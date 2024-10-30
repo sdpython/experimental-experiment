@@ -8,6 +8,7 @@ import os
 import warnings
 from typing import Any, Dict, List, Optional, Union
 from onnx import ModelProto, save
+from .helpers import pretty_onnx
 
 
 def check_model_ort(
@@ -40,26 +41,22 @@ def check_model_ort(
             return InferenceSession(onx, providers=providers)
         except Exception as e:
             import onnx
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
             if dump_file:
                 save(onx, dump_file)
 
             raise AssertionError(  # noqa: B904
                 f"onnxruntime cannot load the model "
-                f"due to {e}\n{onnx_simple_text_plot(onnx.load(onx))}"
+                f"due to {e}\n{pretty_onnx(onnx.load(onx))}"
             )
         return
     try:
         return InferenceSession(onx.SerializeToString(), providers=providers)
     except Exception as e:
-        from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
         if dump_file:
             save(onx, dump_file)
-
         raise AssertionError(  # noqa: B904
-            f"onnxruntime cannot load the modeldue to {e}\n{onnx_simple_text_plot(onx)}"
+            f"onnxruntime cannot load the modeldue to {e}\n{pretty_onnx(onx)}"
         )
 
 

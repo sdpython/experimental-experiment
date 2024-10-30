@@ -179,10 +179,10 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
     def _run_function(
         self,
         output_names,
-        feed_inputs: dict[str, Any],
-        attributes: dict[str, Any] | None = None,
+        feed_inputs: Dict[str, Any],
+        attributes: Optional[Dict[str, Any]] = None,
         intermediate: bool = False,
-    ) -> dict[str, Any] | list[Any]:  # type: ignore
+    ) -> Union[Dict[str, Any], List[Any]]:  # type: ignore
         if output_names is None:
             output_names = self.output_names
 

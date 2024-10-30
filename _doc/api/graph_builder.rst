@@ -9,10 +9,10 @@ GraphBuilder
 .. autoclass:: experimental_experiment.xbuilder.GraphBuilder
     :members:
 
-OnnxType
-========
+FunctionOptions
+===============
 
-.. autoclass:: experimental_experiment.xbuilder.OnnxType
+.. autoclass:: experimental_experiment.xbuilder.FunctionOptions
     :members:
 
 OptimizationOptions

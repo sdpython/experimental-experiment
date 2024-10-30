@@ -1055,16 +1055,18 @@ class GraphBuilderPatternOptimization:
         if self.verbose > 0:
             print(
                 f"[GraphBuilderPatternOptimization.optimize] start with "
-                f"{len(self.builder.nodes)} nodes and {len(self.patterns)} patterns, "
-                f"priorities={priorities}"
+                f"{len(self.builder.nodes)} nodes, "
+                f"{len(self.builder.initializers_dict)} initializers, "
+                f"{len(self.patterns)} patterns, priorities={priorities}"
             )
-            for i, (pp, _, pattern) in enumerate(
-                sorted((p.priority, repr(p), p) for p in self.patterns)
-            ):
-                print(
-                    f"[GraphBuilderPatternOptimization.optimize] "
-                    f"use pattern {i+1:3d}/{len(self.patterns)} - P{pp} - {pattern!r}"
-                )
+            if self.verbose > 1:
+                for i, (pp, _, pattern) in enumerate(
+                    sorted((p.priority, repr(p), p) for p in self.patterns)
+                ):
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] "
+                        f"use pattern {i+1:3d}/{len(self.patterns)} - P{pp} - {pattern!r}"
+                    )
 
         begin_all = time.perf_counter()
         statistics = []

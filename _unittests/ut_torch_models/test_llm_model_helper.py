@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_cuda,
     skipif_ci_windows,
+    long_test,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_models import flatten_outputs
@@ -12,11 +13,12 @@ from experimental_experiment.torch_models.phi3_helper import has_phi3
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
-class TestLlm(ExtTestCase):
+class TestLlmModelHelper(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
+    @long_test()
     def test_get_phi_35_mini_instruct(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -110,8 +112,53 @@ class TestLlm(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False, decomposition_table="all"),
             export_modules_as_functions=True,
+            inline=False,  # function do not retain shape information
         )
         filename = "test_get_phi_35_mini_instruct_custom_cuda_modules.onnx"
+        onx.save(filename, all_tensors_to_one_file=True)
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            filename, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+        )
+        got = sess.run(None, {k: v.cpu().numpy() for k, v in model_inputs.items()})
+        self.assertEqual(len(expected), len(got))
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-2)
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @skipif_ci_windows("not supported")
+    @requires_cuda()
+    def test_get_phi_35_mini_instruct_cuda_modules_dynshapes(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_35_mini_instruct,
+        )
+
+        model, model_inputs = get_phi_35_mini_instruct(num_hidden_layers=1, batch=2)
+        model = model.to("cuda")
+        model_inputs = {k: v.to("cuda") for k, v in model_inputs.items()}
+        expected = list(flatten_outputs(model(**model_inputs)))
+        dims = {
+            0: torch.export.Dim("batch", min=1, max=128),
+            1: torch.export.Dim("seq", min=1, max=512) * 8 - 2,
+        }
+        dyn_shapes = {"input_ids": dims, "attention_mask": dims}
+        onx = to_onnx(
+            model,
+            None,  # args
+            model_inputs,  # kwargs
+            large_model=True,
+            verbose=0,
+            options=OptimizationOptions(max_iter=10),
+            export_options=ExportOptions(strict=False, decomposition_table="all"),
+            export_modules_as_functions=True,
+            inline=False,  # function do not retain shape information
+            dynamic_shapes=dyn_shapes,
+        )
+        filename = "test_get_phi_35_mini_instruct_custom_cuda_modules_dynshapes.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
 
@@ -263,7 +310,6 @@ class TestLlm(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_get_phi_35_mini_instruct_cache_export(self):
         import torch
-        from transformers.models.phi3.modeling_phi3 import Phi3Attention
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi_35_mini_instruct,
         )
@@ -272,21 +318,35 @@ class TestLlm(ExtTestCase):
         )
 
         model, model_inputs = get_phi_35_mini_instruct(num_hidden_layers=1)
-        attentions = {
-            name: inst
-            for name, inst in model.named_modules()
-            if isinstance(inst, Phi3Attention)
-        }
-        self.assertEqual(len(attentions), 1)
 
         with bypass_export_some_errors():
-            exported_program = torch.export.export(
-                model,
-                tuple(),
-                model_inputs,
-                strict=False,
-                preserve_module_call_signature=tuple(attentions),
-            )
+            exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
+        self.assertNotEmpty(exported_program)
+
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @unittest.skip("Wrong setting for the images")
+    def test_get_llama_32_9b_vision(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_llama_32_9b_vision,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        model, model_inputs = get_llama_32_9b_vision(
+            num_hidden_layers=1,
+            num_global_layers=1,
+            rope_scaling={
+                "type": "default",
+                "rope_type": "default",
+                "mrope_section": [2, 1, 1],
+            },
+        )
+        with bypass_export_some_errors():
+            exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
         self.assertNotEmpty(exported_program)
 
 

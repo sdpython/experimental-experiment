@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.helpers import pretty_onnx
 
 
 class TestOnnxExportLarge(ExtTestCase):
@@ -87,21 +88,17 @@ class TestOnnxExportLarge(ExtTestCase):
                 InferenceSession(name, providers=["CPUExecutionProvider"])
             except Exception as e:
                 import onnx
-                from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
                 raise AssertionError(  # noqa: B904
                     f"onnxruntime cannot load the model "
-                    f"due to {e}\n{onnx_simple_text_plot(onnx.load(name))}"
+                    f"due to {e}\n{pretty_onnx(onnx.load(name))}"
                 )
             return
         try:
             InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
         except Exception as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
             raise AssertionError(  # noqa: B904
-                f"onnxruntime cannot load the model"
-                f"due to {e}\n{onnx_simple_text_plot(name)}"
+                f"onnxruntime cannot load the model due to {e}\n{pretty_onnx(name)}"
             )
 
     @skipif_ci_windows("torch dynamo not supported on windows")

@@ -8,7 +8,7 @@ from onnx import ModelProto, save_model
 from onnx.defs import onnx_opset_version
 from onnx.model_container import ModelContainer
 from ..helpers import string_type
-from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions
+from ..xbuilder.graph_builder import GraphBuilder, OptimizationOptions, FunctionOptions
 from .export_options import ExportOptions
 
 
@@ -234,6 +234,8 @@ def _make_builder_interpreter(
     dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
     export_options: Optional[Union[str, ExportOptions]] = None,
     optimize_submodules: bool = False,
+    function_options: Optional[FunctionOptions] = None,
+    local_domain: str = "local_functions",
 ) -> Tuple[
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
@@ -261,6 +263,8 @@ def _make_builder_interpreter(
     :param export_options: Optional[Union[str, ExportOptions]] = None,
     :param optimize_submodules: optimizes submodules, this is done while building the model,
         and not at the end
+    :param function_options: how to deal with local functions
+    :param local_domain: domain name to use for local functions if not specified
     :return: onnx model
     """
 
@@ -397,6 +401,7 @@ def _make_builder_interpreter(
         verbose=verbose,
         raise_list=raise_list,
         dynamic_shapes=dynamic_shapes,
+        local_domain=local_domain,
     )
 
     def retrieve(
@@ -423,6 +428,7 @@ def _make_builder_interpreter(
         example_inputs=args,
         export_options=export_options,
         optimize_submodules=optimize_submodules,
+        function_options=function_options,
     )
     return (exported_program or graph_module), builder, interpreter
 
@@ -558,6 +564,7 @@ def to_onnx(
     export_modules_as_functions: Union[
         bool, Set[type["torch.nn.Module"]]  # noqa: F821
     ] = False,
+    function_options: Optional[FunctionOptions] = None,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -594,6 +601,8 @@ def to_onnx(
     :param export_modules_as_functions: export submodules as local functions,
         this parameter can be filled with a set of class to preserve,
         all this other will be exported as usual
+    :param function_options: to specify what to do with the initializers in local functions,
+        add them as constants or inputs
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -680,6 +689,7 @@ def to_onnx(
         dispatcher=dispatcher,
         export_options=export_options,
         optimize_submodules=optimize,
+        function_options=function_options,
     )
 
     add_stats = {}
@@ -714,6 +724,7 @@ def to_onnx(
 
     if verbose:
         print("[to_onnx] start creating the onnx nodes")
+        print(f"[to_onnx] interpreter.function_options={interpreter.function_options!r}")
 
     begin = t
     builder.process(graph_module, interpreter)
@@ -730,6 +741,7 @@ def to_onnx(
         external_threshold=external_threshold,
         return_optimize_report=True,
         inline=inline,
+        function_options=function_options,
     )
     all_stats = dict(builder=builder.statistics_)
     if stats:

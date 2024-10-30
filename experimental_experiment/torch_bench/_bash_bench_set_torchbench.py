@@ -679,7 +679,9 @@ class TorchBenchRunner(BenchmarkRunner):
             nvtx=nvtx,
         )
         if not self._config:
-            self.initialize()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.initialize()
         assert self._config
         assert "inference" in self._config["batch_size"]
         assert "inference" in self._batch_size

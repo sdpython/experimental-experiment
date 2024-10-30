@@ -38,7 +38,6 @@ from ..xbuilder.shape_type_compute import (
     set_type_shape_matmul,
     prepare_inputs_homogeneous_operator,
 )
-from . import LOCAL_DOMAIN
 from ._exceptions import FunctionNotFoundError
 
 
@@ -1032,10 +1031,10 @@ def aten_cond(
 ) -> T:
     "cond"
     assert g.has_local_function(
-        true_graph, LOCAL_DOMAIN
+        true_graph, g.local_domain
     ), f"Unable to find local function {true_graph!r}{g.get_debug_msg()}"
     assert g.has_local_function(
-        false_graph, LOCAL_DOMAIN
+        false_graph, g.local_domain
     ), f"Unable to find local function {false_graph!r}{g.get_debug_msg()}"
     res = g.make_node(
         "If",
@@ -1043,13 +1042,13 @@ def aten_cond(
         outputs,
         name=name,
         then_branch=make_graph(
-            [make_node(true_graph, inputs, outputs, domain=LOCAL_DOMAIN)],
+            [make_node(true_graph, inputs, outputs, domain=g.local_domain)],
             true_graph,
             [],
             [make_tensor_value_info(o, 0, None) for o in outputs],
         ),
         else_branch=make_graph(
-            [make_node(false_graph, inputs, outputs, domain=LOCAL_DOMAIN)],
+            [make_node(false_graph, inputs, outputs, domain=g.local_domain)],
             false_graph,
             [],
             [make_tensor_value_info(o, 0, None) for o in outputs],
@@ -1798,6 +1797,14 @@ def aten_embedding_bag_padding_idx(
     assert padding_idx is None, (
         f"Not implemented for padding_idx={padding_idx}, "
         f"include_last_offset={include_last_offset}{g.get_debug_msg()}"
+    )
+    assert not sparse, (
+        f"aten_embedding_bag_padding_idx implemented when "
+        f"sparse is True{g.get_debug_msg()}"
+    )
+    assert not scale_grad_by_freq, (
+        f"aten_embedding_bag_padding_idx implemented when "
+        f"scale_grad_by_freq is True{g.get_debug_msg()}"
     )
     itype = g.get_type(weight)
 
@@ -5294,6 +5301,42 @@ def aten_reciprocal(
     return res
 
 
+def aten_scatter_reduce_two(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    reduce: str,
+    include_self: bool = True,
+    name: str = "scatter_reduce_two",
+):
+    """scatter_reduce.two"""
+    assert (
+        reduce != "mean"
+    ), f"scatter_reduce_two not implemented for reduce={reduce!r}{g.get_debug_msg()}"
+    assert g.has_rank(x), f"rank of {x!r} is expected{g.get_debug_msg()}"
+    assert not include_self, f"not implemented if include_self is True{g.get_debug_smg()}"
+    reduce_mode = {"mean": "none", "sum": "add", "prod": "mul", "amin": "min", "amax": "max"}
+    onnx_reduce = reduce_mode[reduce]
+    is_scalar = g.get_rank(x) == 0
+    if is_scalar:
+        x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+        index = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+        src = g.op.Reshape(src, np.array([-1], dtype=np.int64), name=name)
+        result = g.op.ScatterElements(
+            x, index, src, axis=dim, reduction=onnx_reduce, name=name
+        )
+        result = g.op.Squeeze(result, name=name, outputs=outputs)
+    else:
+        result = g.op.ScatterElements(
+            x, index, src, axis=dim, reduction=onnx_reduce, name=name, outputs=outputs
+        )
+    return result
+
+
 def aten_relu(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -7433,19 +7476,19 @@ def aten_wrap_with_autocast(
         not cache_enabled
     ), f"Not implemented with cache_enabled={cache_enabled}{g.get_debug_msg()}"
     assert g.has_local_function(
-        wrapped_func, domain=LOCAL_DOMAIN
-    ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
+        wrapped_func, domain=g.local_domain
+    ), f"No local function {wrapped_func!r}, domain={g.local_domain!r}\n{g.pretty_text()}"
     assert all(
         isinstance(_, str) for _ in args
     ), f"Unexpected input types args={args}{g.get_debug_msg()}"
-    local_outputs = g.get_local_function_outputs(wrapped_func, domain=LOCAL_DOMAIN)
+    local_outputs = g.get_local_function_outputs(wrapped_func, domain=g.local_domain)
     if len(outputs) == len(local_outputs):
         return g.make_node(
             wrapped_func,
             args,
             outputs,
             name="wrap_with_autocast",
-            domain=LOCAL_DOMAIN,
+            domain=g.local_domain,
             doc_string=f"wrap_with_autocast(..., dtype={dtype})" if dtype is not None else "",
         )
     assert len(outputs) == 1, (
@@ -7458,7 +7501,7 @@ def aten_wrap_with_autocast(
         args,
         new_outputs,
         name="wrap_with_autocast",
-        domain=LOCAL_DOMAIN,
+        domain=g.local_domain,
     )
 
 
@@ -7476,19 +7519,19 @@ def aten_wrap_with_set_grad_enabled(
         not enable_grad
     ), f"Not implemented with enable_grad={enable_grad}{g.get_debug_msg()}"
     assert g.has_local_function(
-        wrapped_func, domain=LOCAL_DOMAIN
+        wrapped_func, domain=g.local_domain
     ), f"No local function {wrapped_func!r}{g.get_debug_msg()}"
     assert all(
         isinstance(_, str) for _ in args
     ), f"Unexpected input types args={args}{g.get_debug_msg()}"
-    local_outputs = g.get_local_function_outputs(wrapped_func, domain=LOCAL_DOMAIN)
+    local_outputs = g.get_local_function_outputs(wrapped_func, domain=g.local_domain)
     if len(outputs) == len(local_outputs):
         return g.make_node(
             wrapped_func,
             args,
             outputs,
             name="wrap_with_set_grad_enabled",
-            domain=LOCAL_DOMAIN,
+            domain=g.local_domain,
         )
     assert len(outputs) == 1, (
         f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
@@ -7500,7 +7543,7 @@ def aten_wrap_with_set_grad_enabled(
         args,
         new_outputs,
         name="wrap_with_set_grad_enabled",
-        domain=LOCAL_DOMAIN,
+        domain=g.local_domain,
     )
 
 

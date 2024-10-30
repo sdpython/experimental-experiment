@@ -1,5 +1,5 @@
 import contextlib
-from typing import Dict, Generator, List
+from typing import Dict, Generator, List, Tuple
 import numpy as np
 from onnx import NodeProto
 import onnx.helper as oh
@@ -162,7 +162,7 @@ class _GraphBuilderRuntime:
             # Type conversion between numpy and torch is not robust.
             itype = dtype_to_tensor_dtype(x.dtype)
             ttype = onnx_dtype_to_torch_dtype(itype)
-            x = self.torch.Tensor(x).to(ttype)
+            x = self.torch.from_numpy(x.copy()).to(ttype)
         return [self.torch.permute(x, perm).to(x.dtype)]
 
     def _apply_expand(
@@ -387,6 +387,10 @@ class _GraphBuilderRuntime:
                 new_feeds[k] = x
             else:
                 new_feeds[k] = v
+        assert len(node.input) >= 3, (
+            f"Node {node.op_type} (name={node.name!r}) has not enough "
+            f"inputs {node.input}\n{self.pretty_text()}"
+        )
         data, starts, ends = [new_feeds[k] for k in node.input[:3]]
         axes = new_feeds[node.input[3]] if len(node.input) > 3 and node.input[3] else None
         steps = new_feeds[node.input[4]] if len(node.input) > 4 and node.input[4] else None
@@ -413,3 +417,25 @@ class _GraphBuilderRuntime:
             f"slices={slices}"
         )
         return [res]
+
+    def _apply_shape_on_shape(
+        self, node: NodeProto, shape: Tuple[int, ...]
+    ) -> "torch.Tensor":  # noqa: F821
+        if node.attribute:
+            start = 0
+            end = None
+            for att in node.attribute:
+                if att.name == "start":
+                    start = att.i
+                elif att.name == "end":
+                    end = att.i
+            shape = shape[start:] if end is None else shape[start:end]
+        return [self.torch.from_numpy(np.array(shape, dtype=np.int64))]
+
+    def _apply_shape(
+        self,
+        node: NodeProto,
+        feeds: Dict[str, "torch.Tensor"],  # noqa: F821
+    ) -> "torch.Tensor":  # noqa: F821
+        shape = tuple(map(int, feeds[node.input[0]].shape))
+        return self._apply_shape_on_shape(node, shape)

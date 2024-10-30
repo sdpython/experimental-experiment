@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, NodeProto, TensorProto, TypeProto, helper as oh, load
 from onnx.numpy_helper import to_array
+from ..helpers import pretty_onnx
 
 
 class OrtEval:
@@ -290,10 +291,8 @@ class OrtEval:
                 onx.SerializeToString(), self.session_options, self.providers
             )
         except onnxruntime.capi.onnxruntime_pybind11_state.Fail as e:
-            from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-
             raise RuntimeError(
-                f"Unable to infer a session due to {e}\n{onnx_simple_text_plot(onx)}"
+                f"Unable to infer a session due to {e}\n{pretty_onnx(onx)}"
             ) from e
         return onx, sess
 

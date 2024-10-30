@@ -16,7 +16,7 @@ A model
 import os
 import onnx
 import pandas
-from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
+from experimental_experiment.helpers import pretty_onnx
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -33,7 +33,7 @@ proto = onnx.load(filename)
 print(f"number of nodes: {len(proto.graph.node)}")
 
 
-print(onnx_simple_text_plot(proto))
+print(pretty_onnx(proto))
 
 ##############################
 # And visually.
@@ -94,7 +94,7 @@ print(f"number of new nodes: {len(optimized_proto.graph.node)}")
 ##########################################
 # It gives the following.
 
-print(onnx_simple_text_plot(optimized_proto))
+print(pretty_onnx(optimized_proto))
 
 ##############################
 # And visually.

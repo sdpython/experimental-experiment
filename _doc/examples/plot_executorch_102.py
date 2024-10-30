@@ -56,6 +56,7 @@ print(exported_program.graph)
 
 if executorch:
     edge_program: EdgeProgramManager = to_edge(exported_program)
+    print(f"edge_program {edge_program!r}")
 
 ######################################
 # Serializes.
@@ -70,6 +71,7 @@ if executorch:
 
     with open(save_path, "wb") as file:
         file.write(executorch_program.buffer)
+    print(f"model saved into {save_path!r}")
 
 
 ########################################
@@ -101,6 +103,7 @@ if executorch:
     forward: Method = program.load_method("forward")
 
     outputs = forward.execute(inputs)
+    print("forward:", forward)
 
 ###################
 # Let's compare.

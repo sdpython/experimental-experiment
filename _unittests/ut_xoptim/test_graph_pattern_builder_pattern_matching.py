@@ -450,9 +450,6 @@ class TestGraphPatternBuilder(ExtTestCase):
         if __name__ == "__main__":
             print(f"Loading done in {time.perf_counter() - begin}s")
 
-        # from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
-        # print(onnx_simple_text_plot(onx))
-
         opt_onx = gr.to_onnx(optimize=True)
 
         begin = time.perf_counter()

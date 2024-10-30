@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 import numpy as np
 from onnx import TensorProto
 from ..helpers import string_type
+from ..xbuilder import GraphBuilder, FunctionOptions
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import (
@@ -40,14 +41,16 @@ class DynamoInterpreter:
 
     def __init__(
         self,
-        graph_builder: "GraphBuilder",  # noqa: F821
+        graph_builder: GraphBuilder,
         retriever: Callable,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         example_inputs: Optional[Tuple["torch.Tensor", ...]] = None,  # noqa: F821
         export_options: Optional[ExportOptions] = None,
         optimize_submodules: bool = False,
+        function_options: Optional[FunctionOptions] = None,
     ):
         import torch
+        from ..xbuilder import FunctionOptions
 
         self.torch = torch
         self.builder = graph_builder
@@ -55,6 +58,16 @@ class DynamoInterpreter:
         self.dispatcher = dispatcher
         self.export_options = export_options
         self.optimize_submodules = optimize_submodules
+        self.function_options = function_options or FunctionOptions(
+            name="*",
+            domain="*",
+            export_as_function=True,
+            external_threshold=256,
+            move_initializer_to_constant=True,
+            return_initializer=True,
+            merge_allowed=True,
+            rename_allowed=True,
+        )
         self.example_values_ = {}
         assert example_inputs is None or isinstance(
             example_inputs, tuple
@@ -168,7 +181,9 @@ class DynamoInterpreter:
         elif node.op == "output":
             res = self.output(node)
         elif node.op == "call_module":
+            self.builder._check_constants(f"before-{node.op}")
             res = self.call_module(node)
+            self.builder._check_constants(f"after-{node.op}")
         elif node.op == "get_attr":
             res = self.get_attr(node)
         elif node.op == "call_method":
@@ -218,11 +233,28 @@ class DynamoInterpreter:
 
         if isinstance(init, self.torch.fx.GraphModule):
             # This function is meant to be used later.
+            if "." in self.builder.local_domain:
+                root, n = self.builder.local_domain.split(".")
+                n = int(n) + 1
+            else:
+                root, n = self.builder.local_domain, 0
+
             builder, _args, _kwargs, _output_names = self._interpret_sub_module(
-                init, None, None, source_node=node
+                init, None, None, source_node=node, local_domain=f"{root}.{n}"
             )
             self.builder.make_local_function(
-                node.name, builder, domain=LOCAL_DOMAIN, optimize=self.optimize_submodules
+                builder,
+                function_options=FunctionOptions(
+                    name=node.name,
+                    domain=self.builder.local_domain,
+                    export_as_function=True,
+                    return_initializer=True,
+                    move_initializer_to_constant=self.function_options.move_initializer_to_constant,
+                    external_threshold=self.function_options.external_threshold,
+                    merge_allowed=self.function_options.merge_allowed,
+                    rename_allowed=self.function_options.rename_allowed,
+                ),
+                optimize=self.optimize_submodules,
             )
             return None
 
@@ -1327,7 +1359,9 @@ class DynamoInterpreter:
         if last_node is not None and description:
             last_node.doc_string += "\n".join(description)
 
-    def _interpret_sub_module(self, sub_module, args, kwargs, source_node=None):
+    def _interpret_sub_module(
+        self, sub_module, args, kwargs, source_node=None, local_domain=None
+    ):
         from .onnx_export import _make_builder_interpreter
 
         if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
@@ -1357,6 +1391,8 @@ class DynamoInterpreter:
             dynamic_shapes=self.builder.dynamic_shapes,
             export_options=self.export_options,
             optimize_submodules=self.optimize_submodules,
+            function_options=self.function_options,
+            local_domain=local_domain,
         )
         if self.preserved_modules:
             assert (
@@ -1420,9 +1456,22 @@ class DynamoInterpreter:
                         builder.set_shape(name, val[i].shape)
                     if not builder.has_type(name):
                         builder.set_type(name, val[i].dtype)
-                    self.builder.set_shapes_types(
-                        source_node.name, "call_module", (val[i].dtype, val[i].shape)
-                    )
+                    if isinstance(val[i], self.builder.torch.Tensor):
+                        self.builder.set_shapes_types(
+                            source_node.name, "call_module", (val[i].dtype, val[i].shape)
+                        )
+                    elif isinstance(val[i], (self.builder.torch.SymInt)):
+                        self.builder.set_shapes_types(
+                            source_node.name,
+                            "call_module",
+                            (self.builder.torch.SymInt, tuple()),
+                        )
+                    elif isinstance(val[i], (self.builder.torch.SymFloat)):
+                        self.builder.set_shapes_types(
+                            source_node.name,
+                            "call_module",
+                            (self.builder.torch.SymFloat, tuple()),
+                        )
         else:
             # We could use the informations stored in the builder.
             pass
@@ -1437,6 +1486,7 @@ class DynamoInterpreter:
             .replace("transformers.", "")
             .replace("models.", "")
             .replace("modeling_", "")
+            .replace("phi3.", "")
         )
         return name
 
@@ -1488,9 +1538,21 @@ class DynamoInterpreter:
                 f"kwargs={string_type(node.kwargs)}]"
             )
 
+        # This function is meant to be used later.
+        if "." in self.builder.local_domain:
+            root, n = self.builder.local_domain.split(".")
+            n = int(n) + 1
+        else:
+            root, n = self.builder.local_domain, 0
+
+        self.builder._check_constants("before-_interpret_sub_module")
+
         builder, args, kwargs, output_names = self._interpret_sub_module(
-            sub_module, args, node.kwargs, source_node=node
+            sub_module, args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
         )
+
+        self.builder._check_constants("after-_interpret_sub_module")
+
         assert kwargs is None or len(kwargs) == 0, (
             f"args={string_type(args)}, kwargs={string_type(kwargs)} "
             f"is not implemented yet{self.builder.get_debug_msg()}"
@@ -1508,25 +1570,32 @@ class DynamoInterpreter:
             if type(m) in self.preserved_modules:
                 name = type(m).__name__
                 local_function_name = self._clean_any_name(
-                    f"{m.__module__}.{name}"
-                    if m.__module__ != "__main__"
-                    else name.replace("torch.nn.modules.", "")
+                    f"{m.__module__}.{name}" if m.__module__ != "__main__" else name
                 )
+
+            self.builder._check_constants("before-make_nodes")
+
+            # let's create a function under the appropriate name
             self.builder.make_nodes(
                 builder,
                 args,
                 output_names,
                 prefix=f"_sub_{name}_",
-                local_function_name=(
-                    LOCAL_DOMAIN,
-                    local_function_name,
-                    dict(
-                        merge_allowed=True,
-                        rename_allowed=True,
-                        optimize=self.optimize_submodules,
-                    ),
+                function_options=FunctionOptions(
+                    name=local_function_name,
+                    domain=LOCAL_DOMAIN,
+                    export_as_function=True,
+                    return_initializer=True,
+                    move_initializer_to_constant=self.function_options.move_initializer_to_constant,
+                    external_threshold=self.function_options.external_threshold,
+                    merge_allowed=self.function_options.merge_allowed,
+                    rename_allowed=self.function_options.rename_allowed,
                 ),
+                optimize=self.optimize_submodules,
             )
+
+            self.builder._check_constants("after-make_nodes")
+
             if len(output_names) == len(builder.outputs):
                 # One output, both tensor
                 for name, out_name in zip(builder.output_names, output_names):
@@ -1556,6 +1625,8 @@ class DynamoInterpreter:
                 )
         else:
             # nodes are inserted inline
+            self.builder._check_constants("before-make_nodes(2)")
             self.builder.make_nodes(builder, args, output_names, prefix=f"_sub_{name}_")
+            self.builder._check_constants("after-make_nodes(2)")
 
         return output_names

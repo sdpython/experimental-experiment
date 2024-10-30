@@ -10,6 +10,7 @@ from ..torch_models.llm_model_helper import (
     get_ai21_jamba_15_mini,
     get_all_mini_ml_l6_v1,
     get_falcon_mamba_7b,
+    get_llama_32_9b_vision,
     get_phi_35_mini_instruct,
     get_smollm_1_7b,
 )
@@ -27,10 +28,15 @@ class UntrainedRunner(BenchmarkRunner):
                 # diffusion
                 "SableDiffusion2Unet": get_stable_diffusion_2_unet,
                 # LLM
-                "AI21Jamba15MiniLM": get_ai21_jamba_15_mini,
+                "AI21Jamba15MiniLM16Layer": lambda: get_ai21_jamba_15_mini(
+                    num_hidden_layers=16
+                ),
                 "AllMiniLML6v1": get_all_mini_ml_l6_v1,
                 "FalconMamba7bLM": get_falcon_mamba_7b,
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
+                "Llama_9b_vision_8Layer": (
+                    lambda: get_llama_32_9b_vision(num_hidden_layers=8)
+                ),
                 "Phi35MiniInstructLM_1Layer": (
                     lambda: (
                         *get_phi_35_mini_instruct(num_hidden_layers=1),
@@ -101,6 +107,8 @@ class UntrainedRunner(BenchmarkRunner):
         else:
             model_cls, example_inputs, export_options = tu
         model = model_cls() if isinstance(model_cls, type) else model_cls
+        if str(type(model)) == "<class 'function'>":
+            model = model()
 
         if is_training and not use_eval_mode:
             model.train()

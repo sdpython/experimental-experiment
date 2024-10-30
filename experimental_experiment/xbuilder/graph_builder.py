@@ -1,5 +1,4 @@
 import contextlib
-import enum
 import pprint
 import time
 import os
@@ -33,7 +32,8 @@ import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
-from experimental_experiment.reference import ExtendedReferenceEvaluator
+from ..helpers import string_sig, pretty_onnx
+from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
@@ -67,14 +67,6 @@ from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
 
 
-class OnnxType(enum.IntEnum):
-    """Defines which can of onnx the builder needs to produces"""
-
-    MODEL_PROTO = 0
-    FUNCTION_PROTO = 1
-    FUNCTION_AND_INITIALIZERS = 2
-
-
 @contextlib.contextmanager
 def _unset_fake_temporarily() -> Generator:
     import torch
@@ -87,6 +79,66 @@ def _unset_fake_temporarily() -> Generator:
             torch._C._set_dispatch_mode(old)
 
 
+class FunctionOptions:
+    """
+    Defines how local functions must behave.
+
+    :param name: function name
+    :param domain: function domain
+    :param export_as_function: export the onnx as functions or keep local function
+    :param external_threshold: whether or not keep initializer as input for the function
+        or move them as constant of the function
+    :param move_initializer_to_constant: move initializers as constant first before
+        creating the function proto, that depends on the size defined by
+        external_threshold
+    :param return_initializer: return the remaining initializer and add them as input
+        to the function
+    :param inline: inline functions
+    :param rename_allowed: allow to rename the function if a duplicate is detected
+    :param merge_allowed: allow to merge a function in case the same code is detected
+    """
+
+    empty_names = (None, "", "*")
+
+    def __init__(
+        self,
+        export_as_function: bool = False,
+        name: str = "",
+        domain: str = "",
+        external_threshold: int = 2**25,
+        move_initializer_to_constant: bool = False,
+        return_initializer: bool = False,
+        inline: bool = False,
+        merge_allowed: bool = False,
+        rename_allowed: bool = False,
+    ):
+        if name:
+            export_as_function = True
+        assert not export_as_function or name, (
+            f"to be removed help track bugs, name={name!r}, domain={domain!r}, "
+            f"export_as_function={export_as_function!r}"
+        )
+        assert export_as_function or (not name and not domain), (
+            f"to be removed help track bugs, name={name!r}, domain={domain!r}, "
+            f"export_as_function={export_as_function!r}"
+        )
+        assert isinstance(
+            external_threshold, int
+        ), f"Unexpected type {type(external_threshold)} for external_threshold"
+        self.export_as_function = export_as_function
+        self.external_threshold = external_threshold
+        self.move_initializer_to_constant = move_initializer_to_constant
+        self.name = name
+        self.domain = domain
+        self.return_initializer = return_initializer
+        self.inline = inline
+        self.rename_allowed = rename_allowed
+        self.merge_allowed = merge_allowed
+
+    def __repr__(self) -> str:
+        return string_sig(self)
+
+
 class GraphBuilder(_GraphBuilderRuntime):
     """
     Simplifies the creation of a model.
@@ -95,6 +147,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         a dictionary of domain, version
     :param input_names: input names
     :param as_function: export as a function or a model
+       there are less assert when as_function is True
     :param optimization_options: optimizations options,
         see :class:`OptimizationOptions`
     :param args: example of inputs
@@ -104,11 +157,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         existing shapes are ignored
     :param raise_list: raise an exception if a new operator belongs to that list
     :param dynamic_shapes: dynamic shapes
+    :param local_domain: domain name to use for local functions if not specified
 
     Important attributes:
 
     - `input_names: List[str]`: list of input names
-    - `as_function: bool`: the model must be exported as a function or as a model
+    - `as_function: bool`: the model must be exported as a function or as a model,
+      there are less assert when as_function is True
     - `optimization_options: OptimizationOptions`:
     - `nodes: List[NodeProto]`: list of nodes
     - `initializers_dict: Dict[str, Any]`: initializers
@@ -159,7 +214,27 @@ class GraphBuilder(_GraphBuilderRuntime):
     of a variable is set. Example: ``ONNXSTOP=attn_output python ...``
     """
 
+    class ShapeConstant:
+        """
+        Wraps a constant shape even if the input producing the shape is not.
+        """
+
+        def __init__(self, name: str, shape: Tuple[int, ...], node: NodeProto):
+            self.name = name
+            self.shape = shape
+            self.node = node
+
+        def __repr__(self) -> str:
+            return (
+                f"{self.__class__.__name__}({self.name!r}, shape={self.shape!r}, "
+                f"node=<{self.node.op_type})"
+            )
+
     class WrapSym:
+        """
+        Wraps a symbolic int (a dimension for example).
+        """
+
         def __init__(self, sym: Union["torch.SymInt", "torch.SymFloat"]):  # noqa: F821
             self.sym = sym
 
@@ -180,7 +255,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self,
         target_opset_or_existing_proto: Union[int, Dict[str, int], ModelProto, FunctionProto],
         input_names: Optional[Sequence[str]] = None,
-        as_function: Union[bool, OnnxType] = False,
+        as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
         args: Optional[List[Any]] = None,
         ir_version: Optional[int] = None,
@@ -188,6 +263,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         infer_shapes: Union[bool, str] = False,
         raise_list: Optional[Set[str]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+        local_domain: str = "local_function",
     ):
         import torch
 
@@ -196,6 +272,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.optimization_options = optimization_options or OptimizationOptions(
             verbose=verbose
         )
+        self.local_domain = local_domain
         self.as_function = as_function
         self.input_args = args
         self.verbose = verbose
@@ -237,6 +314,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
+        self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
         self.constraints_ = {}
@@ -406,11 +484,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         return [o.name for o in self.outputs]
 
     def empty_copy(
-        self, as_function: Union[bool, OnnxType] = False, constant_size: int = 2**24
+        self, as_function: bool = False, constant_size: int = 2**24
     ) -> "GraphBuilder":
         """
         Creates an empty copy but with the same opsets.
         """
+        assert isinstance(as_function, bool), f"wrong type {type(as_function)} for as_function"
         opt = OptimizationOptions(
             constant_size=constant_size,
             constant_fusing=False,
@@ -461,7 +540,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{node.op_type}[{node.domain}]: {node.input} -> {node.output}"
         return f"{node.op_type}: {node.input} -> {node.output}"
 
-    def print_text(self) -> str:
+    def pretty_text(self) -> str:
         def _v(v):
             if hasattr(v, "shape"):
                 shape = "x".join(map(str, v.shape))
@@ -530,6 +609,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             return tuple(proto.dims)
         if isinstance(proto, NodeProto):
             for att in proto.attribute:
+                assert att.type != AttributeProto.GRAPH, (
+                    f"Unexpected attribute type for attribute {att.name!r} "
+                    f"attribute list is {[a.name for a in proto.attribute]} "
+                    f"in node type {proto.op_type!r}, name={proto.name!r}, "
+                    f"doc_string={proto.doc_string!r}"
+                )
                 if att.name in ("value_float", "value_int"):
                     return tuple()
                 if att.name == "value_floats":
@@ -583,16 +668,24 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param multiple_outputs: allow multiple outputs
         :return: value
         """
+        if self._debug_get_constant:
+            print(
+                f"[GraphBuilder.get_constant] name={name}, "
+                f"computed_value={computed_value}, as_shape={as_shape}, "
+                f"exc={exc}"
+            )
         if as_shape:
             assert not multiple_outputs, "multiple outputs not allowed with as_shape=True"
             res = self.get_constant(name, exc, computed_value=computed_value, as_shape=False)
             if res is None:
                 assert not exc, (
                     f"No constant for name={name!r}, exc={exc}, "
-                    f"computed_value={computed_value}, as_shape={as_shape}"
+                    f"computed_value={computed_value}, as_shape={as_shape}, "
+                    f"multiple_outputs={multiple_outputs}{self.get_debug_msg()}"
                 )
+                if self._debug_get_constant:
+                    print("[GraphBuilder.get_constant]   A: None")
                 return None
-
             assert multiple_outputs or not isinstance(
                 res, tuple
             ), f"Multiple output is not allowed but type is {type(res)} for name={name!r}"
@@ -602,11 +695,15 @@ class GraphBuilder(_GraphBuilderRuntime):
                     new_res.append(i)
                 else:
                     new_res.append(int(i))
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   B: {tuple(new_res)}")
             return tuple(new_res)
 
         if not self.is_constant(name):
             if exc:
                 raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
+            if self._debug_get_constant:
+                print("[GraphBuilder.get_constant]   C: None")
             return None
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
@@ -615,6 +712,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert multiple_outputs or not isinstance(
                 value, tuple
             ), f"Multiple output is not allowed but type is {type(value)} for name={name!r}"
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   D: value: {type(value)}")
             return value
 
         if possible_value is not None:
@@ -626,6 +725,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 res, _ = self.compute_constant(name, exc=exc)
                 if res is None:
                     # The constant is too big to be computed.
+                    if self._debug_get_constant:
+                        print("[GraphBuilder.get_constant]   E: None")
                     return None
 
                 assert multiple_outputs or not isinstance(res, tuple), (
@@ -637,6 +738,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"name={name!r}"
                 )
                 if not isinstance(res, tuple):
+                    if self._debug_get_constant:
+                        print("[GraphBuilder.get_constant]   F: tuple")
                     return res
 
                 assert isinstance(res, tuple), (
@@ -648,6 +751,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"Multiple output is not allowed but type is {type(value)} "
                         f"for name={name!r}"
                     )
+                    if self._debug_get_constant:
+                        print(f"[GraphBuilder.get_constant]   G: {type(res[0])}")
                     return res[0]
 
                 index = list(possible_value.output).index(name)
@@ -657,6 +762,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"Multiple output is not allowed but type is {type(value)} "
                     f"for name={name!r}"
                 )
+                if self._debug_get_constant:
+                    print(f"[GraphBuilder.get_constant]   H: {type(value)}")
                 return value
 
             assert possible_value is not None, f"Constant is empty for name={name!r}"
@@ -664,6 +771,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Multiple output is not allowed but type is {type(possible_value)} "
                 f"for name={name!r}"
             )
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   I: {type(possible_value)}")
             return possible_value
 
         if name not in self.initializers_dict:
@@ -671,17 +780,32 @@ class GraphBuilder(_GraphBuilderRuntime):
                 raise ValueError(
                     f"Result {name!r} was never evaluated within method 'constant_folding'."
                 )
+            if self._debug_get_constant:
+                print("[GraphBuilder.get_constant]   J: None")
             return None
 
         value = self.initializers_dict[name]
 
         if isinstance(value, np.ndarray):
+            if self._debug_get_constant:
+                if value.size < 10:
+                    print(
+                        f"[GraphBuilder.get_constant]   K: np.array {value.shape}, "
+                        f"{value.dtype}, {value}"
+                    )
+                else:
+                    print(
+                        f"[GraphBuilder.get_constant]   K: np.array {value.shape}, "
+                        f"{value.dtype}"
+                    )
             return value
 
         if isinstance(value, self.torch.Tensor):
             v = value.detach().cpu()
             self.constants_computed_[name] = v
             assert not multiple_outputs, f"Multiple output is not allowed for name={name!r}"
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   L: nptorch.Tensor {v.shape}, {v.dtype}")
             return v
 
         if isinstance(value, TensorProto):
@@ -691,14 +815,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"Tensor is using external data, data_type={value.data_type}, "
                         f"dims={value.dims}"
                     )
+                if self._debug_get_constant:
+                    print("[GraphBuilder.get_constant]   M: None")
                 return None
             v = onh.to_array(value)
             assert not multiple_outputs, f"Multiple output is not allowed for name={name!r}"
             self.constants_computed_[name] = v
+            if self._debug_get_constant:
+                print("[GraphBuilder.get_constant]   O: TensorProto")
             return v
 
         if isinstance(value, np.float32):
             # This should not be needed.
+            if self._debug_get_constant:
+                print(f"[GraphBuilder.get_constant]   P: np.float32 {value}")
             return np.array(value, dtype=np.float32)
 
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
@@ -1311,8 +1441,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         "Returns the size in byte of the an element of this size."
         if elem_type in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
             return 4
-        if elem_type in {TensorProto.DOUBLE, TensorProto.INT64, TensorProto.UINT64}:
+        if elem_type in {
+            TensorProto.DOUBLE,
+            TensorProto.INT64,
+            TensorProto.UINT64,
+            TensorProto.COMPLEX64,
+        }:
             return 8
+        if elem_type in {TensorProto.COMPLEX128}:
+            return 16
         if elem_type in {
             TensorProto.INT16,
             TensorProto.UINT16,
@@ -1322,7 +1459,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             return 2
         if elem_type in {TensorProto.BOOL, TensorProto.UINT8, TensorProto.INT8}:
             return 1
-        raise AssertionError(f"elem_size not implemented for elem_type={elem_type}.")
+        from . import str_tensor_proto_type
+
+        raise AssertionError(
+            f"elem_size not implemented for elem_type={elem_type}, "
+            f"among {str_tensor_proto_type()}"
+        )
 
     def make_dynamic_object(
         self,
@@ -1761,27 +1903,27 @@ class GraphBuilder(_GraphBuilderRuntime):
         if node.domain != "":
             return False
         if node.op_type not in {
-            "Concat",
-            "Gather",
-            "Shape",
-            "Add",
-            "Mul",
-            "Div",
-            "Sub",
-            "Mod",
-            "Slice",
             "Abs",
+            "Add",
+            "Concat",
+            "Div",
+            "Gather",
+            "Greater",
+            "GreaterOrEqual",
+            "Equal",
+            "Identity",
+            "Less",
+            "LessOrEqual",
+            "Mod",
+            "Mul",
+            "Not",
             "Range",
             "Scatter",
+            "Shape",
+            "Slice",
             "Squeeze",
-            "Identity",
+            "Sub",
             "Unsqueeze",
-            "Greater",
-            "Less",
-            "GreaterOrEqual",
-            "LessOrEqual",
-            "Equal",
-            "Not",
         }:
             return False
 
@@ -1832,7 +1974,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         if node.op_type == "Shape":
             if len(node.attribute) == 0:
                 if self.has_shape(node.input[0]):
-                    self.set_value_shape(node.output[0], self.get_shape(node.input[0]))
+                    shape = self.get_shape(node.input[0])
+                    self.set_value_shape(node.output[0], shape)
+                    if all_int(shape):
+                        self.update_node_constant(node.output[0], node)
                 else:
                     self.set_value_shape(node.output[0], node.output[0])
                 return True
@@ -1849,14 +1994,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"is {shape}{self.get_debug_msg()}"
                 )
                 if end is None:
-                    self.set_value_shape(node.output[0], shape[start.i :])
+                    n_shape = shape[start.i :]
+                    self.set_value_shape(node.output[0], n_shape)
+                    if all_int(shape):
+                        self.update_node_constant(node.output[0], node)
                     return True
                 assert getattr(end, "i", end) <= len(shape), (
                     f"Shape mismatch, end={getattr(end, 'i', end)}, "
                     f"shape of {node.input[0]!r} "
                     f"is {shape}{self.get_debug_msg()}"
                 )
-                self.set_value_shape(node.output[0], shape[start.i : getattr(end, "i", end)])
+                n_shape = shape[start.i : getattr(end, "i", end)]
+                if all_int(shape):
+                    self.update_node_constant(node.output[0], node)
+                self.set_value_shape(node.output[0], n_shape)
                 return True
 
             if end is None:
@@ -2762,6 +2913,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.update_node_constant(o, node)
 
         if node.op_type == "Constant":
+            assert (
+                len(node.attribute) == 0
+                or node.attribute[0].name != "value"
+                or node.attribute[0].type != AttributeProto.GRAPH
+            ), f"{node}"
             if len(node.attribute) == 1 and node.attribute[0].name == "value":
                 size = np.prod(node.attribute[0].t.dims)
             else:
@@ -2786,7 +2942,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 itype = TensorProto.FLOAT
             self.set_type(node.output[0], itype)
             if self.is_constant(node.input[0]):
-                value = self.get_constant(node.input[0], computed_value=True, as_shape=True)
+                value = self.get_constant(
+                    node.input[0], computed_value=True, as_shape=True, exc=False
+                )
                 if value is not None:
                     self.set_shape(node.output[0], value)
                     node.doc_string += ":constant-9:"
@@ -2806,9 +2964,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self.is_constant(node.input[1]):
                 cst, _ = self.compute_constant(node.input[1], exc=False, only_array=True)
                 if cst is not None:
+                    assert not isinstance(
+                        cst, self.torch._subclasses.fake_tensor.FakeTensor
+                    ), (
+                        f"self.compute_constant returns a FakeTensor for {node.input[1]!r}"
+                        f"\n{self.pretty_text()}"
+                    )
                     self.set_shape(node.output[0], tuple(int(i) for i in cst))
         elif node.op_type == "Reshape":
-            self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.has_type(node.input[0]):
+                self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[1]):
                 cst, _ = self.compute_constant(
                     node.input[1], exc=False, only_array=True, allow_empty=True
@@ -2910,6 +3075,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         if node.domain != "":
             set_shape_type_custom(self, node)
         else:
+            if node.input and not self.has_type(node.input[0]):
+                # It is probably coming from an inlined function.
+                return
             set_shape_type_op_any(self, node)
 
     def make_nodes(
@@ -2918,9 +3086,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         input_names: List[str],
         output_names: List[str],
         prefix: str = "",
-        local_function_name: Optional[
-            Union[str, Tuple[str, str], Tuple[str, str, Dict[str, bool]]]
-        ] = None,
+        function_options: Optional[FunctionOptions] = None,
+        optimize: bool = False,
     ) -> Union[str, List[str]]:
         """
         Appends all nodes and initializers from another builder.
@@ -2931,38 +3098,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param input_names: input names
         :param output_names: output names
         :param prefix: prefix all name from this builder
-        :param local_function_name: inserts the nodes as a local function,
-            they become a local function, the name does not need to be unique,
-            if the builder detects a local function with the same name,
-            it checks they are identical, otherwise, it gives a different name,
-            initializers are still inserted into the main graph and become
-            additional inputs, this parameter can be a string, the local function name,
-            a tuple, a pair `(domain, name)` or three values
-            `(domain, name, dict(rename_allowed=True))`,
-            `(domain, name, dict(merge_allowed=True))`
-            see :meth:`GraphBuilder.make_local_function`
+        :param function_options: defines how to create a local function if needed
+        :param optimize: optimize the function
         :return: output names
         """
-        if local_function_name:
-            rename_allowed = False
-            merge_allowed = False
+        if function_options is not None and function_options.export_as_function:
             optimize = False
-            if isinstance(local_function_name, tuple):
-                domain, name = local_function_name[:2]
-                if len(local_function_name) == 3:
-                    rename_allowed = local_function_name[2].get("rename_allowed", False)
-                    merge_allowed = local_function_name[2].get("merge_allowed", False)
-                    optimize = local_function_name[2].get("optimize", False)
-            else:
-                name = local_function_name
-                domain = "local_domain"
             new_inits, (fdomain, fname) = self.make_local_function(
-                name,
                 builder,
-                domain=domain,
-                move_initializer_to_constant=False,
-                rename_allowed=rename_allowed,
-                merge_allowed=merge_allowed,
+                function_options=function_options,
                 optimize=optimize,
             )
             self.make_node(
@@ -2971,7 +3115,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 output_names,
                 domain=fdomain,
                 check=False,
-                name=name,
+                name=fname,
             )
 
             # Shape information, needs to handle multiple outputs
@@ -2987,8 +3131,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             #    if builder.has_type(o):
             #        self.set_type(no, builder.get_type(o))
 
-            if domain not in self.opsets:
-                self.opsets[domain] = 1
+            if fdomain not in self.opsets:
+                self.opsets[fdomain] = 1
         else:
             renaming = {}
             for init, value in builder.initializers_dict.items():
@@ -3070,6 +3214,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         return output_names
 
     def _build_large_initializers(self, external_threshold: int):
+        assert isinstance(
+            external_threshold, int
+        ), f"Unexpected type {type(external_threshold)} for external_threshold"
         new_inits = {}
         large_inits = {}
         for k, v in self.initializers_dict.items():
@@ -3080,15 +3227,26 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_inits[k] = v
             else:
                 location = f"#{k}"
-
                 nt = make_large_tensor_proto(location, k, itype, shape)
                 new_inits[k] = nt
                 large_inits[location] = v
         return new_inits, large_inits
 
     def _build_initializers(
-        self, large_model: bool, switch_low_high: bool, external_threshold: int
+        self, large_model: bool, switch_low_high: bool, external_threshold: Union[bool, int]
     ) -> Tuple[List[TensorProto], Dict[str, TensorProto]]:
+        """
+        Builds initializers.
+
+        :param large_model: build with a large container
+        :param switch_low_high: invert low, high precision
+        :param external_threshold: size to use when moving a tensor to the list of tensors
+            stored outside the model, if can be False for none of them, true for all of them
+            or a number, if the threshold is specified and large_model is False,
+            then all tensors above this threshold are ignored
+        :return: a list of tensors to stored in the model,
+            another list to tensors stored outside the model
+        """
         if self.verbose:
             begin = time.perf_counter()
             print(
@@ -3191,6 +3349,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         large_inits = {}
         res = []
         for k, v in sorted(init_dict.items()):
+            if isinstance(v, TensorProto):
+                res.append(v)
+                continue
             if isinstance(v, self.torch.Tensor):
                 # no string tensor
                 t = self.from_array(v, name=k)
@@ -3204,9 +3365,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 t = onh.from_array(v, name=k)
                 res.append(t)
-                continue
-            if isinstance(v, TensorProto):
-                res.append(v)
                 continue
             raise TypeError(
                 f"Unable to convert initializer {k!r} with type "
@@ -3509,26 +3667,42 @@ class GraphBuilder(_GraphBuilderRuntime):
         used_functions = self._get_used_local_functions()
         return inputs_to_add, used_functions
 
+    def _check_constant(self, node: NodeProto, prefix: str):
+        assert isinstance(node, NodeProto), f"Unexpected type {type(node)} for node"
+        if node.op_type != "Constant":
+            return
+        assert (
+            len(node.attribute) == 1
+        ), f"{prefix}: unexpected number of attribute in node {node}"
+        assert (
+            node.attribute[0].type != AttributeProto.GRAPH
+        ), f"{prefix}: wrong attribute type in node {node}"
+
+    def _check_constants(self, prefix="before-inline", add: Optional[Any] = None):
+        for v in self.constants_node_.values():
+            self._check_constant(v, prefix)
+        for v in self.nodes:
+            self._check_constant(v, prefix)
+        for k, v in self.functions.items():
+            for node in v.node:
+                self._check_constant(node, f"{prefix}-[{k}]")
+        if add is not None:
+            assert isinstance(add, FunctionProto), f"Not implemented for type {type(add)}"
+            for node in add.node:
+                self._check_constant(node, f"{prefix}-[add]")
+
     def to_onnx(
         self,
-        as_function: Union[bool, OnnxType] = False,
         optimize: bool = True,
         large_model: bool = False,
         external_threshold: int = 1024,
         return_optimize_report: bool = False,
-        function_name: str = "",
-        function_domain: str = "",
         inline: bool = False,
+        function_options: Optional[FunctionOptions] = None,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer, Dict[str, Any]]:
         """
-        Conversion to onnx. Only then the initializers are converted into
-        TensorProto.
+        Conversion to onnx. Only then the initializers are converted into TensorProto.
 
-        :param as_function: converts the graph as a FunctionProto or a ModelProto,
-            if it is True, all initializers are converted into constants nodes,
-            if it is ``OnxType.FUNCTION_AND_INITIALIZERS``, the function returns
-            the initializers and the FunctionProto with additional inputs for
-            the remaining initializers
         :param optimize: disable or enable the optimization,
             the optimization are set when the class constructor is called
         :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
@@ -3537,17 +3711,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param external_threshold: if large_model is True, every tensor above this limit
             is stored as external
         :param return_optimize_report: return statistics about the optimization as well
-        :param function_name: only used if as_function is True
-        :param function_domain: only used if as_function is True
         :param inline: inline local functions, this is done before
             any optimization takes place
+        :param function_options: to be set to export as a function
         :return: the proto
         """
+        if function_options is None:
+            function_options = FunctionOptions()
         if len(self.nodes) == 0:
             raise RuntimeError(f"The onnx model is empty (no node).\n{self.get_debug_msg()}")
 
         if inline:
+            self._check_constants("before-inline")
             stats = self.inline_functions(verbose=self.verbose)
+            self._check_constants("after-inline")
         else:
             stats = None
 
@@ -3564,44 +3741,43 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
-        if as_function:
-            assert function_name, "Function name cannot be empty."
-            assert function_domain, "Function domain cannot be empty."
-            if as_function is True and self.initializers_dict:
-                self.move_initializers_to_constant(verbose=max(0, self.verbose - 1))
+        if function_options.export_as_function:
             assert (
-                as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.initializers_dict
+                function_options.name not in FunctionOptions.empty_names
+                and function_options.domain not in FunctionOptions.empty_names
             ), (
-                f"function_name={function_name!r}, initializers "
-                f"are not supported when exporting a local function. "
-                f"You should call 'move_initializers_to_constant'"
-                f"{self.get_debug_msg()}"
+                f"Function name={function_options.name!r} cannot be empty and "
+                f"Function domain={function_options.domain!r} cannot be empty."
             )
-            assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS or not self.functions, (
-                f"function_name={function_name!r}, local functions "
-                f"[{', '.join(f.name for f in self.functions.values())}] "
-                f"are not supported yet when exporting a local function "
-                f"{self.get_debug_msg()}"
+            key = function_options.domain, function_options.name
+            assert key not in self.functions, (
+                f"The given name {key} is already taken by a local function"
+                f"{self.pretty_text()}"
             )
+            if function_options.move_initializer_to_constant:
+                self.move_initializers_to_constant(
+                    threshold=function_options.external_threshold,
+                    verbose=max(0, self.verbose - 1),
+                )
             proto = oh.make_function(
-                function_domain,
-                function_name,
+                function_options.domain,
+                function_options.name,
                 [i.name for i in self.inputs],
                 [o.name for o in self.outputs],
                 self.nodes,
                 opsets,
             )
-            if as_function is True:
-                return proto
-            if (
-                len(self.initializers_dict) == 0 and len(self.functions) == 0
-            ) or as_function != OnnxType.FUNCTION_AND_INITIALIZERS:
-                return dict(proto=proto)
 
-            assert as_function == OnnxType.FUNCTION_AND_INITIALIZERS, (
-                f"Unexpected value for as_function={as_function!r}"
-                f"It should be 'OnnxType.FUNCTION_AND_CONSTANTS'."
-            )
+            if not function_options.return_initializer:
+                return proto
+
+            if len(self.initializers_dict) == 0 and len(self.functions) == 0:
+                res = dict(proto=proto)
+                if self.functions:
+                    used_functions = self._get_used_local_functions()
+                    if used_functions:
+                        res["functions"] = used_functions
+                return res
 
             # We need to move the initializers as inputs, we sort than by decresing size
             inits, functions = self._extend_local_function_inputs()
@@ -3760,7 +3936,16 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if self.verbose or self.optimization_options.verbose:
             print(f"[GraphBuilder.optimize] start with {len(self.nodes)} nodes")
-            print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
+            if self.verbose > 1:
+                print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
+            else:
+                n_patterns = (
+                    0
+                    if self.optimization_options is None
+                    or self.optimization_options.patterns is None
+                    else len(self.optimization_options.patterns)
+                )
+                print(f"[GraphBuilder.optimize] #patterns={n_patterns}")
 
         self._check(statistics, "A")
         if self.optimization_options.remove_identity:
@@ -3875,8 +4060,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder.optimize] done with "
                 f"{len(self.nodes)} nodes in {duration:.3f}"
             )
-            msg = self._compile_statistics(statistics)
-            print(msg)
+            if self.verbose > 1:
+                print(self._compile_statistics(statistics))
 
         return statistics
 
@@ -4142,16 +4327,21 @@ class GraphBuilder(_GraphBuilderRuntime):
                 removed.add(ind)
 
         if self.optimization_options.verbose > 1:
-            for k, v in self.initializers_dict.items():
+            n_not_marked = 0
+            for i, (k, v) in enumerate(self.initializers_dict.items()):
                 if k not in marked:
+                    n_not_marked += 1
                     v = self.initializers_dict[k]
                     if hasattr(v, "dtype") and hasattr(v, "shape"):
                         print(
-                            f"[GraphBuilder.remove_unused] "
+                            f"[GraphBuilder.remove_unused] {i}/{len(self.initializers_dict)}"
                             f"remove_initializer:{k}:{v.dtype}[{v.shape}]"
                         )
                     else:
-                        print(f"[GraphBuilder.remove_unused] remove_initializer:{k}]")
+                        print(
+                            f"[GraphBuilder.remove_unused] remove_initializer {n_not_marked}:"
+                            f"{i}/{len(self.initializers_dict)}: {k}]"
+                        )
 
         self.initializers_dict = {
             k: v for k, v in self.initializers_dict.items() if k in marked
@@ -4180,7 +4370,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param only_array: do not return TensorProto
         :param allow_empty: allow empty result
         :return: constant
+
+        If returns None if the constant is a FakeTensor.
         """
+        if self.main_opset < 18:
+            # This functionality is not enabled before that opset.
+            return None, None
         assert self.is_constant(name), f"Name {name!r} is not a constant"
         if name in self.initializers_dict:
             value = self.initializers_dict[name]
@@ -4192,6 +4387,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 v = onh.to_array(value)
                 self.add_initializer(name, v, existing=True, allow_empty=allow_empty)
                 return v, None
+            if isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
+                return None, None
             return value, None
 
         v = self.constants_[name]
@@ -4199,8 +4396,30 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             v, NodeProto
         ), f"Unexpected type {type(v)} for constant name={name!r}"
+
+        if v.op_type == "Shape" and not self.is_constant(v.input[0]):
+            # One exception here as the input maybe not constant but the shape may be known.
+            assert self.has_shape(
+                v.input[0]
+            ), f"Shape must be known if shape is constant in {v}{self.get_debug_msg()}"
+            shape = self.get_shape(v.input[0])
+            assert all_int(shape), (
+                f"Shape must be static ({shape}) if shape is constant in {v}"
+                f"{self.get_debug_msg()}"
+            )
+            with self.maybe_disable_fake_tensor_mode():
+                output = self._apply_shape_on_shape(v, shape)
+                if isinstance(output[0], self.torch.Tensor):
+                    # We convert the tensor into numpy array,
+                    # it is a small shape anyway so the FakeMode
+                    # does not come up as an issue.
+                    output = [output[0].detach().cpu().numpy()]
+                return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
+
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
+            if not exc and "FakeTensor" in str(type(val)):
+                return None, None
             assert "FakeTensor" not in str(type(val)), (
                 f"FakeTensor {kval!r} cannot be an initializer {type(val)}, "
                 f"v.op_type={v.op_type!r}"
@@ -4280,6 +4499,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
         )
         assert cst is not None, f"Constant {name!r} was not found in {v.output}"
+        if isinstance(cst, self.torch._subclasses.fake_tensor.FakeTensor):
+            return None, None
         return cst, feeds
 
     def constant_folding(self, convert_into_initializer: bool = True) -> int:
@@ -4301,8 +4522,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self.verbose >= 10:
                 for name in self._known_names:
                     print(
-                        f"[GraphBuilder.constant_folding] "
-                        f"cst:: {1 if self.is_constant(name) else '.'} :: {name}"
+                        f"[GraphBuilder.constant_folding] cst:: "
+                        f"{1 if self.is_constant(name) else '.'} :: {name}"
                     )
         start = len(self.nodes)
         updates = {}
@@ -5266,7 +5487,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return parse_expression(expr, exc=exc, context=self.dynamic_objects)
         except AssertionError as e:
             raise AssertionError(
-                f"Unable to parse an expression expr={expr!r} "
+                f"Unable to parse an expression expr=[{expr!r}] "
                 f"due to {e}{self.get_debug_msg()}"
             ) from e
 
@@ -5328,27 +5549,16 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def make_local_function(
         self,
-        name: str,
         builder: "GraphBuilder",
-        domain: str = "",
-        move_initializer_to_constant: bool = True,
+        function_options,
         optimize: bool = False,
-        rename_allowed: bool = False,
-        merge_allowed: bool = False,
     ) -> Tuple[List[str], Tuple[str, str]]:
         """
         Adds a local function to exiting graph.
 
-        :param name: local function name
         :param builder: builder
-        :param domain: domain name
-        :param move_initializer_to_constant: move initializers to constant (True)
-            or add them as inputs (False)
+        :param function_options: to define how to handle weights
         :param optimize: optimize the function
-        :param rename_allowed: function renaming is allowed to avoid
-            replacing an existing one
-        :param merge_allowed: if a function with the same name already exists,
-            it checks it is the same, if it is, then no new function is added
         :return: the list of added initializers if
             *move_initializer_to_constant* is True,
             and the function name (domain, name),
@@ -5359,73 +5569,83 @@ class GraphBuilder(_GraphBuilderRuntime):
         the builder if *move_initializer_to_constant* is True.
         It modifies the builder inplace.
         """
+        name = function_options.name
+        domain = function_options.domain
+        assert name, f"function_options is wrong {function_options!r}"
         assert (
-            rename_allowed
-            or merge_allowed
+            function_options.rename_allowed
+            or function_options.merge_allowed
             or not self.has_local_function(name=name, domain=domain)
         ), f"Function {name!r}, domain={domain!r} already exists"
-        if move_initializer_to_constant:
-            builder.inline_functions(verbose=max(0, self.verbose - 1))
-            onx = builder.to_onnx(
-                as_function=True,
-                function_name=name,
-                function_domain=domain,
-                optimize=optimize,
+
+        if function_options.move_initializer_to_constant:
+            if function_options.inline:
+                self._check_constants("before-inline_functions")
+                builder.inline_functions(verbose=max(0, self.verbose - 1))
+                self._check_constants("after-inline_functions")
+
+        assert function_options.return_initializer, (
+            f"incompatible options, return_initializer must be True "
+            f"but function_options={function_options!r}"
+        )
+        fct = builder.to_onnx(
+            function_options=function_options,
+            optimize=optimize,
+        )
+        assert isinstance(fct, dict), (
+            f"Unexpected type {type(fct)}, function_options={function_options}"
+            f"{self.get_debug_msg()}"
+        )
+        onx = fct["proto"]
+        to_rename = {}
+        keys = []
+        for f in builder.functions.values():
+            # What if on is already existing?
+            old_key = f.domain, f.name
+            new_key = self.add_function(
+                f,
+                rename_allowed=function_options.rename_allowed,
+                merge_allowed=function_options.merge_allowed,
             )
+            if new_key != old_key:
+                to_rename[old_key] = new_key
+            keys.append(new_key)
+
+        if to_rename:
+            # We rename the local functions.
+            onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
+
+        # Let's rename the initializers.
+        if "initializers_dict" in fct:
+            repl = {}
+            inits = fct["initializers_dict"]
             new_inits = []
-            new_name = name
+            for i in onx.input:
+                if i in inits:
+                    new_inits.append(i)
+            for i in inits:
+                if i not in new_inits:
+                    new_inits.append(i)
+            for k, v in inits.items():
+                new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
+                repl[k] = new_name
+            new_inits = [repl.get(i, i) for i in new_inits]
         else:
-            fct = builder.to_onnx(
-                as_function=OnnxType.FUNCTION_AND_INITIALIZERS,
-                function_name=name,
-                function_domain=domain,
-                optimize=optimize,
-            )
-            assert isinstance(fct, dict), f"Unexpected type {type(fct)}{self.get_debug_msg()}"
-            onx = fct["proto"]
-            to_rename = {}
-            keys = []
-            for f in builder.functions.values():
-                # What if on is already existing?
-                old_key = f.domain, f.name
-                new_key = self.add_function(
-                    f, rename_allowed=rename_allowed, merge_allowed=merge_allowed
-                )
-                if new_key != old_key:
-                    to_rename[old_key] = new_key
-                keys.append(new_key)
-            if to_rename:
-                # We rename the local functions.
-                onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
+            new_inits = []
 
-            # Let's rename the initializers.
-            if "initializers_dict" in fct:
-                repl = {}
-                inits = fct["initializers_dict"]
-                new_inits = []
-                for i in onx.input:
-                    if i in inits:
-                        new_inits.append(i)
-                for i in inits:
-                    if i not in new_inits:
-                        new_inits.append(i)
-                for k, v in inits.items():
-                    new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
-                    repl[k] = new_name
-                new_inits = [repl.get(i, i) for i in new_inits]
-            else:
-                new_inits = []
-
-        assert isinstance(
-            onx, FunctionProto
-        ), f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}"
+        assert isinstance(onx, FunctionProto), (
+            f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}, "
+            f"function_options={function_options}"
+        )
         assert all(node.op_type != name or node.domain != domain for node in onx.node), (
-            f"Recursivity is not allowed in function {name!r}, domain={domain!r}"
-            f"\n------ONNX----\n{onx}"
+            f"Recursivity is not allowed in function {name!r}, domain={domain!r}, "
+            f"function_options={function_options}\n------ONNX----\n{pretty_onnx(onx)}"
             f"{self.get_debug_msg()}"
         )
         new_domain, new_name = self.add_function(
-            onx, rename_allowed=rename_allowed, merge_allowed=merge_allowed
+            onx,
+            rename_allowed=function_options.rename_allowed,
+            merge_allowed=function_options.merge_allowed,
         )
         if new_domain not in self.opsets:
             self.opsets[new_domain] = 1
@@ -5476,9 +5696,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         return True
         return False
 
-    @classmethod
     def _rename_op_type_in_local_functions(
-        cls,
+        self,
         proto: Union[FunctionProto, GraphProto],
         replacements: Dict[Tuple[str, str], Tuple[str, str]],
     ) -> Union[FunctionProto, GraphProto]:
@@ -5489,7 +5708,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param replacements: the replacements to do
         :return: the new proto, or the existing one if no replacements was found
         """
-        if not cls._detect_op_type_replacements(proto, replacements):
+        if not self._detect_op_type_replacements(proto, replacements):
             return proto
         if isinstance(proto, FunctionProto):
             new_proto = FunctionProto()
@@ -5498,6 +5717,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             raise AssertionError(f"Unexpected type {type(proto)}")
         new_proto.ParseFromString(proto.SerializeToString())
+
+        self._check_constants("begin-renaming")
         for node in new_proto.node:
             key = node.domain, node.op_type
             if key in replacements:
@@ -5505,20 +5726,23 @@ class GraphBuilder(_GraphBuilderRuntime):
             node_attributes = []
             modified = False
             for att in node.attribute:
-                if att.type == AttributeProto.GRAPH:
-                    if not cls._detect_op_type_replacements(att.g, replacements):
-                        node_attributes.append(att)
-                        continue
+                if att.type != AttributeProto.GRAPH:
+                    node_attributes.append(att)
+                    continue
+                if not self._detect_op_type_replacements(att.g, replacements):
+                    node_attributes.append(att)
+                    continue
                 modified = True
                 node_attributes.append(
                     oh.make_attribute(
                         att.name,
-                        cls._rename_op_type_in_local_functions(att.g, replacements),
+                        self._rename_op_type_in_local_functions(att.g, replacements),
                     )
                 )
             if modified:
                 del node.attribute[:]
                 node.attribute.extend(node_attributes)
+        self._check_constants("after-renaming", new_proto)
         return new_proto
 
     def add_function(
@@ -5544,14 +5768,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         if rename_allowed and key in self.functions:
             i = 2
             new_name = f"{f.name}_2"
-            while new_name in self.functions:
+            while (f.domain, new_name) in self.functions:
                 i += 1
                 new_name = f"{f.name}_{i}"
             f.name = new_name
         key = f.domain, f.name
-        assert (
-            key not in self.functions
-        ), f"Function {key} was already added{self.get_debug_msg()}"
+        assert key not in self.functions, (
+            f"Function {key} was already added, rename_allowed={rename_allowed}, "
+            f"merge_allowed={merge_allowed}, same: "
+            f"{same_function_proto(self.functions[key], f)}"
+            f"\n{self.pretty_text()}"
+        )
         self.functions[key] = f
         return f.domain, f.name
 
@@ -5587,7 +5814,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(a, np.ndarray):
             if len(a.shape) == 0:
                 # Then torch may consider this as a the creation of empty array.
-                tt = self.torch.Tensor(a.reshape((1,)))
+                tt = self.torch.from_numpy(a.reshape((1,)).copy())
                 tt = tt[0]
             else:
                 tt = self.torch.Tensor(a)
@@ -5935,27 +6162,44 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         return new_nodes
 
-    def move_initializers_to_constant(self, verbose: int = 0):
+    def move_initializers_to_constant(
+        self, threshold: Optional[int] = None, verbose: int = 0
+    ) -> int:
         """
         Moves initializers as constant nodes.
+
+        :param threshold: only move intializers to constant if their size is below this limit
+        :param verbose: verbosity
+        :return: number of moves iniatliazers
         """
         if not self.initializers_dict:
             return
 
         initializers, _ = self._build_initializers(
             switch_low_high=sys.byteorder != "big",
-            large_model=False,
-            external_threshold=False,
+            large_model=True,
+            external_threshold=threshold or 2**30,
         )
 
+        to_remove = []
         cst_nodes = []
         for proto in initializers:
+            if proto.external_data:
+                # external tensor
+                continue
+            to_remove.append(proto.name)
             if self.verbose:
                 print(
                     f"[move_initializers_to_constant] convert "
                     f"{proto.name!r} into a node 'Constant'"
                 )
-            cst = oh.make_node("Constant", [], [proto.name], value=proto)
+            cst = oh.make_node(
+                "Constant",
+                [],
+                [proto.name],
+                value=proto,
+                name=self.unique_node_name("init2cst"),
+            )
             cst_nodes.append(cst)
             self.add_constant_node(cst)
             self.update_node_constant(proto.name, cst)
@@ -5964,5 +6208,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 proto.name
             ), f"Shape is missing for initializer {proto.name!r}"
 
-        self.initializers_dict = {}
-        self.nodes = [*cst_nodes, *self.nodes]
+        if to_remove:
+            remove = set(to_remove)
+            self.initializers_dict = {
+                k: v for k, v in self.initializers_dict.items() if k not in remove
+            }
+            self.nodes = [*cst_nodes, *self.nodes]

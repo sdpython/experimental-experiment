@@ -955,6 +955,7 @@ class TestOperatorsCort(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            verbose=0,
         )
 
     def test_full_like(self):
