@@ -921,6 +921,35 @@ class TestIssuesPytorch2024(ExtTestCase):
                     exporter=exporter, d3=d3, decomposition=decomposition, dynamic=dynamic
                 )
 
+    def test_sequence_ops_embedding_bag(self):
+        # https://github.com/pytorch/pytorch/issues/138485
+        import torch
+
+        model = torch.nn.EmbeddingBag(num_embeddings=49157, embedding_dim=32, mode="sum")
+        a = torch.tensor([[39906]]).long()
+        example_args = (a,)
+        model_eval = model.eval()
+        onx = to_onnx(model_eval, example_args)
+        with open("test_sequence_ops_embedding_bag_custom.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
+
+        expected = model(*example_args)
+
+        from onnxruntime import InferenceSession
+
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        got = sess.run(None, {onx.graph.input[0].name: example_args[0].numpy()})
+        self.assertEqualArray(expected, got[0])
+
+        """
+        torch.onnx.export(
+            model_eval,
+            example_args,
+            "test_sequence_ops_embedding_bag_torchscript.onnx",
+            dynamo=False,
+        )
+        """
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -662,7 +662,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if res is None:
                 assert not exc, (
                     f"No constant for name={name!r}, exc={exc}, "
-                    f"computed_value={computed_value}, as_shape={as_shape}"
+                    f"computed_value={computed_value}, as_shape={as_shape}, "
+                    f"multiple_outputs={multiple_outputs}{self.get_debug_msg()}"
                 )
                 return None
 
@@ -2880,7 +2881,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 itype = TensorProto.FLOAT
             self.set_type(node.output[0], itype)
             if self.is_constant(node.input[0]):
-                value = self.get_constant(node.input[0], computed_value=True, as_shape=True)
+                value = self.get_constant(
+                    node.input[0], computed_value=True, as_shape=True, exc=False
+                )
                 if value is not None:
                     self.set_shape(node.output[0], value)
                     node.doc_string += ":constant-9:"
@@ -3837,10 +3840,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self.verbose > 1:
                 print(f"[GraphBuilder.optimize] options={self.optimization_options!r}")
             else:
-                print(
-                    f"[GraphBuilder.optimize] #patterns="
-                    f"{len(self.optimization_options.patterns)}"
+                n_patterns = (
+                    0
+                    if self.optimization_options is None
+                    or self.optimization_options.patterns is None
+                    else len(self.optimization_options.patterns)
                 )
+                print(f"[GraphBuilder.optimize] #patterns={n_patterns}")
 
         self._check(statistics, "A")
         if self.optimization_options.remove_identity:
@@ -5645,9 +5651,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_name = f"{f.name}_{i}"
             f.name = new_name
         key = f.domain, f.name
-        assert (
-            key not in self.functions
-        ), f"Function {key} was already added{self.get_debug_msg()}"
+        assert key not in self.functions, (
+            f"Function {key} was already added, rename_allowed={rename_allowed}, "
+            f"merge_allowed={merge_allowed}{self.get_debug_msg()}"
+        )
         self.functions[key] = f
         return f.domain, f.name
 

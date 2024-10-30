@@ -1799,6 +1799,14 @@ def aten_embedding_bag_padding_idx(
         f"Not implemented for padding_idx={padding_idx}, "
         f"include_last_offset={include_last_offset}{g.get_debug_msg()}"
     )
+    assert not sparse, (
+        f"aten_embedding_bag_padding_idx implemented when "
+        f"sparse is True{g.get_debug_msg()}"
+    )
+    assert not scale_grad_by_freq, (
+        f"aten_embedding_bag_padding_idx implemented when "
+        f"scale_grad_by_freq is True{g.get_debug_msg()}"
+    )
     itype = g.get_type(weight)
 
     # Change padding_idx to positive value, -1 means the last index

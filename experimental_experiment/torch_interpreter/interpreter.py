@@ -65,6 +65,8 @@ class DynamoInterpreter:
             external_threshold=256,
             move_initializer_to_constant=True,
             return_initializer=True,
+            merge_allowed=True,
+            rename_allowed=True,
         )
         self.example_values_ = {}
         assert example_inputs is None or isinstance(

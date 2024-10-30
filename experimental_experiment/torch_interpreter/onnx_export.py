@@ -721,6 +721,7 @@ def to_onnx(
 
     if verbose:
         print("[to_onnx] start creating the onnx nodes")
+        print(f"[to_onnx] function_options={interpreter.function_options!r}")
 
     begin = t
     builder.process(graph_module, interpreter)
@@ -737,6 +738,7 @@ def to_onnx(
         external_threshold=external_threshold,
         return_optimize_report=True,
         inline=inline,
+        function_options=interpreter.function_options,
     )
     all_stats = dict(builder=builder.statistics_)
     if stats:
