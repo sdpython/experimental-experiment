@@ -3575,6 +3575,58 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_batch_normalization_identity(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "BatchNormalization",
+                        ["X", "scale", "B", "input_mean", "input_var"],
+                        ["Y"],
+                        epsilon=0.0,
+                    ),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [1024, 16])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [1024, 16])],
+                [
+                    onh.from_array(np.zeros((16,), dtype=np.float32), name="B"),
+                    onh.from_array(np.zeros((16,), dtype=np.float32), name="input_mean"),
+                    onh.from_array(np.ones((16,), dtype=np.float32), name="input_var"),
+                    onh.from_array(np.ones((16,), dtype=np.float32), name="scale"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(1024, 16).astype(np.float32)}
+        from onnxruntime import InferenceSession
+
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["BatchNormalization"], verbose=0, constant_folding=True
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Identity"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
