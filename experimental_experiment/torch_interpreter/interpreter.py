@@ -181,7 +181,9 @@ class DynamoInterpreter:
         elif node.op == "output":
             res = self.output(node)
         elif node.op == "call_module":
+            self.builder._check_constants(f"before-{node.op}")
             res = self.call_module(node)
+            self.builder._check_constants(f"after-{node.op}")
         elif node.op == "get_attr":
             res = self.get_attr(node)
         elif node.op == "call_method":
@@ -1530,9 +1532,14 @@ class DynamoInterpreter:
         else:
             root, n = self.builder.local_domain, 0
 
+        self.builder._check_constants("before-_interpret_sub_module")
+
         builder, args, kwargs, output_names = self._interpret_sub_module(
             sub_module, args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
         )
+
+        self.builder._check_constants("after-_interpret_sub_module")
+
         assert kwargs is None or len(kwargs) == 0, (
             f"args={string_type(args)}, kwargs={string_type(kwargs)} "
             f"is not implemented yet{self.builder.get_debug_msg()}"
@@ -1553,6 +1560,8 @@ class DynamoInterpreter:
                     f"{m.__module__}.{name}" if m.__module__ != "__main__" else name
                 )
 
+            self.builder._check_constants("before-make_nodes")
+
             # let's create a function under the appropriate name
             self.builder.make_nodes(
                 builder,
@@ -1571,6 +1580,9 @@ class DynamoInterpreter:
                 ),
                 optimize=self.optimize_submodules,
             )
+
+            self.builder._check_constants("after-make_nodes")
+
             if len(output_names) == len(builder.outputs):
                 # One output, both tensor
                 for name, out_name in zip(builder.output_names, output_names):
@@ -1600,6 +1612,8 @@ class DynamoInterpreter:
                 )
         else:
             # nodes are inserted inline
+            self.builder._check_constants("before-make_nodes(2)")
             self.builder.make_nodes(builder, args, output_names, prefix=f"_sub_{name}_")
+            self.builder._check_constants("after-make_nodes(2)")
 
         return output_names

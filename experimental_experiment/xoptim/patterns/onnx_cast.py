@@ -307,6 +307,8 @@ class ComputationCastOpCastPattern(PatternOptimization):
         else:
             node_left = None
         node_before = node_left or node_right
+        if not g.has_type(node.output[0]) or not g.has_type(node_before.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
         output_type = g.get_type(node.output[0])
         before_type = g.get_type(node_before.input[0])
         if not (

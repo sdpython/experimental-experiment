@@ -23,10 +23,12 @@ class ConvBiasNullPattern(PatternOptimization):
         if len(node.input) < 3:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if g.is_constant(node.input[2]):
-            cst = g.get_computed_constant(node.input[2])
-            if cst is None or cst.min() != 0 or cst.max() != 0:
-                return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[2]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cst = g.get_computed_constant(node.input[2])
+        if cst is None or cst.min() != 0 or cst.max() != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(

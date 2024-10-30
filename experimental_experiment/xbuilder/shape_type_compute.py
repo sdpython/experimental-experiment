@@ -473,7 +473,8 @@ def _adjust_attributes_of_max_pool(
 
 def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     k = node.output[0]
-    self.set_type(k, self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(k, self.get_type(node.input[0]))
     shape_set = False
     if self.is_constant(node.input[1]):
         value = self.get_constant(node.input[1], computed_value=True, as_shape=True, exc=False)

@@ -387,6 +387,10 @@ class _GraphBuilderRuntime:
                 new_feeds[k] = x
             else:
                 new_feeds[k] = v
+        assert len(node.input) >= 3, (
+            f"Node {node.op_type} (name={node.name!r}) has not enough "
+            f"inputs {node.input}\n{self.pretty_text()}"
+        )
         data, starts, ends = [new_feeds[k] for k in node.input[:3]]
         axes = new_feeds[node.input[3]] if len(node.input) > 3 and node.input[3] else None
         steps = new_feeds[node.input[4]] if len(node.input) > 4 and node.input[4] else None

@@ -314,7 +314,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
-        self._debug_get_constant = os.environ.get("ONNXCST", "0") != "#?#"
+        self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
         self.constraints_ = {}
@@ -609,6 +609,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             return tuple(proto.dims)
         if isinstance(proto, NodeProto):
             for att in proto.attribute:
+                assert att.type != AttributeProto.GRAPH, (
+                    f"Unexpected attribute type for attribute {att.name!r} "
+                    f"attribute list is {[a.name for a in proto.attribute]} "
+                    f"in node type {proto.op_type!r}, name={proto.name!r}, "
+                    f"doc_string={proto.doc_string!r}"
+                )
                 if att.name in ("value_float", "value_int"):
                     return tuple()
                 if att.name == "value_floats":
@@ -2907,6 +2913,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.update_node_constant(o, node)
 
         if node.op_type == "Constant":
+            assert (
+                len(node.attribute) == 0
+                or node.attribute[0].name != "value"
+                or node.attribute[0].type != AttributeProto.GRAPH
+            ), f"{node}"
             if len(node.attribute) == 1 and node.attribute[0].name == "value":
                 size = np.prod(node.attribute[0].t.dims)
             else:
@@ -2961,7 +2972,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     self.set_shape(node.output[0], tuple(int(i) for i in cst))
         elif node.op_type == "Reshape":
-            self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.has_type(node.input[0]):
+                self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[1]):
                 cst, _ = self.compute_constant(
                     node.input[1], exc=False, only_array=True, allow_empty=True
@@ -3063,6 +3075,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         if node.domain != "":
             set_shape_type_custom(self, node)
         else:
+            if node.input and not self.has_type(node.input[0]):
+                # It is probably coming from an inlined function.
+                return
             set_shape_type_op_any(self, node)
 
     def make_nodes(
@@ -3652,6 +3667,30 @@ class GraphBuilder(_GraphBuilderRuntime):
         used_functions = self._get_used_local_functions()
         return inputs_to_add, used_functions
 
+    def _check_constant(self, node: NodeProto, prefix: str):
+        assert isinstance(node, NodeProto), f"Unexpected type {type(node)} for node"
+        if node.op_type != "Constant":
+            return
+        assert (
+            len(node.attribute) == 1
+        ), f"{prefix}: unexpected number of attribute in node {node}"
+        assert (
+            node.attribute[0].type != AttributeProto.GRAPH
+        ), f"{prefix}: wrong attribute type in node {node}"
+
+    def _check_constants(self, prefix="before-inline", add: Optional[Any] = None):
+        for v in self.constants_node_.values():
+            self._check_constant(v, prefix)
+        for v in self.nodes:
+            self._check_constant(v, prefix)
+        for k, v in self.functions.items():
+            for node in v.node:
+                self._check_constant(node, f"{prefix}-[{k}]")
+        if add is not None:
+            assert isinstance(add, FunctionProto), f"Not implemented for type {type(add)}"
+            for node in add.node:
+                self._check_constant(node, f"{prefix}-[add]")
+
     def to_onnx(
         self,
         optimize: bool = True,
@@ -3683,7 +3722,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise RuntimeError(f"The onnx model is empty (no node).\n{self.get_debug_msg()}")
 
         if inline:
+            self._check_constants("before-inline")
             stats = self.inline_functions(verbose=self.verbose)
+            self._check_constants("after-inline")
         else:
             stats = None
 
@@ -4332,6 +4373,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         If returns None if the constant is a FakeTensor.
         """
+        if self.main_opset < 18:
+            # This functionality is not enabled before that opset.
+            return None, None
         assert self.is_constant(name), f"Name {name!r} is not a constant"
         if name in self.initializers_dict:
             value = self.initializers_dict[name]
@@ -5536,7 +5580,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if function_options.move_initializer_to_constant:
             if function_options.inline:
+                self._check_constants("before-inline_functions")
                 builder.inline_functions(verbose=max(0, self.verbose - 1))
+                self._check_constants("after-inline_functions")
 
         assert function_options.return_initializer, (
             f"incompatible options, return_initializer must be True "
@@ -5564,6 +5610,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if new_key != old_key:
                 to_rename[old_key] = new_key
             keys.append(new_key)
+
         if to_rename:
             # We rename the local functions.
             onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
@@ -5649,9 +5696,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         return True
         return False
 
-    @classmethod
     def _rename_op_type_in_local_functions(
-        cls,
+        self,
         proto: Union[FunctionProto, GraphProto],
         replacements: Dict[Tuple[str, str], Tuple[str, str]],
     ) -> Union[FunctionProto, GraphProto]:
@@ -5662,7 +5708,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param replacements: the replacements to do
         :return: the new proto, or the existing one if no replacements was found
         """
-        if not cls._detect_op_type_replacements(proto, replacements):
+        if not self._detect_op_type_replacements(proto, replacements):
             return proto
         if isinstance(proto, FunctionProto):
             new_proto = FunctionProto()
@@ -5671,6 +5717,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             raise AssertionError(f"Unexpected type {type(proto)}")
         new_proto.ParseFromString(proto.SerializeToString())
+
+        self._check_constants("begin-renaming")
         for node in new_proto.node:
             key = node.domain, node.op_type
             if key in replacements:
@@ -5678,20 +5726,23 @@ class GraphBuilder(_GraphBuilderRuntime):
             node_attributes = []
             modified = False
             for att in node.attribute:
-                if att.type == AttributeProto.GRAPH:
-                    if not cls._detect_op_type_replacements(att.g, replacements):
-                        node_attributes.append(att)
-                        continue
+                if att.type != AttributeProto.GRAPH:
+                    node_attributes.append(att)
+                    continue
+                if not self._detect_op_type_replacements(att.g, replacements):
+                    node_attributes.append(att)
+                    continue
                 modified = True
                 node_attributes.append(
                     oh.make_attribute(
                         att.name,
-                        cls._rename_op_type_in_local_functions(att.g, replacements),
+                        self._rename_op_type_in_local_functions(att.g, replacements),
                     )
                 )
             if modified:
                 del node.attribute[:]
                 node.attribute.extend(node_attributes)
+        self._check_constants("after-renaming", new_proto)
         return new_proto
 
     def add_function(
@@ -6142,7 +6193,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"[move_initializers_to_constant] convert "
                     f"{proto.name!r} into a node 'Constant'"
                 )
-            cst = oh.make_node("Constant", [], [proto.name], value=proto)
+            cst = oh.make_node(
+                "Constant",
+                [],
+                [proto.name],
+                value=proto,
+                name=self.unique_node_name("init2cst"),
+            )
             cst_nodes.append(cst)
             self.add_constant_node(cst)
             self.update_node_constant(proto.name, cst)

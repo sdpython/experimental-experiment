@@ -112,14 +112,12 @@ class TestLlmModelHelper(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False, decomposition_table="all"),
             export_modules_as_functions=True,
+            inline=False,  # function do not retain shape information
         )
         filename = "test_get_phi_35_mini_instruct_custom_cuda_modules.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
 
-        from experimental_experiment.helpers import pretty_onnx
-
-        print(pretty_onnx(filename))
         sess = onnxruntime.InferenceSession(
             filename, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
         )
