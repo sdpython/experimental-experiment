@@ -5516,12 +5516,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             new_inits = []
 
-        assert isinstance(
-            onx, FunctionProto
-        ), f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}"
+        assert isinstance(onx, FunctionProto), (
+            f"Unexpected type {type(onx)}, name={name!r}, domain={domain!r}, "
+            f"function_options={function_options}"
+        )
         assert all(node.op_type != name or node.domain != domain for node in onx.node), (
-            f"Recursivity is not allowed in function {name!r}, domain={domain!r}"
-            f"\n------ONNX----\n{onx}"
+            f"Recursivity is not allowed in function {name!r}, domain={domain!r}, "
+            f"function_options={function_options}\n------ONNX----\n{onx}"
             f"{self.get_debug_msg()}"
         )
         new_domain, new_name = self.add_function(

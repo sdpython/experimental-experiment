@@ -243,8 +243,8 @@ class DynamoInterpreter:
                     return_initializer=True,
                     move_initializer_to_constant=self.function_options.move_initializer_to_constant,
                     external_threshold=self.function_options.external_threshold,
-                    merge_allowed=self.function_options,
-                    rename_allowed=self.function_options,
+                    merge_allowed=self.function_options.merge_allowed,
+                    rename_allowed=self.function_options.rename_allowed,
                 ),
                 optimize=self.optimize_submodules,
             )
@@ -1549,8 +1549,8 @@ class DynamoInterpreter:
                     return_initializer=True,
                     move_initializer_to_constant=self.function_options.move_initializer_to_constant,
                     external_threshold=self.function_options.external_threshold,
-                    merge_allowed=self.function_options,
-                    rename_allowed=self.function_options,
+                    merge_allowed=self.function_options.merge_allowed,
+                    rename_allowed=self.function_options.rename_allowed,
                 ),
                 optimize=self.optimize_submodules,
             )

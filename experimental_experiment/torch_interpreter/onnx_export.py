@@ -738,7 +738,7 @@ def to_onnx(
         external_threshold=external_threshold,
         return_optimize_report=True,
         inline=inline,
-        function_options=interpreter.function_options,
+        function_options=function_options,
     )
     all_stats = dict(builder=builder.statistics_)
     if stats:
