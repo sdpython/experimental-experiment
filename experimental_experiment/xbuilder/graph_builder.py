@@ -2533,6 +2533,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
     def _fill_dynamic_alias(self, dyn_shape: Tuple[Any, ...], name: str):
+        if dyn_shape is None:
+            return
         for pos, k in enumerate(dyn_shape):
             if not self._is_dynamic_dimension(k):
                 continue
