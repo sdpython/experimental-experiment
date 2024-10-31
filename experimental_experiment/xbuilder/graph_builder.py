@@ -2201,7 +2201,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def _get_dynamic_dimension(self, name: str, dim: int) -> Optional[str]:
         if self.dynamic_shapes is None:
             return None
-        if name not in self.dynamic_shapes:
+        if not self.dynamic_shapes or name not in self.dynamic_shapes:
             return None
         dyn = self.dynamic_shapes[name]
         if dim not in dyn:
@@ -2552,7 +2552,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if alias is None:
                 res.append(None)
                 continue
-            if name not in self.dynamic_shapes:
+            if not self.dynamic_shapes or name not in self.dynamic_shapes:
                 res.append(None)
                 continue
             ds = self.dynamic_shapes[name]
