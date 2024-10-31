@@ -402,6 +402,7 @@ def _make_builder_interpreter(
         raise_list=raise_list,
         dynamic_shapes=dynamic_shapes,
         local_domain=local_domain,
+        signature=inspect.signature(mod.forward),
     )
 
     def retrieve(

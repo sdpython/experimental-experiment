@@ -333,6 +333,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         with torch.no_grad():
             input_dims = [(2, 1024), (3, 1024)]
             model, input_tensors = get_llama_model(input_dims, with_mask=False)
+            print(model.forward)
             onx = to_onnx(
                 model,
                 input_tensors[0],

@@ -60,6 +60,36 @@ def string_type(obj: Any) -> str:
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 
 
+def string_signature(sig: Any) -> str:
+    """
+    Displays the signature of a functions.
+    """
+
+    def _k(p, kind):
+        for name in dir(p):
+            if getattr(p, name) == kind:
+                return name
+        return repr(kind)
+
+    text = [" __call__ ("]
+    for p in sig.parameters:
+        pp = sig.parameters[p]
+        kind = repr(pp.kind)
+        t = f"{p}: {pp.annotation}" if pp.annotation is not inspect._empty else p
+        if pp.default is not inspect._empty:
+            t = f"{t} = {pp.default!r}"
+        if kind == pp.VAR_POSITIONAL:
+            t = f"*{t}"
+        le = (30 - len(t)) * " "
+        text.append(f"    {t}{le}|{_k(pp,kind)}")
+        text.append(
+            f") -> {sig.return_annotation}"
+            if sig.return_annotation is not inspect._empty
+            else ")"
+        )
+        return "\n".join(text)
+
+
 def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
     """
     Displays the signature of a functions if the default
