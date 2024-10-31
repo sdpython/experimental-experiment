@@ -203,6 +203,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     - `constraints_: Dict[str, Set[Any]]`:
         if a broadcast implies a constraints on a dynamic shape,
         it is stored here
+    - `_events`: is used ot retrieve any information useful to debug
 
     Debugging attributes:
 
@@ -309,6 +310,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._dynamic_alias = {}
         self.constants_node_ = {}
         self.constants_alias_ = {}
+        self._events = {}
         self.signature = signature
 
         self.nodes = []
@@ -358,7 +360,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.input_names = input_names or []
             self.current_input = 0
             self._unique_names = set(self.input_names)
-            self._known_names = self._unique_names.copy()
 
         elif isinstance(target_opset_or_existing_proto, ModelProto):
             # loads a model from nothing
@@ -961,20 +962,29 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"new={d}{self.get_debug_msg()}"
             )
 
-    def set_name(self, name: str):
+    def set_name(self, name: str, marker: str):
         """Adds a name to the list of known names."""
-        assert name != "", f"Empty name {name!r} cannot be registered{self.get_debug_msg()}"
+        assert name != "", (
+            f"Empty name {name!r} cannot be registered, "
+            f"marker={marker!r}{self.get_debug_msg()}"
+        )
         assert name not in self._raise_list, (
             f"Name {name!r} is one of the name declared in "
-            f"the stop list{self.get_debug_msg()}"
+            f"the stop list, marker={marker!r}{self.get_debug_msg()}"
         )
-
-        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        assert (
-            name not in self._known_names
-        ), f"Name {name!r} already exists{self.get_debug_msg()}"
+        assert isinstance(name, str), (
+            f"Unexpected type {type(name)} for name, "
+            f"marker={marker!r}, existing marker={self._events[name, 'set_name']}"
+            f"{self.get_debug_msg()}"
+        )
+        assert name not in self._known_names, (
+            f"Name {name!r} already exists, marker={marker!r}, "
+            f"existing marker is {self._events[name, 'set_name']}"
+            f"{self.get_debug_msg()}"
+        )
         self._known_names.add(name)
         self._unique_names.add(name)
+        self._events[name, "set_name"] = marker
 
     def set_rank(self, name: str, value: int):
         """
@@ -1651,6 +1661,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 ),
                 (1,),
                 is_dimension=True,
+                marker="make_dynamic_object",
             )
         return self._known_value_shape[name]
 
@@ -1941,7 +1952,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_shape(name, shape)
             self.set_type(name, itype)
             if not self.has_name(name):
-                self.set_name(name)
+                self.set_name(name, "make_initializer")
             self._unique_names.add(name)
 
         self.initializers_dict[name] = value
@@ -2444,7 +2455,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._registered_users[name] = set(users)
 
     def make_tensor_input(
-        self, name: str, elem_type: Any, shape: DYNAMIC_SHAPE, is_dimension: bool
+        self,
+        name: str,
+        elem_type: Any,
+        shape: DYNAMIC_SHAPE,
+        is_dimension: bool,
+        marker: str = "",
     ) -> str:
         """
         Adds a tensor input to the onnx graph.
@@ -2454,6 +2470,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param shape: shape
         :param is_dimension: torch is using torch.SymInt to add a dynamic input
             to the graph
+        :param marker: to known from this input was created
         :return: input name
         """
         add_node = lambda: None  # noqa: E731
@@ -2465,7 +2482,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     "Identity",
                     [input_name],
                     [name],
-                    name="make_tensor_input",
+                    name="make_tensor_input_id",
                 )
         else:
             if is_dimension:
@@ -2477,7 +2494,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         "Identity",
                         [input_name],
                         [name],
-                        name="make_tensor_input",
+                        name="make_tensor_input_id",
                     )
             else:
                 self.input_names.append(name)
@@ -2503,14 +2520,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
-        self.set_name(input_name)
+        self.set_name(input_name, marker=f"make_tensor_input_{marker}")
         if shape is not None:
             self._make_tensor_input_finalize(name, shape, dyn_shape)
 
         if self.verbose > 1:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_input] "
-                f"{input_name}[{elem_type}:{dyn_shape}]"
+                f"{input_name}[{elem_type}:{dyn_shape}] -- marker={marker}"
             )
         assert (
             self.as_function or elem_type
@@ -3015,7 +3032,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for o in node.output:
             if o == "":
                 continue
-            self.set_name(o)
+            self.set_name(o, f"make_node_{op_type}_{o}")
         if insert_position == "HEAD":
             self.nodes.insert(0, node)
         else:
@@ -5143,7 +5160,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     # connecting to existing input
                     n_existing.append(o)
                 else:
-                    self.set_name(o)
+                    self.set_name(o, f"insert_and_remove_nodes_{node.op_type}_{o}")
 
             node_domain = node.domain or ""
             if node_domain in self.opsets:
@@ -5417,7 +5434,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             available_shapes = {}
 
         for i in self.inputs + self.outputs:
-            self.set_name(i.name)
+            self.set_name(i.name, f"_update_structures_with_proto_{i}")
             self.set_type(i.name, i.type.tensor_type.elem_type)
             if i.type.tensor_type.shape.dim:
                 shape = tuple(
@@ -5462,7 +5479,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if shape_set:
                 for o in node.output:
                     if not self.has_name(o):
-                        self.set_name(o)
+                        self.set_name(o, f"_update_structures_with_proto_n_{o}")
                 new_nodes.append(node)
                 continue
 
@@ -5474,7 +5491,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                     unique_dtypes = set(u for u in unique_dtypes if u != 0)
                     if len(unique_dtypes) == 0:
                         if not self.has_name(node.output[0]):
-                            self.set_name(node.output[0])
+                            self.set_name(
+                                node.output[0],
+                                f"_update_structures_with_proto_SC1_{node.output[0]}",
+                            )
                         self.set_sequence(
                             node.output[0], 0, shapes=None, ranks=None, unknown=True
                         )
@@ -5487,7 +5507,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"node.input={node.input}"
                 )
                 if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
+                    self.set_name(
+                        node.output[0], f"_update_structures_with_proto_SC2_{node.output[0]}"
+                    )
                 self.set_sequence(
                     node.output[0],
                     next(_ for _ in unique_dtypes),
@@ -5505,7 +5527,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     # More than one type is allowed in torch sequences.
                     dtype = dtype[int(position)]
                 if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
+                    self.set_name(
+                        node.output[0], f"_update_structures_with_proto_SAt_{node.output[0]}"
+                    )
                 self.set_type(node.output[0], dtype)
                 if seq["ranks"] is None:
                     new_nodes.append(node)
@@ -5542,7 +5566,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
                 self.update_node_constant(node.output[0], node)
                 if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
+                    self.set_name(
+                        node.output[0], f"_update_structures_with_proto_Cst_{node.output[0]}"
+                    )
 
                 if replaced:
                     self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -5567,7 +5593,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
                 self.update_node_constant(node.output[0], node)
                 if not self.has_name(node.output[0]):
-                    self.set_name(node.output[0])
+                    self.set_name(
+                        node.output[0], f"_update_structures_with_proto_CoF_{node.output[0]}"
+                    )
 
                 if replaced:
                     self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -5586,7 +5614,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if o == "":
                         continue
                     if not self.has_name(o):
-                        self.set_name(o)
+                        self.set_name(o, f"_update_structures_with_proto_l_{o}")
 
                 self._make_node_set_type_shape_constant(node, True)
                 self._make_node_set_type_shape(node)

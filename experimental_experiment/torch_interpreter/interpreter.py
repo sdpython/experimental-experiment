@@ -310,7 +310,11 @@ class DynamoInterpreter:
 
         self.current_input_ += 1
         return self.builder.make_tensor_input(
-            name, elem_type, shape, is_dimension=is_dimension
+            name,
+            elem_type,
+            shape,
+            is_dimension=is_dimension,
+            marker="DynamoInterpreter._make_tensor_input",
         )
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
