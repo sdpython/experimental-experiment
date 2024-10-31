@@ -15,6 +15,18 @@ class Expression:
         return f"{self.__class__.__name__}({self.expr!r})"
 
 
+def parse_expression_tokens(expr: str):
+    """
+    Extracts the token from an expression.
+    """
+    tokens = []
+    st = ast.parse(expr, mode="eval")
+    for node in ast.walk(st):
+        if isinstance(node, ast.Name):
+            tokens.append(node.id)
+    return set(tokens)
+
+
 def parse_expression(
     expr: str,
     context: Optional[Dict[str, Any]] = None,

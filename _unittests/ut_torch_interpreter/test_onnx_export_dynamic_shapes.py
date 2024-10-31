@@ -74,8 +74,8 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             return_builder=True,
         )
         s = _builder.pretty_text()
-        self.assertIn("batchx1", s)
-        self.assertIn("batchx3", s)
+        self.assertIn("batch x 1", s)
+        self.assertIn("batch x 3", s)
 
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
@@ -119,7 +119,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             options=OptimizationOptions(patterns=None),
             return_builder=True,
         )
-        self.assertIn("|T1:11x1", builder.pretty_text())
+        self.assertIn("|T1: 11 x 1", builder.pretty_text())
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
             for d in onx.graph.input[0].type.tensor_type.shape.dim
@@ -151,7 +151,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             verbose=0,
             return_builder=True,
         )
-        self.assertIn("|T1:2*batchx1", _builder.pretty_text())
+        self.assertIn("|T1: 2*batch x 1", _builder.pretty_text())
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
             for d in onx.graph.input[0].type.tensor_type.shape.dim
@@ -333,7 +333,6 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         with torch.no_grad():
             input_dims = [(2, 1024), (3, 1024)]
             model, input_tensors = get_llama_model(input_dims, with_mask=False)
-            print(model.forward)
             onx = to_onnx(
                 model,
                 input_tensors[0],
@@ -386,8 +385,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 verbose=0,
                 return_builder=True,
             )
-            self.assertNotEmpty(builder)
-            print(builder.pretty_text())
+            self.assertIn("WrapSym(s1 + 1)", builder.pretty_text())
             if __name__ == "__main__":
                 with open(
                     "test_export_llama_model_dynamic_shapes_x2_cpu_tuple.onnx", "wb"
@@ -399,7 +397,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 # The value changed from ("s1", "s2") to ("s0", "s1") between
                 # 9/25/24 and 9/28/24.
-                self.assertIn(value, (("s0", "s1"), ("s1", "s2")))
+                self.assertEqual(value, ("batch", "length"))
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)

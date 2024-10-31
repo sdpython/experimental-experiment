@@ -5,10 +5,9 @@ import types
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from ..helpers import string_type
+from ..helpers import string_type, make_hash
 from ..xbuilder import GraphBuilder, FunctionOptions
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
-from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import (
     torch_dtype_to_onnx_dtype,
     onnx_dtype_to_torch_dtype,

@@ -37,6 +37,7 @@ API
     torch_helper
     torch_test
     convert
+    helpers
     misc
 
 **Versions**

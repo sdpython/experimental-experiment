@@ -32,7 +32,7 @@ import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
-from ..helpers import string_sig, pretty_onnx, string_signature
+from ..helpers import make_hash, string_sig, pretty_onnx, string_signature
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
     DYNAMIC_SHAPE,
@@ -60,9 +60,8 @@ from ._dtype_helper import (
     onnx_dtype_to_torch_dtype,
     torch_dtype_to_onnx_dtype,
 )
-from ._helper import make_hash
 from .optimization_options import OptimizationOptions
-from .expression_dimension import Expression, parse_expression
+from .expression_dimension import Expression, parse_expression, parse_expression_tokens
 from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
 
@@ -240,10 +239,25 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.sym = sym
 
         def __repr__(self) -> str:
-            try:
-                return f"WrapSym({self.sym!r})"
-            except AttributeError:
-                return "WrapSym(...)"
+            return f"WrapSym({self._dynamic_to_str(self.sym)})"
+
+        def _dynamic_to_str(self, obj: Any) -> Optional[str]:
+            if isinstance(obj, str):
+                return obj
+            import torch
+
+            if isinstance(obj, torch.export.dynamic_shapes._DerivedDim):
+                return obj.__name__
+            if isinstance(obj, torch.export.dynamic_shapes._Dim):
+                return obj.__name__
+            if isinstance(obj, torch.SymInt):
+                if isinstance(obj.node, str):
+                    return obj.node
+                i = obj.node._expr
+                if "sympy" in str(type(i)):
+                    return str(i)
+                return None
+            raise AssertionError(f"Unexpected type {type(obj)} to convert into string")
 
     # Size of a tensor kept in the onnx file and not stored as exrternal weight.
     SMALL_TENSOR = 1024
@@ -285,6 +299,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
         self.functions = {}
+        self.functions_builder = {}
         self.value_info = []
         self.raise_list = raise_list
         self._raise_list = raise_list or set()
@@ -548,8 +563,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         info = []
         for o in node.output:
             t = f"T{self.get_type(o)}" if self.has_type(o) else ""
-            s = "x".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
-            info.append(":".join([t, s]))
+            s = " x ".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
+            info.append(": ".join([t, s]))
         return f"{text}|{' '.join(info)}"
 
     def pretty_text(self) -> str:
@@ -558,7 +573,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(d1, self.torch.SymInt):
                 return f"SymInt({self._torch_sym_int_to_str(d1)})"
             if isinstance(d1, self.WrapSym):
-                return f"WrapSym({_d(d1.sym)})"
+                return repr(d1)
             if isinstance(d1, self.torch.export.dynamic_shapes._DerivedDim):
                 return f"_DerivedDim({d1.__name__})"
             if isinstance(d1, self.torch.export.dynamic_shapes._Dim):
@@ -578,20 +593,20 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         def _v(v):
             if hasattr(v, "shape"):
-                shape = "x".join(map(str, v.shape))
+                shape = " x ".join(map(str, v.shape))
                 dtype = str(v.dtype)
             else:
                 shape = "?"
                 dtype = "?"
-            return f"{dtype}:{shape}"
+            return f"{dtype}: {shape}"
 
         def _io(o, prefix):
             text = f"{prefix}: {o}"
             add = " " * abs(80 - len(text))
             text += add
             t = f"T{self.get_type(o)}" if self.has_type(o) else ""
-            s = "x".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
-            return f"{text}|{':'.join([t,s])}"
+            s = " x ".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
+            return f"{text}|{': '.join([t,s])}"
 
         rows = [""]
         # signature
@@ -620,14 +635,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             rows.append(self.print_node(node))
         for i in self.output_names:
             rows.append(_io(i, "output:"))
-        for f in self.functions.values():
+        for k, f in self.functions.items():
             rows.append("")
+            rows.append(f"FUNCKEY: {k}")
             rows.append(f"FUNC {f.name}[{f.domain}]: {f.input} -> {f.output}")
             for op in f.opset_import:
                 n = op.domain if op.domain else "''"
                 rows.append(f"  opset: {n}: {op.version}")
             for node in f.node:
                 rows.append(f"  {self.print_node(node)}")
+            if k in self.functions_builder:
+                rows.append(self.functions_builder[k].pretty_text())
         return "\n".join(rows)
 
     @property
@@ -2445,7 +2463,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.current_input += 1
         elem_type = _get_type(elem_type)
         dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
-        _new_dyn_shape = self._fill_dynamic_alias(dyn_shape, name)
+        self._fill_dynamic_alias(shape, name)
+        new_dyn_shape = self._fill_dynamic_alias(dyn_shape, name)
+        if new_dyn_shape is not None:
+            dyn_shape = tuple(
+                (a if a is not None else b) for a, b in zip(new_dyn_shape, dyn_shape)
+            )
 
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
         if shape is not None:
@@ -2480,21 +2503,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return res
             if res not in self.dynamic_objects:
                 self.add_dynamic_object(res, res)
-            if "*" in res:
-                raise NotImplementedError(f"{res!r} not supported yet")
-                # Handling the case where a dynamic
-                # dimension is given as a multiple.
-                # There should be another way.
-                """
-                spl = sb.split("*")
-                for _ in tokens:
-                    try:
-                        int(_)
-                        continue
-                    except ValueError:
-                        pass
-                    self.add_dynamic_object(_, _)
-                """
+            tokens = parse_expression_tokens(res)
+            if register_if_not_exist and len(tokens) > 1:
+                for t in tokens:
+                    if isinstance(t, str):
+                        self.add_dynamic_object(t, t)
             return res
 
         if isinstance(obj, str):
@@ -2505,16 +2518,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             return obj.__name__
         if isinstance(obj, self.torch.SymInt):
             i = obj.node._expr
-            if i.__class__.__name__ == "Symbol":
+            if "sympy" in str(type(i)):
                 return str(i)
             if exc:
-                print(obj)
-                print(obj.node)
-                print(type(obj.node))
-                print(obj.__dict__)
-                print(obj.node.__dict__)
-                print(type(obj.node._expr))
-                print(str(obj))
                 raise AssertionError(
                     f"Object has {type(obj)} but could not find a dynamic interpretation"
                 )
@@ -2532,24 +2538,33 @@ class GraphBuilder(_GraphBuilderRuntime):
             ),
         )
 
-    def _fill_dynamic_alias(self, dyn_shape: Tuple[Any, ...], name: str):
+    def _fill_dynamic_alias(
+        self, dyn_shape: Optional[Tuple[Any, ...]], name: str
+    ) -> Optional[Tuple[Any, ...]]:
         if dyn_shape is None:
-            return
+            return None
+        res = []
         for pos, k in enumerate(dyn_shape):
             if not self._is_dynamic_dimension(k):
+                res.append(None)
                 continue
             alias = self._dynamic_to_str(k, exc=False)
             if alias is None:
+                res.append(None)
                 continue
             if name not in self.dynamic_shapes:
+                res.append(None)
                 continue
             ds = self.dynamic_shapes[name]
             if pos not in ds:
+                res.append(None)
                 continue
             dim = ds[pos]
             sdim = self._dynamic_to_str(dim, register_if_not_exist=True)
-            if dim != alias:
+            if sdim != alias:
                 self._dynamic_alias[alias] = sdim
+            res.append(sdim)
+        return tuple(res)
 
     def _make_tensor_input_finalize(self, name: str, shape: Any, dyn_shape: Any):
         tuple_shape = tuple(shape)
@@ -2630,7 +2645,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.verbose > 1:
             print(
                 f"[GraphBuilder-{self._hash()}.make_tensor_output] "
-                f"{name}[{elem_type}:{dyn_shape}]"
+                f"{name}[{elem_type}: {dyn_shape}]"
             )
         if dyn_shape:
             self.set_shape(name, dyn_shape)
@@ -2852,7 +2867,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             print(
                 f"[GraphBuilder-{self._hash()}.make_node]"
                 f"[{self._debug_string_inputs(inputs, output_names)}] "
-                f"{op_type}:{inputs}->{outputs}"
+                f"{op_type}: {inputs}->{outputs}"
             )
 
         if check is not False:
@@ -2944,7 +2959,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     print(
                         f"[GraphBuilder-{self._hash()}.make_node] "
                         f"duplicated constant detected for "
-                        f"{node.op_type}:{node.input}->{node.output}"
+                        f"{node.op_type}: {node.input}->{node.output}"
                     )
                 node = oh.make_node(
                     "Identity",
@@ -2963,7 +2978,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             print(
                 f"[GraphBuilder-{self._hash()}.make_node] "
                 f"[{self._debug_string_inputs(node.input, output_names)}] "
-                f"{node.op_type}:{node.input}->{node.output}"
+                f"{node.op_type}: {node.input}->{node.output}"
             )
 
         shape_set = self.simple_update_value_shape_with_node(node)
@@ -3042,7 +3057,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_shape(k, shape)
             self.set_type(k, dtype)
             if self.verbose > 2 or np.prod(shape) > 100:
-                print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}:{shape}]")
+                print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}: {shape}]")
         elif node.op_type == "ConstantOfShape":
             if len(node.attribute) == 1 and node.attribute[0].name == "value":
                 itype = node.attribute[0].t.data_type
@@ -5360,6 +5375,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for i in proto.graph.sparse_initializer:
             self.add_initializer(i.name, i, allow_empty=True)
         self.functions = {}
+        self.functions_builder = {}
         for f in proto.functions:
             self.add_function(f)
         self.value_info = list(proto.graph.value_info)
@@ -5754,6 +5770,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             onx,
             rename_allowed=function_options.rename_allowed,
             merge_allowed=function_options.merge_allowed,
+            builder=builder,
         )
         if new_domain not in self.opsets:
             self.opsets[new_domain] = 1
@@ -5854,7 +5871,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         return new_proto
 
     def add_function(
-        self, f: FunctionProto, rename_allowed: bool = False, merge_allowed: bool = False
+        self,
+        f: FunctionProto,
+        rename_allowed: bool = False,
+        merge_allowed: bool = False,
+        builder: Optional["GraphBuilder"] = None,
     ):
         """
         Adds a new local function.
@@ -5865,6 +5886,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             the proto is modified inplace
         :param merge_allowed: the function is not added if another function
             of the same name already exists and is the same
+        :param builder: GraphBuilder used to build the local function,
+            it contains shape information the function does not have
         :return: function name
         """
         key = f.domain, f.name
@@ -5888,6 +5911,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"\n{self.pretty_text()}"
         )
         self.functions[key] = f
+        if builder:
+            self.functions_builder[key] = builder
         return f.domain, f.name
 
     def has_local_function(self, name: str, domain: str = ""):
