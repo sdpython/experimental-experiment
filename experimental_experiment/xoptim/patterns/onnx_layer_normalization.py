@@ -409,3 +409,82 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
         )
         new_node.attribute.extend(node.attribute)
         return [*nodes, new_node]
+
+
+class BatchNormalizationPattern(PatternOptimization):
+    """
+    Checks that a BatchNormalization is really needed.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "BatchNormalization" or node.domain != "":
+            return self.none()
+        if len(node.output) > 1 and len(g.next_nodes(node.output[1])):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(node.output) > 2 and len(g.next_nodes(node.output[2])):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        momentum = 0.9
+        epsilon = 1e-5
+        training_mode = 0
+        for att in node.attribute:
+            if att.name == "momentum":
+                momentum = att.f
+            elif att.name == "epsilon":
+                epsilon = att.f
+            elif att.name == "training_mode":
+                training_mode = att.i
+        if training_mode and momentum != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if epsilon != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[2]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[3]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[3]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # biases
+        for z in node.input[2:4]:
+            cst = g.get_computed_constant(z)
+            if cst is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if cst.min() == cst.max() == 0:
+                continue
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # scales
+        for z in [node.input[1], node.input[4]]:
+            cst = g.get_computed_constant(z)
+            if cst is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if cst.min() == cst.max() == 1:
+                continue
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "Identity",
+            node.input[:1],
+            node.output[:1],
+            name=f"{self.__class__.__name__}--{node.name}",
+            doc_string=node.doc_string,
+        )
+        return [new_node]
