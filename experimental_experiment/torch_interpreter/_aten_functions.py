@@ -4302,6 +4302,29 @@ def aten_mm(
     return res
 
 
+def aten_mod(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="mod",
+) -> T:
+    "mod"
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g,
+        x,
+        y,
+        f=g.op.Mod,
+        name=name,
+        outputs=outputs,
+        sts=sts,
+    )
+    if not sts:
+        set_type_shape_binary_op(g, res, x, y)
+    return res
+
+
 def aten_mul(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5035,10 +5058,11 @@ def aten_pad(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    pad: Tuple[int, ...],
+    pad: Union[T, Tuple[int, ...]],
     mode: str = "constant",
     value: Optional[float] = None,
     name: str = "pad",
+    pad_is_right: bool = False,
 ) -> T:
     """pad"""
     assert mode in {
@@ -5049,16 +5073,20 @@ def aten_pad(
     value = float(value or 0)
 
     rk = g.get_rank(x)
-    if len(pad) < rk * 2:
-        pad = list(pad) + list((0,) * (rk * 2 - len(pad)))
-
-    new_pad = pad[::2][::-1] + pad[1::2][::-1]
+    if isinstance(pad, list):
+        if len(pad) < rk * 2:
+            pad = list(pad) + list((0,) * (rk * 2 - len(pad)))
+        new_pad = pad[::2][::-1] + pad[1::2][::-1]
+        new_pad = np.array(new_pad, dtype=np.int64)
+    else:
+        assert (
+            pad_is_right
+        ), f"not implemented if pad={pad!r} is coming from pytorch{g.get_debug_msg()}"
+        new_pad = pad
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     cst = np.array(value, dtype=dtype)
-    res = g.op.Pad(
-        x, np.array(new_pad, dtype=np.int64), cst, name=name, outputs=outputs, mode=mode
-    )
+    res = g.op.Pad(x, new_pad, cst, name=name, outputs=outputs, mode=mode)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_rank(x):
@@ -5076,13 +5104,39 @@ def aten_constant_pad_nd(
     name: str = "constant_pad_nd",
 ) -> T:
     """pad"""
-    if all_int(pad) and isinstance(value, (int, float)):
-        if value == 0:
-            return aten_pad(g, sts, outputs, x, pad, mode="constant", name=name)
-        return aten_pad(g, sts, outputs, x, pad, mode="constant", name=name, value=value)
-
-    raise AssertionError(
-        f"Not implemented for pad={pad!r}, value={value!r}{g.get_debug_msg()}"
+    if all(isinstance(i, (int, str)) for i in pad):
+        # We need to concatenate first.
+        assert g.has_rank(
+            x
+        ), f"Not implemented when rank of {x!r} is missing{g.get_debug_msg()}"
+        rk = g.get_rank(x)
+        if len(pad) < rk * 2:
+            pad = list(pad) + list((0,) * (rk * 2 - len(pad)))
+        onnx_pad = pad[::2][::-1] + pad[1::2][::-1]
+        new_pad = g.make_shape_from_results(onnx_pad, name=name)
+        name = f"{name}_dyn"
+        pad_is_right = True
+    elif all_int(pad) and isinstance(value, (int, float)):
+        new_pad = pad
+        pad_is_right = False
+    else:
+        raise AssertionError(
+            f"Not implemented for pad={pad!r}, value={value!r}{g.get_debug_msg()}"
+        )
+    if value == 0:
+        return aten_pad(
+            g, sts, outputs, x, new_pad, mode="constant", name=name, pad_is_right=pad_is_right
+        )
+    return aten_pad(
+        g,
+        sts,
+        outputs,
+        x,
+        new_pad,
+        mode="constant",
+        name=name,
+        value=value,
+        pad_is_right=pad_is_right,
     )
 
 

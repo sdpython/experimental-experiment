@@ -869,8 +869,15 @@ class DynamoInterpreter:
                 self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
+            elif isinstance(val, self.torch.SymInt):
+                self.builder.set_shape(node.name, tuple())
+                self.builder.set_type(node.name, TensorProto.INT64)
+                sts = {"dtype": self.torch.int64}
             else:
-                raise TypeError(f"Unexpected type in node {node!r}, type(val)={type(val)}.")
+                raise TypeError(
+                    f"Unexpected type {type(val)} in node {node!r}"
+                    f"\n{self.builder.pretty_text(add_fx_graph=True)}"
+                )
 
         if hasattr(index, "name"):
             # A dynamic index (torch.fx.Node)
@@ -1287,7 +1294,7 @@ class DynamoInterpreter:
                             expr = str(t.node._expr)
                             if expr not in self.builder.dynamic_objects:
                                 # A new shape may be given to a result.
-                                self.builder.add_dynamic_object(expr, t)
+                                self.builder.add_dynamic_object(expr, t, parse=True)
 
                     if self.builder.is_dynamic_shape(shape):
                         # sets shape coming from the original model

@@ -567,7 +567,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             info.append(": ".join([t, s]))
         return f"{text}|{' '.join(info)}"
 
-    def pretty_text(self) -> str:
+    def pretty_text(self, add_fx_graph: bool = False) -> str:
 
         def _d(d1):
             if isinstance(d1, self.torch.SymInt):
@@ -646,6 +646,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 rows.append(f"  {self.print_node(node)}")
             if k in self.functions_builder:
                 rows.append(self.functions_builder[k].pretty_text())
+        if add_fx_graph:
+            fx = self._debug_msg.get("process.graph_module")
+            if fx:
+                rows.append("-- FX.GRAPH-- ")
+                rows.append(str(fx))
         return "\n".join(rows)
 
     @property
@@ -1086,6 +1091,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                         # No dynamic shape as input, so there
                         # shoud not be any dynamic shape as output.
                         return False
+                if val1 == ("", ""):
+                    # Another case where it seems False.
+                    return False
+                raise RuntimeError(
+                    f"Not implemented for name={name!r}, value={value!r} ({type(value)}), "
+                    f"val1={val1}, elem_type={elem_type}, shape={shape}, n_outputs={n_outputs}"
+                    f"{self.get_debug_msg()}"
+                )
             elif value[0] == "call_module":
                 if isinstance(value[1], tuple) and len(value[1]) == 2:
                     el_type, size = value[1]
@@ -1316,7 +1329,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param dtype: element type (an integer, ONNX)
         :param exc: raises an exception
         """
-        if name == self._debug_stop or name == self._debug_stop_type:
+        if name in (self._debug_stop, self._debug_stop_type):
             raise AssertionError(f"Requested stop, name={name!r}, dtype={dtype}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if isinstance(dtype, int):
@@ -1590,7 +1603,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 self.dynamic_dimensions_source[name] = [source]
 
-        self.add_dynamic_object(name, value)
+        self.add_dynamic_object(name, value, parse=True)
         if (
             shape_as_input
             and isinstance(value, self.torch.SymInt)
@@ -2215,7 +2228,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         return name
 
     def add_dynamic_object(
-        self, key: str, value: Any, name: Optional[str] = None, dim: Optional[int] = None
+        self,
+        key: str,
+        value: Any,
+        name: Optional[str] = None,
+        dim: Optional[int] = None,
+        parse: bool = False,
     ):
         """
         Registers a dynamic object such as a dynamic dimension.
@@ -2224,19 +2242,38 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param value: SymInt, Dim, _DerivedDim
         :param name: input name it comes from
         :param dim: dimension for this dimension in input
+        :param parse: parse the expression add pieces of it as well
         """
         assert not isinstance(
             value, self.torch.export.dynamic_shapes._Dim
         ), f"Unexpected dimension type {type(value)} for key={key!r}{self.get_debug_msg()}"
-        if isinstance(value, (self.torch.SymInt, self.torch.SymFloat)):
-            self.dynamic_objects[key] = self.WrapSym(value)
-        else:
-            self.dynamic_objects[key] = value
+
+        self.dynamic_objects[key] = (
+            self.WrapSym(value)
+            if isinstance(value, (self.torch.SymInt, self.torch.SymFloat))
+            else value
+        )
+
         if name is not None and name in self.dynamic_shapes and dim is not None:
             dyn_shape = self.dynamic_shapes[name]
             if dim in dyn_shape:
                 dyndim = dyn_shape[dim]
                 self._dynamic_alias[key] = dyndim.__name__
+
+        if parse:
+            tokens = parse_expression_tokens(key)
+            for t in tokens:
+                if isinstance(t, str):
+                    if t not in self.dynamic_objects:
+                        self.add_dynamic_object(t, t)
+        else:
+            tokens = parse_expression_tokens(key)
+            for t in tokens:
+                if isinstance(t, str):
+                    assert t in self.dynamic_objects, (
+                        f"Token {t!r} from {key!r} is not registered "
+                        f"among {list(self.dynamic_objects)}{self.get_debug_msg()}"
+                    )
 
     def has_dynamic_object(self, name: str) -> bool:
         """Tells if a result is a dynamic object, `torch.SymInt` for torch."""
@@ -2442,14 +2479,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                         [name],
                         name="make_tensor_input",
                     )
-                assert self.has_name(
-                    name
-                ), f"Missing name={name!r}, is_dimension={is_dimension}"
-                self.set_name(input_name)
             else:
                 self.input_names.append(name)
                 input_name = name
-                self.set_name(name)
 
         assert (is_dimension and "_dim_" in input_name) or (
             not is_dimension and "_dim_" not in input_name
@@ -2471,6 +2503,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
         self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
+        self.set_name(input_name)
         if shape is not None:
             self._make_tensor_input_finalize(name, shape, dyn_shape)
 
@@ -2502,12 +2535,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if res is None:
                 return res
             if res not in self.dynamic_objects:
-                self.add_dynamic_object(res, res)
-            tokens = parse_expression_tokens(res)
-            if register_if_not_exist and len(tokens) > 1:
-                for t in tokens:
-                    if isinstance(t, str):
-                        self.add_dynamic_object(t, t)
+                self.add_dynamic_object(res, res, parse=register_if_not_exist)
             return res
 
         if isinstance(obj, str):
