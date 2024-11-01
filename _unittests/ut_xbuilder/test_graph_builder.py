@@ -296,7 +296,7 @@ class TestTools(ExtTestCase):
 
         # finally, the conversion to onnx
         text = g.pretty_text()
-        self.assertIn("['_onx_regression0', 'bias2']", text)
+        self.assertIn("_onx_regression0, bias2", text)
         fct = g.to_onnx(
             function_options=FunctionOptions(
                 name="linear", domain="mine", return_initializer=True

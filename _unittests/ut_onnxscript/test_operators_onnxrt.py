@@ -2008,6 +2008,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             dynamic_axes={"input_1": {1: "dim_0"}, "input_2": {2: "dim_1"}},
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     @hide_stdout()

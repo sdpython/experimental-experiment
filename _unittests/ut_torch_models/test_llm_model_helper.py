@@ -42,7 +42,7 @@ class TestLlmModelHelper(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False, decomposition_table="all"),
         )
-        filename = "test_get_phi_35_mini_instruct_custom.onnx"
+        filename = "test_phi_35_mini_instruct_custom.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
 
@@ -76,7 +76,7 @@ class TestLlmModelHelper(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False, decomposition_table="all"),
         )
-        filename = "test_get_phi_35_mini_instruct_custom_cuda.onnx"
+        filename = "test_phi_35_mini_instruct_custom_cuda.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
 
@@ -114,7 +114,7 @@ class TestLlmModelHelper(ExtTestCase):
             export_modules_as_functions=True,
             inline=False,  # function do not retain shape information
         )
-        filename = "test_get_phi_35_mini_instruct_custom_cuda_modules.onnx"
+        filename = "test_phi_35_mini_instruct_custom_cuda_modules.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
 
@@ -146,7 +146,7 @@ class TestLlmModelHelper(ExtTestCase):
             1: torch.export.Dim("seq", min=1, max=512) * 8 - 2,
         }
         dyn_shapes = {"input_ids": dims, "attention_mask": dims}
-        onx = to_onnx(
+        onx, builder = to_onnx(
             model,
             None,  # args
             model_inputs,  # kwargs
@@ -157,9 +157,23 @@ class TestLlmModelHelper(ExtTestCase):
             export_modules_as_functions=True,
             inline=False,  # function do not retain shape information
             dynamic_shapes=dyn_shapes,
+            return_builder=True,
         )
-        filename = "test_get_phi_35_mini_instruct_custom_cuda_modules_dynshapes.onnx"
+        text = builder.pretty_text()
+        filename = "test_phi35_mistruct_custom_cuda_mod_dynshapes.onnx"
+        with open("test_get_phi_35_mini_instruct_custom_cuda_modules_dynshapes.txt", "w") as f:
+            f.write(text)
         onx.save(filename, all_tensors_to_one_file=True)
+        onx.inline = True
+        filename = "test_phi35_mistruct_custom_cuda_mod_dynshapes.inline.onnx"
+        onx.save(filename, all_tensors_to_one_file=True)
+
+        new_onx = onnx.load(filename, load_external_data=True)
+        del new_onx.graph.value_info[:]
+        new_onx = onnx.shape_inference.infer_shapes(new_onx)
+        filename = "test_phi35_mistruct_custom_cuda_mod_dynshapes.inline.reshaped.onnx"
+        onnx.save(new_onx, filename, save_as_external_data=True, all_tensors_to_one_file=True)
+
         import onnxruntime
 
         sess = onnxruntime.InferenceSession(
@@ -192,7 +206,7 @@ class TestLlmModelHelper(ExtTestCase):
                 options=OptimizationOptions(max_iter=10),
                 export_options=ExportOptions(strict=False, decomposition_table="all"),
             )
-        filename = "test_get_phi_35_mini_instruct_custom_auto.onnx"
+        filename = "test_phi_35_mini_instruct_custom_auto.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         m = onnx.load(filename, load_external_data=False)
         self.assertEqual(
@@ -221,7 +235,7 @@ class TestLlmModelHelper(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False),
         )
-        filename = "test_get_phi_35_mini_instruct_no_decomposition_custom.onnx"
+        filename = "test_phi_35_mini_instruct_no_decomposition_custom.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
 

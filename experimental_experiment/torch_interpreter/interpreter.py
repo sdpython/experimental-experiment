@@ -5,10 +5,9 @@ import types
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import TensorProto
-from ..helpers import string_type
+from ..helpers import string_type, make_hash
 from ..xbuilder import GraphBuilder, FunctionOptions
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
-from ..xbuilder._helper import make_hash
 from ..xbuilder._dtype_helper import (
     torch_dtype_to_onnx_dtype,
     onnx_dtype_to_torch_dtype,
@@ -311,7 +310,11 @@ class DynamoInterpreter:
 
         self.current_input_ += 1
         return self.builder.make_tensor_input(
-            name, elem_type, shape, is_dimension=is_dimension
+            name,
+            elem_type,
+            shape,
+            is_dimension=is_dimension,
+            marker="DynamoInterpreter._make_tensor_input",
         )
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
@@ -514,7 +517,7 @@ class DynamoInterpreter:
 
         if isinstance(val, tuple):
             assert len(val) == 1, (
-                f"Not yet implemented for multiple outputs, node={node}"
+                f"output not yet implemented for multiple outputs, node={node}"
                 f"{self.builder.get_debug_msg()}"
             )
             val = val[0]
@@ -870,8 +873,15 @@ class DynamoInterpreter:
                 self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
+            elif isinstance(val, self.torch.SymInt):
+                self.builder.set_shape(node.name, (1,))
+                self.builder.set_type(node.name, TensorProto.INT64)
+                sts = {"dtype": self.torch.int64}
             else:
-                raise TypeError(f"Unexpected type in node {node!r}, type(val)={type(val)}.")
+                raise TypeError(
+                    f"Unexpected type {type(val)} in node {node!r}"
+                    f"\n{self.builder.pretty_text(add_fx_graph=True)}"
+                )
 
         if hasattr(index, "name"):
             # A dynamic index (torch.fx.Node)
@@ -1288,7 +1298,7 @@ class DynamoInterpreter:
                             expr = str(t.node._expr)
                             if expr not in self.builder.dynamic_objects:
                                 # A new shape may be given to a result.
-                                self.builder.add_dynamic_object(expr, t)
+                                self.builder.add_dynamic_object(expr, t, parse=True)
 
                     if self.builder.is_dynamic_shape(shape):
                         # sets shape coming from the original model
@@ -1602,7 +1612,11 @@ class DynamoInterpreter:
                     if builder.has_type(name):
                         self.builder.set_type(out_name, builder.get_type(name))
                     if builder.has_shape(name):
-                        self.builder.set_shape(out_name, builder.get_shape(name))
+                        existing_shape = builder.get_shape(name)
+                        # We need to move any dynamic objects necessary from the submodules
+                        # to the parent module.
+                        self.builder.register_dynamic_objects_from_shape(existing_shape)
+                        self.builder.set_shape(out_name, existing_shape)
                     elif builder.has_rank(name):
                         self.builder.set_rank(out_name, builder.get_rank(name))
             elif len(output_names) == 1 and len(builder.outputs) > 1:

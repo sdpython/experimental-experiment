@@ -303,7 +303,7 @@ class EasyPatternOptimization(PatternOptimization):
         g2 = g.builder.empty_copy(as_function=True, constant_size=2**30)
         for name, ann in zip(args, anns):
             if ann is None or ann is str or ann is inspect._empty:
-                g2.make_tensor_input(name, 0, None, False)
+                g2.make_tensor_input(name, 0, None, False, marker=f"_build_pattern1_{name}")
                 # Type is unknown
                 g2.set_type(name, -1)
                 continue
@@ -311,7 +311,7 @@ class EasyPatternOptimization(PatternOptimization):
                 ann, str
             ), f"Annotation for {name!r} must be a string or None but ann={ann!r}"
             itype = string_to_elem_type(ann)
-            g2.make_tensor_input(name, itype, None, False)
+            g2.make_tensor_input(name, itype, None, False, marker=f"_build_pattern2_{name}")
 
         output = fct(g2, *args, **kwargs)
         if isinstance(output, str):

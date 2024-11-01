@@ -8,6 +8,8 @@ import onnx.helper as oh
 from onnx import ModelProto, StringStringEntryProto, TensorProto
 from onnx.model_container import ModelContainer, _set_external_data
 from onnx.external_data_helper import _get_all_tensors, uses_external_data
+from onnx.inliner import inline_local_functions
+
 
 STORAGE_TYPE = {
     TensorProto.FLOAT16: np.int16,
@@ -133,7 +135,9 @@ class TorchModelContainer(ModelContainer):
             "time_export_tobytes": 0,
             "time_export_proto_from_array": 0,
             "time_export_write_tensor_bytes": 0,
+            "time_export_inline_model": 0,
         }
+        self.inline = False
 
     def _save_external(
         self,
@@ -258,8 +262,14 @@ class TorchModelContainer(ModelContainer):
                     f.write(tensor_bytes)
             self._stats["time_export_write_tensor_bytes"] += time.perf_counter() - begin
 
+        if self.inline:
+            begin = time.perf_counter()
+            copy = inline_local_functions(copy)
+            self._stats["time_export_inline_model"] += time.perf_counter() - begin
+
         begin = time.perf_counter()
         with open(file_path, "wb") as f:
             f.write(copy.SerializeToString())
+
         self._stats["time_export_write_model"] += time.perf_counter() - begin
         return copy

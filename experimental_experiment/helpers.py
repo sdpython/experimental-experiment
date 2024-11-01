@@ -60,6 +60,36 @@ def string_type(obj: Any) -> str:
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 
 
+def string_signature(sig: Any) -> str:
+    """
+    Displays the signature of a functions.
+    """
+
+    def _k(p, kind):
+        for name in dir(p):
+            if getattr(p, name) == kind:
+                return name
+        return repr(kind)
+
+    text = [" __call__ ("]
+    for p in sig.parameters:
+        pp = sig.parameters[p]
+        kind = repr(pp.kind)
+        t = f"{p}: {pp.annotation}" if pp.annotation is not inspect._empty else p
+        if pp.default is not inspect._empty:
+            t = f"{t} = {pp.default!r}"
+        if kind == pp.VAR_POSITIONAL:
+            t = f"*{t}"
+        le = (30 - len(t)) * " "
+        text.append(f"    {t}{le}|{_k(pp,kind)}")
+        text.append(
+            f") -> {sig.return_annotation}"
+            if sig.return_annotation is not inspect._empty
+            else ")"
+        )
+        return "\n".join(text)
+
+
 def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
     """
     Displays the signature of a functions if the default
@@ -109,3 +139,11 @@ def pretty_onnx(onx: Union[FunctionProto, GraphProto, ModelProto, str]) -> str:
         from onnx.printer import to_text
 
         return to_text(onx)
+
+
+def make_hash(obj: Any) -> str:
+    """
+    Returns a simple hash of ``id(obj)`` in four letter.
+    """
+    aa = id(obj) % (26**3)
+    return f"{chr(65 + aa // 26 ** 2)}{chr(65 + (aa // 26) % 26)}{chr(65 + aa % 26)}"

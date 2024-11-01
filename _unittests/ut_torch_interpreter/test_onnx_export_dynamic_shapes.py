@@ -19,7 +19,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_torch("2.5")
-    def test_linear_regression_dynamic_batch(self):
+    def test_linear_regression_dynamic_batch_first(self):
         import torch
 
         class TorchLinearRegression(torch.nn.Module):
@@ -73,6 +73,9 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             verbose=0,
             return_builder=True,
         )
+        s = _builder.pretty_text()
+        self.assertIn("batch x 1", s)
+        self.assertIn("batch x 3", s)
 
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
@@ -109,12 +112,14 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         expected = model(x)
         self.assertEqual(expected.shape, (x.shape[0], 1))
 
-        onx = to_onnx(
+        onx, builder = to_onnx(
             model,
             (x,),
             input_names=["x"],
             options=OptimizationOptions(patterns=None),
+            return_builder=True,
         )
+        self.assertIn("|T1: 11 x 1", builder.pretty_text())
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
             for d in onx.graph.input[0].type.tensor_type.shape.dim
@@ -146,7 +151,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             verbose=0,
             return_builder=True,
         )
-
+        self.assertIn("|T1: 2*batch x 1", _builder.pretty_text())
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
             for d in onx.graph.input[0].type.tensor_type.shape.dim
@@ -219,6 +224,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             verbose=0,
             return_builder=True,
         )
+        self.assertIn("dynals: s0 -> 'batch'", _builder.pretty_text())
 
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
@@ -320,7 +326,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @requires_onnxruntime("1.18")
     @ignore_warnings(DeprecationWarning)
-    def test_export_llama_model_dynamic_shapes_x2_cpu(self):
+    def test_export_llama_model_dynamic_shapes_x2_cpu_1(self):
         import torch
         import onnxruntime
 
@@ -379,7 +385,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 verbose=0,
                 return_builder=True,
             )
-            self.assertNotEmpty(builder)
+            self.assertIn("WrapSym(s1 + 1)", builder.pretty_text())
             if __name__ == "__main__":
                 with open(
                     "test_export_llama_model_dynamic_shapes_x2_cpu_tuple.onnx", "wb"
@@ -389,9 +395,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             for i in onx.graph.input:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                # The value changed from ("s1", "s2") to ("s0", "s1") between
-                # 9/25/24 and 9/28/24.
-                self.assertIn(value, (("s0", "s1"), ("s1", "s2")))
+                self.assertEqual(value, ("batch", "length"))
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
