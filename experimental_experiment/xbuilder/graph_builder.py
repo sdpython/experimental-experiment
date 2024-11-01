@@ -2256,20 +2256,40 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             dim, (str, self.torch.SymInt)
         ), f"Unexpected type {type(dim)} for dim={dim}{self.get_debug_msg()}"
-        name = str(dim)
-        try:
-            value = int(name)
-            dyn = False
-        except ValueError:
-            dyn = True
-        if not dyn:
-            if keep_const:
-                return np.array([value], dtype=np.int64)
-            return self.make_initializer("", np.array([value], dtype=np.int64))
-        assert (
-            name in self.dynamic_objects
-        ), f"Unable to find dim={dim!r} in {self.dynamic_objects}{self.get_debug_msg()}"
-        return name
+        if isinstance(dim, str):
+            if self.has_name(dim):
+                return dim
+            assert dim in self.dynamic_objects, (
+                f"Unable to find a dynamic object for {dim:r}, "
+                f"list={list(self.dynamic_objects)}"
+                f"{self.get_debug_msg()}"
+            )
+            assert dim in self.dynamic_dimensions_source, (
+                f"Unable to find a result to express dim {dim:r}, "
+                f"sources={list(self.dynamic_dimensions_source)}"
+                f"{self.get_debug_msg()}"
+            )
+            raise NotImplementedError(
+                f"Source is available for {dim!r}, "
+                f"source={self.dynamic_dimensions_source[dim]}"
+            )
+        name = self._torch_dim_to_str(dim)
+        assert name, f"Unable to expression a dynamic dimension{self.get_debug_msg()}"
+        if self.has_name(name):
+            return name
+        assert name in self.dynamic_objects, (
+            f"Unable to find a dynamic object for {name:r}, "
+            f"list={list(self.dynamic_objects)}"
+            f"{self.get_debug_msg()}"
+        )
+        assert name in self.dynamic_dimensions_source, (
+            f"Unable to find a result to express dim {name:r}, "
+            f"sources={list(self.dynamic_dimensions_source)}"
+            f"{self.get_debug_msg()}"
+        )
+        raise NotImplementedError(
+            f"Source is available for {dim!r}, source={self.dynamic_dimensions_source[dim]}"
+        )
 
     def _get_dynamic_dimension(self, name: str, dim: int) -> Optional[str]:
         if self.dynamic_shapes is None:

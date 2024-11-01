@@ -326,7 +326,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @requires_onnxruntime("1.18")
     @ignore_warnings(DeprecationWarning)
-    def test_export_llama_model_dynamic_shapes_x2_cpu(self):
+    def test_export_llama_model_dynamic_shapes_x2_cpu_1(self):
         import torch
         import onnxruntime
 
