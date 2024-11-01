@@ -553,11 +553,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return (value.dtype, value.shape, tuple(value.ravel().tolist()))
         return None
 
-    def print_node(self, node: NodeProto, limit: int = 80):
+    def pretty_node(self, node: NodeProto, limit: int = 80):
         text = (
-            f"{node.op_type}[{node.domain}]: {node.input} -> {node.output}"
+            (
+                f"{node.op_type}[{node.domain}]: "
+                f"{', '.join(node.input)} -> {', '.join(node.output)}"
+            )
             if node.domain
-            else f"{node.op_type}: {node.input} -> {node.output}"
+            else f"{node.op_type}: {', '.join(node.input)} -> {', '.join(node.output)}"
         )
         add = " " * abs(80 - len(text))
         text += add
@@ -568,7 +571,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             info.append(": ".join([t, s]))
         return f"{text}|{' '.join(info)}"
 
-    def pretty_text(self, add_fx_graph: bool = False) -> str:
+    def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
 
         def _d(d1):
             if isinstance(d1, self.torch.SymInt):
@@ -633,7 +636,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for i in self.input_names:
             rows.append(_io(i, "input:"))
         for node in self.nodes:
-            rows.append(self.print_node(node))
+            rows.append(self.pretty_node(node))
         for i in self.output_names:
             rows.append(_io(i, "output:"))
         for k, f in self.functions.items():
@@ -644,9 +647,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 n = op.domain if op.domain else "''"
                 rows.append(f"  opset: {n}: {op.version}")
             for node in f.node:
-                rows.append(f"  {self.print_node(node)}")
+                rows.append(f"  {self.pretty_node(node)}")
             if k in self.functions_builder:
-                rows.append(self.functions_builder[k].pretty_text())
+                rows.append(
+                    self.functions_builder[k].pretty_text(
+                        add_fx_graph=add_fx_graph, recursive=False
+                    )
+                )
         if add_fx_graph:
             fx = self._debug_msg.get("process.graph_module")
             if fx:
@@ -967,6 +974,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert name != "", (
             f"Empty name {name!r} cannot be registered, "
             f"marker={marker!r}{self.get_debug_msg()}"
+        )
+        assert len(name) == len(name.strip()), (
+            f"No space should be added at the extremities of the name {name!r}"
+            f"{self.get_debug_msg()}"
         )
         assert name not in self._raise_list, (
             f"Name {name!r} is one of the name declared in "
@@ -1769,7 +1780,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     if self.get_rank(name) == 0:
                         r = self.op.UnsqueezeAnyOpset(
-                            name, np.array([0], dtype=np.int64), name=f"_mkshape_{name}"
+                            name, np.array([0], dtype=np.int64), name=f"_mkshape1_{name}"
                         )
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
@@ -1805,7 +1816,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     if self.get_rank(name) == 0:
                         r = self.op.UnsqueezeAnyOpset(
-                            name, np.array([0], dtype=np.int64), name=f"_mkshape_{name}"
+                            name, np.array([0], dtype=np.int64), name=f"_mkshape2_{name}"
                         )
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
@@ -3114,7 +3125,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             # second try
             self._make_node_set_type_shape(node)
 
-        node.doc_string += ".\n" + self._info_shape_type(output_names) + "\n"
+        node.doc_string += ".\n" + self._info_shape_type(node.output) + "\n"
 
         if len(output_names) == 1:
             return output_names[0]
@@ -3123,12 +3134,13 @@ class GraphBuilder(_GraphBuilderRuntime):
     def _info_shape_type(self, outputs: List[str]) -> str:
         rows = []
         for o in outputs:
-            rows.append(f"*T{self.get_type(o)}" if self.has_type(o) else "T?")
+            st = f"-T{self.get_type(o)}:" if self.has_type(o) else "T?:"
             if self.has_shape(o):
-                rows.append("x".join(map(str, self.get_shape(o))))
+                st += "x".join(map(str, self.get_shape(o)))
             elif self.has_rank(o):
-                rows.append(f"R{self.get_rank(o)}")
-        return ":".join(rows)
+                st += f"R{self.get_rank(o)}"
+            rows.append(st)
+        return "/".join(rows)
 
     @property
     def last_added_node(self):
@@ -3351,13 +3363,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param builder: other builder
         :param input_names: input names
         :param output_names: output names
-        :param prefix: prefix all name from this builder
+        :param prefix: prefix all name from this builder if `function_options` is None
         :param function_options: defines how to create a local function if needed
         :param optimize: optimize the function
         :return: output names
         """
         if function_options is not None and function_options.export_as_function:
-            optimize = False
             new_inits, (fdomain, fname) = self.make_local_function(
                 builder,
                 function_options=function_options,
@@ -4081,6 +4092,24 @@ class GraphBuilder(_GraphBuilderRuntime):
         model.functions.extend(self.functions.values())
         model.ir_version = ir_version
         self._add_shape_information(model)
+
+        doc_string = (
+            f"large_model={large_model}, inline={inline}, "
+            f"external_threshold={external_threshold}"
+            f"\nfunction_options={function_options!r}"
+        )
+        model.doc_string += doc_string + (
+            f"\noptimized:{self.optimization_options!r}" if optimize else "not-optimized"
+        )
+        assert (
+            not optimize
+            or not self.optimization_options.remove_identity
+            or len([n for n in model.graph.node if n.op_type == "Identity"])
+            <= len(model.graph.output)
+        ), (
+            f"The optimization was not applied. There are two many nodes identity"
+            f"\n{self.pretty_text()}"
+        )
 
         if large_model:
             lm = TorchModelContainer()
@@ -5334,7 +5363,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             max_position = min(needed_at.get(o, N) for o in node.output)
 
             assert min_position <= max_position, (
-                f"Unable to insert node {self.print_node(node)}, "
+                f"Unable to insert node {self.pretty_node(node)}, "
                 f"min_position={min_position}, max_position={max_position}, "
                 f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
                 f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}, "
@@ -5350,7 +5379,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
 
             assert local_min_position <= local_max_position, (
-                f"Unable to insert node {self.print_node(node)}, "
+                f"Unable to insert node {self.pretty_node(node)}, "
                 f"local_min_position={local_min_position}, "
                 f"local_max_position={local_max_position}, "
                 f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
@@ -5863,15 +5892,21 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{self.get_debug_msg()}"
         )
         onx = fct["proto"]
+        doc_string = f"function_options={function_options!r}"
+        onx.doc_string += doc_string + (
+            f"\noptimized:{builder.optimization_options!r}" if optimize else "not-optimized"
+        )
+
         to_rename = {}
         keys = []
-        for f in builder.functions.values():
+        for key, f in builder.functions.items():
             # What if on is already existing?
             old_key = f.domain, f.name
             new_key = self.add_function(
                 f,
                 rename_allowed=function_options.rename_allowed,
                 merge_allowed=function_options.merge_allowed,
+                builder=builder.functions_builder.get(key),
             )
             if new_key != old_key:
                 to_rename[old_key] = new_key
@@ -5908,6 +5943,15 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"function_options={function_options}\n------ONNX----\n{pretty_onnx(onx)}"
             f"{self.get_debug_msg()}"
         )
+        assert (
+            not optimize
+            or not builder.optimization_options.remove_identity
+            or len([n for n in onx.node if n.op_type == "Identity"]) <= len(onx.output)
+        ), (
+            f"The optimization was not applied. There are two many nodes identity"
+            f"\n{builder.pretty_text()}"
+        )
+
         new_domain, new_name = self.add_function(
             onx,
             rename_allowed=function_options.rename_allowed,

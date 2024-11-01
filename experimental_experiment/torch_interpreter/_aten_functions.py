@@ -6063,6 +6063,7 @@ def _aten_slice_scatter_static(
             ),
             np.array([0], dtype=np.int64),
             np.array([step or 1], dtype=np.int64),
+            name=name,
         )
 
     # step 2
@@ -6082,6 +6083,7 @@ def _aten_slice_scatter_static(
             ),
             perm=perm,
             outputs=outputs,
+            name=name,
         )
 
     if not sts:
@@ -6114,6 +6116,30 @@ def _aten_slice_scatter_dynamic(
         step
     ), f"slice_scatter not implemented for step={step}{g.get_debug_msg()}"
 
+    if (
+        isinstance(start, int)
+        and not isinstance(start, g.torch.SymInt)
+        and start == 0
+        and isinstance(end, int)
+        and not isinstance(end, g.torch.SymInt)
+        and end == 9223372036854775807
+        and isinstance(step, int)
+        and not isinstance(step, g.torch.SymInt)
+        and step == 1
+    ):
+        # slice scatter on dimension
+        if g.has_shape(x) and g.has_shape(src) and g.get_shape(x) == g.get_shape(src):
+            # Identity
+            res = g.op.Identity(src, name=name)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+                g.set_shape(res, g.set_shape(src))
+            return res
+        raise AssertionError(
+            f"start={start}, end={end}, step={step} is not implemented yet "
+            f"for slice_scatter{g.get_debug_msg()}"
+        )
+
     shape = g.op.Shape(x, name=name)
     dim_shape = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name)
 
@@ -6131,6 +6157,7 @@ def _aten_slice_scatter_dynamic(
         (dim_shape if end is None else g.get_dynamic_dimension(end)),
         np.array([0], dtype=np.int64),
         np.array([step or 1], dtype=np.int64),
+        name=name,
     )
 
     # step 2
@@ -6150,6 +6177,7 @@ def _aten_slice_scatter_dynamic(
             ),
             perm=perm,
             outputs=outputs,
+            name=name,
         )
 
     if not sts:
