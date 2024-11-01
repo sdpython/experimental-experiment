@@ -3065,9 +3065,18 @@ class GraphBuilder(_GraphBuilderRuntime):
             # second try
             self._make_node_set_type_shape(node)
 
+        node.doc_string += ".\n" + self._info_shape_type(output_names) + "\n"
+
         if len(output_names) == 1:
             return output_names[0]
         return output_names
+
+    def _info_shape_type(self, outputs: List[str]) -> str:
+        rows = []
+        for o in outputs:
+            rows.append(f"*T{self.get_type(o)}" if self.has_type(o) else "T?")
+            rows.append("x".join(map(str, self.get_shape(o))) if self.has_shape(o) else "?")
+        return ":".join(rows)
 
     @property
     def last_added_node(self):

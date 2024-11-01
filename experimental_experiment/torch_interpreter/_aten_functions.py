@@ -6728,8 +6728,14 @@ def aten_sym_size_int(
     """
     Shape + Gather
     """
-    shape = g.op.Shape(x, name=name)
-    return g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name, outputs=outputs)
+    assert (
+        g.main_opset >= 15
+    ), f"aten_sym_size_int is not implemented for opset < 15{g.get_debug_msg()}"
+    assert isinstance(dim, int), f"type(dim)={type(int)} must be an int{g.get_debug_msg()}"
+    shape = g.op.Shape(x, name=name, start=dim, end=dim + 1)
+    return g.op.SqueezeAnyOpset(
+        shape, np.array([0], dtype=np.int64), name=name, outputs=outputs
+    )
 
 
 def aten__to_copy(
