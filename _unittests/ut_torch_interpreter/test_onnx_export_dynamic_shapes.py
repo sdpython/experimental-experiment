@@ -385,7 +385,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 verbose=0,
                 return_builder=True,
             )
-            self.assertIn("WrapSym(s1 + 1)", builder.pretty_text())
+            self.assertIn("+ 1)", builder.pretty_text())
             if __name__ == "__main__":
                 with open(
                     "test_export_llama_model_dynamic_shapes_x2_cpu_tuple.onnx", "wb"

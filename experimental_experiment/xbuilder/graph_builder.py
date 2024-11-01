@@ -331,6 +331,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.constants_ = {}
         self.op = Opset(self)
         self.anyop = Opset(self, allow_unknown=True)
+        self._debug_null_shape = int(os.environ.get("NULLSHAPE", "0"))
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
@@ -1324,6 +1325,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             len(shape) == 0 or not shape_int or min(shape_int) >= 0
         ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
+        assert (
+            not self._debug_null_shape
+            or len(shape) == 0
+            or not shape_int
+            or min(shape_int) > 0
+        ), f"Zero value in shape {shape} for {name!r}{self.get_debug_msg()}"
 
         if name in self._known_shapes:
             old_shape = self._known_shapes[name]

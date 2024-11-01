@@ -140,11 +140,21 @@ class Opset:
             elif i is None:
                 # Optional input
                 new_inputs.append("")
-            else:
+            elif isinstance(i, np.ndarray):
+                assert 0 not in i.shape, (
+                    f"Not implemented for type(i)={type(i)}, i={i}, "
+                    f"inputs={inputs!r}, op_type={op_type!r}, i.shape={i.shape}"
+                    f"{self.builder.get_debug_msg()}"
+                )
                 cst_name = self.builder.make_initializer(
                     "", i, msg=f"input {i} of op_type={op_type!r}"
                 )
                 new_inputs.append(cst_name)
+            else:
+                raise AssertionError(
+                    f"Not implemented for type(i)={type(i)}, i={i}, "
+                    f"inputs={inputs!r}, op_type={op_type!r}{self.builder.get_debug_msg()}"
+                )
 
         assert None not in new_inputs
         return self.builder.make_node(

@@ -654,6 +654,7 @@ def aten_avg_pool2d(
     ceil_mode: bool = False,
     count_include_pad: bool = True,
     divisor_override: Optional[int] = None,
+    name: str = "aten_avg_pool2d",
 ) -> T:
     "AveragePool"
     assert divisor_override is None, (
@@ -675,7 +676,7 @@ def aten_avg_pool2d(
         pads=pads,
         strides=strides,
         outputs=outputs,
-        name="avg_pool2d",
+        name=name,
     )
 
     if not sts:
@@ -815,8 +816,26 @@ def _aten_adaptive_avg_poolnd(
                 g.get_shape(res, rk)
         return res
 
+    shape = g.get_shape(x) if g.has_shape(x) else None
+
+    if (
+        d == 2
+        and shape is not None
+        and is_static_shape(shape[-d:])
+        and shape[-2] % output_size[-2] == 0
+        and shape[-1] % output_size[-1] == 0
+    ):
+        # Optimization coming from pytorch decomposition
+        stride = tuple(i // o for i, o in zip(shape[-2:], output_size))
+        kernel = tuple(i - (o - 1) * s for i, o, s in zip(shape[-2:], output_size, stride))
+        return aten_avg_pool2d(
+            g, sts, outputs, x, kernel_size=kernel, stride=stride, name=name
+        )
+
     raise AssertionError(
-        f"_aten_adaptive_avg_poolnd not yet implemented for output_size={output_size!r}"
+        f"_aten_adaptive_avg_poolnd (d={d}, output_size={output_size}, "
+        f"input_shape={g.get_shape(x) if g.has_shape(x) else '?'}) "
+        f"not yet implemented{g.get_debug_msg()}"
     )
 
 
@@ -1801,10 +1820,11 @@ def aten_embedding_bag_padding_idx(
         f"Not implemented for padding_idx={padding_idx}, "
         f"include_last_offset={include_last_offset}{g.get_debug_msg()}"
     )
-    assert not sparse, (
-        f"aten_embedding_bag_padding_idx implemented when "
-        f"sparse is True{g.get_debug_msg()}"
-    )
+    # There is no sparse tensor in onnx so that should not matter.
+    # assert not sparse, (
+    #     f"aten_embedding_bag_padding_idx implemented when "
+    #     f"sparse is True{g.get_debug_msg()}"
+    # )
     assert not scale_grad_by_freq, (
         f"aten_embedding_bag_padding_idx implemented when "
         f"scale_grad_by_freq is True{g.get_debug_msg()}"
@@ -5033,6 +5053,34 @@ def aten_ones(
     return res
 
 
+def aten_new_ones(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    size: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    name: str = "new_ones",
+) -> T:
+    """new_ones"""
+    if dtype is None:
+        dtype = onnx_dtype_to_torch_dtype(g.get_type(x))
+    return aten_ones(
+        g,
+        sts,
+        outputs,
+        size,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        name=name,
+    )
+
+
 def aten_ones_like(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5353,6 +5401,28 @@ def aten_reciprocal(
 ) -> T:
     """reciprocal"""
     res = g.op.Reciprocal(x, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_scatter_add(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    name: str = "scatter_add",
+) -> T:
+    """scatter_add"""
+    assert isinstance(
+        dim, int
+    ), f"scatter_add not implemented if type(dim)={type(dim)}{g.get_debug_msg()}"
+    res = g.op.ScatterElements(
+        x, index, src, axis=dim, reduction="add", name=name, outputs=outputs
+    )
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -5765,12 +5835,17 @@ def aten_select_scatter(
     name: str = "select_scatter",
 ) -> T:
     """scatter elements"""
+    assert isinstance(
+        index, int
+    ), f"select_scatter not implemented for index={index!r}{g.get_debug_msg()}"
 
     # Change src rank to self rank according to dim
     # e.g. if self is [2,3,4], src is [2,4], dim=1, then update is [2,1,4]
     update = g.op.Unsqueeze(src, axes=dim, name=name)
     # Change index rank to the same as 'update' [2,1,4]
-    indices = g.op.Expand(index, g.op.Shape(update, name=name), name=name)
+    indices = g.op.Expand(
+        np.array([index], dtype=np.int64), g.op.Shape(update, name=name), name=name
+    )
     res = g.op.ScatterElements(
         x, indices, update, axis=dim, reduction="none", name=name, outputs=outputs
     )
