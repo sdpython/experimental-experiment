@@ -2840,7 +2840,7 @@ def aten_hardtanh_backward(
         name=name,
     )
     min_mask = g.op.Where(
-        g.op.Less(x, min_val, name=name),
+        g.op.Less(x, np.array([min_val], dtype=dtype), name=name),
         np.array([0.0], dtype=dtype),
         np.array([1.0], dtype=dtype),
         name=name,
@@ -5420,6 +5420,11 @@ def aten_scatter_add(
     assert isinstance(
         dim, int
     ), f"scatter_add not implemented if type(dim)={type(dim)}{g.get_debug_msg()}"
+    if g.main_opset < 13:
+        # reduction is not available for opset < 13
+        raise FunctionNotFoundError(
+            f"reduction='add' not available in opset {g.main_opset}{g.get_debug_msg()}"
+        )
     res = g.op.ScatterElements(
         x, index, src, axis=dim, reduction="add", name=name, outputs=outputs
     )
