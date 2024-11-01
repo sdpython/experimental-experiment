@@ -517,7 +517,7 @@ class DynamoInterpreter:
 
         if isinstance(val, tuple):
             assert len(val) == 1, (
-                f"Not yet implemented for multiple outputs, node={node}"
+                f"output not yet implemented for multiple outputs, node={node}"
                 f"{self.builder.get_debug_msg()}"
             )
             val = val[0]

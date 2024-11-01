@@ -2513,7 +2513,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 or "_DerivedDim" in str(d)
                 or "_Dim" in str(d)
             ):
-                raise NotImplementedError(f"Not yet implemented for type(d)={type(d)}, d={d}")
+                raise NotImplementedError(
+                    f"verify_dynamic_shape not yet implemented for type(d)={type(d)}, d={d}"
+                )
             if isinstance(d, int):
                 new_shape.append(d)
                 continue

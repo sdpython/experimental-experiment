@@ -815,7 +815,9 @@ def _aten_adaptive_avg_poolnd(
                 g.get_shape(res, rk)
         return res
 
-    raise AssertionError(f"Not yet implemented for output_size={output_size!r}")
+    raise AssertionError(
+        f"_aten_adaptive_avg_poolnd not yet implemented for output_size={output_size!r}"
+    )
 
 
 def aten_bitwise_or(
@@ -1607,13 +1609,14 @@ def aten_div_Tensor_mode(
     if rounding_mode is None:
         return aten_div(g, sts, outputs, x, y, name=name)
 
-    assert rounding_mode in {
-        "trunc",
-        "floor",
-    }, f"Unexpected value for round_mode={rounding_mode!r}{g.get_debug_msg()}"
-    assert (
-        rounding_mode == "floor"
-    ), f"Not yet implemented for round_mode={rounding_mode!r}{g.get_debug_msg()}"
+    assert rounding_mode in {"trunc", "floor"}, (
+        f"aten_div_Tensor_mode: nexpected value for round_mode={rounding_mode!r}"
+        f"{g.get_debug_msg()}"
+    )
+    assert rounding_mode == "floor", (
+        f"aten_div_Tensor_mode not yet implemented for "
+        f"round_mode={rounding_mode!r}{g.get_debug_msg()}"
+    )
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     return g.op.Floor(g.op.Div(x, y, name=name), name=name, outputs=outputs)
 
@@ -5510,8 +5513,8 @@ def aten_repeat(
             f"Unexpected rank {g.get_rank(x)} for x={x!r}, repeats={repeats}"
             f"{g.get_debug_msg()}"
         )
-        expanded = g.UnsqueezeAnyOpset(
-            x, np.arange(len(repeats) - g.get_rank()).astype(np.int64), name=name
+        expanded = g.op.UnsqueezeAnyOpset(
+            x, np.arange(len(repeats) - g.get_rank(x)).astype(np.int64), name=name
         )
     else:
         expanded = x
