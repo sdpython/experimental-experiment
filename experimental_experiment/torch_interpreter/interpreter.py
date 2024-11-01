@@ -1612,7 +1612,11 @@ class DynamoInterpreter:
                     if builder.has_type(name):
                         self.builder.set_type(out_name, builder.get_type(name))
                     if builder.has_shape(name):
-                        self.builder.set_shape(out_name, builder.get_shape(name))
+                        existing_shape = builder.get_shape(name)
+                        # We need to move any dynamic objects necessary from the submodules
+                        # to the parent module.
+                        self.builder.register_dynamic_objects_from_shape(existing_shape)
+                        self.builder.set_shape(out_name, existing_shape)
                     elif builder.has_rank(name):
                         self.builder.set_rank(out_name, builder.get_rank(name))
             elif len(output_names) == 1 and len(builder.outputs) > 1:

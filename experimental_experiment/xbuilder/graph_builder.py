@@ -1246,6 +1246,27 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
 
+    def register_dynamic_objects_from_shape(self, shape: DYNAMIC_SHAPE):
+        """
+        Registers all the dynamic objects required in this shape.
+        """
+        for dim in shape:
+            if isinstance(dim, str):
+                self.register_dynamic_objects_from_dim(dim)
+
+    def register_dynamic_objects_from_dim(self, dim: str):
+        """
+        Registers all the dynamic objects required in a dimension.
+        """
+        assert isinstance(
+            dim, str
+        ), f"type(dim)={type(dim)} must be a str{self.get_debug_msg()}"
+        for token in parse_expression_tokens(dim):
+            if token not in self.dynamic_objects:
+                self.add_dynamic_object(token, token)
+        if dim not in self.dynamic_objects:
+            self.add_dynamic_object(dim, dim)
+
     def set_shape(
         self,
         name: str,
@@ -1275,16 +1296,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             shape
         ), f"Unexpected type {type(shape)} for a shape={shape}{self.get_debug_msg()}"
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
+        for sdim in shape:
+            if not isinstance(sdim, str):
+                continue
+            self.register_dynamic_objects_from_dim(sdim)
         shape = self.verify_shape(shape, 0, name=name)
         assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
             f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
             f"{self.get_debug_msg()}"
         )
-        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
         shape_int = [d for d in shape if isinstance(d, int)]
         assert (
             len(shape) == 0 or not shape_int or min(shape_int) >= 0
         ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
+
         if name in self._known_shapes:
             old_shape = self._known_shapes[name]
             if len(shape) == len(old_shape) and set_if_more_precise:
@@ -2272,11 +2297,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self._dynamic_alias[key] = dyndim.__name__
 
         if parse:
-            tokens = parse_expression_tokens(key)
-            for t in tokens:
-                if isinstance(t, str):
-                    if t not in self.dynamic_objects:
-                        self.add_dynamic_object(t, t)
+            self.register_dynamic_objects_from_dim(key)
         else:
             tokens = parse_expression_tokens(key)
             for t in tokens:
@@ -2417,6 +2438,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(d, (self.torch.SymInt, str)):
                 dyn_name = self._get_dynamic_dimension(name, dim)
                 if dyn_name is not None:
+                    if add:
+                        self.add_dynamic_object(dyn_name, dyn_name, parse=True)
                     new_shape.append(dyn_name)
                     continue
 
