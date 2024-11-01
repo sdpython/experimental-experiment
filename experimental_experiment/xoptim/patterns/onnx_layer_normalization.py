@@ -427,9 +427,9 @@ class BatchNormalizationPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "BatchNormalization" or node.domain != "":
             return self.none()
-        if len(node.output) > 1 and len(g.next_nodes(node.output[1])):
+        if len(node.output) > 1 and g.next_nodes(node.output[1]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if len(node.output) > 2 and len(g.next_nodes(node.output[2])):
+        if len(node.output) > 2 and g.next_nodes(node.output[2]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         momentum = 0.9
@@ -488,3 +488,90 @@ class BatchNormalizationPattern(PatternOptimization):
             doc_string=node.doc_string,
         )
         return [new_node]
+
+
+class BatchNormalizationTrainingPattern(PatternOptimization):
+    """
+    Checks that a BatchNormalization in training mode can be avoided.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "BatchNormalization" or node.domain != "":
+            return self.none()
+        if g.main_opset < 18:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(node.input[0]) and g.get_rank(node.input[0]) < 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(node.output) > 1 and g.next_nodes(node.output[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(node.output) > 2 and g.next_nodes(node.output[2]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        momentum = 0.9
+        training_mode = 0
+        for att in node.attribute:
+            if att.name == "momentum":
+                momentum = att.f
+            elif att.name == "training_mode":
+                training_mode = att.i
+        if not training_mode and momentum != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        nname = f"{self.__class__.__name__}--{node.name}"
+        rk = g.get_rank(node.input[0])
+        axes = tuple(np.delete(np.arange(rk), 1))
+        init_axes = g.make_initializer("", np.array(list(axes), dtype=np.int64))
+
+        mean_name = g.unique_name(f"{self.__class__.__name__}_mean_{node.input[0]}")
+        mean = g.make_node(
+            "ReduceMean", [node.input[0], init_axes], [mean_name], keepdims=1, name=nname
+        )
+        centered_name = g.unique_name(f"{self.__class__.__name__}_center_{node.input[0]}")
+        sub = g.make_node("Sub", [node.input[0], mean_name], [centered_name], name=nname)
+
+        x2 = g.unique_name(f"{self.__class__.__name__}_x2_{node.input[0]}")
+        mul2 = g.make_node("Mul", [centered_name, centered_name], [x2], name=nname)
+
+        var_name = g.unique_name(f"{self.__class__.__name__}_var_{node.input[0]}")
+        var = g.make_node("ReduceMean", [x2, init_axes], [var_name], keepdims=1, name=nname)
+
+        dtype = tensor_dtype_to_np_dtype(g.get_type(node.input[0]))
+        epsilon = g.get_attributes_with_default(node, epsilon=1e-5)["epsilon"]
+        init_epsilon = g.make_initializer("", np.array([epsilon], dtype=dtype))
+        vare_name = g.unique_name(f"{self.__class__.__name__}_vareps_{node.input[0]}")
+        add = g.make_node("Add", [var_name, init_epsilon], [vare_name], name=nname)
+        std_name = g.unique_name(f"{self.__class__.__name__}_vareps_{node.input[0]}")
+        sqrt = g.make_node("Sqrt", [vare_name], [std_name], name=nname)
+
+        new_shape = [1 for _ in range(rk)]
+        new_shape[1] = -1
+        new_shape = g.make_initializer("", np.array(new_shape, dtype=np.int64))
+        scale_name = g.unique_name(f"{self.__class__.__name__}_scale_{node.input[0]}")
+        scale = g.make_node("Reshape", [node.input[1], new_shape], [scale_name], name=nname)
+        bias_name = g.unique_name(f"{self.__class__.__name__}_bias_{node.input[0]}")
+        bias = g.make_node("Reshape", [node.input[2], new_shape], [bias_name], name=nname)
+
+        scaled_name = g.unique_name(f"{self.__class__.__name__}_scaled_{node.input[0]}")
+        scaled = g.make_node("Div", [centered_name, std_name], [scaled_name], name=nname)
+
+        scaled2_name = g.unique_name(f"{self.__class__.__name__}_scaled2_{node.input[0]}")
+        scaled2 = g.make_node("Mul", [scaled_name, scale_name], [scaled2_name], name=nname)
+
+        final = g.make_node("Add", [scaled2_name, bias_name], [node.output[0]], name=nname)
+
+        return [mean, sub, mul2, var, add, sqrt, scale, bias, scaled, scaled2, final]

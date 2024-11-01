@@ -7048,10 +7048,27 @@ def aten_triu(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    diagonal: int = 0,
+    diagonal: Union[int, T] = 0,
 ) -> T:
     """trilu"""
-    res = g.op.Trilu(x, diagonal, upper=1, name="triu", outputs=outputs)
+    if isinstance(diagonal, int):
+        k = np.array(diagonal, dtype=np.int64)
+    elif isinstance(diagonal, str):
+        k = diagonal
+    elif isinstance(diagonal, g.torch.Tensor):
+        assert tuple(diagonal.shape) in (
+            tuple(),
+            (1,),
+        ), f"Unexpected for diagonal={diagonal}{g.get_debug_msg()}"
+        value = int(
+            diagonal.cpu().numpy() if len(diagonal.shape) == 0 else diagonal.cpu().numpy()[0]
+        )
+        k = np.array(value, dtype=np.int64)
+    else:
+        raise AssertionError(
+            f"triu: unexpected type={type(diagonal)} for diagonal{g.get_debug_msg()}"
+        )
+    res = g.op.Trilu(x, k, upper=1, name="triu", outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
