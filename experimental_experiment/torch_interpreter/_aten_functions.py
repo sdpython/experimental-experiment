@@ -3117,9 +3117,9 @@ def aten_index_put(
             and g.has_rank(x)
         ):
             name = (
-                f"{name}2{'o' if ind0 is None else {g.get_rank(ind0)}}"
-                f"{'o' if ind1 is None else g.get_rank(ind1)}_"
-                f"{g.get_rank(x)}_{g.get_rank(values)}_"
+                f"{name}2i{'o' if ind0 is None else g.get_rank(ind0)}"
+                f"i{'o' if ind1 is None else g.get_rank(ind1)}"
+                f"x{g.get_rank(x)}_v{g.get_rank(values)}"
             )
             assert g.get_rank(x) == 2 and (
                 g.get_rank(values) == 1 or ind0 is None or ind1 is None
@@ -3241,10 +3241,10 @@ def aten_index_put(
             and g.has_rank(x)
         ):
             name = (
-                f"{name}3{'o' if ind0 is None else g.get_rank(ind0)}"
-                f"{'o' if ind1 is None else g.get_rank(ind1)}"
-                f"{'o' if ind2 is None else g.get_rank(ind2)}_"
-                f"{g.get_rank(x)}_{g.get_rank(values)}_"
+                f"{name}3i{'o' if ind0 is None else g.get_rank(ind0)}"
+                f"i{'o' if ind1 is None else g.get_rank(ind1)}"
+                f"i{'o' if ind2 is None else g.get_rank(ind2)}"
+                f"x{g.get_rank(x)}v{g.get_rank(values)}_"
             )
             assert g.get_rank(x) == 3 and (
                 g.get_rank(values) == 1 or ind0 is None or ind1 is None or ind2 is None
@@ -6732,10 +6732,16 @@ def aten_sym_size_int(
         g.main_opset >= 15
     ), f"aten_sym_size_int is not implemented for opset < 15{g.get_debug_msg()}"
     assert isinstance(dim, int), f"type(dim)={type(int)} must be an int{g.get_debug_msg()}"
-    shape = g.op.Shape(x, name=name, start=dim, end=dim + 1)
-    return g.op.SqueezeAnyOpset(
-        shape, np.array([0], dtype=np.int64), name=name, outputs=outputs
-    )
+    res = g.op.Shape(x, name=name, start=dim, end=dim + 1)
+    if not sts:
+        g.set_type(res, TensorProto.INT64)
+        g.set_shape(
+            res,
+            tuple(
+                1,
+            ),
+        )
+    return res
 
 
 def aten__to_copy(

@@ -2059,14 +2059,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         if node.op_type == "Identity":
             value = self.value_as_shape(node.input[0])
             if value is not None:
+                node.doc_string += "#II1"
                 self.set_value_shape(
                     node.output[0], value, equal_to=(node.input[0], node.output[0])
                 )
                 return True
+            node.doc_string += "#II2"
             return False
 
         if node.op_type == "Squeeze":
             if self.is_constant_or_attribute(node, 1, "axes"):
+                node.doc_string += "#ISq1"
                 y = self.value_as_shape(node.input[0])
                 if y is None:
                     return False
@@ -2098,25 +2101,30 @@ class GraphBuilder(_GraphBuilderRuntime):
                 ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
                 self.set_value_shape(node.output[0], y[0])
                 return True
+            node.doc_string += "#ISq2"
             return False
 
         if node.op_type == "Shape":
             if len(node.attribute) == 0:
+                node.doc_string += "#IS1"
                 if self.has_shape(node.input[0]):
                     shape = self.get_shape(node.input[0])
                     self.set_value_shape(node.output[0], shape)
                     if all_int(shape):
                         self.update_node_constant(node.output[0], node)
+                    self.set_shape(node.output[0], (len(shape),))
                 else:
                     self.set_value_shape(node.output[0], node.output[0])
                 return True
 
+            node.doc_string += "#IS2"
             start = self.get_attribute(node, "start", exc=False) or 0
             end = self.get_attribute(node, "end", exc=False)
             if end is None:
                 if self.has_rank(node.input[0]):
                     end = self.get_rank(node.input[0])
             if self.has_shape(node.input[0]):
+                node.doc_string += "#IS3"
                 shape = self.get_shape(node.input[0])
                 assert start.i < len(shape), (
                     f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
@@ -2127,6 +2135,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     self.set_value_shape(node.output[0], n_shape)
                     if all_int(shape):
                         self.update_node_constant(node.output[0], node)
+                    self.set_shape(node.output[0], (len(n_shape),))
+                    node.doc_string += "#IS4"
                     return True
                 assert getattr(end, "i", end) <= len(shape), (
                     f"Shape mismatch, end={getattr(end, 'i', end)}, "
@@ -2135,28 +2145,36 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
                 n_shape = shape[start.i : getattr(end, "i", end)]
                 if all_int(shape):
+                    node.doc_string += "#IS5"
                     self.update_node_constant(node.output[0], node)
                 self.set_value_shape(node.output[0], n_shape)
+                self.set_shape(node.output[0], (len(n_shape),))
+                node.doc_string += "#IS6"
                 return True
 
             if end is None:
                 self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
+                node.doc_string += "#IS6"
                 return False
 
             self.set_value_shape(
                 node.output[0],
                 f"{node.input[0]}[{start.i}:{getattr(end, 'i', end)}]",
             )
+            node.doc_string += "#IS7"
             return True
 
         if node.op_type == "Gather":
             if self.is_constant(node.input[1]):
+                node.doc_string += "#IG1"
                 y = self.value_as_shape(node.input[0])
                 if y is None:
+                    node.doc_string += "#IG2"
                     return False
                 i = self.get_constant(node.input[1], computed_value=True)
                 if isinstance(y, str) and isinstance(i, int):
                     self.set_value_shape(node.output[0], f"{y}[{i}]")
+                    node.doc_string += "#IG3"
                     return True
                 if (
                     isinstance(y, str)
@@ -2166,9 +2184,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 ):
                     ii = int(i[0]) if i.shape == (1,) else int(i)
                     self.set_value_shape(node.output[0], f"{y}[{ii}]")
+                    node.doc_string += "#IG4"
                     return True
                 if isinstance(y, tuple) and isinstance(i, int):
                     self.set_value_shape(node.output[0], y[i])
+                    node.doc_string += "#IG5"
                     return True
                 if (
                     isinstance(y, tuple)
@@ -2182,18 +2202,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"with inputs={node.input}{self.get_debug_msg()}"
                     )
                     self.set_value_shape(node.output[0], y[ii])
+                    node.doc_string += "#IG6"
                     return True
                 raise RuntimeError(
                     f"Not implemented when node Gather with inputs={node.input}, "
                     f"y={y!r}, i={i!r}{self.get_debug_msg()}"
                 )
+            node.doc_string += "#IG7"
             return False
 
         values = [self.value_as_shape(x) for x in node.input[0]]
         if any(x is None for x in values):
             # it is not a shape
+            node.doc_string += "#IZ"
             return False
         if node.op_type == "Concat":
+            node.doc_string += "#IC1"
             self.set_shape_value(node.output[0], tuple(values))
             return True
         raise RuntimeError(
@@ -2542,7 +2566,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 (a if a is not None else b) for a, b in zip(new_dyn_shape, dyn_shape)
             )
 
-        self.inputs.append(oh.make_tensor_value_info(input_name, elem_type, dyn_shape))
+        node = oh.make_tensor_value_info(input_name, elem_type, dyn_shape)
+        self.inputs.append(node)
         self.set_name(input_name, marker=f"make_tensor_input_{marker}")
         if shape is not None:
             self._make_tensor_input_finalize(name, shape, dyn_shape)
@@ -2564,6 +2589,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if input_name != name:
                 self.set_type(input_name, elem_type)
 
+        node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         add_node()
         return name
 
@@ -2708,7 +2734,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         if not self.as_function and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
-        self.outputs.append(oh.make_tensor_value_info(name, elem_type, dyn_shape))
+        node = oh.make_tensor_value_info(name, elem_type, dyn_shape)
+        node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
+        self.outputs.append(node)
         assert self.has_name(name), f"Output {name!r} not found{self.get_debug_msg()}"
         if self.verbose > 1:
             print(
@@ -3049,6 +3077,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{node.op_type}: {node.input}->{node.output}"
             )
 
+        # shape inference
         shape_set = self.simple_update_value_shape_with_node(node)
 
         # add the node
@@ -3075,7 +3104,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         rows = []
         for o in outputs:
             rows.append(f"*T{self.get_type(o)}" if self.has_type(o) else "T?")
-            rows.append("x".join(map(str, self.get_shape(o))) if self.has_shape(o) else "?")
+            if self.has_shape(o):
+                rows.append("x".join(map(str, self.get_shape(o))))
+            elif self.has_rank(o):
+                rows.append(f"R{self.get_rank(o)}")
         return ":".join(rows)
 
     @property
@@ -3273,11 +3305,13 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def _make_node_set_type_shape(self, node: NodeProto):
         if node.domain != "":
+            node.doc_string += "#Io1"
             set_shape_type_custom(self, node)
         else:
             if node.input and not self.has_type(node.input[0]):
                 # It is probably coming from an inlined function.
                 return
+            node.doc_string += "#Io2"
             set_shape_type_op_any(self, node)
 
     def make_nodes(
