@@ -553,6 +553,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return (value.dtype, value.shape, tuple(value.ravel().tolist()))
         return None
 
+    def pretty_tensor(self, tensor: Any) -> str:
+        if hasattr(tensor, "shape"):
+            return f"{tensor.dtype}:{tuple(tensor.shape)}"
+        return f"no pretty: {type(tensor)}"
+
     def pretty_node(self, node: NodeProto, limit: int = 80):
         text = (
             (
@@ -569,6 +574,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             t = f"T{self.get_type(o)}" if self.has_type(o) else ""
             s = " x ".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
             info.append(": ".join([t, s]))
+        if node.name:
+            return f"{text}|{' '.join(info)}             - {node.name}"
         return f"{text}|{' '.join(info)}"
 
     def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
@@ -786,7 +793,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 else:
                     new_res.append(int(i))
             if self._debug_get_constant:
-                print(f"[GraphBuilder.get_constant]   B: {tuple(new_res)}")
+                print(f"[GraphBuilder.get_constant]   SHAPE: {tuple(new_res)}")
             return tuple(new_res)
 
         if not self.is_constant(name):
@@ -4679,25 +4686,42 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             v, NodeProto
         ), f"Unexpected type {type(v)} for constant name={name!r}"
+        if self._debug_get_constant:
+            print(f"[GraphBuilder.compute_constant] {self.pretty_node(v)}")
 
-        if v.op_type == "Shape" and not self.is_constant(v.input[0]):
-            # One exception here as the input maybe not constant but the shape may be known.
-            assert self.has_shape(
-                v.input[0]
-            ), f"Shape must be known if shape is constant in {v}{self.get_debug_msg()}"
+        if v.op_type == "Shape":
+            if not self.has_shape(v.input[0]):
+                # We stop.
+                return None, None
             shape = self.get_shape(v.input[0])
-            assert all_int(shape), (
-                f"Shape must be static ({shape}) if shape is constant in {v}"
-                f"{self.get_debug_msg()}"
-            )
-            with self.maybe_disable_fake_tensor_mode():
-                output = self._apply_shape_on_shape(v, shape)
-                if isinstance(output[0], self.torch.Tensor):
-                    # We convert the tensor into numpy array,
-                    # it is a small shape anyway so the FakeMode
-                    # does not come up as an issue.
-                    output = [output[0].detach().cpu().numpy()]
-                return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
+            if is_static_shape(shape):
+                if self._debug_get_constant:
+                    print(f"[GraphBuilder.compute_constant]     - SHAPE {name}: {shape}")
+                return np.array([shape], dtype=np.int64), {
+                    v.input[0]: self.ShapeConstant(v.input[0], shape, v)
+                }
+
+            if not self.is_constant(v.input[0]):
+                # One exception here as the input maybe not
+                # be constant but the shape may be known.
+                assert all_int(shape), (
+                    f"Shape must be static ({shape}) if shape is constant in {v}"
+                    f"{self.get_debug_msg()}"
+                )
+                with self.maybe_disable_fake_tensor_mode():
+                    output = self._apply_shape_on_shape(v, shape)
+                    if isinstance(output[0], self.torch.Tensor):
+                        # We convert the tensor into numpy array,
+                        # it is a small shape anyway so the FakeMode
+                        # does not come up as an issue.
+                        output = [output[0].detach().cpu().numpy()]
+                    if self._debug_get_constant:
+                        print(
+                            f"[GraphBuilder.compute_constant]     - A "
+                            f"{name}: {self.pretty_tensor(output[0])}"
+                        )
+                    return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
+            return None, None
 
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
@@ -4784,6 +4808,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert cst is not None, f"Constant {name!r} was not found in {v.output}"
         if isinstance(cst, self.torch._subclasses.fake_tensor.FakeTensor):
             return None, None
+        if self._debug_get_constant:
+            print(f"[GraphBuilder.compute_constant]     - A {name}: {self.pretty_tensor(cst)}")
         return cst, feeds
 
     def constant_folding(self, convert_into_initializer: bool = True) -> int:

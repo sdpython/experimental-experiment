@@ -5496,6 +5496,9 @@ def aten_repeat(
     "repeat"
     assert isinstance(repeats, (tuple, list))
     if all_int(repeats):
+        if set(repeats) == {1}:
+            # identity
+            return g.op.Identity(x, name=name, outputs=outputs)
         irep = np.array(repeats, dtype=np.int64)
     elif g.is_dynamic_shape(repeats):
         # repeats is like a shape
@@ -5503,7 +5506,13 @@ def aten_repeat(
     else:
         raise RuntimeError(f"repeat not implemented for repeats={repeats}{g.get_debug_msg()}")
     if g.get_rank(x) != len(repeats):
-        expanded = g.op.Expand(x, np.array((1,) * len(repeats), dtype=np.int64), name=name)
+        assert g.get_rank(x) < len(repeats), (
+            f"Unexpected rank {g.get_rank(x)} for x={x!r}, repeats={repeats}"
+            f"{g.get_debug_msg()}"
+        )
+        expanded = g.UnsqueezeAnyOpset(
+            x, np.arange(len(repeats) - g.get_rank()).astype(np.int64), name=name
+        )
     else:
         expanded = x
     res = g.op.Tile(expanded, irep, name=name)
