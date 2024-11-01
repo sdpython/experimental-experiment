@@ -4576,11 +4576,11 @@ def aten__native_batch_norm(
         f"Unexpected number of outputs {outputs!r}, "
         f"training_mode={training}{g.get_debug_msg()}"
     )
-
-    if training:
-        outs = [outputs[0], g.unique_name(f"{name}_mean"), g.unique_name(f"{name}_var")]
-    else:
-        outs = outputs[:1]
+    outs = (
+        [outputs[0], g.unique_name(f"{name}_mean"), g.unique_name(f"{name}_var")]
+        if training
+        else outputs[:1]
+    )
     batch_out = g.op.BatchNormalization(
         x,
         weight,

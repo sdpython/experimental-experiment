@@ -788,10 +788,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             ), f"Multiple output is not allowed but type is {type(res)} for name={name!r}"
             new_res = []
             for i in res:
-                if isinstance(i, str):
-                    new_res.append(i)
-                else:
-                    new_res.append(int(i))
+                new_res.append(i if isinstance(i, str) else int(i))
             if self._debug_get_constant:
                 print(f"[GraphBuilder.get_constant]   SHAPE: {tuple(new_res)}")
             return tuple(new_res)
@@ -3232,7 +3229,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         elif node.op_type == "Expand":
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self.get_type(node.input[0]))
-            if self.is_constant(node.input[1]):
+            if (
+                self.has_shape(node.input[0])
+                and is_static_shape(self.get_shape(node.input[0]))
+                and self.is_constant(node.input[1])
+            ):
                 cst, _ = self.compute_constant(node.input[1], exc=False, only_array=True)
                 if cst is not None:
                     assert not isinstance(
@@ -3241,7 +3242,24 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"self.compute_constant returns a FakeTensor for {node.input[1]!r}"
                         f"\n{self.pretty_text()}"
                     )
-                    self.set_shape(node.output[0], tuple(int(i) for i in cst))
+                    assert (
+                        not self.has_rank(node.input[1]) or self.get_rank(node.input[1]) == 1
+                    ), (
+                        f"Unexpected rank {self.get_rank(node.input[1])} for {node.input[1]!r}"
+                        f"{self.get_debug_msg()}"
+                    )
+                    assert len(cst.shape) == 1 and cst.min() > 0, (
+                        f"Unexpected shape {cst.shape} "
+                        f"for computed constant {node.input[1]!r}, "
+                        f"cst={cst}{self.get_debug_msg()}"
+                    )
+                    shape = self.get_shape(node.input[0])
+                    new_shape = tuple(int(i) for i in cst)
+                    if len(shape) < len(new_shape):
+                        shape = (1,) * (len(new_shape) - len(shape)) + shape
+                    self.set_shape(
+                        node.output[0], tuple(max(i, j) for i, j in zip(shape, new_shape))
+                    )
         elif node.op_type == "Reshape":
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -4697,7 +4715,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if is_static_shape(shape):
                 if self._debug_get_constant:
                     print(f"[GraphBuilder.compute_constant]     - SHAPE {name}: {shape}")
-                return np.array([shape], dtype=np.int64), {
+                return np.array(shape, dtype=np.int64), {
                     v.input[0]: self.ShapeConstant(v.input[0], shape, v)
                 }
 
