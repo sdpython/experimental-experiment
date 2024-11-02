@@ -18,6 +18,7 @@ from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPatter
 from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
 from .onnx_layer_normalization import (
     BatchNormalizationPattern,
+    BatchNormalizationTrainingPattern,
     CastLayerNormalizationCastPattern,
     LayerNormalizationPattern,
     LayerNormalizationScalePattern,
@@ -100,6 +101,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
     return [
         # AlmostDoNothingPattern(verbose=verbose),
         BatchNormalizationPattern(verbose=verbose),
+        BatchNormalizationTrainingPattern(verbose=verbose),
         CastLayerNormalizationCastPattern(verbose=verbose),
         CastPattern(verbose=verbose),
         CastCastBinaryPattern(verbose=verbose),

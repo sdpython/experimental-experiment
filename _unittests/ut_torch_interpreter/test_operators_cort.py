@@ -1555,6 +1555,14 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    def test_upsample_bicubic_vec(self):
+        x = torch.randn(1, 2, 3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: nn.functional.interpolate(x, size=16, mode="bicubic"),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
     def test_unsqueeze(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(

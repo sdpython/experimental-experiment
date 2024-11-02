@@ -515,11 +515,13 @@ def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noq
             cst = self.get_constant(node.input[1])
             if isinstance(cst, NodeProto) and self.is_constant(cst.output[0]):
                 cst = self.get_constant(node.input[1], computed_value=True)
-            assert isinstance(cst, np.ndarray), (
+            assert isinstance(cst, (np.ndarray, self.torch.Tensor)), (
                 f"Unexpected type {type(cst)} for {node.input[1]!r}, "
                 f"unable to set type and shape for node {node.op_type} "
                 f"with name={node.name!r}{self.get_debug_msg()}"
             )
+            if isinstance(cst, self.torch.Tensor):
+                cst = cst.cpu()
             iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
         else:
             iaxes = None

@@ -39,6 +39,7 @@ from experimental_experiment.xbuilder._shape_helper import (
     compatible_dimensions,
 )
 from experimental_experiment.xoptim import get_pattern_list
+from experimental_experiment.helpers import pretty_onnx
 
 TFLOAT = TensorProto.FLOAT
 TFLOAT16 = TensorProto.FLOAT16
@@ -3620,6 +3621,62 @@ class TestGraphPatternOptimization(ExtTestCase):
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_batch_normalization_no_training(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "BatchNormalization",
+                        ["X", "scale", "B", "input_mean", "input_var"],
+                        ["Y", "unused1", "unused2"],
+                        epsilon=0.5,
+                        momentum=1.0,
+                        training_mode=1,
+                    ),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [3, 4])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [3, 4])],
+                [
+                    onh.from_array((np.arange(4) + 1).astype(np.float32), name="scale"),
+                    onh.from_array((np.arange(4) + 100).astype(np.float32), name="B"),
+                    onh.from_array((np.arange(4) + 20).astype(np.float32), name="input_mean"),
+                    onh.from_array((np.arange(4) + 2).astype(np.float32), name="input_var"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 4).astype(np.float32)}
+        from onnxruntime import InferenceSession
+
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["BatchNormalizationTraining"], verbose=0, constant_folding=True
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertIn("ReduceMean", pretty_onnx(opt_onx))
+        self.assertNotEqual(
+            ["BatchNormalization"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(4, len(opt_onx.graph.initializer))
 
         opt_ref = InferenceSession(
             opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
