@@ -1716,6 +1716,7 @@ def aten_dropout(
     training: T = True,  # bool
 ) -> T:
     "dropout"
+    print("**********", x, p, training)
     if len(outputs) == 1:
         outputs = outputs.copy()
         outputs.append("")

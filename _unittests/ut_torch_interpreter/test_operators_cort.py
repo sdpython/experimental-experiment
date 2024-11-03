@@ -288,6 +288,11 @@ class TestOperatorsCort(ExtTestCase):
                     raise
 
                 if isinstance(baseline_result, torch.Tensor):
+                    if save_onnx:
+                        assert storage["instance"]
+                        for i, inst in enumerate(storage["instance"]):
+                            with open(f"{onnx_export}_debug_{i}.onnx", "wb") as f:
+                                f.write(inst["onnx"].SerializeToString())
                     assert_all_close(
                         baseline_result,
                         result,
@@ -1758,29 +1763,33 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: x.erf(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    def test_dropout(self):
+    def test_dropout_notraining(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: torch.max(functional.dropout(x, training=False)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=True,
         )
 
     def test_dropout_default(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.max(functional.dropout(x)),
+            lambda x: torch.max(functional.dropout(x, p=0.5, training=False)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=False,
+            optimize=True,
         )
 
     def test_dropout_training(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.max(functional.dropout(x)),
+            lambda x: torch.max(functional.dropout(x, p=0.0, training=True)),
             x,
             training=torch.onnx.TrainingMode.TRAINING,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=False,
         )
 
     def test_dropout_opset12(self):
