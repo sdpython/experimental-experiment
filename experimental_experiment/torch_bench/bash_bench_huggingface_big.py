@@ -33,6 +33,10 @@ from experimental_experiment.torch_bench._bash_bench_cmd import bash_bench_main
 
 
 def main(args=None):
+    """
+    Main function for command line
+    ``python -m experimental_experiment.torch_bench.bash_bench_huggingface_big``.
+    """
     bash_bench_main("bash_bench_huggingface_big", __doc__, args)
 
 

@@ -405,7 +405,7 @@ Opsets
 
 Patterns must rewrite using the nodes of the opset defined in the model.
 
-* :meth:`main_opset <experimental_experiment.xoptim.GraphBuilderPatternOptimization.main_opset>`: returns the opset
+* :attr:`main_opset <experimental_experiment.xoptim.GraphBuilderPatternOptimization.main_opset>`: returns the opset
 
 Shapes, Types
 +++++++++++++

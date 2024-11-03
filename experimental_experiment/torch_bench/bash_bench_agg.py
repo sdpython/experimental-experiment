@@ -17,6 +17,10 @@ from argparse import ArgumentParser, BooleanOptionalAction
 
 
 def main(args=None):
+    """
+    Main function for command line
+    ``python -m experimental_experiment.torch_bench.bash_bench_agg``.
+    """
     parser = ArgumentParser(
         "experimental_experiment.torch_bench.bash_bench_agg", description=__doc__
     )
