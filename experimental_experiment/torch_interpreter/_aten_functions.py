@@ -7441,6 +7441,37 @@ def aten_upsample_bicubic2d(
     )
 
 
+def aten_upsample_bilinear2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scales_d: Optional[float] = None,
+    scales_h: Optional[float] = None,
+    name: str = "upsample_bilinear2d",
+) -> T:
+    """resize"""
+    assert output_size is not None, "Not implemented when size is None"
+    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="linear",
+        coordinate_transformation_mode=(
+            "align_corners" if align_corners else "pytorch_half_pixel"
+        ),
+        d=2,
+        name=name,
+    )
+
+
 def aten_upsample_bicubic2d_vec(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -7459,6 +7490,26 @@ def aten_upsample_bicubic2d_vec(
     # )
     scales = [None, None, None]
     return aten_upsample_bicubic2d(g, sts, outputs, x, osize, *scales, name=name)
+
+
+def aten_upsample_bilinear2d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scale_factors: Optional[Sequence[float]] = None,
+    name: str = "upsample_bicubic2d_vec",
+) -> T:
+    """resize"""
+    assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
+    osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
+    # scales = (
+    #     scale_factors if scale_factors else [None] * len(osize)
+    # )
+    scales = [None, None, None]
+    return aten_upsample_bilinear2d(g, sts, outputs, x, osize, *scales, name=name)
 
 
 def aten_upsample_nearest2d_vec(
