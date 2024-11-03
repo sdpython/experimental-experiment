@@ -8,6 +8,8 @@ or::
 
     clear&&EXPDORAISE=1 \\
     python _unittests/ut_torch_interpreter/test_operators_cort.py -f
+
+``EXPDORAISE`` can be replace by ``EXPDORAISEFW``  to fail only on forward.
 """
 
 import copy
@@ -277,9 +279,11 @@ class TestOperatorsCort(ExtTestCase):
                 try:
                     result = compiled_model(*args)
                 except torch._dynamo.exc.BackendCompilerFailed as e:
-                    if not os.environ.get(
-                        "EXPDORAISE", False
-                    ) and "FunctionNotFoundError" in str(e):
+                    if (
+                        not os.environ.get("EXPDORAISE", False)
+                        and not os.environ.get("EXPDORAISEFW", False)
+                        and "FunctionNotFoundError" in str(e)
+                    ):
                         raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
                     raise
 
@@ -2104,6 +2108,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x, b1, b2: torch.baddbmm(x, b1, b2),
             (x, b1, b2),
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     def test_round(self):

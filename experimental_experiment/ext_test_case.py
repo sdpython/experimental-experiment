@@ -410,7 +410,7 @@ class ExtTestCase(unittest.TestCase):
                 expected_value = torch.abs(value).max()
                 rows = [
                     f"{msg}\n{e}" if msg else str(e),
-                    f"expected max value={expected_max}"
+                    f"expected max value={expected_max}",
                     f"expected computed value={expected_value}",
                 ]
                 raise AssertionError("\n".join(rows))  # noqa: B904
@@ -440,7 +440,7 @@ class ExtTestCase(unittest.TestCase):
             expected_value = numpy.abs(value).max()
             rows = [
                 f"{msg}\n{e}" if msg else str(e),
-                f"expected max value={expected_max}"
+                f"expected max value={expected_max}",
                 f"expected computed value={expected_value}",
             ]
             raise AssertionError("\n".join(rows))  # noqa: B904

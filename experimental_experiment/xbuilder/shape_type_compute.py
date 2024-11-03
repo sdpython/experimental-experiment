@@ -567,7 +567,7 @@ def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa:
 
 
 def _set_shape_type_op_any_sign(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    set_type_shape_unary_op(self, node.output[0], node.input[0], itype=TensorProto.INT64)
+    set_type_shape_unary_op(self, node.output[0], node.input[0])
 
 
 def _set_shape_type_op_any_castlike(
