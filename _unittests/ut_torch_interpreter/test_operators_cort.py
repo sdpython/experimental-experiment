@@ -2191,6 +2191,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=True,
         )
 
     def test_softmaxcrossentropy_3d_none(self):
@@ -2292,7 +2293,6 @@ class TestOperatorsCort(ExtTestCase):
             impl="ref",
         )
 
-    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_12(self):
         m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape((2, 3, 4))
         self.assertONNX(
@@ -2305,7 +2305,6 @@ class TestOperatorsCort(ExtTestCase):
             impl="ref",
         )
 
-    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_18(self):
         m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape((2, 3, 4))
         self.assertONNX(

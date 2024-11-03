@@ -1716,7 +1716,6 @@ def aten_dropout(
     training: T = True,  # bool
 ) -> T:
     "dropout"
-    print("**********", x, p, training)
     if len(outputs) == 1:
         outputs = outputs.copy()
         outputs.append("")
@@ -4455,6 +4454,25 @@ def aten_mean_dim(
     if not sts:
         set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
     return result
+
+
+def aten_mean(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "mean",
+) -> T:
+    """mean"""
+    if dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        x = g.op.Cast(x, to=itype, name=name)
+    res = g.op.ReduceMean(x, keepdims=0, name=name, outputs=outputs)
+    if not sts:
+        g.set_type(res, g.get_type(x) if dtype is None else itype)
+        g.get_shape(res, tuple())
+    return res
 
 
 def aten_min(
