@@ -228,7 +228,7 @@ class _GraphBuilderRuntime:
             assert isinstance(
                 x, (float, int, np.float32, np.float64, np.float16, np.int32, np.int64)
             ), f"Unexpected type {type(x)} for {node.input[0]!r} (node.name={node.name!r})"
-            res = self._apply_cast(node, {node.input[0]: np.array([x])})
+            res = self._apply_cast(node, {node.input[0]([x])})
             return [res[0]]
         to, saturate = None, 1
         for att in node.attribute:

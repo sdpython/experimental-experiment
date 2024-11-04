@@ -887,12 +887,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self._debug_get_constant:
                 if value.size < 10:
                     print(
-                        f"[GraphBuilder.get_constant]   K: np.array {value.shape}, "
+                        f"[GraphBuilder.get_constant]   K: np.ndarray {value.shape}, "
                         f"{value.dtype}, {value}"
                     )
                 else:
                     print(
-                        f"[GraphBuilder.get_constant]   K: np.array {value.shape}, "
+                        f"[GraphBuilder.get_constant]   K: np.ndarray {value.shape}, "
                         f"{value.dtype}"
                     )
             return value
@@ -1875,7 +1875,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         elif isinstance(value, float):
             value = np.array(value, dtype=np.float32)
         elif hasattr(value, "data"):
-            # torch.nn.parameter.Parameter -> np.array
+            # torch.nn.parameter.Parameter -> np.ndarray
             assert "FakeTensor" not in str(type(value)), (
                 f"FakeTensor {name!r} cannot be an initializer {type(value)}"
                 f"{self.get_debug_msg()}"
