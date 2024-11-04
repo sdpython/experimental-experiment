@@ -1804,11 +1804,23 @@ class TestOperatorsCort(ExtTestCase):
     def test_dropout_training_opset12(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.max(functional.dropout(x)),
+            lambda x: torch.max(functional.dropout(x, p=0, training=True)),
             x,
             opset_version=12,
             training=torch.onnx.TrainingMode.TRAINING,
             onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_dropout_training_opset12_optim(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.max(functional.dropout(x, p=0.5, training=True)),
+            x,
+            opset_version=12,
+            training=torch.onnx.TrainingMode.TRAINING,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=10,
+            verbose=0,
         )
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
