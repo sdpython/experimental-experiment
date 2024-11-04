@@ -406,9 +406,14 @@ class ExtTestCase(unittest.TestCase):
             try:
                 torch.testing.assert_close(value, expected, atol=atol, rtol=rtol)
             except AssertionError as e:
-                if msg:
-                    raise AssertionError(msg) from e
-                raise
+                expected_max = torch.abs(expected).max()
+                expected_value = torch.abs(value).max()
+                rows = [
+                    f"{msg}\n{e}" if msg else str(e),
+                    f"expected max value={expected_max}",
+                    f"expected computed value={expected_value}",
+                ]
+                raise AssertionError("\n".join(rows))  # noqa: B904
             return
 
         if hasattr(expected, "detach"):
@@ -431,9 +436,14 @@ class ExtTestCase(unittest.TestCase):
         try:
             assert_allclose(desired=expected, actual=value, atol=atol, rtol=rtol)
         except AssertionError as e:
-            if msg:
-                raise AssertionError(msg) from e
-            raise
+            expected_max = numpy.abs(expected).max()
+            expected_value = numpy.abs(value).max()
+            rows = [
+                f"{msg}\n{e}" if msg else str(e),
+                f"expected max value={expected_max}",
+                f"expected computed value={expected_value}",
+            ]
+            raise AssertionError("\n".join(rows))  # noqa: B904
 
     def assertEqualTrue(self, value: Any, msg: str = ""):
         if value is True:

@@ -18,6 +18,10 @@ class DropoutPattern(PatternOptimization):
         if node.op_type != "Dropout" or node.domain != "":
             return None
 
+        for o in node.output[1:]:
+            if o and g.is_used(o):
+                return self.none(node, inspect.currentframe().f_lineno)
+
         if not (
             len(node.input) >= 3
             and node.input[2] != ""

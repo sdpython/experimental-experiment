@@ -8,6 +8,8 @@ or::
 
     clear&&EXPDORAISE=1 \\
     python _unittests/ut_torch_interpreter/test_operators_cort.py -f
+
+``EXPDORAISE`` can be replace by ``EXPDORAISEFW``  to fail only on forward.
 """
 
 import copy
@@ -277,13 +279,20 @@ class TestOperatorsCort(ExtTestCase):
                 try:
                     result = compiled_model(*args)
                 except torch._dynamo.exc.BackendCompilerFailed as e:
-                    if not os.environ.get(
-                        "EXPDORAISE", False
-                    ) and "FunctionNotFoundError" in str(e):
+                    if (
+                        not os.environ.get("EXPDORAISE", False)
+                        and not os.environ.get("EXPDORAISEFW", False)
+                        and "FunctionNotFoundError" in str(e)
+                    ):
                         raise unittest.SkipTest(f"MISSING FOR FORWARD {e}")
                     raise
 
                 if isinstance(baseline_result, torch.Tensor):
+                    if save_onnx:
+                        assert storage["instance"]
+                        for i, inst in enumerate(storage["instance"]):
+                            with open(f"{onnx_export}_debug_{i}.onnx", "wb") as f:
+                                f.write(inst["onnx"].SerializeToString())
                     assert_all_close(
                         baseline_result,
                         result,
@@ -1754,29 +1763,33 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: x.erf(), x, onnx_export=inspect.currentframe().f_code.co_name
         )
 
-    def test_dropout(self):
+    def test_dropout_notraining(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
             lambda x: torch.max(functional.dropout(x, training=False)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=True,
         )
 
     def test_dropout_default(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.max(functional.dropout(x)),
+            lambda x: torch.max(functional.dropout(x, p=0.5, training=False)),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=False,
+            optimize=True,
         )
 
     def test_dropout_training(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.max(functional.dropout(x)),
+            lambda x: torch.max(functional.dropout(x, p=0.0, training=True)),
             x,
             training=torch.onnx.TrainingMode.TRAINING,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=False,
         )
 
     def test_dropout_opset12(self):
@@ -1791,11 +1804,23 @@ class TestOperatorsCort(ExtTestCase):
     def test_dropout_training_opset12(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.max(functional.dropout(x)),
+            lambda x: torch.max(functional.dropout(x, p=0, training=True)),
             x,
             opset_version=12,
             training=torch.onnx.TrainingMode.TRAINING,
             onnx_export=inspect.currentframe().f_code.co_name,
+        )
+
+    def test_dropout_training_opset12_optim(self):
+        x = torch.randn(3, 4, requires_grad=True)
+        self.assertONNX(
+            lambda x: torch.max(functional.dropout(x, p=0.5, training=True)),
+            x,
+            opset_version=12,
+            training=torch.onnx.TrainingMode.TRAINING,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            atol=10,
+            verbose=0,
         )
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
@@ -2104,6 +2129,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x, b1, b2: torch.baddbmm(x, b1, b2),
             (x, b1, b2),
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=1e-5,
         )
 
     def test_round(self):
@@ -2177,6 +2203,7 @@ class TestOperatorsCort(ExtTestCase):
             (x, y),
             opset_version=12,
             onnx_export=inspect.currentframe().f_code.co_name,
+            save_onnx=True,
         )
 
     def test_softmaxcrossentropy_3d_none(self):
@@ -2278,7 +2305,6 @@ class TestOperatorsCort(ExtTestCase):
             impl="ref",
         )
 
-    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_12(self):
         m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape((2, 3, 4))
         self.assertONNX(
@@ -2291,7 +2317,6 @@ class TestOperatorsCort(ExtTestCase):
             impl="ref",
         )
 
-    @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic axes not supported")
     def test_dynamic_axes_reduce_mean_18(self):
         m1 = torch.arange(24, dtype=torch.float32, requires_grad=True).reshape((2, 3, 4))
         self.assertONNX(

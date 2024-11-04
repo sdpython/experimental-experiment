@@ -1067,6 +1067,10 @@ class GraphBuilderPatternOptimization:
                         f"[GraphBuilderPatternOptimization.optimize] "
                         f"use pattern {i+1:3d}/{len(self.patterns)} - P{pp} - {pattern!r}"
                     )
+            if self.verbose >= 10:
+                print("--")
+                print(self.builder.pretty_text())
+                print("--")
 
         begin_all = time.perf_counter()
         statistics = []
