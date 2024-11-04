@@ -19,7 +19,7 @@ class DropoutPattern(PatternOptimization):
             return None
 
         for o in node.output[1:]:
-            if g.is_used(o):
+            if o and g.is_used(o):
                 return self.none(node, inspect.currentframe().f_lineno)
 
         if not (
