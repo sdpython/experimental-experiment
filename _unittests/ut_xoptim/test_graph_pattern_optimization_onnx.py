@@ -3391,6 +3391,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-2)
         # self._check_with_ort(opt_onx)
 
+    @requires_torch("2.6")
     def test_conv_null_bias(self):
         model = oh.make_model(
             oh.make_graph(
@@ -3514,6 +3515,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    @requires_torch("2.6")
     def test_folding_with_conv_no_bias(self):
         model = oh.make_model(
             oh.make_graph(
