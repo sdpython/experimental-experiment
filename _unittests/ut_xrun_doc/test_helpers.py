@@ -9,7 +9,7 @@ class TestHelpers(ExtTestCase):
         a = np.array([1])
         obj = {"a": a, "b": [5.6], "c": (1,)}
         s = string_type(obj)
-        self.assertEqual(s, "dict(a:A7r1,b:[float],c:(int,))")
+        self.assertEqual(s, "dict(a:A7r1,b:#1[float],c:(int,))")
 
     def test_string_dict(self):
         a = np.array([1], dtype=np.float32)

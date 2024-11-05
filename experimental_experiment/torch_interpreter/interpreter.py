@@ -1229,6 +1229,8 @@ class DynamoInterpreter:
                 return tuple((None if v is None else v.dtype) for v in val)
             if isinstance(val, self.torch.SymInt):
                 return self.torch.SymInt
+            if isinstance(val, self.torch.SymBool):
+                return self.torch.SymBool
             if isinstance(val, self.torch.SymFloat):
                 return self.torch.SymFloat
             exa = node.meta.get("example_value", None)
@@ -1319,6 +1321,11 @@ class DynamoInterpreter:
                     # this is a shape
                     self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.INT64)
+                    self.builder.make_dynamic_object(r, v)
+                elif isinstance(v, self.torch.SymBool):
+                    # this is a shape
+                    self.builder.set_shape(r, (1,))
+                    self.builder.set_type(r, TensorProto.BOOL)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, self.torch.SymFloat):
                     # this is a shape

@@ -1193,12 +1193,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             name = name.name
         self._known_torch_value[name] = (where, value)
 
-    @classmethod
-    def _torch_sym_int_to_str(cls, value: "torch.SymInt") -> Union[int, str]:  #  noqa: F821
+    def _torch_sym_int_to_str(self, value: "torch.SymInt") -> Union[int, str]:  #  noqa: F821
         try:
             val_int = int(value)
             return val_int
-        except (TypeError, ValueError, AttributeError):
+        except (
+            TypeError,
+            ValueError,
+            AttributeError,
+            self.torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode,
+        ):
             pass
 
         if isinstance(value.node, str):
@@ -1644,7 +1648,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(value, self.WrapSym):
             value = value.sym
         assert isinstance(
-            value, (self.torch.SymInt, self.torch.SymFloat)
+            value, (self.torch.SymInt, self.torch.SymFloat, self.torch.SymBool)
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
 
         if input_name is not None and isinstance(value, self.torch.SymInt):

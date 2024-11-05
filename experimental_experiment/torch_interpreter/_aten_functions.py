@@ -50,6 +50,17 @@ class Reduction(Enum):
     SUM = 2
 
 
+def aten__assert_scalar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: Any,
+    name: str = "_assert_scalar",
+):
+    "_assert_scalar"
+    return g.op.Identity(x, name=name, outputs=outputs)
+
+
 def aten__log_api_usage_once(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], module_name: str
 ) -> T:
@@ -7180,6 +7191,19 @@ def aten_sum_dim_IntList(
     itype = torch_dtype_to_onnx_dtype(dtype)
     result = g.op.Cast(res, to=itype, outputs=outputs, name="sum_dim_IntList")
     return result
+
+
+def aten_sym_constrain_range_for_size(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    dim: Any,
+    min: Optional[int] = None,
+    max: Optional[int] = None,
+    name: str = "sym_constrain_range_for_size",
+):
+    "assert sym_constrain_range_for_size"
+    return g.op.Cast(dim, name=name, to=TensorProto.BOOL, outputs=outputs)
 
 
 def aten_sym_size_int(
