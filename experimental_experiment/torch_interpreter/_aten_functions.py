@@ -252,7 +252,24 @@ def aten_and(
     outputs: List[str],
     x: T,
     y: T,
-    name="and",
+    name: str = "and",
+) -> T:
+    "and"
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
+    )
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten___and___Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "__and___Tensor",
 ) -> T:
     "and"
     res, x, y = prepare_inputs_homogeneous_operator(
@@ -5195,6 +5212,36 @@ def aten_nll_loss_forward(
         final_result = g.op.Identity(result, name=name, outputs=outputs[:1])
 
     return final_result, total_weight
+
+
+def aten_nonzero(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "nonzero",
+) -> T:
+    """nonzero"""
+    res = g.op.Transpose(g.op.NonZero(x, name=name), perm=[1, 0], name=name, outputs=outputs)
+    if not sts:
+        g.set_type(res, TensorProto.INT64)
+        g.set_rank(res, 2)
+    return res
+
+
+def aten_nonzero_numpy(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "nonzero",
+) -> T:
+    """nonzero numpy"""
+    res = g.op.NonZero(x, name=name, outputs=outputs)
+    if not sts:
+        g.set_type(res, TensorProto.INT64)
+        g.set_rank(res, 2)
+    return res
 
 
 def aten_not(
