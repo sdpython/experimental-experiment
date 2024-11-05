@@ -1013,6 +1013,28 @@ def aten_clamp(
     return res
 
 
+def aten_clamp_max(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    max_: T,
+    name: str = "clamp_min",
+) -> T:
+    """clamp_min"""
+    if isinstance(max_, (float, int)):
+        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        max_value = np.array([max_], dtype=dtype)
+        res = g.op.Clip(x, None, max_value, name=name, outputs=outputs)
+    else:
+        assert isinstance(max_, str), f"Unexpected type {type(max_)}{g.get_debug_msg()}"
+        res = g.op.Max(x, max_, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_clamp_min(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

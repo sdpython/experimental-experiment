@@ -43,7 +43,7 @@ def get_model_inputs(
     device: str = "cuda",
     dtype: Optional[str] = None,
 ) -> Tuple[Callable, Tuple[Any, ...]]:
-    """Returns a codellama model and its inputs."""
+    """Returns a model and its inputs."""
 
     # model.model.layers = model.model.layers[:1]
     # model.config.num_hidden_layers = 1

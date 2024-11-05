@@ -104,7 +104,7 @@ def get_model_inputs(
     device: str = "cuda",
     dtype: Optional[str] = None,
 ) -> Tuple[Callable, Tuple[Any, ...]]:
-    """Returns a codellama model and its inputs."""
+    """Returns a model and its inputs."""
 
     input_ids = ids_tensor((1, 128), 32016).to(device)
 

@@ -1404,17 +1404,16 @@ class DynamoInterpreter:
             function_options=self.function_options,
             local_domain=local_domain,
         )
-        if self.preserved_modules:
+        if self.preserved_modules and hasattr(self, "named_modules"):
             assert (
                 source_node is not None
             ), f"For this option, source_node cannot be None{self.builder.get_debug_msg()}"
             module_name = source_node.target
-            assert module_name in self.named_modules, (
-                f"Unable to find {module_name!r} in "
-                f"{sorted(self.named_module)}{self.builder.get_debug_msg()}"
-            )
-            module_child = self.named_modules[module_name]
-            interpreter.register(self.preserved_modules, dict(module_child.named_modules()))
+            if module_name in self.named_modules:
+                module_child = self.named_modules[module_name]
+                interpreter.register(
+                    self.preserved_modules, dict(module_child.named_modules())
+                )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
 

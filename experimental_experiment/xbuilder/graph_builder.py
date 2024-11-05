@@ -4569,7 +4569,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     less = set(h for h in hid if h not in memo)
                     hidden |= less
             memo |= set(node.output)
-        assert all(name in self.initializers_dict for name in hidden), (
+        assert all(name in self.initializers_dict for name in hidden if name), (
             f"Some hidden inputs in {sorted(hidden)!r} are not initializers "
             f"{sorted(self.initializers_dict)}. It is unexpected."
         )
