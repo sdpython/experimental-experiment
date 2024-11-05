@@ -3,6 +3,8 @@ from ._bash_bench_model_runner import MakeConfig
 
 
 class Neuron(torch.nn.Module):
+    "Dummy module with one input."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -17,6 +19,8 @@ class Neuron(torch.nn.Module):
 
 
 class Neuron2Outputs(torch.nn.Module):
+    "Dummy module with 2 outputs."
+
     def __init__(self, n_dims: int = 1000, n_targets: int = 100):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -31,6 +35,8 @@ class Neuron2Outputs(torch.nn.Module):
 
 
 class Neuron16(Neuron):
+    "Dummy module with 1 input in float16."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super(Neuron, self).__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets, dtype=torch.float16)
@@ -45,6 +51,8 @@ class Neuron16(Neuron):
 
 
 class NeuronTuple(torch.nn.Module):
+    "Dummy module with a tuple as input."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -60,6 +68,8 @@ class NeuronTuple(torch.nn.Module):
 
 
 class Neuron2Inputs(torch.nn.Module):
+    "Dummy module with 2 inputs."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -75,6 +85,8 @@ class Neuron2Inputs(torch.nn.Module):
 
 
 class NeuronNamed1(torch.nn.Module):
+    "Dummy module with named inputs."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -91,6 +103,8 @@ class NeuronNamed1(torch.nn.Module):
 
 
 class NeuronNamed2(torch.nn.Module):
+    "Dummy module with named inputs and none inputs."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -110,6 +124,8 @@ class NeuronNamed2(torch.nn.Module):
 
 
 class NeuronNamedDict(torch.nn.Module):
+    "Dummy module with as dictionary as input."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -126,6 +142,8 @@ class NeuronNamedDict(torch.nn.Module):
 
 
 class NeuronIList(torch.nn.Module):
+    "Dummy module with a list as input."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -144,6 +162,8 @@ class NeuronIList(torch.nn.Module):
 
 
 class NeuronIInt(torch.nn.Module):
+    "Dummy module with an integer."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -159,6 +179,8 @@ class NeuronIInt(torch.nn.Module):
 
 
 class NeuronNoneInt(torch.nn.Module):
+    "Dummy module with an empty input and an integer as input."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -174,6 +196,8 @@ class NeuronNoneInt(torch.nn.Module):
 
 
 class NeuronNoneListInt(torch.nn.Module):
+    "Dummy module with a list and an integrer as inputs."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -193,6 +217,8 @@ class NeuronNoneListInt(torch.nn.Module):
 
 
 class NeuronNoneIntDefault(torch.nn.Module):
+    "Dummy module with an optional integer and a list as inputs."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -208,6 +234,8 @@ class NeuronNoneIntDefault(torch.nn.Module):
 
 
 class NeuronNoneIntDict(torch.nn.Module):
+    "Dummy module with an optional integer and dictionary as inputs."
+
     def __init__(self, n_dims: int = 5, n_targets: int = 3):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)

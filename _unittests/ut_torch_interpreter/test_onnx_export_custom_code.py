@@ -397,6 +397,84 @@ class TestOnnxExportCustomCode(ExtTestCase):
         expected = (x + x + x) * x
         self.assertEqualArray(expected, got)
 
+    def test_custom_graph_break(self):
+        import torch
+
+        def _model():
+
+            class ModelGraphBreak(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+
+                def forward(self, x):
+                    if x.sum() > 0:
+                        return x
+                    else:
+                        return -x
+
+            return ModelGraphBreak, torch.rand(5, 3)
+
+        cls, x = _model()
+        model = cls()
+        expected = model(x)
+
+        # export
+        self.assertRaise(lambda: torch.export.export(model, (x,)), torch._dynamo.exc.UserError)
+
+        # register a custom op
+        def replace_fn(x: torch.Tensor) -> torch.Tensor:
+            def p(t):
+                return t.clone()
+
+            def n(t):
+                return -t
+
+            return torch.cond(x.sum() > 0, p, n, (x,))
+
+        def replace_meta(x):
+            # produces a fake result with the same type and shape
+            return torch.empty_like(x)
+
+        schema_str = torch.library.infer_schema(replace_fn, mutates_args=())
+        namespace, opname = "testlib", "replace_fn"
+        replace_op = torch.library.CustomOpDef(namespace, opname, schema_str, replace_fn)
+        replace_op.register_kernel(None)(replace_fn)
+        replace_op._abstract_fn = replace_meta
+
+        # verification
+        y = replace_fn(x)
+        self.assertEqualArray(expected, y)
+
+        # second verification
+        model.forward = lambda x: torch.ops.testlib.replace_fn(x)
+        z = model(x)
+        self.assertEqualArray(expected, z)
+
+        # let's export again
+        ep = torch.export.export(model, (x,))
+        self.assertIn("torch.ops.testlib.replace_fn.default", str(ep))
+
+        # let's export and map this to a cuwtom op
+        T = str
+
+        def testlib_replace_fn(
+            g: "GraphBuilder",  # noqa: F821
+            sts: Dict[str, Any],
+            outputs: List[str],
+            x: T,
+            name: str = "testlib_replace_fn",
+        ) -> T:
+            return g.anyop.WeirdUnary(x, name=name, outputs=outputs, domain="testlib")
+
+        onx = to_onnx(
+            model,
+            (x,),
+            dispatcher=Dispatcher({"testlib::replace_fn": testlib_replace_fn}),
+            target_opset={"": 18, "testlib": 1},
+        )
+        op_types = [(n.domain, n.op_type) for n in onx.graph.node]
+        self.assertEqual(op_types, [("testlib", "WeirdUnary")])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

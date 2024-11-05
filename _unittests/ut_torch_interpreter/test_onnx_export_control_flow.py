@@ -30,7 +30,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         return Bad1Fixed, torch.rand(5, 3)
 
-    @unittest.skip("cond not supported by torch_script")
+    @requires_torch("2.7")
     def test_controlflow_script(self):
         import torch
 
@@ -49,7 +49,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got)
 
-    @unittest.skip("torch.ops.higher_order.cond not supported yet")
+    @requires_torch("2.7")
     @skipif_ci_windows("not yet supported on Windows")
     def test_controlflow_dynamo(self):
         import torch
@@ -80,6 +80,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
     def test_controlflow_custom_if_1(self):
+        import onnxruntime
+
         cls, x = self.get_custom_model()
         model = cls()
         onx = to_onnx(model, (x,))
@@ -91,6 +93,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
             expected = model(_x)
             ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
+            self.assertEqualArray(expected, got, atol=1e-5)
+
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            got = sess.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got, atol=1e-5)
 
     @classmethod

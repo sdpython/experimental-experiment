@@ -123,6 +123,11 @@ def get_peak_memory():
 
 
 class WrappedModelBase(torch.nn.Module):
+    """
+    Wrapper around a module, flattens inputs and outputs so that every
+    exporter can use it.
+    """
+
     def __init__(self, model):
         super().__init__()
         self.model = model
@@ -138,6 +143,11 @@ class WrappedModelBase(torch.nn.Module):
 
 
 class WrappedModelToTuple(WrappedModelBase):
+    """
+    Wrapper around a module, flattens inputs and outputs so that every
+    exporter can use it.
+    """
+
     def __init__(self, model):
         super().__init__(model)
 

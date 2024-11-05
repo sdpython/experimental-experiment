@@ -8,7 +8,7 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
-from onnx import TensorProto
+from onnx import TensorProto, ValueInfoProto
 from onnx.helper import (
     tensor_dtype_to_np_dtype,
     make_graph,
@@ -1117,6 +1117,12 @@ def aten_cond(
     assert g.has_local_function(
         false_graph, g.local_domain
     ), f"Unable to find local function {false_graph!r}{g.get_debug_msg()}"
+
+    def mkv(name):
+        value_info_proto = ValueInfoProto()
+        value_info_proto.name = name
+        return value_info_proto
+
     res = g.make_node(
         "If",
         [cond],
@@ -1126,13 +1132,13 @@ def aten_cond(
             [make_node(true_graph, inputs, outputs, domain=g.local_domain)],
             true_graph,
             [],
-            [make_tensor_value_info(o, 0, None) for o in outputs],
+            [mkv(o) for o in outputs],
         ),
         else_branch=make_graph(
             [make_node(false_graph, inputs, outputs, domain=g.local_domain)],
             false_graph,
             [],
-            [make_tensor_value_info(o, 0, None) for o in outputs],
+            [mkv(o) for o in outputs],
         ),
     )
     return res
@@ -5614,7 +5620,7 @@ def aten_prod(
     res = g.op.ReduceProd(x, keepdims=0, name=name, outputs=outputs)
     if not sts:
         g.set_type(res, g.get_type(x) if dtype is None else itype)
-        g.get_shape(res, tuple())
+        g.set_shape(res, tuple())
     return res
 
 

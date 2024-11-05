@@ -55,7 +55,7 @@ kernel
 # A raw version of a 2D convolution.
 
 
-def raw_convolution(data: np.array, kernel: Sequence[int]) -> np.array:
+def raw_convolution(data: np.ndarray, kernel: Sequence[int]) -> np.ndarray:
     rx = (kernel.shape[0] - 1) // 2
     ry = (kernel.shape[1] - 1) // 2
     res = np.zeros(data.shape, dtype=data.dtype)
@@ -291,7 +291,7 @@ ct
 # can be expressed as a matrix multiplication. It takes the image and the kernel shape.
 
 
-def _get_indices(i: int, shape: Sequence[int]) -> np.array:
+def _get_indices(i: int, shape: Sequence[int]) -> np.ndarray:
     res = np.empty((len(shape),), dtype=np.int64)
     k = len(shape) - 1
     while k > 0:
@@ -314,8 +314,8 @@ def _is_out(ind: Sequence[int], shape: Sequence[int]) -> bool:
 
 
 def im2col_naive_implementation(
-    data: np.array, kernel_shape: Sequence[int], fill_value: int = 0
-) -> np.array:
+    data: np.ndarray, kernel_shape: Sequence[int], fill_value: int = 0
+) -> np.ndarray:
     """
     Naive implementation for `im2col` or
     :func:`torch.nn.Unfold` (but with `padding=1`).
