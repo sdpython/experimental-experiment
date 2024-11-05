@@ -183,7 +183,7 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
 
     @skipif_ci_windows("not working on windows")
-    def test_aten_nonzero(self):
+    def test_aten_nonzero_1(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -210,6 +210,38 @@ class TestOnnxExportAten(ExtTestCase):
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_nonzero_tuple(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                y = torch.nonzero(x, as_tuple=True)
+                return y
+
+        model = Model()
+        x = torch.randn(3, 4, requires_grad=False)
+        expected = model(x)
+        model_path = self._call_exporter("test_aten_nonzeros", "custom", model, (x,))
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqual(len(expected), 2)
+        self.assertEqual(len(got), 2)
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-5)
 
 
 if __name__ == "__main__":

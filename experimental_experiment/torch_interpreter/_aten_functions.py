@@ -5245,14 +5245,14 @@ def aten_nonzero_numpy(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    name: str = "nonzero",
+    name: str = "nonzero_numpy",
 ) -> T:
     """nonzero numpy"""
-    res = g.op.NonZero(x, name=name, outputs=outputs)
-    if not sts:
-        g.set_type(res, TensorProto.INT64)
-        g.set_rank(res, 2)
-    return res
+    if len(outputs) > 1:
+        return g.op.NonZero(x, name=name, outputs=outputs)
+    res = g.op.NonZero(x, name=name)
+    seq = g.op.SplitToSequence(res, axis=0, keepdims=0, outputs=outputs)
+    return seq
 
 
 def aten_not(

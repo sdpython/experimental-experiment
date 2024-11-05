@@ -13,6 +13,7 @@ from ..xbuilder._dtype_helper import (
     onnx_dtype_to_torch_dtype,
 )
 from ..xbuilder.model_container import _get_type
+from ..xbuilder.expression_dimension import parse_expression_tokens
 from . import LOCAL_DOMAIN
 from .export_options import ExportOptions
 from ._exceptions import FunctionNotFoundError
@@ -870,6 +871,9 @@ class DynamoInterpreter:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
                 dtype = _get_type(val.dtype)
+                # the shaphe could be new if a function produces a results
+                # depending on the result values
+                self._verify_new_shape(shape, node)
                 self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
@@ -1026,6 +1030,21 @@ class DynamoInterpreter:
             f"node={node}, args={args}, val={val}"
             f"{self.builder.get_debug_msg()}"
         )
+
+    def _verify_new_shape(self, shape, node):
+        for dim in shape:
+            if isinstance(dim, self.torch.SymInt):
+                sdim = self.builder._torch_sym_int_to_str(dim)
+                tokens = parse_expression_tokens(sdim)
+                if len(tokens) == 1:
+                    # Only one token, possibly knew
+                    t = tokens.pop()
+                    if t not in self.builder.dynamic_objects:
+                        self.builder.add_dynamic_object(t, t)
+                        if t in self.builder.dynamic_dimensions_source:
+                            self.builder.dynamic_dimensions_source[t].append(dim)
+                        else:
+                            self.builder.dynamic_dimensions_source[t] = [dim]
 
     def _process_arg(self, node, aten_name, i):
         if i is None:
