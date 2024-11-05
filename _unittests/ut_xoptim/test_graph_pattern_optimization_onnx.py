@@ -26,6 +26,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_onnx,
+    requires_torch,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
