@@ -3,6 +3,12 @@ from onnx.helper import np_dtype_to_tensor_dtype
 
 
 def onnx_dtype_to_torch_dtype(itype: int) -> "torch.dtype":  # noqa: F821
+    """
+    Converts an onnx type into a torch dtype.
+
+    :param to: onnx dtype
+    :return: torch dtype
+    """
     import torch
 
     if itype == TensorProto.FLOAT:
@@ -39,6 +45,12 @@ def onnx_dtype_to_torch_dtype(itype: int) -> "torch.dtype":  # noqa: F821
 
 
 def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
+    """
+    Converts a torch dtype into a onnx element type.
+
+    :param to: torch dtype
+    :return: onnx type
+    """
     import torch
 
     if to == torch.float32:
@@ -67,6 +79,12 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
 
 
 def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
+    """
+    Converts a torch dtype or numpy dtype into a onnx element type.
+
+    :param to: dtype
+    :return: onnx type
+    """
     try:
         return np_dtype_to_tensor_dtype(dt)
     except (KeyError, TypeError):

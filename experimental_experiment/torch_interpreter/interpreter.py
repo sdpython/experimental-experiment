@@ -13,6 +13,7 @@ from ..xbuilder._dtype_helper import (
     onnx_dtype_to_torch_dtype,
 )
 from ..xbuilder.model_container import _get_type
+from ..xbuilder.expression_dimension import parse_expression_tokens
 from . import LOCAL_DOMAIN
 from .export_options import ExportOptions
 from ._exceptions import FunctionNotFoundError
@@ -870,6 +871,9 @@ class DynamoInterpreter:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
                 dtype = _get_type(val.dtype)
+                # the shaphe could be new if a function produces a results
+                # depending on the result values
+                self._verify_new_shape(shape, node)
                 self.builder.set_shape(node.name, tuple(shape))
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
@@ -1026,6 +1030,21 @@ class DynamoInterpreter:
             f"node={node}, args={args}, val={val}"
             f"{self.builder.get_debug_msg()}"
         )
+
+    def _verify_new_shape(self, shape, node):
+        for dim in shape:
+            if isinstance(dim, self.torch.SymInt):
+                sdim = self.builder._torch_sym_int_to_str(dim)
+                tokens = parse_expression_tokens(sdim)
+                if len(tokens) == 1:
+                    # Only one token, possibly knew
+                    t = tokens.pop()
+                    if t not in self.builder.dynamic_objects:
+                        self.builder.add_dynamic_object(t, t)
+                        if t in self.builder.dynamic_dimensions_source:
+                            self.builder.dynamic_dimensions_source[t].append(dim)
+                        else:
+                            self.builder.dynamic_dimensions_source[t] = [dim]
 
     def _process_arg(self, node, aten_name, i):
         if i is None:
@@ -1229,6 +1248,8 @@ class DynamoInterpreter:
                 return tuple((None if v is None else v.dtype) for v in val)
             if isinstance(val, self.torch.SymInt):
                 return self.torch.SymInt
+            if isinstance(val, self.torch.SymBool):
+                return self.torch.SymBool
             if isinstance(val, self.torch.SymFloat):
                 return self.torch.SymFloat
             exa = node.meta.get("example_value", None)
@@ -1320,6 +1341,11 @@ class DynamoInterpreter:
                     self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.INT64)
                     self.builder.make_dynamic_object(r, v)
+                elif isinstance(v, self.torch.SymBool):
+                    # this is a shape
+                    self.builder.set_shape(r, (1,))
+                    self.builder.set_type(r, TensorProto.BOOL)
+                    self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, self.torch.SymFloat):
                     # this is a shape
                     self.builder.set_shape(r, (1,))
@@ -1404,17 +1430,16 @@ class DynamoInterpreter:
             function_options=self.function_options,
             local_domain=local_domain,
         )
-        if self.preserved_modules:
+        if self.preserved_modules and hasattr(self, "named_modules"):
             assert (
                 source_node is not None
             ), f"For this option, source_node cannot be None{self.builder.get_debug_msg()}"
             module_name = source_node.target
-            assert module_name in self.named_modules, (
-                f"Unable to find {module_name!r} in "
-                f"{sorted(self.named_module)}{self.builder.get_debug_msg()}"
-            )
-            module_child = self.named_modules[module_name]
-            interpreter.register(self.preserved_modules, dict(module_child.named_modules()))
+            if module_name in self.named_modules:
+                module_child = self.named_modules[module_name]
+                interpreter.register(
+                    self.preserved_modules, dict(module_child.named_modules())
+                )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
 

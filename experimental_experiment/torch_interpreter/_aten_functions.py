@@ -50,6 +50,17 @@ class Reduction(Enum):
     SUM = 2
 
 
+def aten__assert_scalar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: Any,
+    name: str = "_assert_scalar",
+):
+    "_assert_scalar"
+    return g.op.Identity(x, name=name, outputs=outputs)
+
+
 def aten__log_api_usage_once(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], module_name: str
 ) -> T:
@@ -252,7 +263,24 @@ def aten_and(
     outputs: List[str],
     x: T,
     y: T,
-    name="and",
+    name: str = "and",
+) -> T:
+    "and"
+    res, x, y = prepare_inputs_homogeneous_operator(
+        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
+    )
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
+
+
+def aten___and___Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "__and___Tensor",
 ) -> T:
     "and"
     res, x, y = prepare_inputs_homogeneous_operator(
@@ -1008,6 +1036,28 @@ def aten_clamp(
             outputs=outputs,
             name=name,
         )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_clamp_max(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    max_: T,
+    name: str = "clamp_min",
+) -> T:
+    """clamp_min"""
+    if isinstance(max_, (float, int)):
+        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        max_value = np.array([max_], dtype=dtype)
+        res = g.op.Clip(x, None, max_value, name=name, outputs=outputs)
+    else:
+        assert isinstance(max_, str), f"Unexpected type {type(max_)}{g.get_debug_msg()}"
+        res = g.op.Max(x, max_, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -5175,6 +5225,36 @@ def aten_nll_loss_forward(
     return final_result, total_weight
 
 
+def aten_nonzero(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "nonzero",
+) -> T:
+    """nonzero"""
+    res = g.op.Transpose(g.op.NonZero(x, name=name), perm=[1, 0], name=name, outputs=outputs)
+    if not sts:
+        g.set_type(res, TensorProto.INT64)
+        g.set_rank(res, 2)
+    return res
+
+
+def aten_nonzero_numpy(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "nonzero_numpy",
+) -> T:
+    """nonzero numpy"""
+    if len(outputs) > 1:
+        return g.op.NonZero(x, name=name, outputs=outputs)
+    res = g.op.NonZero(x, name=name)
+    seq = g.op.SplitToSequence(res, axis=0, keepdims=0, outputs=outputs)
+    return seq
+
+
 def aten_not(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -7111,6 +7191,19 @@ def aten_sum_dim_IntList(
     itype = torch_dtype_to_onnx_dtype(dtype)
     result = g.op.Cast(res, to=itype, outputs=outputs, name="sum_dim_IntList")
     return result
+
+
+def aten_sym_constrain_range_for_size(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    dim: Any,
+    min: Optional[int] = None,
+    max: Optional[int] = None,
+    name: str = "sym_constrain_range_for_size",
+):
+    "assert sym_constrain_range_for_size"
+    return g.op.Cast(dim, name=name, to=TensorProto.BOOL, outputs=outputs)
 
 
 def aten_sym_size_int(

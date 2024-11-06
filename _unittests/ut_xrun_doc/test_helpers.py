@@ -1,15 +1,33 @@
 import unittest
 import numpy as np
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.helpers import string_type, string_sig
 
 
 class TestHelpers(ExtTestCase):
+    @skipif_ci_windows("numpy does not choose the same default type on windows and linux")
     def test_string_type(self):
         a = np.array([1])
         obj = {"a": a, "b": [5.6], "c": (1,)}
         s = string_type(obj)
-        self.assertEqual(s, "dict(a:A1,b:[float],c:(int,))")
+        self.assertEqual(s, "dict(a:A7r1,b:#1[float],c:(int,))")
+
+    def test_string_dict(self):
+        a = np.array([1], dtype=np.float32)
+        obj = {"a": a, "b": {"r": 5.6}, "c": {1}}
+        s = string_type(obj)
+        self.assertEqual(s, "dict(a:A1r1,b:dict(r:float),c:{int})")
+
+    def test_string_type_array(self):
+        import torch
+
+        a = np.array([1], dtype=np.float32)
+        t = torch.tensor([1])
+        obj = {"a": a, "b": t}
+        s = string_type(obj, with_shape=False)
+        self.assertEqual(s, "dict(a:A1r1,b:T7r1)")
+        s = string_type(obj, with_shape=True)
+        self.assertEqual(s, "dict(a:A1s1,b:T7s1)")
 
     def test_string_sig_f(self):
 

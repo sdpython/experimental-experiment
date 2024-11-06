@@ -10,6 +10,146 @@ from ...xbuilder._shape_helper import (
 from ..patterns_api import MatchResult, PatternOptimization
 
 
+class MatMulAddPattern(PatternOptimization):
+    """
+    Replaces the sequence Matmul, Add into Gemm
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"MatMul", "Gemm"} or node.domain != "":
+            return self.none()
+        if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(node.input[0]) != 2 or g.get_rank(node.input[1]) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        add_node = next_nodes[0]
+        if add_node.op_type != "Add":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # Gemm does not allow broadcasting.
+        bias2 = add_node.input[0 if add_node.input[1] == node.output[0] else 1]
+        if not g.has_shape(node.input[1]) or not g.has_shape(bias2):
+            return self.none(node, inspect.currentframe().f_lineno)
+        transB = (
+            g.get_attributes_with_default(node, transB=0).get("transB", 0)
+            if node.op_type == "Gemm"
+            else 0
+        )
+        shape_2 = g.get_shape(node.input[1])
+        last_dim = shape_2[-1 - transB]
+        shape_bias = g.get_shape(bias2)
+        if last_dim != shape_bias[-1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if node.op_type == "MatMul" or len(node.input) == 2:
+            return MatchResult(self, [node, add_node], self.apply, insert_at=add_node)
+
+        bias = node.input[2]
+        if (
+            not g.has_shape(bias)
+            or not g.has_shape(bias2)
+            or g.get_shape(bias) != g.get_shape(bias2)
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, add_node], self.apply, insert_at=add_node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        matmul_node: NodeProto,
+        add_node: NodeProto,
+    ) -> List[NodeProto]:
+        bias2 = add_node.input[0 if add_node.input[1] == matmul_node.output[0] else 1]
+
+        if matmul_node.op_type == "MatMul" or len(matmul_node.input) == 2:
+            new_node = g.make_node(
+                "Gemm",
+                [*matmul_node.input, bias2],
+                add_node.output,
+                name=f"{self.__class__.__name__}--{matmul_node.name}",
+                doc_string=matmul_node.doc_string,
+            )
+            if matmul_node.op_type == "Gemm":
+                new_node.attribute.extend(matmul_node.attribute)
+            return [new_node]
+
+        # Two bias we need to add first.
+        bias_all = g.unique_name(f"{self.__class__.__name__}--{matmul_node.input[2]}")
+        new_add_node = g.make_node(
+            "Add",
+            [bias2, matmul_node.input[2]],
+            [bias_all],
+            name=f"{self.__class__.__name__}--{matmul_node.name}",
+        )
+        new_node = g.make_node(
+            "Gemm",
+            [*matmul_node.input[:2], bias_all],
+            add_node.output,
+            name=f"{self.__class__.__name__}--{matmul_node.name}",
+            doc_string=matmul_node.doc_string,
+        )
+        new_node.attribute.extend(matmul_node.attribute)
+        return [new_add_node, new_node]
+
+
+class GemmTransposePattern(PatternOptimization):
+    """
+    Replaces Gemm (., constant) by Gemm(., constant', transB=1)
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Gemm" or node.domain != "":
+            return self.none()
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if node.op_type == "Gemm":
+            atts = g.get_attributes_with_default(node, transA=0, transB=0, beta=1.0)
+            if atts.get("beta", 1) != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if atts.get("transB", 0) or atts.get("transA", 0):
+                return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        tr = g.unique_name(f"{self.__class__.__name__}--{node.input[1]}")
+        return [
+            g.make_node(
+                "Transpose",
+                [node.input[1]],
+                [tr],
+                perm=[1, 0],
+                name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=node.doc_string,
+            ),
+            g.make_node(
+                "Gemm",
+                [node.input[0], tr, *node.input[2:]],
+                node.output,
+                transB=1,
+                name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=node.doc_string,
+            ),
+        ]
+
+
 class MatMulReshape2Of3Pattern(PatternOptimization):
     """
     Replaces the reshapes around a matmul
@@ -555,6 +695,22 @@ class TransposeMatMulPattern(PatternOptimization):
         # At this stage, one or two inputs are transposed before being used.
         # MatMul or Gemm are operating on 2D tensors.
         nodes = [*ns, node]
+
+        if node.op_type == "Gemm":
+            if nodes[1] is not None:  # nodes_before_right
+                atts = g.get_attributes_with_default(node, transA=0, transB=0)
+                if atts.get("transB", 0) != atts.get("transA", 0) and g.is_constant(
+                    node.input[1]
+                ):
+                    # it is better to do constant folding rather than changing transB
+                    return self.none(node, inspect.currentframe().f_lineno)
+            if nodes[0] is not None:  # nodes_before_left
+                atts = g.get_attributes_with_default(node, transA=0, transB=0)
+                if atts.get("transB", 0) != atts.get("transA", 0) and g.is_constant(
+                    node.input[0]
+                ):
+                    # it is better to do constant folding rather than changing transB
+                    return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, nodes, self.apply)
 

@@ -28,6 +28,8 @@ from .onnx_mul import (
     SwitchOrderBinaryPattern,
 )
 from .onnx_matmul import (
+    GemmTransposePattern,
+    MatMulAddPattern,
     MatMulReshape2Of3Pattern,
     MulMulMatMulPattern,
     ReshapeMatMulReshapePattern,
@@ -124,6 +126,8 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ReshapeMatMulReshapePattern(verbose=verbose),
         Reshape2Of3Pattern(verbose=verbose),
         ReshapeReshapeBinaryPattern(verbose=verbose),
+        MatMulAddPattern(verbose=verbose),
+        GemmTransposePattern(verbose=verbose),
         MatMulReshape2Of3Pattern(verbose=verbose),
         MulMulMatMulPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),

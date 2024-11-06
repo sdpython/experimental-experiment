@@ -2,13 +2,16 @@ import inspect
 from typing import Any, Callable, Dict, Optional, Union
 import numpy as np
 from onnx import FunctionProto, GraphProto, ModelProto, load as onnx_load
+from onnx.helper import np_dtype_to_tensor_dtype
 
 
-def string_type(obj: Any) -> str:
+def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) -> str:
     """
     Displays the types of an object as a string.
 
     :param obj: any
+    :param with_shape: displays shapes as well
+    :param with_min_max: displays information about the values
     :return: str
 
     .. runpython::
@@ -21,15 +24,36 @@ def string_type(obj: Any) -> str:
         return "None"
     if isinstance(obj, tuple):
         if len(obj) == 1:
-            return f"({string_type(obj[0])},)"
-        return f"({','.join(map(string_type, obj))})"
+            s = string_type(obj[0], with_shape=with_shape, with_min_max=with_min_max)
+            return f"({s},)"
+        js = ",".join(
+            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+        )
+        return f"({js})"
     if isinstance(obj, list):
-        return f"[{','.join(map(string_type, obj))}]"
+        js = ",".join(
+            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+        )
+        return f"#{len(obj)}[{js}]"
+    if isinstance(obj, set):
+        js = ",".join(
+            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+        )
+        return f"{{{js}}}"
     if isinstance(obj, dict):
-        s = ",".join(f"{kv[0]}:{string_type(kv[1])}" for kv in obj.items())
+        s = ",".join(
+            f"{kv[0]}:{string_type(kv[1],with_shape=with_shape,with_min_max=with_min_max)}"
+            for kv in obj.items()
+        )
         return f"dict({s})"
     if isinstance(obj, np.ndarray):
-        return f"A{len(obj.shape)}"
+        if with_min_max:
+            s = string_type(obj, with_shape=with_shape)
+            return f"{s}[{obj.min()}:{obj.max()}]"
+        i = np_dtype_to_tensor_dtype(obj.dtype)
+        if not with_shape:
+            return f"A{i}r{len(obj.shape)}"
+        return f"A{i}s{'x'.join(map(str, obj.shape))}"
 
     import torch
 
@@ -42,10 +66,22 @@ def string_type(obj: Any) -> str:
     if isinstance(obj, torch.SymFloat):
         return "SymFloat"
     if isinstance(obj, torch.Tensor):
-        return f"T{len(obj.shape)}"
+        if with_min_max:
+            s = string_type(obj, with_shape=with_shape)
+            return f"{s}[{obj.min()}:{obj.max()}]"
+        from .xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+
+        i = torch_dtype_to_onnx_dtype(obj.dtype)
+        if not with_shape:
+            return f"T{i}r{len(obj.shape)}"
+        return f"T{i}s{'x'.join(map(str, obj.shape))}"
     if isinstance(obj, int):
+        if with_min_max:
+            return f"int[{obj}]"
         return "int"
     if isinstance(obj, float):
+        if with_min_max:
+            return f"float[{obj}]"
         return "float"
     if isinstance(obj, str):
         return "str"
@@ -56,6 +92,15 @@ def string_type(obj: Any) -> str:
         return f"%{obj.target}"
     if type(obj).__name__ == "ValueInfoProto":
         return f"OT{obj.type.tensor_type.elem_type}"
+
+    if obj.__class__.__name__ == "DynamicCache":
+        kc = string_type(obj.key_cache, with_shape=with_shape, with_min_max=with_min_max)
+        vc = string_type(obj.value_cache, with_shape=with_shape, with_min_max=with_min_max)
+        return f"DynamicCache(key_cache={kc}, DynamicCache(value_cache={vc})"
+
+    if obj.__class__.__name__ == "BatchFeature":
+        s = string_type(obj.data, with_shape=with_shape, with_min_max=with_min_max)
+        return f"BatchFeature(data={s})"
 
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 

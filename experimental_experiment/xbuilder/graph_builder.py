@@ -1193,14 +1193,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             name = name.name
         self._known_torch_value[name] = (where, value)
 
-    @classmethod
-    def _torch_sym_int_to_str(cls, value: "torch.SymInt") -> Union[int, str]:  #  noqa: F821
-        try:
-            val_int = int(value)
-            return val_int
-        except (TypeError, ValueError, AttributeError):
-            pass
-
+    def _torch_sym_int_to_str(self, value: "torch.SymInt") -> Union[int, str]:  #  noqa: F821
         if isinstance(value.node, str):
             return f"{value.node}"
 
@@ -1209,6 +1202,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(value.node, SymNode):
             # '_expr' is safer than expr
             return str(value.node._expr)
+
+        try:
+            val_int = int(value)
+            return val_int
+        except (
+            TypeError,
+            ValueError,
+            AttributeError,
+            self.torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode,
+        ):
+            pass
+
         raise AssertionError(f"Unable to convert {value!r} into string")
 
     def _check_two_shapes_are_compatible(
@@ -1644,7 +1649,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(value, self.WrapSym):
             value = value.sym
         assert isinstance(
-            value, (self.torch.SymInt, self.torch.SymFloat)
+            value, (self.torch.SymInt, self.torch.SymFloat, self.torch.SymBool)
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
 
         if input_name is not None and isinstance(value, self.torch.SymInt):
@@ -4569,7 +4574,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     less = set(h for h in hid if h not in memo)
                     hidden |= less
             memo |= set(node.output)
-        assert all(name in self.initializers_dict for name in hidden), (
+        assert all(name in self.initializers_dict for name in hidden if name), (
             f"Some hidden inputs in {sorted(hidden)!r} are not initializers "
             f"{sorted(self.initializers_dict)}. It is unexpected."
         )
