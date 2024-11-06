@@ -510,9 +510,13 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_rank(node.input[0]) and g.get_rank(node.input[0]) < 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if len(node.output) > 1 and g.next_nodes(node.output[1]):
+        if len(node.output) > 1 and (
+            not g.has_rank(node.input[1]) or g.next_nodes(node.output[1])
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
-        if len(node.output) > 2 and g.next_nodes(node.output[2]):
+        if len(node.output) > 2 and (
+            not g.has_rank(node.input[2]) or g.next_nodes(node.output[2])
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         momentum = 0.9
@@ -561,17 +565,33 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
         new_shape = [1 for _ in range(rk)]
         new_shape[1] = -1
         new_shape = g.make_initializer("", np.array(new_shape, dtype=np.int64))
-        scale_name = g.unique_name(f"{self.__class__.__name__}_scale_{node.input[0]}")
-        scale = g.make_node("Reshape", [node.input[1], new_shape], [scale_name], name=nname)
-        bias_name = g.unique_name(f"{self.__class__.__name__}_bias_{node.input[0]}")
-        bias = g.make_node("Reshape", [node.input[2], new_shape], [bias_name], name=nname)
 
-        scaled_name = g.unique_name(f"{self.__class__.__name__}_scaled_{node.input[0]}")
+        if g.get_rank(node.input[1]) == 1:
+            scale_name = g.unique_name(f"{self.__class__.__name__}_scale_{node.input[1]}")
+            scale = g.make_node(
+                "Reshape", [node.input[1], new_shape], [scale_name], name=nname
+            )
+        else:
+            scale_name = node.input[1]
+            scale = None
+
+        if g.get_rank(node.input[2]) == 1:
+            bias_name = g.unique_name(f"{self.__class__.__name__}_bias_{node.input[2]}")
+            bias = g.make_node("Reshape", [node.input[2], new_shape], [bias_name], name=nname)
+        else:
+            bias_name = node.input[2]
+            bias = None
+
+        scaled_name = g.unique_name(f"{self.__class__.__name__}_scaled_{node.input[1]}")
         scaled = g.make_node("Div", [centered_name, std_name], [scaled_name], name=nname)
 
-        scaled2_name = g.unique_name(f"{self.__class__.__name__}_scaled2_{node.input[0]}")
+        scaled2_name = g.unique_name(f"{self.__class__.__name__}_scaled2_{node.input[2]}")
         scaled2 = g.make_node("Mul", [scaled_name, scale_name], [scaled2_name], name=nname)
 
         final = g.make_node("Add", [scaled2_name, bias_name], [node.output[0]], name=nname)
 
-        return [mean, sub, mul2, var, add, sqrt, scale, bias, scaled, scaled2, final]
+        return [
+            _
+            for _ in [mean, sub, mul2, var, add, sqrt, scale, bias, scaled, scaled2, final]
+            if _ is not None
+        ]
