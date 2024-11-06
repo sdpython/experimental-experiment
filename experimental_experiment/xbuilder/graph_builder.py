@@ -1194,6 +1194,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._known_torch_value[name] = (where, value)
 
     def _torch_sym_int_to_str(self, value: "torch.SymInt") -> Union[int, str]:  #  noqa: F821
+        if isinstance(value.node, str):
+            return f"{value.node}"
+
+        from torch.fx.experimental.sym_node import SymNode
+
+        if isinstance(value.node, SymNode):
+            # '_expr' is safer than expr
+            return str(value.node._expr)
+
         try:
             val_int = int(value)
             return val_int
@@ -1205,14 +1214,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         ):
             pass
 
-        if isinstance(value.node, str):
-            return f"{value.node}"
-
-        from torch.fx.experimental.sym_node import SymNode
-
-        if isinstance(value.node, SymNode):
-            # '_expr' is safer than expr
-            return str(value.node._expr)
         raise AssertionError(f"Unable to convert {value!r} into string")
 
     def _check_two_shapes_are_compatible(

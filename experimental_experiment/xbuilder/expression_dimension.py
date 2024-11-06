@@ -20,7 +20,10 @@ def parse_expression_tokens(expr: str):
     Extracts the token from an expression.
     """
     tokens = []
-    st = ast.parse(expr, mode="eval")
+    try:
+        st = ast.parse(expr, mode="eval")
+    except TypeError as e:
+        raise TypeError(f"Unable to compile expression {expr!r} (type is {type(expr)})") from e
     for node in ast.walk(st):
         if isinstance(node, ast.Name):
             tokens.append(node.id)
