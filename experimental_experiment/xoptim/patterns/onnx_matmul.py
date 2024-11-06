@@ -34,11 +34,25 @@ class MatMulAddPattern(PatternOptimization):
         if add_node.op_type != "Add":
             return self.none(node, inspect.currentframe().f_lineno)
 
+        # Gemm does not allow broadcasting.
+        bias2 = add_node.input[0 if add_node.input[1] == node.output[0] else 1]
+        if not g.has_shape(node.input[1]) or not g.has_shape(bias2):
+            return self.none(node, inspect.currentframe().f_lineno)
+        transB = (
+            g.get_attributes_with_default(node, transB=0).get("transB", 0)
+            if node.op_type == "Gemm"
+            else 0
+        )
+        shape_2 = g.get_shape(node.input[1])
+        last_dim = shape_2[-1 - transB]
+        shape_bias = g.get_shape(bias2)
+        if last_dim != shape_bias[-1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         if node.op_type == "MatMul" or len(node.input) == 2:
             return MatchResult(self, [node, add_node], self.apply, insert_at=add_node)
 
         bias = node.input[2]
-        bias2 = add_node.input[0 if add_node.input[1] == node.output[0] else 1]
         if (
             not g.has_shape(bias)
             or not g.has_shape(bias2)

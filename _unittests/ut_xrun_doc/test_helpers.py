@@ -1,10 +1,11 @@
 import unittest
 import numpy as np
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.helpers import string_type, string_sig
 
 
 class TestHelpers(ExtTestCase):
+    @skipif_ci_windows("numpy does not choose the same default type on windows and linux")
     def test_string_type(self):
         a = np.array([1])
         obj = {"a": a, "b": [5.6], "c": (1,)}
