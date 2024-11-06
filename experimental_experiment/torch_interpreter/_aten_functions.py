@@ -597,12 +597,13 @@ def aten_as_strided(
     size: List[int],
     stride: List[int],
     storage_offset: Optional[int] = None,
+    name: str = "as_strided",
 ) -> T:
     "as_strided"
     if storage_offset is None and min(stride) == max(stride) == 1 and g.has_shape(x):
         shape = g.get_shape(x)
         if np.prod(shape) == np.prod(size):
-            return g.op.Reshape(x, np.array(size, dtype=np.int64), outputs=outputs)
+            return g.op.Reshape(x, np.array(size, dtype=np.int64), outputs=outputs, name=name)
 
     raise AssertionError(
         f"The implementation is still incorrect, x={x!r}, "
@@ -629,9 +630,9 @@ def aten_as_strided(
             ) from e
         np_strided = strided.detach().numpy().ravel()
 
-    flat = g.op.Reshape(x, np.array([-1], dtype=np.int64))
-    xflat = g.op.Gather(flat, np_strided.astype(np.int64))
-    res = g.op.Reshape(xflat, np.array(size, dtype=np.int64), outputs=outputs)
+    flat = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+    xflat = g.op.Gather(flat, np_strided.astype(np.int64), name=name)
+    res = g.op.Reshape(xflat, np.array(size, dtype=np.int64), outputs=outputs, name=name)
 
     if not sts:
         g.set_type(res, g.get_type(x))
@@ -3717,7 +3718,11 @@ def aten_index_select(
     name: str = "index_select",
 ) -> T:
     "[...,:, ...]"
-    res = g.op.Gather(x, index, axis=dim, outputs=outputs, name=name)
+    assert g.has_type(index), f"aten_index_select: index type must be knonw{g.get_debug_msg()}"
+    if g.get_type(index) == TensorProto.BOOL:
+        res = g.op.Compress(x, index, axis=dim, outputs=outputs, name=name)
+    else:
+        res = g.op.Gather(x, index, axis=dim, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x) and g.has_shape(index):
