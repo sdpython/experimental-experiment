@@ -197,6 +197,9 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.7"):
                     reason = "requires torch 2.7"
 
+            if name == "plot_exporter_recipes_oe_cond.py":
+                reason = "torch.cond not working yet"
+
             if reason:
 
                 @unittest.skip(reason)

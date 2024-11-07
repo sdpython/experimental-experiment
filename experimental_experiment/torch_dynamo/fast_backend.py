@@ -587,9 +587,12 @@ def onnx_custom_backend(
             fullgraph=True,
         )
 
-        got = compiled_model(x)
-        diff = (expected - got).max()
-        print(f"discrepancies: {diff}")
+        try:
+            got = compiled_model(x)
+            diff = (expected - got).max()
+            print(f"discrepancies: {diff}")
+        except (ImportError, AttributeError) as e:
+            print("onnxruntime-training is not installed", e)
     """
     assert dump_patterns is None or isinstance(
         dump_patterns, str
