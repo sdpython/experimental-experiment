@@ -49,7 +49,7 @@ x = torch.randn(3)
 model(x)
 
 ######################################
-# As as expected, it does not export.
+# As expected, it does not export.
 try:
     torch.export.export(model, (x,))
     raise AssertionError("This export should failed unless pytorch now supports this model.")
