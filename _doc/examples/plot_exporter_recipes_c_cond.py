@@ -13,6 +13,7 @@ A model with a test
 """
 
 import torch
+from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -100,3 +101,9 @@ print(pretty_onnx(onx))
 
 onx = to_onnx(model, (x,), inline=True)
 print(pretty_onnx(onx))
+
+
+####################################
+# And visually.
+
+plot_dot(onx)
