@@ -10,6 +10,7 @@ Use:
 
 import os
 import unittest
+import pprint
 from typing import Optional
 import numpy as np
 import onnx
@@ -3301,10 +3302,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                     )
                 ],
                 "dummy",
-                [_mkv_("X", TFLOAT, [1024, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
-                [_mkv_("Y", TFLOAT, [1024, 64, 32, 32])],
+                [_mkv_("X", TFLOAT, [512, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
+                [_mkv_("Y", TFLOAT, [512, 64, 32, 32])],
                 [
-                    onh.from_array(np.zeros((16,), dtype=np.float32), name="B"),
+                    onh.from_array(np.zeros((3 * 512,), dtype=np.float32), name="B"),
                 ],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
@@ -3312,7 +3313,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         check_model(model)
         feeds = {
-            "X": self._range(1024, 3, 64, 64).astype(np.float32),
+            "X": self._range(512, 3, 64, 64).astype(np.float32),
             "W": self._range(64, 3, 4, 4).astype(np.float32),
         }
         from onnxruntime import InferenceSession
@@ -3336,11 +3337,19 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         self.assertEqual(0, len(opt_onx.graph.initializer))
 
-        opt_ref = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        got = opt_ref.run(None, feeds)[0]
-        self.assertEqualArray(expected, got, atol=1e-2)
+        excs = []
+        for _ in range(2):
+            opt_ref = InferenceSession(
+                opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            for __ in range(2):
+                got = opt_ref.run(None, feeds)[0]
+                try:
+                    self.assertEqualArray(expected, got, atol=1e-2)
+                except Exception as e:
+                    excs.append((_, __, str(e)))
+        if excs:
+            raise AssertionError(f"{len(excs)} validations failed\n{pprint.pformat(excs)}")
 
     def test_conv_null_bias_shape_expand(self):
         model = oh.make_model(
@@ -3360,10 +3369,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                     ),
                 ],
                 "dummy",
-                [_mkv_("X", TFLOAT, [1024, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
-                [_mkv_("Y", TFLOAT, [1024, 64, 32, 32])],
+                [_mkv_("X", TFLOAT, [512, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
+                [_mkv_("Y", TFLOAT, [512, 64, 32, 32])],
                 [
-                    onh.from_array(np.zeros((16,), dtype=np.float32), name="B"),
+                    onh.from_array(np.zeros((3 * 512,), dtype=np.float32), name="B"),
                     onh.from_array(np.zeros((1,), dtype=np.float32), name="zero"),
                 ],
             ),
@@ -3372,7 +3381,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         check_model(model)
         feeds = {
-            "X": np.abs(self._range(1024, 3, 64, 64).astype(np.float32)),
+            "X": np.abs(self._range(512, 3, 64, 64).astype(np.float32)),
             "W": np.abs(self._range(64, 3, 4, 4).astype(np.float32)),
         }
         from onnxruntime import InferenceSession
@@ -3421,10 +3430,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                     ),
                 ],
                 "dummy",
-                [_mkv_("X", TFLOAT, [1024, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
-                [_mkv_("Y", TFLOAT, [1024, 64, 32, 32])],
+                [_mkv_("X", TFLOAT, [512, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
+                [_mkv_("Y", TFLOAT, [512, 64, 32, 32])],
                 [
-                    onh.from_array(np.zeros((16,), dtype=np.float32), name="B"),
+                    onh.from_array(np.zeros((3 * 512,), dtype=np.float32), name="B"),
                     onh.from_array(np.zeros((1,), dtype=np.float32), name="zero"),
                 ],
             ),
@@ -3433,7 +3442,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         check_model(model)
         feeds = {
-            "X": np.abs(self._range(1024, 3, 64, 64).astype(np.float32)),
+            "X": np.abs(self._range(512, 3, 64, 64).astype(np.float32)),
             "W": np.abs(self._range(64, 3, 4, 4).astype(np.float32)),
         }
         from onnxruntime import InferenceSession

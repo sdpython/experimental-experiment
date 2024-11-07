@@ -4729,8 +4729,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return None, None
             shape = self.get_shape(v.input[0])
             if is_static_shape(shape):
-                if self._debug_get_constant:
-                    print(f"[GraphBuilder.compute_constant]     - SHAPE {name}: {shape}")
+                if v.attribute:
+                    start = 0
+                    end = None
+                    for att in v.attribute:
+                        if att.name == "start":
+                            start = att.i
+                        elif att.name == "end":
+                            end = att.i
+                    shape = shape[start:] if end is None else shape[start:end]
+                    if self._debug_get_constant:
+                        print(
+                            f"[GraphBuilder.compute_constant]     - SHAPE "
+                            f"{name}: {shape}? start={start}, end={end}"
+                        )
+                elif self._debug_get_constant:
+                    print(f"[GraphBuilder.compute_constant]     - SHAPE {name}: {shape}?")
                 return np.array(shape, dtype=np.int64), {
                     v.input[0]: self.ShapeConstant(v.input[0], shape, v)
                 }
