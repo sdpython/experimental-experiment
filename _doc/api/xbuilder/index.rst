@@ -21,6 +21,20 @@ experimental_experiment.xbuilder
     shape_type_compute
     type_inference
 
+GraphBuilder
+++++++++++++
+
+.. autoclass:: experimental_experiment.xbuilder.GraphBuilder
+    :members:
+
+OptimizationOptions
++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xbuilder.OptimizationOptions
+    :members:
+
+Other functions
++++++++++++++++
 
 .. automodule:: experimental_experiment.xbuilder
     :members:

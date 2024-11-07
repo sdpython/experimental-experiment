@@ -1,3 +1,4 @@
+.. _l-aten-methods:
 
 experimental_experiment.torch_interpreter._aten_methods
 =======================================================

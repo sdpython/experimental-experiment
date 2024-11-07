@@ -14,5 +14,4 @@ The tutorial is a collection of examples or benchmark around that topic.
     pytorch
     onnx
     exporter_recipes
-    errors
     docker

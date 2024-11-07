@@ -62,7 +62,7 @@ except Exception as e:
 
 ####################################
 # Registration
-# +++++++++++
+# ++++++++++++
 #
 # The exporter how to convert the new exporter into ONNX.
 # This must be defined. The first piece is to tell the exporter

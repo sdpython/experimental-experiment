@@ -2,8 +2,7 @@
 Benchmark Aggregator
 ====================
 
-Calls :func:`merge_benchmark_reports
-<experimental_experiment.torch_bench._bash_bench_benchmark_runner.merge_benchmark_reports>`.
+Calls ``merge_benchmark_reports``.
 
 ::
 

@@ -179,8 +179,7 @@ with torch.no_grad():
 # * The CUDA kernels are implemented at
 #   `onnx_extended/ortops/optim/cuda
 #   <https://github.com/sdpython/onnx-extended/tree/main/onnx_extended/ortops/optim/cuda>`_
-# * Section :ref:`l-custom-op-patterns` covers the implemented patterns fusing nodes
-#   in onnx models. See :ref:`l-design-pattern-optimizer` to understand how
+# * See :ref:`l-design-pattern-optimizer` to understand how
 #   these are applied to modify an onnx model.
 #
 # The GPU memory is not fully freed before two iterations. Only one scenario

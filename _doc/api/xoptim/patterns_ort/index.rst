@@ -1,3 +1,4 @@
+.. _l-pattern-optimization-ort:
 
 experimental_experiment.xoptim.patterns_ort
 ===========================================

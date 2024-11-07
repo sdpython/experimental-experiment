@@ -26,6 +26,30 @@ experimental_experiment.torch_interpreter
     oxs_dispatcher
     oxs_opset
 
+to_onnx
++++++++
+
+.. autofunction:: experimental_experiment.torch_interpreter.to_onnx
+
+Dispatcher
+++++++++++
+
+.. autoclass:: experimental_experiment.torch_interpreter.Dispatcher
+    :members:
+
+ExportOptions
++++++++++++++
+
+.. autoclass:: experimental_experiment.torch_interpreter.ExportOptions
+    :members:
+
+match_input_parameters
+++++++++++++++++++++++
+
+.. autofunction:: experimental_experiment.torch_interpreter.match_input_parameters
+
+Other functions
++++++++++++++++
 
 .. automodule:: experimental_experiment.torch_interpreter
     :members:
