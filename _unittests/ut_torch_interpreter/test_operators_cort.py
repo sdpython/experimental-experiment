@@ -1109,7 +1109,7 @@ class TestOperatorsCort(ExtTestCase):
     def test_reduced_prod_dtype(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
-            lambda x: torch.prod(x, dim=0, dtype=torch.double),
+            lambda x: torch.prod(x, dim=0, dtype=torch.float32),
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
         )

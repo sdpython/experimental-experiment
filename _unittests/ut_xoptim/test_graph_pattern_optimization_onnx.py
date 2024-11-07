@@ -3305,7 +3305,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [_mkv_("X", TFLOAT, [512, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
                 [_mkv_("Y", TFLOAT, [512, 64, 32, 32])],
                 [
-                    onh.from_array(np.zeros((3 * 512,), dtype=np.float32), name="B"),
+                    onh.from_array(np.zeros((64,), dtype=np.float32), name="B"),
                 ],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
@@ -3372,7 +3372,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [_mkv_("X", TFLOAT, [512, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
                 [_mkv_("Y", TFLOAT, [512, 64, 32, 32])],
                 [
-                    onh.from_array(np.zeros((3 * 512,), dtype=np.float32), name="B"),
+                    onh.from_array(np.zeros((64,), dtype=np.float32), name="B"),
                     onh.from_array(np.zeros((1,), dtype=np.float32), name="zero"),
                 ],
             ),
@@ -3433,7 +3433,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [_mkv_("X", TFLOAT, [512, 3, 64, 64]), _mkv_("W", TFLOAT, [64, 3, 4, 4])],
                 [_mkv_("Y", TFLOAT, [512, 64, 32, 32])],
                 [
-                    onh.from_array(np.zeros((3 * 512,), dtype=np.float32), name="B"),
+                    onh.from_array(np.zeros((64,), dtype=np.float32), name="B"),
                     onh.from_array(np.zeros((1,), dtype=np.float32), name="zero"),
                 ],
             ),
