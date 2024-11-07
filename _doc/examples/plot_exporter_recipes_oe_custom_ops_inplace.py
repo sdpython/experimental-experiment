@@ -1,24 +1,23 @@
 """
-.. _l-plot-exporter-recipes-custom-custom-ops:
+.. _l-plot-exporter-recipes-onnx-exporter-custom-ops-inplace:
 
-to_onnx and a custom operator
-=============================
+torch.onnx.export and a custom operator inplace
+===============================================
 
 This example shows how to convert a custom operator as defined
 in the tutorial `Python Custom Operators
 <https://pytorch.org/tutorials/advanced/python_custom_ops.html#python-custom-ops-tutorial>`_.
 
+Inplace modification are not supported by onnx.
+
 A model with a custom ops
 +++++++++++++++++++++++++
 """
 
-from typing import Any, Dict, List, Optional
 import numpy as np
+from onnx.printer import to_text
+import onnxscript
 import torch
-from onnx_array_api.plotting.graphviz_helper import plot_dot
-from experimental_experiment.xbuilder import GraphBuilder
-from experimental_experiment.helpers import pretty_onnx
-from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
 
 
 #################################
@@ -60,7 +59,7 @@ except Exception as e:
 # The exporter fails with the same eror as it expects torch.export.export to work.
 
 try:
-    to_onnx(model, (x,))
+    torch.onnx.export(model, (x,), dynamo=True)
 except Exception as e:
     print(e)
 
@@ -85,39 +84,24 @@ def numpy_sin_shape(x, output):
 T = str  # a tensor name
 
 
-def numpy_sin_to_onnx(
-    g: GraphBuilder,
-    sts: Dict[str, Any],
-    outputs: List[str],
-    x: T,
-    output: Optional[T] = None,
-    name: str = "mylib.numpy_sin",
-) -> T:
-    # name= ... lets the user know when the node comes from
-    # o is not used, we could check the shape are equal.
-    # outputs contains unexpectedly two outputs
-    g.op.Sin(x, name=name, outputs=outputs[1:])
-    return outputs
+op = onnxscript.opset18
+
+#####################################
+# Let's convert the custom op into onnx.
 
 
-####################################
-# We create a :class:`Dispatcher <experimental_experiment.torch_interpreter.Dispatcher>`.
+@onnxscript.script()
+def numpy_sin_to_onnx(x):
+    return op.Sin(x)
 
-dispatcher = Dispatcher({"mylib::numpy_sin": numpy_sin_to_onnx})
 
 #####################################
 # And we convert again.
 
-onx = to_onnx(model, (x,), dispatcher=dispatcher, optimize=False)
-print(pretty_onnx(onx))
-
-#####################################
-# And we convert again with optimization this time.
-
-onx = to_onnx(model, (x,), dispatcher=dispatcher, optimize=True)
-print(pretty_onnx(onx))
-
-####################################
-# And visually.
-
-plot_dot(onx)
+ep = torch.onnx.export(
+    model,
+    (x,),
+    custom_translation_table={torch.ops.mylib.numpy_sin: numpy_sin_to_onnx},
+    dynamo=True,
+)
+print(to_text(ep.model_proto))

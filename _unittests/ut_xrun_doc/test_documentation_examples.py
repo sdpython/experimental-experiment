@@ -193,6 +193,10 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 
+            if not reason and name.startswith("plot_exporter_recipes_oe_"):
+                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.7"):
+                    reason = "requires torch 2.7"
+
             if reason:
 
                 @unittest.skip(reason)

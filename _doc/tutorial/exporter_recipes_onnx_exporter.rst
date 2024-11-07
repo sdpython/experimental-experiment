@@ -9,3 +9,10 @@ Control Flow
 ++++++++++++
 
 * :ref:`l-plot-exporter-recipes-onnx-exporter-cond`
+
+Custom Operators
+================
+
+* :ref:`l-plot-exporter-recipes-oe-custom-ops-fct`
+* :ref:`l-plot-exporter-recipes-oe-custom-ops-inplace`
+

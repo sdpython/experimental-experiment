@@ -16,4 +16,5 @@ Control Flow
 Custom Operators
 ================
 
-* :ref:`l-plot-exporter-recipes-custom-custom-ops`
+* :ref:`l-plot-exporter-recipes-custom-custom-ops-fct`
+* :ref:`l-plot-exporter-recipes-custom-custom-ops-inplace`
