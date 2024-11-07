@@ -204,9 +204,10 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str):  # noqa
                 sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
             else:
                 sh2 = (1,) * (len(sh1) - len(sh2)) + sh2
-        assert len(sh1) == len(
-            sh2
-        ), f"not implemented when shapes are {sh1} and {sh2}{g.get_debug_msg()}"
+        assert len(sh1) == len(sh2), (
+            f"not implemented when shapes are {sh1} ({x!r}) and {sh2} ({y!r})"
+            f"{g.get_debug_msg()}"
+        )
         new_shape = []
         for a, b in zip(sh1[:-2], sh2[:-2]):
             if all_int((a, b)) or a == b:
