@@ -26,10 +26,10 @@ onnx_debug_backend
 
 .. autofunction:: experimental_experiment.torch_dynamo.onnx_debug_backend
 
-onnx_dynger_backend
-++++++++++++++++++++
+dynger_backend
+++++++++++++++
 
-.. autofunction:: experimental_experiment.torch_dynamo.onnx_dynger_backend
+.. autofunction:: experimental_experiment.torch_dynamo.dynger_backend
 
 Other functions
 +++++++++++++++
