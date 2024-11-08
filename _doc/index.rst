@@ -39,7 +39,7 @@ Source are `sdpython/experimental-experiment
     tutorial/index
     api/index
     auto_examples/index
-    models/index
+    auto_recipes/index
     command_lines
     miscellaneous/index
 
