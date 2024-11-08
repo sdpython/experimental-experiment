@@ -454,7 +454,14 @@ class DynamoInterpreter:
                         node.name, dtype, shape, False, users=node.users, fake_tensor=True
                     )
                 raise RuntimeError(f"value is None, unable to retrieve target {node.target!r}")
-            return self.builder.make_initializer(node.name, value)
+            parameter_name = (
+                self.parameter_naming(node.name, value, node=node)
+                if isinstance(value, self.builder.torch.nn.Parameter)
+                else None
+            )
+            return self.builder.make_initializer(
+                node.name, value, parameter_name=parameter_name
+            )
 
         if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):
             return self.builder.make_dynamic_object(node.name, val, shape_as_input=True)

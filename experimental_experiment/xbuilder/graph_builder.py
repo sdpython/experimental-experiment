@@ -26,6 +26,7 @@ from onnx import (
     NodeProto,
     TensorProto,
     TypeProto,
+    ValueInfoTensorProto,
 )
 import onnx.helper as oh
 import onnx.numpy_helper as onh
@@ -4197,7 +4198,34 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if self._parameter_renaming:
             # We rename.
-            raise NotImplementedError("Should be done")
+            nodes_add = []
+            setp = set(self._parameter_renaming)
+            for node in self.nodes:
+                seti = set(node.input)
+                if not (seti & setp):
+                    nodes_add.append(node)
+                    continue
+                node2 = NodeProto()
+                node2.ParseFromString(node.SerializeToString())
+                del node2.input[:]
+                node2.input.extend([self._parameter_renaming.get(i, i) for i in node.input])
+                nodes_add.append(node2)
+            model.graph.node.extend(nodes_add)
+
+            seti = set(i.name for i in self.inputs)
+            if seti & setp:
+                new_inputs = []
+                for i in self.inputs:
+                    if i.name in self.setp:
+                        v = ValueInfoTensorProto()
+                        v.ParseFromString(v.SerializeToString())
+                        v.name = self._parameter_renaming[i.name]
+                        new_inputs.append(v)
+                    else:
+                        new_inputs.append(i)
+                model.graph.input.extend(new_inputs)
+            else:
+                model.graph.input.extend(self.inputs)
         else:
             model.graph.node.extend(self.nodes)
             model.graph.input.extend(self.inputs)

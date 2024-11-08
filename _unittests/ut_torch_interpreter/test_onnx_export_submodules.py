@@ -136,6 +136,12 @@ class TestOnnxExportSubModules(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    def test_dummy_llm_flat(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(model, inputs, optimize=False, verbose=0)
+        names = [i.name for i in onx.graph.initializer]
+        self.assertNotIn("p_decoder_feed_forward_linear_1_weight", names)
+
     def test_dummy_llm(self):
         model, inputs = dummy_llm()
         onx = to_onnx(

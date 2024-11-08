@@ -220,7 +220,7 @@ def _retrieve(
 
 class SubModuleNaming:
     """
-    A class which maps class types and local functions in order to give
+    A class which maps class submodule name and local functions in order to give
     short but unique names.
     """
 
@@ -256,6 +256,11 @@ class SubModuleNaming:
 
 
 class ParameterNaming:
+    """
+    A class which maps parameters name in the original module and the different
+    they have in the fx.graph.
+    """
+
     def __init__(self, mod: "torch.nn.Module"):  # noqa: F821
         self.mod = mod
         self._idmap = {}
@@ -285,13 +290,23 @@ class ParameterNaming:
     def __call__(
         self, name: str, value: "torch.nn.Parameter", node: "torch.fx.Node"  # noqa: F821
     ) -> str:
+        assert isinstance(
+            name, str
+        ), f"Unexpected type {type(name)} for name{self.get_debug_msg()}"
         from_node = node.meta["from_node"]
         assert (
             len(from_node) == 1
         ), f"Parameter {name!r} seems shared accross multiple objects{from_node}"
-        key = f"{from_node[0][1]}_{name}"
-        if key.startswith("L__self___"):
-            key = key[len("L__self___") :]
+        if name.startswith("p_") and name[2:] in self._idmap:
+            key = name[2:]
+        else:
+            key = f"{from_node[0][1]}_{name}"
+            if key.startswith("L__self___"):
+                key = key[len("L__self___") :]
+            elif name.startswith("p_"):
+                key = name[len("p_") :]
+            else:
+                key = name
         assert key in self._idmap, (
             f"Unable to find parameter {name!r} from {from_node!r}, key={key!r}\n"
             f"{pprint.pformat(self.display)}"
