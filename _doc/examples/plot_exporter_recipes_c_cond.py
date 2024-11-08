@@ -89,6 +89,11 @@ for name, mod in model.named_modules():
     print(name, type(mod))
     if isinstance(mod, ModuleWithControlFlow):
         mod.forward = new_forward
+    
+####################################
+# Let's see what the fx graph looks like.
+
+print(torch.export.export(model, (x,)).graph)
 
 ####################################
 # Let's export again.

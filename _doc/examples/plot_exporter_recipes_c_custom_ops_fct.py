@@ -91,6 +91,10 @@ model = ModuleWithACustomOperator()
 # Let's check it runs again.
 model(x)
 
+####################################
+# Let's see what the fx graph looks like.
+
+print(torch.export.export(model, (x,)).graph)
 
 #####################################
 # Next is the conversion to onnx.

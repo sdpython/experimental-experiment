@@ -87,6 +87,11 @@ for name, mod in model.named_modules():
         mod.forward = new_forward
 
 ####################################
+# Let's see what the fx graph looks like.
+
+print(torch.export.export(model, (x,)).graph)
+
+####################################
 # Let's export again.
 
 ep = torch.onnx.export(model, (x,), dynamo=True)
