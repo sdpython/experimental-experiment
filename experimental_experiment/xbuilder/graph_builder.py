@@ -3590,8 +3590,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         new_inits = {}
         large_inits = {}
         for k, v in self.initializers_dict.items():
-            if (full_parameter_name and k in self._parameter_renaming) or (
-                not full_parameter_name and k not in self._parameter_norename
+            if self._parameter_renaming and (
+                (full_parameter_name and k in self._parameter_renaming)
+                or (not full_parameter_name and k not in self._parameter_norename)
             ):
                 # Those parameters are present under another name already.
                 continue
@@ -3652,8 +3653,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             initializer = []
             for k, v in init_dict.items():
-                if (full_parameter_name and k in self._parameter_renaming) or (
-                    not full_parameter_name and k not in self._parameter_norename
+                if self._parameter_renaming and (
+                    (full_parameter_name and k in self._parameter_renaming)
+                    or (not full_parameter_name and k not in self._parameter_norename)
                 ):
                     # Those parameters are present under another name already.
                     continue
@@ -3736,8 +3738,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         large_inits = {}
         res = []
         for k, v in sorted(init_dict.items()):
-            if (full_parameter_name and k in self._parameter_renaming) or (
-                not full_parameter_name and k not in self._parameter_norename
+            if self._parameter_renaming and (
+                (full_parameter_name and k in self._parameter_renaming)
+                or (not full_parameter_name and k not in self._parameter_norename)
             ):
                 # Those parameters are present under another name already.
                 continue
