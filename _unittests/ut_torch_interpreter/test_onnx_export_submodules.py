@@ -148,12 +148,13 @@ class TestOnnxExportSubModules(ExtTestCase):
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
         p_names = set(name for name, _ in model.named_parameters())
-        init_names = set(i.name for i in onx.graph.initializer)
+        init_names = set(i.name for i in onx.graph.initializer if "mask" not in i.name)
         self.assertEqual(len(p_names & init_names), 12)
         check_model(onx)
 
-        # from experimental_experiment.helpers import pretty_onnx
-        # print(pretty_onnx(onx))
+        onx2 = to_onnx(model, inputs, optimize=False, verbose=0)
+        init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
+        self.assertEqual(init_names2 & init_names, init_names)
 
 
 if __name__ == "__main__":
