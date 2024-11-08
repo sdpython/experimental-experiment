@@ -38,8 +38,7 @@ Source are `sdpython/experimental-experiment
     design/index
     tutorial/index
     api/index
-    auto_examples/index
-    auto_recipes/index
+    galleries
     command_lines
     miscellaneous/index
 

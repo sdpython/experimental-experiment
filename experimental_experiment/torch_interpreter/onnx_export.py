@@ -218,6 +218,84 @@ def _retrieve(
     return None
 
 
+class SubModuleNaming:
+    """
+    A class which maps class types and local functions in order to give
+    short but unique names.
+    """
+
+    def __init__(self, mod: "torch.nn.Module"):  # noqa: F821
+        self.mod = mod
+        self._memo = {}
+        self._names = {}
+
+    def __call__(self, name: str, submod: "torch.nn.Module") -> str:  # noqa: F821
+        if type(submod) in self._memo:
+            self._names[type(submod)].append(name)
+            return self._memo[type(submod)]
+        type_name = submod.__class__.__name__
+        ends = f"<locals>.{type_name}'>"
+        if str(type(submod)).endswith(ends):
+            type_name = f"<locals>.{type_name}"
+        if type_name not in self._memo:
+            self._memo[type(submod)] = type_name
+            self._memo[type_name] = type(submod)
+            self._names[type(submod)] = [name]
+            return type_name
+
+        raise NotImplementedError(
+            f"Unable to give a unique name to submodule {name!r}, "
+            f"module={submod.__module__!r}, "
+            f"type_name={type_name!r}, type(submod)={type(submod)}, "
+            f"already given:\n{pprint.pformat(self._memo)}"
+            f"\nnames:\n{pprint.pformat(self._names)}"
+        )
+
+
+class ParameterNaming:
+    def __init__(self, mod: "torch.nn.Module"):  # noqa: F821
+        self.mod = mod
+        self._idmap = {}
+        self._id_modules = {}
+        self.display = {}
+        for name, p in mod.named_parameters():
+            self._idmap[name] = p
+            self.display[name] = name
+            new_key = name.replace(".", "_")
+            if new_key != name:
+                assert (
+                    new_key not in self._id_modules
+                ), f"Two parameters have similar names {name!r} mapped into {new_key!r}"
+                self._idmap[new_key] = name
+                self.display[new_key] = name
+        for name, submod in mod.named_modules():
+            if not name:
+                continue
+            self._id_modules[name] = submod
+            new_key = name.replace(".", "_")
+            if new_key != name:
+                assert (
+                    new_key not in self._id_modules
+                ), f"Two modules have similar names {name!r} mapped into {new_key!r}"
+                self._id_modules[new_key] = name
+
+    def __call__(
+        self, name: str, value: "torch.nn.Parameter", node: "torch.fx.Node"  # noqa: F821
+    ) -> str:
+        from_node = node.meta["from_node"]
+        assert (
+            len(from_node) == 1
+        ), f"Parameter {name!r} seems shared accross multiple objects{from_node}"
+        key = f"{from_node[0][1]}_{name}"
+        if key.startswith("L__self___"):
+            key = key[len("L__self___") :]
+        assert key in self._idmap, (
+            f"Unable to find parameter {name!r} from {from_node!r}, key={key!r}\n"
+            f"{pprint.pformat(self.display)}"
+        )
+        return self._idmap[key]
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -236,6 +314,8 @@ def _make_builder_interpreter(
     optimize_submodules: bool = False,
     function_options: Optional[FunctionOptions] = None,
     local_domain: str = "local_functions",
+    submodule_naming: Optional[Callable] = None,
+    parameter_naming: Optional[Callable] = None,
 ) -> Tuple[
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
@@ -265,6 +345,8 @@ def _make_builder_interpreter(
         and not at the end
     :param function_options: how to deal with local functions
     :param local_domain: domain name to use for local functions if not specified
+    :param submodule_naming: a function which returns a submodule name in the onnx graph
+    :param parameter_naming: a function which returns a parameter name in the onnx graph
     :return: onnx model
     """
 
@@ -430,6 +512,8 @@ def _make_builder_interpreter(
         export_options=export_options,
         optimize_submodules=optimize_submodules,
         function_options=function_options,
+        submodule_naming=submodule_naming or SubModuleNaming(mod),
+        parameter_naming=parameter_naming or ParameterNaming(mod),
     )
     return (exported_program or graph_module), builder, interpreter
 
@@ -708,7 +792,9 @@ def to_onnx(
 
         if export_modules_as_functions is True:
             export_modules_as_functions = set(type(m) for m in mod.modules())
-        interpreter.register(export_modules_as_functions, dict(mod.named_modules()))
+        interpreter.register_named_modules(
+            None, export_modules_as_functions, dict(mod.named_modules())
+        )
         if verbose > 1:
             print(
                 f"[to_onnx] unflatten the graph_module, "

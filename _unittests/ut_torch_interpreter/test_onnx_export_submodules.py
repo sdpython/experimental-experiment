@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.xbuilder import FunctionOptions
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.torch_test_helper import dummy_llm
 
 
 class TestOnnxExportSubModules(ExtTestCase):
@@ -134,6 +135,25 @@ class TestOnnxExportSubModules(ExtTestCase):
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    def test_dummy_llm(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(
+            model, inputs, export_modules_as_functions=True, optimize=False, verbose=0
+        )
+        node_names = [n.op_type for n in onx.graph.node]
+        self.assertEqual(
+            node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"]
+        )
+        node_names = [n.op_type for n in onx.functions[1].node]
+        self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
+        p_names = set(name for name, _ in model.named_parameters())
+        init_names = set(i.name for i in onx.graph.initializer)
+        self.assertEqual(len(p_names & init_names), 12)
+        check_model(onx)
+
+        # from experimental_experiment.helpers import pretty_onnx
+        # print(pretty_onnx(onx))
 
 
 if __name__ == "__main__":

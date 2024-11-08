@@ -34,6 +34,8 @@ class DynamoInterpreter:
     :param export_options: see :class:`ExportOptions
         <experimental_experiment.torch_interpreter.ExportOptions>`
     :param optimize_submodules: optimizes submodules after they are built
+    :param submodule_naming: a function which returns a submodule name in the onnx graph
+    :param parameter_naming: a function which returns a parameter name in the onnx graph
     """
 
     def _hash(self) -> str:
@@ -48,6 +50,8 @@ class DynamoInterpreter:
         export_options: Optional[ExportOptions] = None,
         optimize_submodules: bool = False,
         function_options: Optional[FunctionOptions] = None,
+        submodule_naming: Optional[Callable] = None,
+        parameter_naming: Optional[Callable] = None,
     ):
         import torch
         from ..xbuilder import FunctionOptions
@@ -88,25 +92,35 @@ class DynamoInterpreter:
         self.flat_example_inputs_ = self.flatten_inputs(example_inputs)
         self.current_input_ = 0
         self.preserved_modules = set()
+        self.parent_interpreter = None
+        self.parameter_naming = parameter_naming
+        self.submodule_naming = submodule_naming
 
-    def register(
+    def register_named_modules(
         self,
-        preserved_modules: Set[type["torch.nn.Module"]],  # noqa: F821
+        parent_interpreter: Optional["DynamoInterpreter"],
+        preserved_modules: Optional[Set[type["torch.nn.Module"]]],  # noqa: F821
         named_modules: Dict[str, "torch.nn.Module"],  # noqa: F821
     ):
         """
-        Registers a list of module to preserve as local function
+        Registers a list of modules to preserve as local function
         in the onnx model. If empty, the graph is almost inlined.
         The module to convert to onnx should the output of method
         :func:`torch.export.unflatten.unflatten`.
         """
+        assert parent_interpreter is None or isinstance(
+            parent_interpreter, DynamoInterpreter
+        ), f"Unexpected type {type(parent_interpreter)} for the interpreter"
         if self.builder.verbose > 4 and preserved_modules:
             print(
                 f"[DynamoInterpreter-{self._hash()}.register] "
                 f"{sorted(c.__name__ for c in preserved_modules)}"
             )
-        self.preserved_modules = preserved_modules
         self.named_modules = named_modules
+        self.preserved_modules = preserved_modules or parent_interpreter.preserved_modules
+        if parent_interpreter is not None:
+            self.submodule_naming = parent_interpreter.submodule_naming
+            self.parameter_naming = parent_interpreter.parameter_naming
 
     def flatten_inputs(self, x: Any) -> List["torch.Tensor"]:  # noqa: F821
         """
@@ -258,7 +272,12 @@ class DynamoInterpreter:
             )
             return None
 
-        self.builder.make_initializer(node.name, init)
+        parameter_name = (
+            self.parameter_naming(node.name, init, node=node)
+            if isinstance(init, self.builder.torch.nn.Parameter)
+            else None
+        )
+        self.builder.make_initializer(node.name, init, parameter_name=parameter_name)
         return node.name
 
     def _make_tensor_input(
@@ -1435,6 +1454,8 @@ class DynamoInterpreter:
             optimize_submodules=self.optimize_submodules,
             function_options=self.function_options,
             local_domain=local_domain,
+            submodule_naming=self.submodule_naming,
+            parameter_naming=self.parameter_naming,
         )
         if self.preserved_modules and hasattr(self, "named_modules"):
             assert (
@@ -1443,8 +1464,8 @@ class DynamoInterpreter:
             module_name = source_node.target
             if module_name in self.named_modules:
                 module_child = self.named_modules[module_name]
-                interpreter.register(
-                    self.preserved_modules, dict(module_child.named_modules())
+                interpreter.register_named_modules(
+                    self, None, dict(module_child.named_modules())
                 )
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
@@ -1519,17 +1540,15 @@ class DynamoInterpreter:
 
         return builder, args, kwargs, output_names
 
-    @classmethod
-    def _clean_any_name(cls, name):
-        # Shorten name. A better way should be implemented.
-        name = (
-            name.replace("torch.nn.modules.", "")
-            .replace("transformers.", "")
-            .replace("models.", "")
-            .replace("modeling_", "")
-            .replace("phi3.", "")
-        )
-        return name
+    def get_submodule_name(
+        self, module_name: str, module: "torch.nn.Module"  # noqa: F821
+    ) -> str:
+        """
+        Gets a submodule name, simple but unique.
+        """
+        assert self.submodule_naming, "submodule_naming is null"
+        assert self.parameter_naming, "parameter_naming is null"
+        return self.submodule_naming(module_name, module)
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         """
@@ -1609,10 +1628,9 @@ class DynamoInterpreter:
             )
             m = self.named_modules[node.target]
             if type(m) in self.preserved_modules:
-                name = type(m).__name__
-                local_function_name = self._clean_any_name(
-                    f"{m.__module__}.{name}" if m.__module__ != "__main__" else name
-                )
+                # Which name to give the submodule?
+                # The class, the module name, ...?
+                local_function_name = name = self.get_submodule_name(node.target, m)
 
             self.builder._check_constants("before-make_nodes")
 

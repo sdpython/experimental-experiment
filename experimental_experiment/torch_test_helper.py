@@ -6,7 +6,7 @@ import contextlib
 import io
 import os
 import warnings
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from onnx import ModelProto, save
 from .helpers import pretty_onnx
 
@@ -128,3 +128,123 @@ def export_to_onnx(
             f.write((onx[0] if return_builder else onx).SerializeToString())
         ret["custom"] = filename
     return ret
+
+
+def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa: F821
+    """
+    Creates a dummy LLM for test purposes.
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.torch_test_helper import dummy_llm
+        print(dummy_llm())
+    """
+    import torch
+
+    class Embedding(torch.nn.Module):
+        def __init__(self, vocab_size: int, embedding_dim: int):
+            super().__init__()
+            self.embedding = torch.nn.Embedding(vocab_size, embedding_dim)
+            self.pe = torch.nn.Embedding(vocab_size, embedding_dim)
+
+        def forward(self, x):
+            word_emb = self.embedding(x)
+            word_pe = self.pe(x)
+            return word_emb + word_pe
+
+    class AttentionBlock(torch.nn.Module):
+
+        def __init__(self, embedding_dim: int, context_size: int):
+            super().__init__()
+            self.query = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+            self.key = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+            self.value = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
+
+            ones = torch.ones(size=[context_size, context_size], dtype=torch.float)
+            self.register_buffer(name="mask", tensor=torch.tril(input=ones))
+
+        def forward(self, x):
+            B, T, C = x.size()
+
+            query = self.query(x)
+            key = self.key(x)
+            value = self.value(x)
+
+            qk = query @ key.transpose(-2, -1) * C**-0.5
+            attention = qk.masked_fill(self.mask[:T, :T] == 0, float("-inf"))
+            attention = torch.nn.functional.softmax(input=attention, dim=-1)
+
+            out = attention @ value
+            return out
+
+    class MultiAttentionBlock(torch.nn.Module):
+
+        def __init__(self, embedding_dim: int, num_heads: int, context_size: int):
+            super().__init__()
+            self.attention = torch.nn.ModuleList(
+                modules=[AttentionBlock(embedding_dim, context_size) for _ in range(num_heads)]
+            )
+            self.linear = torch.nn.Linear(
+                in_features=embedding_dim * num_heads, out_features=embedding_dim
+            )
+
+        def forward(self, x):
+            out = torch.cat(tensors=[attention(x) for attention in self.attention], dim=-1)
+            x = self.linear(out)
+            return x
+
+    class FeedForward(torch.nn.Module):
+
+        def __init__(self, embedding_dim: int, ff_dim: int):
+            super().__init__()
+            self.linear_1 = torch.nn.Linear(embedding_dim, ff_dim)
+            self.relu = torch.nn.ReLU()
+            self.linear_2 = torch.nn.Linear(ff_dim, embedding_dim)
+
+        def forward(self, x):
+            x = self.linear_1(x)
+            x = self.relu(x)
+            x = self.linear_2(x)
+            return x
+
+    class DecoderLayer(torch.nn.Module):
+
+        def __init__(self, embedding_dim: int, num_heads: int, context_size: int, ff_dim: int):
+            super().__init__()
+            self.attention = MultiAttentionBlock(embedding_dim, num_heads, context_size)
+            self.feed_forward = FeedForward(embedding_dim, ff_dim)
+            self.norm_1 = torch.nn.LayerNorm(normalized_shape=embedding_dim)
+            self.norm_2 = torch.nn.LayerNorm(normalized_shape=embedding_dim)
+
+        def forward(self, x):
+            x_norm = self.norm_1(x)
+            attention = self.attention(x_norm)
+            attention = attention + x
+
+            attention_norm = self.norm_2(attention)
+            ff = self.feed_forward(attention_norm)
+            ff = ff + attention
+
+            return ff
+
+    class LLM(torch.nn.Module):
+
+        def __init__(
+            self,
+            vocab_size: int = 1024,
+            embedding_dim: int = 16,
+            num_heads: int = 2,
+            context_size: int = 256,
+            ff_dim: int = 128,
+        ):
+            super().__init__()
+            self.embedding = Embedding(vocab_size, embedding_dim)
+            self.decoder = DecoderLayer(embedding_dim, num_heads, context_size, ff_dim)
+
+        def forward(self, input_ids):
+            x = self.embedding(input_ids)
+            y = self.decoder(x)
+            return y
+
+    return LLM(), (torch.randint(0, 1024, (1, 30)).to(torch.int64),)

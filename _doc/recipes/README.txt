@@ -1,5 +1,5 @@
-Exporter Recipes
-================
+Exporter Recipes Gallery
+========================
 
 A model can be converted to ONNX if :func:`torch.export.export` is
 able to convert that model into a graph. This is not always
@@ -9,3 +9,6 @@ and make the code more complex than it should be.
 The conversion is a necessary step to be able to use
 ONNX. Next examples shows some recurrent code patterns and
 ways to rewrite them so that the exporter works.
+
+See :ref:`l-exporter-recipes` for an organized version of this gallery.
+

@@ -177,6 +177,8 @@ class GraphBuilder(_GraphBuilderRuntime):
       dictionary of functions to add to the model
     - `value_info: List[ValueInfoProto]`: value info of the original model
     - `dynamic_shapes: Union[Dict[str, Any], Tuple[Any]]]`: dynamic_shapes informations
+    - `_parameter_renaming: Dict[str, str]`: to rename parameter and give them
+      a name which can be found in ``module.named_parameter``
 
     Computed attributes:
 
@@ -330,6 +332,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._unique_node_names = set()
         self._known_value_shape = {}
         self._dynamic_examples = {}
+        self._parameter_renaming = {}
+        self._parameter_norename = set()
         self.constants_ = {}
         self.op = Opset(self)
         self.anyop = Opset(self, allow_unknown=True)
@@ -1858,7 +1862,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         return res
 
     def make_initializer(
-        self, name: str, value: Any, external: bool = False, msg: str = ""
+        self,
+        name: str,
+        value: Any,
+        external: bool = False,
+        msg: str = "",
+        parameter_name: Optional[str] = None,
     ) -> str:
         """
         Adds an initializer to the graph.
@@ -1871,6 +1880,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param value: value (TensorProto)
         :param external: external initializer or not (not stored in the graph model)
         :param msg: added to the error message if something goes wrong
+        :param parameter_name: the parameter name is different than its name in the fx graph,
+            they are restored when the model is finally exported into onnx,
+            until then, the mapping is kept in attribute ``_parameter_renaming``
         :return: name of the initializer
         """
         if external:
@@ -1930,7 +1942,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
 
-        self.add_initializer(name, value, itype=itype, shape=shape, key=key)
+        self.add_initializer(
+            name, value, itype=itype, shape=shape, key=key, parameter_name=parameter_name
+        )
         return name
 
     def add_initializer(
@@ -1943,6 +1957,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         key: Optional[Any] = None,
         existing: bool = False,
         allow_empty: bool = False,
+        parameter_name: Optional[str] = None,
     ):
         """
         Adds an initializer.
@@ -1957,6 +1972,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param existing: if True, shape and type should exist,
             if False, it should not exist, if None, both case are allowed
         :param allow_empty: allow empty tensor anyway
+        :param parameter_name: the parameter name is different than its name in the fx graph,
+            they are restored when the model is finally exported into onnx,
+            until then, the mapping is kept in attribute ``_parameter_renaming``
         """
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
@@ -2010,11 +2028,38 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._unique_names.add(name)
 
         self.initializers_dict[name] = value
+
+        if parameter_name:
+            # We want a specific name for this one, let's keep that information in
+            # main so that we can rename them later.
+            assert not self.has_name(parameter_name), (
+                f"Parameter {name!r} cannot be renamed int {parameter_name!r} as it "
+                f"is already taken{self.get_debug_msg()}"
+            )
+            self._parameter_renaming[name] = parameter_name
+            self._parameter_norename.add(parameter_name)
+            self.initializers_dict[parameter_name] = value
+            self.set_name(parameter_name, marker="parameter_name")
+            self.set_shape(parameter_name, self.get_shape(name))
+            self.set_type(parameter_name, self.get_type(name))
+            if self.verbose and (
+                self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)
+            ):
+                print(
+                    f"[GraphBuilder-{self._hash()}.make_initializer] "
+                    f"{name}[{itype}:{shape}] -> {parameter_name}"
+                )
+        else:
+            if self.verbose and (
+                self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)
+            ):
+                print(
+                    f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]"
+                )
+
         if cst is None and isinstance(value, NodeProto):
             cst = value
         self.update_node_constant(name, cst)
-        if self.verbose and (self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)):
-            print(f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]")
 
         if key is None:
             key = self.make_key(value)
@@ -3442,7 +3487,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             renaming = {}
             for init, value in builder.initializers_dict.items():
-                name = self.unique_name(f"{prefix}{init}")
+                if init in builder._parameter_renaming:
+                    # Its copy already exists.
+                    continue
+                if init in builder._parameter_norename:
+                    name = init
+                    assert not self.has_name(init), (
+                        f"Parameter {init!r} must be renamed as another one "
+                        f"already exists{self.get_debug_msg()}"
+                    )
+                else:
+                    name = self.unique_name(f"{prefix}{init}")
                 renaming[init] = name
                 if isinstance(value, TensorProto):
                     value.name = name
@@ -3526,6 +3581,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         new_inits = {}
         large_inits = {}
         for k, v in self.initializers_dict.items():
+            if k in self._parameter_renaming:
+                # Those parameters are present under another name already.
+                continue
             itype = self.get_type(k)
             shape = self.get_shape(k)
             size = np.prod(shape) * self.elem_size(itype)
@@ -3539,7 +3597,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         return new_inits, large_inits
 
     def _build_initializers(
-        self, large_model: bool, switch_low_high: bool, external_threshold: Union[bool, int]
+        self,
+        large_model: bool,
+        switch_low_high: bool,
+        external_threshold: Union[bool, int],
+        full_parameter_name: bool = True,
     ) -> Tuple[List[TensorProto], Dict[str, TensorProto]]:
         """
         Builds initializers.
@@ -3550,6 +3612,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             stored outside the model, if can be False for none of them, true for all of them
             or a number, if the threshold is specified and large_model is False,
             then all tensors above this threshold are ignored
+        :param full_parameter_name: keeps the full name for the parameters or not
         :return: a list of tensors to stored in the model,
             another list to tensors stored outside the model
         """
@@ -3576,6 +3639,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             initializer = []
             for k, v in init_dict.items():
+                if (full_parameter_name and k in self._parameter_renaming) or (
+                    not full_parameter_name and k in self._parameter_norename
+                ):
+                    # Those parameters are present under another name already.
+                    continue
                 if isinstance(v, TensorProto):
                     if self.verbose > 1:
                         print(
@@ -3769,6 +3837,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             rows.append("--CONSTRAINTS--")
             for a, b in sorted(self.constraints_.items()):
                 rows.append(f"{a} = {b}")
+        rows.append("--PARAMETERS--")
+        rows.append("dynamic_examples=")
+        for i, (k, v) in enumerate(sorted(self._parameter_renaming.items())):
+            rows.append(f"   {k} = {v!r}")
+            if i >= 10000:
+                break
         rows.append("--SHAPE--")
         rows.append("dynamic_examples=")
         for i, (k, v) in enumerate(sorted(self._dynamic_examples.items())):
@@ -4062,9 +4136,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             if function_options.move_initializer_to_constant:
                 self.move_initializers_to_constant(
+                    full_parameter_name=False,
                     threshold=function_options.external_threshold,
                     verbose=max(0, self.verbose - 1),
                 )
+            # if self._parameter_renaming: we don't necessarily need to rename here.
+            # We better not if we want to make this function equivalent to it.
             proto = oh.make_function(
                 function_options.domain,
                 function_options.name,
@@ -4092,7 +4169,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 proto=proto,
                 initializers_name=inits,
                 initializers_dict={
-                    k: v for k, v in self.initializers_dict.items() if k in set(inits)
+                    self._parameter_renaming.get(k, k): v
+                    for k, v in self.initializers_dict.items()
+                    if k in set(inits)
                 },
             )
             if functions:
@@ -4110,22 +4189,25 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}.time_evaluation_constants_] "
                 f"{self.time_evaluation_constants_}"
             )
-
         # building the model
         model = ModelProto()
         model.graph.CopyFrom(GraphProto())
-
-        model.graph.node.extend(self.nodes)
         model.graph.name = "experiment"
-        model.graph.input.extend(self.inputs)
         model.graph.output.extend(self.outputs)
 
-        # initializer
+        if self._parameter_renaming:
+            # We rename.
+            raise NotImplementedError("Should be done")
+        else:
+            model.graph.node.extend(self.nodes)
+            model.graph.input.extend(self.inputs)
 
+        # initializer
         initializers, large_initializers = self._build_initializers(
             switch_low_high=sys.byteorder != "big",
             large_model=large_model,
             external_threshold=external_threshold,
+            full_parameter_name=True,
         )
         model.graph.initializer.extend(initializers)
 
@@ -6002,7 +6084,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if i not in new_inits:
                     new_inits.append(i)
             for k, v in inits.items():
-                new_name = self.add_initializer(self.unique_name(f"{onx.name}_{k}"), v)
+                new_name = self.add_initializer(self.unique_name(k), v)
                 repl[k] = new_name
             new_inits = [repl.get(i, i) for i in new_inits]
         else:
@@ -6556,11 +6638,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         return new_nodes
 
     def move_initializers_to_constant(
-        self, threshold: Optional[int] = None, verbose: int = 0
+        self, full_parameter_name, threshold: Optional[int] = None, verbose: int = 0
     ) -> int:
         """
         Moves initializers as constant nodes.
 
+        :param full_parameter_name: keeps the local name or the full name for the parameters
         :param threshold: only move intializers to constant if their size is below this limit
         :param verbose: verbosity
         :return: number of moves iniatliazers
@@ -6572,6 +6655,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             switch_low_high=sys.byteorder != "big",
             large_model=True,
             external_threshold=threshold or 2**30,
+            full_parameter_name=full_parameter_name,
         )
 
         to_remove = []

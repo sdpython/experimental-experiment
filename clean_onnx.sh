@@ -37,6 +37,22 @@ rm _doc/examples/*.script.onnx
 rm _doc/examples/dump_models -rf
 rm _doc/examples/dump_onx_*
 
+rm _doc/recipes/plot*.onnx
+rm _doc/recipes/plot*.txt
+rm _doc/recipes/ort*.onnx
+rm _doc/recipes/*.sarif
+rm _doc/recipes/*.json
+rm _doc/recipes/*.png
+rm _doc/recipes/*.csv
+rm _doc/recipes/*.pte
+rm _doc/recipes/*.xlsx
+rm _doc/recipes/dummy*.onnx
+rm _doc/recipes/*.opt.onnx
+rm _doc/recipes/*.dynamo.onnx
+rm _doc/recipes/*.script.onnx
+rm _doc/recipes/dump_models -rf
+rm _doc/recipes/dump_onx_*
+
 rm _tools/bin -rf
 rm _tools/mambaroot -rf
 rm _tools/repos -rf

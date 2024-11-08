@@ -1,3 +1,4 @@
+.. _l-exporter-recipes:
 
 ================
 Exporter Recipes
