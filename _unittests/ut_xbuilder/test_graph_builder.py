@@ -228,7 +228,7 @@ class TestTools(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @ignore_warnings(DeprecationWarning)
-    def test_as_function_constant(self):
+    def test_as_function_constant_notfull(self):
         g = GraphBuilder(18, ir_version=9, as_function=True)
         g.make_tensor_input("X", None, None, False)
         np_weights = np.random.randn(4, 3).astype(np.float32)
@@ -238,6 +238,24 @@ class TestTools(ExtTestCase):
         g.op.Add(g.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
         g.make_tensor_output("Y", is_dimension=False, indexed=False)
         g.move_initializers_to_constant(full_parameter_name=False)
+        fct = g.to_onnx(function_options=FunctionOptions(name="linear", domain="mine"))
+        feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
+        expected = feeds["X"] @ np_weights + np_bias
+        ref = ExtendedReferenceEvaluator(fct)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+
+    @ignore_warnings(DeprecationWarning)
+    def test_as_function_constant_full(self):
+        g = GraphBuilder(18, ir_version=9, as_function=True)
+        g.make_tensor_input("X", None, None, False)
+        np_weights = np.random.randn(4, 3).astype(np.float32)
+        np_bias = np.random.randn(1, 3).astype(np.float32)
+        init = g.make_initializer("weights", np_weights)
+        bias = g.make_initializer("bias", np_bias)
+        g.op.Add(g.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
+        g.make_tensor_output("Y", is_dimension=False, indexed=False)
+        g.move_initializers_to_constant(full_parameter_name=True)
         fct = g.to_onnx(function_options=FunctionOptions(name="linear", domain="mine"))
         feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
         expected = feeds["X"] @ np_weights + np_bias

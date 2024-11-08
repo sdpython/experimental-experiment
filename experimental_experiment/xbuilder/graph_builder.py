@@ -4147,6 +4147,12 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if function_options.export_as_function:
+            if self.verbose:
+                print(
+                    f"[GraphBuilder-{self._hash()}.to_onnx] make_function "
+                    f"{len(self.initializers_dict)} inits "
+                    f"{len(self._parameter_renaming)} params"
+                )
             assert (
                 function_options.name not in FunctionOptions.empty_names
                 and function_options.domain not in FunctionOptions.empty_names
@@ -4209,7 +4215,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             ir_version = _default_OPSET_TO_IR_VERSION()[self.opsets[""]]
 
         if self.verbose:
-            print(f"[GraphBuilder-{self._hash()}.to_onnx] make_model")
+            print(
+                f"[GraphBuilder-{self._hash()}.to_onnx] make_model "
+                f"{len(self.initializers_dict)} inits "
+                f"{len(self._parameter_renaming)} params"
+            )
             print(
                 f"[GraphBuilder-{self._hash()}.time_evaluation_constants_] "
                 f"{self.time_evaluation_constants_}"
@@ -4229,16 +4239,43 @@ class GraphBuilder(_GraphBuilderRuntime):
             nodes_add = []
             setp = set(self._parameter_renaming)
             for node in self.nodes:
-                # TODO: handle subgraphs as well.
-                seti = set(node.input)
-                if not (seti & setp):
-                    nodes_add.append(node)
-                    continue
+
+                needs_rewrite = False
+                for att in node.attribute:
+                    if att.type == AttributeProto.GRAPH:
+                        hidden = self._get_hidden_inputs(att.g)
+                        if hidden & setp:
+                            needs_rewrite = True
+                            # needs rewrite
+                            new_g = self._rename_inputs_in_subgraph(
+                                att.g, self._parameter_renaming
+                            )
+
+                if not needs_rewrite:
+                    seti = set(node.input)
+                    if not (seti & setp):
+                        nodes_add.append(node)
+                        continue
+
                 node2 = NodeProto()
-                node2.ParseFromString(node.SerializeToString())
-                del node2.input[:]
+                node2.doc_string = node.doc_string
+                node2.name = node.name
+                node2.op_type = node.op_type
                 node2.input.extend([self._parameter_renaming.get(i, i) for i in node.input])
+                node2.output.extend(node.output)
+
+                atts = []
+                for att in node.attribute:
+                    if att.type != AttributeProto.GRAPH:
+                        atts.append(att)
+                        continue
+
+                    new_g = self._rename_inputs_in_subgraph(att.g, self._parameter_renaming)
+                    atts.append(oh.make_attribute(att.name, new_g))
+
+                node2.attribute.extend(atts)
                 nodes_add.append(node2)
+
             model.graph.node.extend(nodes_add)
 
             seti = set(i.name for i in self.inputs)

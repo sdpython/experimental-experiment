@@ -933,7 +933,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         a = torch.tensor([[39906]]).long()
         example_args = (a,)
         model_eval = model.eval()
-        onx = to_onnx(model_eval, example_args)
+        onx = to_onnx(model_eval, example_args, verbose=1)
         with open("test_sequence_ops_embedding_bag_custom.onnx", "wb") as f:
             f.write(onx.SerializeToString())
 

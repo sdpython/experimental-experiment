@@ -307,6 +307,8 @@ class ParameterNaming:
             key = f"{from_node[0][1]}_{name}"
             if key.startswith("L__self___"):
                 key = key[len("L__self___") :]
+            elif name.startswith("p_fn_"):
+                key = name[len("p_fn_") :]
             elif name.startswith("p_"):
                 key = name[len("p_") :]
             else:
