@@ -614,7 +614,11 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
-            to_onnx(model, (example_input,), filename=onnx_file_path)
+            onx, builder = to_onnx(
+                model, (example_input,), filename=onnx_file_path, return_builder=True
+            )
+            self.assertNotEmpty(builder._parameter_renaming)
+            self.assertEqual(len(onx.graph.initializer), 2)
 
         expected_output = model(example_input)
 

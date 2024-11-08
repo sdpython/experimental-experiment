@@ -1915,6 +1915,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         key = self.make_key(value)
         if key and key in self._values:
             if name == "":
+                assert (
+                    not parameter_name
+                ), f"Empty name cannot be used with parameter_name={parameter_name!r}"
                 new_name = self._values[key]
                 assert new_name in self.initializers_dict, f"Unable to find {new_name!r}"
                 return new_name
@@ -2030,7 +2033,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         self.initializers_dict[name] = value
 
-        if parameter_name:
+        if parameter_name and parameter_name != name:
             # We want a specific name for this one, let's keep that information in
             # main so that we can rename them later.
             assert not self.has_name(parameter_name), (
@@ -2060,7 +2063,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if cst is None and isinstance(value, NodeProto):
             cst = value
-        self.update_node_constant(name, cst)
+        is_constant = self.update_node_constant(name, cst)
+        if is_constant and parameter_name:
+            self.update_node_constant(parameter_name, cst)
 
         if key is None:
             key = self.make_key(value)
@@ -3365,7 +3370,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 elif self.has_rank(node.input[1]):
                     self.set_rank(node.output[0], self.get_rank(node.input[1]))
 
-    def update_node_constant(self, name: str, node: NodeProto):
+    def update_node_constant(self, name: str, node: NodeProto) -> bool:
         """
         Updates a constant NodeProto.
         """
@@ -3379,6 +3384,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{name!r}, node={None if node is None else node.op_type}"
             )
         self.constants_[name] = node
+        return True
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
@@ -3575,14 +3581,18 @@ class GraphBuilder(_GraphBuilderRuntime):
             return output_names[0]
         return output_names
 
-    def _build_large_initializers(self, external_threshold: int):
+    def _build_large_initializers(
+        self, external_threshold: int, full_parameter_name: bool = True
+    ):
         assert isinstance(
             external_threshold, int
         ), f"Unexpected type {type(external_threshold)} for external_threshold"
         new_inits = {}
         large_inits = {}
         for k, v in self.initializers_dict.items():
-            if k in self._parameter_renaming:
+            if (full_parameter_name and k in self._parameter_renaming) or (
+                not full_parameter_name and k not in self._parameter_norename
+            ):
                 # Those parameters are present under another name already.
                 continue
             itype = self.get_type(k)
@@ -3626,7 +3636,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
         init_dict, large_inits = (
-            self._build_large_initializers(external_threshold)
+            self._build_large_initializers(
+                external_threshold, full_parameter_name=full_parameter_name
+            )
             if large_model
             else (self.initializers_dict, {})
         )
@@ -3641,7 +3653,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             initializer = []
             for k, v in init_dict.items():
                 if (full_parameter_name and k in self._parameter_renaming) or (
-                    not full_parameter_name and k in self._parameter_norename
+                    not full_parameter_name and k not in self._parameter_norename
                 ):
                     # Those parameters are present under another name already.
                     continue
@@ -3724,6 +3736,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         large_inits = {}
         res = []
         for k, v in sorted(init_dict.items()):
+            if (full_parameter_name and k in self._parameter_renaming) or (
+                not full_parameter_name and k not in self._parameter_norename
+            ):
+                # Those parameters are present under another name already.
+                continue
             if isinstance(v, TensorProto):
                 res.append(v)
                 continue
@@ -4115,6 +4132,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 stats.extend(statso)
             else:
                 stats = statso
+            if self._parameter_renaming:
+                # Adding the true names back.
+                update = {}
+                for k, v in self.initializers_dict.items():
+                    if k in self._parameter_renaming:
+                        update[self._parameter_renaming[k]] = v
+                self.initializers_dict.update(update)
 
         assert len(self.nodes) > 0, (
             f"The onnx model is empty after optimization (no node)."
@@ -4197,6 +4221,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         model.graph.output.extend(self.outputs)
 
         if self._parameter_renaming:
+            assert self.initializers_dict, (
+                f"Some parameters are renamed {self._parameter_renaming} "
+                f"but there is no initializer{self.get_debug_msg()}"
+            )
             # We rename.
             nodes_add = []
             setp = set(self._parameter_renaming)
@@ -4237,6 +4265,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             large_model=large_model,
             external_threshold=external_threshold,
             full_parameter_name=True,
+        )
+        assert not self._parameter_renaming or initializers, (
+            f"Some parameters are renamed {self._parameter_renaming} "
+            f"self.initializers_dict={set(self.initializers_dict)} "
+            f"but there is no initializer{self.get_debug_msg()}"
         )
         model.graph.initializer.extend(initializers)
 

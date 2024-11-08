@@ -276,6 +276,8 @@ class ParameterNaming:
                 ), f"Two parameters have similar names {name!r} mapped into {new_key!r}"
                 self._idmap[new_key] = name
                 self.display[new_key] = name
+            else:
+                self._idmap[new_key] = name
         for name, submod in mod.named_modules():
             if not name:
                 continue
@@ -285,6 +287,8 @@ class ParameterNaming:
                 assert (
                     new_key not in self._id_modules
                 ), f"Two modules have similar names {name!r} mapped into {new_key!r}"
+                self._id_modules[new_key] = name
+            else:
                 self._id_modules[new_key] = name
 
     def __call__(
@@ -311,7 +315,11 @@ class ParameterNaming:
             f"Unable to find parameter {name!r} from {from_node!r}, key={key!r}\n"
             f"{pprint.pformat(self.display)}"
         )
-        return self._idmap[key]
+        res = self._idmap[key]
+        assert isinstance(
+            res, str
+        ), f"Unexpected type for key={key!r}, name={name!r}, type(res)={type(res)!r}"
+        return res
 
 
 def _make_builder_interpreter(
