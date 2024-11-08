@@ -26,7 +26,7 @@ from onnx import (
     NodeProto,
     TensorProto,
     TypeProto,
-    ValueInfoTensorProto,
+    ValueInfoProto,
 )
 import onnx.helper as oh
 import onnx.numpy_helper as onh
@@ -4218,7 +4218,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_inputs = []
                 for i in self.inputs:
                     if i.name in self.setp:
-                        v = ValueInfoTensorProto()
+                        v = ValueInfoProto()
                         v.ParseFromString(v.SerializeToString())
                         v.name = self._parameter_renaming[i.name]
                         new_inputs.append(v)
