@@ -1,8 +1,10 @@
 """
-.. _l-plot-exporter-recipes-custom-modules:
+.. _l-plot-exporter-recipes-onnx-exporter-modules:
 
-to_onnx and submodules from LLMs
-================================
+torch.onnx.export and submodules from LLMs
+==========================================
+
+**Incomplete**
 
 Big models are hard to read once converted into onnx.
 Let's see how to improve their readibility.
@@ -18,15 +20,9 @@ A few fixes were applied to the original code.
 """
 
 import onnx
-from onnx.inliner import inline_local_functions
-from onnx_array_api.plotting.graphviz_helper import plot_dot
-from onnx_array_api.reference import compare_onnx_execution
+from onnx.printer import to_text
 import torch
 from onnxruntime import InferenceSession
-from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.helpers import pretty_onnx
-from experimental_experiment.bench_run import max_diff
-from experimental_experiment.xbuilder import OptimizationOptions
 
 
 class Embedding(torch.nn.Module):
@@ -157,27 +153,28 @@ print(f"output: shape={y.shape}, min={y.min()}, max={y.max()}")
 ep = torch.export.export(llm, (input_ids,))
 print(ep.graph)
 
-# Then function :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
-# converts it into ONNX.
+# Then function :func:`torch.onnx.export` converts it into ONNX.
 
-onx = to_onnx(llm, (input_ids,))
-print(pretty_onnx(onx))
+epo = torch.onnx.export(llm, (input_ids,), dynamo=True)
+print(to_text(epo.model_proto))
 
 ###########################################
 # Let's check there is no discrepancy.
 
-sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+sess = InferenceSession(
+    epo.model_proto.SerializeToString(), providers=["CPUExecutionProvider"]
+)
 feeds = dict(input_ids=input_ids.numpy())
 got = sess.run(None, feeds)[0]
 
-diff = max_diff(y, got)
+diff = torch.abs(y - torch.from_numpy(got)).max()
 print(f"output: shape={got.shape}, min={got.min()}, max={got.max()}")
 print(f"max discrepancy={diff['abs']}")
 
 ###########################################
 # Let's save the ONNX model.
 
-onnx.save(onx, "plot_exporter_recipes_c_modules.inlined.onnx")
+onnx.save(epo.model_proto, "plot_exporter_recipes_c_modules.inlined.onnx")
 
 ###########################################
 # ONNX with submodules
@@ -205,114 +202,4 @@ print(unflatten_ep.graph)
 # and contains the fx nodes contributing to the submodule and coming from the
 # previous graph.
 #
-# Now the ONNX graph.
-
-onx_module = to_onnx(llm, (input_ids,), export_modules_as_functions=True)
-print(pretty_onnx(onx_module))
-
-##########################################
-# We check again there is no new discrepancies.
-
-sess = InferenceSession(onx_module.SerializeToString(), providers=["CPUExecutionProvider"])
-feeds = dict(input_ids=input_ids.numpy())
-got = sess.run(None, feeds)[0]
-
-diff = max_diff(y, got)
-print(f"output: shape={got.shape}, min={got.min()}, max={got.max()}")
-print(f"max discrepancy={diff['abs']}")
-
-###########################################
-# Let's save the ONNX model.
-
-onnx.save(onx_module, "plot_exporter_recipes_c_modules.module.onnx")
-
-####################################
-# And visually.
-
-plot_dot(onx_module)
-
-###########################################
-# Inlining
-# ++++++++
-#
-# The ONNX graph can still be inline after this.
-
-onx_inlined = inline_local_functions(onx_module)
-print(pretty_onnx(onx_inlined))
-
-###########################################
-# Optimizations
-# +++++++++++++
-#
-# The ONNX graph produced by the exporter without any optimization is very verbose
-# and less efficient. That's why some optimizations are made to the model by default.
-# It is also possible to introduce kernels implemented in :epkg:`onnxruntime`.
-# Let's how it goes.
-
-onx_optimized = to_onnx(
-    llm,
-    (input_ids,),
-    options=OptimizationOptions(
-        patterns="default+onnxruntime", constant_folding=True, verbose=2
-    ),
-)
-print(pretty_onnx(onx_optimized))
-
-##################################
-# This shows a kernel ``FusedMatMul[com.microsoft]`` which implement a kernel equivalent Gemm
-# but working for any tensors, not only 2D.
-# How does it work on the model which keeps exports the moduels as local functions?
-# The optimizer optimizes every local function independantly.
-# We reduce the verbosity...
-
-onx_module_optimized = to_onnx(
-    llm,
-    (input_ids,),
-    options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=True),
-    export_modules_as_functions=True,
-)
-print(pretty_onnx(onx_module_optimized))
-
-#################################
-# It seems to be working as well on this simple case even though the optimizers were
-# not tested on such models. However, keeping the submodule information might be useful
-# to implement optimizer for a fmaily of models sharing the same components.
-#
-# Optimizations for CUDA
-# ++++++++++++++++++++++
-#
-# The optimizer may have a different behaviour knowning the model is running on CUDA.
-# It may use different kernels and do different optimization if needed.
-# That may not be the good place to do it as the runtime may choose to run one kernel on CPU,
-# another one on CUDA. The current optimization does not know that and
-# is not able to decide which provider would be more useful for some kernels.
-# This coudl even be decided at runtime.
-
-onx_cuda_optimized = to_onnx(
-    llm,
-    (input_ids,),
-    options=OptimizationOptions(
-        patterns="default+onnxruntime", constant_folding=True, verbose=2, processor="CUDA"
-    ),
-)
-print(pretty_onnx(onx_cuda_optimized))
-
-
-###########################################
-# Comparison optimized and not optimized?
-# +++++++++++++++++++++++++++++++++++++++
-#
-# The following tools is trying to match the node and shape inference
-# from two models. If they are not too different, the functions
-# is able to find out the differences. We can use to see
-# which operators were fused into bigger ones only implemented by
-# :epkg:`onnxruntime`.
-
-res1, res2, align, dc = compare_onnx_execution(onx, onx_optimized, verbose=1)
-print("------------")
-text = dc.to_str(res1, res2, align)
-print(text)
-
-###########################################
-# The conversion should handle dynamic shapes as well as the input sequence
-# can be of any length. But that's a topic for another example.
+# And the ONNX graph.

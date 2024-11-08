@@ -16,3 +16,7 @@ Custom Operators
 * :ref:`l-plot-exporter-recipes-onnx-exporter-custom-ops-fct`
 * :ref:`l-plot-exporter-recipes-onnx-exporter-custom-ops-inplace`
 
+Submodules
+==========
+
+* :ref:`l-plot-exporter-recipes-onnx-exporter-modules`
