@@ -4201,6 +4201,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             nodes_add = []
             setp = set(self._parameter_renaming)
             for node in self.nodes:
+                # TODO: handle subgraphs as well.
                 seti = set(node.input)
                 if not (seti & setp):
                     nodes_add.append(node)
