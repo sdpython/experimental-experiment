@@ -772,6 +772,12 @@ def max_diff(
             _index=_index,
         )
 
+    if isinstance(expected, np.ndarray):
+        return max_diff(torch.from_numpy(expected), got)
+
+    if isinstance(got, np.ndarray):
+        return max_diff(expected, torch.from_numpy(got))
+
     raise AssertionError(
         f"Not implemented with type(expected)={type(expected)}, "
         f"type(results)={type(got)},\n"
