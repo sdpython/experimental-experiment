@@ -1,7 +1,9 @@
 import os
 import sys
+import packaging.version as pv
 from sphinx_runpython.github_link import make_linkcode_resolve
 from sphinx_runpython.conf_helper import has_dvipng, has_dvisvgm
+import torch
 from experimental_experiment import __version__
 
 extensions = [
@@ -104,10 +106,20 @@ nitpick_ignore_regex = [
 
 sphinx_gallery_conf = {
     # path to your examples scripts
-    "examples_dirs": os.path.join(os.path.dirname(__file__), "examples"),
+    "examples_dirs": [
+        os.path.join(os.path.dirname(__file__), "examples"),
+        os.path.join(os.path.dirname(__file__), "recipes"),
+    ],
     # path where to save gallery generated examples
-    "gallery_dirs": "auto_examples",
+    "gallery_dirs": [
+        "auto_examples",
+        "auto_recipes",
+    ],
 }
+
+if pv.Version(torch.__version__) < pv.Version("2.7"):
+    sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_)|(_executorch_)).*"
+
 
 epkg_dictionary = {
     "aten functions": "https://pytorch.org/cppdocs/api/namespace_at.html#functions",

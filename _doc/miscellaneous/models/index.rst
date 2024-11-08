@@ -12,12 +12,3 @@ This projects was started with LLaMa.
     mistral
     phi
     phi3
-
-Other untrained models are available.
-
-.. toctree::
-    :caption: Other LLMs
-    :maxdepth: 1
-
-    diffusion_helper
-    llm_helper

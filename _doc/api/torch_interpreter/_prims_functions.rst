@@ -1,3 +1,4 @@
+.. _l-aten-prims:
 
 experimental_experiment.torch_interpreter._prims_functions
 ==========================================================

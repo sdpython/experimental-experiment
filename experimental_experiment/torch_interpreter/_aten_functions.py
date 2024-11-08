@@ -672,6 +672,60 @@ def aten_atanh(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str
     return res
 
 
+def aten_auto_functionalized(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    wrapped_func,
+    *args: Sequence[T],
+    **kwargs,
+) -> T:
+    "identity, calling a local function"
+    assert all(
+        isinstance(_, str) for _ in args
+    ), f"Unexpected input types args={args}{g.get_debug_msg()}"
+    assert all(
+        isinstance(_, str) for _ in kwargs.values()
+    ), f"Unexpected input types kwargs={kwargs}{g.get_debug_msg()}"
+
+    full_name = str(wrapped_func)
+    # something like OpOverload(op='mylib.numpy_sin', overload='default'
+    spl = full_name.split("op='")[-1].split("',")[0].split(".")
+    assert len(spl) == 2, (
+        f"Unable to extract function name and domain name in {full_name!r}, "
+        f"spl={spl}{g.get_debug_msg()}"
+    )
+    fdomain, fname = spl
+
+    assert g.has_local_function(fname, domain=fdomain), (
+        f"No local function {fname!r}, domain={fdomain!r}, "
+        f"wrapped_func={wrapped_func!r}\n{g.pretty_text()}"
+    )
+
+    local_outputs = g.get_local_function_outputs(fname, domain=fdomain)
+    if len(outputs) == len(local_outputs):
+        return g.make_node(
+            fname,
+            args,
+            outputs,
+            name="aten_auto_functionalized",
+            domain=fdomain,
+            doc_string="aten_auto_functionalized-E",
+        )
+    assert len(outputs) == 1, (
+        f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
+        f"for function {fdomain}:{fname!r}{g.get_debug_msg()}"
+    )
+    new_outputs = [f"{outputs[0]}#{i}" for i in range(len(local_outputs))]
+    return g.make_node(
+        fname,
+        args,
+        new_outputs,
+        name="aten_auto_functionalized-N",
+        domain=fdomain,
+    )
+
+
 def _adjust_attributes_of_avg_pool(
     expand_size: int,
     kernel_size: Union[Sequence[int], int],

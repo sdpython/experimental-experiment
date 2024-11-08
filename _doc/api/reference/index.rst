@@ -20,6 +20,15 @@ experimental_experiment.reference
     ort_evaluator
 
 
+ExtendedReferenceEvaluator
+++++++++++++++++++++++++++
+
+.. autoclass:: experimental_experiment.reference.ExtendedReferenceEvaluator
+    :members:
+
+Other functions
++++++++++++++++
+
 .. automodule:: experimental_experiment.reference
     :members:
     :no-undoc-members:

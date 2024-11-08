@@ -129,8 +129,13 @@ def onnx_derivative(
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
-        new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepYieldOp)
-        print("DOT-SECTION", to_dot(new_onx))
+        try:
+            new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepYieldOp)
+        except ImportError as e:
+            print("onnxruntime-training is not installed", e)
+            new_onx = None
+        if new_onx:
+            print("DOT-SECTION", to_dot(new_onx))
 
     These operators are the outputs of the
     initial graph and must be replaced by the gradient of these
@@ -163,8 +168,13 @@ def onnx_derivative(
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
-        new_onx = onnx_derivative(onx, options=DerivativeOptions.Zero)
-        print("DOT-SECTION", to_dot(new_onx))
+        try:
+            new_onx = onnx_derivative(onx, options=DerivativeOptions.Zero)
+        except ImportError as e:
+            print("onnxruntime-training is not installed", e)
+            new_onx = None
+        if new_onx:
+            print("DOT-SECTION", to_dot(new_onx))
 
     The user can still compute the outputs.
 
@@ -194,8 +204,13 @@ def onnx_derivative(
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
-        new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepOutputs)
-        print("DOT-SECTION", to_dot(new_onx))
+        try:
+            new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepOutputs)
+        except ImportError as e:
+            print("onnxruntime-training is not installed", e)
+            new_onx = None
+        if new_onx:
+            print("DOT-SECTION", to_dot(new_onx))
 
     The input gradient can be filled with a constant matrix
     filled with one and with the expected shape.
@@ -226,10 +241,15 @@ def onnx_derivative(
             {"Y": FloatTensorType([None, 10])},
             target_opset=opv,
         )
-        new_onx = onnx_derivative(
-            onx, options=(DerivativeOptions.KeepOutputs | DerivativeOptions.FillGrad)
-        )
-        print("DOT-SECTION", to_dot(new_onx))
+        try:
+            new_onx = onnx_derivative(
+                onx, options=DerivativeOptions.KeepOutputs | DerivativeOptions.FillGrad
+            )
+        except ImportError as e:
+            print("onnxruntime-training is not installed", e)
+            new_onx = None
+        if new_onx:
+            print("DOT-SECTION", to_dot(new_onx))
     """
     assert isinstance(
         options, DerivativeOptions

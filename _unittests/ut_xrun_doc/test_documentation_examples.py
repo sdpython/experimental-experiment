@@ -80,13 +80,26 @@ class TestDocumentationExamples(ExtTestCase):
                 continue
             reason = None
 
-            if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.5"):
-                reason = "too long, pytorch < 2.5"
+            # Windows, Apple
 
-            if name in {"plot_torch_export_201.py"}:
-                if sys.platform in {"win32"}:
-                    # dynamo not supported on windows
-                    reason = "windows not supported"
+            if not reason and (
+                name.startswith("plot_exporter_")
+                or name
+                in {
+                    "plot_llama_diff_dort_301.py",
+                    "plot_llama_diff_export_301.py",
+                    "plot_profile_existing_onnx_101.py",
+                    "plot_torch_export_201.py",
+                }
+            ):
+                if sys.platform == "win32":
+                    reason = "does not work on windows"
+
+            if not reason and name in {"plot_llama_bench_102.py"}:
+                if sys.platform in {"darwin"}:
+                    reason = "apple not supported"
+
+            # too long
 
             if not reason and name in {
                 "plot_llama_bench_102.py",
@@ -104,6 +117,22 @@ class TestDocumentationExamples(ExtTestCase):
                     "plot_custom_backend_llama_102.py",
                 }:
                     reason = "too long"
+
+            if not reason and is_apple():
+                reason = "last for ever"
+
+            if not reason and name in {
+                "plot_torch_aot_201.py",
+                "plot_torch_dort_201.py",
+            }:
+                # too long
+                reason = "not working yet or too long"
+
+            # missing
+
+            if not reason and is_apple() and name in {"plot_convolutation_matmul_102.py"}:
+                reason = "dot is missing"
+
             if not reason and name in {
                 "plot_convolutation_matmul_102.py",
                 "plot_optimize_101.py",
@@ -115,6 +144,27 @@ class TestDocumentationExamples(ExtTestCase):
                     reason = "graphviz not installed"
 
             if not reason and name in {
+                "plot_torch_custom_backend_101.py",
+                "lot_llama_bench_102.py",
+                "plot_custom_backend_llama_102.py",
+            }:
+                if not has_onnxruntime_training(True):
+                    reason = "OrtValueVector.push_back_batch is missing (onnxruntime)"
+
+            if not reason and name in {"plot_convolutation_matmul_102.py"}:
+                if not has_onnxruntime_training(True):
+                    reason = "OrtModuleGraphBuilder is missing (onnxruntime)"
+
+            if not reason and name in {"plot_executorch_102.py"}:
+                if not has_executorch():
+                    reason = "executorch is not installed"
+
+            # version
+
+            if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.5"):
+                reason = "too long, pytorch < 2.5"
+
+            if not reason and name in {
                 "plot_llama_diff_dort_301.py",
                 "plot_llama_diff_export_301.py",
             }:
@@ -122,16 +172,6 @@ class TestDocumentationExamples(ExtTestCase):
 
                 if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.4"):
                     reason = "requires torch 2.4"
-
-            if not reason and name in {
-                "plot_llama_diff_dort_301.py",
-                "plot_llama_diff_export_301.py",
-                "plot_profile_existing_onnx_101.py",
-            }:
-                from torch import __version__ as tv
-
-                if sys.platform == "win32":
-                    reason = "does not work on windows"
 
             if not reason and name in {"plot_torch_export_201.py"}:
                 from torch import __version__ as tv
@@ -142,49 +182,23 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(".".join(toaa.split(".")[:2])) < pv.Version("0.3"):
                     reason = "requires onnx-array-api 0.3"
 
-            if not reason and name in {"plot_llama_bench_102.py"}:
-                if sys.platform in {"darwin"}:
-                    reason = "apple not supported"
-
-            if not reason and name in {
-                "plot_torch_custom_backend_101.py",
-                "lot_llama_bench_102.py",
-                "plot_custom_backend_llama_102.py",
-            }:
-                if not has_onnxruntime_training(True):
-                    reason = "OrtValueVector.push_back_batch is missing (onnxruntime)"
-
-            if not reason and name in {"plot_executorch_102.py"}:
-                if not has_executorch():
-                    reason = "execution is not installed"
-
-            if not reason and name in {"plot_convolutation_matmul_102.py"}:
-                if not has_onnxruntime_training(True):
-                    reason = "OrtModuleGraphBuilder is missing (onnxruntime)"
-
-            if not reason and name in {
-                # "plot_convolutation_matmul.py",
-                # "plot_profile_existing_onnx.py",
-                # "test_plot_torch_dort.py",
-                "plot_torch_aot_201.py",
-                "plot_torch_dort_201.py",
-                # "plot_torch_export.py",
-            }:
-                # too long
-                reason = "not working yet or too long"
-
-            if not reason and name in {
-                "plot_torch_export_101.py",
-                "plot_torch_export_compile_102.py",
-            }:
+            if not reason and (
+                name.startswith("plot_exporter_")
+                or name
+                in {
+                    "plot_torch_export_101.py",
+                    "plot_torch_export_compile_102.py",
+                }
+            ):
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 
-            if not reason and is_apple() and name in {"plot_convolutation_matmul_102.py"}:
-                reason = "dot is missing"
+            if not reason and name.startswith("plot_exporter_recipes_oe_"):
+                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.7"):
+                    reason = "requires torch 2.7"
 
-            if not reason and is_apple():
-                reason = "last for ever"
+            if name == "plot_exporter_recipes_oe_cond.py":
+                reason = "torch.cond not working yet"
 
             if reason:
 

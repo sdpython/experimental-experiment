@@ -27,6 +27,8 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         node_pow = g.node_before(node.input[0])
+        if node_pow is None:
+            return self.none(node, inspect.currentframe().f_lineno)
         if node_pow.op_type != "Pow" or node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant_scalar(node_pow.input[1], 2):

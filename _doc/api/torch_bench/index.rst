@@ -2,15 +2,6 @@
 experimental_experiment.torch_bench
 ===================================
 
-
-.. toctree::
-    :maxdepth: 1
-    :caption: submodules
-
-
-    big_models/index
-
-
 .. toctree::
     :maxdepth: 1
     :caption: modules

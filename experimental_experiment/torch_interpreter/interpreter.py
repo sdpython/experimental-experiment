@@ -1081,8 +1081,14 @@ class DynamoInterpreter:
         """
         Called for a function.
         """
-        fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
         aten_name = self._get_aten_name(node)
+        fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
+
+        if aten_name == "aten_auto_functionalized":
+            # Should we make a direct call?
+            aten_name = node.args[0]
+            fx_args = fx_args[1:]
+
         self.builder.add_stat(kind="aten", name=aten_name)
         if aten_name == "getitem":
             return self.getitem(node)
