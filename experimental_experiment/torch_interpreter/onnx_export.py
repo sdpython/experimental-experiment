@@ -236,7 +236,10 @@ class SubModuleNaming:
         type_name = submod.__class__.__name__
         ends = f"<locals>.{type_name}'>"
         if str(type(submod)).endswith(ends):
-            type_name = f"<locals>.{type_name}"
+            type_name = ends[:-2]
+        ends = f"__main__.{type_name}'>"
+        if str(type(submod)).endswith(ends):
+            type_name = ends[:-2]
         if type_name not in self._memo:
             self._memo[type(submod)] = type_name
             self._memo[type_name] = type(submod)
