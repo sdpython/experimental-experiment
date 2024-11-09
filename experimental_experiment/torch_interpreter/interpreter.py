@@ -457,6 +457,7 @@ class DynamoInterpreter:
             parameter_name = (
                 self.parameter_naming(node.name, value, node=node)
                 if isinstance(value, self.builder.torch.nn.Parameter)
+                and "from_node" in node.meta
                 else None
             )
             return self.builder.make_initializer(
