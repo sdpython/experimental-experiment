@@ -36,6 +36,7 @@ class DynamoInterpreter:
     :param optimize_submodules: optimizes submodules after they are built
     :param submodule_naming: a function which returns a submodule name in the onnx graph
     :param parameter_naming: a function which returns a parameter name in the onnx graph
+    :param module_name: module name (makes it easier to retrieve the parameter names)
     """
 
     def _hash(self) -> str:
@@ -52,6 +53,7 @@ class DynamoInterpreter:
         function_options: Optional[FunctionOptions] = None,
         submodule_naming: Optional[Callable] = None,
         parameter_naming: Optional[Callable] = None,
+        module_name: Optional[str] = None,
     ):
         import torch
         from ..xbuilder import FunctionOptions
@@ -95,6 +97,7 @@ class DynamoInterpreter:
         self.parent_interpreter = None
         self.parameter_naming = parameter_naming
         self.submodule_naming = submodule_naming
+        self.module_name = module_name
 
     def register_named_modules(
         self,
@@ -273,7 +276,7 @@ class DynamoInterpreter:
             return None
 
         parameter_name = (
-            self.parameter_naming(node.name, init, node=node)
+            self.parameter_naming(node.name, init, node=node, prefix=self.module_name)
             if isinstance(init, self.builder.torch.nn.Parameter)
             else None
         )
@@ -457,7 +460,6 @@ class DynamoInterpreter:
             parameter_name = (
                 self.parameter_naming(node.name, value, node=node)
                 if isinstance(value, self.builder.torch.nn.Parameter)
-                and "from_node" in node.meta
                 else None
             )
             return self.builder.make_initializer(
@@ -1464,6 +1466,15 @@ class DynamoInterpreter:
             local_domain=local_domain,
             submodule_naming=self.submodule_naming,
             parameter_naming=self.parameter_naming,
+            module_name=(
+                None
+                if (self.module_name is None or source_node is None)
+                else (
+                    source_node.target
+                    if self.module_name == ""
+                    else f"{self.module_name}.{source_node.target}"
+                )
+            ),
         )
         if self.preserved_modules and hasattr(self, "named_modules"):
             assert (

@@ -10,3 +10,4 @@ Exporter Recipes
     exporter_recipes_custom
     exporter_recipes_onnx_export
     errors
+    exporter_strict

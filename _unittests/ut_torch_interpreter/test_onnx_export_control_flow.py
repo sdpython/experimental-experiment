@@ -386,7 +386,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         def add(carry: torch.Tensor, y: torch.Tensor):
             next_carry = carry + y
-            return next_carry, next_carry
+            return [next_carry, next_carry]
 
         class ScanModel(torch.nn.Module):
             def forward(self, x):
@@ -400,7 +400,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         model = ScanModel()
         expected = model(x)
         self.assertEqualArray(expected, x.sum(axis=0))
-        print(torch.export.export(model, (x,), strict=False).graph)
+        print(torch.export.export(model, (x,), strict=True).graph)
 
         onx = to_onnx(model, (x,))
         from experimental_experiment.helpers import pretty_onnx
