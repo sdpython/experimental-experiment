@@ -290,6 +290,16 @@ class ParameterNaming:
                 self._id_modules[new_key] = name
             else:
                 self._id_modules[new_key] = name
+        updates = {}
+        for k in self._idmap:
+            kl = k.lower()
+            if kl == k:
+                continue
+            assert (
+                kl not in self._idmap
+            ), f"Ambiguities for weights {kl!r} and {k!r} in {pprint.pformat(self._idmap)}"
+            updates[kl] = self._idmap[k]
+        self._idmap.update(updates)
 
     def __call__(
         self, name: str, value: "torch.nn.Parameter", node: "torch.fx.Node"  # noqa: F821
