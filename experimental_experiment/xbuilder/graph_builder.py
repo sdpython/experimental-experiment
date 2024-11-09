@@ -6359,15 +6359,21 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.functions_builder[key] = builder
         return f.domain, f.name
 
-    def has_local_function(self, name: str, domain: str = ""):
+    def has_local_function(self, name: str, domain: str = "") -> bool:
         """
         Checks if a local function exists.
         """
         return (domain, name) in self.functions
 
-    def get_local_function_outputs(self, name: str, domain: str = ""):
+    def get_local_function(self, name: str, domain: str = "") -> FunctionProto:
         """
-        Returns the outputs of a local functions.
+        Returns a local function.
+        """
+        return self.functions[domain, name]
+
+    def get_local_function_outputs(self, name: str, domain: str = "") -> List[str]:
+        """
+        Returns the outputs of a local function.
         """
         return self.functions[domain, name].output
 

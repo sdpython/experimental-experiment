@@ -5802,6 +5802,55 @@ def aten_reciprocal(
     return res
 
 
+def aten_scan(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    scan_graph: str,
+    scan_inits: List[str],
+    scan_inputs: List[str],
+    dim: int,
+    reverse: bool,
+    additional_inputs: List[str],
+    name="aten_scan",
+) -> T:
+    "cond"
+    assert g.has_local_function(
+        scan_graph, g.local_domain
+    ), f"Unable to find local function {scan_graph!r}{g.get_debug_msg()}"
+
+    def mkv(name):
+        value_info_proto = ValueInfoProto()
+        value_info_proto.name = name
+        return value_info_proto
+
+    loc = g.get_local_function(scan_graph, g.local_domain)
+    res = g.make_node(
+        "Scan",
+        [*scan_inits, *scan_inputs],
+        outputs,
+        name=name,
+        body=make_graph(
+            [
+                make_node(
+                    scan_graph,
+                    [*loc.input, *additional_inputs],
+                    list(loc.output),
+                    domain=g.local_domain,
+                )
+            ],
+            scan_graph,
+            [mkv(o) for o in loc.input],
+            [mkv(o) for o in loc.output],
+        ),
+        num_scan_inputs=len(scan_inputs),
+        scan_input_directions=[(1 if reverse else 0) for _ in scan_inputs],
+        scan_output_axes=[dim for _ in scan_inputs],
+        scan_output_directions=[(1 if reverse else 0) for _ in scan_inputs],
+    )
+    return res
+
+
 def aten_scatter_add(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

@@ -400,26 +400,28 @@ class TestOnnxExportControlFlow(ExtTestCase):
         model = ScanModel()
         expected = model(x)
         self.assertEqualArray(expected, x.sum(axis=0))
-        print(torch.export.export(model, (x,), strict=True).graph)
+        self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
 
         onx = to_onnx(model, (x,))
-        from experimental_experiment.helpers import pretty_onnx
-
-        print(pretty_onnx)
         names = [(f.domain, f.name) for f in onx.functions]
         self.assertEqual(len(names), len(set(names)))
-        ref = ExtendedReferenceEvaluator(onx)
-        import onnxruntime
 
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (-x, x):
             expected = model(_x)
             feeds = {"x": _x.detach().numpy()}
             got = ref.run(None, feeds)
             self.assertEqualArray(expected, got[0], atol=1e-5)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        for _x in (-x, x):
+            expected = model(_x)
+            feeds = {"x": _x.detach().numpy()}
             got = sess.run(None, feeds)
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
