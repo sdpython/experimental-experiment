@@ -37,6 +37,7 @@ class ExportOptions:
     _allowed = {
         None: {},
         "none": {},
+        "strict": {"strict": True},
         "nostrict": {"strict": False},
         "jit": {"jit": True},
         "fallback": {"fallback": True},
@@ -46,7 +47,7 @@ class ExportOptions:
 
     def __init__(
         self,
-        strict: bool = True,
+        strict: bool = False,
         fallback: bool = False,
         jit: bool = False,
         decomposition_table: Optional[
@@ -103,7 +104,7 @@ class ExportOptions:
         """Returns the fallback scenario."""
         return [
             ExportOptions(decomposition_table=self.decomposition_table),
-            ExportOptions(strict=False, decomposition_table=self.decomposition_table),
+            ExportOptions(strict=True, decomposition_table=self.decomposition_table),
             ExportOptions(dynamo=True, decomposition_table=self.decomposition_table),
             ExportOptions(jit=True, decomposition_table=self.decomposition_table),
         ]

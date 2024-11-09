@@ -381,35 +381,36 @@ class TestOnnxExportControlFlow(ExtTestCase):
             got = sess.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
-
-
     def test_scan(self):
         import torch
 
         def add(carry: torch.Tensor, y: torch.Tensor):
             next_carry = carry + y
-            return next_carry, y
+            return next_carry, next_carry
 
         class ScanModel(torch.nn.Module):
             def forward(self, x):
                 init = torch.zeros_like(x[0])
-                # torch.ops.higher_order.scan(scan_combine_graph_0, [init_1], [xs_1], 0, True, []);
-                carry, out = torch.ops.higher_order.scan(add, [init], [x], dim=0, reverse=False, additional_inputs=[])
+                carry, out = torch.ops.higher_order.scan(
+                    add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+                )
                 return carry
 
         x = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32)
         model = ScanModel()
-        expected = model(x)[0]
+        expected = model(x)
         self.assertEqualArray(expected, x.sum(axis=0))
-        print(torch.export.export(model, (x,)).graph)
+        print(torch.export.export(model, (x,), strict=False).graph)
 
         onx = to_onnx(model, (x,))
         from experimental_experiment.helpers import pretty_onnx
+
         print(pretty_onnx)
         names = [(f.domain, f.name) for f in onx.functions]
         self.assertEqual(len(names), len(set(names)))
         ref = ExtendedReferenceEvaluator(onx)
         import onnxruntime
+
         sess = onnxruntime.InferenceSession(
             onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
