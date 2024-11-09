@@ -142,6 +142,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         names = [i.name for i in onx.graph.initializer]
         self.assertNotIn("p_decoder_feed_forward_linear_1_weight", names)
 
+    @requires_torch("2.6", "owning_module is None")
     def test_dummy_llm(self):
         model, inputs = dummy_llm()
         onx = to_onnx(
