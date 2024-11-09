@@ -1,3 +1,4 @@
+.. _l-pytorch-onnx-examples:
 
 ================
 pytorch and onnx

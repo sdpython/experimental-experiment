@@ -1,5 +1,5 @@
-Example gallery
-===============
+Examples Gallery
+================
 
 A couple of examples to illustrate different implementation
 of dot product (see also :epkg:`sphinx-gallery`).
@@ -28,3 +28,5 @@ all the graphs, the data used to draw them, and the models.
 ::
 
     python _doc/examples/plot_torch_export.py -s large
+
+See :ref:`l-pytorch-onnx-examples` for an organized version of this page.

@@ -228,7 +228,7 @@ class TestTools(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @ignore_warnings(DeprecationWarning)
-    def test_as_function_constant(self):
+    def test_as_function_constant_notfull(self):
         g = GraphBuilder(18, ir_version=9, as_function=True)
         g.make_tensor_input("X", None, None, False)
         np_weights = np.random.randn(4, 3).astype(np.float32)
@@ -237,7 +237,25 @@ class TestTools(ExtTestCase):
         bias = g.make_initializer("bias", np_bias)
         g.op.Add(g.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
         g.make_tensor_output("Y", is_dimension=False, indexed=False)
-        g.move_initializers_to_constant()
+        g.move_initializers_to_constant(full_parameter_name=False)
+        fct = g.to_onnx(function_options=FunctionOptions(name="linear", domain="mine"))
+        feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
+        expected = feeds["X"] @ np_weights + np_bias
+        ref = ExtendedReferenceEvaluator(fct)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+
+    @ignore_warnings(DeprecationWarning)
+    def test_as_function_constant_full(self):
+        g = GraphBuilder(18, ir_version=9, as_function=True)
+        g.make_tensor_input("X", None, None, False)
+        np_weights = np.random.randn(4, 3).astype(np.float32)
+        np_bias = np.random.randn(1, 3).astype(np.float32)
+        init = g.make_initializer("weights", np_weights)
+        bias = g.make_initializer("bias", np_bias)
+        g.op.Add(g.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
+        g.make_tensor_output("Y", is_dimension=False, indexed=False)
+        g.move_initializers_to_constant(full_parameter_name=True)
         fct = g.to_onnx(function_options=FunctionOptions(name="linear", domain="mine"))
         feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
         expected = feeds["X"] @ np_weights + np_bias
@@ -270,8 +288,8 @@ class TestTools(ExtTestCase):
                 return_initializer=True,
             ),
         )
-        self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
-        self.assertEqualArray(g.initializers_dict["Regression_weights"], np_weights)
+        self.assertEqual(new_inits, ["weights", "bias"])
+        self.assertEqualArray(g.initializers_dict["weights"], np_weights)
 
         bias2 = g.make_initializer("bias2", np_bias2)
         g.op.Add(
@@ -287,7 +305,7 @@ class TestTools(ExtTestCase):
                 (
                     "custom",
                     "Regression",
-                    ["X", "Regression_weights", "Regression_bias"],
+                    ["X", "weights", "bias"],
                     ["_onx_regression0"],
                 ),
                 ("", "Add", ["_onx_regression0", "bias2"], ["Y"]),
@@ -311,9 +329,7 @@ class TestTools(ExtTestCase):
         self.assertIsInstance(fct["functions"], list)
         self.assertTrue(all(isinstance(p, FunctionProto) for p in fct["functions"]))
         self.assertIsInstance(fct["initializers_name"], list)
-        self.assertEqual(
-            fct["initializers_name"], ["Regression_weights", "bias2", "Regression_bias"]
-        )
+        self.assertEqual(fct["initializers_name"], ["weights", "bias2", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
             all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
@@ -321,7 +337,7 @@ class TestTools(ExtTestCase):
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])
-        self.assertEqual(proto.input, ["X", "Regression_weights", "bias2", "Regression_bias"])
+        self.assertEqual(proto.input, ["X", "weights", "bias2", "bias"])
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
         f1 = fct["functions"][0]
@@ -332,10 +348,10 @@ class TestTools(ExtTestCase):
 
         feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
         feeds.update(fct["initializers_dict"])
-        self.assertEqualArray(np_weights, feeds["Regression_weights"])
-        self.assertEqualArray(np_bias, feeds["Regression_bias"])
+        self.assertEqualArray(np_weights, feeds["weights"])
+        self.assertEqualArray(np_bias, feeds["bias"])
         self.assertEqualArray(np_bias2, feeds["bias2"])
-        self.assertEqual(set(feeds), {"X", "Regression_weights", "bias2", "Regression_bias"})
+        self.assertEqual(set(feeds), {"X", "weights", "bias2", "bias"})
         expected = feeds["X"] @ np_weights + np_bias + np_bias2
         ref = ExtendedReferenceEvaluator(fct["proto"], functions=fct["functions"])
         got = ref.run(None, feeds)
@@ -423,12 +439,7 @@ class TestTools(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(
             fct["initializers_name"],
-            [
-                "RegressionBias_Regression_weights",
-                "bias3",
-                "RegressionBias_bias2",
-                "RegressionBias_Regression_bias",
-            ],
+            ["weights", "bias3", "bias2", "bias"],
         )
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
@@ -439,13 +450,7 @@ class TestTools(ExtTestCase):
         self.assertEqual(proto.output, ["Y"])
         self.assertEqual(
             proto.input,
-            [
-                "X",
-                "RegressionBias_Regression_weights",
-                "bias3",
-                "RegressionBias_bias2",
-                "RegressionBias_Regression_bias",
-            ],
+            ["X", "weights", "bias3", "bias2", "bias"],
         )
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
@@ -459,22 +464,22 @@ class TestTools(ExtTestCase):
         self.assertEqual(f2.domain, "custom")
         self.assertEqual(f2.name, "RegressionBias")
         self.assertEqual(f2.output, ["Y"])
-        self.assertEqual(f2.input, ["X", "Regression_weights", "bias2", "Regression_bias"])
+        self.assertEqual(f2.input, ["X", "weights", "bias2", "bias"])
 
         feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
         feeds.update(fct["initializers_dict"])
-        self.assertEqualArray(np_weights, feeds["RegressionBias_Regression_weights"])
-        self.assertEqualArray(np_bias, feeds["RegressionBias_Regression_bias"])
-        self.assertEqualArray(np_bias2, feeds["RegressionBias_bias2"])
+        self.assertEqualArray(np_weights, feeds["weights"])
+        self.assertEqualArray(np_bias, feeds["bias"])
+        self.assertEqualArray(np_bias2, feeds["bias2"])
         self.assertEqualArray(np_bias3, feeds["bias3"])
         self.assertEqual(
             set(feeds),
             {
                 "X",
-                "RegressionBias_Regression_weights",
-                "RegressionBias_Regression_bias",
+                "weights",
+                "bias",
                 "bias3",
-                "RegressionBias_bias2",
+                "bias2",
             },
         )
         expected = feeds["X"] @ np_weights + np_bias + np_bias2 + np_bias3
@@ -519,8 +524,8 @@ class TestTools(ExtTestCase):
             ),
         )
         self.assertEqual(len(g.functions), 1)
-        self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
-        self.assertEqualArray(g.initializers_dict["Regression_weights"], np_weights)
+        self.assertEqual(new_inits, ["weights", "bias"])
+        self.assertEqualArray(g.initializers_dict["weights"], np_weights)
 
         # function 3: the same name but different
         gf = GraphBuilder(18, ir_version=9, as_function=True)
@@ -544,8 +549,8 @@ class TestTools(ExtTestCase):
             ),
         )
         self.assertEqual(len(g.functions), 2)
-        self.assertEqual(new_inits, ["Regression_weights", "Regression_bias"])
-        self.assertEqualArray(g.initializers_dict["Regression_weights"], np_weights)
+        self.assertEqual(new_inits, ["weights", "bias"])
+        self.assertEqualArray(g.initializers_dict["weights"], np_weights)
 
         # two functions
         g.op.Add(
@@ -573,12 +578,7 @@ class TestTools(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(
             fct["initializers_name"],
-            [
-                "Regression_weights2",
-                "Regression_weights",
-                "Regression_bias2",
-                "Regression_bias",
-            ],
+            ["weights2", "weights", "bias2", "bias"],
         )
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
@@ -589,13 +589,7 @@ class TestTools(ExtTestCase):
         self.assertEqual(proto.output, ["Y"])
         self.assertEqual(
             proto.input,
-            [
-                "X",
-                "Regression_weights2",
-                "Regression_weights",
-                "Regression_bias2",
-                "Regression_bias",
-            ],
+            ["X", "weights2", "weights", "bias2", "bias"],
         )
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
@@ -721,14 +715,7 @@ class TestTools(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(
             fct["initializers_name"],
-            [
-                "RegressionBias_Regression_weights2",
-                "RegressionBias_Regression_weights",
-                "RegressionBias_bias22",
-                "RegressionBias_bias2",
-                "RegressionBias_Regression_bias2",
-                "RegressionBias_Regression_bias",
-            ],
+            ["weights2", "weights", "bias3", "bias22", "bias2", "bias"],
         )
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
@@ -739,15 +726,7 @@ class TestTools(ExtTestCase):
         self.assertEqual(proto.output, ["Y"])
         self.assertEqual(
             proto.input,
-            [
-                "X",
-                "RegressionBias_Regression_weights2",
-                "RegressionBias_Regression_weights",
-                "RegressionBias_bias22",
-                "RegressionBias_bias2",
-                "RegressionBias_Regression_bias2",
-                "RegressionBias_Regression_bias",
-            ],
+            ["X", "weights2", "weights", "bias3", "bias22", "bias2", "bias"],
         )
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
@@ -761,13 +740,13 @@ class TestTools(ExtTestCase):
         self.assertEqual(f2.domain, "custom")
         self.assertEqual(f2.name, "RegressionBias")
         self.assertEqual(f2.output, ["Y"])
-        self.assertEqual(f2.input, ["X", "Regression_weights", "bias2", "Regression_bias"])
+        self.assertEqual(f2.input, ["X", "weights", "bias2", "bias"])
 
         feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
         feeds.update(fct["initializers_dict"])
-        self.assertEqualArray(np_weights, feeds["RegressionBias_Regression_weights"])
-        self.assertEqualArray(np_bias, feeds["RegressionBias_Regression_bias"])
-        self.assertEqualArray(np_bias2, feeds["RegressionBias_bias2"])
+        self.assertEqualArray(np_weights, feeds["weights"])
+        self.assertEqualArray(np_bias, feeds["bias"])
+        self.assertEqualArray(np_bias2, feeds["bias2"])
         expected = (feeds["X"] @ np_weights + np_bias + np_bias2) * 2
 
         # Evaluation of a function
@@ -887,14 +866,7 @@ class TestTools(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(
             fct["initializers_name"],
-            [
-                "RegressionBias_Regression_weights2",
-                "RegressionBias_Regression_weights",
-                "RegressionBias_bias22",
-                "RegressionBias_bias2",
-                "RegressionBias_Regression_bias2",
-                "RegressionBias_Regression_bias",
-            ],
+            ["weights2", "weights", "bias3", "bias22", "bias2", "bias"],
         )
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
@@ -905,15 +877,7 @@ class TestTools(ExtTestCase):
         self.assertEqual(proto.output, ["Y"])
         self.assertEqual(
             proto.input,
-            [
-                "X",
-                "RegressionBias_Regression_weights2",
-                "RegressionBias_Regression_weights",
-                "RegressionBias_bias22",
-                "RegressionBias_bias2",
-                "RegressionBias_Regression_bias2",
-                "RegressionBias_Regression_bias",
-            ],
+            ["X", "weights2", "weights", "bias3", "bias22", "bias2", "bias"],
         )
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
@@ -927,13 +891,13 @@ class TestTools(ExtTestCase):
         self.assertEqual(f2.domain, "custom")
         self.assertEqual(f2.name, "RegressionBias")
         self.assertEqual(f2.output, ["Y"])
-        self.assertEqual(f2.input, ["X", "Regression_weights", "bias2", "Regression_bias"])
+        self.assertEqual(f2.input, ["X", "weights", "bias2", "bias"])
 
         feeds = dict(X=np.random.randn(2, 4).astype(np.float32))
         feeds.update(fct["initializers_dict"])
-        self.assertEqualArray(np_weights, feeds["RegressionBias_Regression_weights"])
-        self.assertEqualArray(np_bias, feeds["RegressionBias_Regression_bias"])
-        self.assertEqualArray(np_bias2, feeds["RegressionBias_bias2"])
+        self.assertEqualArray(np_weights, feeds["weights"])
+        self.assertEqualArray(np_bias, feeds["bias"])
+        self.assertEqualArray(np_bias2, feeds["bias2"])
         expected = (feeds["X"] @ np_weights + np_bias + np_bias2) * 2
 
         # Evaluation of a function

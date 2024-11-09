@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.xbuilder import FunctionOptions
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.torch_test_helper import dummy_llm
 
 
 class TestOnnxExportSubModules(ExtTestCase):
@@ -134,6 +135,33 @@ class TestOnnxExportSubModules(ExtTestCase):
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    def test_dummy_llm_flat(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(model, inputs, optimize=False, verbose=0)
+        names = [i.name for i in onx.graph.initializer]
+        self.assertNotIn("p_decoder_feed_forward_linear_1_weight", names)
+
+    @requires_torch("2.6", "owning_module is None")
+    def test_dummy_llm(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(
+            model, inputs, export_modules_as_functions=True, optimize=False, verbose=0
+        )
+        node_names = [n.op_type for n in onx.graph.node]
+        self.assertEqual(
+            node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"]
+        )
+        node_names = [n.op_type for n in onx.functions[1].node]
+        self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
+        p_names = set(name for name, _ in model.named_parameters())
+        init_names = set(i.name for i in onx.graph.initializer if "mask" not in i.name)
+        self.assertEqual(len(p_names & init_names), 12)
+        check_model(onx)
+
+        onx2 = to_onnx(model, inputs, optimize=False, verbose=0)
+        init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
+        self.assertEqual(init_names2 & init_names, init_names)
 
 
 if __name__ == "__main__":

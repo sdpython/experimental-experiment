@@ -614,7 +614,11 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
-            to_onnx(model, (example_input,), filename=onnx_file_path)
+            onx, builder = to_onnx(
+                model, (example_input,), filename=onnx_file_path, return_builder=True
+            )
+            self.assertNotEmpty(builder._parameter_renaming)
+            self.assertEqual(len(onx.graph.initializer), 2)
 
         expected_output = model(example_input)
 
@@ -929,7 +933,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         a = torch.tensor([[39906]]).long()
         example_args = (a,)
         model_eval = model.eval()
-        onx = to_onnx(model_eval, example_args)
+        onx = to_onnx(model_eval, example_args, verbose=1)
         with open("test_sequence_ops_embedding_bag_custom.onnx", "wb") as f:
             f.write(onx.SerializeToString())
 
