@@ -45,6 +45,14 @@ Here is an example with scan.
 strict=False
 ===========
 
+'from_node' missing in node.meta
+++++++++++++++++++++++++++++++++
+
+Every node of the obtained with ``strict=False`` has no key ``'from_node'``
+in dictionary ``node.meta``. It is therefore difficult to trace where a parameter
+is coming from unless this information is passed along when looking
+into the submodules.
+
 inplace x[..., i] = y
 +++++++++++++++++++++
 
