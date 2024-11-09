@@ -40,12 +40,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
         with open(filename, "rb") as f:
             onx = onnx.load(f)
-        # co = Counter([n.op_type for n in onx.graph.node])
-        # self.assertEqual(co, {"Add": 2, "Mul": 1})
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got)
 
@@ -68,12 +66,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         )
         with open(filename, "rb") as f:
             onx = onnx.load(f)
-        # co = Counter([n.op_type for n in onx.graph.node])
-        # self.assertEqual(co, {"Add": 2, "Mul": 1})
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got)
 
@@ -88,16 +84,16 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
         self.assertEqual(len(onx.functions), 2)
+        ref = ExtendedReferenceEvaluator(onx)
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got, atol=1e-5)
 
-            sess = onnxruntime.InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
             got = sess.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got, atol=1e-5)
 
@@ -126,10 +122,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
         self.assertEqual(len(onx.functions), 2)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})
             self.assertEqual(len(expected), len(got))
             for e, g in zip(expected, got):
@@ -146,10 +142,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
         self.assertEqual(len(onx.functions), 0)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
             self.assertEqualArray(expected, got, atol=1e-5)
 
@@ -174,10 +170,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
         self.assertEqual(len(onx.functions), 2)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x, y)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy(), "y": y.detach().numpy()})
             self.assertEqual(len(expected), len(got))
             for e, g in zip(expected, got):
@@ -213,10 +209,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
         self.assertEqual(len(onx.functions), 4)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
@@ -247,10 +243,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"Sin": 1})
         self.assertEqual(len(onx.functions), 0)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x,):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
@@ -279,10 +275,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"Sin": 1})
         self.assertEqual(len(onx.functions), 0)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x,):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
@@ -311,10 +307,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
         self.assertEqual(len(onx.functions), 2)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
@@ -325,11 +321,105 @@ class TestOnnxExportControlFlow(ExtTestCase):
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"ReduceSum": 1, "Greater": 1, "If": 1})
         self.assertEqual(len(onx.functions), 0)
+        ref = ExtendedReferenceEvaluator(onx)
 
         for _x in (x, -x):
             expected = model(_x)
-            ref = ExtendedReferenceEvaluator(onx)
             got = ref.run(None, {"x": _x.detach().numpy()})
+            self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    def test_nested_cond(self):
+        import onnxruntime
+        import torch
+
+        class Submodule(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                # Nested weight
+                self.weight = torch.nn.Parameter(torch.tensor([100.0]))
+
+            def forward(self, x):
+                def true_fn(x):
+                    return x * self.weight
+
+                def false_fn(x):
+                    return x / self.weight
+
+                y = torch.cond(torch.abs(x).sum() > 100, true_fn, false_fn, [x])
+                return y
+
+        class CondModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.submodule = Submodule()
+                self.weight = torch.nn.Parameter(torch.tensor([42.0]))
+
+            def forward(self, x):
+                def true_fn(x):
+                    return self.submodule(x)
+
+                def false_fn(x):
+                    return x - self.weight
+
+                y = torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+                return y
+
+        x = torch.tensor([-1, 2])
+        model = CondModel()
+        onx = to_onnx(model, (x,))
+        names = [(f.domain, f.name) for f in onx.functions]
+        self.assertEqual(len(names), len(set(names)))
+        ref = ExtendedReferenceEvaluator(onx)
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+
+        for _x in (x, -x, -x * 1000, x * 1000):
+            expected = model(_x)
+            got = ref.run(None, {"x": _x.detach().numpy()})
+            self.assertEqualArray(expected, got[0], atol=1e-5)
+            got = sess.run(None, {"x": _x.detach().numpy()})
+            self.assertEqualArray(expected, got[0], atol=1e-5)
+
+
+
+    def test_scan(self):
+        import torch
+
+        def add(carry: torch.Tensor, y: torch.Tensor):
+            next_carry = carry + y
+            return next_carry, y
+
+        class ScanModel(torch.nn.Module):
+            def forward(self, x):
+                init = torch.zeros_like(x[0])
+                # torch.ops.higher_order.scan(scan_combine_graph_0, [init_1], [xs_1], 0, True, []);
+                carry, out = torch.ops.higher_order.scan(add, [init], [x], dim=0, reverse=False, additional_inputs=[])
+                return carry
+
+        x = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32)
+        model = ScanModel()
+        expected = model(x)[0]
+        self.assertEqualArray(expected, x.sum(axis=0))
+        print(torch.export.export(model, (x,)).graph)
+
+        onx = to_onnx(model, (x,))
+        from experimental_experiment.helpers import pretty_onnx
+        print(pretty_onnx)
+        names = [(f.domain, f.name) for f in onx.functions]
+        self.assertEqual(len(names), len(set(names)))
+        ref = ExtendedReferenceEvaluator(onx)
+        import onnxruntime
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+
+        for _x in (-x, x):
+            expected = model(_x)
+            feeds = {"x": _x.detach().numpy()}
+            got = ref.run(None, feeds)
+            self.assertEqualArray(expected, got[0], atol=1e-5)
+            got = sess.run(None, feeds)
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
