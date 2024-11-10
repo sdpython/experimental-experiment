@@ -5825,24 +5825,44 @@ def aten_scan(
         return value_info_proto
 
     loc = g.get_local_function(scan_graph, g.local_domain)
+    assert len(loc.output) == len(outputs), (
+        f"Mismatched number of outputs loc.output={loc.output}, "
+        f"outputs={outputs}{g.get_debug_msg()}"
+    )
+    # loc.input is [*scan_inits, *scan_inputs, *additional_inputs]
+    # loc.output is [*scan_inits, *scan_outputs]
+
+    # An issue may occurs if one of the scan input is used by operator Scan
+    # as additional input as well. The algorithm removing identity node
+    # must not remove such node so we add identity node which cannot be remove.
+    if additional_inputs:
+        additional_inputs = [
+            g.op.Identity(
+                a,
+                name="_DONOTREMOVE_Scan_hidden_input_{i}",
+                outputs=[g.unique_name(f"hidden_input_scan_{i}_{a}")],
+            )
+            for i, a in enumerate(additional_inputs)
+        ]
+
+    full_inputs = [*scan_inits, *scan_inputs]
     g.make_node(
         "Scan",
-        [*additional_inputs, *scan_inits, *scan_inputs],
-        [*[f"{a}_" for a in additional_inputs], *outputs],
+        full_inputs,
+        outputs,
         name=name,
         body=make_graph(
             [
                 make_node(
                     scan_graph,
-                    [*loc.input],
-                    list(loc.output),
+                    [*full_inputs, *additional_inputs],
+                    [*loc.output],
                     domain=g.local_domain,
                 ),
-                *[make_node("Identity", [a], [f"{a}_"]) for a in additional_inputs],
             ],
             scan_graph,
-            [mkv(o) for o in loc.input],
-            [mkv(o) for o in [*[f"{a}_" for a in additional_inputs], *loc.output]],
+            [mkv(o) for o in full_inputs],
+            [mkv(o) for o in loc.output],
         ),
         num_scan_inputs=len(scan_inputs),
         scan_input_directions=[(1 if reverse else 0) for _ in scan_inputs],

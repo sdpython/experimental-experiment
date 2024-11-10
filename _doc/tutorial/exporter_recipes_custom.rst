@@ -12,6 +12,7 @@ Control Flow
 ++++++++++++
 
 * :ref:`l-plot-exporter-recipes-custom-cond`
+* :ref:`l-plot-exporter-recipes-custom-pdist`
 
 Custom Operators
 ================

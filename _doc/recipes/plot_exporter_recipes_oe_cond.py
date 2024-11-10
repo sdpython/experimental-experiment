@@ -20,20 +20,20 @@ import torch
 # We define a model with a control flow (-> graph break)
 
 
-class ModuleWithControlFlow(torch.nn.Module):
+class ForwardWithControlFlowTest(torch.nn.Module):
     def forward(self, x):
         if x.sum():
             return x * 2
         return -x
 
 
-class ModelWithControlFlow(torch.nn.Module):
+class ModelWithControlFlowTest(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.mlp = torch.nn.Sequential(
             torch.nn.Linear(3, 2),
             torch.nn.Linear(2, 1),
-            ModuleWithControlFlow(),
+            ForwardWithControlFlowTest(),
         )
 
     def forward(self, x):
@@ -41,7 +41,7 @@ class ModelWithControlFlow(torch.nn.Module):
         return out
 
 
-model = ModelWithControlFlow()
+model = ModelWithControlFlowTest()
 
 ######################################
 # Let's check it runs.
@@ -83,7 +83,7 @@ def new_forward(x):
 print("the list of submodules")
 for name, mod in model.named_modules():
     print(name, type(mod))
-    if isinstance(mod, ModuleWithControlFlow):
+    if isinstance(mod, ForwardWithControlFlowTest):
         mod.forward = new_forward
 
 ####################################

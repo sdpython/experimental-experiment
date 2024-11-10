@@ -22,7 +22,7 @@ from experimental_experiment.torch_interpreter import to_onnx
 # We define a model with a control flow (-> graph break)
 
 
-class ModuleWithControlFlow(torch.nn.Module):
+class ForwardWithControlFlowTest(torch.nn.Module):
     def forward(self, x):
         if x.sum():
             return x * 2
@@ -35,7 +35,7 @@ class ModelWithControlFlow(torch.nn.Module):
         self.mlp = torch.nn.Sequential(
             torch.nn.Linear(3, 2),
             torch.nn.Linear(2, 1),
-            ModuleWithControlFlow(),
+            ForwardWithControlFlowTest(),
         )
 
     def forward(self, x):
@@ -87,7 +87,7 @@ def new_forward(x):
 print("the list of submodules")
 for name, mod in model.named_modules():
     print(name, type(mod))
-    if isinstance(mod, ModuleWithControlFlow):
+    if isinstance(mod, ForwardWithControlFlowTest):
         mod.forward = new_forward
 
 ####################################

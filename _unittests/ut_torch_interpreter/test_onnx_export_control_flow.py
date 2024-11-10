@@ -568,35 +568,26 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqual(expected.shape, (3, 3))
         self.assertEqualArray(expected, torch.cdist(x, x))
         self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
-        # print(torch.export.export(model, (x,), strict=True).graph)
 
-        onx = to_onnx(model, (x,), optimize=False)
-        with open("test_scan_cdist_add.onnx", "wb") as f:
-            f.write(onx.SerializeToString())
-        # from experimental_experiment.helpers import pretty_onnx
-        # print(pretty_onnx(onx))
-        names = [(f.domain, f.name) for f in onx.functions]
-        self.assertEqual(len(names), len(set(names)))
+        for optimize in [False, True]:
+            onx = to_onnx(model, (x,), optimize=optimize)
+            # with open(f"test_scan_cdist_add_{int(optimize)}.onnx", "wb") as f:
+            #     f.write(onx.SerializeToString())
 
-        if False:
-            ref = ExtendedReferenceEvaluator(onx, verbose=10)
+            names = [(f.domain, f.name) for f in onx.functions]
+            self.assertEqual(len(names), len(set(names)))
 
+            # ReferenceEvaluator does not work in this graph
+            import onnxruntime
+
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
             for _x in (-x, x):
                 expected = model(_x)
                 feeds = {"x": _x.detach().numpy()}
-                got = ref.run(None, feeds)
+                got = sess.run(None, feeds)
                 self.assertEqualArray(expected, got[0], atol=1e-5)
-
-        import onnxruntime
-
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        for _x in (-x, x):
-            expected = model(_x)
-            feeds = {"x": _x.detach().numpy()}
-            got = sess.run(None, feeds)
-            self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":
