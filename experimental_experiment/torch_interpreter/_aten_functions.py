@@ -5846,24 +5846,31 @@ def aten_scan(
         ]
 
     full_inputs = [*scan_inits, *scan_inputs]
+    full_inputs_graph = []
+    for i, s in enumerate(scan_inits):
+        full_inputs_graph.append(f"init_{i}_{s}")
+    for i, s in enumerate(scan_inputs):
+        full_inputs_graph.append(f"scan_{i}_{s}")
+
+    body = make_graph(
+        [
+            make_node(
+                scan_graph,
+                full_inputs_graph,
+                [*loc.output],
+                domain=g.local_domain,
+            ),
+        ],
+        scan_graph,
+        [mkv(o) for o in full_inputs_graph],
+        [mkv(o) for o in loc.output],
+    )
     g.make_node(
         "Scan",
         full_inputs,
         outputs,
         name=name,
-        body=make_graph(
-            [
-                make_node(
-                    scan_graph,
-                    [*full_inputs, *additional_inputs],
-                    [*loc.output],
-                    domain=g.local_domain,
-                ),
-            ],
-            scan_graph,
-            [mkv(o) for o in full_inputs],
-            [mkv(o) for o in loc.output],
-        ),
+        body=body,
         num_scan_inputs=len(scan_inputs),
         scan_input_directions=[(1 if reverse else 0) for _ in scan_inputs],
         scan_output_axes=[dim for _ in scan_inputs],

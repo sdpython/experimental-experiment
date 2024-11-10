@@ -403,28 +403,30 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualArray(expected, x.sum(axis=0))
         self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
 
-        onx = to_onnx(model, (x,))
-        names = [(f.domain, f.name) for f in onx.functions]
-        self.assertEqual(len(names), len(set(names)))
+        for optimize in [False, True]:
+            with self.subTest(optimize=optimize):
+                onx = to_onnx(model, (x,), optimize=optimize)
+                names = [(f.domain, f.name) for f in onx.functions]
+                self.assertEqual(len(names), len(set(names)))
 
-        ref = ExtendedReferenceEvaluator(onx)
+                ref = ExtendedReferenceEvaluator(onx)
 
-        for _x in (-x, x):
-            expected = model(_x)
-            feeds = {"x": _x.detach().numpy()}
-            got = ref.run(None, feeds)
-            self.assertEqualArray(expected, got[0], atol=1e-5)
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = ref.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
 
-        import onnxruntime
+                import onnxruntime
 
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        for _x in (-x, x):
-            expected = model(_x)
-            feeds = {"x": _x.detach().numpy()}
-            got = sess.run(None, feeds)
-            self.assertEqualArray(expected, got[0], atol=1e-5)
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_torch("2.6")
     def test_scan_2(self):
@@ -457,30 +459,32 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualArray(expected[0], x.sum(axis=0))
         self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
 
-        onx = to_onnx(model, (x,))
-        names = [(f.domain, f.name) for f in onx.functions]
-        self.assertEqual(len(names), len(set(names)))
+        for optimize in [False, True]:
+            with self.subTest(optimize=optimize):
+                onx = to_onnx(model, (x,), optimize=optimize)
+                names = [(f.domain, f.name) for f in onx.functions]
+                self.assertEqual(len(names), len(set(names)))
 
-        ref = ExtendedReferenceEvaluator(onx)
+                ref = ExtendedReferenceEvaluator(onx)
 
-        for _x in (-x, x):
-            expected = model(_x)
-            feeds = {"x": _x.detach().numpy()}
-            got = ref.run(None, feeds)
-            for e, g in zip(expected, got):
-                self.assertEqualArray(e, g, atol=1e-5)
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = ref.run(None, feeds)
+                    for e, g in zip(expected, got):
+                        self.assertEqualArray(e, g, atol=1e-5)
 
-        import onnxruntime
+                import onnxruntime
 
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        for _x in (-x, x):
-            expected = model(_x)
-            feeds = {"x": _x.detach().numpy()}
-            got = sess.run(None, feeds)
-            for e, g in zip(expected, got):
-                self.assertEqualArray(e, g, atol=1e-5)
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = sess.run(None, feeds)
+                    for e, g in zip(expected, got):
+                        self.assertEqualArray(e, g, atol=1e-5)
 
     @requires_torch("2.6")
     def test_scan_cdist_carry(self):
@@ -513,28 +517,30 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualArray(expected, torch.cdist(x, x))
         self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
 
-        onx = to_onnx(model, (x,))
-        names = [(f.domain, f.name) for f in onx.functions]
-        self.assertEqual(len(names), len(set(names)))
+        for optimize in [False, True]:
+            with self.subTest(optimize=optimize):
+                onx = to_onnx(model, (x,), optimize=optimize)
+                names = [(f.domain, f.name) for f in onx.functions]
+                self.assertEqual(len(names), len(set(names)))
 
-        ref = ExtendedReferenceEvaluator(onx)
+                ref = ExtendedReferenceEvaluator(onx)
 
-        for _x in (-x, x):
-            expected = model(_x)
-            feeds = {"x": _x.detach().numpy()}
-            got = ref.run(None, feeds)
-            self.assertEqualArray(expected, got[0], atol=1e-5)
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = ref.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
 
-        import onnxruntime
+                import onnxruntime
 
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        for _x in (-x, x):
-            expected = model(_x)
-            feeds = {"x": _x.detach().numpy()}
-            got = sess.run(None, feeds)
-            self.assertEqualArray(expected, got[0], atol=1e-5)
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_torch("2.6")
     def test_scan_cdist_add(self):
@@ -570,24 +576,25 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
 
         for optimize in [False, True]:
-            onx = to_onnx(model, (x,), optimize=optimize)
-            # with open(f"test_scan_cdist_add_{int(optimize)}.onnx", "wb") as f:
-            #     f.write(onx.SerializeToString())
+            with self.subTest(optimize=optimize):
+                onx = to_onnx(model, (x,), optimize=optimize)
+                # with open(f"test_scan_cdist_add_{int(optimize)}.onnx", "wb") as f:
+                #     f.write(onx.SerializeToString())
 
-            names = [(f.domain, f.name) for f in onx.functions]
-            self.assertEqual(len(names), len(set(names)))
+                names = [(f.domain, f.name) for f in onx.functions]
+                self.assertEqual(len(names), len(set(names)))
 
-            # ReferenceEvaluator does not work in this graph
-            import onnxruntime
+                # ReferenceEvaluator does not work in this graph
+                import onnxruntime
 
-            sess = onnxruntime.InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
-            for _x in (-x, x):
-                expected = model(_x)
-                feeds = {"x": _x.detach().numpy()}
-                got = sess.run(None, feeds)
-                self.assertEqualArray(expected, got[0], atol=1e-5)
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":
