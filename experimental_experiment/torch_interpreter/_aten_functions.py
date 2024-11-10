@@ -5825,30 +5825,31 @@ def aten_scan(
         return value_info_proto
 
     loc = g.get_local_function(scan_graph, g.local_domain)
-    res = g.make_node(
+    g.make_node(
         "Scan",
-        [*scan_inits, *scan_inputs],
-        outputs,
+        [*additional_inputs, *scan_inits, *scan_inputs],
+        [*[f"{a}_" for a in additional_inputs], *outputs],
         name=name,
         body=make_graph(
             [
                 make_node(
                     scan_graph,
-                    [*loc.input, *additional_inputs],
+                    [*loc.input],
                     list(loc.output),
                     domain=g.local_domain,
-                )
+                ),
+                *[make_node("Identity", [a], [f"{a}_"]) for a in additional_inputs],
             ],
             scan_graph,
             [mkv(o) for o in loc.input],
-            [mkv(o) for o in loc.output],
+            [mkv(o) for o in [*[f"{a}_" for a in additional_inputs], *loc.output]],
         ),
         num_scan_inputs=len(scan_inputs),
         scan_input_directions=[(1 if reverse else 0) for _ in scan_inputs],
         scan_output_axes=[dim for _ in scan_inputs],
         scan_output_directions=[(1 if reverse else 0) for _ in scan_inputs],
     )
-    return res
+    return outputs
 
 
 def aten_scatter_add(
