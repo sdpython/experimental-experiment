@@ -1676,7 +1676,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if name in self.dynamic_objects:
             # The dimension is already registered but it is used for another input.
             _append_to_source(name, input_name, axis, value)
-            return self._known_value_shape[name]
+            return None
 
         assert name not in self.dynamic_objects, (
             f"Dynamic object {name!r}, value={value!r} "

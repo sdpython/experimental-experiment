@@ -266,6 +266,7 @@ class ParameterNaming:
         self._idmap = {}
         self._id_modules = {}
         self.display = {}
+        self._unable_to_map = set()
         for name, p in mod.named_parameters():
             self._idmap[name] = p
             self.display[name] = name
@@ -336,11 +337,12 @@ class ParameterNaming:
             )
 
             key = f"{prefix}.{name}"
-        assert key in self._idmap, (
-            f"Unable to find parameter {name!r} from node {node!r}, key={key!r} "
-            f"with node.meta={pprint.pformat(node.meta)}\n"
-            f"{pprint.pformat(self.display)}"
-        )
+
+        if key not in self._idmap:
+            # There may be unknown name if the module dynamically creates name.
+            self._unable_to_map.add(name)
+            return name
+
         res = self._idmap[key]
         if not isinstance(res, str):
             return key
