@@ -5207,8 +5207,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     replacements = replacements.copy()
                     was_copied = True
                 for i in node.output:
-                    if i.name in to_rename:
-                        del replacements[i.name]
+                    if i in to_rename:
+                        del replacements[i]
                 to_rename = set(replacements)
 
         return oh.make_graph(

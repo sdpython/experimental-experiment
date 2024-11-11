@@ -584,7 +584,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                 names = [(f.domain, f.name) for f in onx.functions]
                 self.assertEqual(len(names), len(set(names)))
 
-                # ReferenceEvaluator does not work in this graph
                 import onnxruntime
 
                 sess = onnxruntime.InferenceSession(

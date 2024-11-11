@@ -5856,7 +5856,7 @@ def aten_scan(
         [
             make_node(
                 scan_graph,
-                full_inputs_graph,
+                [*full_inputs_graph, *additional_inputs],
                 [*loc.output],
                 domain=g.local_domain,
             ),
