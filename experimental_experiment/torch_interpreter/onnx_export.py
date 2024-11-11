@@ -266,6 +266,7 @@ class ParameterNaming:
         self._idmap = {}
         self._id_modules = {}
         self.display = {}
+        self._unable_to_map = set()
         for name, p in mod.named_parameters():
             self._idmap[name] = p
             self.display[name] = name
@@ -336,11 +337,12 @@ class ParameterNaming:
             )
 
             key = f"{prefix}.{name}"
-        assert key in self._idmap, (
-            f"Unable to find parameter {name!r} from node {node!r}, key={key!r} "
-            f"with node.meta={pprint.pformat(node.meta)}\n"
-            f"{pprint.pformat(self.display)}"
-        )
+
+        if key not in self._idmap:
+            # There may be unknown name if the module dynamically creates name.
+            self._unable_to_map.add(name)
+            return name
+
         res = self._idmap[key]
         if not isinstance(res, str):
             return key
@@ -763,60 +765,12 @@ def to_onnx(
 
     verbose = max(verbose, int(os.environ.get("TO_ONNX_VERBOSE", verbose)))
     if verbose:
-        print(f"[to_onnx] build the graph module with input_names={input_names}")
+        print(f"[to_onnx] build the graph module from {type(mod)}, type(args)={type(args)}")
+        if input_names:
+            print(f"[to_onnx] build the graph module with input_names={input_names}")
+        if dynamic_shapes:
+            print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
 
-    if isinstance(dynamic_shapes, tuple):
-        dyn_shapes = dynamic_shapes[0] if is_wrapped(mod, dynamic_shapes) else dynamic_shapes
-        if not input_names:
-            input_names = [f"input{i}" for i in range(len(dyn_shapes))]
-        assert len(input_names) == len(dyn_shapes), (
-            f"Mismatch number of inputs, input_names={input_names!r}, "
-            f"dyn_shapes={dyn_shapes!r}"
-        )
-        dict_dynamic_shapes = dict(zip(input_names, dyn_shapes))
-    elif dynamic_shapes is not None:
-        assert isinstance(
-            dynamic_shapes, dict
-        ), f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes={dynamic_shapes}"
-        dict_dynamic_shapes = dynamic_shapes
-    else:
-        dict_dynamic_shapes = None
-
-    if dynamic_shapes is None:
-        use_dynamic_shapes = None
-    elif input_names:
-        # Let's rewrite the dynamic shapes with the true name
-        use_dynamic_shapes = _replacements_dynamic_shapes(
-            mod,
-            args,
-            kwargs,
-            dynamic_shapes if isinstance(dynamic_shapes, dict) else dict_dynamic_shapes,
-            input_names,
-            verbose=verbose,
-        )
-    else:
-        use_dynamic_shapes = (
-            dynamic_shapes
-            if isinstance(dynamic_shapes, tuple)
-            else _replacements_dynamic_shapes(
-                mod,
-                args,
-                kwargs,
-                dynamic_shapes if isinstance(dynamic_shapes, tuple) else dict_dynamic_shapes,
-                verbose=verbose,
-            )
-        )
-
-    if verbose and dynamic_shapes:
-        print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
-        print(f"[to_onnx] use_dynamic_shapes={use_dynamic_shapes}")
-
-    assert use_dynamic_shapes is None or isinstance(use_dynamic_shapes, (dict, type(args))), (
-        f"type(use_dynamic_shapes)={type(use_dynamic_shapes)} should have the "
-        f"same type as args or a dictionary: {type(args)}, "
-        f"dynamic_shapes={dynamic_shapes}, dict_dynamic_shapes={dict_dynamic_shapes}, "
-        f"use_dynamic_shapes={use_dynamic_shapes}"
-    )
     graph_module, builder, interpreter = _make_builder_interpreter(
         mod=mod,
         args=args,
@@ -827,7 +781,7 @@ def to_onnx(
         optimization_options=options,
         verbose=verbose,
         raise_list=raise_list,
-        dynamic_shapes=use_dynamic_shapes,
+        dynamic_shapes=dynamic_shapes,
         dispatcher=dispatcher,
         export_options=export_options,
         optimize_submodules=optimize,

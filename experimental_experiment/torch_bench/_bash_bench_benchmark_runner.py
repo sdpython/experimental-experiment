@@ -1151,7 +1151,7 @@ class BenchmarkRunner:
         #########
 
         if dynamic:
-            expected_dynamic = model_runner.run_dynamic(wrapped=True)
+            expected_dynamic = model_runner.run_dynamic()
             expected_dynamic = self.move_to("cpu", expected_dynamic)
         else:
             expected_dynamic = None

@@ -1459,7 +1459,8 @@ class DynamoInterpreter:
             verbose=max(0, self.builder.verbose - 1),
             dispatcher=self.dispatcher,
             raise_list=self.builder.raise_list,
-            dynamic_shapes=self.builder.dynamic_shapes,
+            # dynamic shapes applies on the inner graph, not on the subgraph
+            # dynamic_shapes=self.builder.dynamic_shapes,
             export_options=self.export_options,
             optimize_submodules=self.optimize_submodules,
             function_options=self.function_options,

@@ -407,61 +407,6 @@ class ModelRunner:
             return False
         return "LM" in self.model_name
 
-    def get_dynamic_shapes(
-        self,
-        dynamic: bool = False,
-        wrapped: bool = False,
-        input_names: Optional[List[str]] = None,
-    ) -> Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]]:
-        """
-        Returns dynamic shapes specifying the first dimension as dynamic.
-
-        :param dynamic: make it dynamic or not
-        :param wrapped: the model is wrapped into a class defining forward method
-            as ``forward(self, *args, **kargs)``
-        :param input_names: to overwrite the input names,
-            (not used)
-        """
-        if not dynamic:
-            return None
-        assert (
-            input_names is None
-        ), f"This method is not implemented if input_names={input_names!r}"
-        assert input_names is None or len(input_names) == len(self.inputs), (
-            f"Unexpected number of input_names {len(input_names)} != "
-            f"{len(self.inputs)} (expected), input_names={input_names!r}"
-        )
-
-        batch = torch.export.Dim("batch", min=1, max=1024)
-        seq_length = (
-            (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
-        )
-        res = []
-        for i, x in enumerate(self.inputs):
-            if x is None or isinstance(x, (int, float)):
-                res.append(None)
-                continue
-
-            dyn_dims = {0: batch}
-            if seq_length is not None:
-                dyn_dims.update({1: seq_length})
-            if isinstance(x, list):
-                assert all(
-                    _ is None or hasattr(_, "shape") for _ in x
-                ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
-                tries = [dyn_dims if _ is not None and len(_.shape) > 1 else None for _ in x]
-                res.append(tries)
-                continue
-            assert hasattr(
-                x, "shape"
-            ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
-            res.append(dyn_dims if len(x.shape) > 1 else None)
-
-        final = tuple(res)
-        if wrapped:
-            return (final,)
-        return final
-
     def dump_std(self, filename: str):
         """Dumps some information in the given filename."""
         if self.std_to_dump:
@@ -484,8 +429,8 @@ class ModelRunner:
             torch.cuda.nvtx.range_pop()
         return res
 
-    def run_dynamic(self, wrapped: bool = False) -> Any:
-        dynamic_inputs = self.make_dynamic_inputs(wrapped=wrapped)
+    def run_dynamic(self) -> Any:
+        dynamic_inputs = self.make_dynamic_inputs()
         if self.autocast:
             if self.nvtx:
                 torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast.dynamic")
@@ -772,7 +717,6 @@ class ModelRunner:
         export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
-
         if verbose:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
@@ -1097,9 +1041,6 @@ class ModelRunner:
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 
-        if dyn_shapes and isinstance(self.model, WrappedModelBase):
-            dyn_shapes = (dyn_shapes,)
-
         if verbose:
             print(f"[ModelRunner._to_onnx_dynamo] detailed={detailed}, fallback={fallback}")
             print(f"[ModelRunner._to_onnx_dynamo] additional_kwargs={additional_kwargs}")
@@ -1230,7 +1171,10 @@ class ModelRunner:
 
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
-        export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
+        opts = self.export_options or {}
+        if "fallback" not in opts:
+            opts["fallback"] = True
+        export_options = ExportOptions(strategy=strategy or "strict", **opts)
         if verbose:
             print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
             print(f"[ModelRunner._to_export] export_inputs={string_type(export_inputs)!r}")
@@ -1464,6 +1408,59 @@ class ModelRunner:
                 )
         return res, None
 
+    def get_dynamic_shapes(
+        self,
+        dynamic: bool = False,
+        input_names: Optional[List[str]] = None,
+    ) -> Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]]:
+        """
+        Returns dynamic shapes specifying the first dimension as dynamic.
+
+        :param dynamic: make it dynamic or not
+        :param input_names: to overwrite the input names,
+            (not used)
+        """
+        if not dynamic:
+            return None
+        assert (
+            input_names is None
+        ), f"This method is not implemented if input_names={input_names!r}"
+        assert input_names is None or len(input_names) == len(self.inputs), (
+            f"Unexpected number of input_names {len(input_names)} != "
+            f"{len(self.inputs)} (expected), input_names={input_names!r}"
+        )
+
+        batch = torch.export.Dim("batch", min=1, max=1024)
+        seq_length = (
+            (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
+        )
+        res = []
+        for i, x in enumerate(self.inputs):
+            if x is None or isinstance(x, (int, float)):
+                res.append(None)
+                continue
+
+            dyn_dims = {0: batch}
+            if seq_length is not None:
+                dyn_dims.update({1: seq_length})
+            if isinstance(x, list):
+                assert all(
+                    _ is None or hasattr(_, "shape") for _ in x
+                ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
+                tries = [dyn_dims if _ is not None and len(_.shape) > 1 else None for _ in x]
+                res.append(tries)
+                continue
+            assert hasattr(
+                x, "shape"
+            ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
+            res.append(dyn_dims if len(x.shape) > 1 else None)
+
+        final = tuple(res)
+        if isinstance(self.model, WrappedModelBase):
+            # Wrapped dynamic shapes.
+            final = (final,)
+        return final
+
     def _make_export_new_dynamic_shape(
         self,
         input_shape: Tuple[int, ...],
@@ -1494,7 +1491,6 @@ class ModelRunner:
     def make_export_inputs(
         self,
         dynamic: bool = False,
-        wrapped: bool = False,
         inputs: Optional[Tuple[Any, ...]] = None,
         kw_inputs: Optional[Dict[str, Any]] = None,
         int_to_tensor: bool = False,
@@ -1507,7 +1503,6 @@ class ModelRunner:
         if it is 1. These inputs should only be used at export time.
 
         :param dynamic: dynamic, yes or no?
-        :param wrapped: wrapped model
         :param inputs: existing inputs or None to use `self.inputs`
         :param int_to_tensor: converts integers or float to tensors
         :return: new inputs
@@ -1563,16 +1558,9 @@ class ModelRunner:
         assert isinstance(
             inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(inputs)}"
-        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=wrapped)
-        if wrapped:
-            assert isinstance(dynamic_shapes, tuple), (
-                f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
-                f"wrapped={wrapped}, input type is {type(self.inputs)}"
-            )
-            assert len(dynamic_shapes) == 1, (
-                f"Unexpected number of dynamic_shapes {len(dynamic_shapes)}, "
-                f"input type is {type(self.inputs)}"
-            )
+        dynamic_shapes = self.get_dynamic_shapes(dynamic)
+        if isinstance(self.model, WrappedModelBase):
+            # dynamic shapes are wrapped
             dynamic_shapes = dynamic_shapes[0]
 
         dyn_inputs = []
@@ -1639,6 +1627,9 @@ class ModelRunner:
         if dyn_shape is None:
             return input_shape
         new_shape = []
+        if isinstance(self.model, WrappedModelBase):
+            # dynamic shapes are wrapped
+            dyn_shape = dyn_shape[0]
         assert isinstance(dyn_shape, dict), (
             f"Unexpected type for input {i}, "
             f"dyn_shape{dyn_shape}, shape of input[{i}]={input_shape}, "
@@ -1661,7 +1652,6 @@ class ModelRunner:
     def get_input_shapes(
         self,
         dynamic: bool = False,
-        wrapped: bool = False,
         export: bool = False,
         inputs: Optional[Any] = None,
     ) -> Any:
@@ -1669,30 +1659,17 @@ class ModelRunner:
         Returns the input shapes.
 
         :param dynamic: dynamic, yes or no?
-        :param wrapped: wrapped model
         :param inputs: existing inputs or None to use `self.inputs`
         :param export: returns the shapes for the inputs used for export
         :return: new inputs
         """
         if inputs is None:
-            return self.get_input_shapes(
-                dynamic=dynamic, export=export, wrapped=wrapped, inputs=self.inputs
-            )
+            return self.get_input_shapes(dynamic=dynamic, export=export, inputs=self.inputs)
 
         assert isinstance(
             inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(inputs)}"
-        dynamic_shapes = self.get_dynamic_shapes(dynamic, wrapped=wrapped)
-        if dynamic_shapes is not None and wrapped:
-            assert isinstance(dynamic_shapes, tuple), (
-                f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
-                f"wrapped={wrapped}, input type is {type(self.inputs)}"
-            )
-            assert len(dynamic_shapes) == 1, (
-                f"Unexpected number of dynamic_shapes {len(dynamic_shapes)}, "
-                f"input type is {type(self.inputs)}"
-            )
-            dynamic_shapes = dynamic_shapes[0]
+        dynamic_shapes = self.get_dynamic_shapes(dynamic)
         dyn_input_shapes = []
         dyn_values = {}
         for i in range(len(self.inputs)):
@@ -1752,6 +1729,9 @@ class ModelRunner:
         self, input_shape, dyn_shape, dyn_values: Dict[str, Any], i: Optional[int] = None
     ):
         new_shape = []
+        if isinstance(self.model, WrappedModelBase):
+            # dynamic shapes are wrapped
+            dyn_shape = dyn_shape[0]
         assert dyn_shape is None or isinstance(dyn_shape, dict), (
             f"Unexpected type for input {i}, dyn_shape{dyn_shape}, "
             f"shape of input[{i}]={input_shape}"
@@ -1771,7 +1751,7 @@ class ModelRunner:
 
         return tuple(new_shape)
 
-    def make_dynamic_inputs(self, wrapped: bool = False):
+    def make_dynamic_inputs(self):
         """
         Creates dynamic inputs based on the static ones by changing the dynamic
         according to the definition of the dynamic_shapes.
@@ -1779,17 +1759,7 @@ class ModelRunner:
         assert isinstance(
             self.inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
-        dynamic_shapes = self.get_dynamic_shapes(True, wrapped=wrapped)
-        if wrapped:
-            assert isinstance(dynamic_shapes, tuple), (
-                f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes, "
-                f"wrapped={wrapped}, input type is {type(self.inputs)}"
-            )
-            assert len(dynamic_shapes) == 1, (
-                f"Unexpected number of dynamic_shapes {len(dynamic_shapes)}, "
-                f"input type is {type(self.inputs)}"
-            )
-            dynamic_shapes = dynamic_shapes[0]
+        dynamic_shapes = self.get_dynamic_shapes(True)
         dyn_inputs = []
         dyn_values = {}
         for i in range(len(self.inputs)):
