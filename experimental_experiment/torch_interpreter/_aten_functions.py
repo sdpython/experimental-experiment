@@ -5802,6 +5802,83 @@ def aten_reciprocal(
     return res
 
 
+def aten_scan(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    scan_graph: str,
+    scan_inits: List[str],
+    scan_inputs: List[str],
+    dim: int,
+    reverse: bool,
+    additional_inputs: List[str],
+    name="aten_scan",
+) -> T:
+    "cond"
+    assert g.has_local_function(
+        scan_graph, g.local_domain
+    ), f"Unable to find local function {scan_graph!r}{g.get_debug_msg()}"
+
+    def mkv(name):
+        value_info_proto = ValueInfoProto()
+        value_info_proto.name = name
+        return value_info_proto
+
+    loc = g.get_local_function(scan_graph, g.local_domain)
+    assert len(loc.output) == len(outputs), (
+        f"Mismatched number of outputs loc.output={loc.output}, "
+        f"outputs={outputs}{g.get_debug_msg()}"
+    )
+    # loc.input is [*scan_inits, *scan_inputs, *additional_inputs]
+    # loc.output is [*scan_inits, *scan_outputs]
+
+    # An issue may occurs if one of the scan input is used by operator Scan
+    # as additional input as well. The algorithm removing identity node
+    # must not remove such node so we add identity node which cannot be remove.
+    if additional_inputs:
+        additional_inputs = [
+            g.op.Identity(
+                a,
+                name="_DONOTREMOVE_Scan_hidden_input_{i}",
+                outputs=[g.unique_name(f"hidden_input_scan_{i}_{a}")],
+            )
+            for i, a in enumerate(additional_inputs)
+        ]
+
+    full_inputs = [*scan_inits, *scan_inputs]
+    full_inputs_graph = []
+    for i, s in enumerate(scan_inits):
+        full_inputs_graph.append(f"init_{i}_{s}")
+    for i, s in enumerate(scan_inputs):
+        full_inputs_graph.append(f"scan_{i}_{s}")
+
+    body = make_graph(
+        [
+            make_node(
+                scan_graph,
+                [*full_inputs_graph, *additional_inputs],
+                [*loc.output],
+                domain=g.local_domain,
+            ),
+        ],
+        scan_graph,
+        [mkv(o) for o in full_inputs_graph],
+        [mkv(o) for o in loc.output],
+    )
+    g.make_node(
+        "Scan",
+        full_inputs,
+        outputs,
+        name=name,
+        body=body,
+        num_scan_inputs=len(scan_inputs),
+        scan_input_directions=[(1 if reverse else 0) for _ in scan_inputs],
+        scan_output_axes=[dim for _ in scan_inputs],
+        scan_output_directions=[(1 if reverse else 0) for _ in scan_inputs],
+    )
+    return outputs
+
+
 def aten_scatter_add(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

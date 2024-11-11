@@ -19,7 +19,7 @@ from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 class TestIssuesPytorch2024(ExtTestCase):
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     def test_dort(self):
         import torch
 
@@ -228,8 +228,8 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
-            export_options = (
-                ExportOptions(decomposition_table="all") if decomposition else None
+            export_options = ExportOptions(
+                decomposition_table="all" if decomposition else None, strict=True
             )
             to_onnx(
                 model,
@@ -464,7 +464,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
-            to_onnx(model, (example_input,), filename=onnx_file_path, verbose=1)
+            to_onnx(model, (example_input,), filename=onnx_file_path, verbose=0)
 
         import onnxruntime
 
@@ -871,8 +871,8 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
-            export_options = (
-                ExportOptions(decomposition_table="all") if decomposition else None
+            export_options = ExportOptions(
+                decomposition_table="all" if decomposition else None, strict=True
             )
             dn = torch.export.Dim("n")
             to_onnx(
@@ -933,7 +933,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         a = torch.tensor([[39906]]).long()
         example_args = (a,)
         model_eval = model.eval()
-        onx = to_onnx(model_eval, example_args, verbose=1)
+        onx = to_onnx(model_eval, example_args, verbose=0)
         with open("test_sequence_ops_embedding_bag_custom.onnx", "wb") as f:
             f.write(onx.SerializeToString())
 

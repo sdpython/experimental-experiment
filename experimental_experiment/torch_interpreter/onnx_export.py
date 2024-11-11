@@ -302,32 +302,48 @@ class ParameterNaming:
         self._idmap.update(updates)
 
     def __call__(
-        self, name: str, value: "torch.nn.Parameter", node: "torch.fx.Node"  # noqa: F821
+        self,
+        name: str,
+        value: "torch.nn.Parameter",  # noqa: F821
+        node: "torch.fx.Node",  # noqa: F821
+        prefix: Optional[str] = None,
     ) -> str:
         assert isinstance(
             name, str
         ), f"Unexpected type {type(name)} for name{self.get_debug_msg()}"
-        from_node = node.meta["from_node"]
-        assert (
-            len(from_node) == 1
-        ), f"Parameter {name!r} seems shared accross multiple objects{from_node}"
+        if "from_node" in node.meta:
+            from_node = node.meta["from_node"]
+            assert (
+                len(from_node) == 1
+            ), f"Parameter {name!r} seems shared accross multiple objects{from_node}"
+        key = None
         if name.startswith("p_") and name[2:] in self._idmap:
             key = name[2:]
-        else:
+        elif name.startswith("p_fn_"):
+            key = name[len("p_fn_") :]
+        elif "from_node" in node.meta:
             key = f"{from_node[0][1]}_{name}"
             if key.startswith("L__self___"):
                 key = key[len("L__self___") :]
-            elif name.startswith("p_fn_"):
-                key = name[len("p_fn_") :]
-            elif name.startswith("p_"):
-                key = name[len("p_") :]
-            else:
-                key = name
+        elif name in self._idmap:
+            key = name
+        if key is None:
+            assert prefix is not None, (
+                f"Unable to find parameter {name!r} from node {node!r} "
+                f"with a null prefix, "
+                f"with node.meta={pprint.pformat(node.meta)}\n"
+                f"{pprint.pformat(self.display)}"
+            )
+
+            key = f"{prefix}.{name}"
         assert key in self._idmap, (
-            f"Unable to find parameter {name!r} from {from_node!r}, key={key!r}\n"
+            f"Unable to find parameter {name!r} from node {node!r}, key={key!r} "
+            f"with node.meta={pprint.pformat(node.meta)}\n"
             f"{pprint.pformat(self.display)}"
         )
         res = self._idmap[key]
+        if not isinstance(res, str):
+            return key
         assert isinstance(
             res, str
         ), f"Unexpected type for key={key!r}, name={name!r}, type(res)={type(res)!r}"
@@ -354,6 +370,7 @@ def _make_builder_interpreter(
     local_domain: str = "local_functions",
     submodule_naming: Optional[Callable] = None,
     parameter_naming: Optional[Callable] = None,
+    module_name: Optional[str] = None,
 ) -> Tuple[
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
@@ -385,6 +402,7 @@ def _make_builder_interpreter(
     :param local_domain: domain name to use for local functions if not specified
     :param submodule_naming: a function which returns a submodule name in the onnx graph
     :param parameter_naming: a function which returns a parameter name in the onnx graph
+    :param module_name: name of the module, to help retrieve the parameter name
     :return: onnx model
     """
 
@@ -552,6 +570,7 @@ def _make_builder_interpreter(
         function_options=function_options,
         submodule_naming=submodule_naming or SubModuleNaming(mod),
         parameter_naming=parameter_naming or ParameterNaming(mod),
+        module_name=module_name,
     )
     return (exported_program or graph_module), builder, interpreter
 
@@ -813,6 +832,7 @@ def to_onnx(
         export_options=export_options,
         optimize_submodules=optimize,
         function_options=function_options,
+        module_name="",
     )
 
     add_stats = {}

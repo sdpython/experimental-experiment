@@ -5182,12 +5182,35 @@ class GraphBuilder(_GraphBuilderRuntime):
     ) -> GraphProto:
         """
         Renames inputs.
+        There is a weird case when one of the result defined in the inner context
+        is overriden by the subgraph itself. We should assume this case never happens.
         """
-        # graph inputs and outputs should node be changed, initializer as well
+        # graph inputs and outputs should not be changed, initializer as well
         to_rename = set(replacements)
+        was_copied = False
+        if set(i.name for i in graph.input) & to_rename:
+            # An input of the graph is overrides one of the replacements.
+            # The replacement should noe take place then.
+            replacements = replacements.copy()
+            for i in graph.input:
+                if i.name in to_rename:
+                    del replacements[i.name]
+            to_rename = set(replacements)
+            was_copied = True
+
         nodes = []
         for node in graph.node:
             nodes.append(cls._rename_inputs_in_node(node, replacements, to_rename))
+            if set(node.output) & to_rename:
+                # An output overrides a replacement
+                if not was_copied:
+                    replacements = replacements.copy()
+                    was_copied = True
+                for i in node.output:
+                    if i in to_rename:
+                        del replacements[i]
+                to_rename = set(replacements)
+
         return oh.make_graph(
             nodes,
             graph.name,
@@ -6359,15 +6382,21 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.functions_builder[key] = builder
         return f.domain, f.name
 
-    def has_local_function(self, name: str, domain: str = ""):
+    def has_local_function(self, name: str, domain: str = "") -> bool:
         """
         Checks if a local function exists.
         """
         return (domain, name) in self.functions
 
-    def get_local_function_outputs(self, name: str, domain: str = ""):
+    def get_local_function(self, name: str, domain: str = "") -> FunctionProto:
         """
-        Returns the outputs of a local functions.
+        Returns a local function.
+        """
+        return self.functions[domain, name]
+
+    def get_local_function_outputs(self, name: str, domain: str = "") -> List[str]:
+        """
+        Returns the outputs of a local function.
         """
         return self.functions[domain, name].output
 

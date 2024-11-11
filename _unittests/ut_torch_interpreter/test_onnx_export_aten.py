@@ -18,6 +18,7 @@ class TestOnnxExportAten(ExtTestCase):
         decomposition: bool = False,
         verbose: int = 0,
         optimize: bool = False,
+        strict: bool = False,
     ) -> str:
         import torch
 
@@ -27,8 +28,8 @@ class TestOnnxExportAten(ExtTestCase):
         elif exporter == "dynamo":
             torch.onnx.export(model, inputs, filename, dynamo=True)
         else:
-            export_options = (
-                ExportOptions(decomposition_table="all") if decomposition else None
+            export_options = ExportOptions(
+                decomposition_table="all" if decomposition else None, strict=strict
             )
             to_onnx(
                 model,
@@ -98,7 +99,7 @@ class TestOnnxExportAten(ExtTestCase):
         index = torch.from_numpy(np.array([0, 3, 2, 1])).to(torch.int64)
         expected = model(index, update)
         model_path = self._call_exporter(
-            "test_aten_index_put_3d_nd_case_1", "custom", model, (index, update)
+            "test_aten_index_put_3d_nd_case_1", "custom", model, (index, update), strict=True
         )
         check_model(model_path)
 
@@ -132,7 +133,7 @@ class TestOnnxExportAten(ExtTestCase):
         index = torch.from_numpy(np.array([0, 3, 2, 5])).to(torch.int64)
         expected = model(index, update)
         model_path = self._call_exporter(
-            "test_aten_index_put_3d_nd_case_2", "custom", model, (index, update)
+            "test_aten_index_put_3d_nd_case_2", "custom", model, (index, update), strict=True
         )
         check_model(model_path)
 
