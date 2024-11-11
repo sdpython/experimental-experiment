@@ -100,16 +100,20 @@ class ExportOptions:
         ), f"Unexpected type {type(self.decomposition_table)} for decomposition_table"
         return self.decomposition_table
 
-    def get_fallback_options(self) -> List["ExportOptions"]:
+    def get_fallback_options(self, kind: Optional[str] = None) -> List["ExportOptions"]:
         """Returns the fallback scenario."""
-        return [
-            ExportOptions(strict=True, decomposition_table=self.decomposition_table),
-            ExportOptions(strict=False, decomposition_table=self.decomposition_table),
-            ExportOptions(dynamo=True, decomposition_table=self.decomposition_table),
-            ExportOptions(strict=True),
-            ExportOptions(strict=False),
-            ExportOptions(jit=True, decomposition_table=self.decomposition_table),
-        ]
+        if kind is None or kind == "strategy":
+            return [
+                ExportOptions(strict=True, decomposition_table=self.decomposition_table),
+                ExportOptions(strict=False, decomposition_table=self.decomposition_table),
+                ExportOptions(dynamo=True, decomposition_table=self.decomposition_table),
+                ExportOptions(strict=True),
+                ExportOptions(strict=False),
+                ExportOptions(jit=True, decomposition_table=self.decomposition_table),
+            ]
+        if kind == "strict":
+            return [ExportOptions(strict=True), ExportOptions(strict=False)]
+        raise AssertionError(f"Unable to return fallback strategy with kind={kind!r}")
 
     def export(
         self,
@@ -129,9 +133,11 @@ class ExportOptions:
         if self.fallback or self.strategy == "fallback":
             if verbose:
                 print("[ExportOptions.export] fallback")
-            tries = self.get_fallback_options()
+            tries = self.get_fallback_options(self.strategy)
             excs = []
-            for opt in tries:
+            for ion, opt in enumerate(tries):
+                if verbose:
+                    print(f"[ExportOptions.export] tries {ion+1}/{len(tries)}: {opt}")
                 try:
                     return opt.export(
                         mod,
