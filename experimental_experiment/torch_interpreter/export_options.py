@@ -102,7 +102,7 @@ class ExportOptions:
 
     def get_fallback_options(self, kind: Optional[str] = None) -> List["ExportOptions"]:
         """Returns the fallback scenario."""
-        if kind is None or kind == "strategy":
+        if kind is None or kind == "fallback":
             return [
                 ExportOptions(strict=True, decomposition_table=self.decomposition_table),
                 ExportOptions(strict=False, decomposition_table=self.decomposition_table),
