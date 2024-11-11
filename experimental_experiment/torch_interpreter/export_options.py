@@ -102,7 +102,7 @@ class ExportOptions:
 
     def get_fallback_options(self, kind: Optional[str] = None) -> List["ExportOptions"]:
         """Returns the fallback scenario."""
-        if kind is None or kind == "fallback":
+        if kind is None or kind in ("fallback", "fallback-default", "default"):
             return [
                 ExportOptions(strict=True, decomposition_table=self.decomposition_table),
                 ExportOptions(strict=False, decomposition_table=self.decomposition_table),
@@ -113,6 +113,13 @@ class ExportOptions:
             ]
         if kind == "strict":
             return [ExportOptions(strict=True), ExportOptions(strict=False)]
+        if kind == "nostrict":
+            return [ExportOptions(strict=False), ExportOptions(strict=True)]
+        if kind in ("jit"):
+            return [
+                ExportOptions(strict=True),
+                ExportOptions(jit=True, decomposition_table=self.decomposition_table),
+            ]
         raise AssertionError(f"Unable to return fallback strategy with kind={kind!r}")
 
     def export(
