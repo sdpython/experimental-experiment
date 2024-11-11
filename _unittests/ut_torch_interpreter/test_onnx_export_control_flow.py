@@ -1,3 +1,4 @@
+import itertools
 import unittest
 import warnings
 from collections import Counter
@@ -592,6 +593,66 @@ class TestOnnxExportControlFlow(ExtTestCase):
                 for _x in (-x, x):
                     expected = model(_x)
                     feeds = {"x": _x.detach().numpy()}
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @requires_torch("2.6")
+    def test_scan_cdist_dynamic(self):
+        import torch
+
+        def dist(y: torch.Tensor, scanned_x: torch.Tensor):
+            sub = y - scanned_x.reshape((1, -1))
+            sq = sub * sub
+            rd = torch.sqrt(sq.sum(axis=1))
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [y.clone(), rd]
+
+        class ModuleWithControlFlowLoopScan(torch.nn.Module):
+
+            def forward(self, x, y):
+                carry, out = torch.ops.higher_order.scan(
+                    dist,
+                    [y],
+                    [x],
+                    dim=0,
+                    reverse=False,
+                    additional_inputs=[],
+                )
+                return out
+
+        x_rows = torch.export.Dim("x_rows")
+        y_rows = torch.export.Dim("y_rows")
+        dim = torch.export.Dim("dim")
+        dyns = [
+            ({0: x_rows, 1: dim}, {0: y_rows, 1: dim}),
+            {"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}},
+        ]
+        inputs = [
+            (torch.randn(3, 4), torch.randn(5, 4)),
+            (torch.randn(13, 14), torch.randn(15, 14)),
+        ]
+        inputs.append((-inputs[0][0], -inputs[0][1]))
+        model = ModuleWithControlFlowLoopScan()
+
+        for optimize, ds in itertools.product([False, True], dyns):
+            torch.export.export(model, inputs[0], dynamic_shapes=ds)
+            onx = to_onnx(model, inputs[0], optimize=optimize, dynamic_shapes=ds, verbose=2)
+            names = [(f.domain, f.name) for f in onx.functions]
+            self.assertEqual(len(names), len(set(names)))
+            import onnxruntime
+
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            ref = ExtendedReferenceEvaluator(onx)
+
+            for xy in inputs:
+                with self.subTest(optimize=optimize, ds=type(ds), xy=xy[0].shape):
+                    expected = model(*xy)
+                    feeds = {"x": xy[0].detach().numpy(), "y": xy[1].detach().numpy()}
+                    got = ref.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
