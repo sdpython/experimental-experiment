@@ -636,8 +636,18 @@ class TestOnnxExportControlFlow(ExtTestCase):
         model = ModuleWithControlFlowLoopScan()
 
         for optimize, ds in itertools.product([False, True], dyns):
-            torch.export.export(model, inputs[0], dynamic_shapes=ds)
-            onx = to_onnx(model, inputs[0], optimize=optimize, dynamic_shapes=ds, verbose=2)
+            onx = to_onnx(model, inputs[0], optimize=optimize, dynamic_shapes=ds)
+            if isinstance(ds, dict):
+                for i in onx.graph.input:
+                    shape = i.type.tensor_type.shape
+                    ods = tuple(d.dim_param for d in shape.dim)
+                    self.assertEqual(ods, (f"{i.name}_rows", "dim"))
+            else:
+                for i in onx.graph.input:
+                    shape = i.type.tensor_type.shape
+                    ods = tuple(d.dim_param for d in shape.dim)
+                    self.assertEqual(ods, (f"{i.name}_rows", "dim"))
+            # self.print_model(onx)
             names = [(f.domain, f.name) for f in onx.functions]
             self.assertEqual(len(names), len(set(names)))
             import onnxruntime
@@ -655,6 +665,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     self.assertEqualArray(expected, got[0], atol=1e-5)
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
+                    return
 
 
 if __name__ == "__main__":

@@ -103,7 +103,7 @@ ep = torch.export.export(
 print(ep.graph)
 
 ####################################
-# Let's export again.
+# Let's export again with ONNX.
 
 onx = to_onnx(
     model, (x, y), dynamic_shapes={"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}}

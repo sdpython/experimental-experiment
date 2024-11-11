@@ -348,9 +348,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.constraints_ = {}
         self._registered_users = {}
         self.was_inputs_renamed = input_names is not None and input_names
+        self.update_dynamic_shape_when_input_name_is_defined = False
 
-        assert dynamic_shapes is None or isinstance(dynamic_shapes, dict), (
-            f"dynamic_shapes is expected to be empty or a dictionary "
+        assert dynamic_shapes is None or isinstance(dynamic_shapes, (dict, tuple)), (
+            f"dynamic_shapes is expected to be empty or a dictionary or a tuple "
             f"not {type(dynamic_shapes)}, dynamic_shapes={dynamic_shapes}"
         )
 
@@ -431,14 +432,25 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             self.dynamic_shapes is not None
         ), "Call this method if self.dynamic_shapes is not None"
-        for input_name, v in self.dynamic_shapes.items():
+        self.update_dynamic_shape_when_input_name_is_defined = not isinstance(
+            self.dynamic_shapes, dict
+        )
+        seq_dynamic_shapes = (
+            list(self.dynamic_shapes.items())
+            if isinstance(self.dynamic_shapes, dict)
+            else list(enumerate(self.dynamic_shapes))
+        )
+        for input_name_or_position, v in seq_dynamic_shapes:
             if isinstance(v, dict):
                 pos_vv = list(v.items())
             elif isinstance(v, (list, tuple)):
-                pos_vv = [(f"{input_name}_{i}", v[i]) for i in range(len(v))]
+                if isinstance(input_name_or_position, str):
+                    pos_vv = [(f"{input_name_or_position}_{i}", v[i]) for i in range(len(v))]
+                else:
+                    pos_vv = [((input_name_or_position, i), v[i]) for i in range(len(v))]
             else:
                 raise AssertionError(
-                    f"Unexpected value for input_name={input_name!r} and "
+                    f"Unexpected value for input_name={input_name_or_position!r} and "
                     f"v={v}, dynamic_shapes={self.dynamic_shapes}"
                 )
             for pos, vv in pos_vv:
@@ -459,7 +471,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 elif isinstance(vv, self.torch.SymInt):
                     if not self.has_dynamic_object(vv.__name__):
                         self.make_dynamic_object(
-                            vv.__name__, vv, axis=pos, input_name=input_name
+                            vv.__name__, vv, axis=pos, input_name=input_name_or_position
                         )
                 elif isinstance(vv, self.torch.export.dynamic_shapes._DerivedDim):
                     # Used to specify a dimension as a multiple of something
@@ -469,7 +481,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             vv.__name__,
                             self.torch.SymInt(vv.__name__),
                             axis=pos,
-                            input_name=input_name,
+                            input_name=input_name_or_position,
                         )
                     # It should be recursive.
                     if not self.has_dynamic_object(vv.root.__name__):
@@ -485,7 +497,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             vv.__name__,
                             self.torch.SymInt(vv.__name__),
                             axis=pos,
-                            input_name=input_name,
+                            input_name=input_name_or_position,
                         )
                 else:
                     raise AssertionError(
@@ -2660,6 +2672,19 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         self.current_input += 1
         elem_type = _get_type(elem_type)
+
+        if self.update_dynamic_shape_when_input_name_is_defined:
+            #
+            # dynamic shapes were defined as tuple,
+            # we need to propagate the information to the names
+            # dynamic_dimensions_source={'dim': [{'axis': 1, 'input_name': 0}]}
+            for _k, v in self.dynamic_dimensions_source.items():
+                for d in v:
+                    if isinstance(d["input_name"], int) and d["input_name"] == len(
+                        self.inputs
+                    ):
+                        d["input_name"] = input_name
+
         dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
         self._fill_dynamic_alias(shape, name)
         new_dyn_shape = self._fill_dynamic_alias(dyn_shape, name)
