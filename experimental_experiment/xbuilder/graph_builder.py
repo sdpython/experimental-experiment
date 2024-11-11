@@ -653,8 +653,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         for k, v in sorted(self._dynamic_alias.items()):
             rows.append(f"dynals: {k} -> {_d(v)}")
         if self.dynamic_shapes:
-            for k, v in sorted(self.dynamic_shapes.items()):
-                rows.append(f"dynshp: {k} -> {_d(v)}")
+            if isinstance(self.dynamic_shapes, dict):
+                for k, v in sorted(self.dynamic_shapes.items()):
+                    rows.append(f"d-dynshp: {k} -> {_d(v)}")
+            else:
+                for k, v in enumerate(self.dynamic_shapes):
+                    rows.append(f"t-dynshp: {k} -> {_d(v)}")
         # the rest
         for k, v in self.opsets.items():
             rows.append(f"opset: {k}: {v}")
@@ -2645,6 +2649,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     [name],
                     name="make_tensor_input_id",
                 )
+            assert (
+                not self.update_dynamic_shape_when_input_name_is_defined
+            ), f"not yet implemented for {self.dynamic_shapes}"
         else:
             if is_dimension:
                 # The convention is to have _dim_ in the name to tell
@@ -2678,12 +2685,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             # dynamic shapes were defined as tuple,
             # we need to propagate the information to the names
             # dynamic_dimensions_source={'dim': [{'axis': 1, 'input_name': 0}]}
-            for _k, v in self.dynamic_dimensions_source.items():
+            for dim_name, v in self.dynamic_dimensions_source.items():
                 for d in v:
                     if isinstance(d["input_name"], int) and d["input_name"] == len(
                         self.inputs
                     ):
                         d["input_name"] = input_name
+                        if shape:
+                            axis = d["axis"]
+                            shape = tuple(
+                                dim_name if i == axis else shape[i] for i in range(len(shape))
+                            )
 
         dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
         self._fill_dynamic_alias(shape, name)
@@ -4289,6 +4301,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node2.doc_string = node.doc_string
                 node2.name = node.name
                 node2.op_type = node.op_type
+                node2.domain = node.domain
                 node2.input.extend([self._parameter_renaming.get(i, i) for i in node.input])
                 node2.output.extend(node.output)
 

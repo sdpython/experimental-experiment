@@ -527,6 +527,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         opts = onnxruntime.SessionOptions()
         append_custom_libraries(onx, opts)
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        # self.print_model(onx)
 
         for i in range(0, len(input_tensors)):
             expected = model(*input_tensors[i])
