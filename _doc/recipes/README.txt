@@ -12,3 +12,25 @@ ways to rewrite them so that the exporter works.
 
 See :ref:`l-exporter-recipes` for an organized version of this gallery.
 
+A couple of examples to illustrate different implementation
+of dot product (see also :epkg:`sphinx-gallery`).
+
+Getting started
++++++++++++++++
+
+pytorch nightly build should be installed, see
+`Start Locally <https://pytorch.org/get-started/locally/>`_.
+
+::
+
+    git clone https://github.com/sdpython/experimental-experiment.git
+    pip install onnxruntime-gpu pynvml
+    pip install -r requirements-dev.txt    
+    export PYTHONPATH=$PYTHONPATH:<this folder>
+
+Common Errors
++++++++++++++
+
+Some of them are exposed in the examples. Others may be found at
+:ref:`l-frequent-exporter-errors`.
+

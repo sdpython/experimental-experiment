@@ -126,8 +126,16 @@ class LayerNormalizationPattern(PatternOptimization):
             if g.has_shape(red.input[0]):
                 shape = g.get_shape(red.input[0])
                 if isinstance(shape[-1], int):
-                    scale = g.make_initializer("", np.ones((shape[-1],), dtype=dtype))
-                    bias = g.make_initializer("", np.zeros((shape[-1],), dtype=dtype))
+                    scale = g.make_initializer(
+                        "",
+                        np.ones((shape[-1],), dtype=dtype),
+                        source="LayerNormalizationPattern.apply.1",
+                    )
+                    bias = g.make_initializer(
+                        "",
+                        np.zeros((shape[-1],), dtype=dtype),
+                        source="LayerNormalizationPattern.apply.1",
+                    )
         else:
             ly_axis = min(axis)
         if scale is None:

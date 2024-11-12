@@ -280,7 +280,16 @@ class DynamoInterpreter:
             if isinstance(init, self.builder.torch.nn.Parameter)
             else None
         )
-        self.builder.make_initializer(node.name, init, parameter_name=parameter_name)
+        self.builder.make_initializer(
+            node.name,
+            init,
+            parameter_name=parameter_name,
+            source=(
+                f"DynamoInterpret.get_attr.1/P({parameter_name})"
+                if parameter_name
+                else "DynamoInterpret.get_attr.0"
+            ),
+        )
         return node.name
 
     def _make_tensor_input(
@@ -463,7 +472,14 @@ class DynamoInterpreter:
                 else None
             )
             return self.builder.make_initializer(
-                node.name, value, parameter_name=parameter_name
+                node.name,
+                value,
+                parameter_name=parameter_name,
+                source=(
+                    f"DynamoInterpret.placeholder.1/P({parameter_name})"
+                    if parameter_name
+                    else "DynamoInterpret.placeholder.0"
+                ),
             )
 
         if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):

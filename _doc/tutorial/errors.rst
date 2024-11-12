@@ -1,7 +1,9 @@
 
-===================
-Frequent Exceptions
-===================
+.. _l-frequent-exporter-errors:
+
+===============================================
+Frequent Exceptions or Errors with the Exporter
+===============================================
 
 Unsupported functions or classes
 ================================

@@ -348,7 +348,15 @@ def _cast_inputs(
         else:
             a = np.array(a)
     if isinstance(a, np.ndarray):
-        return g.make_initializer("", a.astype(tensor_dtype_to_np_dtype(itype)))
+        return g.make_initializer(
+            "",
+            a.astype(tensor_dtype_to_np_dtype(itype)),
+            source=(
+                f"shape_type_compute._cast_inputs.1({name})"
+                if name
+                else "shape_type_compute._cast_inputs.0"
+            ),
+        )
     raise RuntimeError(f"Unexpected type {type(a)}, itype={itype}.")
 
 

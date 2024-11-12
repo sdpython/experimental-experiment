@@ -602,9 +602,16 @@ class GraphBuilderPatternOptimization:
         return self.builder.opsets[""]
 
     def make_initializer(
-        self, name: str, value: Any, external: bool = False, msg: str = ""
+        self,
+        name: str,
+        value: Any,
+        external: bool = False,
+        msg: str = "",
+        source: Optional[str] = None,
     ) -> str:
-        new_name = self.builder.make_initializer(name, value, external=external, msg=msg)
+        new_name = self.builder.make_initializer(
+            name, value, external=external, msg=msg, source=source
+        )
         return new_name
 
     def unique_name(self, prefix: str) -> str:
