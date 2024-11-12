@@ -1107,7 +1107,7 @@ class EasyPatternOptimization(PatternOptimization):
                     name = g.make_initializer(
                         new_outputs[0],
                         value,
-                        source=f"EasyPatternOptimization.constant/from({name})",
+                        source=f"EasyPatternOptimization.constant/from({new_outputs[0]})",
                     )
                     assert name == new_outputs[0], f"Name mismatch {name} != {new_outputs[0]}"
                     continue

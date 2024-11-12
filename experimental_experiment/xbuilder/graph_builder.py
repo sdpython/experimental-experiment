@@ -3689,11 +3689,18 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"FakeTensor {name!r} cannot be an initializer {type(value)}"
                         f"{self.get_debug_msg()}"
                     )
+                src = (
+                    ""
+                    if init.name not in builder.initializers_dict_sources
+                    or not builder.initializers_dict_sources[init.name].source
+                    else f"##{builder.initializers_dict_sources[init.name].source}"
+                )
                 self.add_initializer(
                     name,
                     value,
                     itype=builder._known_types[init],
                     shape=builder._known_shapes[init],
+                    source=f"GraphBuilder.make_nodes/from{init.name}{src}",
                 )
 
             for k, v in builder.dynamic_objects.items():
@@ -5120,7 +5127,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             if only_array and isinstance(value, TensorProto):
                 # Should reuse memory buffer here.
                 v = onh.to_array(value)
-                self.add_initializer(name, v, existing=True, allow_empty=allow_empty)
+                src = (
+                    ""
+                    if name not in self.initializers_dict_sources
+                    or not self.initializers_dict_sources[name].source
+                    else f"##{self.initializers_dict_sources[name].source}"
+                )
+                self.add_initializer(
+                    name,
+                    v,
+                    existing=True,
+                    allow_empty=allow_empty,
+                    source=f"GraphBuilder.compute_constant/from({name}){src}",
+                )
                 return v, None
             if isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
                 return None, None
@@ -6058,9 +6077,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.ir_version = proto.ir_version
         self.nodes = list(proto.graph.node)
         for i in proto.graph.initializer:
-            self.add_initializer(i.name, i, allow_empty=True)
+            self.add_initializer(
+                i.name,
+                i,
+                allow_empty=True,
+                source=f"GraphBuilder._update_structures_with_proto.1/from({i.name})",
+            )
         for i in proto.graph.sparse_initializer:
-            self.add_initializer(i.name, i, allow_empty=True)
+            self.add_initializer(
+                i.name,
+                i,
+                allow_empty=True,
+                source=f"GraphBuilder._update_structures_with_proto.2/from({i.name})",
+            )
         self.functions = {}
         self.functions_builder = {}
         for f in proto.functions:
@@ -6454,7 +6483,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if i not in new_inits:
                     new_inits.append(i)
             for k, v in inits.items():
-                new_name = self.add_initializer(self.unique_name(k), v)
+                new_name = self.add_initializer(
+                    self.unique_name(k),
+                    v,
+                    source=f"GraphBuilder.make_local_function/from({k})",
+                )
                 repl[k] = new_name
             new_inits = [repl.get(i, i) for i in new_inits]
         else:
