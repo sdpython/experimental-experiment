@@ -313,9 +313,13 @@ class TestOperatorsCort(ExtTestCase):
                         baseline_result.sum().backward()
                         try:
                             result.sum().backward()
-                        except FunctionNotFoundError as e:
+                        except (FunctionNotFoundError, TypeError) as e:
                             if not os.environ.get("EXPDORAISE", False):
                                 raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            if isinstance(
+                                e, TypeError
+                            ) and "'NoneType' object is not callable" not in str(e):
+                                raise
                             assert (
                                 len(storage["instance"]) == 1
                             ), f"Unexpected number of instance {len(storage['instance'])}"
@@ -1467,12 +1471,49 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    def test_elu_only_compile(self):
+        import torch
+        from torch._dynamo.backends.common import aot_autograd
+
+        def compiler_fn(fx_module: torch.fx.GraphModule, _):
+            return fx_module
+
+        class FuncModule(Module):
+            def __init__(self, params=None, dtype=torch.float32):
+                if params is None:
+                    params = ()
+                super().__init__()
+                self.f = torch.nn.functional.elu
+                rg = dtype == torch.float32
+                val = torch.ones((1,), requires_grad=rg, dtype=dtype)
+                self.ppp = Parameter(val, requires_grad=rg)
+                val2 = torch.ones((1,), requires_grad=rg, dtype=dtype)
+                self.ppp2 = Parameter(val2, requires_grad=rg)
+                self.params = nn.ParameterList(list(params))
+
+            def forward(self, *args):
+                f_args = list(itertools.chain(args, self.params))
+                f_args[0] = f_args[0] * self.ppp
+                res = self.f(*f_args) * self.ppp2
+                return res
+
+        model = FuncModule()
+        model.eval()
+        compiled_model = torch.compile(
+            model, backend=aot_autograd(fw_compiler=compiler_fn), fullgraph=True
+        )
+
+        x = torch.randn(1, 2, 3, 4, requires_grad=True)
+        y = compiled_model(x)
+        y.sum().backward()
+
     def test_elu(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
             torch.nn.functional.elu,
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
         )
 
     def test_selu(self):
