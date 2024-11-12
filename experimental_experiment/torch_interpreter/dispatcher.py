@@ -253,7 +253,9 @@ class ForceDispatcher(Dispatcher):
                     new_args.append(n)
                     continue
                 if isinstance(n, g.torch.Tensor):
-                    init = g.make_initializer("", n)
+                    init = g.make_initializer(
+                        "", n, source=f"ForceDispatcher.fallback.wrapper.{i}"
+                    )
                     new_args.append(init)
                     continue
                 if not sig:

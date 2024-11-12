@@ -1565,6 +1565,56 @@ class BenchmarkRunner:
                 stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                 if time_first_iter is not None:
                     stats["time_warmup_first_iteration"] = time_first_iter
+            elif exporter == "flaggems":
+                # no try, catch needed for eager mode.
+                if quiet:
+                    try:
+                        import flag_gems
+
+                        with flag_gems.use_gems():
+                            begin = time.perf_counter()
+                            time_first_iter = None
+                            for _ in range(warmup):
+                                if self.nvtx:
+                                    torch.cuda.nvtx.range_push("FLAGGEMS-WARMUP")
+                                if _ == warmup - 1:
+                                    got = sess.run(feeds)
+                                else:
+                                    sess.run(feeds)
+                                if time_first_iter is None:
+                                    time_first_iter = time.perf_counter() - begin
+                                if self.nvtx:
+                                    torch.cuda.nvtx.range_pop()
+                            stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                            if time_first_iter is not None:
+                                stats["time_warmup_first_iteration"] = time_first_iter
+                    except Exception as e:
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                            traceback.print_tb(e.__traceback__, file=sys.stdout)
+                        stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
+                        stats["time_warmup_fail"] = time.perf_counter() - begin
+                        return stats
+                else:
+                    import flag_gems
+
+                    with flag_gems.use_gems():
+                        begin = time.perf_counter()
+                        time_first_iter = None
+                        for _ in range(warmup):
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("FLAGGEMS-WARMUP")
+                            if _ == warmup - 1:
+                                got = sess.run(feeds)
+                            else:
+                                sess.run(feeds)
+                            if time_first_iter is None:
+                                time_first_iter = time.perf_counter() - begin
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
+                        stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                        if time_first_iter is not None:
+                            stats["time_warmup_first_iteration"] = time_first_iter
             else:
                 with bypass_export_some_errors():
                     # flattened classes needs to be registered again to be able to
@@ -1641,7 +1691,7 @@ class BenchmarkRunner:
                         if is_cuda:
                             torch.cuda.synchronize()
                         if self.nvtx:
-                            torch.cuda.nvtx.range_push("CPL-ITER")
+                            torch.cuda.nvtx.range_push("EAGER-ITER")
                         begin = time.perf_counter()
                         sess.run(feeds)
                         if is_cuda:
@@ -1649,6 +1699,22 @@ class BenchmarkRunner:
                         lats.append(time.perf_counter() - begin)
                         if self.nvtx:
                             torch.cuda.nvtx.range_pop()
+                elif exporter == "flaggems":
+                    import flag_gems
+
+                    with flag_gems.use_gems():
+                        for _ in range(repeat):
+                            if is_cuda:
+                                torch.cuda.synchronize()
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("FLAGGEMS-ITER")
+                            begin = time.perf_counter()
+                            sess.run(feeds)
+                            if is_cuda:
+                                torch.cuda.synchronize()
+                            lats.append(time.perf_counter() - begin)
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
                 else:
                     # flattened classes needs to be registered again to be able to
                     # execute the fx graph.

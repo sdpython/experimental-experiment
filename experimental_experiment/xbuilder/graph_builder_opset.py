@@ -146,8 +146,14 @@ class Opset:
                     f"inputs={inputs!r}, op_type={op_type!r}, i.shape={i.shape}"
                     f"{self.builder.get_debug_msg()}"
                 )
+                if i.dtype == np.int64 and i.size < 16:
+                    source = "Opset.make_node.1/Shape"
+                elif i.size < 2:
+                    source = "Opset.make_node.1/Small"
+                else:
+                    source = "Opset.make_node.0"
                 cst_name = self.builder.make_initializer(
-                    "", i, msg=f"input {i} of op_type={op_type!r}"
+                    "", i, msg=f"input {i} of op_type={op_type!r}", source=source
                 )
                 new_inputs.append(cst_name)
             else:

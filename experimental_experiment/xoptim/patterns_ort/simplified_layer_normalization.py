@@ -107,12 +107,20 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         dtype = oh.tensor_dtype_to_np_dtype(stash_type)
         if shape is not None and isinstance(shape[axis], int):
             # a constant
-            scale = g.make_initializer("", np.array([1] * shape[axis], dtype=dtype))
+            scale = g.make_initializer(
+                "",
+                np.array([1] * shape[axis], dtype=dtype),
+                source="SimplifiedLayerNormalizationPattern.apply.scale",
+            )
         else:
             sh = g.make_node(
                 "Shape", [node_pow.input[0]], name=f"{self.__class__.__name__}--{nname}"
             )
-            axis_name = g.make_initializer("", np.array([axis], dtype=np.int64))
+            axis_name = g.make_initializer(
+                "",
+                np.array([axis], dtype=np.int64),
+                source="SimplifiedLayerNormalizationPattern.apply.axis",
+            )
             ga = g.make_node(
                 "Gather",
                 [sh.output[0], axis_name],

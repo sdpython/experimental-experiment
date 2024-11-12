@@ -159,6 +159,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param dynamic_shapes: dynamic shapes
     :param local_domain: domain name to use for local functions if not specified
     :param signature: the signature is unused but helps for debugging purposes
+    :param check_empty_source: checks source are not empty
 
     Important attributes:
 
@@ -168,6 +169,8 @@ class GraphBuilder(_GraphBuilderRuntime):
     - `optimization_options: OptimizationOptions`:
     - `nodes: List[NodeProto]`: list of nodes
     - `initializers_dict: Dict[str, Any]`: initializers
+    - `initializers_dict_sources: Dict[str, InitializerInfo]`:
+      information about where the initiliazers was created
     - `inputs: List[ValueInfoTensorProto]`: inputs
     - `outputs: List[ValueInfoTensorProto]`: outputs
     - `ir_version: int`: ir version
@@ -265,6 +268,34 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return None
             raise AssertionError(f"Unexpected type {type(obj)} to convert into string")
 
+    class InitializerInfo:
+        """
+        Tracks the location where the initializer was created.
+
+        :param name: initializer name
+        :param source: information
+        :param same_as: same as an existing initializers
+        """
+
+        def __init__(self, name: str, source: str, same_as: Optional[str] = None):
+            self.name = name
+            self.source = source
+            self.same_as = same_as
+
+        def __repr__(self) -> str:
+            if self.same_as:
+                return (
+                    f"InitializerInfo({self.name!r}, source={self.source!r}, "
+                    f"same_as={self.same_as!r})"
+                )
+            return f"InitializerInfo({self.name!r}, source={self.source!r})"
+
+        def add_source(self, source: str):
+            """
+            Adds other sources.
+            """
+            self.source += f"##{source}"
+
     # Size of a tensor kept in the onnx file and not stored as exrternal weight.
     SMALL_TENSOR = 1024
 
@@ -286,6 +317,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         local_domain: str = "local_function",
         signature: Optional[Any] = None,
+        check_empty_source: bool = False,
     ):
         import torch
 
@@ -317,9 +349,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.constants_alias_ = {}
         self._events = {}
         self.signature = signature
+        self.check_empty_source = check_empty_source
 
         self.nodes = []
         self.initializers_dict = {}
+        self.initializers_dict_sources = {}
         self.inputs = []
         self.outputs = []
 
@@ -655,7 +689,22 @@ class GraphBuilder(_GraphBuilderRuntime):
         for k, v in self.opsets.items():
             rows.append(f"opset: {k}: {v}")
         for k, v in self.initializers_dict.items():
-            rows.append(f"init: {k}: {_v(v)}")
+            if (
+                k in self.initializers_dict_sources
+                and self.initializers_dict_sources[k].source
+            ):
+                t = f"init: {k}: {_v(v)}"
+                rows.append(
+                    f"{t}{' '*max(2,70-len(t))} -- {self.initializers_dict_sources[k].source}"
+                )
+            else:
+                rows.append(f"init: {k}: {_v(v)}")
+        for k, v in self.initializers_dict_sources.items():
+            if (
+                k not in self.initializers_dict_sources
+                or not self.initializers_dict_sources[k].source
+            ):
+                rows.append(f"init-source: {k}: {v}")
         for i in self.input_names:
             rows.append(_io(i, "input:"))
         for node in self.nodes:
@@ -1756,7 +1805,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         input_name = source["input_name"]
         shape_name = self.unique_name(f"_onx_shape_{name}")
         self.make_node("Shape", [input_name], [shape_name], name="_get_dimension_as_result")
-        axis_name = self.make_initializer("", np.array([axis], dtype=np.int64))
+        axis_name = self.make_initializer(
+            "",
+            np.array([axis], dtype=np.int64),
+            source="GraphBuilder.get_dimension_as_result.axis_name",
+        )
         self.make_node(
             "Gather", [shape_name, axis_name], [name], name="_get_dimension_as_result"
         )
@@ -1770,7 +1823,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             shape, (list, tuple)
         ), f"Unexpected type {type(shape)} for shape{self.get_debug_msg()}"
         if all_int(shape):
-            return self.make_initializer("", np.array(shape, dtype=np.int64))
+            return self.make_initializer(
+                "",
+                np.array(shape, dtype=np.int64),
+                source="GraphBuilder.make_shape_from_results.shape",
+            )
 
         key = []
         for d in shape:
@@ -1797,7 +1854,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         conc = []
         for d in shape:
             if isinstance(d, int):
-                conc.append(self.make_initializer("", np.array([d], dtype=np.int64)))
+                conc.append(
+                    self.make_initializer(
+                        "",
+                        np.array([d], dtype=np.int64),
+                        source="GraphBuilder.make_shape_from_results.conc",
+                    ),
+                )
             elif isinstance(d, str):
                 value = d
                 if value in self.dynamic_objects_rev:
@@ -1886,6 +1949,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         external: bool = False,
         msg: str = "",
         parameter_name: Optional[str] = None,
+        source: str = "",
     ) -> str:
         """
         Adds an initializer to the graph.
@@ -1901,6 +1965,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param parameter_name: the parameter name is different than its name in the fx graph,
             they are restored when the model is finally exported into onnx,
             until then, the mapping is kept in attribute ``_parameter_renaming``
+        :param source: any additional information, this field is usually used to
+            let the number know where the initializer was created.
         :return: name of the initializer
         """
         if external:
@@ -1937,7 +2003,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 ), f"Empty name cannot be used with parameter_name={parameter_name!r}"
                 new_name = self._values[key]
                 assert new_name in self.initializers_dict, f"Unable to find {new_name!r}"
+                self._append_initializer_source(new_name, source, existing=True)
                 return new_name
+            self._append_initializer_source(name, source, same_as=key)
             return self.make_node(
                 "Identity",
                 [self._values[key]],
@@ -1964,9 +2032,45 @@ class GraphBuilder(_GraphBuilderRuntime):
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
 
         self.add_initializer(
-            name, value, itype=itype, shape=shape, key=key, parameter_name=parameter_name
+            name,
+            value,
+            itype=itype,
+            shape=shape,
+            key=key,
+            parameter_name=parameter_name,
+            source=source,
         )
         return name
+
+    def _append_initializer_source(
+        self, name: str, source: str, same_as: Optional[str] = None, existing: bool = False
+    ):
+        """
+        Gathers information related to an initializer.
+
+        :param name: name of the initializer
+        :param source: any kind of string, it should not be empty
+        :param same_as: the initializer was detected as a duplicate of an existing one,
+            this field reflects that.
+        :param existing: does it already exists?
+        """
+        if existing:
+            assert name in self.initializers_dict_sources, (
+                f"Initializer {name!r} does not exist, source={source!r}, "
+                f"{self.get_debug_msg()}"
+            )
+            self.initializers_dict_sources[name].add_source(source)
+            return
+        assert name not in self.initializers_dict_sources, (
+            f"Initializer {name!r} was already added to the model, source={source!r}, "
+            f"existing is {self.initializers_dict_sources[name]!r}{self.get_debug_msg()}"
+        )
+        assert (
+            not self.check_empty_source or source
+        ), f"source is null for initializer {name!r}"
+        self.initializers_dict_sources[name] = GraphBuilder.InitializerInfo(
+            name, source, same_as=same_as
+        )
 
     def add_initializer(
         self,
@@ -1979,6 +2083,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         existing: bool = False,
         allow_empty: bool = False,
         parameter_name: Optional[str] = None,
+        source: str = "",
     ):
         """
         Adds an initializer.
@@ -1996,6 +2101,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param parameter_name: the parameter name is different than its name in the fx graph,
             they are restored when the model is finally exported into onnx,
             until then, the mapping is kept in attribute ``_parameter_renaming``
+        :param source: any additional information, this field is usually used to
+            let the number know where the initializer was created.
         """
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
@@ -2049,6 +2156,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._unique_names.add(name)
 
         self.initializers_dict[name] = value
+        self._append_initializer_source(name, source, existing=existing)
 
         if parameter_name and parameter_name != name:
             # We want a specific name for this one, let's keep that information in
@@ -2060,6 +2168,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._parameter_renaming[name] = parameter_name
             self._parameter_norename.add(parameter_name)
             self.initializers_dict[parameter_name] = value
+            self._append_initializer_source(
+                parameter_name, source, existing=existing, same_as=name
+            )
             self.set_name(parameter_name, marker="parameter_name")
             self.set_shape(parameter_name, self.get_shape(name))
             self.set_type(parameter_name, self.get_type(name))
@@ -2349,7 +2460,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(dim, int):
             if keep_const:
                 return np.array([dim], dtype=np.int64)
-            return self.make_initializer("", np.array([dim], dtype=np.int64))
+            return self.make_initializer(
+                "",
+                np.array([dim], dtype=np.int64),
+                source="GraphBuilder.get_dynamic_dimension.dim",
+            )
         assert isinstance(
             dim, (str, self.torch.SymInt)
         ), f"Unexpected type {type(dim)} for dim={dim}{self.get_debug_msg()}"
@@ -3289,7 +3404,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     inputs = inputs[:1]
                 elif opset >= 13 and len(inputs) == 1:
-                    name = self.make_initializer("", np.array(kwargs["axes"], dtype=np.int64))
+                    name = self.make_initializer(
+                        "",
+                        np.array(kwargs["axes"], dtype=np.int64),
+                        source="GraphBuilder._partial_rewrite_opset_version.axes",
+                    )
                     inputs.append(name)
                     del kwargs["axes"]
         return inputs, kwargs
@@ -3570,11 +3689,18 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"FakeTensor {name!r} cannot be an initializer {type(value)}"
                         f"{self.get_debug_msg()}"
                     )
+                src = (
+                    ""
+                    if init.name not in builder.initializers_dict_sources
+                    or not builder.initializers_dict_sources[init.name].source
+                    else f"##{builder.initializers_dict_sources[init.name].source}"
+                )
                 self.add_initializer(
                     name,
                     value,
                     itype=builder._known_types[init],
                     shape=builder._known_shapes[init],
+                    source=f"GraphBuilder.make_nodes/from{init.name}{src}",
                 )
 
             for k, v in builder.dynamic_objects.items():
@@ -3646,13 +3772,19 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"Unexpected type {type(external_threshold)} for external_threshold"
         new_inits = {}
         large_inits = {}
-        for k, v in self.initializers_dict.items():
+        for k, v in sorted(self.initializers_dict.items()):
             if self._parameter_renaming and (
                 (full_parameter_name and k in self._parameter_renaming)
                 or (not full_parameter_name and k not in self._parameter_norename)
             ):
                 # Those parameters are present under another name already.
                 continue
+            doc_string = (
+                self.initializers_dict_sources[k].source
+                if k in self.initializers_dict_sources
+                and self.initializers_dict_sources[k].source
+                else ""
+            )
             itype = self.get_type(k)
             shape = self.get_shape(k)
             size = np.prod(shape) * self.elem_size(itype)
@@ -3661,6 +3793,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 location = f"#{k}"
                 nt = make_large_tensor_proto(location, k, itype, shape)
+                nt.doc_string += doc_string
                 new_inits[k] = nt
                 large_inits[location] = v
         return new_inits, large_inits
@@ -3673,7 +3806,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         full_parameter_name: bool = True,
     ) -> Tuple[List[TensorProto], Dict[str, TensorProto]]:
         """
-        Builds initializers.
+        Builds initializers. Initializers are sorted by name.
 
         :param large_model: build with a large container
         :param switch_low_high: invert low, high precision
@@ -3709,19 +3842,26 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"switch low/high order"
                 )
             initializer = []
-            for k, v in init_dict.items():
+            for k, v in sorted(init_dict.items()):
                 if self._parameter_renaming and (
                     (full_parameter_name and k in self._parameter_renaming)
                     or (not full_parameter_name and k not in self._parameter_norename)
                 ):
                     # Those parameters are present under another name already.
                     continue
+                doc_string = (
+                    self.initializers_dict_sources[k].source
+                    if k in self.initializers_dict_sources
+                    and self.initializers_dict_sources[k].source
+                    else ""
+                )
                 if isinstance(v, TensorProto):
                     if self.verbose > 1:
                         print(
                             f"[GraphBuilder-{self._hash()}._build_initializers] "
                             f"TensorProto-{k}:{v.data_type}[{tuple(v.dims)}]"
                         )
+                    v.doc_string += doc_string
                     initializer.append(v)
                     continue
 
@@ -3742,6 +3882,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         getattr(TensorProto, "INT4", 0),
                     }:
                         t = onh.from_array(v, name=k)
+                        t.doc_string += doc_string
                         initializer.append(t)
                         continue
 
@@ -3749,11 +3890,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 elif isinstance(v, np.float32):
                     # This should not happen.
                     t = onh.from_array(np.array([v], dtype=np.float32), name=k)
+                    t.doc_string += doc_string
                     initializer.append(t)
                     continue
                 elif isinstance(v, np.float16):
                     # This should not happen.
                     t = onh.from_array(np.array([v], dtype=np.float16), name=k)
+                    t.doc_string += doc_string
                     initializer.append(t)
                     continue
                 else:
@@ -3777,6 +3920,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     with self.maybe_disable_fake_tensor_mode():
                         tensor = proto_from_array(v, name=k, verbose=self.verbose)
 
+                tensor.doc_string += doc_string
                 initializer.append(tensor)
 
             if self.verbose:
@@ -3801,12 +3945,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             ):
                 # Those parameters are present under another name already.
                 continue
+            doc_string = (
+                self.initializers_dict_sources[k].source
+                if k in self.initializers_dict_sources
+                and self.initializers_dict_sources[k].source
+                else ""
+            )
             if isinstance(v, TensorProto):
+                v.doc_string += doc_string
                 res.append(v)
                 continue
             if isinstance(v, self.torch.Tensor):
                 # no string tensor
                 t = self.from_array(v, name=k)
+                t.doc_string += doc_string
                 res.append(t)
                 continue
             if isinstance(v, np.ndarray):
@@ -3816,6 +3968,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"onh.from_array:{k}:{v.dtype}[{v.shape}]"
                     )
                 t = onh.from_array(v, name=k)
+                t.doc_string += doc_string
                 res.append(t)
                 continue
             raise TypeError(
@@ -4020,9 +4173,15 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
         for name, init in self.initializers_dict.items():
             sval = "" if _size(init) > 5 else f":{_values(init)}"
+            source = (
+                self.initializers_dict_sources[name].source
+                if name in self.initializers_dict_sources
+                else "?"
+            )
             rows.append(
                 f"[GraphBuilder-{hs}.make_initializer] "
-                f"{name}[{_dtype(init)}:{_shape(init)}{sval}]"
+                f"{name}[{_dtype(init)}:{_shape(init)}{sval}] "
+                f"- SOURCE: {source}"
             )
             if len(rows) > limit:
                 rows.append("...")
@@ -4195,10 +4354,15 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self._parameter_renaming:
                 # Adding the true names back.
                 update = {}
+                update_source = {}
                 for k, v in self.initializers_dict.items():
                     if k in self._parameter_renaming:
                         update[self._parameter_renaming[k]] = v
+                        update_source[self._parameter_renaming[k]] = (
+                            self.initializers_dict_sources[k]
+                        )
                 self.initializers_dict.update(update)
+                self.initializers_dict_sources.update(update_source)
 
         assert len(self.nodes) > 0, (
             f"The onnx model is empty after optimization (no node)."
@@ -4393,6 +4557,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"The optimization was not applied. There are two many nodes identity"
             f"\n{self.pretty_text()}"
         )
+        if self.check_empty_source:
+            for init in model.graph.initializer:
+                assert init.doc_string, (
+                    f"doc_string is missing for initializer {init.name!r}"
+                    f"\n{self.pretty_text()}"
+                )
 
         if large_model:
             lm = TorchModelContainer()
@@ -4400,6 +4570,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             if large_initializers:
                 lm.set_large_initializers(large_initializers)
                 lm.check_large_initializers()
+                if self.check_empty_source:
+                    for init in lm.model_proto.graph.initializer:
+                        assert init.doc_string, (
+                            f"doc_string is missing for initializer {init.name!r}"
+                            f"\n{self.pretty_text()}"
+                        )
             return (lm, stats) if return_optimize_report else lm
 
         return (model, stats) if return_optimize_report else model
@@ -4900,13 +5076,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                     v = self.initializers_dict[k]
                     if hasattr(v, "dtype") and hasattr(v, "shape"):
                         print(
-                            f"[GraphBuilder.remove_unused] {i}/{len(self.initializers_dict)}"
-                            f"remove_initializer:{k}:{v.dtype}[{v.shape}]"
+                            f"[GraphBuilder.remove_unused] remove_initializer {n_not_marked}:"
+                            f"{i}/{len(self.initializers_dict)}:{k}:{v.dtype}[{v.shape}]"
                         )
                     else:
                         print(
                             f"[GraphBuilder.remove_unused] remove_initializer {n_not_marked}:"
-                            f"{i}/{len(self.initializers_dict)}: {k}]"
+                            f"{i}/{len(self.initializers_dict)}:{k}"
                         )
 
         self.initializers_dict = {
@@ -4951,7 +5127,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             if only_array and isinstance(value, TensorProto):
                 # Should reuse memory buffer here.
                 v = onh.to_array(value)
-                self.add_initializer(name, v, existing=True, allow_empty=allow_empty)
+                src = (
+                    ""
+                    if name not in self.initializers_dict_sources
+                    or not self.initializers_dict_sources[name].source
+                    else f"##{self.initializers_dict_sources[name].source}"
+                )
+                self.add_initializer(
+                    name,
+                    v,
+                    existing=True,
+                    allow_empty=allow_empty,
+                    source=f"GraphBuilder.compute_constant/from({name}){src}",
+                )
                 return v, None
             if isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
                 return None, None
@@ -5156,7 +5344,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"{[type(i) for i in feeds.values()]})"
                             f"{self.get_debug_msg()}"
                         )
-                        self.add_initializer(name, value, existing=None)
+                        sources = []
+                        for k in feeds:
+                            sources.append(
+                                f"##{k}/"
+                                if k not in self.initializers_dict_sources
+                                or not self.initializers_dict_sources[k].source
+                                else f"##{k}/{self.initializers_dict_sources[k].source}"
+                            )
+                        text_sources = "".join(sources) if sources else ""
+                        self.add_initializer(
+                            name,
+                            value,
+                            existing=None,
+                            source=f"GraphBuilder.constant_folding.from/fold"
+                            f"({','.join(sorted(feeds))}){text_sources}",
+                        )
                     else:
                         updates[name] = v
                     if self.verbose > 3:
@@ -5390,6 +5593,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"FakeTensor {k!r} cannot be an initializer "
                     f"{type(self.initializers_dict[k])}{self.get_debug_msg()}"
                 )
+                source = (
+                    ""
+                    if k not in self.initializers_dict_sources
+                    or not self.initializers_dict_sources[k].source
+                    else f"##{self.initializers_dict_sources[k].source}"
+                )
                 self.add_initializer(
                     v,
                     self.initializers_dict[k],
@@ -5397,6 +5606,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     shape=self.get_shape(k),
                     cst=self.constants_[k],
                     existing=None,
+                    source=f"GraphBuilder.remove_identity_nodes/from({k}){source}",
                 )
                 del self.initializers_dict[k]
                 del self.constants_[k]
@@ -5867,9 +6077,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.ir_version = proto.ir_version
         self.nodes = list(proto.graph.node)
         for i in proto.graph.initializer:
-            self.add_initializer(i.name, i, allow_empty=True)
+            self.add_initializer(
+                i.name,
+                i,
+                allow_empty=True,
+                source=f"GraphBuilder._update_structures_with_proto.1/from({i.name})",
+            )
         for i in proto.graph.sparse_initializer:
-            self.add_initializer(i.name, i, allow_empty=True)
+            self.add_initializer(
+                i.name,
+                i,
+                allow_empty=True,
+                source=f"GraphBuilder._update_structures_with_proto.2/from({i.name})",
+            )
         self.functions = {}
         self.functions_builder = {}
         for f in proto.functions:
@@ -6263,7 +6483,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if i not in new_inits:
                     new_inits.append(i)
             for k, v in inits.items():
-                new_name = self.add_initializer(self.unique_name(k), v)
+                new_name = self.add_initializer(
+                    self.unique_name(k),
+                    v,
+                    source=f"GraphBuilder.make_local_function/from({k})",
+                )
                 repl[k] = new_name
             new_inits = [repl.get(i, i) for i in new_inits]
         else:
@@ -6831,7 +7055,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param full_parameter_name: keeps the local name or the full name for the parameters
         :param threshold: only move intializers to constant if their size is below this limit
         :param verbose: verbosity
-        :return: number of moves iniatliazers
+        :return: number of moved initializers
         """
         if not self.initializers_dict:
             return
@@ -6861,6 +7085,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 [proto.name],
                 value=proto,
                 name=self.unique_node_name("init2cst"),
+                doc_string=f"move_initializers_to_constant/{proto.doc_string}",
             )
             cst_nodes.append(cst)
             self.add_constant_node(cst)

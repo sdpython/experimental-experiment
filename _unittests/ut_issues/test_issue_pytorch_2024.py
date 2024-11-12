@@ -20,6 +20,7 @@ from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 class TestIssuesPytorch2024(ExtTestCase):
 
     @ignore_warnings((UserWarning, FutureWarning))
+    @requires_onnxruntime_training(ortmodule=True)
     def test_dort(self):
         import torch
 

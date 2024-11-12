@@ -375,7 +375,11 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             perm=[1, 0],
             name=f"{self.__class__.__name__}--{trees[0].name}",
         )
-        new_shape = g.make_initializer("", np.array([-1, 1], dtype=np.int64))
+        new_shape = g.make_initializer(
+            "",
+            np.array([-1, 1], dtype=np.int64),
+            source="TreeEnsembleRegressorConcatPattern.apply.new_shape",
+        )
         reshape = g.make_node(
             "Reshape",
             [transpose_output, new_shape],

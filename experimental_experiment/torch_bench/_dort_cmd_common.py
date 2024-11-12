@@ -39,11 +39,25 @@ def get_fused_aten_ops_dispatcher():
         # itype = g.get_type(value)
         # dtype = tensor_dtype_to_np_dtype(itype)
         t_compute_log_sumexp = g.make_initializer(
-            "", np.array(compute_log_sumexp, dtype=np.bool_)
+            "",
+            np.array(compute_log_sumexp, dtype=np.bool_),
+            source="onnx_scaled_dot_product_efficient_attention.t_compute_log_sumexp",
         )
-        t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
-        t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
-        t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
+        t_dropout_p = g.make_initializer(
+            "",
+            np.array(dropout_p, dtype=np.float32),
+            source="onnx_scaled_dot_product_efficient_attention.t_dropout_p",
+        )
+        t_is_causal = g.make_initializer(
+            "",
+            np.array(is_causal, dtype=np.bool_),
+            source="onnx_scaled_dot_product_efficient_attention.t_is_causal",
+        )
+        t_scale = g.make_initializer(
+            "",
+            np.array(scale or 1.0, dtype=np.float32),
+            source="onnx_scaled_dot_product_efficient_attention.t_scale",
+        )
         output, log_sumexp, philox_seed, philox_offset = g.make_node(
             "ATen",
             [
@@ -116,10 +130,26 @@ def get_fused_aten_ops_dispatcher():
             f"Unexpected kwargs {kwargs} in "
             f"onnx_scaled_dot_product_attention_backward{g.get_debug_msg()}"
         )
-        t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
-        t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
-        t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
-        t_grad_input_mask = g.make_initializer("", np.array(grad_input_mask, dtype=np.int64))
+        t_scale = g.make_initializer(
+            "",
+            np.array(scale or 1.0, dtype=np.float32),
+            source="onnx_scaled_dot_product_attention_backward.t_scale",
+        )
+        t_dropout_p = g.make_initializer(
+            "",
+            np.array(dropout_p, dtype=np.float32),
+            source="onnx_scaled_dot_product_attention_backward.t_dropout_p",
+        )
+        t_is_causal = g.make_initializer(
+            "",
+            np.array(is_causal, dtype=np.bool_),
+            source="onnx_scaled_dot_product_attention_backward.t_is_causal",
+        )
+        t_grad_input_mask = g.make_initializer(
+            "",
+            np.array(grad_input_mask, dtype=np.int64),
+            source="onnx_scaled_dot_product_attention_backward.t_grad_input_mask",
+        )
         # onnxruntime fails with type inference failed
         # Let's add some Cast even if not needed.
         dt = g.get_type(grad)

@@ -1071,7 +1071,9 @@ class EasyPatternOptimization(PatternOptimization):
         # Creation of the new initializers
         for name, init in new_pat.builder.initializers_dict.items():
             # We add them to the graph, they will be removed if unused.
-            new_name = g.make_initializer(name, init)
+            new_name = g.make_initializer(
+                name, init, source=f"EasyPatternOptimization.init/from({name})"
+            )
             replacements[new_name] = name
 
         # Creation of the new node.
@@ -1102,7 +1104,11 @@ class EasyPatternOptimization(PatternOptimization):
                 size = np.prod(value.dims)
                 if size >= g.builder.optimization_options.constant_size:
                     # We check the size to convert it into initializer if needed.
-                    name = g.make_initializer(new_outputs[0], value)
+                    name = g.make_initializer(
+                        new_outputs[0],
+                        value,
+                        source=f"EasyPatternOptimization.constant/from({new_outputs[0]})",
+                    )
                     assert name == new_outputs[0], f"Name mismatch {name} != {new_outputs[0]}"
                     continue
 

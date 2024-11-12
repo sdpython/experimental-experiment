@@ -7,7 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 class SlicesSplitPattern(PatternOptimization):
     """
-    Detects multiple slices into a split.
+    Merges multiple parallel slices into a split.
     """
 
     def match(
@@ -113,7 +113,9 @@ class SlicesSplitPattern(PatternOptimization):
             cst_ends[-1] = shape[axis]
         n_els = [cst_ends[i] - cst_starts[i] for i in range(len(starts))]
 
-        splits = g.make_initializer("", np.array(n_els, dtype=np.int64))
+        splits = g.make_initializer(
+            "", np.array(n_els, dtype=np.int64), source="SlicesSplitPattern.apply.splits"
+        )
         outputs = [op.output[0] for op in nodes]
         node = g.make_node(
             "Split",

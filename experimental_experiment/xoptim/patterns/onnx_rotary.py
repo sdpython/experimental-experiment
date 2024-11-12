@@ -569,7 +569,11 @@ class RotaryConcatPartPattern(PatternOptimization):
             dim_left = slice_left_def[1][0] - slice_left_def[0][0]
             dim_right = slice_right_def[1][0] - slice_right_def[0][0]
 
-            splits = g.make_initializer("", np.array([dim_left, dim_right], dtype=np.int64))
+            splits = g.make_initializer(
+                "",
+                np.array([dim_left, dim_right], dtype=np.int64),
+                source="RotaryConcatPartPattern.apply.splits",
+            )
 
             split = g.make_node(
                 "Split",

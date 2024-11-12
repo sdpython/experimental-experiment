@@ -206,7 +206,7 @@ class OxsOpset:
                 new_inputs.append(i.name)
             else:
                 cst_name = self.builder.make_initializer(
-                    "", i, msg=f"input {i} of op_type={op_type!r}"
+                    "", i, msg=f"input {i} of op_type={op_type!r}", source="OxsOpset.cst"
                 )
                 new_inputs.append(cst_name)
 

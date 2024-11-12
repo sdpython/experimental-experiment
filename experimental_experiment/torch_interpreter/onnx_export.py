@@ -543,6 +543,7 @@ def _make_builder_interpreter(
         dynamic_shapes=dynamic_shapes,
         local_domain=local_domain,
         signature=inspect.signature(mod.forward),
+        check_empty_source=True,
     )
 
     def retrieve(

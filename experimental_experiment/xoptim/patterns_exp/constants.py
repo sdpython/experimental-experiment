@@ -108,7 +108,9 @@ class TriMatrixPattern(PatternOptimization):
         assert csts_array.shape == (3,), f"Wrong constant array: {csts_array}"
 
         cst_name = g.make_initializer(
-            f"{self.__class__.__name__}--{where_node.name}", csts_array
+            f"{self.__class__.__name__}--{where_node.name}",
+            csts_array,
+            source="TriMatrixPattern.apply.cst",
         )
         new_node = g.make_node(
             "TriMatrix",

@@ -280,7 +280,16 @@ class DynamoInterpreter:
             if isinstance(init, self.builder.torch.nn.Parameter)
             else None
         )
-        self.builder.make_initializer(node.name, init, parameter_name=parameter_name)
+        self.builder.make_initializer(
+            node.name,
+            init,
+            parameter_name=parameter_name,
+            source=(
+                f"DynamoInterpret.get_attr.1/P({parameter_name})"
+                if parameter_name
+                else "DynamoInterpret.get_attr.0"
+            ),
+        )
         return node.name
 
     def _make_tensor_input(
@@ -463,7 +472,14 @@ class DynamoInterpreter:
                 else None
             )
             return self.builder.make_initializer(
-                node.name, value, parameter_name=parameter_name
+                node.name,
+                value,
+                parameter_name=parameter_name,
+                source=(
+                    f"DynamoInterpret.placeholder.1/P({parameter_name})"
+                    if parameter_name
+                    else "DynamoInterpret.placeholder.0"
+                ),
             )
 
         if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):
@@ -688,7 +704,9 @@ class DynamoInterpreter:
         # axes
         aaxes = np.array(axes, dtype=np.int64)
         axes_name = self.builder.unique_name(f"{node.name}_axis")
-        self.builder.make_initializer(axes_name, aaxes)
+        self.builder.make_initializer(
+            axes_name, aaxes, source="DynamoInterpreter._getitem_slice.axis.1"
+        )
 
         shape_value = None
         if self.builder.has_shape(input_name):
@@ -723,7 +741,9 @@ class DynamoInterpreter:
 
                     aaxis = np.array([axis], dtype=np.int64)
                     axis_name = self.builder.unique_name(f"{node.name}_axis_{axis}")
-                    self.builder.make_initializer(axis_name, aaxis)
+                    self.builder.make_initializer(
+                        axis_name, aaxis, source="DynamoInterpreter._getitem_slice.axis.2"
+                    )
 
                     end_name = self.builder.unique_name(f"{node.name}_end")
                     self.builder.make_node(
@@ -775,7 +795,9 @@ class DynamoInterpreter:
                 f"Unexpected value for ends={ends}: {[type(_) for _ in ends]}"
                 f"{self.builder.get_debug_msg()}"
             )
-            conc_ends = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
+            conc_ends = self.builder.make_initializer(
+                "", np.array(ends, dtype=np.int64), source="DynamoInterpreter._getitem_slice.1"
+            )
 
         assert all_int(steps), (
             f"Not implemented for steps={steps} (types are "
@@ -785,6 +807,7 @@ class DynamoInterpreter:
             conc_starts = self.builder.make_initializer(
                 self.builder.unique_name(f"{node.name}_start"),
                 np.array(starts, dtype=np.int64),
+                source="DynamoInterpreter._getitem_slice.2",
             )
         else:
             istarts = []
@@ -821,6 +844,7 @@ class DynamoInterpreter:
             self.builder.make_initializer(
                 self.builder.unique_name(f"{node.name}_step"),
                 np.array(steps, dtype=np.int64),
+                source="DynamoInterpreter._getitem_slice.3",
             ),
         ]
 
@@ -939,7 +963,9 @@ class DynamoInterpreter:
             # The user mean to access the first element of a tensor or a sequence
             if self.builder.is_sequence(result_name):
                 # A sequence
-                tpos = self.builder.make_initializer("", np.array(index, dtype=np.int64))
+                tpos = self.builder.make_initializer(
+                    "", np.array(index, dtype=np.int64), source="DynamoInterpreter.getitem.1"
+                )
                 res = self.builder.make_node(
                     "SequenceAt",
                     [result_name, tpos],

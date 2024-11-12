@@ -142,9 +142,13 @@ def aten_meth_mean(
 ) -> T:
     "reducemean"
     if isinstance(dim, int):
-        cst = g.make_initializer("", np.array([dim], dtype=np.int64))
+        cst = g.make_initializer(
+            "", np.array([dim], dtype=np.int64), source="aten_meth_mean.cst.1"
+        )
     elif isinstance(dim, tuple):
-        cst = g.make_initializer("", np.array(dim, dtype=np.int64))
+        cst = g.make_initializer(
+            "", np.array(dim, dtype=np.int64), source="aten_meth_mean.cst.2"
+        )
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim.")
     res = g.op.ReduceMeanAnyOpset(
@@ -172,10 +176,19 @@ def aten_meth_pow(
     assert isinstance(x, str), f"Unexpected type {type(x)} (x={x!r}, exponent={exponent!r})"
     if isinstance(exponent, (int, float)):
         cst = g.make_initializer(
-            "", np.array(exponent, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
+            "",
+            np.array(
+                exponent,
+                dtype=tensor_dtype_to_np_dtype(g.get_type(x)),
+            ),
+            source="aten_meth_pow.exponent.scalar",
         )
     elif isinstance(exponent, np.array):
-        cst = g.make_initializer("", exponent.as_type(tensor_dtype_to_np_dtype(g.get_type(x))))
+        cst = g.make_initializer(
+            "",
+            exponent.as_type(tensor_dtype_to_np_dtype(g.get_type(x))),
+            source="aten_meth_pow.exponent.tensor",
+        )
     elif isinstance(exponent, str):
         cst = exponent
     else:
@@ -208,7 +221,9 @@ def aten_meth_reshape(
     "reshape"
     if all_int(shape):
         # static version
-        cst = g.make_initializer("", np.array(shape, dtype=np.int64))
+        cst = g.make_initializer(
+            "", np.array(shape, dtype=np.int64), source="aten_meth_reshape.shape"
+        )
         res = g.make_node("Reshape", [input_name, cst], outputs, name=name)
         if not sts:
             set_type_shape_reshape(g, res, input_name, shape)
@@ -339,7 +354,9 @@ def aten_meth_unsqueeze(
 ) -> T:
     "unsqueeze"
     new_name = g.unique_name(f"{input_name}_axes")
-    g.make_initializer(new_name, np.array([dim], dtype=np.int64))
+    g.make_initializer(
+        new_name, np.array([dim], dtype=np.int64), source="aten_meth_unsqueeze.axis"
+    )
     res = g.make_node("Unsqueeze", [input_name, new_name], outputs, name="meth_unsqueeze")
     if not sts:
         dtype = g.get_type(input_name)
@@ -364,7 +381,9 @@ def aten_meth_view(
     if all_int(args):
         # static shape
         new_shape_name = g.unique_name(f"{input_name}_view_shape")
-        g.make_initializer(new_shape_name, np.array(args, dtype=np.int64))
+        g.make_initializer(
+            new_shape_name, np.array(args, dtype=np.int64), source="aten_meth_view.shape"
+        )
         res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
         if not sts:
             set_type_shape_reshape(g, res, input_name, args)
