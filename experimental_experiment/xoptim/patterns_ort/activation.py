@@ -193,3 +193,48 @@ class FastGeluPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{gelu_node.name}",
             )
         ]
+
+
+class BiasSoftmaxPattern(PatternOptimization):
+    """
+    Replaces Softmax(Add(x,y), axis=-1) by BiasSoftmax(x,y,axis=-1)
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if not g.has_processor("CUDA"):
+            return self.none()
+        if node.op_type != "Softmax" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        atts = g.get_attributes_with_default(node, axis=-1)
+        if atts["axis"] != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        before = g.node_before(node.input[0])
+        if before is None or before.op_type != "Add":
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [before, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        add_node: NodeProto,
+        softmax_node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "BiasSoftmax",
+                add_node.input,
+                softmax_node.output,
+                axis=-1,
+                is_inner_broadcast=0,
+                domain="com.microsoft",
+                doc_string=softmax_node.doc_string,
+                name=f"{self.__class__.__name__}--{softmax_node.name}",
+            )
+        ]

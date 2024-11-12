@@ -13,9 +13,10 @@ from onnx import (
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    ignore_warnings,
     skipif_ci_windows,
     requires_onnxruntime_training,
-    ignore_warnings,
+    requires_cuda,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -974,6 +975,54 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(expected[0], got[0], atol=1e-4)
         node = opt_onx.graph.node[0]
         self.assertEqual(node.op_type, "Gelu")
+
+    @requires_cuda()
+    def test_bias_softmax(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy"]),
+                    oh.make_node("Softmax", ["xy"], ["Z"], axis=-1),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [16, 8, 4, 8]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [16, 1, 4, 8]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [16, 8, 4, 8])],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        check_model(model)
+        feeds = {"X": self._range(16, 8, 4, 8), "Y": self._range(16, 1, 4, 8)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CUDAExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["BiasSoftmax"], processor="CPU,CUDA", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["BiasSoftmax"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CUDAExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-4)
 
 
 if __name__ == "__main__":
