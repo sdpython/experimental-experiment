@@ -180,14 +180,14 @@ def aten_meth_pow(
             np.array(
                 exponent,
                 dtype=tensor_dtype_to_np_dtype(g.get_type(x)),
-                source="aten_meth_pow.cst.1",
             ),
+            source="aten_meth_pow.exponent.scalar",
         )
     elif isinstance(exponent, np.array):
         cst = g.make_initializer(
             "",
             exponent.as_type(tensor_dtype_to_np_dtype(g.get_type(x))),
-            source="aten_meth_pow.cst.2",
+            source="aten_meth_pow.exponent.tensor",
         )
     elif isinstance(exponent, str):
         cst = exponent
