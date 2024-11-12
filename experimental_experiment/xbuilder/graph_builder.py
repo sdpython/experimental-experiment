@@ -4556,11 +4556,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"doc_string is missing for initializer {init.name!r}"
                     f"\n{self.pretty_text()}"
                 )
-            for init in large_initializers.values():
-                assert init.doc_string, (
-                    f"doc_string is missing for initializer {init.name!r}"
-                    f"\n{self.pretty_text()}"
-                )
 
         if large_model:
             lm = TorchModelContainer()
@@ -4568,6 +4563,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             if large_initializers:
                 lm.set_large_initializers(large_initializers)
                 lm.check_large_initializers()
+                if self.check_empty_source:
+                    for init in lm.model_proto.graph.initializer:
+                        assert init.doc_string, (
+                            f"doc_string is missing for initializer {init.name!r}"
+                            f"\n{self.pretty_text()}"
+                        )
             return (lm, stats) if return_optimize_report else lm
 
         return (model, stats) if return_optimize_report else model

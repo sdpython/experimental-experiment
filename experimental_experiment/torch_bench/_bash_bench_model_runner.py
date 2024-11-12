@@ -591,6 +591,19 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
             )
+        if exporter == "flaggems":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
+            return self._to_flaggems(
+                name,
+                dynamic=dynamic,
+                fake_tensor=fake_tensor,
+                no_grad=no_grad,
+                optimization=optimization,
+                verbose=verbose,
+            )
         if exporter == "compile":
             assert strategy in (
                 None,
@@ -1300,6 +1313,23 @@ class ModelRunner:
 
         return self.model, None
 
+    def _to_flaggems(
+        self,
+        name: str,
+        dynamic: bool,
+        fake_tensor: bool,
+        no_grad: bool,
+        optimization: str,
+        verbose: int,
+    ):
+        assert not fake_tensor, "fake_tensor not implemented."
+        assert no_grad, "no_grad false not implemented yet"
+        assert (
+            not optimization or optimization == "none"
+        ), f"optimization {optimization!r} not compatible with eager"
+
+        return self.model, None
+
     def _to_ortmodule(
         self,
         name: str,
@@ -1816,6 +1846,7 @@ class ModelRunner:
             "cort",
             "cortgrad",
             "executorch",
+            "flaggems",
         }:
             return self.inputs
 
