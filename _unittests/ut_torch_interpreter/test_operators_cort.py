@@ -319,6 +319,9 @@ class TestOperatorsCort(ExtTestCase):
                             if isinstance(
                                 e, TypeError
                             ) and "'NoneType' object is not callable" not in str(e):
+                                # see runtime_wrappers.py in
+                                # https://github.com/pytorch/pytorch/pull/139849
+                                # this broke the retrieval of the proper exception type
                                 raise
                             assert (
                                 len(storage["instance"]) == 1
@@ -399,9 +402,16 @@ class TestOperatorsCort(ExtTestCase):
                         baseline_result[0].sum().backward()
                         try:
                             result[0].sum().backward()
-                        except FunctionNotFoundError as e:
+                        except (FunctionNotFoundError, TypeError) as e:
                             if not os.environ.get("EXPDORAISE", False):
                                 raise unittest.SkipTest(f"MISSING FOR BACKWARD {e}")
+                            if isinstance(
+                                e, TypeError
+                            ) and "'NoneType' object is not callable" not in str(e):
+                                # see runtime_wrappers.py in
+                                # https://github.com/pytorch/pytorch/pull/139849
+                                # this broke the retrieval of the proper exception type
+                                raise
                             raise
 
                     base_grads = tuple(_.grad for _ in model.parameters())
