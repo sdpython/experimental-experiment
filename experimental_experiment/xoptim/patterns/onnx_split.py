@@ -7,7 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 class SlicesSplitPattern(PatternOptimization):
     """
-    Detects multiple slices into a split.
+    Merges multiple parallel slices into a split.
     """
 
     def match(

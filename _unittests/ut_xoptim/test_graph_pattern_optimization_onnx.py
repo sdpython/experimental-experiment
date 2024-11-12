@@ -2161,10 +2161,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [_mkv_("Z", TFLOAT16, ["a", 2, 3, 4])],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4),
-            "Y": self._range(1, 3, 4),
-        }
+        feeds = {"X": self._range(2, 3, 4), "Y": self._range(1, 3, 4)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -2200,10 +2197,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [_mkv_("Z", TFLOAT16, ["a", 2, 3, 4])],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4),
-            "Y": self._range(1, 3, 4),
-        }
+        feeds = {"X": self._range(2, 3, 4), "Y": self._range(1, 3, 4)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -2241,10 +2235,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [_mkv_("Z", TFLOAT16, ["a", 2, 3, 4])],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4),
-            "Y": self._range(1, 3, 4),
-        }
+        feeds = {"X": self._range(2, 3, 4), "Y": self._range(1, 3, 4)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -2288,10 +2279,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [_mkv_("Z", TFLOAT16, ["a", 2, 3, 4])],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4),
-            "Y": self._range(1, 3, 4),
-        }
+        feeds = {"X": self._range(2, 3, 4), "Y": self._range(1, 3, 4)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -2446,9 +2434,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [onh.from_array(np.array([2], dtype=np.float32), name="two")],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4).astype(np.float32),
-        }
+        feeds = {"X": self._range(2, 3, 4).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -2485,9 +2471,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [onh.from_array(np.array([2], dtype=np.float32), name="two")],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4).astype(np.float32),
-        }
+        feeds = {"X": self._range(2, 3, 4).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -2526,9 +2510,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4).astype(np.float32),
-        }
+        feeds = {"X": self._range(2, 3, 4).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -2565,9 +2547,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [onh.from_array(np.array([2], dtype=np.float32), name="two")],
             )
         )
-        feeds = {
-            "X": self._range(2, 3, 4).astype(np.float32),
-        }
+        feeds = {"X": self._range(2, 3, 4).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
         expected = ref.run(None, feeds)[0]
         inputs = [tuple(n.input) for n in model.graph.node]
@@ -3794,9 +3774,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             ir_version=10,
         )
         check_model(model)
-        feeds = {
-            "X": self._range(2, 3).astype(np.float32),
-        }
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
         from onnxruntime import InferenceSession
 
         ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
@@ -3819,6 +3797,174 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_ref = InferenceSession(
             opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_slice_slice_nostep(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Slice", ["X", "zero", "one", "zero"], ["x1"]),
+                    oh.make_node("Slice", ["x1", "zero", "one", "one"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["c", "d"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SliceSlice"],
+                verbose=0,
+                constant_folding=True,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(["Slice"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 3)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_slice_slice_steps1(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Slice", ["X", "zero", "one", "zero", "one"], ["x1"]),
+                    oh.make_node("Slice", ["x1", "zero", "one", "one"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["c", "d"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SliceSlice"],
+                verbose=0,
+                constant_folding=True,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(["Slice"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 4)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_slice_slice_steps2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Slice", ["X", "zero", "one", "zero"], ["x1"]),
+                    oh.make_node("Slice", ["x1", "zero", "one", "one", "one"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["c", "d"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SliceSlice"],
+                verbose=0,
+                constant_folding=True,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(["Slice"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 4)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_slice_slice_steps3(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Slice", ["X", "zero", "one", "zero", "one"], ["x1"]),
+                    oh.make_node("Slice", ["x1", "zero", "one", "one", "one"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["c", "d"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SliceSlice"],
+                verbose=0,
+                constant_folding=True,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(["Slice"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 4)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 

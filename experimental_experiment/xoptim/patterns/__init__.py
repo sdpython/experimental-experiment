@@ -45,6 +45,7 @@ from .onnx_reshape import (
     ReshapeReshapePattern,
 )
 from .onnx_rotary import RotaryConcatPartPattern
+from .onnx_slice import SliceSlicePattern
 from .onnx_split import SlicesSplitPattern
 from .onnx_sub import Sub1MulPattern
 from .onnx_transpose import TransposeTransposePattern, TransposeReshapeTransposePattern
@@ -133,6 +134,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
+        SliceSlicePattern(verbose=verbose),
         SlicesSplitPattern(verbose=verbose),
         SoftmaxCrossEntropyLossCastPattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),

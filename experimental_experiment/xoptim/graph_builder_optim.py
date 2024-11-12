@@ -609,6 +609,14 @@ class GraphBuilderPatternOptimization:
         msg: str = "",
         source: Optional[str] = None,
     ) -> str:
+        if not source:
+            if isinstance(value, np.ndarray):
+                if value.dtype == np.int64 and value.size < 16:
+                    source = "GraphBuilderPatternOptimization.make_initializer.1/Shape"
+                elif value.size < 2:
+                    source = "GraphBuilderPatternOptimization.make_initializer.1/Small"
+                else:
+                    source = "GraphBuilderPatternOptimization.make_initializer.0"
         new_name = self.builder.make_initializer(
             name, value, external=external, msg=msg, source=source
         )

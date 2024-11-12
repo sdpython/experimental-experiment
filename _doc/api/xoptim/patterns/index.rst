@@ -23,6 +23,7 @@ experimental_experiment.xoptim.patterns
     onnx_reduce
     onnx_reshape
     onnx_rotary
+    onnx_slice
     onnx_split
     onnx_sub
     onnx_transpose
