@@ -1805,7 +1805,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         input_name = source["input_name"]
         shape_name = self.unique_name(f"_onx_shape_{name}")
         self.make_node("Shape", [input_name], [shape_name], name="_get_dimension_as_result")
-        axis_name = self.make_initializer("", np.array([axis], dtype=np.int64))
+        axis_name = self.make_initializer(
+            "",
+            np.array([axis], dtype=np.int64),
+            source="GraphBuilder.get_dimension_as_result.axis_name",
+        )
         self.make_node(
             "Gather", [shape_name, axis_name], [name], name="_get_dimension_as_result"
         )
@@ -1819,7 +1823,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             shape, (list, tuple)
         ), f"Unexpected type {type(shape)} for shape{self.get_debug_msg()}"
         if all_int(shape):
-            return self.make_initializer("", np.array(shape, dtype=np.int64))
+            return self.make_initializer(
+                "",
+                np.array(shape, dtype=np.int64),
+                source="GraphBuilder.make_shape_from_results.shape",
+            )
 
         key = []
         for d in shape:
@@ -1846,7 +1854,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         conc = []
         for d in shape:
             if isinstance(d, int):
-                conc.append(self.make_initializer("", np.array([d], dtype=np.int64)))
+                conc.append(
+                    self.make_initializer("", np.array([d], dtype=np.int64)),
+                    source="GraphBuilder.make_shape_from_results.conc",
+                )
             elif isinstance(d, str):
                 value = d
                 if value in self.dynamic_objects_rev:
@@ -2446,7 +2457,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(dim, int):
             if keep_const:
                 return np.array([dim], dtype=np.int64)
-            return self.make_initializer("", np.array([dim], dtype=np.int64))
+            return self.make_initializer(
+                "",
+                np.array([dim], dtype=np.int64),
+                source="GraphBuilder.get_dynamic_dimension.dim",
+            )
         assert isinstance(
             dim, (str, self.torch.SymInt)
         ), f"Unexpected type {type(dim)} for dim={dim}{self.get_debug_msg()}"
@@ -3386,7 +3401,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     inputs = inputs[:1]
                 elif opset >= 13 and len(inputs) == 1:
-                    name = self.make_initializer("", np.array(kwargs["axes"], dtype=np.int64))
+                    name = self.make_initializer(
+                        "",
+                        np.array(kwargs["axes"], dtype=np.int64),
+                        source="GraphBuilder._partial_rewrite_opset_version.axes",
+                    )
                     inputs.append(name)
                     del kwargs["axes"]
         return inputs, kwargs
@@ -5551,6 +5570,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"FakeTensor {k!r} cannot be an initializer "
                     f"{type(self.initializers_dict[k])}{self.get_debug_msg()}"
                 )
+                source = (
+                    ""
+                    if k not in self.initializers_dict_sources
+                    or not self.initializers_dict_sources[k].source
+                    else f"##{self.initializers_dict_sources[k].source}"
+                )
                 self.add_initializer(
                     v,
                     self.initializers_dict[k],
@@ -5558,6 +5583,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     shape=self.get_shape(k),
                     cst=self.constants_[k],
                     existing=None,
+                    source=f"GraphBuilder.remove_identity_nodes/from({k}){source}",
                 )
                 del self.initializers_dict[k]
                 del self.constants_[k]

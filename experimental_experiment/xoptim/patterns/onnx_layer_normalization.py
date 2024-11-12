@@ -547,7 +547,11 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
         nname = f"{self.__class__.__name__}--{node.name}"
         rk = g.get_rank(node.input[0])
         axes = tuple(np.delete(np.arange(rk), 1))
-        init_axes = g.make_initializer("", np.array(list(axes), dtype=np.int64))
+        init_axes = g.make_initializer(
+            "",
+            np.array(list(axes), dtype=np.int64),
+            source="BatchNormalizationTrainingPattern.apply.init_axes",
+        )
 
         mean_name = g.unique_name(f"{self.__class__.__name__}_mean_{node.input[0]}")
         mean = g.make_node(
@@ -564,7 +568,11 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
 
         dtype = tensor_dtype_to_np_dtype(g.get_type(node.input[0]))
         epsilon = g.get_attributes_with_default(node, epsilon=1e-5)["epsilon"]
-        init_epsilon = g.make_initializer("", np.array([epsilon], dtype=dtype))
+        init_epsilon = g.make_initializer(
+            "",
+            np.array([epsilon], dtype=dtype),
+            source="BatchNormalizationTrainingPattern.apply.init_epsilon",
+        )
         vare_name = g.unique_name(f"{self.__class__.__name__}_vareps_{node.input[0]}")
         add = g.make_node("Add", [var_name, init_epsilon], [vare_name], name=nname)
         std_name = g.unique_name(f"{self.__class__.__name__}_vareps_{node.input[0]}")
@@ -572,7 +580,11 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
 
         new_shape = [1 for _ in range(rk)]
         new_shape[1] = -1
-        new_shape = g.make_initializer("", np.array(new_shape, dtype=np.int64))
+        new_shape = g.make_initializer(
+            "",
+            np.array(new_shape, dtype=np.int64),
+            source="BatchNormalizationTrainingPattern.apply.new_shape",
+        )
 
         if g.get_rank(node.input[1]) == 1:
             scale_name = g.unique_name(f"{self.__class__.__name__}_scale_{node.input[1]}")

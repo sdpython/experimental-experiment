@@ -666,7 +666,11 @@ class GraphBuilderPatternOptimization:
                 )
             if len(inputs) == 1 and "axes" in kwargs:
                 axes = kwargs["axes"]
-                axes_name = self.make_initializer("", np.array([axes], dtype=np.int64))
+                axes_name = self.make_initializer(
+                    "",
+                    np.array([axes], dtype=np.int64),
+                    source="GraphBuilderPatternOptimization.make_node_check_opset.axes",
+                )
                 inputs.append(axes_name)
                 del kwargs["axes"]
             return self.make_node(

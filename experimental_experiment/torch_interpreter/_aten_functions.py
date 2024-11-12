@@ -2040,10 +2040,20 @@ def aten_embedding_bag_padding_idx(
     # loop_condition = g.op("Constant", value_t=torch.tensor(1))
     # loop_condition = g.op("Cast", loop_condition, to_i=_C_onnx.TensorProtoDataType.BOOL)
     # zero = g.op("Constant", value_t=torch.tensor([0]))
-    loop_condition = g.make_initializer("", np.array(True, dtype=np.bool_))
-    zero = g.make_initializer("", np.array([0], dtype=np.int64))
-    one = g.make_initializer("", np.array([1], dtype=np.int64))
-    very_end = g.make_initializer("", np.array([sys.maxsize], dtype=np.int64))
+    loop_condition = g.make_initializer(
+        "", np.array(True, dtype=np.bool_), source="aten_embedding_bag_padding_idx.loop"
+    )
+    zero = g.make_initializer(
+        "", np.array([0], dtype=np.int64), source="aten_embedding_bag_padding_idx.zero"
+    )
+    one = g.make_initializer(
+        "", np.array([1], dtype=np.int64), source="aten_embedding_bag_padding_idx.one"
+    )
+    very_end = g.make_initializer(
+        "",
+        np.array([sys.maxsize], dtype=np.int64),
+        source="aten_embedding_bag_padding_idx.very_end",
+    )
 
     # indices_len = _unsqueeze_helper(g,
     #   _size_helper(g, indices, g.op("Constant", value_t=torch.tensor(0))),[0],)
@@ -4472,9 +4482,21 @@ def _aten_max_pool_with_indices_onnx(
         x, dilations=dilation, kernel_shape=n_dims_one, strides=n_dims_one
     )
 
-    ends = g.make_initializer("", np.array(n_dims_one, dtype=np.int64))
-    starts = g.make_initializer("", np.array(n_dims_zero, dtype=np.int64))
-    axes = g.make_initializer("", np.array(n_dims_axes, dtype=np.int64))
+    ends = g.make_initializer(
+        "",
+        np.array(n_dims_one, dtype=np.int64),
+        source="_aten_max_pool_with_indices_onnx.ends",
+    )
+    starts = g.make_initializer(
+        "",
+        np.array(n_dims_zero, dtype=np.int64),
+        source="_aten_max_pool_with_indices_onnx.starts",
+    )
+    axes = g.make_initializer(
+        "",
+        np.array(n_dims_axes, dtype=np.int64),
+        source="_aten_max_pool_with_indices_onnx.axes",
+    )
 
     delta = g.op.Slice(flatten_indices, starts, ends, axes, name=name)
     indices = g.op.Sub(indices, delta, name=name)
@@ -4750,8 +4772,14 @@ def aten_native_dropout(
         assert len(outputs) == 1, f"train is False and outputs is {outputs}{g.get_debug_msg()}"
         return g.op.Identity(x, outputs=outputs, name=name)
     assert len(outputs) == 2, f"train is True and outputs is {outputs}{g.get_debug_msg()}"
-    tp = g.make_initializer("", np.array(p, dtype=tensor_dtype_to_np_dtype(g.get_type(x))))
-    tt = g.make_initializer("", np.array(train, dtype=np.bool_))
+    tp = g.make_initializer(
+        "",
+        np.array(p, dtype=tensor_dtype_to_np_dtype(g.get_type(x))),
+        source="aten_native_dropout.tp",
+    )
+    tt = g.make_initializer(
+        "", np.array(train, dtype=np.bool_), source="aten_native_dropout.tt"
+    )
     g.make_node("Dropout", [x, tp, tt], outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
@@ -7082,7 +7110,9 @@ def aten_split_with_sizes(
         f"Number of outputs is unexpected, outputs={outputs}, "
         f"split_sizes={split_sizes}{g.get_debug_msg()}"
     )
-    init = g.make_initializer("", np.array(split_sizes, dtype=np.int64))
+    init = g.make_initializer(
+        "", np.array(split_sizes, dtype=np.int64), source="aten_split_with_sizes.init"
+    )
     if use_sequence:
         res = g.make_node("SplitToSequence", [x, init], outputs, axis=dim, name=name)
         if not sts:
@@ -7195,7 +7225,7 @@ def aten_stack(
 ) -> T:
     """concat"""
     new_tensors = []
-    adim = g.make_initializer("", np.array([dim], dtype=np.int64))
+    adim = g.make_initializer("", np.array([dim], dtype=np.int64), source="aten_stack.adim")
     for t in tensors:
         r = g.op.UnsqueezeAnyOpset(t, adim, name=name)
         new_tensors.append(r)
@@ -7709,7 +7739,9 @@ def aten_unbind_int(
         new_outputs = outputs
 
     g.make_node("Split", [x], unbind_outputs, axis=dim, num_outputs=shape[dim], name=name)
-    dim_np = g.make_initializer("", np.array([dim], dtype=np.int64))
+    dim_np = g.make_initializer(
+        "", np.array([dim], dtype=np.int64), source="aten_unbind_int.dim_np"
+    )
     for o, u in zip(new_outputs, unbind_outputs):
         g.make_node("Squeeze", [u, dim_np], [o], name=name)
     res = new_outputs
@@ -7801,12 +7833,20 @@ def _aten_upsample_output_size(
     if g.has_shape(x):
         shape = g.get_shape(x)
         if is_static_shape(shape):
-            batch_channel = g.make_initializer("", np.array(shape[:2], dtype=np.int64))
+            batch_channel = g.make_initializer(
+                "",
+                np.array(shape[:2], dtype=np.int64),
+                source="_aten_upsample_output_size.batch_channel",
+            )
     if batch_channel is None:
         batch_channel = g.op.Shape(x, start=0, end=2, name=name)
     if isinstance(output_size, (tuple, list)):
         assert is_static_shape(output_size), f"output_size={output_size} must be static"
-        rsize = g.make_initializer("", np.array(output_size, dtype=np.int64))
+        rsize = g.make_initializer(
+            "",
+            np.array(output_size, dtype=np.int64),
+            source="_aten_upsample_output_size.rsize",
+        )
     else:
         assert isinstance(
             output_size, str

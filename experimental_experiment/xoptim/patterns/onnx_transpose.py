@@ -259,7 +259,11 @@ class TransposeReshapeTransposePattern(PatternOptimization):
     ) -> List[NodeProto]:
         new_perm, new_shape, after = self._new_shape_perm(g, t1_node, reshape_node, t2_node)
         new_name = g.unique_name(f"{self.__class__.__name__}_{t1_node.output[0]}")
-        new_shape_name = g.make_initializer("", np.array(new_shape, dtype=np.int64))
+        new_shape_name = g.make_initializer(
+            "",
+            np.array(new_shape, dtype=np.int64),
+            source="TransposeReshapeTransposePattern.apply.new_shape_name",
+        )
         if after:
             return [
                 t1_node,

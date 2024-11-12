@@ -836,7 +836,9 @@ def has_onnxruntime_training(push_back_batch: bool = False):
     return True
 
 
-def requires_onnxruntime_training(push_back_batch: bool = False, msg: str = "") -> Callable:
+def requires_onnxruntime_training(
+    push_back_batch: bool = False, ortmodule: bool = False, msg: str = ""
+) -> Callable:
     """Skips a unit test if :epkg:`onnxruntime` is not onnxruntime_training."""
     try:
         from onnxruntime import training
@@ -856,6 +858,12 @@ def requires_onnxruntime_training(push_back_batch: bool = False, msg: str = "") 
 
         if not hasattr(OrtValueVector, "push_back_batch"):
             msg = msg or "OrtValue has no method push_back_batch"
+            return unittest.skip(msg)
+    if ortmodule:
+        try:
+            import onnxruntime.training.ortmodule  # noqa: F401
+        except (AttributeError, ImportError):
+            msg = msg or "ortmodule is missing in onnxruntime-training"
             return unittest.skip(msg)
     return lambda x: x
 

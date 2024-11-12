@@ -331,7 +331,11 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         if node_left is None:
             expected_shape = the_shape_right[:-2] + shape_left[-2:]
             if the_shape_left != expected_shape:
-                shape_name = g.make_initializer("", np.array(expected_shape, dtype=np.int64))
+                shape_name = g.make_initializer(
+                    "",
+                    np.array(expected_shape, dtype=np.int64),
+                    source="MatMulReshape2Of3Pattern.apply.shape_name.1",
+                )
                 left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
                 res.append(
                     g.make_node(
@@ -353,7 +357,11 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         if node_right is None:
             expected_shape = the_shape_left[:-2] + shape_right[-2:]
             if the_shape_right != expected_shape:
-                shape_name = g.make_initializer("", np.array(expected_shape, dtype=np.int64))
+                shape_name = g.make_initializer(
+                    "",
+                    np.array(expected_shape, dtype=np.int64),
+                    source="MatMulReshape2Of3Pattern.apply.shape_name.2",
+                )
                 right_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
                 res.append(
                     g.make_node(
@@ -421,7 +429,11 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 new_sh = (
                     g.get_shape(next_node.output[0])[:-2] + g.get_shape(node.input[0])[-2:]
                 )
-                sh = g.make_initializer("", np.array(new_sh, dtype=np.int64))
+                sh = g.make_initializer(
+                    "",
+                    np.array(new_sh, dtype=np.int64),
+                    source="MatMulReshape2Of3Pattern.apply.sh.1",
+                )
                 add = g.make_node(
                     "Reshape",
                     [left_name, sh],
@@ -435,7 +447,11 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 new_sh = (
                     g.get_shape(next_node.output[0])[:-2] + g.get_shape(node.input[1])[-2:]
                 )
-                sh = g.make_initializer("", np.array(new_sh, dtype=np.int64))
+                sh = g.make_initializer(
+                    "",
+                    np.array(new_sh, dtype=np.int64),
+                    source="MatMulReshape2Of3Pattern.apply.sh.2",
+                )
                 add = g.make_node(
                     "Reshape",
                     [right_name, sh],
@@ -515,7 +531,7 @@ class MulMulMatMulPattern(PatternOptimization):
         cs = [g.get_computed_constant(c) for c in cst]
         c = (cs[0] * cs[1]).astype(cs[0].dtype)
 
-        ccc = g.make_initializer("", c)
+        ccc = g.make_initializer("", c, source="MulMulMatMulPattern.apply.ccc")
         mul_name = g.unique_name(f"{self.__class__.__name__}_{node.output[0]}")
 
         return [
@@ -854,7 +870,11 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
     ) -> List[NodeProto]:
         shape = list(g.get_computed_constant((node_left or node_right).input[1]))
         shape[-2], shape[-1] = shape[-1], shape[-2]
-        shape_name = g.make_initializer("", np.array(shape, dtype=np.int64))
+        shape_name = g.make_initializer(
+            "",
+            np.array(shape, dtype=np.int64),
+            source="TransposeReshapeMatMulPattern.apply.shape_name",
+        )
 
         if node_right is None:
             # left side

@@ -94,7 +94,9 @@ class SliceSlicePattern(PatternOptimization):
             )
             inputs.append(new_step)
         elif len(node.input) > 4:
-            one = g.make_initializer("", np.array([1], dtype=np.int64))
+            one = g.make_initializer(
+                "", np.array([1], dtype=np.int64), source="SliceSlicePattern.apply.step.1"
+            )
             new_step = g.unique_name(f"{self.__class__.__name__}_{node.input[0]}_step")
             conc.append(
                 g.make_node(
@@ -107,7 +109,9 @@ class SliceSlicePattern(PatternOptimization):
             )
             inputs.append(new_step)
         elif len(before.input) > 4:
-            one = g.make_initializer("", np.array([1], dtype=np.int64))
+            one = g.make_initializer(
+                "", np.array([1], dtype=np.int64), source="SliceSlicePattern.apply.step.2"
+            )
             new_step = g.unique_name(f"{self.__class__.__name__}_{node.input[0]}_step")
             conc.append(
                 g.make_node(

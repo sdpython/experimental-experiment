@@ -74,7 +74,9 @@ class MulMulMulScalarPattern(PatternOptimization):
         new_value = cst_left * cst_right
         if not isinstance(new_value, np.ndarray):
             new_value = np.array(new_value)
-        new_cst = g.make_initializer("", new_value)
+        new_cst = g.make_initializer(
+            "", new_value, source="MulMulMulScalarPattern.apply.new_cst"
+        )
 
         new_node2 = g.make_node(
             "Mul",

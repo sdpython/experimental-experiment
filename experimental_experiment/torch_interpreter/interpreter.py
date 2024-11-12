@@ -791,7 +791,9 @@ class DynamoInterpreter:
                 f"Unexpected value for ends={ends}: {[type(_) for _ in ends]}"
                 f"{self.builder.get_debug_msg()}"
             )
-            conc_ends = self.builder.make_initializer("", np.array(ends, dtype=np.int64))
+            conc_ends = self.builder.make_initializer(
+                "", np.array(ends, dtype=np.int64), source="DynamoInterpreter._getitem_slice.1"
+            )
 
         assert all_int(steps), (
             f"Not implemented for steps={steps} (types are "
@@ -955,7 +957,9 @@ class DynamoInterpreter:
             # The user mean to access the first element of a tensor or a sequence
             if self.builder.is_sequence(result_name):
                 # A sequence
-                tpos = self.builder.make_initializer("", np.array(index, dtype=np.int64))
+                tpos = self.builder.make_initializer(
+                    "", np.array(index, dtype=np.int64), source="DynamoInterpreter.getitem.1"
+                )
                 res = self.builder.make_node(
                     "SequenceAt",
                     [result_name, tpos],
