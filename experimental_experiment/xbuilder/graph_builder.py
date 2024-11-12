@@ -689,7 +689,22 @@ class GraphBuilder(_GraphBuilderRuntime):
         for k, v in self.opsets.items():
             rows.append(f"opset: {k}: {v}")
         for k, v in self.initializers_dict.items():
-            rows.append(f"init: {k}: {_v(v)}")
+            if (
+                k in self.initializers_dict_sources
+                and self.initializers_dict_sources[k].source
+            ):
+                t = f"init: {k}: {_v(v)}"
+                rows.append(
+                    f"{t}{' '*max(2,70-len(t))} -- {self.initializers_dict_sources[k].source}"
+                )
+            else:
+                rows.append(f"init: {k}: {_v(v)}")
+        for k, v in self.initializers_dict_sources.items():
+            if (
+                k not in self.initializers_dict_sources
+                or not self.initializers_dict_sources[k].source
+            ):
+                rows.append(f"init-source: {k}: {v}")
         for i in self.input_names:
             rows.append(_io(i, "input:"))
         for node in self.nodes:
@@ -1936,7 +1951,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param parameter_name: the parameter name is different than its name in the fx graph,
             they are restored when the model is finally exported into onnx,
             until then, the mapping is kept in attribute ``_parameter_renaming``
-        :param doc_string: any additional information, this field is usually used to
+        :param source: any additional information, this field is usually used to
             let the number know where the initializer was created.
         :return: name of the initializer
         """
@@ -2002,9 +2017,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
 
-        self._append_initializer_source(name, source)
         self.add_initializer(
-            name, value, itype=itype, shape=shape, key=key, parameter_name=parameter_name
+            name,
+            value,
+            itype=itype,
+            shape=shape,
+            key=key,
+            parameter_name=parameter_name,
+            source=source,
         )
         return name
 
@@ -2049,6 +2069,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         existing: bool = False,
         allow_empty: bool = False,
         parameter_name: Optional[str] = None,
+        source: str = "",
     ):
         """
         Adds an initializer.
@@ -2066,6 +2087,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param parameter_name: the parameter name is different than its name in the fx graph,
             they are restored when the model is finally exported into onnx,
             until then, the mapping is kept in attribute ``_parameter_renaming``
+        :param source: any additional information, this field is usually used to
+            let the number know where the initializer was created.
         """
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
@@ -2119,6 +2142,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._unique_names.add(name)
 
         self.initializers_dict[name] = value
+        self._append_initializer_source(name, source, existing=existing)
 
         if parameter_name and parameter_name != name:
             # We want a specific name for this one, let's keep that information in
@@ -2130,6 +2154,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._parameter_renaming[name] = parameter_name
             self._parameter_norename.add(parameter_name)
             self.initializers_dict[parameter_name] = value
+            self._append_initializer_source(
+                parameter_name, source, existing=existing, same_as=name
+            )
             self.set_name(parameter_name, marker="parameter_name")
             self.set_shape(parameter_name, self.get_shape(name))
             self.set_type(parameter_name, self.get_type(name))
@@ -4503,9 +4530,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         if self.check_empty_source:
             for init in model.graph.initializer:
-                assert init.doc_string, f"doc_string is missing for initializer {init.name!r}"
+                assert init.doc_string, (
+                    f"doc_string is missing for initializer {init.name!r}"
+                    f"\n{self.pretty_text()}"
+                )
             for init in large_initializers.values():
-                assert init.doc_string, f"doc_string is missing for initializer {init.name!r}"
+                assert init.doc_string, (
+                    f"doc_string is missing for initializer {init.name!r}"
+                    f"\n{self.pretty_text()}"
+                )
 
         if large_model:
             lm = TorchModelContainer()
@@ -5269,7 +5302,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"{[type(i) for i in feeds.values()]})"
                             f"{self.get_debug_msg()}"
                         )
-                        self.add_initializer(name, value, existing=None)
+                        sources = []
+                        for k in feeds:
+                            sources.append(
+                                f"##{k}/"
+                                if k not in self.initializers_dict_sources
+                                or not self.initializers_dict_sources[k].source
+                                else f"##{k}/{self.initializers_dict_sources[k].source}"
+                            )
+                        text_sources = "".join(sources) if sources else ""
+                        self.add_initializer(
+                            name,
+                            value,
+                            existing=None,
+                            source=f"GraphBuilder.constant_folding.from/fold"
+                            f"({','.join(sorted(feeds))}){text_sources}",
+                        )
                     else:
                         updates[name] = v
                     if self.verbose > 3:
