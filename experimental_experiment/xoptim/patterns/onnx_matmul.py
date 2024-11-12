@@ -334,7 +334,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 shape_name = g.make_initializer(
                     "",
                     np.array(expected_shape, dtype=np.int64),
-                    source="MatMulReshape2Of3Pattern.apply.shape_name.1",
+                    source="MatMulReshape2Of3Pattern.apply.shape.1",
                 )
                 left_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
                 res.append(
@@ -360,7 +360,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 shape_name = g.make_initializer(
                     "",
                     np.array(expected_shape, dtype=np.int64),
-                    source="MatMulReshape2Of3Pattern.apply.shape_name.2",
+                    source="MatMulReshape2Of3Pattern.apply.shape.2",
                 )
                 right_name = g.unique_name(f"{self.__class__.__name__}L_{node.input[0]}")
                 res.append(
@@ -390,7 +390,9 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             if previous_shape != new_shape:
                 new_name = g.unique_name(f"{self.__class__.__name__}L_{node.output[0]}")
                 previous_shape_name = g.make_initializer(
-                    "", np.array(previous_shape, dtype=np.int64)
+                    "",
+                    np.array(previous_shape, dtype=np.int64),
+                    source="MatMulReshape2Of3Pattern.shape.3",
                 )
                 mm = g.make_node(
                     node.op_type,
@@ -475,7 +477,9 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             if g.is_used_more_than_once(node.output[0]):
                 previous_shape = shape_left[:-1] + (shape_right[-1],)
                 previous_shape_name = g.make_initializer(
-                    "", np.array(previous_shape, dtype=np.int64)
+                    "",
+                    np.array(previous_shape, dtype=np.int64),
+                    source="MatMulReshape2Of3Pattern.apply.shape.4",
                 )
                 res.append(
                     g.make_node(

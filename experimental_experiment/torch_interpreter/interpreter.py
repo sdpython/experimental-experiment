@@ -704,7 +704,9 @@ class DynamoInterpreter:
         # axes
         aaxes = np.array(axes, dtype=np.int64)
         axes_name = self.builder.unique_name(f"{node.name}_axis")
-        self.builder.make_initializer(axes_name, aaxes)
+        self.builder.make_initializer(
+            axes_name, aaxes, source="DynamoInterpreter._getitem_slice.axis.1"
+        )
 
         shape_value = None
         if self.builder.has_shape(input_name):
@@ -739,7 +741,9 @@ class DynamoInterpreter:
 
                     aaxis = np.array([axis], dtype=np.int64)
                     axis_name = self.builder.unique_name(f"{node.name}_axis_{axis}")
-                    self.builder.make_initializer(axis_name, aaxis)
+                    self.builder.make_initializer(
+                        axis_name, aaxis, source="DynamoInterpreter._getitem_slice.axis.2"
+                    )
 
                     end_name = self.builder.unique_name(f"{node.name}_end")
                     self.builder.make_node(
@@ -803,6 +807,7 @@ class DynamoInterpreter:
             conc_starts = self.builder.make_initializer(
                 self.builder.unique_name(f"{node.name}_start"),
                 np.array(starts, dtype=np.int64),
+                source="DynamoInterpreter._getitem_slice.2",
             )
         else:
             istarts = []
@@ -839,6 +844,7 @@ class DynamoInterpreter:
             self.builder.make_initializer(
                 self.builder.unique_name(f"{node.name}_step"),
                 np.array(steps, dtype=np.int64),
+                source="DynamoInterpreter._getitem_slice.3",
             ),
         ]
 

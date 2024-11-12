@@ -5749,7 +5749,9 @@ def aten__prelu_kernel_backward(
 ) -> Tuple[T, T]:
     "prelu backward"
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-    zero = g.make_initializer("zero", np.array([0], dtype=dtype))
+    zero = g.make_initializer(
+        "zero", np.array([0], dtype=dtype), source="aten__prelu_kernel_backward.zero"
+    )
     xg0 = g.op.Greater(x, zero, name="_prelu_kernel_backward")
     mu1 = g.op.Mul(weight, grad_output, name="_prelu_kernel_backward")
     input_grad = g.op.Where(
@@ -7509,7 +7511,9 @@ def _aten_tensor_int1(
 
     # axes
     indices_name = g.unique_name(f"{outputs[0]}_indices")
-    g.make_initializer(indices_name, np.array(indices, dtype=np.int64))
+    g.make_initializer(
+        indices_name, np.array(indices, dtype=np.int64), source="_aten_tensor_int1.indices"
+    )
 
     res = g.make_node(
         "Gather",
@@ -7564,7 +7568,7 @@ def aten_tensor(
                     f"Unable to convert to guess value dtype for x={x}{g.get_debug_msg()}"
                 )
 
-            return g.make_initializer(outputs[0], cst)
+            return g.make_initializer(outputs[0], cst, source="aten_tensor.list")
         raise RuntimeError(
             f"Unable to convert a value into a tensor, x={x}{g.get_debug_msg()}"
         )

@@ -39,7 +39,9 @@ def get_fused_aten_ops_dispatcher():
         # itype = g.get_type(value)
         # dtype = tensor_dtype_to_np_dtype(itype)
         t_compute_log_sumexp = g.make_initializer(
-            "", np.array(compute_log_sumexp, dtype=np.bool_)
+            "",
+            np.array(compute_log_sumexp, dtype=np.bool_),
+            source="onnx_scaled_dot_product_efficient_attention.t_compute_log_sumexp",
         )
         t_dropout_p = g.make_initializer(
             "",

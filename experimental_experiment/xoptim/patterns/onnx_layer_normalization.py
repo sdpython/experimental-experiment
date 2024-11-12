@@ -129,12 +129,12 @@ class LayerNormalizationPattern(PatternOptimization):
                     scale = g.make_initializer(
                         "",
                         np.ones((shape[-1],), dtype=dtype),
-                        source="LayerNormalizationPattern.apply.1",
+                        source="LayerNormalizationPattern.apply.scale",
                     )
                     bias = g.make_initializer(
                         "",
                         np.zeros((shape[-1],), dtype=dtype),
-                        source="LayerNormalizationPattern.apply.1",
+                        source="LayerNormalizationPattern.apply.bias",
                     )
         else:
             ly_axis = min(axis)
