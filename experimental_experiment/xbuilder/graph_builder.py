@@ -1855,8 +1855,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         for d in shape:
             if isinstance(d, int):
                 conc.append(
-                    self.make_initializer("", np.array([d], dtype=np.int64)),
-                    source="GraphBuilder.make_shape_from_results.conc",
+                    self.make_initializer(
+                        "",
+                        np.array([d], dtype=np.int64),
+                        source="GraphBuilder.make_shape_from_results.conc",
+                    ),
                 )
             elif isinstance(d, str):
                 value = d

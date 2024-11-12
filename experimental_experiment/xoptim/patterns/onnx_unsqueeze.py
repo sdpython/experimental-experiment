@@ -43,7 +43,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         axis1 = g.get_constant_or_attribute(node, "axis", 1)
         axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
         new_axis = g.make_initializer(
-            "", np.hstack([axis1, axis2]), name="UnsqueezeUnsqueezePattern.apply.new_axis"
+            "", np.hstack([axis1, axis2]), source="UnsqueezeUnsqueezePattern.apply.new_axis"
         )
         new_node = g.make_node(
             "Unsqueeze",

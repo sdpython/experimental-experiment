@@ -12,6 +12,7 @@ experimental_experiment.xoptim.patterns
 
     onnx_any
     onnx_cast
+    onnx_clip
     onnx_conv
     onnx_dropout
     onnx_equal

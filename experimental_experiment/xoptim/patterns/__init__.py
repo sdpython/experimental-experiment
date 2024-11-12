@@ -11,6 +11,7 @@ from .onnx_cast import (
     CastOpCastPattern,
     ComputationCastOpCastPattern,
 )
+from .onnx_clip import ClipClipPattern
 from .onnx_conv import ConvBiasNullPattern
 from .onnx_dropout import DropoutPattern
 from .onnx_equal import UnsqueezeEqualPattern
@@ -109,6 +110,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         CastPattern(verbose=verbose),
         CastCastBinaryPattern(verbose=verbose),
         CastOpCastPattern(verbose=verbose),
+        ClipClipPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
