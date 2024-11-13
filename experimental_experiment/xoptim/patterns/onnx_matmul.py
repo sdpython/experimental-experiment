@@ -34,7 +34,9 @@ class MatMulAddPattern(PatternOptimization):
         if g.get_rank(node.input[0]) > 2:
             sh1 = g.get_shape(node.input[0]) if g.has_shape(node.input[0]) else None
             sh2 = g.get_shape(node.input[1]) if g.has_shape(node.input[1]) else None
-            if not isinstance(sh1[-1], int) or not isinstance(sh2[0], int):
+            if (sh1 is None or not isinstance(sh1[-1], int)) and (
+                sh2 is None or not isinstance(sh2[0], int)
+            ):
                 # unkown k for the matrix multiplication
                 return self.none(node, inspect.currentframe().f_lineno)
 
@@ -93,7 +95,7 @@ class MatMulAddPattern(PatternOptimization):
                 if g.has_shape(matmul_node.input[1])
                 else None
             )
-            k = sh1[-1] if isinstance(sh1[-1], int) else sh2[0]
+            k = sh1[-1] if sh1 is not None and isinstance(sh1[-1], int) else sh2[0]
             new_shape = g.make_initializer(
                 "",
                 np.array([-1, k], dtype=np.int64),
