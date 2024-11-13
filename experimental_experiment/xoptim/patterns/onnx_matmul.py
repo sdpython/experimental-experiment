@@ -6,6 +6,7 @@ from ...xbuilder._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
     is_static_shape,
+    all_int,
 )
 from ..patterns_api import MatchResult, PatternOptimization
 
@@ -25,8 +26,18 @@ class MatMulAddPattern(PatternOptimization):
             return self.none()
         if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.get_rank(node.input[0]) != 2 or g.get_rank(node.input[1]) != 2:
+        if g.get_rank(node.input[0]) < 2 or g.get_rank(node.input[1]) != 2:
+            # If node.op_type, this condition is useless,
+            # if node.op_type is MatMul we reshape the matrix if
+            # it the rank is > 2 and the last dimension known.
             return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(node.input[0]) > 2:
+            sh1 = g.get_shape(node.input[0]) if g.has_shape(node.input[0]) else None
+            sh2 = g.get_shape(node.input[1]) if g.has_shape(node.input[1]) else None
+            if not isinstance(sh1[-1], int) or not isinstance(sh2[0], int):
+                # unkown k for the matrix multiplication
+                return self.none(node, inspect.currentframe().f_lineno)
+
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -62,26 +73,173 @@ class MatMulAddPattern(PatternOptimization):
 
         return MatchResult(self, [node, add_node], self.apply, insert_at=add_node)
 
-    def apply(
+    def _apply_matmmul(
         self,
         g: "GraphBuilder",  # noqa: F821
         matmul_node: NodeProto,
         add_node: NodeProto,
     ) -> List[NodeProto]:
         bias2 = add_node.input[0 if add_node.input[1] == matmul_node.output[0] else 1]
+        if g.get_rank(matmul_node.input[0]) > 2:
+            rk_bias = g.get_rank(bias2)
+            # get k
+            sh1 = (
+                g.get_shape(matmul_node.input[0])
+                if g.has_shape(matmul_node.input[0])
+                else None
+            )
+            sh2 = (
+                g.get_shape(matmul_node.input[1])
+                if g.has_shape(matmul_node.input[1])
+                else None
+            )
+            k = sh1[-1] if isinstance(sh1[-1], int) else sh2[0]
+            new_shape = g.make_initializer(
+                "",
+                np.array([-1, k], dtype=np.int64),
+                source="MatMulAddPattern.new_shape.1",
+            )
+            reshaped = g.unique_name(f"{self.__class__.__name__}--{matmul_node.input[0]}")
+            reshape_node = g.make_node(
+                "Reshape",
+                [matmul_node.input[0], new_shape],
+                [reshaped],
+                name=f"{self.__class__.__name__}--{matmul_node.name}",
+            )
+            reshape_nodes = [reshape_node]
+            if rk_bias > 2:
+                if g.has_shape(bias2) and isinstance(g.get_shape(bias2)[-1], int):
+                    new_shape_bias = g.make_initializer(
+                        "",
+                        np.array([-1, g.get_shape(bias2)[-1]], dtype=np.int64),
+                        source="MatMulAddPattern.new_shape.3",
+                    )
+                else:
+                    that_shape_bias = g.unique_name(
+                        f"{self.__class__.__name__}--{matmul_node.input[0]}"
+                    )
+                    reshape_nodes.append(
+                        g.make_node(
+                            "Shape",
+                            [bias2],
+                            [that_shape_bias],
+                            start=-1,
+                            name=f"{self.__class__.__name__}--{matmul_node.name}",
+                        )
+                    )
+                    new_shape_bias = g.unique_name(
+                        f"{self.__class__.__name__}--{matmul_node.input[0]}"
+                    )
+                    minus1 = g.make_initializer(
+                        "",
+                        np.array([-1], dtype=np.int64),
+                        source="MatMulAddPattern.new_shape.7",
+                    )
+                    reshape_nodes.append(
+                        g.make_node(
+                            "Concat",
+                            [minus1, that_shape_bias],
+                            [new_shape_bias],
+                            axis=0,
+                            name=f"{self.__class__.__name__}--{matmul_node.name}",
+                        )
+                    )
 
-        if matmul_node.op_type == "MatMul" or len(matmul_node.input) == 2:
-            new_node = g.make_node(
-                "Gemm",
-                [*matmul_node.input, bias2],
+                reshaped_bias = g.unique_name(
+                    f"{self.__class__.__name__}--{matmul_node.input[0]}"
+                )
+                reshape_bias_node = g.make_node(
+                    "Reshape",
+                    [bias2, new_shape_bias],
+                    [reshaped_bias],
+                    name=f"{self.__class__.__name__}--{matmul_node.name}",
+                )
+                reshape_nodes.append(reshape_bias_node)
+                bias_gemm_name = reshaped_bias
+            else:
+                bias_gemm_name = bias2
+
+            inputs = [reshaped, matmul_node.input[1]]
+            unshaped = g.unique_name(f"{self.__class__.__name__}--{matmul_node.input[0]}")
+            outputs = [unshaped]
+
+            # last reshape
+            if g.has_shape(matmul_node.input[0]) and all_int(
+                g.get_shape(matmul_node.input[0])
+            ):
+                shape_back = g.make_initializer(
+                    "",
+                    np.array([*g.get_shape(matmul_node.input[0])[:-1], -1], dtype=np.int64),
+                    source="MatMulAddPattern.new_shape.2",
+                )
+            else:
+                # We extract the shape.
+                that_shape = g.unique_name(
+                    f"{self.__class__.__name__}--{matmul_node.input[0]}"
+                )
+                reshape_nodes.append(
+                    g.make_node(
+                        "Shape",
+                        [matmul_node.input[0]],
+                        [that_shape],
+                        start=0,
+                        end=-1,
+                        name=f"{self.__class__.__name__}--{matmul_node.name}",
+                    )
+                )
+                shape_back = g.unique_name(
+                    f"{self.__class__.__name__}--{matmul_node.input[0]}"
+                )
+                minus1 = g.make_initializer(
+                    "",
+                    np.array([-1], dtype=np.int64),
+                    source="MatMulAddPattern.new_shape.3",
+                )
+                reshape_nodes.append(
+                    g.make_node(
+                        "Concat",
+                        [that_shape, minus1],
+                        [shape_back],
+                        axis=0,
+                        name=f"{self.__class__.__name__}--{matmul_node.name}",
+                    )
+                )
+            reshape_back = g.make_node(
+                "Reshape",
+                [unshaped, shape_back],
                 add_node.output,
                 name=f"{self.__class__.__name__}--{matmul_node.name}",
-                doc_string=matmul_node.doc_string,
             )
-            if matmul_node.op_type == "Gemm":
-                new_node.attribute.extend(matmul_node.attribute)
-            return [new_node]
+        else:
+            inputs = matmul_node.input
+            outputs = add_node.output
+            reshape_node = None
+            bias_gemm_name = bias2
 
+        new_node = g.make_node(
+            "Gemm",
+            [*inputs, bias_gemm_name],
+            outputs,
+            name=f"{self.__class__.__name__}--{matmul_node.name}",
+            doc_string=matmul_node.doc_string,
+        )
+        if matmul_node.op_type == "Gemm":
+            new_node.attribute.extend(matmul_node.attribute)
+        if reshape_node:
+            return [*reshape_nodes, new_node, reshape_back]
+        return [new_node]
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        matmul_node: NodeProto,
+        add_node: NodeProto,
+    ) -> List[NodeProto]:
+
+        if matmul_node.op_type == "MatMul" or len(matmul_node.input) == 2:
+            return self._apply_matmmul(g, matmul_node, add_node)
+
+        bias2 = add_node.input[0 if add_node.input[1] == matmul_node.output[0] else 1]
         # Two bias we need to add first.
         bias_all = g.unique_name(f"{self.__class__.__name__}--{matmul_node.input[2]}")
         new_add_node = g.make_node(
