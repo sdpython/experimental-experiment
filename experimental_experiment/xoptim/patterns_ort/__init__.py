@@ -17,6 +17,7 @@ def get_onnxruntime_patterns(
     """
     from .activation import (
         BiasGeluPattern,
+        BiasSoftmaxPattern,
         FastGeluPattern,
         GeluOrtPattern,
         GeluErfPattern,
@@ -34,6 +35,7 @@ def get_onnxruntime_patterns(
 
     return [
         BiasGeluPattern(verbose=verbose),
+        BiasSoftmaxPattern(verbose=verbose),
         GeluOrtPattern(verbose=verbose),
         GeluErfPattern(verbose=verbose),
         FastGeluPattern(verbose=verbose),
