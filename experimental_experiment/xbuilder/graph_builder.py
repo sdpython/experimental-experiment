@@ -66,6 +66,9 @@ from .expression_dimension import Expression, parse_expression, parse_expression
 from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
 
+# To help finding bugs.
+assert_sorted = sorted
+
 
 @contextlib.contextmanager
 def _unset_fake_temporarily() -> Generator:
@@ -220,7 +223,16 @@ class GraphBuilder(_GraphBuilderRuntime):
     to raise an exception when the type or shape
     of a variable is set. Example: ``ONNXSTOP=attn_output python ...``.
     ``ONNXCST=1`` shows which constant is computed,
-    ``NULLSHAPE=1`` raises an exception as soon as a null shape occurs.
+    ``NULLSHAPE=1`` raises an exception as soon as a null shape occurs. The code includes:
+
+    ::
+
+        self._debug_null_shape = int(os.environ.get("NULLSHAPE", "0"))
+        self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
+        self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
+        self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
+        self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
+        self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
     """
 
     class ShapeConstant:
@@ -372,11 +384,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.constants_ = {}
         self.op = Opset(self)
         self.anyop = Opset(self, allow_unknown=True)
+
         self._debug_null_shape = int(os.environ.get("NULLSHAPE", "0"))
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
         self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
+        self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
+
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
         self.constraints_ = {}
@@ -670,17 +685,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.signature:
             rows.append(string_signature(self.signature))
         # dynamic shapes
-        for k, v in sorted(self.dynamic_objects.items()):
+        for k, v in assert_sorted(self.dynamic_objects.items()):
             rows.append(f"dyn---: {k} -> {_d(v)}")
-        for k, v in sorted(self.dynamic_objects_rev.items()):
+        for k, v in assert_sorted(self.dynamic_objects_rev.items()):
             rows.append(f"dynrev: {k} -> {_d(v)}")
-        for k, v in sorted(self.dynamic_dimensions_source.items()):
+        for k, v in assert_sorted(self.dynamic_dimensions_source.items()):
             rows.append(f"dynsrc: {k} -> {_d(v)}")
-        for k, v in sorted(self._dynamic_alias.items()):
+        for k, v in assert_sorted(self._dynamic_alias.items()):
             rows.append(f"dynals: {k} -> {_d(v)}")
         if self.dynamic_shapes:
             if isinstance(self.dynamic_shapes, dict):
-                for k, v in sorted(self.dynamic_shapes.items()):
+                for k, v in assert_sorted(self.dynamic_shapes.items()):
                     rows.append(f"d-dynshp: {k} -> {_d(v)}")
             else:
                 for k, v in enumerate(self.dynamic_shapes):
@@ -3206,6 +3221,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param kwargs: additional attributes to add the node
         :return: output names
         """
+        if self._debug_local_function and domain:
+            print(
+                f"[GraphBuilder.make_node-f?] {op_type}[{domain}] "
+                f"({', '.join(inputs)}) -> {', '.join(outputs)}"
+            )
         assert name is not None and not name.startswith("None"), (
             f"It is good practice to give every node a name so that is "
             f"easier to see where this node is created but name={name!r} "
@@ -3638,11 +3658,19 @@ class GraphBuilder(_GraphBuilderRuntime):
         :return: output names
         """
         if function_options is not None and function_options.export_as_function:
+            if self._debug_local_function:
+                print(
+                    f"[GraphBuilder.make_nodes-f] function_options={function_options}, "
+                    f"optimize={optimize}"
+                )
+                print(f"[GraphBuilder.make_nodes-f] input_names={input_names}")
             new_inits, (fdomain, fname) = self.make_local_function(
                 builder,
                 function_options=function_options,
                 optimize=optimize,
             )
+            if self._debug_local_function:
+                print(f"[GraphBuilder.make_nodes-f] new_inits={new_inits}")
             self.make_node(
                 fname,
                 [*input_names, *new_inits],
@@ -3772,7 +3800,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"Unexpected type {type(external_threshold)} for external_threshold"
         new_inits = {}
         large_inits = {}
-        for k, v in sorted(self.initializers_dict.items()):
+        for k, v in self.initializers_dict.items():
             if self._parameter_renaming and (
                 (full_parameter_name and k in self._parameter_renaming)
                 or (not full_parameter_name and k not in self._parameter_norename)
@@ -3806,7 +3834,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         full_parameter_name: bool = True,
     ) -> Tuple[List[TensorProto], Dict[str, TensorProto]]:
         """
-        Builds initializers. Initializers are sorted by name.
+        Builds initializers.
 
         :param large_model: build with a large container
         :param switch_low_high: invert low, high precision
@@ -3842,7 +3870,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"switch low/high order"
                 )
             initializer = []
-            for k, v in sorted(init_dict.items()):
+            for k, v in init_dict.items():
                 if self._parameter_renaming and (
                     (full_parameter_name and k in self._parameter_renaming)
                     or (not full_parameter_name and k not in self._parameter_norename)
@@ -3938,7 +3966,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), "_build_initializers not implemented when large_model is True"
         large_inits = {}
         res = []
-        for k, v in sorted(init_dict.items()):
+        for k, v in init_dict.items():
             if self._parameter_renaming and (
                 (full_parameter_name and k in self._parameter_renaming)
                 or (not full_parameter_name and k not in self._parameter_norename)
@@ -4066,17 +4094,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
         if self.constraints_:
             rows.append("--CONSTRAINTS--")
-            for a, b in sorted(self.constraints_.items()):
+            for a, b in assert_sorted(self.constraints_.items()):
                 rows.append(f"{a} = {b}")
         rows.append("--PARAMETERS--")
         rows.append("dynamic_examples=")
-        for i, (k, v) in enumerate(sorted(self._parameter_renaming.items())):
+        for i, (k, v) in enumerate(assert_sorted(self._parameter_renaming.items())):
             rows.append(f"   {k} = {v!r}")
             if i >= 10000:
                 break
         rows.append("--SHAPE--")
         rows.append("dynamic_examples=")
-        for i, (k, v) in enumerate(sorted(self._dynamic_examples.items())):
+        for i, (k, v) in enumerate(assert_sorted(self._dynamic_examples.items())):
             try:
                 rows.append(f"   {k} = {v!r}")
             except AttributeError:
@@ -4084,7 +4112,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if i >= 10000:
                 break
         rows.append("dynamic_objects=")
-        for i, (k, v) in enumerate(sorted(self.dynamic_objects.items())):
+        for i, (k, v) in enumerate(assert_sorted(self.dynamic_objects.items())):
             try:
                 rows.append(f"   {k} = {v!r}")
             except AttributeError:
@@ -4093,7 +4121,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 break
 
         rows.append("dynamic_objects_rev=")
-        for i, (k, v) in enumerate(sorted(self.dynamic_objects_rev.items())):
+        for i, (k, v) in enumerate(assert_sorted(self.dynamic_objects_rev.items())):
             if isinstance(v, (list, tuple)):
                 rows.append(f"   {k!r} = {type(v)}")
                 for vv in v:
@@ -4133,7 +4161,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
         rows.append(
-            f"_known_constants={pprint.pformat(list(sorted(self.constants_))[:10000])}"
+            f"_known_constants={pprint.pformat(list(assert_sorted(self.constants_))[:10000])}"
         )
         reminaing_ranks = {
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
@@ -4141,7 +4169,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
 
         rows.append("--TORCH-USERS--")
-        for k, v in sorted(self._registered_users.items()):
+        for k, v in assert_sorted(self._registered_users.items()):
             rows.append(f"{k} -> {v}")
 
         rows.append("--TORCH-SHAPES--")
@@ -4428,6 +4456,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                     for k, v in self.initializers_dict.items()
                     if k in set(inits)
                 },
+                initializers_renaming={
+                    k: self._parameter_renaming.get(k, k)
+                    for k, v in self.initializers_dict.items()
+                    if k in set(inits)
+                },
             )
             if functions:
                 res["functions"] = [v for k, v in self.functions.items() if k in functions]
@@ -4627,14 +4660,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         output_names = {i.name for i in self.outputs}
         rows = [
             "",
-            f"I<-[{','.join(sorted(input_names))}]",
-            f"C<-[{','.join(sorted(init_names))}]",
+            f"I<-[{','.join(assert_sorted(input_names))}]",
+            f"C<-[{','.join(assert_sorted(init_names))}]",
         ]
         for node in self.nodes:
             rows.append(
-                f"N:{node.op_type}:[{','.join(sorted(node.input))}]->[{','.join(sorted(node.output))}]"
+                f"N:{node.op_type}:[{','.join(assert_sorted(node.input))}]"
+                f"->[{','.join(assert_sorted(node.output))}]"
             )
-        rows.append(f"O->[{','.join(sorted(output_names))}]")
+        rows.append(f"O->[{','.join(assert_sorted(output_names))}]")
         rows.append("")
         return "\n".join(rows)
 
@@ -4842,7 +4876,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 o[k].append(v)
 
         rows = []
-        for k, v in sorted(stats.items()):
+        for k, v in assert_sorted(stats.items()):
             line = (
                 f"    STAT {k} +{v['added']} -{v['removed']} "
                 f"#it={len(set(v['iteration']))} "
@@ -4890,34 +4924,34 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return ", ".join(map(_key, name.input))
 
             cc = Counter([_key(i) for i in self.input_names])
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 rows.append(f"     INPUT: {v:3d} x {k}")
             cc = Counter([_key(i) for i in self.output_names])
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 rows.append(f"    OUTPUT: {v:3d} x {k}")
             cc = Counter([_key(i) for i in self.initializers_dict])
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 rows.append(f"      INIT: {v:3d} x {k}")
             op_types = [(n.domain, n.op_type, _key(n)) for n in self.nodes]
             cc = Counter(op_types)
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 if k[0] == "":
                     rows.append(f"      NODE: {v:3d} x {k[1]} -SIG- {k[2]}")
                 else:
                     rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]} -SIG- {k[2]}")
         else:
             cc = Counter([self.get_type(i) for i in self.input_names])
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 rows.append(f"     INPUT: {v:3d} x {k}t")
             cc = Counter([self.get_type(i) for i in self.output_names])
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 rows.append(f"    OUTPUT: {v:3d} x {k}t")
             cc = Counter([self.get_type(i) for i in self.initializers_dict])
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 rows.append(f"      INIT: {v:3d} x {k}t")
             op_types = [(n.domain, n.op_type) for n in self.nodes]
             cc = Counter(op_types)
-            for k, v in sorted(cc.items()):
+            for k, v in assert_sorted(cc.items()):
                 if k[0] == "":
                     rows.append(f"      NODE: {v:3d} x {k[1]}")
                 else:
@@ -4993,8 +5027,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     hidden |= less
             memo |= set(node.output)
         assert all(name in self.initializers_dict for name in hidden if name), (
-            f"Some hidden inputs in {sorted(hidden)!r} are not initializers "
-            f"{sorted(self.initializers_dict)}. It is unexpected."
+            f"Some hidden inputs in {assert_sorted(hidden)!r} are not initializers "
+            f"{assert_sorted(self.initializers_dict)}. It is unexpected."
         )
         return hidden
 
@@ -5358,7 +5392,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             value,
                             existing=None,
                             source=f"GraphBuilder.constant_folding.from/fold"
-                            f"({','.join(sorted(feeds))}){text_sources}",
+                            f"({','.join(assert_sorted(feeds))}){text_sources}",
                         )
                     else:
                         updates[name] = v
@@ -5366,7 +5400,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         print(
                             f"[GraphBuilder.constant_folding] fold_constant:"
                             f"{v.op_type}:{name}[{value.dtype}:"
-                            f"{value.shape}]:from:{','.join(sorted(feeds))}"
+                            f"{value.shape}]:from:{','.join(assert_sorted(feeds))}"
                         )
 
         for k, v in updates.items():
@@ -6421,6 +6455,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         name = function_options.name
         domain = function_options.domain
+        if self._debug_local_function:
+            print(
+                f"[GraphBuilder.make_local_function] {name}[{domain}]"
+                f"({', '.join(_.name for _ in builder.inputs)})"
+                f"-> {', '.join(_.name for _ in builder.outputs)}"
+            )
         assert name, f"function_options is wrong {function_options!r}"
         assert (
             function_options.rename_allowed
@@ -6431,7 +6471,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         if function_options.move_initializer_to_constant:
             if function_options.inline:
                 self._check_constants("before-inline_functions")
+                if self._debug_local_function:
+                    print(
+                        f"[GraphBuilder.make_local_function] inline_functions "
+                        f"{len(builder.functions)}"
+                    )
                 builder.inline_functions(verbose=max(0, self.verbose - 1))
+                if self._debug_local_function:
+                    print(
+                        f"[GraphBuilder.make_local_function] after inlining "
+                        f"{len(builder.functions)}"
+                    )
                 self._check_constants("after-inline_functions")
 
         assert function_options.return_initializer, (
@@ -6447,6 +6497,25 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{self.get_debug_msg()}"
         )
         onx = fct["proto"]
+        if self._debug_local_function:
+            print(f"[GraphBuilder.make_local_function] keys={', '.join(fct)}")
+            if "initializers_name" in fct:
+                print(
+                    f"[GraphBuilder.make_local_function] initializers_name="
+                    f"{fct['initializers_name']}"
+                )
+                print(
+                    f"[GraphBuilder.make_local_function] initializers_dict="
+                    f"{list(fct['initializers_dict'])}"
+                )
+                print(
+                    f"[GraphBuilder.make_local_function] initializers_renaming="
+                    f"{fct['initializers_renaming']}"
+                )
+            print(
+                f"[GraphBuilder.make_local_function] fct {onx.name}[{onx.domain}]"
+                f"({', '.join(onx.input)}) -> {', '.join(onx.output)})"
+            )
         doc_string = f"function_options={function_options!r}"
         onx.doc_string += doc_string + (
             f"\noptimized:{builder.optimization_options!r}" if optimize else "not-optimized"
@@ -6467,29 +6536,40 @@ class GraphBuilder(_GraphBuilderRuntime):
                 to_rename[old_key] = new_key
             keys.append(new_key)
 
+        if self._debug_local_function:
+            print(f"[GraphBuilder.make_local_function] to_rename={to_rename}")
+
         if to_rename:
             # We rename the local functions.
+            if self._debug_local_function:
+                print(f"[GraphBuilder.make_local_function] to rename inputs={onx.input}")
             onx = self.rename_in_local_functions(to_rename, keys, proto=onx)
+            if self._debug_local_function:
+                print(f"[GraphBuilder.make_local_function] renamed inputs={onx.input}")
 
         # Let's rename the initializers.
         if "initializers_dict" in fct:
+            assert len(fct["initializers_dict"]) == len(fct["initializers_name"]), (
+                f"Names mismatch between {fct['initializers_name']} and "
+                f"{list(fct['initializers_dict'])}{builder.get_debug_msg()}"
+            )
             repl = {}
-            inits = fct["initializers_dict"]
-            new_inits = []
-            for i in onx.input:
-                if i in inits:
-                    new_inits.append(i)
-            for i in inits:
-                if i not in new_inits:
-                    new_inits.append(i)
-            for k, v in inits.items():
+            for k, v in fct["initializers_dict"].items():
                 new_name = self.add_initializer(
                     self.unique_name(k),
                     v,
                     source=f"GraphBuilder.make_local_function/from({k})",
                 )
                 repl[k] = new_name
-            new_inits = [repl.get(i, i) for i in new_inits]
+            renaming = fct["initializers_renaming"]
+            new_inits = []
+            for input_name in fct["initializers_name"]:
+                init_name = renaming[input_name]
+                repl_name = repl[init_name]
+                new_inits.append(repl_name)
+
+            if self._debug_local_function:
+                print(f"[GraphBuilder.make_local_function] new_inits={new_inits}")
         else:
             new_inits = []
 
@@ -6541,7 +6621,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for key in list_keys:
             assert (
                 key in self.functions
-            ), f"Local function {key!r} is missing from {sorted(self.functions)}"
+            ), f"Local function {key!r} is missing from {assert_sorted(self.functions)}"
             new_f = self._rename_op_type_in_local_functions(self.functions[key], replacements)
             self.functions[key] = new_f
         if proto is None:
@@ -6640,6 +6720,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             existing = self.functions[key]
             if same_function_proto(existing, f):
                 # No need to add it again.
+                if self._debug_local_function:
+                    print(
+                        f"[GraphBuilder.add_function] -- existing {f.name}[{f.domain}] "
+                        f"({', '.join(f.input)}) -> {', '.join(f.output)}"
+                    )
                 return f.domain, f.name
         if rename_allowed and key in self.functions:
             i = 2
@@ -6655,6 +6740,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{same_function_proto(self.functions[key], f)}"
             f"\n{self.pretty_text()}"
         )
+        if self._debug_local_function:
+            print(
+                f"[GraphBuilder.add_function] ---- adding {f.name}[{f.domain}] "
+                f"({', '.join(f.input)}) -> {', '.join(f.output)}"
+            )
         self.functions[key] = f
         if builder:
             self.functions_builder[key] = builder
@@ -6927,7 +7017,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if o in replacements:
                     assert (
                         replacements[o] == o
-                    ), f"o={o!r} must be an output in {sorted(replacements)!r}"
+                    ), f"o={o!r} must be an output in {assert_sorted(replacements)!r}"
                     new_outputs.append(o)
                     continue
                 new_name = self.unique_name(o)

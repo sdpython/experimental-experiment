@@ -15,7 +15,6 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from timeit import Timer
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
-
 import numpy
 from numpy.testing import assert_allclose
 
@@ -475,6 +474,11 @@ class ExtTestCase(unittest.TestCase):
         if not isinstance(value, numpy.ndarray):
             value = numpy.array(value).astype(expected.dtype)
         self.assertEqualArray(expected, value, atol=atol, rtol=rtol)
+
+    def check_ort(self, onx: "onnx.ModelProto") -> bool:  # noqa: F821
+        from onnxruntime import InferenceSession
+
+        return InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
 
     def assertRaise(self, fct: Callable, exc_type: type[Exception]):
         """In the name"""
