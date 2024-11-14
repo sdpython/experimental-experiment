@@ -323,7 +323,14 @@ class TestTools(ExtTestCase):
 
         self.assertIsInstance(fct, dict)
         self.assertEqual(
-            set(fct), {"proto", "functions", "initializers_name", "initializers_dict"}
+            set(fct),
+            {
+                "proto",
+                "functions",
+                "initializers_name",
+                "initializers_dict",
+                "initializers_renaming",
+            },
         )
         self.assertIsInstance(fct["proto"], FunctionProto)
         self.assertIsInstance(fct["functions"], list)
@@ -431,7 +438,14 @@ class TestTools(ExtTestCase):
 
         self.assertIsInstance(fct, dict)
         self.assertEqual(
-            set(fct), {"proto", "functions", "initializers_name", "initializers_dict"}
+            set(fct),
+            {
+                "proto",
+                "functions",
+                "initializers_name",
+                "initializers_dict",
+                "initializers_renaming",
+            },
         )
         self.assertIsInstance(fct["proto"], FunctionProto)
         self.assertIsInstance(fct["functions"], list)
@@ -570,7 +584,14 @@ class TestTools(ExtTestCase):
 
         self.assertIsInstance(fct, dict)
         self.assertEqual(
-            set(fct), {"proto", "functions", "initializers_name", "initializers_dict"}
+            set(fct),
+            {
+                "proto",
+                "functions",
+                "initializers_name",
+                "initializers_dict",
+                "initializers_renaming",
+            },
         )
         self.assertIsInstance(fct["proto"], FunctionProto)
         self.assertIsInstance(fct["functions"], list)
@@ -707,7 +728,14 @@ class TestTools(ExtTestCase):
 
         self.assertIsInstance(fct, dict)
         self.assertEqual(
-            set(fct), {"proto", "functions", "initializers_name", "initializers_dict"}
+            set(fct),
+            {
+                "proto",
+                "functions",
+                "initializers_name",
+                "initializers_dict",
+                "initializers_renaming",
+            },
         )
         self.assertIsInstance(fct["proto"], FunctionProto)
         self.assertIsInstance(fct["functions"], list)
@@ -858,7 +886,14 @@ class TestTools(ExtTestCase):
 
         self.assertIsInstance(fct, dict)
         self.assertEqual(
-            set(fct), {"proto", "functions", "initializers_name", "initializers_dict"}
+            set(fct),
+            {
+                "proto",
+                "functions",
+                "initializers_name",
+                "initializers_dict",
+                "initializers_renaming",
+            },
         )
         self.assertIsInstance(fct["proto"], FunctionProto)
         self.assertIsInstance(fct["functions"], list)

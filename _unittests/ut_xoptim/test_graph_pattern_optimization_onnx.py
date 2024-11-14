@@ -3759,6 +3759,156 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_matmul_add_reshape_1(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("MatMul", ["X1", "X2"], ["Y"]),
+                    oh.make_node("Add", ["Y", "B"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("X1", TFLOAT, [4, 2, 3]),
+                    _mkv_("X2", TFLOAT, [3, 2]),
+                    _mkv_("B", TFLOAT, [2]),
+                ],
+                [_mkv_("Z", TFLOAT, [4, 2, 2])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {
+            "X1": self._range(4, 2, 3).astype(np.float32),
+            "X2": self._range(3, 2).astype(np.float32),
+            "B": self._range(2).astype(np.float32),
+        }
+        from onnxruntime import InferenceSession
+
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["MatMulAdd"], verbose=0, constant_folding=True
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(
+            ["Reshape", "Gemm", "Reshape"], [n.op_type for n in opt_onx.graph.node]
+        )
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_matmul_add_reshape_2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("MatMul", ["X1", "X2"], ["Y"]),
+                    oh.make_node("Add", ["Y", "B"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("X1", TFLOAT, [4, 2, 3]),
+                    _mkv_("X2", TFLOAT, [3, 2]),
+                    _mkv_("B", TFLOAT, [4, 2, 2]),
+                ],
+                [_mkv_("Z", TFLOAT, [4, 2, 2])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {
+            "X1": self._range(4, 2, 3).astype(np.float32),
+            "X2": self._range(3, 2).astype(np.float32),
+            "B": self._range(4, 2, 2).astype(np.float32),
+        }
+        from onnxruntime import InferenceSession
+
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["MatMulAdd"], verbose=0, constant_folding=True
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(
+            ["Reshape", "Reshape", "Gemm", "Reshape"], [n.op_type for n in opt_onx.graph.node]
+        )
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_matmul_add_reshape_2_dyn(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("MatMul", ["X1", "X2"], ["Y"]),
+                    oh.make_node("Add", ["Y", "B"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("X1", TFLOAT, ["a", "b", 3]),
+                    _mkv_("X2", TFLOAT, [3, "d"]),
+                    _mkv_("B", TFLOAT, ["a", "b", "d"]),
+                ],
+                [_mkv_("Z", TFLOAT, ["a", "b", "d"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {
+            "X1": self._range(4, 2, 3).astype(np.float32),
+            "X2": self._range(3, 2).astype(np.float32),
+            "B": self._range(4, 2, 2).astype(np.float32),
+        }
+        from onnxruntime import InferenceSession
+
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(
+                patterns=["MatMulAdd"],
+                verbose=10,
+                constant_folding=True,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(
+            ["Reshape", "Shape", "Concat", "Reshape", "Shape", "Concat", "Gemm", "Reshape"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
     def test_matmul_transpose_cst(self):
         model = oh.make_model(
             oh.make_graph(
