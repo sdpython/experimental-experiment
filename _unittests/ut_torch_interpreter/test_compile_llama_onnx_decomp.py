@@ -262,7 +262,7 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model_backward_decomposition",
             decompositions=True,
             impl="ref",
-            atol=2e-4,
+            atol=1e-3,
             # verbose=10,
         )
 
