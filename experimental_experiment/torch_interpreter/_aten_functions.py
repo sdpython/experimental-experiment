@@ -2878,6 +2878,36 @@ def aten_gelu(
     )
 
 
+def aten_grid_sampler(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    grid: T,
+    interpolation_mode: int,
+    padding_mode: int,
+    align_corners: bool,
+    name: str = "grid_sampler",
+) -> T:
+    """grid_sampler"""
+
+    inter_mode_options = ("bilinear", "nearest", "bicubic")
+    inter_mode_str = inter_mode_options[interpolation_mode]
+
+    padding_mode_options = ("zeros", "border", "reflection")
+    padding_mode_str = padding_mode_options[padding_mode]
+
+    return g.op.GridSample(
+        x,
+        grid,
+        align_corners=align_corners,
+        mode=inter_mode_str,
+        padding_mode=padding_mode_str,
+        outputs=outputs,
+        name=name,
+    )
+
+
 def aten_group_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4034,6 +4064,47 @@ def aten_linear(
             if rkw == rkx:
                 g.set_rank(res, rkw)
     return res
+
+
+def aten_linspace(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    start: T,
+    end: T,
+    steps: int,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout: str = "",
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    name: str = "linspace",
+) -> T:
+    """linspace"""
+    import torch
+
+    assert layout in (
+        None,
+        torch.strided,
+    ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
+    assert pin_memory in (
+        None,
+        False,
+    ), f"not implemented for pin_memory={pin_memory!r} {g.get_debug_msg()}"
+
+    if isinstance(start, float) and isinstance(end, float):
+        # A constant will do.
+
+        np_dtype = (
+            np.float32
+            if dtype is None
+            else tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))
+        )
+        cst = np.linspace(start, end, steps).astype(np_dtype)
+        return g.op.Identity(cst, outputs=outputs, name=name)
+
+    raise NotImplementedError(
+        f"linspace not implemented when start={start!r} and end={end!r}{g.get_debug_msg()}"
+    )
 
 
 def aten_log(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
