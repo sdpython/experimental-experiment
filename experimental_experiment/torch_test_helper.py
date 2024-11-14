@@ -130,9 +130,13 @@ def export_to_onnx(
     return ret
 
 
-def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa: F821
+def dummy_llm(
+    cls_name: Optional[str] = None,
+) -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa: F821
     """
     Creates a dummy LLM for test purposes.
+
+    :param cls_name: None for whole model or a piece of it
 
     .. runpython::
         :showcode:
@@ -143,7 +147,7 @@ def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa
     import torch
 
     class Embedding(torch.nn.Module):
-        def __init__(self, vocab_size: int, embedding_dim: int):
+        def __init__(self, vocab_size: int = 1024, embedding_dim: int = 16):
             super().__init__()
             self.embedding = torch.nn.Embedding(vocab_size, embedding_dim)
             self.pe = torch.nn.Embedding(vocab_size, embedding_dim)
@@ -155,7 +159,7 @@ def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa
 
     class AttentionBlock(torch.nn.Module):
 
-        def __init__(self, embedding_dim: int, context_size: int):
+        def __init__(self, embedding_dim: int = 16, context_size: int = 256):
             super().__init__()
             self.query = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
             self.key = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
@@ -180,7 +184,9 @@ def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa
 
     class MultiAttentionBlock(torch.nn.Module):
 
-        def __init__(self, embedding_dim: int, num_heads: int, context_size: int):
+        def __init__(
+            self, embedding_dim: int = 16, num_heads: int = 2, context_size: int = 256
+        ):
             super().__init__()
             self.attention = torch.nn.ModuleList(
                 modules=[AttentionBlock(embedding_dim, context_size) for _ in range(num_heads)]
@@ -196,7 +202,7 @@ def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa
 
     class FeedForward(torch.nn.Module):
 
-        def __init__(self, embedding_dim: int, ff_dim: int):
+        def __init__(self, embedding_dim: int = 16, ff_dim: int = 128):
             super().__init__()
             self.linear_1 = torch.nn.Linear(embedding_dim, ff_dim)
             self.relu = torch.nn.ReLU()
@@ -210,7 +216,13 @@ def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa
 
     class DecoderLayer(torch.nn.Module):
 
-        def __init__(self, embedding_dim: int, num_heads: int, context_size: int, ff_dim: int):
+        def __init__(
+            self,
+            embedding_dim: int = 16,
+            num_heads: int = 2,
+            context_size: int = 256,
+            ff_dim: int = 128,
+        ):
             super().__init__()
             self.attention = MultiAttentionBlock(embedding_dim, num_heads, context_size)
             self.feed_forward = FeedForward(embedding_dim, ff_dim)
@@ -247,4 +259,30 @@ def dummy_llm() -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa
             y = self.decoder(x)
             return y
 
-    return LLM(), (torch.randint(0, 1024, (1, 30)).to(torch.int64),)
+    if cls_name in (None, "LLM"):
+        dec = LLM()
+        x = torch.randint(0, 1024, (1, 30)).to(torch.int64)
+        dec(x)
+        return dec, (x,)
+
+    if cls_name == "DecoderLayer":
+        LLM()(torch.randint(0, 1024, (1, 30)).to(torch.int64))
+
+        dec = DecoderLayer()
+        x = Embedding()(torch.randint(0, 1024, (1, 30)).to(torch.int64))
+        dec(x)
+        return dec, (x,)
+
+    if cls_name == "MultiAttentionBlock":
+        dec = MultiAttentionBlock()
+        x = torch.rand(1, 30, 16).to(torch.float32)
+        dec(x)
+        return dec, (x,)
+
+    if cls_name == "AttentionBlock":
+        dec = AttentionBlock()
+        x = torch.rand(1, 30, 16).to(torch.float32)
+        dec(x)
+        return dec, (x,)
+
+    raise NotImplementedError(f"cls_name={cls_name}")
