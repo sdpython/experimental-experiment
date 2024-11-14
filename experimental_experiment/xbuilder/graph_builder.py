@@ -3665,9 +3665,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
                 print(f"[GraphBuilder.make_nodes-f] input_names={input_names}")
             new_inits, (fdomain, fname) = self.make_local_function(
-                builder,
-                function_options=function_options,
-                optimize=optimize,
+                builder, function_options=function_options, optimize=optimize
             )
             if self._debug_local_function:
                 print(f"[GraphBuilder.make_nodes-f] new_inits={new_inits}")
@@ -3803,7 +3801,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         for k, v in self.initializers_dict.items():
             if self._parameter_renaming and (
                 (full_parameter_name and k in self._parameter_renaming)
-                or (not full_parameter_name and k not in self._parameter_norename)
             ):
                 # Those parameters are present under another name already.
                 continue
@@ -3873,7 +3870,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             for k, v in init_dict.items():
                 if self._parameter_renaming and (
                     (full_parameter_name and k in self._parameter_renaming)
-                    or (not full_parameter_name and k not in self._parameter_norename)
                 ):
                     # Those parameters are present under another name already.
                     continue
@@ -3969,7 +3965,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         for k, v in init_dict.items():
             if self._parameter_renaming and (
                 (full_parameter_name and k in self._parameter_renaming)
-                or (not full_parameter_name and k not in self._parameter_norename)
             ):
                 # Those parameters are present under another name already.
                 continue
@@ -4399,6 +4394,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if function_options.export_as_function:
+            if self._debug_local_function:
+                print(f"[GraphBuilder.to_onnx] export_as_function {function_options}")
             if self.verbose:
                 print(
                     f"[GraphBuilder-{self._hash()}.to_onnx] make_function "
@@ -4418,11 +4415,21 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.pretty_text()}"
             )
             if function_options.move_initializer_to_constant:
+                if self._debug_local_function:
+                    print(
+                        f"[GraphBuilder.to_onnx] move_initializers_to_constant "
+                        f"{len(self.initializers_dict)}"
+                    )
                 self.move_initializers_to_constant(
                     full_parameter_name=False,
                     threshold=function_options.external_threshold,
                     verbose=max(0, self.verbose - 1),
                 )
+                if self._debug_local_function:
+                    print(
+                        f"[GraphBuilder.to_onnx] remaining_initializers "
+                        f"{len(self.initializers_dict)}-{sorted(self.initializers_dict)}"
+                    )
             # if self._parameter_renaming: we don't necessarily need to rename here.
             # We better not if we want to make this function equivalent to it.
             proto = oh.make_function(
@@ -6458,7 +6465,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self._debug_local_function:
             print(
                 f"[GraphBuilder.make_local_function] {name}[{domain}]"
-                f"({', '.join(_.name for _ in builder.inputs)})"
+                f"({', '.join(_.name for _ in builder.inputs)}) "
                 f"-> {', '.join(_.name for _ in builder.outputs)}"
             )
         assert name, f"function_options is wrong {function_options!r}"
