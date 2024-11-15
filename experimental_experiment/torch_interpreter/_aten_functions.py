@@ -31,6 +31,7 @@ from ..xbuilder._dtype_helper import (
 from ..xbuilder.graph_builder import GraphBuilder
 from ..xbuilder.shape_type_compute import (
     _adjust_attributes_of_max_pool,
+    broadcast_shape,
     set_type_shape_unary_op,
     set_type_shape_binary_op,
     set_type_shape_reduce_op,
@@ -1024,6 +1025,46 @@ def aten_bmm(
     if not sts:
         set_type_shape_matmul(g, res, x, y)
     return res
+
+
+def aten_broadcast_tensors(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    tensors: List[str],
+    name: str = "broadcast_tensors",
+) -> List[T]:
+    "reshape into same shapes"
+    assert (
+        len(tensors) > 1
+    ), f"This function should be removed as tensors={tensors!r}{g.get_debug_msg()}"
+    assert all(
+        g.has_type(t) for t in tensors
+    ), f"One tensors in {tensors!r} has no type.{g.get_debug_msg()}"
+    assert (
+        len(outputs) == 1
+    ), f"Mismatch between tensors={tensors} and outputs={outputs}{g.get_debug_msg()}"
+    if all((g.has_shape(t) and is_static_shape(g.get_shape(t))) for t in tensors):
+        shapes = [g.get_shape(t) for t in tensors]
+        if len(tensors) == 2:
+            new_shape = broadcast_shape(*shapes, graph_builder=g)
+            np_shape = np.array(new_shape, dtype=np.int64)
+            new_tensors = [
+                g.op.Reshape(t, np_shape, name=f"{name}_{i}") for i, t in enumerate(tensors)
+            ]
+            seq = g.op.SequenceConstruct(*new_tensors, outputs=outputs, name=name)
+
+            if not sts:
+                g.set_sequence(
+                    seq, g.get_type(tensors[0]), shapes=[new_shape for _t in tensors]
+                )
+            return seq
+        raise NotImplementedError(
+            f"broadcast_tensors applies on more than 2 tensors {tensors!r}{g.get_debug_msg()}"
+        )
+    raise NotImplementedError(
+        f"broadcast_tensors: at least one shape is dynamic in {tensors!r}{g.get_debug_msg()}"
+    )
 
 
 def aten_cat(
@@ -2878,6 +2919,36 @@ def aten_gelu(
     )
 
 
+def aten_grid_sampler(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    grid: T,
+    interpolation_mode: int,
+    padding_mode: int,
+    align_corners: bool,
+    name: str = "grid_sampler",
+) -> T:
+    """grid_sampler"""
+
+    inter_mode_options = ("bilinear", "nearest", "bicubic")
+    inter_mode_str = inter_mode_options[interpolation_mode]
+
+    padding_mode_options = ("zeros", "border", "reflection")
+    padding_mode_str = padding_mode_options[padding_mode]
+
+    return g.op.GridSample(
+        x,
+        grid,
+        align_corners=align_corners,
+        mode=inter_mode_str,
+        padding_mode=padding_mode_str,
+        outputs=outputs,
+        name=name,
+    )
+
+
 def aten_group_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3799,6 +3870,69 @@ def aten_index_select(
     return res
 
 
+def aten_l1_loss(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    target: T,
+    reduction: str = "mean",
+    name: str = "l1_loss",
+) -> T:
+    "l1_loss"
+
+    diff_abs = g.op.Abs(g.op.Sub(x, target, name=name), name=name)
+    if reduction in (1, "mean"):
+        res = g.op.ReduceMeanAnyOpset(diff_abs, name=name, outputs=outputs, keepdims=0)
+    elif reduction == "sum":
+        res = g.op.ReduceSumAnyOpset(diff_abs, name=name, outputs=outputs, keepdims=0)
+    elif reduction == "none":
+        res = g.op.Identity(diff_abs, name=name, outputs=outputs)
+    else:
+        raise NotImplementedError(
+            f"l1_loss with reduction={reduction!r} is not implemented{g.get_debug_msg()}"
+        )
+    if not sts:
+        if reduction == "none":
+            set_type_shape_unary_op(res, x)
+        else:
+            g.set_type(res, g.get_type(x))
+            g.get_shape(res, tuple())
+    return res
+
+
+def aten_mse_loss(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    target: T,
+    reduction: str = "mean",
+    name: str = "mse_loss",
+) -> T:
+    "mse_loss"
+
+    diff = g.op.Sub(x, target, name=name)
+    diff_mul = g.op.Mul(diff, diff, name=name)
+    if reduction in (1, "mean"):
+        res = g.op.ReduceMeanAnyOpset(diff_mul, name=name, outputs=outputs, keepdims=0)
+    elif reduction == "sum":
+        res = g.op.ReduceSumAnyOpset(diff_mul, name=name, outputs=outputs, keepdims=0)
+    elif reduction == "none":
+        res = g.op.Identity(diff_mul, name=name, outputs=outputs)
+    else:
+        raise NotImplementedError(
+            f"l1_loss with reduction={reduction!r} is not implemented{g.get_debug_msg()}"
+        )
+    if not sts:
+        if reduction == "none":
+            set_type_shape_unary_op(res, x)
+        else:
+            g.set_type(res, g.get_type(x))
+            g.get_shape(res, tuple())
+    return res
+
+
 def aten_layer_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4034,6 +4168,47 @@ def aten_linear(
             if rkw == rkx:
                 g.set_rank(res, rkw)
     return res
+
+
+def aten_linspace(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    start: T,
+    end: T,
+    steps: int,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout: str = "",
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    name: str = "linspace",
+) -> T:
+    """linspace"""
+    import torch
+
+    assert layout in (
+        None,
+        torch.strided,
+    ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
+    assert pin_memory in (
+        None,
+        False,
+    ), f"not implemented for pin_memory={pin_memory!r} {g.get_debug_msg()}"
+
+    if isinstance(start, float) and isinstance(end, float):
+        # A constant will do.
+
+        np_dtype = (
+            np.float32
+            if dtype is None
+            else tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))
+        )
+        cst = np.linspace(start, end, steps).astype(np_dtype)
+        return g.op.Identity(cst, outputs=outputs, name=name)
+
+    raise NotImplementedError(
+        f"linspace not implemented when start={start!r} and end={end!r}{g.get_debug_msg()}"
+    )
 
 
 def aten_log(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:

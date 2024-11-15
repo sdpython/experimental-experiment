@@ -12,6 +12,7 @@ experimental_experiment.xoptim.patterns_ort
 
     activation
     activation_grad
+    fused_conv
     fused_matmul
     gather_grad
     simplified_layer_normalization

@@ -1024,6 +1024,60 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-4)
 
+    def test_fused_conv(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "Conv",
+                        ["X", "W", "B"],
+                        ["c"],
+                        dilations=[1, 1],
+                        group=1,
+                        pads=[1, 1, 1, 1],
+                        strides=[1, 1],
+                    ),
+                    oh.make_node("Relu", ["c"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [1, 8, 6, 6]),
+                    oh.make_tensor_value_info("W", TFLOAT, [8, 8, 3, 3]),
+                    oh.make_tensor_value_info("B", TFLOAT, [8]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, [1, 8, 6, 6])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        feeds = {
+            "X": self._range(1, 8, 6, 6),
+            "W": self._range(8, 8, 3, 3),
+            "B": self._range(8),
+        }
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            optimization_options=OptimizationOptions(patterns=["FusedConv"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["FusedConv"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

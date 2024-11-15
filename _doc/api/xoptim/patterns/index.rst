@@ -27,6 +27,7 @@ experimental_experiment.xoptim.patterns
     onnx_slice
     onnx_split
     onnx_sub
+    onnx_sequence
     onnx_transpose
     onnx_unsqueeze
 
