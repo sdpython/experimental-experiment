@@ -1306,8 +1306,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         import torch
 
         assert len(old_shape) == len(shape), (
-            f"Rank mismatch between {old_shape} and {shape} (name={name!r}"
-            f"{self.get_debug_msg()}"
+            f"Rank mismatch between previous shape {old_shape} and "
+            f"new shape {shape} (name={name!r}{self.get_debug_msg()}"
         )
         for d1, d2 in zip(old_shape, shape):
             if isinstance(d1, int) and isinstance(d2, int):

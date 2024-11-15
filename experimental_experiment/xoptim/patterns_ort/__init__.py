@@ -23,6 +23,7 @@ def get_onnxruntime_patterns(
         GeluErfPattern,
     )
     from .activation_grad import SoftmaxGradPattern
+    from .fused_conv import FusedConvPattern
     from .fused_matmul import (
         FusedMatMulDivPattern,
         FusedMatMulPattern,
@@ -38,6 +39,7 @@ def get_onnxruntime_patterns(
         BiasSoftmaxPattern(verbose=verbose),
         GeluOrtPattern(verbose=verbose),
         GeluErfPattern(verbose=verbose),
+        FusedConvPattern(verbose=verbose),
         FastGeluPattern(verbose=verbose),
         FusedMatMulPattern(verbose=verbose),
         FusedMatMulx2Pattern(verbose=verbose),
