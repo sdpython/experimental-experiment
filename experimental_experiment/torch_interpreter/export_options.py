@@ -39,6 +39,7 @@ class ExportOptions:
         None: {},
         "none": {},
         "strict": {"strict": True},
+        "tracing": {"tracing": True},
         "nostrict": {"strict": False},
         "jit": {"jit": True},
         "fallback": {"fallback": True},
@@ -84,6 +85,12 @@ class ExportOptions:
         assert (
             self.strict or not self.dynamo
         ), "strict and dynamo cannot be true at the same time"
+        assert (
+            not tracing or not dynamo
+        ), f"Both tracing and dynamo are incompatible options in {self!r}"
+        assert (
+            not tracing or strict
+        ), f"Both tracing and strict=False are incompatible options in {self!r}"
 
     def __repr__(self) -> str:
         return string_sig(self)

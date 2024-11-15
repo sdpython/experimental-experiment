@@ -1,6 +1,7 @@
 from onnx import TensorProto
 from .optimization_options import OptimizationOptions
 from .graph_builder import GraphBuilder, FunctionOptions
+from .virtual_tensor import VirtualTensor
 
 
 def str_tensor_proto_type() -> str:

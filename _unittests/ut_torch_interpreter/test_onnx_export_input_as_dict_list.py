@@ -214,6 +214,43 @@ class TestOnnxExportInputDictList(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    def test_neuron_tracer(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x))
+
+            def _get_random_inputs(self, device: str):
+                return (torch.randn(2, 5).to(device),)
+
+        x = torch.rand(2, 5)
+        model = Neuron()
+
+        batch = torch.export.Dim("batch", min=1, max=2048)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: batch},),
+            export_options=ExportOptions(tracing=True),
+        )
+        import onnx
+
+        onnx.save(onx, "test_neuron_tracer.onnx")
+        feeds = {"x": x.numpy()}
+
+        expected = model(x)
+
+        from onnxruntime import InferenceSession
+
+        ref = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

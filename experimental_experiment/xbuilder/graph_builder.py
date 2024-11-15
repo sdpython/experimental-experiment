@@ -2774,6 +2774,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param marker: to known from this input was created
         :return: input name
         """
+        assert (
+            self.as_function or elem_type
+        ), f"elem_type is unknown for name={name!r}{self.get_debug_msg()}"
         add_node = lambda: None  # noqa: E731
         if self.current_input < len(self.input_names):
             # The input needs to be renamed, an identity node is added.
@@ -3822,16 +3825,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 src = (
                     ""
-                    if init.name not in builder.initializers_dict_sources
-                    or not builder.initializers_dict_sources[init.name].source
-                    else f"##{builder.initializers_dict_sources[init.name].source}"
+                    if init not in builder.initializers_dict_sources
+                    or not builder.initializers_dict_sources[init].source
+                    else f"##{builder.initializers_dict_sources[init].source}"
                 )
                 self.add_initializer(
                     name,
                     value,
                     itype=builder._known_types[init],
                     shape=builder._known_shapes[init],
-                    source=f"GraphBuilder.make_nodes/from{init.name}{src}",
+                    source=f"GraphBuilder.make_nodes/from{init}{src}",
                 )
 
             for k, v in builder.dynamic_objects.items():
@@ -3851,7 +3854,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"easier to see where this node is created but name={name!r} "
                     f"and op_type={node.op_type!r}."
                 )
-                new_inputs = [renaming[i] for i in node.input]
+                new_inputs = [
+                    renaming[builder._parameter_renaming.get(i, i)] for i in node.input
+                ]
                 new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
                 for o, no in zip(node.output, new_outputs):
                     renaming[o] = no
@@ -7358,6 +7363,11 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         # We assume the rank is correct.
         ret_shape = list(example_shape)
-        for k, v in info.items():
-            ret_shape[k] = v.__name__
+        if isinstance(info, dict):
+            for k, v in info.items():
+                ret_shape[k] = v.__name__
+        else:
+            for i, v in enumerate(info):
+                if v is not None:
+                    ret_shape[i] = v.__name__
         return tuple(ret_shape)

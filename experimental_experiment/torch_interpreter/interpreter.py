@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 import numpy as np
 from onnx import TensorProto
 from ..helpers import string_type, make_hash
-from ..xbuilder import GraphBuilder, FunctionOptions
+from ..xbuilder import GraphBuilder, FunctionOptions, VirtualTensor
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..xbuilder._dtype_helper import (
     torch_dtype_to_onnx_dtype,
@@ -82,7 +82,16 @@ class DynamoInterpreter:
             (
                 t is None
                 or isinstance(
-                    t, (torch.SymInt, torch.SymFloat, torch.Tensor, list, int, float)
+                    t,
+                    (
+                        torch.SymInt,
+                        torch.SymFloat,
+                        torch.Tensor,
+                        list,
+                        int,
+                        float,
+                        VirtualTensor,
+                    ),
                 )
             )
             for t in example_inputs
@@ -136,7 +145,14 @@ class DynamoInterpreter:
             for i in x:
                 if i is None or isinstance(
                     i,
-                    (self.torch.Tensor, self.torch.SymInt, self.torch.SymFloat, int, float),
+                    (
+                        self.torch.Tensor,
+                        self.torch.SymInt,
+                        self.torch.SymFloat,
+                        int,
+                        float,
+                        VirtualTensor,
+                    ),
                 ):
                     res.append(i)
                 else:
@@ -446,7 +462,7 @@ class DynamoInterpreter:
                     users=node.users,
                 )
 
-            if isinstance(example_value, self.torch.Tensor):
+            if isinstance(example_value, (self.torch.Tensor, VirtualTensor)):
                 return self._make_tensor_input(
                     node.name,
                     elem_type=example_value.dtype,
@@ -1528,9 +1544,32 @@ class DynamoInterpreter:
             graph = tracer_class().trace(sub_module)
             gm = self.torch.fx.GraphModule(sub_module, graph)
 
+        assert not kwargs, (
+            f"This functionality is not implemented kwargs={string_type(kwargs)}"
+            f"{self.get_debug_msg()}"
+        )
+        if args is None:
+            new_args = None
+        else:
+            new_args = []
+            for a in args:
+                if isinstance(a, self.torch.fx.Node):
+                    name = a.name
+                    dtype = self.builder.get_type(name) if self.builder.has_type(name) else 0
+                    shape = (
+                        self.builder.get_shape(name) if self.builder.has_shape(name) else None
+                    )
+                    new_args.append(VirtualTensor(name=name, dtype=dtype, shape=shape))
+                elif isinstance(a, self.torch.Tensor):
+                    new_args.append(a)
+                else:
+                    raise NotImplementedError(
+                        f"Unable to process argument {type(a)}{self.get_debug_msg()}"
+                    )
+
         graph_module, builder, interpreter = _make_builder_interpreter(
             gm,
-            args=None if args is None else tuple(args),
+            args=None if new_args is None else tuple(new_args),
             kwargs=None if kwargs is None else kwargs,
             as_function=True,
             target_opset=self.builder.opsets,
@@ -1676,21 +1715,11 @@ class DynamoInterpreter:
             sub_module, self.torch.nn.Module
         ), f"Not implemented for type {type(sub_module)}.\n{raise_msg()}"
 
-        named_args = node.args
-        args = []
-        for a in named_args:
-            val = a.meta.get("example_value", None)
-            args.append(val)
-
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]")
             print(
                 f"[DynamoInterpreter-{self._hash()}.call_module] with "
                 f"node.args={string_type(node.args)}]"
-            )
-            print(
-                f"[DynamoInterpreter-{self._hash()}.call_module] with "
-                f"args={string_type(args)}]"
             )
             print(
                 f"[DynamoInterpreter-{self._hash()}.call_module] with "
@@ -1707,7 +1736,7 @@ class DynamoInterpreter:
         self.builder._check_constants("before-_interpret_sub_module")
 
         builder, args, kwargs, output_names = self._interpret_sub_module(
-            sub_module, args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
+            sub_module, node.args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
         )
 
         self.builder._check_constants("after-_interpret_sub_module")
