@@ -292,15 +292,7 @@ class DynamoInterpreter:
         )
         return node.name
 
-    def _make_tensor_input(
-        self,
-        name: str,
-        elem_type: Any,
-        shape: DYNAMIC_SHAPE,
-        is_dimension: bool,
-        users: Iterable[str],
-        fake_tensor: bool = False,
-    ) -> str:
+    def _make_tensor_check(self, name: str, fake_tensor: bool, users: Any):
         if (
             not fake_tensor
             and self.example_inputs_ is not None
@@ -339,7 +331,22 @@ class DynamoInterpreter:
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
+        return None
 
+    def _make_tensor_input(
+        self,
+        name: str,
+        elem_type: Any,
+        shape: DYNAMIC_SHAPE,
+        is_dimension: bool,
+        users: Iterable[str],
+        fake_tensor: bool = False,
+    ) -> str:
+        ret = self._make_tensor_check(name, fake_tensor, users)
+        if ret is not None:
+            return ret
+
+        shape = self.builder.get_input_dynamic_shape(name, self.current_input_, shape)
         self.current_input_ += 1
         return self.builder.make_tensor_input(
             name,
@@ -347,6 +354,38 @@ class DynamoInterpreter:
             shape,
             is_dimension=is_dimension,
             marker="DynamoInterpreter._make_tensor_input",
+        )
+
+    def _make_list_input(
+        self,
+        name: str,
+        example_value: List["torch.Tensor"],  # noqa: F821
+        users: Iterable[str],
+        fake_tensor: bool = False,
+    ) -> str:
+        ret = self._make_tensor_check(name, fake_tensor, users)
+        if ret is not None:
+            return ret
+
+        assert all(isinstance(t, self.torch.Tensor) for t in example_value), (
+            f"Input {name!r}, unexpected type in example_value: "
+            f"{string_type(example_value)}{self.get_debug_msg()}"
+        )
+        assert len(set(t.dtype for t in example_value)) == 1, (
+            f"Input {name!r}, multiple element type in example_value "
+            f"{[t.dtype for t in example_value]}{self.get_debug_msg()}"
+        )
+
+        shape = self.builder.get_input_dynamic_shape(
+            name, self.current_input_, example_shape=None, example_value=example_value
+        )
+        elem_type = _get_type(example_value[0].dtype)
+        self.current_input_ += 1
+        return self.builder.make_tensor_sequence_input(
+            name,
+            elem_type,
+            shape,
+            marker="DynamoInterpreter._make_list_input",
         )
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
@@ -407,12 +446,22 @@ class DynamoInterpreter:
                     users=node.users,
                 )
 
-            return self._make_tensor_input(
-                node.name,
-                elem_type=example_value.dtype,
-                shape=example_value.shape,
-                is_dimension=False,
-                users=node.users,
+            if isinstance(example_value, self.torch.Tensor):
+                return self._make_tensor_input(
+                    node.name,
+                    elem_type=example_value.dtype,
+                    shape=example_value.shape,
+                    is_dimension=False,
+                    users=node.users,
+                )
+            if isinstance(example_value, list) and all(
+                isinstance(t, self.torch.Tensor) for t in example_value
+            ):
+                return self._make_list_input(node.name, example_value, users=node.users)
+
+            raise NotImplementedError(
+                f"Unable to create an input with type {string_type(example_value)}"
+                f"{self.get_debug_msg()}"
             )
 
         if isinstance(val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)):
@@ -973,15 +1022,19 @@ class DynamoInterpreter:
                     name="getitemB_tuple",
                 )
                 if not sts:
-                    info = self.builder.get_sequence_info(result_name)
+                    info = self.builder.get_sequence(result_name)
                     dtype = info["dtype"]
                     if isinstance(dtype, tuple):
                         dtype = dtype[index]
                     self.builder.set_type(res, dtype)
-                    if info["shape"] is not None:
-                        self.builder.set_shape(res, info["shape"][index])
+                    if info["shapes"] is not None:
+                        self.builder.set_shape(
+                            res, info["shapes"][min(index, len(info["shapes"]) - 1)]
+                        )
                     else:
-                        self.builder.set_rank(res, info["rank"][index])
+                        self.builder.set_rank(
+                            res, info["ranks"][min(index, len(info["ranks"]) - 1)]
+                        )
                 return res
             else:
                 # A tensor.

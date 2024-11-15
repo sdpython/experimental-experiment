@@ -474,7 +474,11 @@ def _make_builder_interpreter(
             verbose=verbose,
         )
 
-        graph_module = exported_program.graph_module
+        graph_module = (
+            exported_program
+            if isinstance(exported_program, torch.fx.GraphModule)
+            else exported_program.graph_module
+        )
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- EXPORTED GRAPH MODULE")
             print(graph_module.graph)
@@ -544,6 +548,7 @@ def _make_builder_interpreter(
         local_domain=local_domain,
         signature=inspect.signature(mod.forward),
         check_empty_source=True,
+        graph_module=graph_module,
     )
 
     def retrieve(
