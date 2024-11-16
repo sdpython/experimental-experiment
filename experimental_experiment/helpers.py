@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 import numpy as np
 from onnx import FunctionProto, GraphProto, ModelProto, load as onnx_load
 from onnx.helper import np_dtype_to_tensor_dtype
@@ -195,3 +195,22 @@ def make_hash(obj: Any) -> str:
     """
     aa = id(obj) % (26**3)
     return f"{chr(65 + aa // 26 ** 2)}{chr(65 + (aa // 26) % 26)}{chr(65 + aa % 26)}"
+
+
+def get_onnx_signature(model: ModelProto) -> Tuple[Tuple[str, Any], ...]:
+    """
+    Produces a tuple of tuples correspinding to the signatures.
+
+    :param model: model
+    :return: signature
+    """
+    sig = []
+    for i in model.graph.input:
+        dt = i.type
+        if dt.HasField("sequence_type"):
+            sig.append((i.name, [dt.sequence_type.elem_type]))
+        elif dt.HasField("tensor_type"):
+            el = dt.tensor_type.elem_type
+            shape = tuple(d.dim_param or d.dim_value for d in dt.tensor_type.shape.dim)
+            sig.append((i.name, el, shape))
+    return tuple(sig)

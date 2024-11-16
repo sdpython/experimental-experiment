@@ -7402,6 +7402,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     ret_shape[k] = v.__name__
             else:
                 for i, v in enumerate(info):
+                    if i >= len(ret_shape):
+                        # torch.export.export flattens everything
+                        continue
                     if isinstance(ret_shape[i], self.torch.SymInt):
                         # We let it, set_shape will replace it
                         # by the dynamic dimension name and register an alias.

@@ -467,7 +467,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if dynamic and exporter == "torch_script":
-                    raise unittest.SkipTest("this input fails")
+                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
                 self._hg_export_bench_cpu(exporter, "101DummyNamed1", dynamic=dynamic)
 
     # name2
@@ -480,7 +480,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if dynamic and exporter == "torch_script":
-                    raise unittest.SkipTest("this input fails")
+                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
                 self._hg_export_bench_cpu(exporter, "101DummyNamed2", dynamic=dynamic)
 
     # name dict
@@ -493,7 +493,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if dynamic and exporter == "torch_script":
-                    raise unittest.SkipTest("this input fails")
+                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
                 self._hg_export_bench_cpu(exporter, "101DummyNamedDict", dynamic=dynamic)
 
     # list
@@ -534,7 +534,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if exporter == "onnx_dynamo" or (dynamic and exporter == "torch_script"):
-                    raise unittest.SkipTest("this input fails")
+                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
                 self._hg_export_bench_cpu(
                     exporter, "101DummyNoneInt", dynamic=dynamic, check_slice_input=True
                 )
@@ -549,7 +549,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if exporter == "onnx_dynamo" or (dynamic and exporter == "torch_script"):
-                    raise unittest.SkipTest("this input fails")
+                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
                 self._hg_export_bench_cpu(
                     exporter, "101DummyNoneIntDefault", dynamic=dynamic, check_slice_input=True
                 )
@@ -583,7 +583,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if exporter == "onnx_dynamo" or (dynamic and exporter == "torch_script"):
-                    raise unittest.SkipTest("this input fails")
+                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
                 self._hg_export_bench_cpu(exporter, "101DummyNoneIntDict", dynamic=dynamic)
 
 
