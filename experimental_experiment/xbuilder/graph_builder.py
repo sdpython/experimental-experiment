@@ -749,6 +749,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             if fx:
                 rows.append("-- FX.GRAPH-- ")
                 rows.append(str(fx))
+                rows.append("--")
+                for node in fx.nodes:
+                    val = node.meta.get("val", None)
+                    if val is None:
+                        rows.append(f"{node.op}:[{node.name}:{node.target}]")
+                    elif isinstance(val, list):
+                        rows.append(f"{node.op}:[{node.name}:{node.target}] - list")
+                    elif isinstance(val, self.torch.Tensor):
+                        rows.append(
+                            f"{node.op}:[{node.name}:{node.target}] - {val.dtype}:{val.shape}"
+                        )
+                    else:
+                        rows.append(f"{node.op}:[{node.name}:{node.target}] - {type(val)}")
         return "\n".join(rows)
 
     @property
@@ -7330,7 +7343,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         if dynamic_shapes is None:
             dynamic_shapes = self.dynamic_shapes
         if dynamic_shapes is None:
-            return example_shape
+            if is_static_shape(example_shape):
+                return tuple(example_shape)
+            # Should we convert SymInt to str.
+            return tuple(example_shape)
 
         if isinstance(example_value, list):
             if isinstance(dynamic_shapes, tuple):
@@ -7349,7 +7365,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{self.get_debug_msg()}"
         )
         if isinstance(dynamic_shapes, tuple):
-            info = dynamic_shapes[input_index]
+            info = dynamic_shapes[input_index] if input_index < len(dynamic_shapes) else None
         elif isinstance(dynamic_shapes, dict):
             info = dynamic_shapes.get(name, None)
         else:
@@ -7358,16 +7374,58 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"({type(dynamic_shapes)}){self.get_debug_msg()}"
             )
 
-        if info is None:
-            return example_shape
+        # We could return example_shape.shape (s0, ...) when info is (batch, ...)
+        # In case example_shape is missing, then dynamic_shape should prevail.
+        if example_shape is not None:
+            if info is None:
+                return tuple(example_shape)
 
-        # We assume the rank is correct.
-        ret_shape = list(example_shape)
-        if isinstance(info, dict):
-            for k, v in info.items():
-                ret_shape[k] = v.__name__
-        else:
-            for i, v in enumerate(info):
-                if v is not None:
-                    ret_shape[i] = v.__name__
-        return tuple(ret_shape)
+            # In that case, we need to make sure that dynamic dimmensions
+            # appears at the same position.
+            ret_shape = list(example_shape)
+            if isinstance(info, dict):
+                for k, v in info.items():
+
+                    if isinstance(ret_shape[k], self.torch.SymInt):
+                        # We let it, set_shape will replace it
+                        # by the dynamic dimension name and register an alias.
+                        continue
+                    assert isinstance(ret_shape[k], int), (
+                        f"Incompatible types between example_shape={example_shape}, k={k!r}, "
+                        f"{string_type(example_shape)}, info={info}, "
+                        f"name={name!r}, input_index={input_index!r}, dynamic_shapes="
+                        f"{dynamic_shapes}, example_value={string_type(example_value)}"
+                        f"{self.get_debug_msg()}"
+                    )
+                    # example_shape[k] is int but dynamic_shape says otherwise,
+                    # we trust dynamic shape
+                    ret_shape[k] = v.__name__
+            else:
+                for i, v in enumerate(info):
+                    if isinstance(ret_shape[i], self.torch.SymInt):
+                        # We let it, set_shape will replace it
+                        # by the dynamic dimension name and register an alias.
+                        continue
+                    if not isinstance(v, (dict, tuple)):
+                        # it should be (self.torch.export.Dim,
+                        #               self.torch.export.dynamic_shapes._DerivedDim)):
+                        assert isinstance(ret_shape[i], int), (
+                            f"Incompatible types between example_shape={example_shape}, "
+                            f"i={i!r}, {string_type(example_shape)}, info={info}, "
+                            f"name={name!r}, input_index={input_index!r}, dynamic_shapes="
+                            f"{dynamic_shapes}, example_value={string_type(example_value)}"
+                            f"{self.get_debug_msg()}"
+                        )
+                        # example_shape[i] is int but dynamic_shape says otherwise,
+                        # we truct dynamic shape
+                        ret_shape[i] = v.__name__
+                    # v should be None or a dictionary but the signature forward(*args)
+                    # is confusing sometimes.
+            return tuple(ret_shape)
+
+        raise NotImplementedError(
+            f"unable to return shape, example_shape={example_shape}, info={info}, "
+            f"name={name!r}, input_index={input_index!r}, dynamic_shapes="
+            f"{dynamic_shapes}, example_value={string_type(example_value)}"
+            f"{self.get_debug_msg()}"
+        )
