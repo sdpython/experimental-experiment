@@ -5,24 +5,49 @@ import onnx
 import numpy as np
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-from experimental_experiment.helpers import get_onnx_signature
+from experimental_experiment.helpers import get_onnx_signature, string_type
 
 
 class TestOnnxExportSignatures(ExtTestCase):
 
+    def _flatten_inputs(self, inputs):
+        import torch
+
+        flattened_inputs = []
+        for inp in inputs:
+            if isinstance(inp, torch.Tensor):
+                flattened_inputs.append(inp)
+            elif isinstance(inp, list):
+                assert all(
+                    isinstance(t, torch.Tensor) for t in inp
+                ), f"flatten not implemented for nested lists {string_type(inputs)}"
+                flattened_inputs.extend(inp)
+            else:
+                raise AssertionError(f"Not implemented for type {type(inp)}")
+        return flattened_inputs
+
     def _make_feeds(
-        self, names: List[str], inputs: Tuple[Any, ...], tracing: bool, exporter: str = ""
+        self,
+        names: List[str],
+        inputs: Tuple[Any, ...],
+        tracing: bool,
+        exporter: str = "",
+        flatten_inputs: bool = False,
     ):
         import torch
 
-        if len(names) == len(inputs):
+        new_inputs = self._flatten_inputs(inputs) if flatten_inputs else inputs
+
+        if len(names) == len(new_inputs):
             feeds = {}
-            for name, xi in zip(names, inputs):
+            for name, xi in zip(names, new_inputs):
                 if isinstance(xi, torch.Tensor):
                     feeds[name] = xi.detach().numpy()
                 elif tracing:
                     if isinstance(xi, int):
                         feeds[name] = np.array([xi], dtype=np.int64)
+                    elif isinstance(xi, list):
+                        feeds[name] = [xii.detach().numpy() for xii in xi]
                     else:
                         raise AssertionError(f"not implemented names={name}, type={type(xi)}")
                 else:
@@ -48,6 +73,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         atol: float = 1e-5,
         target_opset: int = 18,
         others: Optional[Tuple[Any, ...]] = None,
+        flatten_inputs: bool = False,
     ) -> str:
         if isinstance(exporter, tuple):
             for export in exporter:
@@ -64,6 +90,7 @@ class TestOnnxExportSignatures(ExtTestCase):
                         verbose=verbose,
                         optimize=optimize,
                         dynamic_shapes=dynamic_shapes,
+                        flatten_inputs=flatten_inputs,
                     )
             return
         import torch
@@ -108,7 +135,9 @@ class TestOnnxExportSignatures(ExtTestCase):
 
         # feeds
         tracing = "-tracing" in exporter
-        feeds = self._make_feeds(names, inputs, tracing, exporter=exporter)
+        feeds = self._make_feeds(
+            names, inputs, tracing, exporter=exporter, flatten_inputs=flatten_inputs
+        )
 
         from onnxruntime import InferenceSession
 
@@ -118,7 +147,9 @@ class TestOnnxExportSignatures(ExtTestCase):
 
         if others:
             expected = model(*others)
-            feeds = self._make_feeds(names, others, tracing, exporter=exporter)
+            feeds = self._make_feeds(
+                names, others, tracing, exporter=exporter, flatten_inputs=flatten_inputs
+            )
             got = sess.run(None, feeds)
             self.assertEqualArray(expected, got[0], atol=atol)
 
@@ -177,13 +208,17 @@ class TestOnnxExportSignatures(ExtTestCase):
             (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
             (torch.arange(4) + 10).reshape((-1, 1)).to(torch.float32),
         )
+        inputs2 = (
+            (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
+        )
         sig = (
             ("x", onnx.TensorProto.FLOAT, ("batch", 3)),
             ("y", onnx.TensorProto.FLOAT, ("batch", 1)),
         )
         dyn = ({0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")})
         sname = inspect.currentframe().f_code.co_name
-        self._check_exporter(sname, Neuron(), inputs, sig, dynamic_shapes=dyn)
+        self._check_exporter(sname, Neuron(), inputs, sig, dynamic_shapes=dyn, others=inputs2)
 
     @skipif_ci_windows("not working on windows")
     def test_signature_s1d_i_r_v1(self):
@@ -199,17 +234,24 @@ class TestOnnxExportSignatures(ExtTestCase):
                 return torch.sigmoid(self.linear(x)) - self.buff + x[:, i : i + 1]
 
         inputs = ((torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32), 1)
+        inputs2 = ((torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32), 2)
         sig = (
             ("x", onnx.TensorProto.FLOAT, ("batch", 3)),
             ("i", onnx.TensorProto.INT64, (1,)),
         )
         dyn = {
             "x": {0: torch.export.Dim("batch")},
-            "i": None,
-        }  # torch.export.Dim("ii", min=0, max=3)}
+            "i": None,  # torch.export.Dim("ii", min=0, max=3)}
+        }
         sname = inspect.currentframe().f_code.co_name
         self._check_exporter(
-            sname, Neuron(), inputs, sig, dynamic_shapes=dyn, exporter="custom-tracing"
+            sname,
+            Neuron(),
+            inputs,
+            sig,
+            dynamic_shapes=dyn,
+            exporter="custom-tracing",
+            others=inputs2,
         )
 
     @skipif_ci_windows("not working on windows")
@@ -233,15 +275,15 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
         dyn = {
             "x": {0: torch.export.Dim("batch")},
-            "i": None,
-        }  # torch.export.Dim("ii", min=0, max=3)}
+            "i": None,  # torch.export.Dim("ii", min=0, max=3)}
+        }
         sname = inspect.currentframe().f_code.co_name
         self._check_exporter(
             sname, Neuron(), inputs, sig, dynamic_shapes=dyn, exporter="custom-tracing"
         )
 
     @skipif_ci_windows("not working on windows")
-    def test_signature_s1d_ls_r(self):
+    def test_signature_s1d_ls_r_custom(self):
         import torch
 
         class Neuron(torch.nn.Module):
@@ -264,16 +306,76 @@ class TestOnnxExportSignatures(ExtTestCase):
                 (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
             ],
         )
-        sig = (
-            ("x", onnx.TensorProto.FLOAT, ("batch", 3)),
-            ("i", onnx.TensorProto.INT64, (1,)),
+        inputs2 = (
+            (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(8 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
         )
         dyn = {
             "x": {0: torch.export.Dim("batch")},
-            "i": None,
-        }  # torch.export.Dim("ii", min=0, max=3)}
+            "lx": [{0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")}],
+        }
         sname = inspect.currentframe().f_code.co_name
-        self._check_exporter(sname, Neuron(), inputs, sig, dynamic_shapes=dyn)
+        sig_custom = (("x", 1, ("batch", 3)), ("lx_0", 1, ("s1", 1)), ("lx_1", 1, ("s2", 2)))
+        self._check_exporter(
+            sname,
+            Neuron(),
+            inputs,
+            sig_custom,
+            dynamic_shapes=dyn,
+            exporter="custom",
+            flatten_inputs=True,
+            others=inputs2,
+        )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_s1d_ls_r_tracing(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+            def forward(self, x, lx):
+                return (
+                    torch.sigmoid(self.linear(x))
+                    - self.buff
+                    + lx[0] * lx[1].sum(axis=1, keepdim=True)
+                )
+
+        inputs = (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(4) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
+        )
+        inputs2 = (
+            (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(8 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
+        )
+        dyn = {
+            "x": {0: torch.export.Dim("batch")},
+            "lx": [{0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")}],
+        }
+        sname = inspect.currentframe().f_code.co_name
+        sig_tracing = (("x", 1, ("batch", 3)), ("lx", [("lx", 1, ("batch", 1))]))
+        self._check_exporter(
+            sname,
+            Neuron(),
+            inputs,
+            sig_tracing,
+            dynamic_shapes=dyn,
+            exporter="custom-tracing",
+            others=inputs2,
+        )
 
 
 if __name__ == "__main__":
