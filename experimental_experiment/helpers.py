@@ -85,6 +85,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         return "float"
     if isinstance(obj, str):
         return "str"
+    if isinstance(obj, slice):
+        return "slice"
     if type(obj).__name__ == "MambaCache":
         return "MambaCache"
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):

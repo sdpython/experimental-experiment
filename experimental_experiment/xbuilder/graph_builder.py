@@ -496,6 +496,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     pos_vv = [(f"{input_name_or_position}_{i}", v[i]) for i in range(len(v))]
                 else:
                     pos_vv = [((input_name_or_position, i), v[i]) for i in range(len(v))]
+            elif v is None:
+                continue
             else:
                 raise AssertionError(
                     f"Unexpected value for input_name={input_name_or_position!r} and "

@@ -792,7 +792,15 @@ class DynamoInterpreter:
                 steps.append(1)
                 continue
 
-            assert isinstance(aslice, slice), f"Unexpected type {aslice} in {index_slice}"
+            assert isinstance(
+                aslice, (slice, int, self.torch.fx.Node)
+            ), f"Unexpected type {type(aslice)} ({aslice}) in {index_slice}"
+            assert isinstance(aslice, slice), (
+                f"One index is given as an integer {aslice!r} but this requires "
+                f"to append a node 'Squeeze' after this one and this is not yet "
+                f"implemented. You can replace the integer by `i:i+1`"
+                f"{self.builder.get_debug_msg()}"
+            )
 
             starts.append(aslice.start or 0)
 
@@ -1103,6 +1111,17 @@ class DynamoInterpreter:
                 )
 
         if isinstance(index, tuple):
+            if all(isinstance(x, (slice, self.torch.fx.Node)) for x in index):
+                return self._getitem_slice(
+                    node,
+                    node_output.name,
+                    list(index),
+                    sts=sts,
+                    axes=list(range(len(index))),
+                    expand_axes=[],
+                    name="_getitem_slicen",
+                )
+
             if all(x is Ellipsis or x is None or isinstance(x, slice) for x in index):
                 # something like x[3:4]
                 axes = []
@@ -1149,10 +1168,16 @@ class DynamoInterpreter:
                 )
                 return res
 
+            raise RuntimeError(
+                f"getitem: unexpected tuple {tuple(type(x) for x in index)} "
+                f"for index={index}, node={node}, args={args}, val={val}, "
+                f"types={string_type(args)}{self.builder.get_debug_msg()}"
+            )
+
         raise RuntimeError(
             f"getitem: unexpected type {type(index)} for index={index}, "
-            f"node={node}, args={args}, val={val}"
-            f"{self.builder.get_debug_msg()}"
+            f"node={node}, args={args}, val={val}, "
+            f"types={string_type(args)}{self.builder.get_debug_msg()}"
         )
 
     def _verify_new_shape(self, shape, node):
