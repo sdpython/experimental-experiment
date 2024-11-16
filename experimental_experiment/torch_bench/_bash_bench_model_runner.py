@@ -132,9 +132,6 @@ class WrappedModelBase(torch.nn.Module):
         super().__init__()
         self.model = model
 
-    def __call__(self, *args, **kwargs):
-        return self.model(*args, **kwargs)
-
     def forward(self, *args, **kwargs):
         return self.model.forward(*args, **kwargs)
 
@@ -150,10 +147,6 @@ class WrappedModelToTuple(WrappedModelBase):
 
     def __init__(self, model):
         super().__init__(model)
-
-    def __call__(self, *args, **kwargs):
-        res = self.model(*args, **kwargs)
-        return res.to_tuple()
 
     def forward(self, *args, **kwargs):
         res = self.model.forward(*args, **kwargs)

@@ -33,6 +33,12 @@ OptimizationOptions
 .. autoclass:: experimental_experiment.xbuilder.OptimizationOptions
     :members:
 
+VirtualTensor
++++++++++++++
+
+.. autoclass:: experimental_experiment.xbuilder.VirtualTensor
+    :members:
+
 Other functions
 +++++++++++++++
 

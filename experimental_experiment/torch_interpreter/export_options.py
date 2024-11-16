@@ -17,6 +17,7 @@ class ExportOptions:
         :func:`get_decomposition_table
         <experimental_experiment.torch_dynamo.get_decomposition_table>`
     :param dynamo: to use ``torch._dynamo.export`` instead of:func:`torch.export.export`
+    :param tracing: use symbolic tracing
     :param jit: use jit to get a graph then converts it into a fx graph
     :param strategy: to overwrite all the previous parameters with just a value
 
@@ -38,6 +39,7 @@ class ExportOptions:
         None: {},
         "none": {},
         "strict": {"strict": True},
+        "tracing": {"tracing": True},
         "nostrict": {"strict": False},
         "jit": {"jit": True},
         "fallback": {"fallback": True},
@@ -49,6 +51,7 @@ class ExportOptions:
         self,
         strict: bool = True,
         fallback: bool = False,
+        tracing: bool = False,
         jit: bool = False,
         decomposition_table: Optional[
             Union[str, Dict[TorchOpOverload, Callable[..., Any]]]  # noqa: F821
@@ -58,6 +61,7 @@ class ExportOptions:
     ):
         self.strict = strict
         self.fallback = fallback
+        self.tracing = tracing
         self.decomposition_table = (
             None if decomposition_table in ("none", None) else decomposition_table
         )
@@ -81,6 +85,12 @@ class ExportOptions:
         assert (
             self.strict or not self.dynamo
         ), "strict and dynamo cannot be true at the same time"
+        assert (
+            not tracing or not dynamo
+        ), f"Both tracing and dynamo are incompatible options in {self!r}"
+        assert (
+            not tracing or strict
+        ), f"Both tracing and strict=False are incompatible options in {self!r}"
 
     def __repr__(self) -> str:
         return string_sig(self)
@@ -173,6 +183,12 @@ class ExportOptions:
                 f"[ExportOptions.export] {self!r} - torch.export.export {type(mod).__name__!r}"
             )
             begin = time.perf_counter()
+
+        if self.tracing:
+            tracer_class = torch.fx.Tracer
+            graph = tracer_class().trace(mod)
+            gm = torch.fx.GraphModule(mod, graph)
+            return gm
 
         if self.dynamo:
             # import torch.utils._pytree as pytree

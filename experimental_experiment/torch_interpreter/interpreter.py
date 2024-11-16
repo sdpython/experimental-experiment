@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 import numpy as np
 from onnx import TensorProto
 from ..helpers import string_type, make_hash
-from ..xbuilder import GraphBuilder, FunctionOptions
+from ..xbuilder import GraphBuilder, FunctionOptions, VirtualTensor
 from ..xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..xbuilder._dtype_helper import (
     torch_dtype_to_onnx_dtype,
@@ -82,7 +82,16 @@ class DynamoInterpreter:
             (
                 t is None
                 or isinstance(
-                    t, (torch.SymInt, torch.SymFloat, torch.Tensor, list, int, float)
+                    t,
+                    (
+                        torch.SymInt,
+                        torch.SymFloat,
+                        torch.Tensor,
+                        list,
+                        int,
+                        float,
+                        VirtualTensor,
+                    ),
                 )
             )
             for t in example_inputs
@@ -136,7 +145,14 @@ class DynamoInterpreter:
             for i in x:
                 if i is None or isinstance(
                     i,
-                    (self.torch.Tensor, self.torch.SymInt, self.torch.SymFloat, int, float),
+                    (
+                        self.torch.Tensor,
+                        self.torch.SymInt,
+                        self.torch.SymFloat,
+                        int,
+                        float,
+                        VirtualTensor,
+                    ),
                 ):
                     res.append(i)
                 else:
@@ -292,15 +308,7 @@ class DynamoInterpreter:
         )
         return node.name
 
-    def _make_tensor_input(
-        self,
-        name: str,
-        elem_type: Any,
-        shape: DYNAMIC_SHAPE,
-        is_dimension: bool,
-        users: Iterable[str],
-        fake_tensor: bool = False,
-    ) -> str:
+    def _make_tensor_check(self, name: str, fake_tensor: bool, users: Any):
         if (
             not fake_tensor
             and self.example_inputs_ is not None
@@ -339,7 +347,22 @@ class DynamoInterpreter:
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
+        return None
 
+    def _make_tensor_input(
+        self,
+        name: str,
+        elem_type: Any,
+        shape: DYNAMIC_SHAPE,
+        is_dimension: bool,
+        users: Iterable[str],
+        fake_tensor: bool = False,
+    ) -> str:
+        ret = self._make_tensor_check(name, fake_tensor, users)
+        if ret is not None:
+            return ret
+
+        shape = self.builder.get_input_dynamic_shape(name, self.current_input_, shape)
         self.current_input_ += 1
         return self.builder.make_tensor_input(
             name,
@@ -347,6 +370,38 @@ class DynamoInterpreter:
             shape,
             is_dimension=is_dimension,
             marker="DynamoInterpreter._make_tensor_input",
+        )
+
+    def _make_list_input(
+        self,
+        name: str,
+        example_value: List["torch.Tensor"],  # noqa: F821
+        users: Iterable[str],
+        fake_tensor: bool = False,
+    ) -> str:
+        ret = self._make_tensor_check(name, fake_tensor, users)
+        if ret is not None:
+            return ret
+
+        assert all(isinstance(t, self.torch.Tensor) for t in example_value), (
+            f"Input {name!r}, unexpected type in example_value: "
+            f"{string_type(example_value)}{self.get_debug_msg()}"
+        )
+        assert len(set(t.dtype for t in example_value)) == 1, (
+            f"Input {name!r}, multiple element type in example_value "
+            f"{[t.dtype for t in example_value]}{self.get_debug_msg()}"
+        )
+
+        shape = self.builder.get_input_dynamic_shape(
+            name, self.current_input_, example_shape=None, example_value=example_value
+        )
+        elem_type = _get_type(example_value[0].dtype)
+        self.current_input_ += 1
+        return self.builder.make_tensor_sequence_input(
+            name,
+            elem_type,
+            shape,
+            marker="DynamoInterpreter._make_list_input",
         )
 
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
@@ -407,12 +462,22 @@ class DynamoInterpreter:
                     users=node.users,
                 )
 
-            return self._make_tensor_input(
-                node.name,
-                elem_type=example_value.dtype,
-                shape=example_value.shape,
-                is_dimension=False,
-                users=node.users,
+            if isinstance(example_value, (self.torch.Tensor, VirtualTensor)):
+                return self._make_tensor_input(
+                    node.name,
+                    elem_type=example_value.dtype,
+                    shape=example_value.shape,
+                    is_dimension=False,
+                    users=node.users,
+                )
+            if isinstance(example_value, list) and all(
+                isinstance(t, self.torch.Tensor) for t in example_value
+            ):
+                return self._make_list_input(node.name, example_value, users=node.users)
+
+            raise NotImplementedError(
+                f"Unable to create an input with type {string_type(example_value)}"
+                f"{self.get_debug_msg()}"
             )
 
         if isinstance(val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)):
@@ -973,15 +1038,19 @@ class DynamoInterpreter:
                     name="getitemB_tuple",
                 )
                 if not sts:
-                    info = self.builder.get_sequence_info(result_name)
+                    info = self.builder.get_sequence(result_name)
                     dtype = info["dtype"]
                     if isinstance(dtype, tuple):
                         dtype = dtype[index]
                     self.builder.set_type(res, dtype)
-                    if info["shape"] is not None:
-                        self.builder.set_shape(res, info["shape"][index])
+                    if info["shapes"] is not None:
+                        self.builder.set_shape(
+                            res, info["shapes"][min(index, len(info["shapes"]) - 1)]
+                        )
                     else:
-                        self.builder.set_rank(res, info["rank"][index])
+                        self.builder.set_rank(
+                            res, info["ranks"][min(index, len(info["ranks"]) - 1)]
+                        )
                 return res
             else:
                 # A tensor.
@@ -1475,9 +1544,32 @@ class DynamoInterpreter:
             graph = tracer_class().trace(sub_module)
             gm = self.torch.fx.GraphModule(sub_module, graph)
 
+        assert not kwargs, (
+            f"This functionality is not implemented kwargs={string_type(kwargs)}"
+            f"{self.get_debug_msg()}"
+        )
+        if args is None:
+            new_args = None
+        else:
+            new_args = []
+            for a in args:
+                if isinstance(a, self.torch.fx.Node):
+                    name = a.name
+                    dtype = self.builder.get_type(name) if self.builder.has_type(name) else 0
+                    shape = (
+                        self.builder.get_shape(name) if self.builder.has_shape(name) else None
+                    )
+                    new_args.append(VirtualTensor(name=name, dtype=dtype, shape=shape))
+                elif isinstance(a, self.torch.Tensor):
+                    new_args.append(a)
+                else:
+                    raise NotImplementedError(
+                        f"Unable to process argument {type(a)}{self.get_debug_msg()}"
+                    )
+
         graph_module, builder, interpreter = _make_builder_interpreter(
             gm,
-            args=None if args is None else tuple(args),
+            args=None if new_args is None else tuple(new_args),
             kwargs=None if kwargs is None else kwargs,
             as_function=True,
             target_opset=self.builder.opsets,
@@ -1623,21 +1715,11 @@ class DynamoInterpreter:
             sub_module, self.torch.nn.Module
         ), f"Not implemented for type {type(sub_module)}.\n{raise_msg()}"
 
-        named_args = node.args
-        args = []
-        for a in named_args:
-            val = a.meta.get("example_value", None)
-            args.append(val)
-
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_module] class [{type(sub_module)}]")
             print(
                 f"[DynamoInterpreter-{self._hash()}.call_module] with "
                 f"node.args={string_type(node.args)}]"
-            )
-            print(
-                f"[DynamoInterpreter-{self._hash()}.call_module] with "
-                f"args={string_type(args)}]"
             )
             print(
                 f"[DynamoInterpreter-{self._hash()}.call_module] with "
@@ -1654,7 +1736,7 @@ class DynamoInterpreter:
         self.builder._check_constants("before-_interpret_sub_module")
 
         builder, args, kwargs, output_names = self._interpret_sub_module(
-            sub_module, args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
+            sub_module, node.args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
         )
 
         self.builder._check_constants("after-_interpret_sub_module")

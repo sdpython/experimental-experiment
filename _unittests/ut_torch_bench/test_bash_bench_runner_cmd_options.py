@@ -170,6 +170,11 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     def test_custom_nostrict(self):
         self._export_cmd("custom-nostrict", "101Dummy", check_file=True)
 
+    # @ignore_warnings((DeprecationWarning, UserWarning))
+    # @requires_torch("2.4")
+    # def test_custom_tracing(self):
+    #    self._export_cmd("custom-tracing", "101Dummy", check_file=True)
+
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_custom_fallback(self):

@@ -33,7 +33,7 @@ import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
-from ..helpers import make_hash, string_sig, pretty_onnx, string_signature
+from ..helpers import make_hash, string_sig, pretty_onnx, string_signature, string_type
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
     DYNAMIC_SHAPE,
@@ -163,6 +163,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param local_domain: domain name to use for local functions if not specified
     :param signature: the signature is unused but helps for debugging purposes
     :param check_empty_source: checks source are not empty
+    :param graph_module: only used for debugging purpose
 
     Important attributes:
 
@@ -330,6 +331,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         local_domain: str = "local_function",
         signature: Optional[Any] = None,
         check_empty_source: bool = False,
+        graph_module: Optional["torch.fx.GraphModule"] = None,  # noqa: F821
     ):
         import torch
 
@@ -359,6 +361,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._dynamic_alias = {}
         self.constants_node_ = {}
         self.constants_alias_ = {}
+        self.graph_module = graph_module
         self._events = {}
         self.signature = signature
         self.check_empty_source = check_empty_source
@@ -746,6 +749,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             if fx:
                 rows.append("-- FX.GRAPH-- ")
                 rows.append(str(fx))
+                rows.append("--")
+                for node in fx.nodes:
+                    val = node.meta.get("val", None)
+                    if val is None:
+                        rows.append(f"{node.op}:[{node.name}:{node.target}]")
+                    elif isinstance(val, list):
+                        rows.append(f"{node.op}:[{node.name}:{node.target}] - list")
+                    elif isinstance(val, self.torch.Tensor):
+                        rows.append(
+                            f"{node.op}:[{node.name}:{node.target}] - {val.dtype}:{val.shape}"
+                        )
+                    else:
+                        rows.append(f"{node.op}:[{node.name}:{node.target}] - {type(val)}")
         return "\n".join(rows)
 
     @property
@@ -1271,12 +1287,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._known_torch_value[name] = (where, value)
 
     def _torch_sym_int_to_str(self, value: "torch.SymInt") -> Union[int, str]:  #  noqa: F821
-        if isinstance(value.node, str):
+        if isinstance(value, str):
+            return value
+        if hasattr(value, "node") and isinstance(value.node, str):
             return f"{value.node}"
 
         from torch.fx.experimental.sym_node import SymNode
 
-        if isinstance(value.node, SymNode):
+        if hasattr(value, "node") and isinstance(value.node, SymNode):
             # '_expr' is safer than expr
             return str(value.node._expr)
 
@@ -2769,6 +2787,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param marker: to known from this input was created
         :return: input name
         """
+        assert (
+            self.as_function or elem_type
+        ), f"elem_type is unknown for name={name!r}{self.get_debug_msg()}"
         add_node = lambda: None  # noqa: E731
         if self.current_input < len(self.input_names):
             # The input needs to be renamed, an identity node is added.
@@ -2878,6 +2899,106 @@ class GraphBuilder(_GraphBuilderRuntime):
             if input_name != name:
                 self.set_type(input_name, elem_type)
 
+        node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
+        add_node()
+        return name
+
+    def make_tensor_sequence_input(
+        self,
+        name: str,
+        elem_type: Any,
+        shape: DYNAMIC_SHAPE,
+        marker: str = "",
+    ) -> str:
+        """
+        Adds a tensor input to the onnx graph.
+
+        :param name: name
+        :param elem_type: element type
+        :param shape: shape
+        :param marker: to known from this input was created
+        :return: input name
+        """
+        add_node = lambda: None  # noqa: E731
+        if self.current_input < len(self.input_names):
+            # The input needs to be renamed, an identity node is added.
+            input_name = self.input_names[self.current_input]
+            if input_name != name:
+                add_node = lambda: self.make_node(  # noqa: E731
+                    "Identity",
+                    [input_name],
+                    [name],
+                    name="make_tensor_input_id",
+                )
+        else:
+            self.input_names.append(name)
+            input_name = name
+
+        self.current_input += 1
+        elem_type = _get_type(elem_type)
+
+        if self.update_dynamic_shape_when_input_name_is_defined:
+            #
+            # dynamic shapes were defined as tuple,
+            # we need to propagate the information to the names
+            # dynamic_dimensions_source={'dim': [{'axis': 1, 'input_name': 0}]}
+            for dim_name, v in self.dynamic_dimensions_source.items():
+                for d in v:
+                    if isinstance(d["input_name"], int) and d["input_name"] == len(
+                        self.inputs
+                    ):
+                        d["input_name"] = input_name
+                        if shape:
+                            axis = d["axis"]
+                            assert axis < len(shape), (
+                                f"Unexpected shape={shape!r} and axis={axis}, "
+                                f"dim_name={dim_name!r}, self.dynamic_dimensions_source="
+                                f"{self.dynamic_dimensions_source} "
+                                f"name={name!r}, input_name={input_name!r} "
+                                f"self.dynamic_shapes={self.dynamic_shapes} "
+                                f"self.input_names={self.input_names}"
+                                f"{self.get_debug_msg()}"
+                            )
+                            dim_name_axis = self._torch_sym_int_to_str(shape[axis])
+                            if dim_name != dim_name_axis:
+                                assert (
+                                    dim_name_axis not in self._dynamic_alias
+                                    or self._dynamic_alias[dim_name_axis] == dim_name
+                                ), (
+                                    "Alias mismatch for {dim_name_axis!r}, existing is "
+                                    f"{self._dynamic_alias[dim_name_axis]!r}, "
+                                    f"new is {dim_name!r} "
+                                    f"for input {input_name!r} and shape {shape!r}"
+                                    f"{self.get_debug_msg()}"
+                                )
+                                self._dynamic_alias[dim_name_axis] = dim_name
+                            shape = tuple(
+                                dim_name if i == axis else shape[i] for i in range(len(shape))
+                            )
+
+        dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
+        self._fill_dynamic_alias(shape, name)
+        new_dyn_shape = self._fill_dynamic_alias(dyn_shape, name)
+        if new_dyn_shape is not None:
+            dyn_shape = tuple(
+                (a if a is not None else b) for a, b in zip(new_dyn_shape, dyn_shape)
+            )
+
+        node = oh.make_tensor_sequence_value_info(input_name, elem_type, dyn_shape)
+        self.inputs.append(node)
+        self.set_name(input_name, marker=f"make_tensor_sequence_input_{marker}")
+        if shape is not None:
+            self._make_tensor_input_finalize(name, shape, dyn_shape)
+
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder-{self._hash()}.make_tensor_sequence_input] "
+                f"{input_name}[{elem_type}:{dyn_shape}] -- marker={marker}"
+            )
+        assert (
+            self.as_function or elem_type
+        ), f"elem_type={elem_type!r} must be specified for input {name!r}"
+        self.set_sequence(name, elem_type, [shape] if shape else None)
         node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         add_node()
         return name
@@ -3717,16 +3838,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 src = (
                     ""
-                    if init.name not in builder.initializers_dict_sources
-                    or not builder.initializers_dict_sources[init.name].source
-                    else f"##{builder.initializers_dict_sources[init.name].source}"
+                    if init not in builder.initializers_dict_sources
+                    or not builder.initializers_dict_sources[init].source
+                    else f"##{builder.initializers_dict_sources[init].source}"
                 )
                 self.add_initializer(
                     name,
                     value,
                     itype=builder._known_types[init],
                     shape=builder._known_shapes[init],
-                    source=f"GraphBuilder.make_nodes/from{init.name}{src}",
+                    source=f"GraphBuilder.make_nodes/from{init}{src}",
                 )
 
             for k, v in builder.dynamic_objects.items():
@@ -3746,7 +3867,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"easier to see where this node is created but name={name!r} "
                     f"and op_type={node.op_type!r}."
                 )
-                new_inputs = [renaming[i] for i in node.input]
+                new_inputs = [
+                    renaming[builder._parameter_renaming.get(i, i)] for i in node.input
+                ]
                 new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
                 for o, no in zip(node.output, new_outputs):
                     renaming[o] = no
@@ -7198,3 +7321,114 @@ class GraphBuilder(_GraphBuilderRuntime):
                 k: v for k, v in self.initializers_dict.items() if k not in remove
             }
             self.nodes = [*cst_nodes, *self.nodes]
+
+    def get_input_dynamic_shape(
+        self,
+        name: str,
+        input_index: int,
+        example_shape: STATIC_SHAPE,
+        dynamic_shapes: Optional[Any] = None,
+        example_value: Optional[Any] = None,
+    ) -> DYNAMIC_SHAPE:
+        """
+        Updates the shape based on the available information.
+
+        :param name: input name
+        :param input_index: input index
+        :param example_shape: the shape of the given input
+        :param dynamic_shapes: used to handle nested dynamic shapes
+        :param example_value: one example of the value
+        :return: dynamic shape
+        """
+        if dynamic_shapes is None:
+            dynamic_shapes = self.dynamic_shapes
+        if dynamic_shapes is None:
+            if is_static_shape(example_shape):
+                return tuple(example_shape)
+            # Should we convert SymInt to str.
+            return tuple(example_shape)
+
+        if isinstance(example_value, list):
+            if isinstance(dynamic_shapes, tuple):
+                info = dynamic_shapes[input_index]
+            elif isinstance(dynamic_shapes, dict):
+                info = dynamic_shapes.get(name, None)
+            else:
+                raise NotImplementedError(
+                    f"Unexpected type for dynamic_shapes={string_type(dynamic_shapes)}"
+                )
+            return self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))
+
+        assert example_value is None and example_shape is not None, (
+            f"At this stage, a tensor is expected but example_value="
+            f"{string_type(example_value)}, example_shape={example_shape}"
+            f"{self.get_debug_msg()}"
+        )
+        if isinstance(dynamic_shapes, tuple):
+            info = dynamic_shapes[input_index] if input_index < len(dynamic_shapes) else None
+        elif isinstance(dynamic_shapes, dict):
+            info = dynamic_shapes.get(name, None)
+        else:
+            raise NotImplementedError(
+                f"Unexpected type for dynamic_shapes={string_type(dynamic_shapes)} "
+                f"({type(dynamic_shapes)}){self.get_debug_msg()}"
+            )
+
+        # We could return example_shape.shape (s0, ...) when info is (batch, ...)
+        # In case example_shape is missing, then dynamic_shape should prevail.
+        if example_shape is not None:
+            if info is None:
+                return tuple(example_shape)
+
+            # In that case, we need to make sure that dynamic dimmensions
+            # appears at the same position.
+            ret_shape = list(example_shape)
+            if isinstance(info, dict):
+                for k, v in info.items():
+
+                    if isinstance(ret_shape[k], self.torch.SymInt):
+                        # We let it, set_shape will replace it
+                        # by the dynamic dimension name and register an alias.
+                        continue
+                    assert isinstance(ret_shape[k], int), (
+                        f"Incompatible types between example_shape={example_shape}, k={k!r}, "
+                        f"{string_type(example_shape)}, info={info}, "
+                        f"name={name!r}, input_index={input_index!r}, dynamic_shapes="
+                        f"{dynamic_shapes}, example_value={string_type(example_value)}"
+                        f"{self.get_debug_msg()}"
+                    )
+                    # example_shape[k] is int but dynamic_shape says otherwise,
+                    # we trust dynamic shape
+                    ret_shape[k] = v.__name__
+            else:
+                for i, v in enumerate(info):
+                    if i >= len(ret_shape):
+                        # torch.export.export flattens everything
+                        continue
+                    if isinstance(ret_shape[i], self.torch.SymInt):
+                        # We let it, set_shape will replace it
+                        # by the dynamic dimension name and register an alias.
+                        continue
+                    if v and not isinstance(v, (dict, tuple, list)) and hasattr(v, "__name__"):
+                        # it should be (self.torch.export.Dim,
+                        #               self.torch.export.dynamic_shapes._DerivedDim)):
+                        assert isinstance(ret_shape[i], int), (
+                            f"Incompatible types between example_shape={example_shape}, "
+                            f"i={i!r}, {string_type(example_shape)}, info={info}, "
+                            f"name={name!r}, input_index={input_index!r}, dynamic_shapes="
+                            f"{dynamic_shapes}, example_value={string_type(example_value)}"
+                            f"{self.get_debug_msg()}"
+                        )
+                        # example_shape[i] is int but dynamic_shape says otherwise,
+                        # we truct dynamic shape
+                        ret_shape[i] = v.__name__
+                    # v should be None or a dictionary but the signature forward(*args)
+                    # is confusing sometimes.
+            return tuple(ret_shape)
+
+        raise NotImplementedError(
+            f"unable to return shape, example_shape={example_shape}, info={info}, "
+            f"name={name!r}, input_index={input_index!r}, dynamic_shapes="
+            f"{dynamic_shapes}, example_value={string_type(example_value)}"
+            f"{self.get_debug_msg()}"
+        )
