@@ -7406,7 +7406,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         # We let it, set_shape will replace it
                         # by the dynamic dimension name and register an alias.
                         continue
-                    if not isinstance(v, (dict, tuple)):
+                    if v and not isinstance(v, (dict, tuple)):
                         # it should be (self.torch.export.Dim,
                         #               self.torch.export.dynamic_shapes._DerivedDim)):
                         assert isinstance(ret_shape[i], int), (

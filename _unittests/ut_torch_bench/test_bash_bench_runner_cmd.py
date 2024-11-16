@@ -519,7 +519,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         ):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if exporter in ("torch_script", "onnx_dynamo"):
-                    raise unittest.SkipTest("not working")
+                    raise unittest.SkipTest(f"not working with {exporter}")
                 self._hg_export_bench_cpu(
                     exporter, "101DummyIInt", dynamic=dynamic, check_slice_input=True
                 )
