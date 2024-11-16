@@ -270,6 +270,38 @@ def aten_meth_size(
     return res
 
 
+def aten_meth_sum(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    axis: T,
+    keepdim: bool = False,
+    dim: Optional[int] = None,
+) -> T:
+    "reducesum"
+    if axis is not None and isinstance(axis, int):
+        axes = np.array([axis], dtype=np.int64)
+    elif dim is not None and isinstance(dim, int):
+        axes = np.array([dim], dtype=np.int64)
+    else:
+        raise AssertionError(
+            f"Unexpected value for dim={dim!r} or axis={axis!r}{g.get_debug_msg()}"
+        )
+    res = g.op.ReduceSumAnyOpset(
+        x, axes, outputs=outputs, keepdims=1 if keepdim else 0, name=".sum"
+    )
+    if not sts:
+        set_type_shape_reduce_op(
+            g,
+            outputs[0],
+            x,
+            keepdim=keepdim,
+            axes=tuple(map(int, axes)),
+        )
+    return res
+
+
 def aten_meth_t(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "transpose"
     return aten_t(g, sts, outputs, x, name=".t")

@@ -85,6 +85,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         return "float"
     if isinstance(obj, str):
         return "str"
+    if isinstance(obj, slice):
+        return "slice"
     if type(obj).__name__ == "MambaCache":
         return "MambaCache"
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):
@@ -208,9 +210,15 @@ def get_onnx_signature(model: ModelProto) -> Tuple[Tuple[str, Any], ...]:
     for i in model.graph.input:
         dt = i.type
         if dt.HasField("sequence_type"):
-            sig.append((i.name, [dt.sequence_type.elem_type]))
+            dst = dt.sequence_type.elem_type
+            tdt = dst.tensor_type
+            el = tdt.elem_type
+            shape = tuple(d.dim_param or d.dim_value for d in tdt.shape.dim)
+            sig.append((i.name, [(i.name, el, shape)]))
         elif dt.HasField("tensor_type"):
             el = dt.tensor_type.elem_type
             shape = tuple(d.dim_param or d.dim_value for d in dt.tensor_type.shape.dim)
             sig.append((i.name, el, shape))
+        else:
+            raise AssertionError(f"Unable to interpret dt={dt!r} in {i!r}")
     return tuple(sig)
