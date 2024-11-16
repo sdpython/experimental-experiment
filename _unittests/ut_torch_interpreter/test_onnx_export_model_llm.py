@@ -7,10 +7,13 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_transformers,
     skipif_ci_windows,
+    has_cuda,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_models.mistral_helper import get_mistral_model
 from experimental_experiment.torch_models.llama_helper import (
     get_llama_attention,
     get_llama_decoder,
@@ -64,12 +67,15 @@ class TestOnnxExportLlama(ExtTestCase):
 
         torch._dynamo.reset()
 
-    def check_model_ort(self, onx):
+    def check_model_ort(self, onx, providers=None):
         from onnxruntime import InferenceSession
+
+        if providers is None:
+            providers = ["CPUExecutionProvider"]
 
         if isinstance(onx, str):
             try:
-                InferenceSession(onx, providers=["CPUExecutionProvider"])
+                InferenceSession(onx, providers=providers)
             except Exception as e:
                 import onnx
 
@@ -79,7 +85,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 )
             return
         try:
-            InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+            InferenceSession(onx.SerializeToString(), providers=providers)
         except Exception as e:
             raise AssertionError(  # noqa: B904
                 f"onnxruntime cannot load the model due to {e}\n{pretty_onnx(onx)}"
@@ -199,6 +205,26 @@ class TestOnnxExportLlama(ExtTestCase):
             # with open("test_llama_model.onnx", "wb") as f:
             # s    f.write(onx.SerializeToString())
             self.check_model_ort(onx)
+
+    @skipif_ci_windows("not supported yet on Windows")
+    @requires_torch("2.3", "bug")
+    @ignore_warnings(DeprecationWarning)
+    @requires_transformers("4.38")
+    def test_mistral_model(self):
+        model, input_tensors = get_mistral_model()
+        input_tensors = input_tensors[0]
+        expected = model(*input_tensors)
+        # fails with transformers==4.37.2 and torch-nightly==2.4.0.dev20240425+cu118
+        onx = export_utils("test_mistral_model", model, *input_tensors)
+        xp = [x.numpy() for x in input_tensors]
+        feeds = {f"input{i}": x for i, x in enumerate(xp)}
+        ref = ExtendedReferenceEvaluator(onx)
+        results = ref.run(None, feeds)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+        if has_cuda():
+            self.check_model_ort(
+                onx, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+            )
 
 
 if __name__ == "__main__":
