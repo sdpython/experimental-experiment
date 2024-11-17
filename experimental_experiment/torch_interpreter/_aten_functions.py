@@ -4480,7 +4480,7 @@ def aten_max_other(
         return res
 
     if g.has_type(x) and g.has_type(y):
-        # types are different
+        # Type conflicts: we use the output type
         assert g.get_type_known(outputs[0]), (
             f"Type mismatch for {x!r} ({g.get_type(x)}) and {y!r} ({g.get_type(y)}), "
             f"output {outputs[0]!r} has no type{g.get_debug_msg()}"
@@ -5883,7 +5883,23 @@ def aten_pow_Tensor_Tensor(
                 return g.op.Sqrt(x, outputs=outputs, name=name)
             if exponent == -0.5:
                 return g.op.Reciprocal(g.op.Sqrt(x, name=name), outputs=outputs, name=name)
-        exponent = np.array([exponent])
+        elif g.get_type(x) in {TensorProto.INT64, TensorProto.INT32}:
+            if isinstance(exponent, int) or int(exponent) == exponent:
+                exponent = np.array([exponent], dtype=np.int64)
+            else:
+                # Type conflicts: we use the output type
+                output_type = g.get_type_known(outputs[0], exc=False)
+                if output_type is None:
+                    # We assume it has to be float.
+                    g._implicit_decisions.append(
+                        (aten_pow_Tensor_Tensor, x, exponent, outputs, name)
+                    )
+                    dtype = np.float32
+                else:
+                    dtype = tensor_dtype_to_np_dtype(output_type)
+                exponent = np.array([exponent], dtype=dtype)
+        if not isinstance(exponent, np.ndarray):
+            exponent = np.array([exponent])
     if isinstance(x, (int, float)):
         assert isinstance(exponent, str), (
             f"Unexpected type for exponent, type(x)={type(x)}, "

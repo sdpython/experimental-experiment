@@ -1257,6 +1257,7 @@ class DynamoInterpreter:
         self.builder.add_stat(kind="aten", name=aten_name)
         if aten_name == "getitem":
             return self.getitem(node)
+
         fct, lookup, lookup_names = None, None, None
         if self.dispatcher is not None:
             fct = self.dispatcher.find_function(aten_name)
@@ -1598,7 +1599,15 @@ class DynamoInterpreter:
                     name = a.name
                     dtype = self.builder.get_type(name) if self.builder.has_type(name) else 0
                     shape = (
-                        self.builder.get_shape(name) if self.builder.has_shape(name) else None
+                        self.builder.get_shape(name)
+                        if self.builder.has_shape(name)
+                        else (
+                            self.builder.make_new_dynamic_shape(
+                                self.builder.get_rank(name), prefix=name
+                            )
+                            if self.builder.has_rank(name)
+                            else None
+                        )
                     )
                     new_args.append(VirtualTensor(name=name, dtype=dtype, shape=shape))
                 elif isinstance(a, self.torch.Tensor):

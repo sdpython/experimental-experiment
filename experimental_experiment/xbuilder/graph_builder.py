@@ -263,6 +263,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         def __init__(self, sym: Union["torch.SymInt", "torch.SymFloat"]):  # noqa: F821
             self.sym = sym
+            assert isinstance(sym, str) or hasattr(
+                sym, "node"
+            ), f"Missing attribute node for type {type(sym)}"
 
         def __repr__(self) -> str:
             return f"WrapSym({self._dynamic_to_str(self.sym)})"
@@ -407,6 +410,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._registered_users = {}
         self.was_inputs_renamed = input_names is not None and input_names
         self.update_dynamic_shape_when_input_name_is_defined = False
+        self._implicit_decisions = []
 
         assert dynamic_shapes is None or isinstance(dynamic_shapes, (dict, tuple)), (
             f"dynamic_shapes is expected to be empty or a dictionary or a tuple "
@@ -1582,7 +1586,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return self._known_shapes[name]
 
-    def get_type_known(self, name: str) -> Optional[int]:
+    def get_type_known(self, name: str, exc: bool = False) -> Optional[int]:
         """Returns the type known by torch to help solve mismatches."""
         if name in self._known_torch_value:
             value = self._known_torch_value[name]
@@ -1593,15 +1597,26 @@ class GraphBuilder(_GraphBuilderRuntime):
             #                       ('val', torch.float16, torch.Size([2, 12, 2048, 2048]))
             #                   )
             #                )
-            assert (
+            assert not exc or (
                 isinstance(value, tuple)
                 and len(value) == 2
                 and isinstance(value[1], tuple)
                 and len(value[1][1]) == 3
-            ), f"Unexpected value {value} for {name!r}{self.get_debug_msg()}"
-            dtype = value[1][1][1]
-            itype = torch_dtype_to_onnx_dtype(dtype)
-            return itype
+            ), (
+                f"Unexpected output value {value} for {name!r}, "
+                f"No information provided by torch"
+                f"{self.get_debug_msg()}"
+            )
+
+            if (
+                isinstance(value, tuple)
+                and len(value) == 2
+                and isinstance(value[1], tuple)
+                and len(value[1][1]) == 3
+            ):
+                dtype = value[1][1][1]
+                itype = torch_dtype_to_onnx_dtype(dtype)
+                return itype
         return None
 
     def get_type(self, name: str) -> int:
@@ -1775,7 +1790,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(value, self.WrapSym):
             value = value.sym
         assert isinstance(
-            value, (self.torch.SymInt, self.torch.SymFloat, self.torch.SymBool)
+            value, (str, self.torch.SymInt, self.torch.SymFloat, self.torch.SymBool)
         ), f"Unexpected type {type(value)} for value{self.get_debug_msg()}"
         _append_to_source(name, input_name, axis, value)
 
@@ -2632,7 +2647,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if isinstance(d, (str, int, float)):
             return d
-
+        if isinstance(d.node, str):
+            return d.node
         if value is None:
             # Is it an integer?
             value = d.node.maybe_as_int()
@@ -3029,6 +3045,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(obj, self.torch.export.dynamic_shapes._Dim):
             return obj.__name__
         if isinstance(obj, self.torch.SymInt):
+            if isinstance(obj.node, str):
+                return obj.node
             i = obj.node._expr
             if "sympy" in str(type(i)):
                 return str(i)
@@ -4215,9 +4233,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{len(self.inputs)} outputs."
         )
 
-        rows.append("--LOCAL FUNCTIONS--")
-        for k, v in self.functions.items():
-            rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
+        if self._implicit_decisions:
+            rows.append("--IMPLICIT DECISIONS--")
+            rows.extend(map(str, self._implicit_decisions))
+        if self.functions:
+            rows.append("--LOCAL FUNCTIONS--")
+            for k, v in self.functions.items():
+                rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
         if self.constraints_:
             rows.append("--CONSTRAINTS--")
             for a, b in assert_sorted(self.constraints_.items()):
@@ -7372,6 +7394,30 @@ class GraphBuilder(_GraphBuilderRuntime):
                 v = self.input_args[input_index]
                 if isinstance(v, VirtualTensor):
                     example_shape = v.shape
+                else:
+                    raise NotImplementedError(
+                        f"example_shape is None, example_value as well, "
+                        f"type input_arg={type(self.input_args[input_index])}, "
+                        f"dynamic_shapes={dynamic_shapes}, input_index={input_index}, "
+                        f"self.input_args={self.input_args}, "
+                        f"as_function={self.as_function}{self.get_debug_msg()}"
+                    )
+                assert example_shape is not None, (
+                    f"example_shape is None, example_value is None, the input "
+                    f"VirtualTensor has no shape as well, "
+                    f"type input_arg={type(self.input_args[input_index])}, "
+                    f"dynamic_shapes={dynamic_shapes}, input_index={input_index}, "
+                    f"self.input_args={self.input_args}, "
+                    f"as_function={self.as_function}{self.get_debug_msg()}"
+                )
+            else:
+                raise NotImplementedError(
+                    f"example_shape is None, example_value as well, there is no input_args, "
+                    f"type input_arg={type(self.input_args[input_index])}, "
+                    f"dynamic_shapes={dynamic_shapes}, input_index={input_index}, "
+                    f"self.input_args={self.input_args}, "
+                    f"as_function={self.as_function}{self.get_debug_msg()}"
+                )
         assert example_value is None and example_shape is not None, (
             f"At this stage, a tensor is expected but example_value="
             f"{string_type(example_value)}, example_shape={example_shape}, "
@@ -7447,3 +7493,22 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{dynamic_shapes}, example_value={string_type(example_value)}"
             f"{self.get_debug_msg()}"
         )
+
+    def make_new_dynamic_shape(
+        self, rank: int, prefix: str = "d"
+    ) -> Tuple["torch.SymInt", ...]:  # noqa: F821
+        """
+        Creates a dynamic shape of a known rank with new dynamic dimension.
+        """
+
+        def _new_name(d):
+            if d not in self.dynamic_objects:
+                return d
+            i = 2
+            n = f"{d}_{i}"
+            while n in self.dynamic_objects:
+                i += 1
+                n = f"{n}_{i}"
+            return n
+
+        return tuple(self.torch.SymInt(_new_name(f"{prefix}_d{i}")) for i in range(rank))

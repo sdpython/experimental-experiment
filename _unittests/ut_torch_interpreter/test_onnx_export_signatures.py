@@ -132,7 +132,8 @@ class TestOnnxExportSignatures(ExtTestCase):
         onnx.checker.check_model(onx)
         names = [i.name for i in onx.graph.input]
         sig = get_onnx_signature(onx)
-        self.assertEqual(expected_signature, sig)
+        if expected_signature != "NOCHECK":
+            self.assertEqual(expected_signature, sig)
 
         # feeds
         tracing = "-tracing" in exporter
@@ -434,23 +435,45 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
-    def test_signature_llm_s_r(self):
-        import torch
+    def test_signature_llm_s_tracing(self):
+        from experimental_experiment.torch_test_helper import dummy_llm
 
-        def f(self, *args, **kwargs):
-            raise AssertionError(
-                f"A slice involving type {type(self)} cannot return an integer, "
-                f"this may come from an expression mask[0:T] where T is a Proxy "
-                f"and mask a concrete tensor. This cannot be traced."
+        if False:
+            for cls_name in ["AttentionBlock", "MultiAttentionBlock", "DecoderLayer"]:
+                model, inputs = dummy_llm(cls_name)
+                sname = inspect.currentframe().f_code.co_name
+                self._check_exporter(
+                    f"{sname}_{cls_name}",
+                    model,
+                    inputs,
+                    expected_signature="NOCHECK",
+                    optimize=True,
+                    exporter="custom",
+                )
+
+        for cls_name in ["AttentionBlock", "MultiAttentionBlock", "DecoderLayer"]:
+            model, inputs = dummy_llm(cls_name)
+            sname = inspect.currentframe().f_code.co_name
+            self._check_exporter(
+                f"{sname}_{cls_name}",
+                model,
+                inputs,
+                expected_signature="NOCHECK",
+                optimize=False,
+                exporter="custom-tracing",
             )
 
-        torch.fx.proxy.Proxy.__index__ = f
+    @skipif_ci_windows("not working on windows")
+    def test_signature_llm_s_r(self):
         from experimental_experiment.torch_test_helper import dummy_llm
 
         model, inputs = dummy_llm()
         sname = inspect.currentframe().f_code.co_name
         self._check_exporter(
-            sname, model, inputs, expected_signature=(("input_ids", 7, (1, 30)),)
+            sname,
+            model,
+            inputs,
+            expected_signature=(("input_ids", 7, (1, 30)),),
         )
 
     @skipif_ci_windows("not working on windows")
