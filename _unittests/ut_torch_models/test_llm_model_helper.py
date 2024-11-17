@@ -363,6 +363,26 @@ class TestLlmModelHelper(ExtTestCase):
             exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
         self.assertNotEmpty(exported_program)
 
+    @unittest.skip("issues")
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_phi_3_5_vision_instruct(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_3_5_vision_instruct,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        model, model_inputs = get_phi_3_5_vision_instruct(num_hidden_layers=1)
+
+        with bypass_export_some_errors():
+            exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
+        self.assertNotEmpty(exported_program)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

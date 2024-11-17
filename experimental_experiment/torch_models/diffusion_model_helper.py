@@ -3,14 +3,14 @@ from . import assert_found
 
 
 def get_stable_diffusion_2_unet(
-    inputs_as_dict: bool = False,
+    inputs_as_tuple: bool = True,
     overwrite: bool = False,
     **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
-    :param inputs_as_dict: returns dummy inputs as a dictionary or not
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param overwrite: do not consider the config from the true model
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :return: model, inputs
@@ -69,7 +69,7 @@ def get_stable_diffusion_2_unet(
         encoder_hidden_states=torch.randn(1, 1, 32 if overwrite else 1024),
     )
 
-    if inputs_as_dict:
+    if inputs_as_tuple:
         inputs = tuple(inputs.values())
 
     return model, inputs
