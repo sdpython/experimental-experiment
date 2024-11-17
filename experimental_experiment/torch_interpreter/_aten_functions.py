@@ -5895,8 +5895,11 @@ def aten_pow_Tensor_Tensor(
                         (aten_pow_Tensor_Tensor, x, exponent, outputs, name)
                     )
                     dtype = np.float32
+                    itype = TensorProto.FLOAT
                 else:
                     dtype = tensor_dtype_to_np_dtype(output_type)
+                    itype = output_type
+                x = g.op.Cast(x, to=itype, name=name)
                 exponent = np.array([exponent], dtype=dtype)
         if not isinstance(exponent, np.ndarray):
             exponent = np.array([exponent])
