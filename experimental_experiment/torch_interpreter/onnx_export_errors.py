@@ -91,7 +91,7 @@ def flatten_with_keys_dynamic_cache(
 
 
 @contextlib.contextmanager
-def bypass_export_some_errors():
+def bypass_export_some_errors(patch_transformers: bool = False):
     """
     Tries to bypass some functions :func:`torch.export.export` does not
     support:
@@ -100,6 +100,10 @@ def bypass_export_some_errors():
     * `torch._dynamo.mark_static_address`
     * Serialialization of `MambaCache` (in :epkg:`transformers`)
     * Serialialization of `DynamicCache` (in :epkg:`transformers`)
+
+    :param patch_transformers: patches transformers
+
+    * ``AttentionMaskConverter._make_causal_mask``
 
     Serialization issues happen when a module takes one input or output
     has a type :func:`torch.export.export` cannot serialize.
@@ -146,6 +150,15 @@ def bypass_export_some_errors():
                 flatten_with_keys_fn=flatten_with_keys_dynamic_cache,
             )
 
+    if patch_transformers:
+        from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+        from .patches.patch_transformers import patched_AttentionMaskConverter
+
+        keep__make_causal_mask = AttentionMaskConverter._make_causal_mask
+        AttentionMaskConverter._make_causal_mask = (
+            patched_AttentionMaskConverter._make_causal_mask
+        )
+
     try:
         yield
     finally:
@@ -154,3 +167,5 @@ def bypass_export_some_errors():
         if unregistered and MambaCache is not None:
             _torch_pytree.SUPPORTED_NODES.pop(MambaCache)
             _torch_pytree.SUPPORTED_NODES.pop(DynamicCache)
+        if patch_transformers:
+            AttentionMaskConverter._make_causal_mask = keep__make_causal_mask

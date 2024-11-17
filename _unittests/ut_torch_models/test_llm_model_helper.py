@@ -363,7 +363,6 @@ class TestLlmModelHelper(ExtTestCase):
             exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
         self.assertNotEmpty(exported_program)
 
-    @unittest.skip("issues")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
@@ -379,8 +378,10 @@ class TestLlmModelHelper(ExtTestCase):
 
         model, model_inputs = get_phi_3_5_vision_instruct(num_hidden_layers=1)
 
-        with bypass_export_some_errors():
-            exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
+        with bypass_export_some_errors(patch_transformers=True):
+            exported_program = torch.export.export(model, tuple(), model_inputs, strict=True)
+            onx = to_onnx(model, tuple(), model_inputs)
+            onnx.save(onx, "test_get_phi_3_5_vision_instruct.onnx")
         self.assertNotEmpty(exported_program)
 
 
