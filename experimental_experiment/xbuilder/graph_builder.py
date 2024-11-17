@@ -65,6 +65,7 @@ from .optimization_options import OptimizationOptions
 from .expression_dimension import Expression, parse_expression, parse_expression_tokens
 from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
+from .virtual_tensor import VirtualTensor
 
 # To help finding bugs.
 assert_sorted = sorted
@@ -154,6 +155,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param optimization_options: optimizations options,
         see :class:`OptimizationOptions`
     :param args: example of inputs
+    :param kwargs: example of inputs
     :param ir_version: ir version when exporting
     :param verbose: verbosity
     :param infer_shapes: run shape inference, if the value is `'new'`,
@@ -180,6 +182,8 @@ class GraphBuilder(_GraphBuilderRuntime):
     - `ir_version: int`: ir version
     - `opsets: Dict[str, int]`: declared opsets
     - `input_args: List[T]`: input tensors when
+      the class is used to convert an existing model
+    - `input_kwargs: Dict[str, T]`: input tensors when
       the class is used to convert an existing model
     - `functions: Dict[Tuple[str,str], FunctionProto]`:
       dictionary of functions to add to the model
@@ -323,6 +327,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         as_function: bool = False,
         optimization_options: Optional[OptimizationOptions] = None,
         args: Optional[List[Any]] = None,
+        kwargs: Optional[Dict[str, Any]] = None,
         ir_version: Optional[int] = None,
         verbose: int = 0,
         infer_shapes: Union[bool, str] = False,
@@ -343,6 +348,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.local_domain = local_domain
         self.as_function = as_function
         self.input_args = args
+        self.input_kwargs = kwargs
         self.verbose = verbose
         self.ir_version = ir_version
         self._debug_msg = {}
@@ -7361,10 +7367,17 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             return self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))
 
+        if example_shape is None and example_shape is None:
+            if input_index < len(self.input_args):
+                v = self.input_args[input_index]
+                if isinstance(v, VirtualTensor):
+                    example_shape = v.shape
         assert example_value is None and example_shape is not None, (
             f"At this stage, a tensor is expected but example_value="
-            f"{string_type(example_value)}, example_shape={example_shape}"
-            f"{self.get_debug_msg()}"
+            f"{string_type(example_value)}, example_shape={example_shape}, "
+            f"dynamic_shapes={dynamic_shapes}, input_index={input_index}, "
+            f"self.input_args={self.input_args}, "
+            f"as_function={self.as_function}{self.get_debug_msg()}"
         )
         if isinstance(dynamic_shapes, tuple):
             info = dynamic_shapes[input_index] if input_index < len(dynamic_shapes) else None

@@ -542,6 +542,7 @@ def _make_builder_interpreter(
         as_function=as_function,
         optimization_options=optimization_options,
         args=args,
+        kwargs=kwargs,
         verbose=verbose,
         raise_list=raise_list,
         dynamic_shapes=dynamic_shapes,
