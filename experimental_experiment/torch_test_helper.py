@@ -166,9 +166,13 @@ def dummy_llm(
             self.query = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
             self.key = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
             self.value = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
-
-            ones = torch.ones(size=[context_size, context_size], dtype=torch.float)
-            self.register_buffer(name="mask", tensor=torch.tril(input=ones))
+            # torch.nn.Buffer are not fully handled by symbolic tracing
+            # Buffer(...)[:Prowy()] is not working
+            self.mask = torch.nn.Parameter(
+                torch.tril(
+                    input=torch.ones(size=[context_size, context_size], dtype=torch.float)
+                )
+            )
 
         def forward(self, x):
             B, T, C = x.shape

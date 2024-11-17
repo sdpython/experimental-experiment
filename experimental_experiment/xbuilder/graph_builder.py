@@ -7344,7 +7344,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         if dynamic_shapes is None:
             dynamic_shapes = self.dynamic_shapes
-        if dynamic_shapes is None:
+        if dynamic_shapes is None and example_shape is not None:
             if is_static_shape(example_shape):
                 return tuple(example_shape)
             # Should we convert SymInt to str.

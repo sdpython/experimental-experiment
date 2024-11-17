@@ -259,10 +259,21 @@ class DynamoInterpreter:
         try:
             init = getattr(node.graph.owning_module, node.target)
         except AttributeError as e:
-            raise AttributeError(
-                f"Unable to find attribute {node.target!r} (node.name={node.name!r}) in "
-                f"{list(sorted(dir(node.graph.owning_module)))}."
-            ) from e
+            # Maybe it is a parameter:
+            init = None
+            for name, p in node.graph.owning_module.named_parameters():
+                if name == node.target:
+                    init = p
+            if init is None:
+                raise AttributeError(
+                    f"Unable to find attribute {node.target!r} (node.name={node.name!r}) in "
+                    f"type(owning_module)={type(node.graph.owning_module)}, "
+                    f"\nmodules="
+                    f"{sorted([_[0] for _ in node.graph.owning_module.named_modules()])}"
+                    f"\nparameters="
+                    f"{sorted([_[0] for _ in node.graph.owning_module.named_parameters()])}"
+                    f"\nnode.__dict__={node.__dict__}{self.builder.get_debug_msg()}"
+                ) from e
 
         if isinstance(init, self.torch.fx.GraphModule):
             # This function is meant to be used later.
@@ -705,16 +716,21 @@ class DynamoInterpreter:
             complete_args = list(node.args)
             complete_kwargs = {}
             for k, v in node.kwargs.items():
-                if isinstance(v, self.builder.torch.fx.Node):
+                if isinstance(v, self.torch.fx.Node):
                     complete_kwargs[k] = v.name
                 elif v is None:
                     complete_kwargs[k] = None
-                elif isinstance(
-                    v, (int, float, str, self.builder.torch.device, self.builder.torch.dtype)
-                ):
+                elif isinstance(v, (int, float, str, self.torch.device, self.torch.dtype)):
                     complete_kwargs[k] = v
+                elif isinstance(v, self.torch.fx.immutable_collections.immutable_list) and all(
+                    isinstance(el, self.torch.fx.Node) for el in v
+                ):
+                    complete_kwargs[k] = [t.name for t in v]
                 else:
-                    raise AssertionError(f"Unexpected type {type(v)} for k={k!r} (v={v!r})")
+                    raise AssertionError(
+                        f"Unexpected type {type(v)} for k={k!r} (v={v!r})"
+                        f"{self.builder.get_debug_msg()}"
+                    )
         else:
             for i, expected_arg in enumerate(node_schema.arguments):
                 if i < len(node.args):

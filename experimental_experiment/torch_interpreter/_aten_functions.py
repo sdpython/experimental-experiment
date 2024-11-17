@@ -4906,13 +4906,7 @@ def aten_mul(
         res = g.op.And(x, y, name=f"{name}_and", outputs=outputs)
     else:
         res, x, y = prepare_inputs_homogeneous_operator(
-            g,
-            x,
-            y,
-            f=g.op.Mul,
-            name=name,
-            outputs=outputs,
-            sts=sts,
+            g, x, y, f=g.op.Mul, name=name, outputs=outputs, sts=sts, op_type="Mul"
         )
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
@@ -5830,6 +5824,18 @@ def aten_polar(
     return res
 
 
+def aten_pow(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    exponent: T,
+    name: str = "pow",
+) -> T:
+    "pow"
+    return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
+
+
 def aten_pow_Scalar(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5866,7 +5872,17 @@ def aten_pow_Tensor_Tensor(
     if isinstance(exponent, (int, float)):
         if exponent == 1:
             # The node is removed.
-            return g.op.Identity(x, outputs=outputs)
+            return g.op.Identity(x, outputs=outputs, name=name)
+        if g.get_type(x) in {
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.DOUBLE,
+            TensorProto.BFLOAT16,
+        }:
+            if exponent == 0.5:
+                return g.op.Sqrt(x, outputs=outputs, name=name)
+            if exponent == -0.5:
+                return g.op.Reciprocal(g.op.Sqrt(x, name=name), outputs=outputs, name=name)
         exponent = np.array([exponent])
     if isinstance(x, (int, float)):
         assert isinstance(exponent, str), (
@@ -7115,6 +7131,7 @@ def aten_softmax(
     dim: int = -1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     name: str = "softmax",
+    _stacklevel: Optional[int] = None,
 ) -> T:
     "softmax"
     if dtype is not None:

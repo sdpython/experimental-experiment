@@ -435,6 +435,16 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_llm_s_r(self):
+        import torch
+
+        def f(self, *args, **kwargs):
+            raise AssertionError(
+                f"A slice involving type {type(self)} cannot return an integer, "
+                f"this may come from an expression mask[0:T] where T is a Proxy "
+                f"and mask a concrete tensor. This cannot be traced."
+            )
+
+        torch.fx.proxy.Proxy.__index__ = f
         from experimental_experiment.torch_test_helper import dummy_llm
 
         model, inputs = dummy_llm()

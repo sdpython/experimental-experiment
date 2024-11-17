@@ -111,22 +111,33 @@ def aten_meth_masked_fill_(
     value: Any,
 ) -> T:
     "masked"
-    value_cast = g.op.CastLike(value, x, name=".masked_fill")
+    if isinstance(value, float):
+        itype = g.get_type(x)
+        value_cast = g.make_initializer(
+            "",
+            np.array([value], dtype=tensor_dtype_to_np_dtype(itype)),
+            source="aten_meth_masked_fill_",
+        )
+        set_shape_cast = False
+    else:
+        value_cast = g.op.CastLike(value, x, name=".masked_fill")
+        set_shape_cast = True
     res = g.op.Where(mask, value_cast, x, name=".masked_fill")
     if not sts:
         g.set_type(res, g.get_type(x))
-        g.set_type(value_cast, g.get_type(x))
-        if isinstance(value, str):
-            if g.has_shape(value):
-                g.set_shape(value_cast, g.get_shape(value))
-            elif g.has_rank(value):
-                g.set_rank(value_cast, g.get_rank(value))
-        elif isinstance(value, (int, float, bool)):
-            g.set_shape(value_cast, tuple())
-        elif hasattr(value, "shape"):
-            g.set_shape(value_cast, value.shape)
-        else:
-            raise RuntimeError(f"Unable to guess shape from type {type(value)}")
+        if set_shape_cast:
+            g.set_type(value_cast, g.get_type(x))
+            if isinstance(value, str):
+                if g.has_shape(value):
+                    g.set_shape(value_cast, g.get_shape(value))
+                elif g.has_rank(value):
+                    g.set_rank(value_cast, g.get_rank(value))
+            elif isinstance(value, (int, float, bool)):
+                g.set_shape(value_cast, tuple())
+            elif hasattr(value, "shape"):
+                g.set_shape(value_cast, value.shape)
+            else:
+                raise RuntimeError(f"Unable to guess shape from type {type(value)}")
         set_type_shape_binary_op(g, res, mask, value_cast, x, begin=1)
 
     return res
