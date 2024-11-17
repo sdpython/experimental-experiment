@@ -377,6 +377,38 @@ class TestOnnxExportSignatures(ExtTestCase):
             others=inputs2,
         )
 
+    @skipif_ci_windows("not working on windows")
+    def test_signature_index(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+            def forward(self, x, y):
+                t = torch.sigmoid(self.linear(x)) + x
+                return t[:, : y.shape[1]]
+
+        inputs = (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+        )
+        dyn = {
+            "x": {0: torch.export.Dim("batch")},
+            "y": {0: torch.export.Dim("batch"), 1: torch.export.Dim("length", max=3)},
+        }
+        sname = inspect.currentframe().f_code.co_name
+        sig_tracing = (("x", 1, ("batch", 3)),)  # ("y", 1, ("batch", "length")))
+        self._check_exporter(
+            sname,
+            Neuron(),
+            inputs,
+            sig_tracing,
+            dynamic_shapes=dyn,
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
