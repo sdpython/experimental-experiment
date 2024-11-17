@@ -2919,6 +2919,30 @@ def aten_gelu(
     )
 
 
+def aten_getattr(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    attr_name: str,
+    name: str = "getattr",
+) -> T:
+    "getattr"
+    if attr_name == "shape":
+        shape = g.op.Shape(x, name=f"{name}_shape", outputs=outputs)
+        if not sts:
+            g.set_type(shape, TensorProto.INT64)
+            if g.has_rank(x):
+                g.set_shape(shape, (g.get_rank(x),))
+            else:
+                g.set_rank(shape, 1)
+        return shape
+
+    raise AssertionError(
+        f"attr_name={attr_name!r} is not implemented with x={x!r}{g.get_debug_msg()}"
+    )
+
+
 def aten_grid_sampler(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4456,7 +4480,7 @@ def aten_max_other(
         return res
 
     if g.has_type(x) and g.has_type(y):
-        # types are different
+        # Type conflicts: we use the output type
         assert g.get_type_known(outputs[0]), (
             f"Type mismatch for {x!r} ({g.get_type(x)}) and {y!r} ({g.get_type(y)}), "
             f"output {outputs[0]!r} has no type{g.get_debug_msg()}"
@@ -4882,13 +4906,7 @@ def aten_mul(
         res = g.op.And(x, y, name=f"{name}_and", outputs=outputs)
     else:
         res, x, y = prepare_inputs_homogeneous_operator(
-            g,
-            x,
-            y,
-            f=g.op.Mul,
-            name=name,
-            outputs=outputs,
-            sts=sts,
+            g, x, y, f=g.op.Mul, name=name, outputs=outputs, sts=sts, op_type="Mul"
         )
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
@@ -5806,6 +5824,18 @@ def aten_polar(
     return res
 
 
+def aten_pow(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    exponent: T,
+    name: str = "pow",
+) -> T:
+    "pow"
+    return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
+
+
 def aten_pow_Scalar(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5842,8 +5872,37 @@ def aten_pow_Tensor_Tensor(
     if isinstance(exponent, (int, float)):
         if exponent == 1:
             # The node is removed.
-            return g.op.Identity(x, outputs=outputs)
-        exponent = np.array([exponent])
+            return g.op.Identity(x, outputs=outputs, name=name)
+        if g.get_type(x) in {
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.DOUBLE,
+            TensorProto.BFLOAT16,
+        }:
+            if exponent == 0.5:
+                return g.op.Sqrt(x, outputs=outputs, name=name)
+            if exponent == -0.5:
+                return g.op.Reciprocal(g.op.Sqrt(x, name=name), outputs=outputs, name=name)
+        elif g.get_type(x) in {TensorProto.INT64, TensorProto.INT32}:
+            if isinstance(exponent, int) or int(exponent) == exponent:
+                exponent = np.array([exponent], dtype=np.int64)
+            else:
+                # Type conflicts: we use the output type
+                output_type = g.get_type_known(outputs[0], exc=False)
+                if output_type is None:
+                    # We assume it has to be float.
+                    g._implicit_decisions.append(
+                        (aten_pow_Tensor_Tensor, x, exponent, outputs, name)
+                    )
+                    dtype = np.float32
+                    itype = TensorProto.FLOAT
+                else:
+                    dtype = tensor_dtype_to_np_dtype(output_type)
+                    itype = output_type
+                x = g.op.Cast(x, to=itype, name=name)
+                exponent = np.array([exponent], dtype=dtype)
+        if not isinstance(exponent, np.ndarray):
+            exponent = np.array([exponent])
     if isinstance(x, (int, float)):
         assert isinstance(exponent, str), (
             f"Unexpected type for exponent, type(x)={type(x)}, "
@@ -7091,6 +7150,7 @@ def aten_softmax(
     dim: int = -1,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     name: str = "softmax",
+    _stacklevel: Optional[int] = None,
 ) -> T:
     "softmax"
     if dtype is not None:

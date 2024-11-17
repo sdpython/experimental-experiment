@@ -368,9 +368,13 @@ def prepare_inputs_homogeneous_operator(
     name: Optional[str] = None,
     sts: Optional[Any] = None,
     check_shape: bool = True,
+    op_type: Optional[str] = None,
 ) -> Tuple[str, ...]:
     """
     Cast any inputs to ensure all inputs share the same type.
+
+    op_type can be specified to bypass some cases with ambiguities such as
+    a float multiplied with an integer.
     """
     dtypes_list = [_get_input_type(g, a, python_default=False) for a in args]
     dtypes_list_not_none = [n for n in dtypes_list if n is not None]
@@ -423,12 +427,19 @@ def prepare_inputs_homogeneous_operator(
         if sts and sts.get("dtype", None) is not None:
             itype = torch_dtype_to_onnx_dtype(sts["dtype"])
         else:
-            assert len(set(dtypes_list_not_none)) == 1, (
+            itype = None
+            set_itypes = set(dtypes_list_not_none)
+            if op_type in {"Mul", "Div", "Add", "Sub"} and len(set_itypes) > 1:
+                if set_itypes == {TensorProto.FLOAT, TensorProto.INT64}:
+                    itype = TensorProto.FLOAT
+            assert itype or len(set_itypes) == 1, (
                 f"Too many choices for the output type, sts={sts} "
                 f"dtypes_list={dtypes_list}, name={name!r}, "
-                f"dtypes_list_not_none={dtypes_list_not_none}{g.get_debug_msg()}"
+                f"dtypes_list_not_none={dtypes_list_not_none}\nargs={args}"
+                f"{g.get_debug_msg()}"
             )
-            itype = dtypes_list_not_none[0]
+            if not itype:
+                itype = dtypes_list_not_none[0]
         tr = f(*inputs, name=name)
         set_type_shape_binary_op(g, tr, *inputs)
         res = g.op.Cast(tr, to=itype, outputs=outputs, name=name)

@@ -91,6 +91,7 @@ class TestOnnxExportSignatures(ExtTestCase):
                         optimize=optimize,
                         dynamic_shapes=dynamic_shapes,
                         flatten_inputs=flatten_inputs,
+                        others=others,
                     )
             return
         import torch
@@ -131,7 +132,8 @@ class TestOnnxExportSignatures(ExtTestCase):
         onnx.checker.check_model(onx)
         names = [i.name for i in onx.graph.input]
         sig = get_onnx_signature(onx)
-        self.assertEqual(expected_signature, sig)
+        if expected_signature != "NOCHECK":
+            self.assertEqual(expected_signature, sig)
 
         # feeds
         tracing = "-tracing" in exporter
@@ -375,6 +377,120 @@ class TestOnnxExportSignatures(ExtTestCase):
             dynamic_shapes=dyn,
             exporter="custom-tracing",
             others=inputs2,
+        )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_index_s_r(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+            def forward(self, x, y):
+                t = torch.sigmoid(self.linear(x)) + x
+                return t[:, : y.shape[1]]
+
+        inputs = (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+        )
+        sname = inspect.currentframe().f_code.co_name
+        sig_tracing = (("x", 1, (4, 3)), ("y", 1, (4, 2)))
+        self._check_exporter(sname, Neuron(), inputs, sig_tracing)
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_index_d_r(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+            def forward(self, x, y):
+                t = torch.sigmoid(self.linear(x)) + x
+                return t[:, : y.shape[1]]
+
+        inputs = (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+        )
+        inputs2 = (
+            (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            (torch.arange(8 * 1) + 10).reshape((-1, 1)).to(torch.float32),
+        )
+        dim = torch.export.Dim("batch", min=0, max=1024)
+        dyn = {
+            "x": {0: dim},
+            "y": {0: dim, 1: torch.export.Dim("length", min=0, max=2)},
+        }
+        sname = inspect.currentframe().f_code.co_name
+        sig_tracing = (("x", 1, ("batch", 3)), ("y", 1, ("batch", "length")))
+        self._check_exporter(
+            sname, Neuron(), inputs, sig_tracing, dynamic_shapes=dyn, others=inputs2
+        )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_llm_s_tracing(self):
+        from experimental_experiment.torch_test_helper import dummy_llm
+
+        if False:
+            for cls_name in ["AttentionBlock", "MultiAttentionBlock", "DecoderLayer"]:
+                model, inputs = dummy_llm(cls_name)
+                sname = inspect.currentframe().f_code.co_name
+                self._check_exporter(
+                    f"{sname}_{cls_name}",
+                    model,
+                    inputs,
+                    expected_signature="NOCHECK",
+                    optimize=True,
+                    exporter="custom",
+                )
+
+        for cls_name in ["AttentionBlock", "MultiAttentionBlock", "DecoderLayer"]:
+            model, inputs = dummy_llm(cls_name)
+            sname = inspect.currentframe().f_code.co_name
+            self._check_exporter(
+                f"{sname}_{cls_name}",
+                model,
+                inputs,
+                expected_signature="NOCHECK",
+                optimize=False,
+                exporter="custom-tracing",
+            )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_llm_s_r(self):
+        from experimental_experiment.torch_test_helper import dummy_llm
+
+        model, inputs = dummy_llm()
+        sname = inspect.currentframe().f_code.co_name
+        self._check_exporter(
+            sname,
+            model,
+            inputs,
+            expected_signature=(("input_ids", 7, (1, 30)),),
+        )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_llm_d_r(self):
+        import torch
+        from experimental_experiment.torch_test_helper import dummy_llm
+
+        model, inputs, dyn = dummy_llm(dynamic_shapes=True)
+        others = (torch.randint(0, 1024, (4, 50)).to(torch.int64),)
+        sname = inspect.currentframe().f_code.co_name
+        self._check_exporter(
+            sname,
+            model,
+            inputs,
+            dynamic_shapes=dyn,
+            expected_signature=(("input_ids", 7, ("batch", "length")),),
+            others=others,
         )
 
 
