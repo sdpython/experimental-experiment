@@ -2919,6 +2919,30 @@ def aten_gelu(
     )
 
 
+def aten_getattr(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    attr_name: str,
+    name: str = "getattr",
+) -> T:
+    "getattr"
+    if attr_name == "shape":
+        shape = g.op.Shape(x, name=f"{name}_shape", outputs=outputs)
+        if not sts:
+            g.set_type(shape, TensorProto.INT64)
+            if g.has_rank(x):
+                g.set_shape(shape, (g.get_rank(x),))
+            else:
+                g.set_rank(shape, 1)
+        return shape
+
+    raise AssertionError(
+        f"attr_name={attr_name!r} is not implemented with x={x!r}{g.get_debug_msg()}"
+    )
+
+
 def aten_grid_sampler(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

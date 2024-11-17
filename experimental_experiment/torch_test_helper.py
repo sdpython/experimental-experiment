@@ -132,11 +132,13 @@ def export_to_onnx(
 
 def dummy_llm(
     cls_name: Optional[str] = None,
+    dynamic_shapes: bool = False,
 ) -> Tuple["torch.nn.Module", Tuple["torch.Tensor", ...]]:  # noqa: F821
     """
     Creates a dummy LLM for test purposes.
 
     :param cls_name: None for whole model or a piece of it
+    :param dynamic_shapes: returns dynamic shapes as well
 
     .. runpython::
         :showcode:
@@ -169,7 +171,7 @@ def dummy_llm(
             self.register_buffer(name="mask", tensor=torch.tril(input=ones))
 
         def forward(self, x):
-            B, T, C = x.size()
+            B, T, C = x.shape
 
             query = self.query(x)
             key = self.key(x)
@@ -261,28 +263,62 @@ def dummy_llm(
 
     if cls_name in (None, "LLM"):
         dec = LLM()
-        x = torch.randint(0, 1024, (1, 30)).to(torch.int64)
+        x = torch.randint(0, 1024, (2 if dynamic_shapes else 1, 30)).to(torch.int64)
         dec(x)
+        if dynamic_shapes:
+            dyn = {
+                "input_ids": {
+                    0: torch.export.Dim("batch", min=1, max=1024),
+                    1: torch.export.Dim("length", min=1, max=255),
+                }
+            }
+            return dec, (x,), dyn
         return dec, (x,)
 
     if cls_name == "DecoderLayer":
-        LLM()(torch.randint(0, 1024, (1, 30)).to(torch.int64))
+        LLM()(torch.randint(0, 1024, (2 if dynamic_shapes else 1, 30)).to(torch.int64))
 
         dec = DecoderLayer()
-        x = Embedding()(torch.randint(0, 1024, (1, 30)).to(torch.int64))
+        x = Embedding()(
+            torch.randint(0, 1024, (2 if dynamic_shapes else 1, 30)).to(torch.int64)
+        )
         dec(x)
+        if dynamic_shapes:
+            dyn = {
+                "x": {
+                    0: torch.export.Dim("batch", min=1, max=1024),
+                    1: torch.export.Dim("length", min=1, max=255),
+                }
+            }
+            return dec, (x,), dyn
         return dec, (x,)
 
     if cls_name == "MultiAttentionBlock":
         dec = MultiAttentionBlock()
-        x = torch.rand(1, 30, 16).to(torch.float32)
+        x = torch.rand(2 if dynamic_shapes else 1, 30, 16).to(torch.float32)
         dec(x)
+        if dynamic_shapes:
+            dyn = {
+                "x": {
+                    0: torch.export.Dim("batch", min=1, max=1024),
+                    1: torch.export.Dim("length", min=1, max=255),
+                }
+            }
+            return dec, (x,), dyn
         return dec, (x,)
 
     if cls_name == "AttentionBlock":
         dec = AttentionBlock()
-        x = torch.rand(1, 30, 16).to(torch.float32)
+        x = torch.rand(2 if dynamic_shapes else 1, 30, 16).to(torch.float32)
         dec(x)
+        if dynamic_shapes:
+            dyn = {
+                "x": {
+                    0: torch.export.Dim("batch", min=1, max=1024),
+                    1: torch.export.Dim("length", min=1, max=255),
+                }
+            }
+            return dec, (x,), dyn
         return dec, (x,)
 
     raise NotImplementedError(f"cls_name={cls_name}")
