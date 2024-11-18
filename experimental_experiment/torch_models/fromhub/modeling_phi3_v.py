@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from transformers import GenerationMixin
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
@@ -1762,7 +1763,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
         )
 
 
-class Phi3VForCausalLM(Phi3VPreTrainedModel):
+class Phi3VForCausalLM(Phi3VPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     # Copied from transformers.models.llama.modeling_llama.
