@@ -1,6 +1,6 @@
 import inspect
 from typing import List, Optional
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -27,6 +27,11 @@ class FusedConvPattern(PatternOptimization):
 
         op_type = next_nodes[0].op_type
         if op_type != "Relu":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # FusedConv only exists for float32.
+        dtypes = [(g.get_type(i) if g.has_type(i) else None) for i in node.input]
+        if TensorProto.FLOAT not in dtypes:
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [node, next_nodes[0]], self.apply, insert_at=next_nodes[0])
