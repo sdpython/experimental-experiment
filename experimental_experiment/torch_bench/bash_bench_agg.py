@@ -127,6 +127,11 @@ def main(args=None):
         help="excludes files from the aggregation given by their number "
         "(use --list to determine them)",
     )
+    parser.add_argument(
+        "--pages",
+        default="",
+        help="pages to keep when building the historical graphs",
+    )
     parser.add_argument("--verbose", default=0, help="verbosity level")
     res = parser.parse_args(args=args)
 
@@ -155,9 +160,10 @@ def main(args=None):
         build_historical_report(
             input_files=res.inputs,
             output=res.output,
-            verbose=res.verbose,
+            verbose=int(res.verbose),
             filter_in=res.filter_in,
             filter_out=res.filter_out,
+            pages=res.pages,
         )
         return
 

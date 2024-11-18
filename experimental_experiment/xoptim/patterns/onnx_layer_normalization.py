@@ -516,7 +516,7 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
             return self.none()
         if g.main_opset < 18:
             return self.none(node, inspect.currentframe().f_lineno)
-        if not g.has_rank(node.input[0]) and g.get_rank(node.input[0]) < 2:
+        if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) < 2:
             return self.none(node, inspect.currentframe().f_lineno)
         if len(node.output) > 1 and (
             not g.has_rank(node.input[1]) or g.next_nodes(node.output[1])

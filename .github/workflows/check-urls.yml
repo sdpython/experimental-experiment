@@ -30,7 +30,7 @@ jobs:
         print_all: false
         timeout: 2
         retry_count# : 2
-        exclude_urls: https://github.com/pytorch/pytorch/pull/117009
+        exclude_urls: https://github.com/pytorch/pytorch/pull/117009,https://github.com/huggingface/transformers/pull/29285
         exclude_patterns: https://dumps.wikimedia.org/,https://github.com/pytorch/pytorch/pull/
         # force_pass : true
 
