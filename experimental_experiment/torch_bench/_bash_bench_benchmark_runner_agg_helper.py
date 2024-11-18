@@ -2141,6 +2141,7 @@ def build_historical_report(
     verbose: int = 0,
     filter_in: Optional[Any] = None,
     filter_out: Optional[Any] = None,
+    pages: Optional[Union[str, List[str]]] = None,
 ):
     """
     Builds historical graph using the aggregated data (export_simple options).
@@ -2150,6 +2151,8 @@ def build_historical_report(
     :param verbose: verbosity
     :param filter_in: filter in some data to make the report smaller (see below)
     :param filter_out: filter out some data to make the report smaller (see below)
+    :param pages: list of pages to produce, None for all, if can be a string,
+        comma separated values or a of list of strings
 
     Argument `filter_in` or `filter_out` follows the syntax
     ``<column1>:<fmt1>/<column2>:<fmt2>``.
@@ -2164,6 +2167,8 @@ def build_historical_report(
         if verbose:
             print(f"[build_historical_report] read {name!r}")
         df = pandas.read_csv(name)
+        if verbose > 2:
+            print(df.head())
         assert all(
             c in df.columns for c in expected_columns
         ), f"Unexpected columns {df.columns} in {name!r}"
@@ -2210,7 +2215,7 @@ def build_historical_report(
             "number of failures for torch.export.export",
         ],
         "benchmark time": ["total export time", "benchmark duration"],
-        "export time": ["average export time"],
+        "export time": ["total export time"],
         "speedup": ["speedup weighted by latency", "average speedup (geo)"],
         "discrepancies": ["discrepancies < 0.1", "discrepancies < 0.01"],
         "memory": [
@@ -2218,9 +2223,14 @@ def build_historical_report(
             "average GPU delta peak (export) (nvidia-smi)",
         ],
     }
+    if pages:
+        if isinstance(pages, str):
+            pages = pages.split(",")
+        pages = set(pages)
+        graphs = {k: v for k, v in graphs.items() if k in pages}
 
     if verbose:
-        print(f"[build_historical_report] create {output!r}")
+        print(f"[build_historical_report] create {output!r}, verbose={verbose}")
     with pandas.ExcelWriter(output, engine="xlsxwriter") as writer:
         export_export = {}
         for k, v in graphs.items():
@@ -2228,11 +2238,20 @@ def build_historical_report(
                 print(f"[build_historical_report] create graph {k!r}, exporter={exporter}")
             sdf = df[df.METRIC.isin(v)]
             if sdf.shape[0] == 0:
+                if verbose:
+                    print(
+                        f"[build_historical_report] empty graph for {k!r}, exporter={exporter}"
+                    )
                 continue
             sdf = sdf.sort_values([*exporter, "suite", "METRIC", "DATE"])
             sdf = sdf[[*exporter, "suite", "METRIC", "DATE", "value"]].copy()
             if verbose:
-                print(f"[build_historical_report] shape={sdf.shape}")
+                print(
+                    f"[build_historical_report] shape={sdf.shape}, metrics={set(sdf.METRIC)}"
+                )
+                if verbose > 2:
+                    print(sdf.head())
+                    print(sdf.tail())
 
             try:
                 piv = sdf.pivot(
@@ -2249,6 +2268,10 @@ def build_historical_report(
             subset = piv.reset_index(drop=False)
             subset.to_excel(writer, sheet_name=k, index=False)
             idate = list(subset.columns).index("DATE")
+            if verbose > 2:
+                print(f"[build_historical_report] shape={subset.shape}")
+                print(subset.head())
+                print(subset.tail())
 
             workbook = writer.book
             worksheet = writer.sheets[k]

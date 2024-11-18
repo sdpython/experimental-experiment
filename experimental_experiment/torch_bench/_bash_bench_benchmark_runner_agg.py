@@ -1259,19 +1259,41 @@ def _build_aggregated_document(
         piv_total, _ = _fix_report_piv(piv_total, agg=True)
 
         # concatenation with the all suite
-        series_append = piv_total.unstack(level=list(range(len(piv_total.index.names))))
-        data_append = pandas.DataFrame({"value": series_append}).reset_index(drop=False)
-        data_append["suite"] = "All"
-        if "DATE" in data_csv.columns:
-            data_append["DATE"] = data_csv["DATE"].max()
-        data_append = data_append[data_append["METRIC"] != "date"]
-        if weighted_speedup is not None:
-            data_csv = pandas.concat([data_csv, weighted_speedup, data_append], axis=0)
-        else:
-            data_csv = pandas.concat([data_csv, data_append], axis=0)
-        if verbose:
-            print(f"[merge_benchmark_reports] writes {export_simple!r}")
-        data_csv.to_csv(export_simple, index=False)
+        exporters = set(piv.columns)
+        flat_piv = piv.reset_index(drop=False)
+        not_exporters = set(c for c in flat_piv.columns if c not in exporters)
+        flat_piv_total = piv_total.reset_index(drop=False)
+        set_piv = set(flat_piv_total.columns)
+        for c in flat_piv.columns:
+            if c not in set_piv:
+                flat_piv_total[c] = "All"
+        data_append = flat_piv_total
+
+        data_csv = pandas.concat([flat_piv, data_append], axis=0)
+        dates = data_csv[data_csv.METRIC == "date"][list(exporters)]
+        dates_max = dates.astype(str).values.max()
+        data_csv = data_csv[data_csv.METRIC != "date"]
+        nodata_data = data_csv.copy()
+        data_csv["DATE"] = dates_max
+        data_csv.columns = [
+            "-".join(str(_).replace(".0", "") for _ in c if _ and _ != "none")
+            for c in data_csv.columns
+        ]
+        data_csv.to_csv(export_simple.replace(".csv", ".exporter.csv"), index=False)
+
+        # data_csv.to_csv(export_simple, index=True)
+
+        reindexed = nodata_data.set_index(list(not_exporters))
+        reindexed = reindexed.stack(
+            list(range(len(reindexed.columns.names))), future_stack=True
+        )
+        if not isinstance(reindexed, pandas.DataFrame):
+            reindexed = reindexed.to_frame()
+        reindexed.columns = ["value"]
+        reindexed = reindexed.reset_index(drop=False)
+        reindexed["DATE"] = dates_max
+        reindexed.columns = ["".join(map(str, c)) for c in reindexed.columns]
+        reindexed.to_csv(export_simple, index=False)
 
         export_simple_x = f"{export_simple}.xlsx"
         if verbose:
