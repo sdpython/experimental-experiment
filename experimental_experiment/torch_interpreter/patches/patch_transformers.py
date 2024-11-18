@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 import torch
 
+
 @dataclass
 class patched_AttentionMaskConverter:
 
