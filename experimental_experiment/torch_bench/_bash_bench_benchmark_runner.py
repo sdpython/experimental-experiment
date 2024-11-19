@@ -1037,6 +1037,7 @@ class BenchmarkRunner:
                 )
             except Exception as e:
                 stats["time_export"] = time.perf_counter() - begin
+                stats["time_export_2"] = stats["time_export"]
                 stats["ERR_export"] = _clean_string(str(e)).replace("\n", "_ ")
                 if self.verbose:
                     print(f"[benchmarkrunner.benchmark] err_export {e}")
@@ -1050,6 +1051,7 @@ class BenchmarkRunner:
                 return stats, context
 
             stats["time_export"] = time.perf_counter() - begin
+            stats["time_export_2"] = stats["time_export"]
             stats["time_export_success"] = time.perf_counter() - begin
         else:
             exported_model, opt_stats = model_runner.export_as(
@@ -1063,6 +1065,7 @@ class BenchmarkRunner:
                 target_opset=self.target_opset,
             )
             stats["time_export"] = time.perf_counter() - begin
+            stats["time_export_2"] = stats["time_export"]
             stats["time_export_success"] = time.perf_counter() - begin
         model_runner.dump_std(f"{filename}.log.txt")
 

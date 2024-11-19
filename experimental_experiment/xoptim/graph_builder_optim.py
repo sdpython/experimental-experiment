@@ -1307,7 +1307,7 @@ class GraphBuilderPatternOptimization:
             self._build()
             statistics.append(
                 dict(
-                    pattern="build_for_pattern",
+                    pattern="build_graph_for_pattern",
                     iteration=it,
                     time_in=time.perf_counter() - begin,
                 )

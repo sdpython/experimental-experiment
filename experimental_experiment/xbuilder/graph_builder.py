@@ -1431,20 +1431,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self.register_dynamic_objects_from_dim(sdim)
         shape = self.verify_shape(shape, 0, name=name)
-        assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
-            f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
-            f"{self.get_debug_msg()}"
-        )
-        shape_int = [d for d in shape if isinstance(d, int)]
-        assert (
-            len(shape) == 0 or not shape_int or min(shape_int) >= 0
-        ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
-        assert (
-            not self._debug_null_shape
-            or len(shape) == 0
-            or not shape_int
-            or min(shape_int) > 0
-        ), f"Zero value in shape {shape} for {name!r}{self.get_debug_msg()}"
+
+        # costly
+        # assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
+        #     f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
+        #     f"{self.get_debug_msg()}"
+        # )
+        # shape_int = [d for d in shape if isinstance(d, int)]
+        # assert (
+        #     len(shape) == 0 or not shape_int or min(shape_int) >= 0
+        # ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
+        # assert (
+        #     not self._debug_null_shape
+        #     or len(shape) == 0
+        #     or not shape_int
+        #    or min(shape_int) > 0
+        # ), f"Zero value in shape {shape} for {name!r}{self.get_debug_msg()}"
 
         if name in self._known_shapes:
             old_shape = self._known_shapes[name]
@@ -3236,10 +3238,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"Shape must be a tuple not {type(shape)}"
         if shape is None:
             return None
-        assert is_static_shape(shape) or self.is_dynamic_shape(shape, allow_none=True), (
-            f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
-            f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
-        )
+        # costly
+        # assert is_static_shape(shape) or self.is_dynamic_shape(shape, allow_none=True), (
+        #     f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
+        #     f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
+        # )
         new_shape = self.verify_dynamic_shape(shape, name=name)
         return new_shape
 
@@ -5226,7 +5229,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         from subgraphs.
         """
         yield from node.input
-        if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+        if node.op_type[0] in "LSI" and node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
             for att in node.attribute:
                 if att.type == AttributeProto.GRAPH:
                     hidden_inputs = cls._get_hidden_inputs(att.g)
