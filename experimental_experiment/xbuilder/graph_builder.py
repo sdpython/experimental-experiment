@@ -5054,8 +5054,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                         o[k] = 0
                     o[k] = max(o[k], v)
                     continue
-                if k in {"algo"} and k not in o:
+                if k in {"algo", "value"} and k not in o:
                     o[k] = []
+                assert k in o, f"Missing k={k!r} from statistics={statistics!r}"
                 o[k].append(v)
 
         rows = []
