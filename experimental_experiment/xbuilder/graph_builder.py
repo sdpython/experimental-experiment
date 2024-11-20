@@ -4914,15 +4914,25 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.optimization_options.constant_folding:
             # First constant removal
             begin = time.perf_counter()
-            n = self.constant_folding()
+            stats_cf = self.constant_folding()
             statistics.append(
                 dict(
-                    pattern="constant_folding",
-                    removed=n,
+                    pattern="apply_constant_folding",
+                    removed=stats_cf["n"],
                     time_in=time.perf_counter() - begin,
                     iteration=0,
                 )
             )
+            for k, v in stats_cf.items():
+                if k == "n":
+                    continue
+                statistics.append(
+                    dict(
+                        pattern=f"apply_constant_folding_{k}",
+                        value=v,
+                        iteration=0,
+                    )
+                )
             self._check(statistics, "Da")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
@@ -4966,15 +4976,25 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.optimization_options.constant_folding:
             # Second constant removal
             begin = time.perf_counter()
-            n = self.constant_folding()
+            stats_cf = self.constant_folding()
             statistics.append(
                 dict(
-                    pattern="constant_folding",
-                    removed=n,
+                    pattern="apply_constant_folding",
+                    removed=stats_cf["n"],
                     time_in=time.perf_counter() - begin,
                     iteration=1,
                 )
             )
+            for k, v in stats_cf.items():
+                if k == "n":
+                    continue
+                statistics.append(
+                    dict(
+                        pattern=f"apply_constant_folding_{k}",
+                        value=v,
+                        iteration=1,
+                    )
+                )
             self._check(statistics, "Db")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
@@ -5487,14 +5507,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             print(f"[GraphBuilder.compute_constant]     - A {name}: {self.pretty_tensor(cst)}")
         return cst, feeds
 
-    def constant_folding(self, convert_into_initializer: bool = True) -> int:
+    def constant_folding(self, convert_into_initializer: bool = True) -> Dict[str, float]:
         """
         Folds all constants. Constants are marked during the creation of the graph.
         There is no need to propagate this information.
 
         :param convert_into_initializer: moves the constant as an initializer,
             otherwise, just evaluates it
-        :return: number of removed nodes
+        :return: dictionary of statistics
         """
         if self.verbose > 1:
             begin_ = time.perf_counter()
@@ -5509,6 +5529,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"[GraphBuilder.constant_folding] cst:: "
                         f"{1 if self.is_constant(name) else '.'} :: {name}"
                     )
+        stats_cf = {"new_inits": 0}
         start = len(self.nodes)
         updates = {}
         node_to_remove = set()
@@ -5528,6 +5549,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if output is None:
                     # Evaluation failed.
                     continue
+                key = f"{v.domain}_{v.op_type}"
+                if key not in stats_cf:
+                    stats_cf[key] = 1
+                else:
+                    stats_cf[key] += 1
                 if convert_into_initializer:
                     node_to_remove.add(tuple(v.output))
                 if not isinstance(output, tuple):
@@ -5557,6 +5583,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             source=f"GraphBuilder.constant_folding.from/fold"
                             f"({','.join(assert_sorted(feeds))}){text_sources}",
                         )
+                        stats_cf["new_inits"] += 1
                     else:
                         updates[name] = v
                     if self.verbose > 3:
@@ -5585,7 +5612,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{len(self.nodes)} nodes in "
                 f"{time.perf_counter() - begin_} seconds"
             )
-        return start - len(self.nodes)
+        stats_cf["n"] = start - len(self.nodes)
+        return stats_cf
 
     def _clean_values_cache(self):
         """

@@ -945,6 +945,7 @@ def _build_aggregated_document(
         "ERR_",
         "op_onnx_",
         "op_torch_",
+        "op_opt_",
         "mempeak_",
         "speedup_",
         "bucket_",
@@ -1022,6 +1023,7 @@ def _build_aggregated_document(
             "0main",
             "op_onnx",
             "op_torch",
+            "op_opt",
             "MODELS",
             "torch",
         },
@@ -1068,7 +1070,7 @@ def _build_aggregated_document(
     final_res = {
         k: (
             v
-            if k in {"0raw", "0main", "AGG", "AGG2", "op_onnx", "op_torch"}
+            if k in {"0raw", "0main", "AGG", "AGG2", "op_onnx", "op_opt", "op_torch"}
             else _reorder_columns_level(v, column_keys, prefix=k)
         )
         for k, v in res.items()

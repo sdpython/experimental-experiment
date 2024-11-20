@@ -788,7 +788,7 @@ def _apply_excel_style(
                         cell.number_format = fmt
             continue
 
-        if k in ("bucket", "status", "op_onnx", "op_torch") and v.shape[1] > 3:
+        if k in ("bucket", "status", "op_onnx", "op_opt", "op_torch") and v.shape[1] > 3:
             has_convert = [("convert" in str(c)) for c in v.columns]
             has_20 = [("-20%" in str(c)) for c in v.columns]
             assert k != "status" or any(has_convert), (

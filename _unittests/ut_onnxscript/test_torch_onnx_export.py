@@ -1,4 +1,5 @@
 import unittest
+from typing import Optional
 from onnx.reference import ReferenceEvaluator
 import torch
 from experimental_experiment.ext_test_case import (
@@ -76,6 +77,64 @@ class TestTorchOnnxExport(ExtTestCase):
         ref = ReferenceEvaluator(onx)
         got = ref.run(None, {"x": x.detach().cpu().numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    def test_torch_masked_fill(self):
+        import torch
+
+        def _make_causal_mask(
+            input_ids_shape: torch.Size,
+            dtype: torch.dtype,
+            device: torch.device = "cpu",
+            past_key_values_length: int = 0,
+            sliding_window: Optional[int] = None,
+        ):
+            """
+            Make causal mask used for bi-directional self-attention.
+            """
+            bsz, tgt_len = input_ids_shape
+            mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+            mask_cond = torch.arange(mask.size(-1), device=device)
+            mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+
+            mask = mask.to(dtype)
+
+            if past_key_values_length > 0:
+                mask = torch.cat(
+                    [
+                        torch.zeros(
+                            tgt_len, past_key_values_length, dtype=dtype, device=device
+                        ),
+                        mask,
+                    ],
+                    dim=-1,
+                )
+
+            # add lower triangular sliding window mask if necessary
+            if sliding_window is not None:
+                diagonal = past_key_values_length - sliding_window - 1
+
+                context_mask = torch.tril(
+                    torch.ones_like(mask, dtype=torch.bool), diagonal=diagonal
+                )
+                mask.masked_fill_(context_mask, torch.finfo(dtype).min)
+
+            return mask[None, None, :, :].expand(
+                bsz, 1, tgt_len, tgt_len + past_key_values_length
+            )
+
+        class FailingModule(torch.nn.Module):
+
+            def forward(self, input_ids):
+
+                return _make_causal_mask(
+                    input_ids.shape, torch.float32, past_key_values_length=32
+                )
+
+        input_ids = torch.randint(31730, (1, 30))
+        model = FailingModule()
+        # expected = model(input_ids)
+        ep = torch.export.export(model, (input_ids,))
+        self.assertIn("target=torch.ops.aten.expand.default", str(ep.graph))
 
 
 if __name__ == "__main__":
