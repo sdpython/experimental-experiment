@@ -1,6 +1,37 @@
+import enum
 from typing import Any, Dict, Tuple, Union
 import numpy as np
 from . import assert_found
+
+
+class LLMInputKind(enum.IntEnum):
+    """
+    Defines the dummy inputs which can be generated for a LLM vision model.
+
+    Example::
+
+        LLMInputKind.input_ids
+        LLMInputKind.input_ids | position_ids | attention_mask
+        LLMInputKind.input_ids | position_ids | attention_mask | images | past_key_values
+
+    Remarks, for Phi 3.5:
+
+    * images means two new inputs pixel_value Ix5x3x336x336 where I is the number of images
+      and image_size Ix2 which contains the image sizes
+    * min(LLMInputKind.input_ids) = -I where I is still the number of images.
+    * the number of caches is equal to the number of hidden kayers
+
+    What does batch size means? Multiple prompts? The image embedding does not seem
+    to support that.
+    """
+
+    # possible scenario for iteration 0
+    input_ids = 1  # input_dis
+    position_ids = 2  # position_ids
+    attentiion_mask = 4  # attention_mask
+    images = 8  # pixels_values, image_size
+    # possible values for iteration 1
+    past_key_values = 16  # caches
 
 
 def get_phi_35_mini_instruct(
@@ -681,7 +712,7 @@ def get_llama_32_9b_vision(
 
 
 def get_phi_3_5_vision_instruct(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, input_kind: LLMInputKind = LLMInputKind.input_ids, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     import torch
     from .fromhub.configuration_phi3_v import Phi3VConfig
@@ -844,11 +875,14 @@ def get_phi_3_5_vision_instruct(
     model = Phi3VForCausalLM(conf)
     model.eval()
 
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 32064, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
+    if input_kind == LLMInputKind.input_ids:
+        dim = (1, 30)
+        inputs = dict(
+            input_ids=torch.randint(0, 32064, dim).to(torch.int64),
+            attention_mask=torch.ones(*dim, dtype=torch.int64),
+        )
+    else:
+        raise NotImplementedError(f"Unable to generate inputs for input_kind={input_kind!r}")
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())

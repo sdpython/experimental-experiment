@@ -234,7 +234,7 @@ images = []
 placeholder = ""
 
 # Note: if OOM, you might consider reduce number of frames in this example.
-for i in range(1, 2):
+for i in range(1, 3):
     url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
     print(f"-- download image from {url!r}")
     img = Image.open(requests.get(url, stream=True).raw)
@@ -265,17 +265,21 @@ generation_args = {
     "do_sample": False,
 }
 
+inputs_iteration = []
+
 
 def rewrite_forward(f, *args, **kwargs):
-    print("forward input:")
+    print(f"------------- iteration {len(inputs_iteration)}")
     print(f"args: {string_type(args, with_shape=True, with_min_max=True)}")
     print(f"kwargs: {string_type(kwargs, with_shape=True, with_min_max=True)}")
     print(kwargs["input_ids"])
+    inputs_iteration.append((args, kwargs))
     return f(*args, **kwargs)
 
 
 print("-- intercept forward")
 print(f"-- inputs type: {string_type(inputs)}")
+
 model_forward = model.forward
 model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(f, *args, **kwargs)
 
@@ -306,3 +310,7 @@ print("-- response")
 # pixel_values:T1s1x5x3x336x336[-2.063474178314209:2.305359125137329],
 # image_sizes:T7s1x2[672:672],return_dict:int[True])
 print(response)
+
+
+print("---------------------")
+print(inputs_iteration)
