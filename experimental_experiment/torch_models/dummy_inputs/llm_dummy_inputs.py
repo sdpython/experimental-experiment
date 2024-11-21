@@ -1,9 +1,33 @@
-def get_dummy_inputs_for_phi_3_5_vision_instruct(
+import os
+
+
+def restore_dummy_inputs_for_phi_3_5_vision_instruct(
+    num_hidden_layers: int = 2, device: str = "cpu", verbose: int = 0
+):
+    """
+    Restores dummy inputs produced by
+    func:`create_dummy_inputs_for_phi_3_5_vision_instruct`.
+    """
+    from ...mini_onnx_builder import create_input_tensors_from_onnx_model
+
+    filename = os.path.join(
+        os.path.dirname(__file__),
+        f"dummy_microsoft_Phi-3.5-vision-instruct_{num_hidden_layers}.iter.0.onnx",
+    )
+    assert os.path.exists(filename), (
+        f"unable to find {filename!r}, use "
+        f"create_dummy_inputs_for_phi_3_5_vision_instruct to create them"
+    )
+    return create_input_tensors_from_onnx_model(filename, device=device, engine="onnxruntime")
+
+
+def create_dummy_inputs_for_phi_3_5_vision_instruct(
     num_hidden_layers: int = 2, device: str = "cpu", verbose: int = 0
 ):
     """
     Generates dummy inputs for an untrained model using the same
     structure as Phi 3.5 instruct vision.
+    It can be restored by :func:`restore_dummy_inputs_for_phi_3_5_vision_instruct`.
     """
 
     from PIL import Image
@@ -18,7 +42,7 @@ def get_dummy_inputs_for_phi_3_5_vision_instruct(
     model_id = "microsoft/Phi-3.5-vision-instruct"
     if verbose:
         print(
-            f"[get_dummy_inputs_for_phi_3_5_vision_instruct] "
+            f"[create_dummy_inputs_for_phi_3_5_vision_instruct] "
             f"get processor for model {model_id!r}"
         )
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True, num_crops=4)
@@ -30,10 +54,11 @@ def get_dummy_inputs_for_phi_3_5_vision_instruct(
         url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
         if verbose:
             print(
-                f"[get_dummy_inputs_for_phi_3_5_vision_instruct] download image from {url!r}"
+                f"[create_dummy_inputs_for_phi_3_5_vision_instruct] "
+                f"download image from {url!r}"
             )
         img = Image.open(requests.get(url, stream=True).raw)
-        print(f"[get_dummy_inputs_for_phi_3_5_vision_instruct] image size {img.size}")
+        print(f"[create_dummy_inputs_for_phi_3_5_vision_instruct] image size {img.size}")
         images.append(img)
         placeholder += f"<|image_{i}|>\n"
 
@@ -46,15 +71,16 @@ def get_dummy_inputs_for_phi_3_5_vision_instruct(
     )
 
     if verbose:
-        print("[get_dummy_inputs_for_phi_3_5_vision_instruct] create inputs")
+        print("[create_dummy_inputs_for_phi_3_5_vision_instruct] create inputs")
     inputs = processor(prompt, images, return_tensors="pt").to(device)
     if verbose:
         print(
-            f"[get_dummy_inputs_for_phi_3_5_vision_instruct] types: "
+            f"[create_dummy_inputs_for_phi_3_5_vision_instruct] types: "
             f"{string_type(inputs, with_shape=True, with_min_max=True)}"
         )
         print(
-            f"[get_dummy_inputs_for_phi_3_5_vision_instruct] image_sizes {inputs.image_sizes}"
+            f"[create_dummy_inputs_for_phi_3_5_vision_instruct] "
+            f"image_sizes {inputs.image_sizes}"
         )
 
     generation_args = {"max_new_tokens": 30, "temperature": 0.0, "do_sample": False}

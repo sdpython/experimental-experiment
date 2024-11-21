@@ -214,14 +214,14 @@ class MiniOnnxBuilder:
                     kwargs = {
                         "mean": float(tensor.mean()),
                         "scale": float(tensor.std()),
-                        "seed": 0,
+                        "seed": 0.0,
                     }
                 else:
                     op_type = "RandomUniform"
                     kwargs = {
                         "low": float(mini),
                         "high": float(maxi),
-                        "seed": 0,
+                        "seed": 0.0,
                     }
                 shape = tuple(map(int, tensor.shape))
                 self.nodes.append(
@@ -484,7 +484,9 @@ def create_onnx_model_from_input_tensors(
 
 
 def create_input_tensors_from_onnx_model(
-    proto: Union[str, ModelProto], tensor_cls: Optional[type] = None
+    proto: Union[str, ModelProto],
+    device: str = "cpu",
+    engine: str = "ExtendedReferenceEvaluator",
 ) -> Union[Tuple[Any, ...], Dict[str, Any]]:
     """
     Deserializes tensors stored with function
@@ -494,14 +496,32 @@ def create_input_tensors_from_onnx_model(
     to restore the tensors.
 
     :param proto: ModelProto or the file itself
-    :param tensor_cls: tensor class, :class:`torch.Tensor` or :class:`numpy.ndarray`.
+    :param device: moves the tensor to this device
+    :param engine: runtime to use, onnx, the default value, onnxruntime
     :return: ModelProto
     """
-    from .reference import ExtendedReferenceEvaluator
+    if engine == "ExtendedReferenceEvaluator":
+        from .reference import ExtendedReferenceEvaluator
 
-    sess = ExtendedReferenceEvaluator(proto)
+        sess = ExtendedReferenceEvaluator(proto)
+        names = sess.output_names
+    elif engine == "onnx":
+        from onnx.reference import ReferenceEvaluator
+
+        sess = ReferenceEvaluator(proto)
+        names = sess.output_names
+    elif engine == "onnxruntime":
+        from onnxruntime import InferenceSession
+
+        sess = InferenceSession(
+            proto if isinstance(proto, str) else proto.SerializeToString(),
+            providers=["CPUExecutionProvider"],
+        )
+        names = [i.name for i in sess.get_outputs()]
+    else:
+        raise AssertionError(f"Unexpected value for engine={engine!r}")
+
     got = sess.run(None, {})
-    names = sess.output_names
     if len(names) == 1:
         name = names[0]
         output = got[0]
@@ -514,7 +534,7 @@ def create_input_tensors_from_onnx_model(
         if name == "tensor":
             import torch
 
-            return torch.from_numpy(output)
+            return torch.from_numpy(output).to(device)
         raise AssertionError(f"Unexpected name {name!r} in {names}")
 
     def unflatten(names, outputs, pos=0, level=0):
@@ -524,12 +544,14 @@ def create_input_tensors_from_onnx_model(
             # A tensor.
             if spl[-1] == "empty":
                 return pos + 1, None
+            if spl[-1] == "bool":
+                return pos + 1, bool(outputs[pos][0])
             if spl[-1] == "array":
                 return pos + 1, outputs[pos]
             if spl[-1] == "tensor":
                 import torch
 
-                return pos + 1, torch.from_numpy(outputs[pos])
+                return pos + 1, torch.from_numpy(outputs[pos]).to(device)
             raise AssertionError(f"Unexpected name {name!r} in {names}")
 
         res = []
@@ -539,6 +561,16 @@ def create_input_tensors_from_onnx_model(
             spl = name.split("__")
             prefix = spl[level]
             next_pos, value = unflatten(names, outputs, pos=pos, level=level + 1)
+
+            if prefix.startswith("DynamicCache"):
+                assert prefix == "DynamicCache.", f"This should be final but prefix={prefix!r}"
+                from transformers.cache_utils import DynamicCache
+
+                cache = DynamicCache()
+                for k, v in value.items():
+                    setattr(cache, k, v)
+                return next_pos, cache
+
             if prefix.startswith("dict"):
                 key = prefix.split("_", maxsplit=1)[-1]
                 res.append((key, value))

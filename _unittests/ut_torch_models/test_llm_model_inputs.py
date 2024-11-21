@@ -6,6 +6,10 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
+from experimental_experiment.torch_models.dummy_inputs import generate_dummy_inputs
+from experimental_experiment.torch_models.dummy_inputs.llm_dummy_inputs import (
+    restore_dummy_inputs_for_phi_3_5_vision_instruct,
+)
 
 
 class TestLlmModelInputs(ExtTestCase):
@@ -16,7 +20,6 @@ class TestLlmModelInputs(ExtTestCase):
     @ignore_warnings(UserWarning)
     @hide_stdout()
     def test_generate_dummy_inputs(self):
-        from experimental_experiment.torch_models.dummy_inputs import generate_dummy_inputs
 
         filenames = generate_dummy_inputs(
             "microsoft/Phi-3.5-vision-instruct",
@@ -28,6 +31,16 @@ class TestLlmModelInputs(ExtTestCase):
         )
         for f in filenames:
             self.assertExists(f)
+
+    def test_restore_dummy_inputs(self):
+        dummies = restore_dummy_inputs_for_phi_3_5_vision_instruct(num_hidden_layers=1)
+        self.assertIsInstance(dummies, tuple)
+        self.assertEqual(len(dummies), 2)
+        self.assertIsInstance(dummies[0], tuple)
+        self.assertIsInstance(dummies[1], dict)
+        for k, v in dummies[1].items():
+            if k == "past_key_values":
+                self.assertIn("DynamicCache", str(type(v)))
 
 
 if __name__ == "__main__":
