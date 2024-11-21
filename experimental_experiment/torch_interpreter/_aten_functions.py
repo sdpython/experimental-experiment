@@ -3711,6 +3711,29 @@ def aten_index_put(
     )
 
 
+def aten_index_put_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    indices: List[T],
+    values: T,
+    accumulate: bool = False,
+    name="aten_index_put_",
+) -> T:
+    "M[..., :, ...] = ..."
+    return aten_index_put(
+        g,
+        sts,
+        outputs,
+        x,
+        indices,
+        values,
+        accumulate=accumulate,
+        name=aten__native_batch_norm_legit_no_training,
+    )
+
+
 def aten_instance_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -7881,6 +7904,34 @@ def aten_numpy_T(
     return aten_transpose(g, sts, outputs, input_name, 1, 0, name=name)
 
 
+def aten_to(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "cast"
+    from ._aten_method import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
+
+
+def aten_to_device(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to_device",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "to_device -> Identity"
+    return g.op.Identity(input_name, name=name, outputs=outputs)
+
+
 def aten_tril(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -8005,6 +8056,62 @@ def aten_unbind_int(
         for o in res:
             g.set_type(o, t)
             g.get_shape(o, new_shape)
+    return res
+
+
+def aten_unflatten_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    sizes: List[int],
+    name: str = "unflatten_int",
+) -> T:
+    "unflatten --> Reshape"
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+        shape = list(g.get_shape(x))
+        dim = (dim + len(shape)) % len(shape)
+        shape[dim : dim + 1] = sizes
+        return g.op.Reshape(x, np.array(shape, dtype=np.int64), name=name, outputs=outputs)
+
+    if dim == -1:
+        shape = g.op.Shape(x, name=name, end=-1)
+        new_shape = g.op.Concat(shape, np.array(sizes, dtype=np.int64), axis=0, name=name)
+        res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
+        if sts:
+            g.set_type(res, g.get_type(x))
+            if g.has_shape(x):
+                sh = list(g.get_shape(x))
+                g.set_shape(res, (*sh[:-1], *sizes))
+            elif g.has_rank(x):
+                g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+        return res
+
+    if dim == 0:
+        shape = g.op.Shape(x, name=name, start=1)
+        new_shape = g.op.Concat(np.array(sizes, dtype=np.int64), shape, axis=0, name=name)
+        res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
+        if sts:
+            g.set_type(res, g.get_type(x))
+            if g.has_shape(x):
+                sh = list(g.get_shape(x))
+                g.set_shape(res, (*sizes, *sh[1:]))
+            elif g.has_rank(x):
+                g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+        return res
+
+    shape1 = g.op.Shape(x, end=dim - 1, name=name)
+    shape2 = g.op.Shape(x, start=dim + 1, name=name)
+    new_shape = g.op.Concat(shape1, np.array(sizes, dtype=np.int64), shape2, axis=0, name=name)
+    res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
+    if sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            sh = list(g.get_shape(x))
+            g.set_shape(res, (*sh[:dim], *sizes, *sh[dim + 1 :]))
+        elif g.has_rank(x):
+            g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
     return res
 
 
