@@ -351,18 +351,20 @@ class ExtTestCase(unittest.TestCase):
         if a < b:
             return AssertionError(f"{a} < {b}, a not greater or equal than b\n{msg or ''}")
 
-    def assertInOr(self, tofind: Tuple[str, ...], text: str):
+    def assertInOr(self, tofind: Tuple[str, ...], text: str, msg: str = ""):
         for tof in tofind:
             if tof in text:
                 return
         raise AssertionError(
-            f"Unable to find one string in the list {tofind!r} in\n--\n{text}"
+            msg or f"Unable to find one string in the list {tofind!r} in\n--\n{text}"
         )
 
-    def assertIn(self, tofind: str, text: str):
+    def assertIn(self, tofind: str, text: str, msg: str = ""):
         if tofind in text:
             return
-        raise AssertionError(f"Unable to find the list of strings {tofind!r} in\n--\n{text}")
+        raise AssertionError(
+            msg or f"Unable to find the list of strings {tofind!r} in\n--\n{text}"
+        )
 
     def assertEqualArrays(
         self,
@@ -460,6 +462,18 @@ class ExtTestCase(unittest.TestCase):
                 raise AssertionError(  # noqa: B904
                     f"expected is {expected!r}, value is {value!r}\n{e}"
                 )
+
+    def assertEqualAny(self, expected: Any, value: Any, msg: str = ""):
+        if isinstance(expected, (tuple, list, dict)):
+            self.assertIsInstance(value, type(expected), msg=msg)
+            self.assertEqual(len(expected), len(value), msg=msg)
+            if isinstance(expected, dict):
+                for k in expected:
+                    self.assertIn(k, value, msg=msg)
+                    self.assertEqualAny(expected[k], value[k], msg=msg)
+            else:
+                for e, g in zip(expected, value):
+                    self.assertEqualAny(e, g, msg=msg)
 
     def assertAlmostEqual(
         self,
