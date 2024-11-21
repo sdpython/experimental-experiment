@@ -103,9 +103,14 @@ def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
 def proto_from_array(
     arr: "torch.Tensor",  # noqa: F821
     name: Optional[str] = None,
+    verbose: int = 0,
 ) -> TensorProto:
     """
     Converts a torch Tensor into a TensorProto.
+
+    :param arr: tensor
+    :param verbose: display the type and shape
+    :return: a TensorProto
     """
     import sys
     import torch
@@ -144,6 +149,9 @@ def proto_from_array(
         TensorProto.UINT4,
     }, f"Type {arr.dtype} is not supported yet for name={name!r}"
     tensor.data_type = itype
+
+    if verbose > 1 and numel > 100:
+        print(f"[proto_from_array] {tensor.data_type}[{arr_cpu.shape}]")
 
     if isinstance(np_arr, torch.Tensor):
         byte_data = (ctypes.c_ubyte * numel * element_size).from_address(np_arr.data_ptr())
