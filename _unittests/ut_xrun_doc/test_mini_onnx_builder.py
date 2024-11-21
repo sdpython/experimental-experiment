@@ -1,7 +1,10 @@
 import unittest
 import numpy as np
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.torch_test_helper import create_onnx_model_from_input_tensors
+from experimental_experiment.mini_onnx_builder import (
+    create_onnx_model_from_input_tensors,
+    create_input_tensors_from_onnx_model,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
@@ -17,6 +20,15 @@ class TestMiniOnnxBuilder(ExtTestCase):
         for i in range(len(tensors)):
             self.assertEqualArray(tensors[i], got[i])
 
+        restored = create_input_tensors_from_onnx_model(model)
+        self.assertEqual(len(restored), len(tensors))
+        for g in restored:
+            self.assertEqual(np.ndarray, type(g))
+        restored = create_input_tensors_from_onnx_model(model, torch.tensor)
+        self.assertEqual(len(restored), len(tensors))
+        for g in restored:
+            self.assertEqual(torch.Tensor, type(g))
+
     def test_mini_onnx_builder_dict(self):
         import torch
 
@@ -30,6 +42,16 @@ class TestMiniOnnxBuilder(ExtTestCase):
         got = ref.run(None, {})
         self.assertEqualArray(tensors["t1"], got[0])
         self.assertEqualArray(tensors["t2"], got[1])
+
+        restored = create_input_tensors_from_onnx_model(model)
+        self.assertEqual(len(restored), len(tensors))
+        for g in restored:
+            self.assertEqual(np.ndarray, type(g))
+        restored = create_input_tensors_from_onnx_model(model, torch.tensor)
+        self.assertEqual(len(restored), len(tensors))
+        for g in restored:
+            self.assertEqual(torch.Tensor, type(g))
+        create_input_tensors_from_onnx_model(model, torch.tensor)
 
     def test_mini_onnx_builder_tuple_list(self):
         import torch
@@ -55,6 +77,11 @@ class TestMiniOnnxBuilder(ExtTestCase):
 
             else:
                 self.assertEqualArray(tensors[i], got[i])
+        restored = create_input_tensors_from_onnx_model(model)
+        self.assertEqual(len(restored), len(tensors))
+        for g, e in zip(restored, tensors):
+            self.assertEqual(np.ndarray if type(e) is torch.Tensor else type(g), type(g))
+        create_input_tensors_from_onnx_model(model, torch.tensor)
 
     def test_mini_onnx_builder_dict_list(self):
         import torch
@@ -81,6 +108,11 @@ class TestMiniOnnxBuilder(ExtTestCase):
 
             else:
                 self.assertEqualArray(t, got[i])
+        restored = create_input_tensors_from_onnx_model(model)
+        self.assertEqual(len(restored), len(tensors))
+        for g, e in zip(restored, tensors.values()):
+            self.assertEqual(np.ndarray if type(e) is torch.Tensor else type(e), type(g))
+        create_input_tensors_from_onnx_model(model, torch.tensor)
 
     def test_mini_onnx_builder_tuple_dict(self):
         import torch
@@ -117,6 +149,11 @@ class TestMiniOnnxBuilder(ExtTestCase):
                     expected = tensors[3]
                 for k in range(len(expected)):
                     self.assertEqualArray(list(expected.values())[k], g[k])
+        restored = create_input_tensors_from_onnx_model(model)
+        self.assertEqual(len(restored), len(tensors))
+        for g, e in zip(restored, tensors):
+            self.assertEqual(np.ndarray if type(e) is torch.Tensor else type(g), type(g))
+        create_input_tensors_from_onnx_model(model, torch.tensor)
 
     def test_mini_onnx_builder_dict_dict(self):
         import torch
@@ -153,6 +190,11 @@ class TestMiniOnnxBuilder(ExtTestCase):
                     expected = tensors["d2"]
                 for k in range(len(expected)):
                     self.assertEqualArray(list(expected.values())[k], g[k])
+        restored = create_input_tensors_from_onnx_model(model)
+        self.assertEqual(len(restored), len(tensors))
+        for g, e in zip(restored, tensors.values()):
+            self.assertEqual(np.ndarray if type(e) is torch.Tensor else type(e), type(g))
+        create_input_tensors_from_onnx_model(model, torch.tensor)
 
 
 if __name__ == "__main__":

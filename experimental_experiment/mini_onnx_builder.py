@@ -358,3 +358,86 @@ class MiniOnnxBuilder:
         model.opset_import.extend(opsets)
         model.ir_version = ir_version
         return model
+
+
+def create_onnx_model_from_input_tensors(
+    inputs: Union[Tuple[Any, ...], Dict[str, Any]], switch_low_high: Optional[bool] = None
+) -> ModelProto:
+    """
+    Creates a model proto including all the value as initializers.
+    They can be restored by executing the model.
+    We assume these inputs are not bigger than 2Gb,
+    the limit of protobuf.
+
+    :param inputs: any tuple or dictionary of inputs
+    :param switch_low_high: if None, it is equal to ``switch_low_high=sys.byteorder != "big"``
+    :return: ModelProto
+    """
+    import torch
+
+    if switch_low_high is None:
+        switch_low_high = sys.byteorder != "big"
+
+    builder = MiniOnnxBuilder()
+
+    if isinstance(inputs, tuple):
+        for i, obj in enumerate(inputs):
+            if isinstance(obj, (torch.Tensor, np.ndarray)):
+                builder.append_output_initializer(f"arg_{i}", obj)
+            elif isinstance(obj, list):
+                builder.append_output_sequence(f"arg_{i}", obj)
+            elif isinstance(obj, dict):
+                builder.append_output_dict(f"arg_{i}", obj)
+            else:
+                raise NotImplementedError(f"Not yet implemented for type {type(obj)}, i={i}")
+    elif isinstance(inputs, dict):
+        for name, obj in inputs.items():
+            if isinstance(obj, (torch.Tensor, np.ndarray)):
+                builder.append_output_initializer(name, obj)
+            elif isinstance(obj, list):
+                builder.append_output_sequence(name, obj)
+            elif isinstance(obj, dict):
+                builder.append_output_dict(name, obj)
+            else:
+                raise NotImplementedError(
+                    f"Not yet implemented for type {type(obj)}, name={name!r}"
+                )
+
+    return builder.to_onnx()
+
+
+def create_input_tensors_from_onnx_model(
+    proto: Union[str, ModelProto], tensor_cls: Optional[type] = None
+) -> Union[Tuple[Any, ...], Dict[str, Any]]:
+    """
+    Deserializes tensors stored with function
+    :func:`create_onnx_model_from_input_tensors`.
+    It relies on :class:`ExtendedReferenceEvaluator
+    <experimental_experiment.reference.ExtendedReferenceEvaluator>`
+    to restore the tensors.
+
+    :param proto: ModelProto or the file itself
+    :param tensor_cls: tensor class, :class:`torch.Tensor` or :class:`numpy.ndarray`.
+    :return: ModelProto
+    """
+    from .reference import ExtendedReferenceEvaluator
+
+    sess = ExtendedReferenceEvaluator(proto)
+    got = sess.run(None, {})
+    names = sess.output_names
+    res = []
+    current_keys = None
+    for name, g in zip(names, got):
+        if name.endswith("_keys"):
+            current_keys = g.tolist()
+        elif name.endswith("_values"):
+            assert current_keys is not None, f"Issue when deserialize output {name!r}"
+            if tensor_cls is not None:
+                g = [tensor_cls(t) for t in g]
+            res.append(dict(zip(current_keys, g)))
+            current_keys = None
+        elif isinstance(g, list):
+            res.append([t if tensor_cls is None else tensor_cls(t) for t in g])
+        else:
+            res.append(g if tensor_cls is None else tensor_cls(g))
+    return tuple(res)
