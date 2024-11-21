@@ -7840,11 +7840,12 @@ def aten_transpose(
     input_name: T,
     dim0: int,
     dim1: int,
+    name: str = "transpose",
 ) -> T:
     "transpose"
     perm = list(range(g.rank(input_name)))
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
-    res = g.make_node("Transpose", [input_name], outputs, perm=perm, name="transpose")
+    res = g.make_node("Transpose", [input_name], outputs, perm=perm, name=name)
     if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
@@ -7863,9 +7864,21 @@ def aten_transpose_int(
     input_name: T,
     dim0: int,
     dim1: int,
+    name: str = "transpose_int",
 ) -> T:
     "transpose"
-    return aten_transpose(g, sts, outputs, input_name, dim0, dim1)
+    return aten_transpose(g, sts, outputs, input_name, dim0, dim1, name=name)
+
+
+def aten_numpy_T(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    name: str = "numpy_T",
+) -> T:
+    "transpose"
+    return aten_transpose(g, sts, outputs, input_name, 1, 0, name=name)
 
 
 def aten_tril(
