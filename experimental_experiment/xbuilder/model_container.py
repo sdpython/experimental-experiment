@@ -1,14 +1,13 @@
 import os
-import ctypes
 import time
 import sys
 from typing import Any, Optional
 import numpy as np
-import onnx.helper as oh
 from onnx import ModelProto, StringStringEntryProto, TensorProto
 from onnx.model_container import ModelContainer, _set_external_data
 from onnx.external_data_helper import _get_all_tensors, uses_external_data
 from onnx.inliner import inline_local_functions
+from ..mini_onnx_builder import proto_from_array
 
 
 STORAGE_TYPE = {
@@ -55,70 +54,6 @@ def _get_type(elem_type: Any, exc: bool = True) -> int:
         elif exc:
             raise ValueError(f"Unable to interpret elem_type {elem_type!r}.")
     return elem_type
-
-
-def proto_from_array(
-    arr: "torch.Tensor",  # noqa: F821
-    name: Optional[str] = None,
-    verbose: int = 0,  # noqa: F821
-) -> TensorProto:
-    """
-    Converts a torch Tensor into a TensorProto.
-    """
-    import sys
-    import torch
-
-    if not isinstance(arr, torch.Tensor):
-        raise TypeError(f"Unexpected type {type(arr)}.")
-    if arr.is_sparse:
-        raise NotImplementedError(
-            f"Sparse tensor is not supported yet but initializer {name!r} is."
-        )
-
-    # arr.contiguous() is slow after a transpose, maybe there is a way to optimize this.
-    if arr.is_contiguous():
-        arr_cpu = arr.cpu()
-    else:
-        arr_cpu = arr.contiguous().cpu()
-
-    numel = torch.numel(arr_cpu)
-    element_size = arr_cpu.element_size()
-
-    if arr_cpu.dtype in {torch.bfloat16}:
-        np_arr = arr_cpu
-    elif arr_cpu.data_ptr() == arr.data_ptr():
-        copy = arr_cpu.clone().detach().requires_grad_(False)
-        assert arr_cpu.data_ptr() != copy.data_ptr()
-        np_arr = np.from_dlpack(copy)
-    else:
-        np_arr = np.from_dlpack(arr_cpu.detach())
-
-    tensor = TensorProto()
-    tensor.dims.extend(arr_cpu.shape)
-    tensor.name = name
-    itype = _get_type(arr_cpu.dtype)
-    assert not hasattr(TensorProto, "INT4") or itype not in {
-        TensorProto.INT4,
-        TensorProto.UINT4,
-    }, f"Type {arr.dtype} is not supported yet for name={name!r}"
-    tensor.data_type = itype
-
-    if verbose > 1 and numel > 100:
-        print(f"[proto_from_array] {tensor.data_type}[{arr_cpu.shape}]")
-
-    if isinstance(np_arr, torch.Tensor):
-        byte_data = (ctypes.c_ubyte * numel * element_size).from_address(np_arr.data_ptr())
-        tensor.raw_data = bytes(byte_data)
-        if sys.byteorder == "big":
-            np_dtype = oh.tensor_dtype_to_np_dtype(STORAGE_TYPE[tensor.data_type])
-            np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
-    else:
-        tensor.raw_data = np_arr.tobytes()
-        if sys.byteorder == "big":
-            np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
-            np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
-
-    return tensor
 
 
 class TorchModelContainer(ModelContainer):

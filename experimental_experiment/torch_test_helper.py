@@ -5,10 +5,13 @@ More complex helpers used in unit tests.
 import contextlib
 import io
 import os
+import sys
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
+import numpy as np
 from onnx import ModelProto, save
 from .helpers import pretty_onnx
+from .mini_onnx_builder import MiniOnnxBuilder
 
 
 def check_model_ort(
@@ -326,3 +329,41 @@ def dummy_llm(
         return dec, (x,)
 
     raise NotImplementedError(f"cls_name={cls_name}")
+
+
+def create_onnx_model_from_input_tensors(
+    inputs: Union[Tuple[Any, ...], Dict[str, Any]], switch_low_high: Optional[bool] = None
+) -> ModelProto:
+    """
+    Creates a model proto including all the value as initializers.
+    They can be restored by executing the model.
+    We assume these inputs are not bigger than 2Gb,
+    the limit of protobuf.
+
+    :param inputs: any tuple or dictionary of inputs
+    :param switch_low_high: if None, it is equal to ``switch_low_high=sys.byteorder != "big"``
+    :return: ModelProto
+    """
+    import torch
+
+    if switch_low_high is None:
+        switch_low_high = sys.byteorder != "big"
+
+    builder = MiniOnnxBuilder()
+
+    if isinstance(inputs, tuple):
+        for i, obj in enumerate(inputs):
+            if isinstance(obj, (torch.Tensor, np.ndarray)):
+                builder.append_output_initializer(f"arg_{i}", obj)
+            else:
+                raise NotImplementedError(f"Not yet implemented for type {type(obj)}, i={i}")
+    elif isinstance(inputs, dict):
+        for name, obj in inputs.items():
+            if isinstance(obj, (torch.Tensor, np.ndarray)):
+                builder.append_output_initializer(name, obj)
+            else:
+                raise NotImplementedError(
+                    f"Not yet implemented for type {type(obj)}, name={name!r}"
+                )
+
+    return builder.to_onnx()

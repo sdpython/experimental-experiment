@@ -10,9 +10,11 @@ class LLMInputKind(enum.IntEnum):
 
     Example::
 
-        LLMInputKind.input_ids
-        LLMInputKind.input_ids | position_ids | attention_mask
-        LLMInputKind.input_ids | position_ids | attention_mask | images | past_key_values
+        K = LLMInputKind.
+
+        K.input_ids
+        K.input_ids | K.position_ids | K.attention_mask
+        K.input_ids | K.position_ids | K.attention_mask | K.images | K.past_key_values
 
     Remarks, for Phi 3.5:
 
@@ -28,7 +30,7 @@ class LLMInputKind(enum.IntEnum):
     # possible scenario for iteration 0
     input_ids = 1  # input_dis
     position_ids = 2  # position_ids
-    attentiion_mask = 4  # attention_mask
+    attention_mask = 4  # attention_mask
     images = 8  # pixels_values, image_size
     # possible values for iteration 1
     past_key_values = 16  # caches
