@@ -1,6 +1,6 @@
 import ctypes
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import GraphProto, ModelProto, TensorProto
 import onnx.helper as oh
@@ -187,7 +187,9 @@ class MiniOnnxBuilder:
         self.ir_version = ir_version
         self.torch = torch
 
-    def append_output_initializer(self, name: str, tensor: "torch.Tensor"):  # noqa: F821
+    def append_output_initializer(
+        self, name: str, tensor: Union[np.ndarray, "torch.Tensor"]  # noqa: F821
+    ):  # noqa: F821
         """
         Adds an initializer as an output.
         The initializer name is prefixed by ``t_``.
@@ -201,6 +203,56 @@ class MiniOnnxBuilder:
             )
         )
         self.nodes.append(oh.make_node("Identity", [init_name], [name]))
+
+    def append_output_sequence(
+        self, name: str, tensors: List[Union[np.ndarray, "torch.Tensor"]]  # noqa: F821
+    ):  # noqa: F821
+        """
+        Adds a sequence of initializers as an output.
+        The initializers names are prefixed by ``seq_``.
+        The output name is ``name``.
+        """
+        if not tensors:
+            # empty list
+            self.nodes.append(oh.make_node("SequenceEmpty", [], [name]))
+            tensor_type_proto = oh.make_tensor_type_proto(
+                elem_type=TensorProto.FLOAT, shape=None
+            )
+        else:
+            assert all(
+                isinstance(t, (np.ndarray, self.torch.Tensor)) for t in tensors
+            ), f"Nested sequences are not supported, types are {[type(t) for t in tensors]}"
+            names = []
+            for i, t in enumerate(tensors):
+                init_name = f"seq_{name}_{i}"
+                self.initializers_dict[init_name] = t
+                names.append(init_name)
+
+            self.nodes.append(oh.make_node("SequenceConstruct", names, [name]))
+            tensor_type_proto = oh.make_tensor_type_proto(
+                elem_type=dtype_to_tensor_dtype(tensors[0].dtype), shape=None
+            )
+
+        sequence_type_proto = oh.make_sequence_type_proto(tensor_type_proto)
+        output = oh.make_value_info(name, type_proto=sequence_type_proto)
+        self.outputs.append(output)
+
+    def append_output_dict(
+        self, name: str, tensors: Dict[str, Union[np.ndarray, "torch.Tensor"]]  # noqa: F821
+    ):  # noqa: F821
+        """
+        Adds two outputs, a string tensors for the keys and a sequence of tensors
+        for the values.
+
+        The output name is ``name_keys`` and ``name_values``.
+        """
+        keys = []
+        values = []
+        for k, v in tensors.items():
+            keys.append(k)
+            values.append(v)
+        self.append_output_initializer(f"{name}_keys", np.array(keys, dtype=np.str_))
+        self.append_output_sequence(f"{name}_values", values)
 
     def _build_initializers(
         self, switch_low_high: bool

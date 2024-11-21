@@ -355,12 +355,20 @@ def create_onnx_model_from_input_tensors(
         for i, obj in enumerate(inputs):
             if isinstance(obj, (torch.Tensor, np.ndarray)):
                 builder.append_output_initializer(f"arg_{i}", obj)
+            elif isinstance(obj, list):
+                builder.append_output_sequence(f"arg_{i}", obj)
+            elif isinstance(obj, dict):
+                builder.append_output_dict(f"arg_{i}", obj)
             else:
                 raise NotImplementedError(f"Not yet implemented for type {type(obj)}, i={i}")
     elif isinstance(inputs, dict):
         for name, obj in inputs.items():
             if isinstance(obj, (torch.Tensor, np.ndarray)):
                 builder.append_output_initializer(name, obj)
+            elif isinstance(obj, list):
+                builder.append_output_sequence(name, obj)
+            elif isinstance(obj, dict):
+                builder.append_output_dict(name, obj)
             else:
                 raise NotImplementedError(
                     f"Not yet implemented for type {type(obj)}, name={name!r}"
