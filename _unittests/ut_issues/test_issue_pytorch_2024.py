@@ -312,6 +312,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         self._updated_parameter("custom", False, decomposition=False)
 
     @ignore_warnings(UserWarning)
+    @requires_torch("2.7")
     def test_index_put_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
 

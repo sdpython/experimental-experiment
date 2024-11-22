@@ -389,6 +389,26 @@ class TestLlmModelHelper(ExtTestCase):
             onnx.save(onx, "test_get_phi_3_5_vision_instruct.onnx")
         self.assertNotEmpty(exported_program)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_phi_3_5_vision_instruct_input_kind(self):
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_3_5_vision_instruct,
+            LLMInputKind,
+        )
+
+        model, model_inputs = get_phi_3_5_vision_instruct(
+            num_hidden_layers=1, input_kind=LLMInputKind.input_ids
+        )
+        self.assertEqual(list(model_inputs), ["input_ids"])
+
+        model, model_inputs = get_phi_3_5_vision_instruct(
+            num_hidden_layers=1, input_kind=LLMInputKind.input_ids | LLMInputKind.position_ids
+        )
+        self.assertEqual(list(model_inputs), ["input_ids", "position_ids"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

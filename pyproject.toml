@@ -15,6 +15,9 @@ exclude = [
 line-length = 95
 
 [tool.ruff.lint]
+# see https://docs.astral.sh/ruff/rules/
+fixable = ["UP006", "UP035"]
+unfixable = ["E731", "F401", "I001"]
 select = [
     "B", # flake8-bugbear
     "C4", # flake8-comprehensions
@@ -45,8 +48,8 @@ select = [
 "**" = [
     "C401", "C408", "C413",
     "PYI041",
-    "RUF012", "RUF100", "RUF010",
-    "SIM108", "SIM102", "SIM114", "SIM103", "SIM910",
+    "RUF010", "RUF012", "RUF100",
+    "SIM102", "SIM103", "SIM108", "SIM114", "SIM910",
     "UP006", "UP015", "UP027", "UP031", "UP032", "UP034", "UP035"
 ]
 "_doc/examples/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]

@@ -1,5 +1,5 @@
 import enum
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Tuple, Optional, Union
 import numpy as np
 from . import assert_found
 
@@ -28,22 +28,26 @@ class LLMInputKind(enum.IntEnum):
     """
 
     # possible scenario for iteration 0
-    input_ids = 1  # input_dis
-    position_ids = 2  # position_ids
-    attention_mask = 4  # attention_mask
-    images = 8  # pixels_values, image_size
+    input_ids = 4  # input_dis
+    position_ids = 8  # position_ids
+    attention_mask = 16  # attention_mask
+    images = 32  # pixels_values, image_size
     # possible values for iteration 1
-    past_key_values = 16  # caches
+    past_key_values = 64  # caches
 
 
 def get_phi_35_mini_instruct(
-    inputs_as_tuple: bool = False, batch: int = 1, **kwargs
+    inputs_as_tuple: bool = False,
+    batch: int = 1,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param batch: batch size
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :return: model, inputs
 
@@ -52,6 +56,8 @@ def get_phi_35_mini_instruct(
     """
     import torch
     from transformers import Phi3Config, Phi3ForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "Phi-3.5-mini-instruct",
@@ -207,13 +213,14 @@ def get_phi_35_mini_instruct(
 
 
 def get_phi_3_vision_128k_instruct(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
 
     See `Phi-3-vision-128k-instruct/config.json
@@ -222,6 +229,8 @@ def get_phi_3_vision_128k_instruct(
     import torch
     from .configuration_phi3_v import Phi3VConfig
     from .modeling_phi3_v import Phi3VForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "Phi-3-vision-128k-instruct",
@@ -389,13 +398,14 @@ def get_phi_3_vision_128k_instruct(
 
 
 def get_ai21_jamba_15_mini(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
 
     See `ai21labs/AI21-Jamba-1.5-Mini/config.json
@@ -403,6 +413,8 @@ def get_ai21_jamba_15_mini(
     """
     import torch
     from transformers import JambaConfig, JambaForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "architectures": ["JambaForCausalLM"],
@@ -471,13 +483,14 @@ def get_ai21_jamba_15_mini(
 
 
 def get_falcon_mamba_7b(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
 
     See `flacon-mamba-7b/config.json
@@ -485,6 +498,8 @@ def get_falcon_mamba_7b(
     """
     import torch
     from transformers import FalconMambaConfig, FalconMambaForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "./",
@@ -546,13 +561,14 @@ def get_falcon_mamba_7b(
 
 
 def get_all_mini_ml_l6_v1(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
 
     See `all-MiniLM-L6-v1
@@ -560,6 +576,8 @@ def get_all_mini_ml_l6_v1(
     """
     import torch
     from transformers import BertConfig, BertModel
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "nreimers/MiniLM-L6-H384-uncased",
@@ -602,13 +620,14 @@ def get_all_mini_ml_l6_v1(
 
 
 def get_smollm_1_7b(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
 
     See `SmolLM-1.7B
@@ -616,6 +635,8 @@ def get_smollm_1_7b(
     """
     import torch
     from transformers import LlamaConfig, LlamaForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "/fsx/loubna/checkpoints/cosmo2_1T/500000",
@@ -670,13 +691,14 @@ def get_smollm_1_7b(
 
 
 def get_llama_32_9b_vision(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
 
     See `MLlama
@@ -688,6 +710,8 @@ def get_llama_32_9b_vision(
         MllamaVisionConfig,
         MllamaTextConfig,
     )
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {}
     config.update(**kwargs)
@@ -714,11 +738,24 @@ def get_llama_32_9b_vision(
 
 
 def get_phi_3_5_vision_instruct(
-    inputs_as_tuple: bool = False, input_kind: LLMInputKind = LLMInputKind.input_ids, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    inputs_as_tuple: bool = False,
+    input_kind: LLMInputKind = LLMInputKind.input_ids,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]], Optional[Any]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs
+    """
     import torch
     from .fromhub.configuration_phi3_v import Phi3VConfig
     from .fromhub.modeling_phi3_v import Phi3VForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "Phi-3.5-vision-instruct",
@@ -879,12 +916,27 @@ def get_phi_3_5_vision_instruct(
 
     if input_kind == LLMInputKind.input_ids:
         dim = (1, 30)
+        inputs = dict(input_ids=torch.randint(0, 32064, dim).to(torch.int64))
+    elif input_kind == LLMInputKind.input_ids | LLMInputKind.attention_mask:
+        dim = (1, 30)
         inputs = dict(
             input_ids=torch.randint(0, 32064, dim).to(torch.int64),
             attention_mask=torch.ones(*dim, dtype=torch.int64),
         )
     else:
-        raise NotImplementedError(f"Unable to generate inputs for input_kind={input_kind!r}")
+        from .dummy_inputs.llm_dummy_inputs import (
+            restore_dummy_inputs_for_phi_3_5_vision_instruct,
+        )
+
+        data = restore_dummy_inputs_for_phi_3_5_vision_instruct(
+            num_hidden_layers=config["num_hidden_layers"]
+        )
+        args, kwargs = data
+        inputs = {}
+        if input_kind & LLMInputKind.input_ids:
+            inputs["input_ids"] = kwargs["input_ids"]
+        if input_kind & LLMInputKind.position_ids:
+            inputs["position_ids"] = kwargs["position_ids"]
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())
