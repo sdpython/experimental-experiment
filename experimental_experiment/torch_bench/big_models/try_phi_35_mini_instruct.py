@@ -25,7 +25,7 @@ def load_model(
     from transformers import AutoTokenizer, AutoModelForCausalLM
 
     return load_llm_model(
-        "phi_3_5_mini_instruct",
+        "phi_35_mini_instruct",
         "microsoft/Phi-3.5-mini-instruct",
         AutoTokenizer,
         AutoModelForCausalLM,

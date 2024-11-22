@@ -23,13 +23,13 @@ def generate_dummy_inputs(
     """
     from ...mini_onnx_builder import create_onnx_model_from_input_tensors
     from ...helpers import string_type
-    from .llm_dummy_inputs import create_dummy_inputs_for_phi_3_5_vision_instruct
+    from .llm_dummy_inputs import create_dummy_inputs_for_phi_35_vision_instruct
 
     written_files = []
     clean_model_id = model_id.replace("/", "_")
     prefix = f"{prefix}{clean_model_id}_{num_hidden_layers}"
     if model_id == "microsoft/Phi-3.5-vision-instruct":
-        inputs = create_dummy_inputs_for_phi_3_5_vision_instruct(
+        inputs = create_dummy_inputs_for_phi_35_vision_instruct(
             num_hidden_layers=num_hidden_layers, device=device
         )
         if n_iterations > 0 and len(inputs) > n_iterations:

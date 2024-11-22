@@ -9,7 +9,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 from experimental_experiment.torch_models.dummy_inputs import generate_dummy_inputs
 from experimental_experiment.torch_models.dummy_inputs.llm_dummy_inputs import (
-    restore_dummy_inputs_for_phi_3_5_vision_instruct,
+    restore_dummy_inputs_for_phi_35_vision_instruct,
 )
 
 
@@ -35,7 +35,7 @@ class TestLlmModelInputs(ExtTestCase):
             self.assertExists(f)
 
     def test_restore_dummy_inputs(self):
-        dummies = restore_dummy_inputs_for_phi_3_5_vision_instruct(num_hidden_layers=1)
+        dummies = restore_dummy_inputs_for_phi_35_vision_instruct(num_hidden_layers=1)
         self.assertIsInstance(dummies, tuple)
         self.assertEqual(len(dummies), 2)
         self.assertIsInstance(dummies[0], tuple)

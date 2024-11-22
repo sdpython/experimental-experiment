@@ -34,6 +34,8 @@ class LLMInputKind(enum.IntEnum):
     images = 32  # pixels_values, image_size
     # possible values for iteration 1
     past_key_values = 64  # caches
+    # everyyhing checked
+    ALL = 255
 
 
 def get_phi_35_mini_instruct(
@@ -737,7 +739,7 @@ def get_llama_32_9b_vision(
     return model, inputs
 
 
-def get_phi_3_5_vision_instruct(
+def get_phi_35_vision_instruct(
     inputs_as_tuple: bool = False,
     input_kind: LLMInputKind = LLMInputKind.input_ids,
     common_dynamic_shapes: bool = False,
@@ -925,10 +927,10 @@ def get_phi_3_5_vision_instruct(
         )
     else:
         from .dummy_inputs.llm_dummy_inputs import (
-            restore_dummy_inputs_for_phi_3_5_vision_instruct,
+            restore_dummy_inputs_for_phi_35_vision_instruct,
         )
 
-        data = restore_dummy_inputs_for_phi_3_5_vision_instruct(
+        data = restore_dummy_inputs_for_phi_35_vision_instruct(
             num_hidden_layers=config["num_hidden_layers"]
         )
         args, kwargs = data
@@ -937,6 +939,13 @@ def get_phi_3_5_vision_instruct(
             inputs["input_ids"] = kwargs["input_ids"]
         if input_kind & LLMInputKind.position_ids:
             inputs["position_ids"] = kwargs["position_ids"]
+        if input_kind & LLMInputKind.attention_mask:
+            inputs["attention_mask"] = kwargs["attention_mask"]
+        if input_kind & LLMInputKind.past_key_values:
+            inputs["past_key_values"] = kwargs["past_key_values"]
+        if input_kind & LLMInputKind.images:
+            inputs["pixel_values"] = kwargs["pixel_values"]
+            inputs["image_sizes"] = kwargs["image_sizes"]
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())

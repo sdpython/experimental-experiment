@@ -220,9 +220,9 @@ from PIL import Image
 import requests
 from transformers import AutoProcessor
 from experimental_experiment.helpers import string_type
-from experimental_experiment.torch_models.llm_model_helper import get_phi_3_5_vision_instruct
+from experimental_experiment.torch_models.llm_model_helper import get_phi_35_vision_instruct
 
-model, _ = get_phi_3_5_vision_instruct(num_hidden_layers=1)
+model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
 model = model.to("cuda")
 
 # for best performance, use num_crops=4 for multi-frame, num_crops=16 for single-frame.
