@@ -3,9 +3,7 @@ from typing import Any, Sequence, Tuple
 
 
 def has_phi3() -> bool:
-    """
-    Tells if package :epkg:`transformers` is recent enough.
-    """
+    """Tells if package :epkg:`transformers` is recent enough."""
     try:
         from transformers import Phi3Config
 
@@ -130,11 +128,11 @@ def get_phi3_model(
         def generate_example_inputs(batch: int, seq: int, vocab_size: int):
             (
                 input_ids,
-                token_type_ids,
+                _token_type_ids,
                 input_mask,
-                sequence_labels,
-                token_labels,
-                choice_labels,
+                _sequence_labels,
+                _token_labels,
+                _choice_labels,
             ) = _prepare_config_and_inputs(
                 batch_size=batch,
                 seq_length=seq,
@@ -163,11 +161,11 @@ def get_phi3_model(
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):
         (
             input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            _token_type_ids,
+            _input_mask,
+            _sequence_labels,
+            _token_labels,
+            _choice_labels,
         ) = _prepare_config_and_inputs(
             batch_size=batch,
             seq_length=seq,

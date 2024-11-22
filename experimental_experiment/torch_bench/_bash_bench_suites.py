@@ -59,7 +59,9 @@ class UntrainedRunner(BenchmarkRunner):
                 "Phi35MiniInstructLMVision_1Layer_Images": (
                     lambda: (
                         *get_phi_35_vision_instruct(
-                            num_hidden_layers=1, input_kind=LLMInputKind.ALL
+                            num_hidden_layers=1,
+                            _attn_implementation="eager",
+                            input_kind=LLMInputKind.ALL,
                         ),
                         dict(strict=False),
                     )
