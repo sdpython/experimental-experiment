@@ -11,6 +11,7 @@ from experimental_experiment.torch_bench.big_models.try_minilm import (
     get_model_inputs,
 )
 
+
 class TestMiniLM(ExtTestCase):
     @long_test()
     @hide_stdout()
