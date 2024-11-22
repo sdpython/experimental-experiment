@@ -1013,6 +1013,13 @@ def aten_bitwise_or_Tensor(
     return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or_Tensor")
 
 
+def aten_bitwise_or__Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "bitwise or"
+    return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or__Tensor")
+
+
 def aten_bmm(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
