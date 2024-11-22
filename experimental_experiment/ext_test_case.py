@@ -452,7 +452,7 @@ class ExtTestCase(unittest.TestCase):
         raise AssertionError(msg or f"value is not True: {value!r}")
 
     def assertEqual(self, expected: Any, value: Any, msg: str = ""):
-        "Overwrites the error message to get a more explicit message about what is what."
+        """Overwrites the error message to get a more explicit message about what is what."""
         if msg:
             super().assertEqual(expected, value, msg)
         else:
@@ -711,7 +711,7 @@ def requires_monai(version: str = "", msg: str = "") -> Callable:
     try:
         import monai
     except ImportError:
-        return unittest.skip(msg or "monai not installed")
+        return unittest.skip(msg or "monai is not installed")
 
     if version and pv.Version(".".join(monai.__version__.split(".")[:2])) < pv.Version(
         version
@@ -779,12 +779,12 @@ def requires_transformers(
 
     v = pv.Version(".".join(transformers.__version__.split(".")[:2]))
     if v < pv.Version(version):
-        msg = f"transformers version {transformers.__version__} < {version} {msg}"
+        msg = f"transformers version {transformers.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     if or_older_than and v > pv.Version(or_older_than):
         msg = (
             f"transformers version {or_older_than} < "
-            f"{transformers.__version__} < {version} {msg}"
+            f"{transformers.__version__} < {version}: {msg}"
         )
         return unittest.skip(msg)
     return lambda x: x

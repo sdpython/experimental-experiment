@@ -283,6 +283,10 @@ def run_benchmark(
         metrics["ERR_stdout"] = _clean_string(sout)
         if metrics["ERROR"]:
             metrics["ERR_std"] = metrics["ERROR"]
+            if "CUDA out of memory" in metrics["ERROR"]:
+                metrics["ERR_CUDA_OOM"] = 1
+            if "Cannot access gated repo for url" in metrics["ERROR"]:
+                metrics["ERR_ACCESS"] = 1
         if timeout_error:
             metrics["ERR_timeout"] = _clean_string(timeout_error)
         metrics["OUTPUT"] = _clean_string(sout)
@@ -709,7 +713,7 @@ def max_diff(
                 return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
             if set(expected) != set(got):
                 return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            keys = list(sorted(expected))
+            keys = sorted(expected)
             return max_diff(
                 [expected[k] for k in keys],
                 [got[k] for k in keys],
