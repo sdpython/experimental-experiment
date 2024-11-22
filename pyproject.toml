@@ -47,7 +47,7 @@ select = [
     "PYI041",
     "RUF012", "RUF100", "RUF010",
     "SIM108", "SIM102", "SIM114", "SIM103", "SIM910",
-    "UP015", "UP027", "UP031", "UP034", "UP032"
+    "UP006", "UP015", "UP027", "UP031", "UP032", "UP034", "UP035"
 ]
 "_doc/examples/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
 "_doc/notebooks/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
