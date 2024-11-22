@@ -37,6 +37,32 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # print(ep.graph)
         ep.run_decompositions()  # Fails here
 
+    def test_mistral_nousers(self):
+        import torch
+        import transformers
+
+        config = transformers.MistralConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            vocab_size=99,
+            intermediate_size=16,
+            max_position_embeddings=512,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            sliding_window=4096,
+        )
+        config._attn_implementation = "eager"
+        model = transformers.MistralModel(config)
+        shape = (1, 30)
+        input_ids = torch.randint(0, 99, shape).to(torch.int64)
+        attention_mask = torch.ones(shape)
+        expected = model(input_ids, attention_mask)
+        ep = torch.export.export(model, (input_ids, attention_mask))
+        assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
+        mod = ep.module()
+        got = mod((input_ids, attention_mask))
+        torch.testing.assert_close(got, expected)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -58,6 +58,10 @@ def export_utils(
     )
     with open(f"{prefix}.custom.onnx", "wb") as f:
         f.write((onx[0] if return_builder else onx).SerializeToString())
+    if return_builder:
+        with open(f"{prefix}.custom.onnx.txt", "w") as f:
+            f.write(onx[1].get_debug_msg())
+
     return onx
 
 
@@ -215,9 +219,27 @@ class TestOnnxExportLlama(ExtTestCase):
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
         # fails with transformers==4.37.2 and torch-nightly==2.4.0.dev20240425+cu118
-        onx = export_utils("test_mistral_model", model, *input_tensors)
+        onx, _builder = export_utils(
+            "test_mistral_model",
+            model,
+            *input_tensors,
+            remove_unused=False,
+            return_builder=True,
+        )
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
+        feeds0 = dict(zip(["input", "attention_mask"], xp))
+
+        from onnxruntime import InferenceSession
+
+        sess = InferenceSession("test_mistral_model.onnx", providers=["CPUExecutionProvider"])
+        results = sess.run(None, feeds0)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        results = sess.run(None, feeds)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+
         ref = ExtendedReferenceEvaluator(onx)
         results = ref.run(None, feeds)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)

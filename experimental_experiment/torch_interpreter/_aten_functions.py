@@ -4526,7 +4526,7 @@ def aten_masked_fill_Scalar(
             avalue = value
     else:
         avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
-    res = g.op.Where(cmask, avalue, x, name=name)
+    res = g.op.Where(cmask, avalue, x, name=name, outputs=outputs)
     if not sts:
         g.set_type(res, dtx)
         if g.has_shape(mask):
