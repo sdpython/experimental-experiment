@@ -1809,6 +1809,13 @@ def aten_detach(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[st
     return g.make_node("Identity", [x], outputs, name="detach")
 
 
+def aten_detach_(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "identity"
+    return g.make_node("Identity", [x], outputs, name="detach_")
+
+
 def aten_div(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2556,6 +2563,21 @@ def aten_flatten(
     start_dim: int = 1,
     end_dim: int = -1,
     name: str = "flatten",
+) -> T:
+    "flatten"
+    return aten_flatten_using_ints(
+        g, sts, outputs, x, start_dim=start_dim, end_dim=end_dim, name=name
+    )
+
+
+def aten_flatten_using_ints(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    start_dim: int = 1,
+    end_dim: int = -1,
+    name: str = "flatten_using_ints",
 ) -> T:
     "flatten"
     if start_dim < 0:
@@ -6607,11 +6629,25 @@ def aten_select_int(
     x: T,
     dim: int,
     index: int,
+    name: str = "select_int",
+) -> T:
+    "gather"
+    return aten_select_copy_int(g, sts, outputs, x, dim=dim, index=index, name=name)
+
+
+def aten_select_copy_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: int,
+    name: str = "select_copy_int",
 ) -> T:
     "gather"
     assert isinstance(dim, int), f"Unexpected type {type(dim)} for dim{g.get_debug_msg()}"
     assert isinstance(index, int), f"Unexpected type {type(index)} for dim{g.get_debug_msg()}"
-    res = g.op.Gather(x, np.array(index, dtype=np.int64), axis=dim, outputs=outputs)
+    res = g.op.Gather(x, np.array(index, dtype=np.int64), axis=dim, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):
