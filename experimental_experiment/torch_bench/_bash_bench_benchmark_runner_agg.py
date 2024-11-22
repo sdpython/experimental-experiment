@@ -103,7 +103,7 @@ def enumerate_csv_files(
 
 
 def open_dataframe(
-    data: Union[str, Tuple[str, str, str, str], pandas.DataFrame]
+    data: Union[str, Tuple[str, str, str, str], pandas.DataFrame],
 ) -> pandas.DataFrame:
     """
     Opens a filename.

@@ -728,7 +728,7 @@ class BenchmarkRunner:
             monai = None
         try:
             import timm
-        except ImportError:
+        except (ImportError, AttributeError):
             timm = None
 
         from experimental_experiment.ext_test_case import BOOLEAN_VALUES

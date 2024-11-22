@@ -58,8 +58,6 @@ def load_llm_model(
         print(f"[load_model] converts to {device!r} and dtype={dtype!r}")
 
     model = model.to(device)
-    # if dtype:
-    #    model = model.to(dtype)
     if verbose:
         print(f"[load_model] done {model_name}")
     return tokenizer, model
