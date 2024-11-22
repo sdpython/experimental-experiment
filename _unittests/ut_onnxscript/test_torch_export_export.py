@@ -105,7 +105,7 @@ class TestTorchExportExport(ExtTestCase):
         # new check
         export = torch.export.export(rewritten_model, (query, key, value))
 
-        self.assertIn("aten.clone.default", str(export.graph))
+        self.assertIn("scaled_dot_product_attention", str(export.graph))
         module = export.module()
         got = module(query, key, value)
         self.assertEqualArray(expected, got)

@@ -117,11 +117,12 @@ def aten_add_Scalar(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "add_Scalar",
 ) -> T:
     "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs, name="add_Scalar")
+    res = g.op.Add(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
@@ -134,14 +135,27 @@ def aten_add_Tensor(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "add_Tensor",
 ) -> T:
     "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs, name="add_Tensor")
+    res = g.op.Add(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_add__Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: Optional[Any] = None,
+) -> T:
+    "add"
+    return aten_add_Tensor(g, sts, outputs, x, y, name="add__Tensor")
 
 
 def aten_addcmul(
@@ -1112,6 +1126,49 @@ def aten_cat(
     return res
 
 
+def aten_chunk(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    chunks: int,
+    dim: int = 0,
+    use_sequence: bool = False,
+    name: str = "chunk",
+) -> List[T]:
+    """chunk"""
+    if chunks == 1:
+        return g.op.Identity(x, outputs=outputs, name=name)
+    if use_sequence:
+        if g.has_shape(x):
+            shape_x = g.get_shape(x)
+            if is_static_dimension(shape_x[dim]):
+                split_size = shape_x[dim] // chunks
+                split_sizes = [split_size for _ in range(chunks)]
+                if shape_x[dim] % chunks != 0:
+                    split_sizes[-1] = shape_x[dim] - split_size * chunks
+                return g.op.SplitToSequence(
+                    x,
+                    np.array(split_sizes, dtype=np.int64),
+                    keepdims=1,
+                    axis=dim,
+                    outputs=outputs,
+                    name=name,
+                )
+        raise AssertionError(
+            f"aten_chunk not implemented with use_sequence={use_sequence} "
+            f"and x has no static dimension for dim={dim}{g.get_debug_msg()}"
+        )
+
+    assert len(outputs) in (
+        1,
+        chunks,
+    ), f"Unexpected values for chunk={chunks}{g.get_debug_msg()}"
+    if len(outputs) == 1:
+        outputs = [f"{outputs[0]}#{i}" for i in range(chunks)]
+    return g.op.Split(x, axis=dim, num_outputs=chunks, name=name, outputs=outputs)
+
+
 def aten_clamp(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -1854,14 +1911,28 @@ def aten_div_Tensor(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "div_Tensor",
 ) -> T:
     "div"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Div(x, y, outputs=outputs, name="div_Tensor")
+    res = g.op.Div(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_div__Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: Optional[Any] = None,
+    name: str = "div__Tensor",
+) -> T:
+    "div"
+    return aten_div_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_div_Tensor_mode(
@@ -7641,10 +7712,24 @@ def aten_sub_Tensor(
     x: T,
     y: T,
     alpha: float,
+    name: str = "sub_Tensor",
 ) -> T:
     "sub"
     assert alpha == 1, f"sub_Tensor not implemented for alpha={alpha}{g.get_debug_msg()}"
-    return aten_sub(g, sts, outputs, x, y, name="sub_Tensor")
+    return aten_sub(g, sts, outputs, x, y, name=name)
+
+
+def aten_sub__Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: float,
+    name: str = "sub__Tensor",
+) -> T:
+    "sub"
+    return aten_sub_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_sum(
@@ -7999,6 +8084,19 @@ def aten_to(
     return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
 
 
+def aten_to_device(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to_device",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "to_device -> Identity"
+    return g.op.Identity(input_name, name=name, outputs=outputs)
+
+
 def aten_to_dtype(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -8014,17 +8112,19 @@ def aten_to_dtype(
     return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
 
 
-def aten_to_device(
+def aten_to_dtype_layout(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     input_name: T,
     *args: List[Any],
-    name: str = "to_device",
+    name: str = "to_dtype_layout",
     **kwargs: Dict[str, Any],
 ) -> T:
-    "to_device -> Identity"
-    return g.op.Identity(input_name, name=name, outputs=outputs)
+    "cast"
+    from ._aten_methods import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
 
 
 def aten_tril(

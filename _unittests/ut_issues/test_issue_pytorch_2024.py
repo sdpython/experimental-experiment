@@ -12,6 +12,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnxscript,
     requires_onnxruntime_training,
     skipif_ci_windows,
+    has_torch,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -305,6 +306,10 @@ class TestIssuesPytorch2024(ExtTestCase):
 
     def test_index_put_update_parameter_custom_2d_dynamic(self):
         self._updated_parameter("custom", False, dynamic=True)
+
+    @ignore_warnings(UserWarning)
+    def test_index_put_update_parameter_custom_2d_nodec(self):
+        self._updated_parameter("custom", False, decomposition=False)
 
     @ignore_warnings(UserWarning)
     def test_index_put_update_parameter_custom_2d_dec(self):
@@ -872,6 +877,11 @@ class TestIssuesPytorch2024(ExtTestCase):
                 dynamo=True,
             )
         else:
+            if decomposition:
+                if not has_torch("2.7"):
+                    # see issue https://github.com/pytorch/pytorch/issues/141336
+                    raise unittest.SkipTest("run_decompositions fails on this example")
+
             export_options = ExportOptions(
                 decomposition_table="all" if decomposition else None, strict=True
             )

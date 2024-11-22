@@ -668,6 +668,14 @@ def requires_sklearn(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def has_torch(version: str) -> bool:
+    "Returns True if torch verions is higher."
+    import packaging.version as pv
+    import torch
+
+    return pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version(version)
+
+
 def requires_torch(version: str, msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`pytorch` is not recent enough."""
     import packaging.version as pv
