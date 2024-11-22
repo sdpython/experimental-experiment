@@ -4,6 +4,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     hide_stdout,
+    requires_cuda,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 from experimental_experiment.torch_models.dummy_inputs import generate_dummy_inputs
@@ -18,6 +19,7 @@ class TestLlmModelInputs(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @requires_cuda()
     @hide_stdout()
     def test_generate_dummy_inputs(self):
 

@@ -3,6 +3,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     require_diffusers,
     skipif_ci_windows,
+    long_test,
 )
 from experimental_experiment.torch_models import flatten_outputs
 
@@ -11,6 +12,7 @@ class TestDiffusion(ExtTestCase):
 
     @require_diffusers("0.30.0")
     @skipif_ci_windows("crashing")
+    @long_test()
     def test_get_stable_diffusion_2_unet(self):
         # import torch
         from experimental_experiment.torch_models.diffusion_model_helper import (

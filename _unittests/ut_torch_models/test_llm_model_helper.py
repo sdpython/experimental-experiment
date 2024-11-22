@@ -263,6 +263,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_falcon_mamba_7b(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -305,6 +306,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi_3_vision_128k_instruct(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -322,6 +324,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi_35_mini_instruct_cache_export(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -341,6 +344,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @unittest.skip("Wrong setting for the images")
+    @long_test()
     def test_get_llama_32_9b_vision(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -367,6 +371,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi_3_5_vision_instruct(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
