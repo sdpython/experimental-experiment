@@ -1290,6 +1290,22 @@ def aten_cond(
     return res
 
 
+def aten_contiguous(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    memory_format=None,
+    name: str = "contiguous",
+) -> T:
+    "contiguous -> Identity"
+    assert memory_format in (
+        None,
+        0,
+    ), f"not implemented for memory_format={memory_format!r}{g.get_debug_msg()}"
+    return g.op.Identity(x, name=name, outputs=outputs)
+
+
 def aten_convolution(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4962,6 +4978,13 @@ def aten_mul_Tensor(
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
 
 
+def aten_mul__Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "mul"
+    return aten_mul(g, sts, outputs, x, y, name="mul__Tensor")
+
+
 def aten_multiply_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -6087,6 +6110,20 @@ def aten_reciprocal(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_reshape(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    shape: List[int],
+    name: str = "reshape",
+) -> T:
+    "reshape"
+    from ._aten_methods import aten_meth_reshape
+
+    return aten_meth_reshape(g, sts, outputs, input_name, *shape, name=name)
 
 
 def aten_scan(
@@ -7914,7 +7951,22 @@ def aten_to(
     **kwargs: Dict[str, Any],
 ) -> T:
     "cast"
-    from ._aten_method import aten_meth_to
+    from ._aten_methods import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
+
+
+def aten_to_dtype(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to_dtype",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "cast"
+    from ._aten_methods import aten_meth_to
 
     return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
 
