@@ -1,5 +1,6 @@
 import unittest
 from typing import Any, List
+import numpy as np
 import onnx
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
@@ -57,7 +58,7 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
         sess = ExtendedReferenceEvaluator(model_path)
         feeds = dict(zip(sess.input_names, [x.numpy()]))
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected.to(int), got.astype(int))
+        self.assertEqualArray(expected.to(torch.int64), got.astype(np.int64))
 
     def test_aten_roll_relu_dynamic(self):
         import torch
@@ -85,7 +86,7 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
         sess = ExtendedReferenceEvaluator(model_path)
         feeds = dict(zip(sess.input_names, [x.numpy()]))
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected.to(int), got.astype(int))
+        self.assertEqualArray(expected.to(torch.int64), got.astype(np.int64))
 
 
 if __name__ == "__main__":
