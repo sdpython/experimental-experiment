@@ -60,7 +60,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         ep = torch.export.export(model, (input_ids, attention_mask))
         assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
         mod = ep.module()
-        got = mod((input_ids, attention_mask))
+        got = mod(input_ids, attention_mask)
         torch.testing.assert_close(got, expected)
 
 
