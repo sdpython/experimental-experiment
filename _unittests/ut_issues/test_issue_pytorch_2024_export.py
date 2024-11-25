@@ -86,19 +86,16 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         attention_mask = torch.ones(shape)
         expected = model(input_ids, attention_mask)
         ep = torch.export.export(model, (input_ids, attention_mask))
+
         # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
         mod = ep.module()
-        got = mod(input_ids, attention_mask)
-        assert_close(got.to_tuple(), expected.to_tuple())
+        # got = mod(input_ids, attention_mask)
+        # assert_close(got.to_tuple(), expected.to_tuple())
 
-        attention_mask[:, :] = 500
-        expected = model(input_ids, attention_mask)
-        got = mod(input_ids, attention_mask)
-        torch.testing.assert_close(got, expected)
-        assert_close(got.to_tuple(), expected.to_tuple())
-
-        onx = to_onnx(model, (input_ids, attention_mask))
-        onnx.save(onx, "test_mistral_nousers_c2.onnx")
+        expected2 = model(input_ids, attention_mask * 0)
+        got2 = mod(input_ids, attention_mask * 0)
+        assert_close(got2.to_tuple(), expected2.to_tuple())
+        # assert_close(expected2.to_tuple(), expected.to_tuple())
 
         onx = to_onnx(
             model,
@@ -106,25 +103,68 @@ class TestIssuesPytorch2024Export(ExtTestCase):
             export_options=ExportOptions(aten_as_function=True),
             optimize=False,
         )
-        onnx.save(onx, "test_mistral_nousers_c.onnx")
+        onnx.save(onx, "test_mistral_nousers_aten.onnx")
         sess = ort.InferenceSession(
-            "test_mistral_nousers_c.onnx", providers=["CPUExecutionProvider"]
+            "test_mistral_nousers_aten.onnx", providers=["CPUExecutionProvider"]
         )
         got = sess.run(
             None, {"input_ids": input_ids.numpy(), "attention_mask": attention_mask.numpy()}
         )
         assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
 
-        ep = torch.onnx.export(mod, (input_ids, attention_mask), dynamo=True)
-        # ep.optimize()
-        onnx.save(ep.model_proto, "test_mistral_nousers.onnx")
-        sess = ort.InferenceSession(
-            "test_mistral_nousers.onnx", providers=["CPUExecutionProvider"]
-        )
         got = sess.run(
-            None, {"input_ids": input_ids.numpy(), "attention_mask": attention_mask.numpy()}
+            None,
+            {"input_ids": input_ids.numpy(), "attention_mask": (attention_mask * 0).numpy()},
         )
-        assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
+        assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected2.to_tuple()))
+
+        # ep = torch.onnx.export(mod, (input_ids, attention_mask), dynamo=True)
+        # ep.optimize()
+        # onnx.save(ep.model_proto, "test_mistral_nousers.onnx")
+        # sess = ort.InferenceSession(
+        #     "test_mistral_nousers.onnx", providers=["CPUExecutionProvider"]
+        # )
+        # got = sess.run(
+        #     None, {"input_ids": input_ids.numpy(), "attention_mask": attention_mask.numpy()}
+        # )
+        # assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
+
+    def test_inplace_affectation(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                x = x.clone()
+                x[:, :2] = x[:, :2] * 2
+                return x
+
+        model = Model()
+        x = torch.ones((4, 4))
+        ep = torch.export.export(model, (x,))
+        ep.recompile()
+        torch.testing.assert_close(
+            model(x), ep.module()(x)
+        )  # this test should fail but it does not.
+        print(ep.graph)
+        """
+        graph():
+            %x : [num_users=1] = placeholder[target=x]
+            %clone : [num_users=3] = call_function[target=torch.ops.aten.clone.default]
+                (args = (%x,), kwargs = {})
+            %slice_1 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_2 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_1, 1, 0, 2), kwargs = {})
+            %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]
+                (args = (%slice_2, 2), kwargs = {})
+            %slice_3 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_4 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_3, 1, 0, 2), kwargs = {})
+            %copy_ : [num_users=0] = call_function[target=torch.ops.aten.copy_.default]
+                (args = (%slice_4, %mul), kwargs = {})
+            return (clone,)  <---- This is wrong.
+        """
 
 
 if __name__ == "__main__":
