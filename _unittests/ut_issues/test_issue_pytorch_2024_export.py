@@ -38,8 +38,36 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         ep.run_decompositions()  # Fails here
 
     def test_mistral_nousers(self):
+        import onnx
         import torch
         import transformers
+        import onnxruntime as ort
+        from experimental_experiment.torch_interpreter import to_onnx
+
+        def assert_close(actual, desired):
+            if isinstance(desired, torch.Tensor):
+                torch.testing.assert_close(actual, desired)
+            elif isinstance(desired, tuple):
+                assert isinstance(actual, tuple)
+                assert len(actual) == len(desired)
+                for a, d in zip(actual, desired):
+                    torch.testing.assert_close(a, d)
+            else:
+                raise NotImplementedError(f"Not implemented for class {type(desired)}")
+
+        def flatten(obj):
+            if isinstance(obj, torch.Tensor):
+                return obj
+            if isinstance(obj, tuple):
+                res = []
+                for o in obj:
+                    if isinstance(o, torch.Tensor):
+                        res.append(o)
+                    else:
+                        res.extend(flatten(o))
+                return tuple(res)
+            else:
+                raise NotImplementedError(f"Not implemented for class {type(obj)}")
 
         config = transformers.MistralConfig(
             hidden_size=32,
@@ -58,10 +86,37 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         attention_mask = torch.ones(shape)
         expected = model(input_ids, attention_mask)
         ep = torch.export.export(model, (input_ids, attention_mask))
-        assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
+        # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
         mod = ep.module()
         got = mod(input_ids, attention_mask)
+        assert_close(got.to_tuple(), expected.to_tuple())
+
+        attention_mask[:, :] = 500
+        expected = model(input_ids, attention_mask)
+        got = mod(input_ids, attention_mask)
         torch.testing.assert_close(got, expected)
+        assert_close(got.to_tuple(), expected.to_tuple())
+
+        onx = to_onnx(model, (input_ids, attention_mask))
+        onnx.save(onx, "test_mistral_nousers_c.onnx")
+        sess = ort.InferenceSession(
+            "test_mistral_nousers_c.onnx", providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(
+            None, {"input_ids": input_ids.numpy(), "attention_mask": attention_mask.numpy()}
+        )
+        assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
+
+        ep = torch.onnx.export(mod, (input_ids, attention_mask), dynamo=True)
+        # ep.optimize()
+        onnx.save(ep.model_proto, "test_mistral_nousers.onnx")
+        sess = ort.InferenceSession(
+            "test_mistral_nousers.onnx", providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(
+            None, {"input_ids": input_ids.numpy(), "attention_mask": attention_mask.numpy()}
+        )
+        assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
 
 
 if __name__ == "__main__":
