@@ -447,6 +447,52 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
 
+    def make_subset_builder(
+        self,
+        input_names: List[str],
+        name: str,
+        domain: str,
+    ) -> "GraphBuilder":
+        """
+        Creates a copy of the existing builder but with information reduced to the input_names
+        considered as inputs.
+
+        :param input_names: new inputs
+        :param name: function name
+        :param domain: domain name for the function
+        :return: shortened builder
+        """
+        new_builder = GraphBuilder(
+            target_opset_or_existing_proto=self.opsets,
+            input_names=input_names,
+            as_function=True,
+            optimization_options=self.optimization_options,
+            ir_version=self.ir_version,
+            verbose=max(self.verbose - 1, 0),
+            infer_shapes=False,
+            raise_list=self.raise_list,
+            local_domain=domain,
+        )
+
+        # self.dynamic_dimensions_source = {}
+        # self.dynamic_shapes = dynamic_shapes
+        # self.dynamic_objects = {}
+        # self.dynamic_objects_rev = {}
+        # self._dynamic_alias = {}
+
+        for n in input_names:
+            new_builder.set_name(n, marker="make_subset_builder")
+            if self.is_sequence(n):
+                new_builder.set_sequence(n, self.get_sequence(n))
+            else:
+                if self.has_type(n):
+                    new_builder.set_type(n, self.get_type(n))
+                if self.has_shape(n):
+                    new_builder.set_shape(n, self.get_shape(n))
+                elif self.has_rank(n):
+                    new_builder.set_rank(n, self.get_rank(n))
+        return new_builder
+
     def _register_dynamic_object_from_dynamic_shapes_dict(self, pos, pos_vv, vv):
         # example:
         # args_0 {0: <class '._bash_bench_model_runner.batch'>}
@@ -1069,17 +1115,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"the interpret allows multiple types for simplicity"
             f"{self.get_debug_msg()}"
         )
-        d = dict(dtype=dtype, shapes=shapes, ranks=ranks)
-        if shapes is not None and ranks is None:
-            d["ranks"] = tuple(len(s) for s in shapes)
-        if name not in self._known_sequences:
-            self._known_sequences[name] = d
+        if isinstance(dtype, dict):
+            self._known_sequences[name] = dtype
         else:
-            assert self._known_sequences[name] == d, (
-                f"Sequence {name!r} was already declared with a different type "
-                f"or shape or rank, declared={self._known_sequences[name]}, "
-                f"new={d}{self.get_debug_msg()}"
-            )
+            d = dict(dtype=dtype, shapes=shapes, ranks=ranks)
+            if shapes is not None and ranks is None:
+                d["ranks"] = tuple(len(s) for s in shapes)
+            if name not in self._known_sequences:
+                self._known_sequences[name] = d
+            else:
+                assert self._known_sequences[name] == d, (
+                    f"Sequence {name!r} was already declared with a different type "
+                    f"or shape or rank, declared={self._known_sequences[name]}, "
+                    f"new={d}{self.get_debug_msg()}"
+                )
 
     def set_name(self, name: str, marker: str):
         """Adds a name to the list of known names."""
@@ -6893,7 +6942,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         rename_allowed: bool = False,
         merge_allowed: bool = False,
         builder: Optional["GraphBuilder"] = None,
-    ):
+    ) -> Tuple[str, str]:
         """
         Adds a new local function.
 

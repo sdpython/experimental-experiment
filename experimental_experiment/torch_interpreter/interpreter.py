@@ -1242,7 +1242,7 @@ class DynamoInterpreter:
             f"in args={node.args}{self.builder.get_debug_msg()}"
         )
 
-    def call_function(self, node: "torch.fx.Node"):  # noqa: F821
+    def call_function(self, node: "torch.fx.Node") -> Union[str, Tuple[str]]:  # noqa: F821
         """
         Called for a function.
         """
@@ -1285,7 +1285,12 @@ class DynamoInterpreter:
         can_set = self._can_set_shape_and_type(node)
         n_nodes = len(self.builder.nodes) + len(self.builder.initializers_dict)
 
-        res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)
+        if self.export_options.aten_as_function:
+            res = self.add_aten_as_function(
+                aten_name, fct, can_set, output_names, args=args, kwargs=fx_kwargs
+            )
+        else:
+            res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)
 
         n_nodes_after = len(self.builder.nodes) + len(self.builder.initializers_dict)
         if res is None:
@@ -1306,7 +1311,7 @@ class DynamoInterpreter:
         res = self._check_output_name(node, res, output_names)
         return res
 
-    def call_method(self, node: "torch.fx.Node"):  # noqa: F821
+    def call_method(self, node: "torch.fx.Node") -> Union[str, Tuple[str]]:  # noqa: F821
         """
         Called for a method.
         """
@@ -1340,11 +1345,65 @@ class DynamoInterpreter:
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
 
-        res = fct(self.builder, can_set, output_names, *args, **kwargs)
+        if self.export_options.aten_as_function:
+            res = self.add_aten_as_function(name_fct, fct, can_set, output_names, args, kwargs)
+        else:
+            res = fct(self.builder, can_set, output_names, *args, **kwargs)
 
         self._set_shape_and_type(node, res, fct_name=method_name)
         res = self._check_output_name(node, res, output_names)
         return res
+
+    def add_aten_as_function(
+        self,
+        name_fct: str,
+        fct: Callable,
+        can_set: Optional[Dict[str, Any]],
+        output_names: List[str],
+        args: List[Any],
+        kwargs: Dict[str, Any],
+        domain: str = "aten",
+    ) -> Union[str, Tuple[str]]:
+        """
+        Converts a function into a local function and adds this local function to the graph.
+        """
+        # Collects inputs
+        input_names = [a for a in args if isinstance(a, str)]
+        for k, v in kwargs.items():
+            if isinstance(v, str):
+                raise NotImplementedError(
+                    f"This option is not implemented yet for k={k!r} "
+                    f"with type={type(v)}{self.builder.get_debug_msg()}"
+                )
+                input_names.append(v)
+
+        new_builder = self.builder.make_subset_builder(
+            input_names, name=name_fct, domain=domain
+        )
+        res = fct(new_builder, can_set, output_names, *args, **kwargs)
+        assert (len(output_names) == 1 and res == output_names[0]) or res == output_names, (
+            f"Mismatch issue res={res!r}, output_names={output_names!r}"
+            f"{self.builder.get_debug_msg()}"
+        )
+        onx = new_builder.to_onnx()
+        fdomain, fname = self.builder.add_function(
+            onx,
+            rename_allowed=True,
+            merge_allowed=True,
+            builder=new_builder,
+            args=args,
+            kwargs=kwargs,
+        )
+        self.builder.make_node(fname, input_names, output_names, domain=fdomain)
+        if not can_set:
+            for o in output_names:
+                if new_builder.has_type(o):
+                    self.builder.set_type(o)
+                if new_builder.has_shape(o):
+                    self.builder.set_shape(o)
+                elif new_builder.has_rank(o):
+                    self.builder.set_rank(o)
+        return output_names
 
     def _get_output_names(self, node: "torch.fx.Node") -> List[str]:  # noqa: F821
         val = node.meta.get("val", None)
@@ -1399,7 +1458,9 @@ class DynamoInterpreter:
             )
         return res
 
-    def _can_set_shape_and_type(self, node: "torch.fx.Node") -> bool:  # noqa: F821
+    def _can_set_shape_and_type(
+        self, node: "torch.fx.Node"  # noqa: F821
+    ) -> Optional[Dict[str, Any]]:
         if node.meta.get("val", None) is not None:
             dtype = self._get_node_output_type(node)
             assert dtype is not None, (
