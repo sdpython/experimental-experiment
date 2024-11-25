@@ -1,3 +1,4 @@
+import os
 import inspect
 import operator
 import pprint
@@ -107,6 +108,7 @@ class DynamoInterpreter:
         self.parameter_naming = parameter_naming
         self.submodule_naming = submodule_naming
         self.module_name = module_name
+        self._debug_aten_as_function = int(os.environ.get("ATENDEBUG", "0"))
 
     def register_named_modules(
         self,
@@ -1287,7 +1289,7 @@ class DynamoInterpreter:
 
         if self.export_options.aten_as_function:
             res = self.add_aten_as_function(
-                aten_name, fct, can_set, output_names, args=args, kwargs=fx_kwargs
+                str(aten_name), fct, can_set, output_names, args=args, kwargs=fx_kwargs
             )
         else:
             res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)
@@ -1367,34 +1369,80 @@ class DynamoInterpreter:
         """
         Converts a function into a local function and adds this local function to the graph.
         """
+        assert isinstance(name_fct, str), (
+            f"Unexpected type {type(name_fct)} for name_fct={name_fct}"
+            f"{self.builder.get_debug_msg()}"
+        )
         # Collects inputs
-        input_names = [a for a in args if isinstance(a, str)]
+        input_names = []
+        for a in args:
+            if isinstance(a, str) and self.builder.has_name(a):
+                if a not in input_names:
+                    input_names.append(a)
+            elif isinstance(a, list):
+                # some inputs are given as a list
+                for n in a:
+                    if (
+                        isinstance(n, str)
+                        and self.builder.has_name(n)
+                        and n not in input_names
+                    ):
+                        input_names.append(n)
         for k, v in kwargs.items():
             if isinstance(v, str):
                 raise NotImplementedError(
                     f"This option is not implemented yet for k={k!r} "
                     f"with type={type(v)}{self.builder.get_debug_msg()}"
                 )
-                input_names.append(v)
+
+        if self.builder.verbose > 1 or self._debug_aten_as_function:
+            print(
+                f"[DynamoInterpreter.add_aten_as_function] {name_fct}"
+                f"({', '.join(input_names)}) -> {', '.join(output_names)}"
+            )
 
         new_builder = self.builder.make_subset_builder(
             input_names, name=name_fct, domain=domain
         )
-        res = fct(new_builder, can_set, output_names, *args, **kwargs)
+        try:
+            res = fct(new_builder, can_set, output_names, *args, **kwargs)
+        except AssertionError as e:
+            raise AssertionError(
+                f"The conversion of operator {name_fct!r} into a local function\n--ERROR--\n"
+                f"{e}{self.builder.get_debug_msg()}"
+            ) from e
         assert (len(output_names) == 1 and res == output_names[0]) or res == output_names, (
-            f"Mismatch issue res={res!r}, output_names={output_names!r}"
-            f"{self.builder.get_debug_msg()}"
+            f"Mismatch issue res={res!r}, output_names={output_names!r} "
+            f"for function {name_fct!r}{self.builder.get_debug_msg()}"
         )
-        onx = new_builder.to_onnx()
-        fdomain, fname = self.builder.add_function(
-            onx,
-            rename_allowed=True,
-            merge_allowed=True,
-            builder=new_builder,
-            args=args,
-            kwargs=kwargs,
+        for o in output_names:
+            new_builder.make_tensor_output(
+                o, indexed=False, is_dimension=self.builder.get_is_dimension(o, exc=False)
+            )
+        inits, (fdomain, fname) = self.builder.make_local_function(
+            new_builder,
+            FunctionOptions(
+                export_as_function=True,
+                name=name_fct.replace(".", "_"),
+                domain=domain,
+                inline=False,
+                merge_allowed=True,
+                rename_allowed=True,
+                move_initializer_to_constant=True,
+                return_initializer=True,
+                external_threshold=2**8,
+            ),
+            optimize=False,
         )
-        self.builder.make_node(fname, input_names, output_names, domain=fdomain)
+        new_inits = []
+        for init in inits:
+            new_init = self.builder.make_initializer(
+                init.name, init, source="add_aten_as_function"
+            )
+            new_inits.append(new_init)
+        self.builder.make_node(
+            fname, [*input_names, *new_inits], output_names, domain=fdomain, name=name_fct
+        )
         if not can_set:
             for o in output_names:
                 if new_builder.has_type(o):
@@ -1403,7 +1451,7 @@ class DynamoInterpreter:
                     self.builder.set_shape(o)
                 elif new_builder.has_rank(o):
                     self.builder.set_rank(o)
-        return output_names
+        return output_names[0] if len(output_names) == 1 else output_names
 
     def _get_output_names(self, node: "torch.fx.Node") -> List[str]:  # noqa: F821
         val = node.meta.get("val", None)

@@ -1,10 +1,7 @@
 import unittest
 from typing import Any, List
 import onnx
-from experimental_experiment.ext_test_case import (
-    ExtTestCase,
-    skipif_ci_windows,
-)
+from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
@@ -21,6 +18,7 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
         verbose: int = 0,
         optimize: bool = False,
         strict: bool = False,
+        dynamic_shapes=None,
     ) -> str:
         filename = f"{test_name}_{exporter}_{'dec' if decomposition else ''}.onnx"
         export_options = ExportOptions(
@@ -35,11 +33,11 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
             export_options=export_options,
             verbose=verbose,
             optimize=optimize,
+            dynamic_shapes=dynamic_shapes,
         )
         return filename
 
-    @skipif_ci_windows("not working on windows")
-    def test_aten_roll_relu(self):
+    def test_aten_roll_relu_static(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -49,12 +47,40 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
         model = Model()
         x = (torch.arange(4 * 3) + 10).reshape((1, -1, 4)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_roll_relu", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_roll_relu_static", "custom", model, (x,))
         onx = onnx.load(model_path)
         op_types = [n.op_type for n in onx.graph.node]
-        self.assertEqual(op_types, ["aten_roll", "aten_relu"])
+        self.assertEqual(op_types, ["aten_roll_default", "aten_relu_default", "Identity"])
         op_domains = [n.domain for n in onx.graph.node]
-        self.assertEqual(op_domains, ["aten", "aten"])
+        self.assertEqual(op_domains, ["aten", "aten", ""])
+
+        sess = ExtendedReferenceEvaluator(model_path)
+        feeds = dict(zip(sess.input_names, [x.numpy()]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected.to(int), got.astype(int))
+
+    def test_aten_roll_relu_dynamic(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.relu(torch.roll(x, -1, -1))
+
+        model = Model()
+        x = (torch.arange(8 * 3) + 10).reshape((2, -1, 4)).to(torch.float32)
+        expected = model(x)
+        model_path = self._call_exporter(
+            "test_aten_roll_relu_dynamic",
+            "custom",
+            model,
+            (x,),
+            dynamic_shapes={"x": {0: torch.export.Dim("batch", min=1, max=1024)}},
+        )
+        onx = onnx.load(model_path)
+        op_types = [n.op_type for n in onx.graph.node]
+        self.assertEqual(op_types, ["aten_roll_default", "aten_relu_default", "Identity"])
+        op_domains = [n.domain for n in onx.graph.node]
+        self.assertEqual(op_domains, ["aten", "aten", ""])
 
         sess = ExtendedReferenceEvaluator(model_path)
         feeds = dict(zip(sess.input_names, [x.numpy()]))

@@ -471,26 +471,23 @@ class GraphBuilder(_GraphBuilderRuntime):
             verbose=max(self.verbose - 1, 0),
             infer_shapes=False,
             raise_list=self.raise_list,
-            local_domain=domain,
+            local_domain=self.local_domain,
         )
 
-        # self.dynamic_dimensions_source = {}
-        # self.dynamic_shapes = dynamic_shapes
-        # self.dynamic_objects = {}
-        # self.dynamic_objects_rev = {}
-        # self._dynamic_alias = {}
-
         for n in input_names:
-            new_builder.set_name(n, marker="make_subset_builder")
-            if self.is_sequence(n):
-                new_builder.set_sequence(n, self.get_sequence(n))
-            else:
-                if self.has_type(n):
-                    new_builder.set_type(n, self.get_type(n))
-                if self.has_shape(n):
-                    new_builder.set_shape(n, self.get_shape(n))
-                elif self.has_rank(n):
-                    new_builder.set_rank(n, self.get_rank(n))
+            assert not self.is_sequence(
+                n
+            ), f"Input {n!r} is sequence but that's not yet supported{self.get_debug_msg()}"
+            new_builder.make_tensor_input(
+                n,
+                self.get_type(n),
+                self.get_shape(n) if self.has_shape(n) else None,
+                is_dimension=self.get_is_dimension(n),
+                marker="make_subset_builder",
+            )
+        for k, v in self.functions.items():
+            if v.domain != domain:
+                new_builder.functions[k] = v
         return new_builder
 
     def _register_dynamic_object_from_dynamic_shapes_dict(self, pos, pos_vv, vv):
@@ -1205,6 +1202,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         elem_type: Optional[int] = None,
         shape: Optional[STATIC_SHAPE] = None,
         n_outputs: Optional[int] = None,
+        exc: bool = True,
     ) -> bool:
         """
         Tells if a result is a dynamic dimension or not.
@@ -1313,8 +1311,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 TensorProto.BOOL,
             }:
                 return False
+            if not exc:
+                # We return false by default.
+                return False
             raise RuntimeError(
-                f"Unable to gues if {name!r}, elem_type={elem_type}, "
+                f"Unable to guess if {name!r}, elem_type={elem_type}, "
                 f"shape={shape} is a dimension{self.get_debug_msg()}"
             )
         assert not res or (
@@ -4561,6 +4562,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param function_options: to be set to export as a function
         :return: the proto
         """
+        assert self.nodes, f"No node to convert{self.get_debug_msg()}"
         if function_options is None:
             function_options = FunctionOptions()
         if len(self.nodes) == 0:
@@ -4905,7 +4907,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     continue
                 assert i in known, (
                     f"Unknown input {i!r}, step {step!r} in node type "
-                    f"{node.op_type}, name is {node.name!r}\n{node}"
+                    f"{node.op_type}, name is {node.name!r}\n{node}{self.get_debug_msg()}"
                 )
             known |= set(node.output)
         for o in self.outputs:
@@ -6955,6 +6957,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param builder: GraphBuilder used to build the local function,
             it contains shape information the function does not have
         :return: function name
+
+        This function does not add the domain to the list of supported opsets.
+        You should use method :meth:`make_local_function` for this.
         """
         key = f.domain, f.name
         if merge_allowed and key in self.functions:

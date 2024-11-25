@@ -42,7 +42,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         import torch
         import transformers
         import onnxruntime as ort
-        from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
         def assert_close(actual, desired):
             if isinstance(desired, torch.Tensor):
@@ -98,6 +98,14 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         assert_close(got.to_tuple(), expected.to_tuple())
 
         onx = to_onnx(model, (input_ids, attention_mask))
+        onnx.save(onx, "test_mistral_nousers_c2.onnx")
+
+        onx = to_onnx(
+            model,
+            (input_ids, attention_mask),
+            export_options=ExportOptions(aten_as_function=True),
+            optimize=False,
+        )
         onnx.save(onx, "test_mistral_nousers_c.onnx")
         sess = ort.InferenceSession(
             "test_mistral_nousers_c.onnx", providers=["CPUExecutionProvider"]
