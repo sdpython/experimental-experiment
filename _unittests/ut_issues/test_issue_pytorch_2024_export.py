@@ -134,17 +134,33 @@ class TestIssuesPytorch2024Export(ExtTestCase):
 
         class Model(torch.nn.Module):
             def forward(self, x):
-                x = x.clone()
-                x[:, :2] = x[:, :2] * 2
+                xc = x.clone()
+                y = xc[:, :2] * 2
+                xc[:, :2] = y
                 return x
 
         model = Model()
         x = torch.ones((4, 4))
-        ep = torch.export.export(model, (x,))
+        ep = torch.export.export(model, (x,), strict=False)
         # this test should fail but it does not because torch.ops.aten.copy_.default
         # is executed inplace.
         torch.testing.assert_close(model(x), ep.module()(x))
         # print(ep.graph)
+
+        class MyProxy(torch.fx.proxy.Proxy):
+            def __setitem__(self, *args, **kwargs):
+                raise AssertionError(
+                    f"This should fail with args={args!r}, kwargs={kwargs}, "
+                    f"self.node={self.node}, node.meta={self.node.meta}"
+                )
+
+        class MyTracer(torch.fx.Tracer):
+            def proxy(self, node: torch.fx.Node) -> torch.fx.Proxy:
+                return MyProxy(node, self)
+
+        # torch.fx.proxy.Proxy.__setitem__ = setitem
+        self.assertRaise(lambda: MyTracer().trace(model), AssertionError, "This should fail")
+        # print(graph)
         """
         graph():
             %x : [num_users=1] = placeholder[target=x]

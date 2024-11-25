@@ -494,13 +494,15 @@ class ExtTestCase(unittest.TestCase):
 
         return InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
 
-    def assertRaise(self, fct: Callable, exc_type: type[Exception]):
+    def assertRaise(self, fct: Callable, exc_type: type[Exception], msg: Optional[str] = None):
         """In the name"""
         try:
             fct()
         except exc_type as e:
             if not isinstance(e, exc_type):
                 raise AssertionError(f"Unexpected exception {type(e)!r}.")  # noqa: B904
+            if msg is not None and msg not in str(e):
+                raise AssertionError(f"Unexpected exception message {e!r}.")  # noqa: B904
             return
         raise AssertionError("No exception was raised.")  # noqa: B904
 
