@@ -141,11 +141,10 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         model = Model()
         x = torch.ones((4, 4))
         ep = torch.export.export(model, (x,))
-        ep.recompile()
-        torch.testing.assert_close(
-            model(x), ep.module()(x)
-        )  # this test should fail but it does not.
-        print(ep.graph)
+        # this test should fail but it does not because torch.ops.aten.copy_.default
+        # is executed inplace.
+        torch.testing.assert_close(model(x), ep.module()(x))
+        # print(ep.graph)
         """
         graph():
             %x : [num_users=1] = placeholder[target=x]
@@ -164,6 +163,34 @@ class TestIssuesPytorch2024Export(ExtTestCase):
             %copy_ : [num_users=0] = call_function[target=torch.ops.aten.copy_.default]
                 (args = (%slice_4, %mul), kwargs = {})
             return (clone,)  <---- This is wrong.
+
+        This is what is expected:
+
+        graph():
+            %x : [num_users=1] = placeholder[target=x]
+            %clone : [num_users=4] = call_function[target=torch.ops.aten.clone.default]
+                (args = (%x,), kwargs = {})
+            %slice_1 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_2 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_1, 1, 0, 2), kwargs = {})
+            %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]
+                (args = (%slice_2, 2), kwargs = {})
+            %slice_3 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_4 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_3, 1, 0, 2), kwargs = {})
+            %copy : [num_users=1] = call_function[target=torch.ops.aten.copy.default]
+                (args = (%slice_4, %mul), kwargs = {})
+            %slice_5 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_scatter : [num_users=1] = call_function
+                [target=torch.ops.aten.slice_scatter.default]
+                (args = (%slice_5, %copy, 1, 0, 2), kwargs = {})
+            %slice_scatter_1 : [num_users=1] = call_function
+                [target=torch.ops.aten.slice_scatter.default]
+                (args = (%clone, %slice_scatter, 0, 0, 9223372036854775807), kwargs = {})
+            return (slice_scatter_1,)
         """
 
 
