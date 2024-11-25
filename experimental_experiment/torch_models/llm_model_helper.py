@@ -1,16 +1,55 @@
-from typing import Any, Dict, Tuple, Union
+import enum
+from typing import Any, Dict, Tuple, Optional, Union
 import numpy as np
 from . import assert_found
 
 
+class LLMInputKind(enum.IntEnum):
+    """
+    Defines the dummy inputs which can be generated for a LLM vision model.
+
+    Example::
+
+        K = LLMInputKind.
+
+        K.input_ids
+        K.input_ids | K.position_ids | K.attention_mask
+        K.input_ids | K.position_ids | K.attention_mask | K.images | K.past_key_values
+
+    Remarks, for Phi 3.5:
+
+    * images means two new inputs pixel_value Ix5x3x336x336 where I is the number of images
+      and image_size Ix2 which contains the image sizes
+    * min(LLMInputKind.input_ids) = -I where I is still the number of images.
+    * the number of caches is equal to the number of hidden kayers
+
+    What does batch size means? Multiple prompts? The image embedding does not seem
+    to support that.
+    """
+
+    # possible scenario for iteration 0
+    input_ids = 4  # input_dis
+    position_ids = 8  # position_ids
+    attention_mask = 16  # attention_mask
+    images = 32  # pixels_values, image_size
+    # possible values for iteration 1
+    past_key_values = 64  # caches
+    # everyyhing checked
+    ALL = 255
+
+
 def get_phi_35_mini_instruct(
-    inputs_as_tuple: bool = False, batch: int = 1, **kwargs
+    inputs_as_tuple: bool = False,
+    batch: int = 1,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param batch: batch size
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :return: model, inputs
 
@@ -18,7 +57,9 @@ def get_phi_35_mini_instruct(
     <https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json>`_.
     """
     import torch
-    from transformers import Phi3Config, Phi3ForCausalLM
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "Phi-3.5-mini-instruct",
@@ -157,8 +198,8 @@ def get_phi_35_mini_instruct(
     }
     assert_found(kwargs, config)
     config.update(**kwargs)
-    conf = Phi3Config(**config)
-    model = Phi3ForCausalLM(conf)
+    conf = transformers.Phi3Config(**config)
+    model = transformers.Phi3ForCausalLM(conf)
     model.eval()
 
     dim = (batch, 30)
@@ -174,13 +215,14 @@ def get_phi_35_mini_instruct(
 
 
 def get_phi_3_vision_128k_instruct(
-    inputs_as_tuple: bool = False, **kwargs
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
 
     See `Phi-3-vision-128k-instruct/config.json
@@ -189,6 +231,8 @@ def get_phi_3_vision_128k_instruct(
     import torch
     from .configuration_phi3_v import Phi3VConfig
     from .modeling_phi3_v import Phi3VForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "Phi-3-vision-128k-instruct",
@@ -355,337 +399,25 @@ def get_phi_3_vision_128k_instruct(
     return model, inputs
 
 
-def get_ai21_jamba_15_mini(
-    inputs_as_tuple: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+def get_phi_35_vision_instruct(
+    inputs_as_tuple: bool = False,
+    input_kind: LLMInputKind = LLMInputKind.input_ids,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]], Optional[Any]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
-
-    See `ai21labs/AI21-Jamba-1.5-Mini/config.json
-    <https://huggingface.co/ai21labs/AI21-Jamba-1.5-Mini/blob/main/config.json>`_.
     """
-    import torch
-    from transformers import JambaConfig, JambaForCausalLM
-
-    config = {
-        "architectures": ["JambaForCausalLM"],
-        "attention_dropout": 0.0,
-        "attn_layer_offset": 4,
-        "attn_layer_period": 8,
-        "bos_token_id": 1,
-        "eos_token_id": [2, 518],
-        "expert_layer_offset": 1,
-        "expert_layer_period": 2,
-        "hidden_act": "silu",
-        "hidden_size": 4096,
-        "initializer_range": 0.02,
-        "intermediate_size": 14336,
-        "mamba_conv_bias": True,
-        "mamba_d_conv": 4,
-        "mamba_d_state": 16,
-        "mamba_dt_rank": 256,
-        "mamba_expand": 2,
-        "mamba_proj_bias": False,
-        "max_position_embeddings": 262144,
-        "model_type": "jamba",
-        "num_attention_heads": 32,
-        "num_experts": 16,
-        "num_experts_per_tok": 2,
-        "num_hidden_layers": 32,
-        "num_key_value_heads": 8,
-        "num_logits_to_keep": 1,
-        "output_router_logits": False,
-        "pad_token_id": 0,
-        "rms_norm_eps": 1e-06,
-        "router_aux_loss_coef": 0.001,
-        "sliding_window": None,
-        "tie_word_embeddings": False,
-        "torch_dtype": "bfloat16",
-        "transformers_version": "4.40.2",
-        "use_cache": True,
-        "use_mamba_kernels": False,  # maybe another test to add
-        "vocab_size": 65536,
-    }
-    config.update(
-        {
-            "_from_model_config": True,
-            "bos_token_id": 1,
-            "eos_token_id": [2, 518],
-            "pad_token_id": 0,
-            "transformers_version": "4.40.2",
-        }
-    )
-    assert_found(kwargs, config)
-    config.update(**kwargs)
-    conf = JambaConfig(**config)
-    model = JambaForCausalLM(conf)
-    model.eval()
-
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 63028, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
-
-
-def get_falcon_mamba_7b(
-    inputs_as_tuple: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
-    """
-    Gets a non initialized model.
-
-    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :return: model, inputs
-
-    See `flacon-mamba-7b/config.json
-    <https://huggingface.co/tiiuae/falcon-mamba-7b/blob/main/config.json>`_.
-    """
-    import torch
-    from transformers import FalconMambaConfig, FalconMambaForCausalLM
-
-    config = {
-        "_name_or_path": "./",
-        "architectures": ["FalconMambaForCausalLM"],
-        "bos_token_id": 0,
-        "conv_kernel": 4,
-        "eos_token_id": 11,
-        "expand": 16,
-        "hidden_act": "silu",
-        "hidden_size": 4096,
-        "initializer_range": 0.1,
-        "intermediate_size": 8192,
-        "layer_norm_epsilon": 1e-05,
-        "model_type": "falcon_mamba",
-        "num_hidden_layers": 64,
-        "pad_token_id": 11,
-        "rescale_prenorm_residual": False,
-        "residual_in_fp32": True,
-        "state_size": 16,
-        "tie_word_embeddings": False,
-        "time_step_floor": 0.0001,
-        "time_step_init_scheme": "random",
-        "time_step_max": 0.1,
-        "time_step_min": 0.001,
-        "time_step_rank": 256,
-        "time_step_scale": 1.0,
-        "torch_dtype": "bfloat16",
-        "transformers_version": "4.43.0.dev0",
-        "use_bias": False,
-        "use_cache": True,
-        "use_conv_bias": True,
-        "vocab_size": 65024,
-    }
-    config.update(
-        {
-            "_from_model_config": True,
-            "bos_token_id": 0,
-            "eos_token_id": 11,
-            "pad_token_id": 11,
-            "transformers_version": "4.43.0.dev0",
-        }
-    )
-    assert_found(kwargs, config)
-    config.update(**kwargs)
-    conf = FalconMambaConfig(**config)
-    model = FalconMambaForCausalLM(conf)
-    model.eval()
-
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 65024, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
-
-
-def get_all_mini_ml_l6_v1(
-    inputs_as_tuple: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
-    """
-    Gets a non initialized model.
-
-    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :return: model, inputs
-
-    See `all-MiniLM-L6-v1
-    <https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1/blob/main/config.json>`_.
-    """
-    import torch
-    from transformers import BertConfig, BertModel
-
-    config = {
-        "_name_or_path": "nreimers/MiniLM-L6-H384-uncased",
-        "architectures": ["BertModel"],
-        "attention_probs_dropout_prob": 0.1,
-        "gradient_checkpointing": False,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.1,
-        "hidden_size": 384,
-        "initializer_range": 0.02,
-        "intermediate_size": 1536,
-        "layer_norm_eps": 1e-12,
-        "max_position_embeddings": 512,
-        "model_type": "bert",
-        "num_attention_heads": 12,
-        "num_hidden_layers": 6,
-        "pad_token_id": 0,
-        "position_embedding_type": "absolute",
-        "transformers_version": "4.8.2",
-        "type_vocab_size": 2,
-        "use_cache": True,
-        "vocab_size": 30522,
-    }
-    assert_found(kwargs, config)
-    config.update(**kwargs)
-    conf = BertConfig(**config)
-    model = BertModel(conf)
-    model.eval()
-
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 30522, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
-
-
-def get_smollm_1_7b(
-    inputs_as_tuple: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
-    """
-    Gets a non initialized model.
-
-    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :return: model, inputs
-
-    See `SmolLM-1.7B
-    <https://huggingface.co/HuggingFaceTB/SmolLM-1.7B/blob/main/config.json>`_.
-    """
-    import torch
-    from transformers import LlamaConfig, LlamaForCausalLM
-
-    config = {
-        "_name_or_path": "/fsx/loubna/checkpoints/cosmo2_1T/500000",
-        "architectures": ["LlamaForCausalLM"],
-        "attention_bias": False,
-        "attention_dropout": 0.0,
-        "bos_token_id": 0,
-        "eos_token_id": 0,
-        "hidden_act": "silu",
-        "hidden_size": 2048,
-        "initializer_range": 0.02,
-        "intermediate_size": 8192,
-        "max_position_embeddings": 2048,
-        "model_type": "llama",
-        "num_attention_heads": 32,
-        "num_hidden_layers": 24,
-        "num_key_value_heads": 32,
-        "pretraining_tp": 1,
-        "rms_norm_eps": 1e-05,
-        "rope_scaling": None,
-        "rope_theta": 10000.0,
-        "tie_word_embeddings": True,
-        "torch_dtype": "float32",
-        "transformers_version": "4.39.3",
-        "use_cache": True,
-        "vocab_size": 49152,
-    }
-    config.update(
-        {
-            "_from_model_config": True,
-            "bos_token_id": 0,
-            "eos_token_id": 0,
-            "transformers_version": "4.39.3",
-        }
-    )
-    assert_found(kwargs, config)
-    config.update(**kwargs)
-    conf = LlamaConfig(**config)
-    model = LlamaForCausalLM(conf)
-    model.eval()
-
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
-
-
-def get_llama_32_9b_vision(
-    inputs_as_tuple: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
-    """
-    Gets a non initialized model.
-
-    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :return: model, inputs
-
-    See `MLlama
-    <https://huggingface.co/docs/transformers/main/en/model_doc/mllama>`_.
-    """
-    import torch
-    from transformers import MllamaConfig, MllamaForConditionalGeneration
-    from transformers.models.mllama.configuration_mllama import (
-        MllamaVisionConfig,
-        MllamaTextConfig,
-    )
-
-    config = {}
-    config.update(**kwargs)
-
-    vision_config = MllamaVisionConfig(**config)
-    text_config = MllamaTextConfig(**config)
-    configuration = MllamaConfig(vision_config, text_config)
-    model = MllamaForConditionalGeneration(configuration)
-    model.eval()
-
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
-        pixel_values=torch.rand((1, 1, 1, 3, 512, 1080)).to(torch.float16),
-        aspect_ratio_mask=None,
-        aspect_ratio_ids=torch.from_numpy(np.array([[2]], dtype=np.int32)),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
-
-
-def get_phi_3_5_vision_instruct(
-    inputs_as_tuple: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     import torch
     from .fromhub.configuration_phi3_v import Phi3VConfig
     from .fromhub.modeling_phi3_v import Phi3VForCausalLM
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "Phi-3.5-vision-instruct",
@@ -844,9 +576,370 @@ def get_phi_3_5_vision_instruct(
     model = Phi3VForCausalLM(conf)
     model.eval()
 
+    if input_kind == LLMInputKind.input_ids:
+        dim = (1, 30)
+        inputs = dict(input_ids=torch.randint(0, 32064, dim).to(torch.int64))
+    elif input_kind == LLMInputKind.input_ids | LLMInputKind.attention_mask:
+        dim = (1, 30)
+        inputs = dict(
+            input_ids=torch.randint(0, 32064, dim).to(torch.int64),
+            attention_mask=torch.ones(*dim, dtype=torch.int64),
+        )
+    else:
+        from .dummy_inputs.llm_dummy_inputs import (
+            restore_dummy_inputs_for_phi_35_vision_instruct,
+        )
+
+        data = restore_dummy_inputs_for_phi_35_vision_instruct(
+            num_hidden_layers=config["num_hidden_layers"]
+        )
+        args, kwargs = data
+        inputs = {}
+        if input_kind & LLMInputKind.input_ids:
+            inputs["input_ids"] = kwargs["input_ids"]
+        if input_kind & LLMInputKind.position_ids:
+            inputs["position_ids"] = kwargs["position_ids"]
+        if input_kind & LLMInputKind.attention_mask:
+            inputs["attention_mask"] = kwargs["attention_mask"]
+        if input_kind & LLMInputKind.past_key_values:
+            inputs["past_key_values"] = kwargs["past_key_values"]
+        if input_kind & LLMInputKind.images:
+            inputs["pixel_values"] = kwargs["pixel_values"]
+            inputs["image_sizes"] = kwargs["image_sizes"]
+
+    if inputs_as_tuple:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_ai21_jamba_15_mini(
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs
+
+    See `ai21labs/AI21-Jamba-1.5-Mini/config.json
+    <https://huggingface.co/ai21labs/AI21-Jamba-1.5-Mini/blob/main/config.json>`_.
+    """
+    import torch
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+
+    config = {
+        "architectures": ["JambaForCausalLM"],
+        "attention_dropout": 0.0,
+        "attn_layer_offset": 4,
+        "attn_layer_period": 8,
+        "bos_token_id": 1,
+        "eos_token_id": [2, 518],
+        "expert_layer_offset": 1,
+        "expert_layer_period": 2,
+        "hidden_act": "silu",
+        "hidden_size": 4096,
+        "initializer_range": 0.02,
+        "intermediate_size": 14336,
+        "mamba_conv_bias": True,
+        "mamba_d_conv": 4,
+        "mamba_d_state": 16,
+        "mamba_dt_rank": 256,
+        "mamba_expand": 2,
+        "mamba_proj_bias": False,
+        "max_position_embeddings": 262144,
+        "model_type": "jamba",
+        "num_attention_heads": 32,
+        "num_experts": 16,
+        "num_experts_per_tok": 2,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 8,
+        "num_logits_to_keep": 1,
+        "output_router_logits": False,
+        "pad_token_id": 0,
+        "rms_norm_eps": 1e-06,
+        "router_aux_loss_coef": 0.001,
+        "sliding_window": None,
+        "tie_word_embeddings": False,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.40.2",
+        "use_cache": True,
+        "use_mamba_kernels": False,  # maybe another test to add
+        "vocab_size": 65536,
+    }
+    config.update(
+        {
+            "_from_model_config": True,
+            "bos_token_id": 1,
+            "eos_token_id": [2, 518],
+            "pad_token_id": 0,
+            "transformers_version": "4.40.2",
+        }
+    )
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.JambaConfig(**config)
+    model = transformers.JambaForCausalLM(conf)
+    model.eval()
+
     dim = (1, 30)
     inputs = dict(
-        input_ids=torch.randint(0, 32064, dim).to(torch.int64),
+        input_ids=torch.randint(0, 63028, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_tuple:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_falcon_mamba_7b(
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs
+
+    See `flacon-mamba-7b/config.json
+    <https://huggingface.co/tiiuae/falcon-mamba-7b/blob/main/config.json>`_.
+    """
+    import torch
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+
+    config = {
+        "_name_or_path": "./",
+        "architectures": ["FalconMambaForCausalLM"],
+        "bos_token_id": 0,
+        "conv_kernel": 4,
+        "eos_token_id": 11,
+        "expand": 16,
+        "hidden_act": "silu",
+        "hidden_size": 4096,
+        "initializer_range": 0.1,
+        "intermediate_size": 8192,
+        "layer_norm_epsilon": 1e-05,
+        "model_type": "falcon_mamba",
+        "num_hidden_layers": 64,
+        "pad_token_id": 11,
+        "rescale_prenorm_residual": False,
+        "residual_in_fp32": True,
+        "state_size": 16,
+        "tie_word_embeddings": False,
+        "time_step_floor": 0.0001,
+        "time_step_init_scheme": "random",
+        "time_step_max": 0.1,
+        "time_step_min": 0.001,
+        "time_step_rank": 256,
+        "time_step_scale": 1.0,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.43.0.dev0",
+        "use_bias": False,
+        "use_cache": True,
+        "use_conv_bias": True,
+        "vocab_size": 65024,
+    }
+    config.update(
+        {
+            "_from_model_config": True,
+            "bos_token_id": 0,
+            "eos_token_id": 11,
+            "pad_token_id": 11,
+            "transformers_version": "4.43.0.dev0",
+        }
+    )
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.FalconMambaConfig(**config)
+    model = transformers.FalconMambaForCausalLM(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 65024, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_tuple:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_all_mini_ml_l6_v1(
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs
+
+    See `all-MiniLM-L6-v1
+    <https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1/blob/main/config.json>`_.
+    """
+    import torch
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+
+    config = {
+        "_name_or_path": "nreimers/MiniLM-L6-H384-uncased",
+        "architectures": ["BertModel"],
+        "attention_probs_dropout_prob": 0.1,
+        "gradient_checkpointing": False,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "hidden_size": 384,
+        "initializer_range": 0.02,
+        "intermediate_size": 1536,
+        "layer_norm_eps": 1e-12,
+        "max_position_embeddings": 512,
+        "model_type": "bert",
+        "num_attention_heads": 12,
+        "num_hidden_layers": 6,
+        "pad_token_id": 0,
+        "position_embedding_type": "absolute",
+        "transformers_version": "4.8.2",
+        "type_vocab_size": 2,
+        "use_cache": True,
+        "vocab_size": 30522,
+    }
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.BertConfig(**config)
+    model = transformers.BertModel(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 30522, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_tuple:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_llama_32_9b_vision(
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs
+
+    See `MLlama
+    <https://huggingface.co/docs/transformers/main/en/model_doc/mllama>`_.
+    """
+    import torch
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+
+    config = {}
+    config.update(**kwargs)
+
+    vision_config = transformers.MllamaVisionConfig(**config)
+    text_config = transformers.MllamaTextConfig(**config)
+    configuration = transformers.MllamaConfig(vision_config, text_config)
+    model = transformers.MllamaForConditionalGeneration(configuration)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
+        pixel_values=torch.rand((1, 1, 1, 3, 512, 1080)).to(torch.float16),
+        aspect_ratio_mask=None,
+        aspect_ratio_ids=torch.from_numpy(np.array([[2]], dtype=np.int32)),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_tuple:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
+def get_smollm_1_7b(
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs
+
+    See `SmolLM-1.7B
+    <https://huggingface.co/HuggingFaceTB/SmolLM-1.7B/blob/main/config.json>`_.
+    """
+    import torch
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+
+    config = {
+        "_name_or_path": "/fsx/loubna/checkpoints/cosmo2_1T/500000",
+        "architectures": ["LlamaForCausalLM"],
+        "attention_bias": False,
+        "attention_dropout": 0.0,
+        "bos_token_id": 0,
+        "eos_token_id": 0,
+        "hidden_act": "silu",
+        "hidden_size": 2048,
+        "initializer_range": 0.02,
+        "intermediate_size": 8192,
+        "max_position_embeddings": 2048,
+        "model_type": "llama",
+        "num_attention_heads": 32,
+        "num_hidden_layers": 24,
+        "num_key_value_heads": 32,
+        "pretraining_tp": 1,
+        "rms_norm_eps": 1e-05,
+        "rope_scaling": None,
+        "rope_theta": 10000.0,
+        "tie_word_embeddings": True,
+        "torch_dtype": "float32",
+        "transformers_version": "4.39.3",
+        "use_cache": True,
+        "vocab_size": 49152,
+    }
+    config.update(
+        {
+            "_from_model_config": True,
+            "bos_token_id": 0,
+            "eos_token_id": 0,
+            "transformers_version": "4.39.3",
+        }
+    )
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.LlamaConfig(**config)
+    model = transformers.LlamaForCausalLM(conf)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
         attention_mask=torch.ones(*dim, dtype=torch.int64),
     )
 

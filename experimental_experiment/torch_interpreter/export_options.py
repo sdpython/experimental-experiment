@@ -16,7 +16,7 @@ class ExportOptions:
         to use the default decomposition table returned by
         :func:`get_decomposition_table
         <experimental_experiment.torch_dynamo.get_decomposition_table>`
-    :param dynamo: to use ``torch._dynamo.export`` instead of:func:`torch.export.export`
+    :param dynamo: to use ``torch._dynamo.export`` instead of :func:`torch.export.export`
     :param tracing: use symbolic tracing
     :param jit: use jit to get a graph then converts it into a fx graph
     :param strategy: to overwrite all the previous parameters with just a value

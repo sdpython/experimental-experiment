@@ -324,6 +324,7 @@ def aten_meth_to(
     outputs: List[str],
     input_name: T,
     *args: List[Any],
+    name: str = ".to",
     **kwargs: Dict[str, Any],
 ) -> T:
     "cast"
@@ -346,10 +347,10 @@ def aten_meth_to(
     ), "dtype or device cannot be None for method to"
 
     if dtype is None:
-        return g.op.Identity(input_name, outputs=outputs, name=".to")
+        return g.op.Identity(input_name, outputs=outputs, name=name)
     onnx_to = torch_dtype_to_onnx_dtype(dtype)
 
-    res = g.make_node("Cast", [input_name], outputs, to=onnx_to, name=".to")
+    res = g.make_node("Cast", [input_name], outputs, to=onnx_to, name=name)
     if not sts:
         g.set_type(outputs[0], onnx_to)
         if g.has_shape(input_name):

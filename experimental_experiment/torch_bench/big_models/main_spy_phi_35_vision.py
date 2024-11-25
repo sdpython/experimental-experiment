@@ -29,7 +29,7 @@ images = []
 placeholder = ""
 
 # Note: if OOM, you might consider reduce number of frames in this example.
-for i in range(1, 2):
+for i in range(1, 3):
     url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
     print(f"-- download image from {url!r}")
     img = Image.open(requests.get(url, stream=True).raw)
@@ -44,6 +44,9 @@ messages = [
 prompt = processor.tokenizer.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
 )
+print("------------------- prompt")
+print(prompt)
+print("------------------- end prompt")
 
 print("-- create inputs")
 inputs = processor(prompt, images, return_tensors="pt").to("cuda:0")

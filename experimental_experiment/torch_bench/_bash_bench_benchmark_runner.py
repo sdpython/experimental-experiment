@@ -344,7 +344,7 @@ class BenchmarkRunner:
         if "optimization" in opt_stats:
             added, removed, time_in = 0, 0, 0.0
             max_iter = 0
-            applied = set()
+            applied = {}
             matched = set()
             n_applied = 0
             by_pattern = {}
@@ -374,31 +374,41 @@ class BenchmarkRunner:
                 if p.startswith("match_"):
                     matched.add(p)
                 elif p.startswith("apply_"):
-                    applied.add(p)
+                    key = f"op_opt_{p}"
+                    key2 = f"op_opt_maxiter_{p}"
+                    if key not in applied:
+                        applied[key] = 1
+                        applied[key2] = obs["iteration"]
+                    else:
+                        applied[key] += 1
+                        applied[key2] = max(obs["iteration"], applied[key2])
                     n_applied += 1
+
             new_stat.update(
                 dict(
                     onnx_opt_optimized=1,
-                    onnx_opt_all_time_in=time_in,
-                    onnx_opt_all_added=added,
-                    onnx_opt_all_removed=removed,
-                    onnx_opt_max_iter=max_iter,
-                    onnx_opt_unique_matched=len(matched),
-                    onnx_opt_unique_applied=len(applied),
-                    onnx_opt_n_applied=n_applied,
+                    op_opt_all_time_in=time_in,
+                    op_opt_all_added=added,
+                    op_opt_all_removed=removed,
+                    op_opt_max_iter=max_iter,
+                    op_opt_unique_matched=len(matched),
+                    op_opt_unique_applied=len(applied),
+                    op_opt_n_applied=n_applied,
                     time_export_optimization=time_in,
-                    onnx_opt_cst_time_in=cst_time_in,
-                    onnx_opt_cst_added=cst_added,
-                    onnx_opt_cst_removed=cst_removed,
+                    op_opt_export_optimization=time_in,
+                    op_opt_cst_time_in=cst_time_in,
+                    op_opt_cst_added=cst_added,
+                    op_opt_cst_removed=cst_removed,
                 )
             )
+            new_stat.update(applied)
             sorted_time = sorted([(v, k) for k, v in by_pattern.items()], reverse=True)
             if sorted_time:
                 for i in range(min(10, len(sorted_time))):
                     new_stat.update(
                         {
-                            f"onnx_opt_toptime{i}": sorted_time[i][0],
-                            f"onnx_opt_toptimename{i}": sorted_time[i][1],
+                            f"op_opt_toptime{i}": sorted_time[i][0],
+                            f"op_opt_toptimename{i}": sorted_time[i][1],
                             f"time_opt_toptime{i}": sorted_time[i][0],
                         }
                     )
@@ -407,8 +417,8 @@ class BenchmarkRunner:
                 for i in range(min(10, len(sorted_n))):
                     new_stat.update(
                         {
-                            f"onnx_opt_topn{i}": sorted_n[i][0],
-                            f"onnx_opt_topnname{i}": sorted_n[i][1],
+                            f"op_opt_topn{i}": sorted_n[i][0],
+                            f"op_opt_topnname{i}": sorted_n[i][1],
                         }
                     )
             sorted_iter = sorted([(v, k) for k, v in by_iter.items()], reverse=True)
@@ -416,8 +426,8 @@ class BenchmarkRunner:
                 for i in range(min(10, len(sorted_iter))):
                     new_stat.update(
                         {
-                            f"onnx_opt_topiter{i}": sorted_iter[i][0],
-                            f"onnx_opt_topitername{i}": sorted_iter[i][1],
+                            f"op_opt_topiter{i}": sorted_iter[i][0],
+                            f"op_opt_topitername{i}": sorted_iter[i][1],
                         }
                     )
 
@@ -436,6 +446,13 @@ class BenchmarkRunner:
         for f in model.functions:
             nodes.extend(f.node)
         stats["onnx_n_nodes"] = len(nodes)
+        stats["onnx_n_nodes_aionnxml"] = len([n for n in nodes if n.domain == ""])
+        stats["onnx_n_nodes_commicrosoft"] = len(
+            [n for n in nodes if n.domain == "com.microsoft"]
+        )
+        stats["onnx_n_nodes_newdomain"] = len(
+            [n for n in nodes if n.domain not in ("", "com.microsoft")]
+        )
         stats["onnx_n_initializer"] = len(model.graph.initializer)
         stats["onnx_n_sparse_initializer"] = len(model.graph.sparse_initializer)
         stats["onnx_n_functions"] = len(model.functions)
@@ -446,11 +463,27 @@ class BenchmarkRunner:
         stats["onnx_n_outputs"] = len(model.graph.output)
         stats["onnx_input_names"] = "|".join(i.name for i in model.graph.input)
         stats["onnx_output_names"] = "|".join(i.name for i in model.graph.output)
-        stats["op_onnx_initializer"] = len(model.graph.initializer)
+        stats["op_onnx_initializer_int64"] = len(
+            [
+                t
+                for t in model.graph.initializer
+                if t.data_type == onnx.TensorProto.INT64 and np.prod(tuple(t.dims)) < 64
+            ]
+        )
+        stats["op_onnx_initializer_small"] = len(
+            [t for t in model.graph.initializer if np.prod(tuple(t.dims)) < 64]
+        )
+        stats["op_onnx_initializer_big"] = len(
+            [t for t in model.graph.initializer if np.prod(tuple(t.dims)) >= 64]
+        )
         stats["op_onnx_sparse_initializer"] = len(model.graph.sparse_initializer)
+        stats["op_onnx_n_nodes"] = stats["onnx_n_nodes"]
+        stats["op_onnx_n_nodes_aionnxml"] = stats["onnx_n_nodes_aionnxml"]
+        stats["op_onnx_n_nodes_commicrosoft"] = stats["onnx_n_nodes_commicrosoft"]
+        stats["op_onnx_n_nodes_newdomain"] = stats["onnx_n_nodes_newdomain"]
         for node in nodes:
             if node.domain == "":
-                key = f"op_onnx_{node.op_type}"
+                key = f"op_onnx__{node.op_type}"
             else:
                 key = f"op_onnx_{node.domain}_{node.op_type}"
             if key in stats:
@@ -695,7 +728,7 @@ class BenchmarkRunner:
             monai = None
         try:
             import timm
-        except ImportError:
+        except (ImportError, AttributeError):
             timm = None
 
         from experimental_experiment.ext_test_case import BOOLEAN_VALUES
@@ -1037,6 +1070,7 @@ class BenchmarkRunner:
                 )
             except Exception as e:
                 stats["time_export"] = time.perf_counter() - begin
+                stats["time_export_2"] = stats["time_export"]
                 stats["ERR_export"] = _clean_string(str(e)).replace("\n", "_ ")
                 if self.verbose:
                     print(f"[benchmarkrunner.benchmark] err_export {e}")
@@ -1050,6 +1084,7 @@ class BenchmarkRunner:
                 return stats, context
 
             stats["time_export"] = time.perf_counter() - begin
+            stats["time_export_2"] = stats["time_export"]
             stats["time_export_success"] = time.perf_counter() - begin
         else:
             exported_model, opt_stats = model_runner.export_as(
@@ -1063,6 +1098,7 @@ class BenchmarkRunner:
                 target_opset=self.target_opset,
             )
             stats["time_export"] = time.perf_counter() - begin
+            stats["time_export_2"] = stats["time_export"]
             stats["time_export_success"] = time.perf_counter() - begin
         model_runner.dump_std(f"{filename}.log.txt")
 

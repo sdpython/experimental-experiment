@@ -351,18 +351,20 @@ class ExtTestCase(unittest.TestCase):
         if a < b:
             return AssertionError(f"{a} < {b}, a not greater or equal than b\n{msg or ''}")
 
-    def assertInOr(self, tofind: Tuple[str, ...], text: str):
+    def assertInOr(self, tofind: Tuple[str, ...], text: str, msg: str = ""):
         for tof in tofind:
             if tof in text:
                 return
         raise AssertionError(
-            f"Unable to find one string in the list {tofind!r} in\n--\n{text}"
+            msg or f"Unable to find one string in the list {tofind!r} in\n--\n{text}"
         )
 
-    def assertIn(self, tofind: str, text: str):
+    def assertIn(self, tofind: str, text: str, msg: str = ""):
         if tofind in text:
             return
-        raise AssertionError(f"Unable to find the list of strings {tofind!r} in\n--\n{text}")
+        raise AssertionError(
+            msg or f"Unable to find the list of strings {tofind!r} in\n--\n{text}"
+        )
 
     def assertEqualArrays(
         self,
@@ -450,7 +452,7 @@ class ExtTestCase(unittest.TestCase):
         raise AssertionError(msg or f"value is not True: {value!r}")
 
     def assertEqual(self, expected: Any, value: Any, msg: str = ""):
-        "Overwrites the error message to get a more explicit message about what is what."
+        """Overwrites the error message to get a more explicit message about what is what."""
         if msg:
             super().assertEqual(expected, value, msg)
         else:
@@ -460,6 +462,18 @@ class ExtTestCase(unittest.TestCase):
                 raise AssertionError(  # noqa: B904
                     f"expected is {expected!r}, value is {value!r}\n{e}"
                 )
+
+    def assertEqualAny(self, expected: Any, value: Any, msg: str = ""):
+        if isinstance(expected, (tuple, list, dict)):
+            self.assertIsInstance(value, type(expected), msg=msg)
+            self.assertEqual(len(expected), len(value), msg=msg)
+            if isinstance(expected, dict):
+                for k in expected:
+                    self.assertIn(k, value, msg=msg)
+                    self.assertEqualAny(expected[k], value[k], msg=msg)
+            else:
+                for e, g in zip(expected, value):
+                    self.assertEqualAny(e, g, msg=msg)
 
     def assertAlmostEqual(
         self,
@@ -654,6 +668,14 @@ def requires_sklearn(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def has_torch(version: str) -> bool:
+    "Returns True if torch verions is higher."
+    import packaging.version as pv
+    import torch
+
+    return pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version(version)
+
+
 def requires_torch(version: str, msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`pytorch` is not recent enough."""
     import packaging.version as pv
@@ -689,7 +711,7 @@ def requires_monai(version: str = "", msg: str = "") -> Callable:
     try:
         import monai
     except ImportError:
-        return unittest.skip(msg or "monai not installed")
+        return unittest.skip(msg or "monai is not installed")
 
     if version and pv.Version(".".join(monai.__version__.split(".")[:2])) < pv.Version(
         version
@@ -757,12 +779,12 @@ def requires_transformers(
 
     v = pv.Version(".".join(transformers.__version__.split(".")[:2]))
     if v < pv.Version(version):
-        msg = f"transformers version {transformers.__version__} < {version} {msg}"
+        msg = f"transformers version {transformers.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     if or_older_than and v > pv.Version(or_older_than):
         msg = (
             f"transformers version {or_older_than} < "
-            f"{transformers.__version__} < {version} {msg}"
+            f"{transformers.__version__} < {version}: {msg}"
         )
         return unittest.skip(msg)
     return lambda x: x

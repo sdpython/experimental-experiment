@@ -1234,7 +1234,7 @@ class DynamoInterpreter:
         if i is Ellipsis:
             return i
 
-        if isinstance(i, self.torch.dtype):
+        if isinstance(i, (self.torch.dtype, self.torch.device)):
             return i
         raise RuntimeError(
             f"Unexpected type (argument {i}) {type(i)} "

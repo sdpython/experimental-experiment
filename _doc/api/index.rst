@@ -33,6 +33,7 @@ API
     ext_test_case
     helpers
     memory_peak
+    mini_onnx_builder
     model_run
     onnx_tools
     torch_test_helper

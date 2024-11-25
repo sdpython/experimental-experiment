@@ -117,11 +117,12 @@ def aten_add_Scalar(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "add_Scalar",
 ) -> T:
     "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs, name="add_Scalar")
+    res = g.op.Add(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
@@ -134,14 +135,27 @@ def aten_add_Tensor(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "add_Tensor",
 ) -> T:
     "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs, name="add_Tensor")
+    res = g.op.Add(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_add__Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: Optional[Any] = None,
+) -> T:
+    "add"
+    return aten_add_Tensor(g, sts, outputs, x, y, name="add__Tensor")
 
 
 def aten_addcmul(
@@ -1013,6 +1027,13 @@ def aten_bitwise_or_Tensor(
     return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or_Tensor")
 
 
+def aten_bitwise_or__Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "bitwise or"
+    return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or__Tensor")
+
+
 def aten_bmm(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
@@ -1103,6 +1124,49 @@ def aten_cat(
         g.set_type(outputs[0], dt0)
         g.set_rank(outputs[0], r0)
     return res
+
+
+def aten_chunk(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    chunks: int,
+    dim: int = 0,
+    use_sequence: bool = False,
+    name: str = "chunk",
+) -> List[T]:
+    """chunk"""
+    if chunks == 1:
+        return g.op.Identity(x, outputs=outputs, name=name)
+    if use_sequence:
+        if g.has_shape(x):
+            shape_x = g.get_shape(x)
+            if is_static_dimension(shape_x[dim]):
+                split_size = shape_x[dim] // chunks
+                split_sizes = [split_size for _ in range(chunks)]
+                if shape_x[dim] % chunks != 0:
+                    split_sizes[-1] = shape_x[dim] - split_size * chunks
+                return g.op.SplitToSequence(
+                    x,
+                    np.array(split_sizes, dtype=np.int64),
+                    keepdims=1,
+                    axis=dim,
+                    outputs=outputs,
+                    name=name,
+                )
+        raise AssertionError(
+            f"aten_chunk not implemented with use_sequence={use_sequence} "
+            f"and x has no static dimension for dim={dim}{g.get_debug_msg()}"
+        )
+
+    assert len(outputs) in (
+        1,
+        chunks,
+    ), f"Unexpected values for chunk={chunks}{g.get_debug_msg()}"
+    if len(outputs) == 1:
+        outputs = [f"{outputs[0]}#{i}" for i in range(chunks)]
+    return g.op.Split(x, axis=dim, num_outputs=chunks, name=name, outputs=outputs)
 
 
 def aten_clamp(
@@ -1288,6 +1352,22 @@ def aten_cond(
         ),
     )
     return res
+
+
+def aten_contiguous(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    memory_format=None,
+    name: str = "contiguous",
+) -> T:
+    "contiguous -> Identity"
+    assert memory_format in (
+        None,
+        0,
+    ), f"not implemented for memory_format={memory_format!r}{g.get_debug_msg()}"
+    return g.op.Identity(x, name=name, outputs=outputs)
 
 
 def aten_convolution(
@@ -1793,6 +1873,13 @@ def aten_detach(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[st
     return g.make_node("Identity", [x], outputs, name="detach")
 
 
+def aten_detach_(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "identity"
+    return g.make_node("Identity", [x], outputs, name="detach_")
+
+
 def aten_div(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -1824,14 +1911,28 @@ def aten_div_Tensor(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "div_Tensor",
 ) -> T:
     "div"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Div(x, y, outputs=outputs, name="div_Tensor")
+    res = g.op.Div(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
+
+
+def aten_div__Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: Optional[Any] = None,
+    name: str = "div__Tensor",
+) -> T:
+    "div"
+    return aten_div_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_div_Tensor_mode(
@@ -2540,6 +2641,21 @@ def aten_flatten(
     start_dim: int = 1,
     end_dim: int = -1,
     name: str = "flatten",
+) -> T:
+    "flatten"
+    return aten_flatten_using_ints(
+        g, sts, outputs, x, start_dim=start_dim, end_dim=end_dim, name=name
+    )
+
+
+def aten_flatten_using_ints(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    start_dim: int = 1,
+    end_dim: int = -1,
+    name: str = "flatten_using_ints",
 ) -> T:
     "flatten"
     if start_dim < 0:
@@ -3711,6 +3827,29 @@ def aten_index_put(
     )
 
 
+def aten_index_put_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    indices: List[T],
+    values: T,
+    accumulate: bool = False,
+    name="aten_index_put_",
+) -> T:
+    "M[..., :, ...] = ..."
+    return aten_index_put(
+        g,
+        sts,
+        outputs,
+        x,
+        indices,
+        values,
+        accumulate=accumulate,
+        name=aten__native_batch_norm_legit_no_training,
+    )
+
+
 def aten_instance_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4387,7 +4526,7 @@ def aten_masked_fill_Scalar(
             avalue = value
     else:
         avalue = np.array([value], dtype=tensor_dtype_to_np_dtype(dtx))
-    res = g.op.Where(cmask, avalue, x, name=name)
+    res = g.op.Where(cmask, avalue, x, name=name, outputs=outputs)
     if not sts:
         g.set_type(res, dtx)
         if g.has_shape(mask):
@@ -4937,6 +5076,13 @@ def aten_mul_Tensor(
 ) -> T:
     "mul"
     return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
+
+
+def aten_mul__Tensor(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+) -> T:
+    "mul"
+    return aten_mul(g, sts, outputs, x, y, name="mul__Tensor")
 
 
 def aten_multiply_Tensor(
@@ -6066,6 +6212,20 @@ def aten_reciprocal(
     return res
 
 
+def aten_reshape(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    shape: List[int],
+    name: str = "reshape",
+) -> T:
+    "reshape"
+    from ._aten_methods import aten_meth_reshape
+
+    return aten_meth_reshape(g, sts, outputs, input_name, *shape, name=name)
+
+
 def aten_scan(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -6547,11 +6707,25 @@ def aten_select_int(
     x: T,
     dim: int,
     index: int,
+    name: str = "select_int",
+) -> T:
+    "gather"
+    return aten_select_copy_int(g, sts, outputs, x, dim=dim, index=index, name=name)
+
+
+def aten_select_copy_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: int,
+    name: str = "select_copy_int",
 ) -> T:
     "gather"
     assert isinstance(dim, int), f"Unexpected type {type(dim)} for dim{g.get_debug_msg()}"
     assert isinstance(index, int), f"Unexpected type {type(index)} for dim{g.get_debug_msg()}"
-    res = g.op.Gather(x, np.array(index, dtype=np.int64), axis=dim, outputs=outputs)
+    res = g.op.Gather(x, np.array(index, dtype=np.int64), axis=dim, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):
@@ -7538,10 +7712,24 @@ def aten_sub_Tensor(
     x: T,
     y: T,
     alpha: float,
+    name: str = "sub_Tensor",
 ) -> T:
     "sub"
     assert alpha == 1, f"sub_Tensor not implemented for alpha={alpha}{g.get_debug_msg()}"
-    return aten_sub(g, sts, outputs, x, y, name="sub_Tensor")
+    return aten_sub(g, sts, outputs, x, y, name=name)
+
+
+def aten_sub__Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    alpha: float,
+    name: str = "sub__Tensor",
+) -> T:
+    "sub"
+    return aten_sub_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_sum(
@@ -7840,11 +8028,12 @@ def aten_transpose(
     input_name: T,
     dim0: int,
     dim1: int,
+    name: str = "transpose",
 ) -> T:
     "transpose"
     perm = list(range(g.rank(input_name)))
     perm[dim0], perm[dim1] = perm[dim1], perm[dim0]
-    res = g.make_node("Transpose", [input_name], outputs, perm=perm, name="transpose")
+    res = g.make_node("Transpose", [input_name], outputs, perm=perm, name=name)
     if not sts:
         g.set_type(outputs[0], g.get_type(input_name))
         if g.has_shape(input_name):
@@ -7863,9 +8052,79 @@ def aten_transpose_int(
     input_name: T,
     dim0: int,
     dim1: int,
+    name: str = "transpose_int",
 ) -> T:
     "transpose"
-    return aten_transpose(g, sts, outputs, input_name, dim0, dim1)
+    return aten_transpose(g, sts, outputs, input_name, dim0, dim1, name=name)
+
+
+def aten_numpy_T(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    name: str = "numpy_T",
+) -> T:
+    "transpose"
+    return aten_transpose(g, sts, outputs, input_name, 1, 0, name=name)
+
+
+def aten_to(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "cast"
+    from ._aten_methods import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
+
+
+def aten_to_device(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to_device",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "to_device -> Identity"
+    return g.op.Identity(input_name, name=name, outputs=outputs)
+
+
+def aten_to_dtype(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to_dtype",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "cast"
+    from ._aten_methods import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
+
+
+def aten_to_dtype_layout(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input_name: T,
+    *args: List[Any],
+    name: str = "to_dtype_layout",
+    **kwargs: Dict[str, Any],
+) -> T:
+    "cast"
+    from ._aten_methods import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
 
 
 def aten_tril(
@@ -7992,6 +8251,62 @@ def aten_unbind_int(
         for o in res:
             g.set_type(o, t)
             g.get_shape(o, new_shape)
+    return res
+
+
+def aten_unflatten_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    sizes: List[int],
+    name: str = "unflatten_int",
+) -> T:
+    "unflatten --> Reshape"
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+        shape = list(g.get_shape(x))
+        dim = (dim + len(shape)) % len(shape)
+        shape[dim : dim + 1] = sizes
+        return g.op.Reshape(x, np.array(shape, dtype=np.int64), name=name, outputs=outputs)
+
+    if dim == -1:
+        shape = g.op.Shape(x, name=name, end=-1)
+        new_shape = g.op.Concat(shape, np.array(sizes, dtype=np.int64), axis=0, name=name)
+        res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
+        if sts:
+            g.set_type(res, g.get_type(x))
+            if g.has_shape(x):
+                sh = list(g.get_shape(x))
+                g.set_shape(res, (*sh[:-1], *sizes))
+            elif g.has_rank(x):
+                g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+        return res
+
+    if dim == 0:
+        shape = g.op.Shape(x, name=name, start=1)
+        new_shape = g.op.Concat(np.array(sizes, dtype=np.int64), shape, axis=0, name=name)
+        res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
+        if sts:
+            g.set_type(res, g.get_type(x))
+            if g.has_shape(x):
+                sh = list(g.get_shape(x))
+                g.set_shape(res, (*sizes, *sh[1:]))
+            elif g.has_rank(x):
+                g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+        return res
+
+    shape1 = g.op.Shape(x, end=dim - 1, name=name)
+    shape2 = g.op.Shape(x, start=dim + 1, name=name)
+    new_shape = g.op.Concat(shape1, np.array(sizes, dtype=np.int64), shape2, axis=0, name=name)
+    res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
+    if sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            sh = list(g.get_shape(x))
+            g.set_shape(res, (*sh[:dim], *sizes, *sh[dim + 1 :]))
+        elif g.has_rank(x):
+            g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
     return res
 
 

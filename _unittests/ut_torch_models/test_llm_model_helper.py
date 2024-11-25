@@ -263,6 +263,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_falcon_mamba_7b(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -305,6 +306,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi_3_vision_128k_instruct(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -322,6 +324,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi_35_mini_instruct_cache_export(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -341,6 +344,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @unittest.skip("Wrong setting for the images")
+    @long_test()
     def test_get_llama_32_9b_vision(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -367,22 +371,58 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
-    def test_get_phi_3_5_vision_instruct(self):
+    @long_test()
+    def test_get_phi_35_vision_instruct(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_phi_3_5_vision_instruct,
+            get_phi_35_vision_instruct,
         )
         from experimental_experiment.torch_interpreter.onnx_export_errors import (
             bypass_export_some_errors,
         )
 
-        model, model_inputs = get_phi_3_5_vision_instruct(num_hidden_layers=1)
+        model, model_inputs = get_phi_35_vision_instruct(num_hidden_layers=1)
 
         with bypass_export_some_errors(patch_transformers=True):
             exported_program = torch.export.export(model, tuple(), model_inputs, strict=True)
             onx = to_onnx(model, tuple(), model_inputs)
-            onnx.save(onx, "test_get_phi_3_5_vision_instruct.onnx")
+            onnx.save(onx, "test_get_phi_35_vision_instruct.onnx")
         self.assertNotEmpty(exported_program)
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    def test_get_phi_35_vision_instruct_input_kind(self):
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_35_vision_instruct,
+            LLMInputKind,
+        )
+
+        model, model_inputs = get_phi_35_vision_instruct(
+            num_hidden_layers=1, input_kind=LLMInputKind.input_ids
+        )
+        self.assertEqual(list(model_inputs), ["input_ids"])
+
+        model, model_inputs = get_phi_35_vision_instruct(
+            num_hidden_layers=1, input_kind=LLMInputKind.input_ids | LLMInputKind.position_ids
+        )
+        self.assertEqual(list(model_inputs), ["input_ids", "position_ids"])
+
+        model, model_inputs = get_phi_35_vision_instruct(
+            num_hidden_layers=1, input_kind=LLMInputKind.ALL
+        )
+        self.assertEqual(
+            list(model_inputs),
+            [
+                "input_ids",
+                "position_ids",
+                "attention_mask",
+                "past_key_values",
+                "pixel_values",
+                "image_sizes",
+            ],
+        )
 
 
 if __name__ == "__main__":

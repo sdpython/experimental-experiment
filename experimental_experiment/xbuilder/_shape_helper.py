@@ -41,7 +41,7 @@ def is_static_dimension(d: int) -> bool:
         return True
 
     assert isinstance(
-        d, (torch.SymInt, torch.SymFloat, str)
+        d, (str, torch.SymInt, torch.SymFloat)
     ), f"Unexpected type {type(d)} for a dimension {d!r}"
     return False
 

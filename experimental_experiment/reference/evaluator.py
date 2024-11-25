@@ -15,6 +15,7 @@ from .ops.op_add_add_mul_mul import (
     SubMul,
 )
 from .ops.op_average_pool_grad import AveragePoolGrad
+from .ops.op_bias_softmax import BiasSoftmax
 from .ops.op_cast_like import CastLike_15, CastLike_19
 from .ops.op_concat import Concat
 from .ops.op_constant_of_shape import ConstantOfShape
@@ -66,6 +67,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         AddMul,
         AddSharedInput,
         AveragePoolGrad,
+        BiasSoftmax,
         Concat,
         CastLike_15,
         CastLike_19,

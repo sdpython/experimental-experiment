@@ -1431,20 +1431,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self.register_dynamic_objects_from_dim(sdim)
         shape = self.verify_shape(shape, 0, name=name)
-        assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
-            f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
-            f"{self.get_debug_msg()}"
-        )
-        shape_int = [d for d in shape if isinstance(d, int)]
-        assert (
-            len(shape) == 0 or not shape_int or min(shape_int) >= 0
-        ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
-        assert (
-            not self._debug_null_shape
-            or len(shape) == 0
-            or not shape_int
-            or min(shape_int) > 0
-        ), f"Zero value in shape {shape} for {name!r}{self.get_debug_msg()}"
+
+        # costly
+        # assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
+        #     f"Unexpected type for a shape, shape={shape}, types={[type(_) for _ in shape]}"
+        #     f"{self.get_debug_msg()}"
+        # )
+        # shape_int = [d for d in shape if isinstance(d, int)]
+        # assert (
+        #     len(shape) == 0 or not shape_int or min(shape_int) >= 0
+        # ), f"Negative value in shape {shape} for {name!r}{self.get_debug_msg()}"
+        # assert (
+        #     not self._debug_null_shape
+        #     or len(shape) == 0
+        #     or not shape_int
+        #    or min(shape_int) > 0
+        # ), f"Zero value in shape {shape} for {name!r}{self.get_debug_msg()}"
 
         if name in self._known_shapes:
             old_shape = self._known_shapes[name]
@@ -3236,10 +3238,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"Shape must be a tuple not {type(shape)}"
         if shape is None:
             return None
-        assert is_static_shape(shape) or self.is_dynamic_shape(shape, allow_none=True), (
-            f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
-            f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
-        )
+        # costly
+        # assert is_static_shape(shape) or self.is_dynamic_shape(shape, allow_none=True), (
+        #     f"Shape={shape} is not a shape (type={[type(i) for i in shape]}), "
+        #     f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
+        # )
         new_shape = self.verify_dynamic_shape(shape, name=name)
         return new_shape
 
@@ -4911,15 +4914,25 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.optimization_options.constant_folding:
             # First constant removal
             begin = time.perf_counter()
-            n = self.constant_folding()
+            stats_cf = self.constant_folding()
             statistics.append(
                 dict(
-                    pattern="constant_folding",
-                    removed=n,
+                    pattern="apply_constant_folding",
+                    removed=stats_cf["n"],
                     time_in=time.perf_counter() - begin,
                     iteration=0,
                 )
             )
+            for k, v in stats_cf.items():
+                if k == "n":
+                    continue
+                statistics.append(
+                    dict(
+                        pattern=f"apply_constant_folding_{k}",
+                        value=v,
+                        iteration=0,
+                    )
+                )
             self._check(statistics, "Da")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
@@ -4963,15 +4976,25 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.optimization_options.constant_folding:
             # Second constant removal
             begin = time.perf_counter()
-            n = self.constant_folding()
+            stats_cf = self.constant_folding()
             statistics.append(
                 dict(
-                    pattern="constant_folding",
-                    removed=n,
+                    pattern="apply_constant_folding",
+                    removed=stats_cf["n"],
                     time_in=time.perf_counter() - begin,
                     iteration=1,
                 )
             )
+            for k, v in stats_cf.items():
+                if k == "n":
+                    continue
+                statistics.append(
+                    dict(
+                        pattern=f"apply_constant_folding_{k}",
+                        value=v,
+                        iteration=1,
+                    )
+                )
             self._check(statistics, "Db")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
@@ -5031,8 +5054,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                         o[k] = 0
                     o[k] = max(o[k], v)
                     continue
-                if k in {"algo"} and k not in o:
+                if k in {"algo", "value"} and k not in o:
                     o[k] = []
+                assert k in o, f"Missing k={k!r} from statistics={statistics!r}"
                 o[k].append(v)
 
         rows = []
@@ -5226,7 +5250,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         from subgraphs.
         """
         yield from node.input
-        if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+        if node.op_type[0] in "LSI" and node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
             for att in node.attribute:
                 if att.type == AttributeProto.GRAPH:
                     hidden_inputs = cls._get_hidden_inputs(att.g)
@@ -5484,14 +5508,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             print(f"[GraphBuilder.compute_constant]     - A {name}: {self.pretty_tensor(cst)}")
         return cst, feeds
 
-    def constant_folding(self, convert_into_initializer: bool = True) -> int:
+    def constant_folding(self, convert_into_initializer: bool = True) -> Dict[str, float]:
         """
         Folds all constants. Constants are marked during the creation of the graph.
         There is no need to propagate this information.
 
         :param convert_into_initializer: moves the constant as an initializer,
             otherwise, just evaluates it
-        :return: number of removed nodes
+        :return: dictionary of statistics
         """
         if self.verbose > 1:
             begin_ = time.perf_counter()
@@ -5506,6 +5530,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"[GraphBuilder.constant_folding] cst:: "
                         f"{1 if self.is_constant(name) else '.'} :: {name}"
                     )
+        stats_cf = {"new_inits": 0}
         start = len(self.nodes)
         updates = {}
         node_to_remove = set()
@@ -5525,6 +5550,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if output is None:
                     # Evaluation failed.
                     continue
+                key = f"{v.domain}_{v.op_type}"
+                if key not in stats_cf:
+                    stats_cf[key] = 1
+                else:
+                    stats_cf[key] += 1
                 if convert_into_initializer:
                     node_to_remove.add(tuple(v.output))
                 if not isinstance(output, tuple):
@@ -5554,6 +5584,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             source=f"GraphBuilder.constant_folding.from/fold"
                             f"({','.join(assert_sorted(feeds))}){text_sources}",
                         )
+                        stats_cf["new_inits"] += 1
                     else:
                         updates[name] = v
                     if self.verbose > 3:
@@ -5582,7 +5613,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{len(self.nodes)} nodes in "
                 f"{time.perf_counter() - begin_} seconds"
             )
-        return start - len(self.nodes)
+        stats_cf["n"] = start - len(self.nodes)
+        return stats_cf
 
     def _clean_values_cache(self):
         """

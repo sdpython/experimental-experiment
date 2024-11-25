@@ -3,9 +3,7 @@ from typing import Any, Dict, Iterator
 
 
 def flatten_outputs(output: Any) -> Iterator[Any]:
-    """
-    Flattens output results.
-    """
+    """Flattens output results."""
     if isinstance(output, (list, tuple)):
         for item in output:
             yield from flatten_outputs(item)
@@ -18,9 +16,7 @@ def flatten_outputs(output: Any) -> Iterator[Any]:
 
 
 def assert_found(kwargs: Dict[str, Any], config: Dict[str, Any]):
-    """
-    Checks a parameter is available.
-    """
+    """Checks a parameter is available."""
     for k in kwargs:
         assert (
             k in config or k == "_attn_implementation"

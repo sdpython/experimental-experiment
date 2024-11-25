@@ -7,11 +7,13 @@ from ..torch_models.diffusion_model_helper import (
     get_stable_diffusion_2_unet,
 )
 from ..torch_models.llm_model_helper import (
+    LLMInputKind,
     get_ai21_jamba_15_mini,
     get_all_mini_ml_l6_v1,
     get_falcon_mamba_7b,
     get_llama_32_9b_vision,
     get_phi_35_mini_instruct,
+    get_phi_35_vision_instruct,
     get_smollm_1_7b,
 )
 
@@ -40,6 +42,27 @@ class UntrainedRunner(BenchmarkRunner):
                 "Phi35MiniInstructLM_1Layer": (
                     lambda: (
                         *get_phi_35_mini_instruct(num_hidden_layers=1),
+                        dict(strict=False),
+                    )
+                ),
+                "Phi35MiniInstructLMVision_1Layer": (
+                    lambda: (
+                        *get_phi_35_vision_instruct(
+                            num_hidden_layers=1,
+                            input_kind=LLMInputKind.input_ids
+                            | LLMInputKind.attention_mask
+                            | LLMInputKind.position_ids,
+                        ),
+                        dict(strict=False),
+                    )
+                ),
+                "Phi35MiniInstructLMVision_1Layer_Images": (
+                    lambda: (
+                        *get_phi_35_vision_instruct(
+                            num_hidden_layers=1,
+                            _attn_implementation="eager",
+                            input_kind=LLMInputKind.ALL,
+                        ),
                         dict(strict=False),
                     )
                 ),

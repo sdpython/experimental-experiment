@@ -135,6 +135,17 @@ class IdentityPattern(PatternOptimization):
     into identity nodes.
     """
 
+    @classmethod
+    def _any_value_to_scalar(cls, cst):
+        try:
+            return float(cst)
+        except TypeError:
+            return complex(cst)
+
+    @classmethod
+    def _has_unique_value(cls, cst):
+        return cst.min() == cst.max()
+
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
 
@@ -159,6 +170,9 @@ class IdentityPattern(PatternOptimization):
             f"for node type {node.op_type!r} and name {node.name!r}, "
             f"node.input={node.input}"
         )
+        if g.has_rank(node.input[1]) and g.get_rank(node.input[1]) > 1:
+            # No need to go further.
+            return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         shape = g.get_constant_shape(node.input[1], exc=False)
@@ -169,10 +183,7 @@ class IdentityPattern(PatternOptimization):
             if not g.is_constant_scalar(node.input[1]):
                 return self.none(node, inspect.currentframe().f_lineno)
             cst = g.get_constant_scalar(node.input[1])
-            try:
-                val = float(cst)
-            except TypeError:
-                val = complex(cst)
+            val = self._any_value_to_scalar(cst)
             if val == 0 and node.op_type in {"Add", "Sub"}:
                 return MatchResult(node, [node], self.apply, insert_at=node)
             if val == 1 and node.op_type in {"Mul", "Div"}:
@@ -182,18 +193,17 @@ class IdentityPattern(PatternOptimization):
             cst = g.get_computed_constant(node.input[1])
             if cst is None:
                 return self.none(node, inspect.currentframe().f_lineno)
-            unique = set(cst)
-            if len(unique) != 1:
+            if not self._has_unique_value(cst):
                 return self.none(node, inspect.currentframe().f_lineno)
-            unique = list(unique)
+            unique = cst[0]
             if not g.has_shape(node.input[0]):
                 return self.none(node, inspect.currentframe().f_lineno)
             shape = g.get_shape(node.input[0])
             if shape[-1] != cst.shape[0]:
                 return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"Add", "Sub"} and unique[0] != 0:
+            if node.op_type in {"Add", "Sub"} and unique != 0:
                 return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"Mul", "Div"} and unique[0] != 1:
+            if node.op_type in {"Mul", "Div"} and unique != 1:
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(node, [node], self.apply, insert_at=node)
 

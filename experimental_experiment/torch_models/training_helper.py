@@ -76,10 +76,8 @@ def make_aot_ort(
             # ort_session_options.add_session_config_entry("set_denormal_as_zero", "1")
             ort_session_options.add_session_config_entry("disable_prepacking", "1")
 
-    if (
-        enable_pattern
-        and "experimental" in enable_pattern
-        or any("experimental" in s for s in enable_pattern)
+    if enable_pattern and (
+        "experimental" in enable_pattern or any("experimental" in s for s in enable_pattern)
     ):
         try:
             from onnx_extended.ortops.optim.cuda import get_ort_ext_libs
