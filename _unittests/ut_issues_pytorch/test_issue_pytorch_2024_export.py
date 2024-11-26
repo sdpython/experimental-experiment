@@ -11,7 +11,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
 
     @skipif_ci_windows("not working")
     @requires_torch("2.7")
-    def test_index_put_none_decompositions(self):
+    def test_export_index_put_none_decompositions(self):
         # see issue https://github.com/pytorch/pytorch/issues/141336
         import torch
 
@@ -37,7 +37,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # print(ep.graph)
         ep.run_decompositions()  # Fails here
 
-    def test_mistral_nousers(self):
+    def test_export_mistral_nousers(self):
         import onnx
         import torch
         import transformers
@@ -129,7 +129,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # )
         # assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
 
-    def test_inplace_raise(self):
+    def test_export_inplace_raise(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -209,7 +209,25 @@ class TestIssuesPytorch2024Export(ExtTestCase):
             return (slice_scatter_1,)
         """
 
-    def test_inplace_setitem(self):
+    def test_export_list(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, yz):
+                return x + yz[0] + yz[1]
+
+        model = Model()
+        x = torch.ones((4, 4))
+        x2 = x*x
+        # torch.export.export(model, (x,[x2, x2])) fails because
+        # the export detect a duplicated input and reuse whatever is possible.
+        ep = torch.export.export(model, (x,[x2, x2*2]))
+        # this test should fail but it does not because torch.ops.aten.copy_.default
+        # is executed inplace.
+        torch.testing.assert_close(model(x, [x*2,x*3]), ep.module()(x, [x*2,x*3]))
+
+    def test_export_inplace_setitem(self):
+        import operator
         import torch
 
         class Model(torch.nn.Module):
@@ -217,32 +235,32 @@ class TestIssuesPytorch2024Export(ExtTestCase):
                 xc = x.clone()
                 y = xc[:, :2] * 2
                 xc[:, :2] = y
-                return x
+                return xc + 2
 
         model = Model()
         x = torch.ones((4, 4))
-        ep = torch.export.export(model, (x,), strict=False)
+        ep = torch.export.export(model, (x,), strict=True)
         # this test should fail but it does not because torch.ops.aten.copy_.default
         # is executed inplace.
-        torch.testing.assert_close(model(x), ep.module()(x))
-        # print(ep.graph)
+        torch.testing.assert_close(model(x ), ep.module()(x))
+        print('-------')
+        print(ep.graph)
 
         class MyProxy(torch.fx.proxy.Proxy):
             def __setitem__(self, *args, **kwargs):
-                print(args)
-                print(self.__dict__)
-                print(dir(self.tracer))
-                raise AssertionError(
-                    f"This should fail with args={args!r}, kwargs={kwargs}, "
-                    f"self.node={self.node}, node.meta={self.node.meta}"
-                )
+                assert not kwargs, f"Unexpected not empty kwargs={kw_args!r}"
+                assert len(args) == 2, f"Unexpected number of args={len(args)}: {args}"
+                indices, values = args
+                node = self.tracer.create_node("call_function", operator.setitem, args=(indices, values.node), kwargs={})
+                node_to_replace = self.node
+                return self.tracer.proxy(node)
 
         class MyTracer(torch.fx.Tracer):
             def proxy(self, node: torch.fx.Node) -> torch.fx.Proxy:
                 return MyProxy(node, self)
 
-        # torch.fx.proxy.Proxy.__setitem__ = setitem
         graph = MyTracer().trace(model)
+        print(graph)
 
 
 if __name__ == "__main__":
