@@ -225,6 +225,8 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # this test should fail but it does not because torch.ops.aten.copy_.default
         # is executed inplace.
         torch.testing.assert_close(model(x, [x * 2, x * 3]), ep.module()(x, [x * 2, x * 3]))
+        ep = ep.run_decompositions()
+        self.assertIn("yz_0", str(ep.graph))
 
     def test_export_inplace_add_(self):
         import torch
@@ -238,9 +240,8 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         model = Model()
         x = torch.ones((4, 4))
         ep = torch.export.export(model, (x,))
-        print(ep.graph)
-        epo = torch.onnx.export(model, (x,), dynamo=True)
-        print(epo.model_proto.graph.node)
+        ep = ep.run_decompositions({})
+        self.assertNotIn("add_", str(ep.graph))
 
     def test_export_inplace_setitem(self):
         import operator
@@ -256,21 +257,12 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         model = Model()
         x = torch.ones((4, 4))
         ep = torch.export.export(model, (x,))
-        print("-------1")
-        print(ep.graph)
-        for node in ep.graph.nodes:
-            print("****")
-            print(node)
-            print(node.__dict__)
-        ep.run_decompositions()
-        print("-------2")
-        print(ep.graph)
+        ep = ep.run_decompositions({})
+        self.assertIn("slice_scatter", str(ep.graph))
 
         # this test should fail but it does not because torch.ops.aten.copy_.default
         # is executed inplace.
         torch.testing.assert_close(model(x), ep.module()(x))
-        print("-------")
-        print(ep.graph)
 
         class MyProxy(torch.fx.proxy.Proxy):
             def __setitem__(self, *args, **kwargs):
@@ -290,7 +282,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         graph = MyTracer(autowrap_functions=(operator.setitem,)).trace(
             model,
         )
-        print(graph)
+        self.assertIn("operator.setitem", str(graph))
 
 
 if __name__ == "__main__":
