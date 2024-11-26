@@ -129,7 +129,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # )
         # assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
 
-    def test_inplace_affectation(self):
+    def test_inplace_raise(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -208,6 +208,41 @@ class TestIssuesPytorch2024Export(ExtTestCase):
                 (args = (%clone, %slice_scatter, 0, 0, 9223372036854775807), kwargs = {})
             return (slice_scatter_1,)
         """
+
+    def test_inplace_setitem(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                xc = x.clone()
+                y = xc[:, :2] * 2
+                xc[:, :2] = y
+                return x
+
+        model = Model()
+        x = torch.ones((4, 4))
+        ep = torch.export.export(model, (x,), strict=False)
+        # this test should fail but it does not because torch.ops.aten.copy_.default
+        # is executed inplace.
+        torch.testing.assert_close(model(x), ep.module()(x))
+        # print(ep.graph)
+
+        class MyProxy(torch.fx.proxy.Proxy):
+            def __setitem__(self, *args, **kwargs):
+                print(args)
+                print(self.__dict__)
+                print(dir(self.tracer))
+                raise AssertionError(
+                    f"This should fail with args={args!r}, kwargs={kwargs}, "
+                    f"self.node={self.node}, node.meta={self.node.meta}"
+                )
+
+        class MyTracer(torch.fx.Tracer):
+            def proxy(self, node: torch.fx.Node) -> torch.fx.Proxy:
+                return MyProxy(node, self)
+
+        # torch.fx.proxy.Proxy.__setitem__ = setitem
+        graph = MyTracer().trace(model)
 
 
 if __name__ == "__main__":
