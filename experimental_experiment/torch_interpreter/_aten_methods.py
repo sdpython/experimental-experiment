@@ -141,7 +141,8 @@ def aten_meth_masked_fill_(
 ) -> T:
     "masked"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_meth_masked_fill_)."
     )
 
 

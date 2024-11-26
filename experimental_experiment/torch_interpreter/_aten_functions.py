@@ -156,7 +156,8 @@ def aten_add__Tensor(
 ) -> T:
     "add"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_add__Tensor)"
     )
 
 
@@ -330,7 +331,8 @@ def aten_and_(
 ) -> T:
     "and"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_and_)."
     )
 
 
@@ -1031,7 +1033,8 @@ def aten_bitwise_or__Tensor(
 ) -> T:
     "bitwise or"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_bitwise_or__Tensor)."
     )
 
 
@@ -1772,7 +1775,8 @@ def aten_copy_(
 ) -> T:
     "identity"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_copy_)."
     )
 
 
@@ -1936,7 +1940,8 @@ def aten_div__Tensor(
 ) -> T:
     "div"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_div__Tensor)."
     )
 
 
@@ -3844,7 +3849,8 @@ def aten_index_put_(
 ) -> T:
     "M[..., :, ...] = ..."
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_index_put_)."
     )
     """
     return aten_index_put(
@@ -5093,7 +5099,8 @@ def aten_mul__Tensor(
 ) -> T:
     "mul"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_mul__Tensor)."
     )
 
 
@@ -5727,7 +5734,8 @@ def aten_not_(
 ) -> T:
     "not"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_not_)."
     )
 
 
@@ -7744,7 +7752,8 @@ def aten_sub__Tensor(
 ) -> T:
     "sub"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification."
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_sub__Tensor)."
     )
 
 

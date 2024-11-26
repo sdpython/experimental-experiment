@@ -222,11 +222,15 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # torch.export.export(model, (x,[x2, x2])) fails because
         # the export detect a duplicated input and reuse whatever is possible.
         ep = torch.export.export(model, (x, [x2, x2 * 2]))
+        print(ep.graph)
         # this test should fail but it does not because torch.ops.aten.copy_.default
         # is executed inplace.
         torch.testing.assert_close(model(x, [x * 2, x * 3]), ep.module()(x, [x * 2, x * 3]))
         ep = ep.run_decompositions()
+        print(ep.graph)
         self.assertIn("yz_0", str(ep.graph))
+        print("-----")
+        print(torch.fx.Tracer().trace(model))
 
     def test_export_inplace_add_(self):
         import torch
@@ -257,7 +261,9 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         model = Model()
         x = torch.ones((4, 4))
         ep = torch.export.export(model, (x,))
+        print(ep.graph)
         ep = ep.run_decompositions({})
+        print(ep.graph)
         self.assertIn("slice_scatter", str(ep.graph))
 
         # this test should fail but it does not because torch.ops.aten.copy_.default
