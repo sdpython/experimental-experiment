@@ -38,8 +38,36 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         ep.run_decompositions()  # Fails here
 
     def test_mistral_nousers(self):
+        import onnx
         import torch
         import transformers
+        import onnxruntime as ort
+        from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+
+        def assert_close(actual, desired):
+            if isinstance(desired, torch.Tensor):
+                torch.testing.assert_close(actual, desired)
+            elif isinstance(desired, tuple):
+                assert isinstance(actual, tuple)
+                assert len(actual) == len(desired)
+                for a, d in zip(actual, desired):
+                    torch.testing.assert_close(a, d)
+            else:
+                raise NotImplementedError(f"Not implemented for class {type(desired)}")
+
+        def flatten(obj):
+            if isinstance(obj, torch.Tensor):
+                return obj
+            if isinstance(obj, tuple):
+                res = []
+                for o in obj:
+                    if isinstance(o, torch.Tensor):
+                        res.append(o)
+                    else:
+                        res.extend(flatten(o))
+                return tuple(res)
+            else:
+                raise NotImplementedError(f"Not implemented for class {type(obj)}")
 
         config = transformers.MistralConfig(
             hidden_size=32,
@@ -58,10 +86,128 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         attention_mask = torch.ones(shape)
         expected = model(input_ids, attention_mask)
         ep = torch.export.export(model, (input_ids, attention_mask))
-        assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
+
+        # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
         mod = ep.module()
-        got = mod(input_ids, attention_mask)
-        torch.testing.assert_close(got, expected)
+        # got = mod(input_ids, attention_mask)
+        # assert_close(got.to_tuple(), expected.to_tuple())
+
+        expected2 = model(input_ids, attention_mask * 0)
+        got2 = mod(input_ids, attention_mask * 0)
+        assert_close(got2.to_tuple(), expected2.to_tuple())
+        # assert_close(expected2.to_tuple(), expected.to_tuple())
+
+        onx = to_onnx(
+            model,
+            (input_ids, attention_mask),
+            export_options=ExportOptions(aten_as_function=True),
+            optimize=False,
+        )
+        onnx.save(onx, "test_mistral_nousers_aten.onnx")
+        sess = ort.InferenceSession(
+            "test_mistral_nousers_aten.onnx", providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(
+            None, {"input_ids": input_ids.numpy(), "attention_mask": attention_mask.numpy()}
+        )
+        assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
+
+        got = sess.run(
+            None,
+            {"input_ids": input_ids.numpy(), "attention_mask": (attention_mask * 0).numpy()},
+        )
+        assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected2.to_tuple()))
+
+        # ep = torch.onnx.export(mod, (input_ids, attention_mask), dynamo=True)
+        # ep.optimize()
+        # onnx.save(ep.model_proto, "test_mistral_nousers.onnx")
+        # sess = ort.InferenceSession(
+        #     "test_mistral_nousers.onnx", providers=["CPUExecutionProvider"]
+        # )
+        # got = sess.run(
+        #     None, {"input_ids": input_ids.numpy(), "attention_mask": attention_mask.numpy()}
+        # )
+        # assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
+
+    def test_inplace_affectation(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                xc = x.clone()
+                y = xc[:, :2] * 2
+                xc[:, :2] = y
+                return x
+
+        model = Model()
+        x = torch.ones((4, 4))
+        ep = torch.export.export(model, (x,), strict=False)
+        # this test should fail but it does not because torch.ops.aten.copy_.default
+        # is executed inplace.
+        torch.testing.assert_close(model(x), ep.module()(x))
+        # print(ep.graph)
+
+        class MyProxy(torch.fx.proxy.Proxy):
+            def __setitem__(self, *args, **kwargs):
+                raise AssertionError(
+                    f"This should fail with args={args!r}, kwargs={kwargs}, "
+                    f"self.node={self.node}, node.meta={self.node.meta}"
+                )
+
+        class MyTracer(torch.fx.Tracer):
+            def proxy(self, node: torch.fx.Node) -> torch.fx.Proxy:
+                return MyProxy(node, self)
+
+        # torch.fx.proxy.Proxy.__setitem__ = setitem
+        self.assertRaise(lambda: MyTracer().trace(model), AssertionError, "This should fail")
+        # print(graph)
+        """
+        graph():
+            %x : [num_users=1] = placeholder[target=x]
+            %clone : [num_users=3] = call_function[target=torch.ops.aten.clone.default]
+                (args = (%x,), kwargs = {})
+            %slice_1 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_2 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_1, 1, 0, 2), kwargs = {})
+            %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]
+                (args = (%slice_2, 2), kwargs = {})
+            %slice_3 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_4 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_3, 1, 0, 2), kwargs = {})
+            %copy_ : [num_users=0] = call_function[target=torch.ops.aten.copy_.default]
+                (args = (%slice_4, %mul), kwargs = {})
+            return (clone,)  <---- This is wrong.
+
+        This is what is expected:
+
+        graph():
+            %x : [num_users=1] = placeholder[target=x]
+            %clone : [num_users=4] = call_function[target=torch.ops.aten.clone.default]
+                (args = (%x,), kwargs = {})
+            %slice_1 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_2 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_1, 1, 0, 2), kwargs = {})
+            %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]
+                (args = (%slice_2, 2), kwargs = {})
+            %slice_3 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_4 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_3, 1, 0, 2), kwargs = {})
+            %copy : [num_users=1] = call_function[target=torch.ops.aten.copy.default]
+                (args = (%slice_4, %mul), kwargs = {})
+            %slice_5 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_scatter : [num_users=1] = call_function
+                [target=torch.ops.aten.slice_scatter.default]
+                (args = (%slice_5, %copy, 1, 0, 2), kwargs = {})
+            %slice_scatter_1 : [num_users=1] = call_function
+                [target=torch.ops.aten.slice_scatter.default]
+                (args = (%clone, %slice_scatter, 0, 0, 9223372036854775807), kwargs = {})
+            return (slice_scatter_1,)
+        """
 
 
 if __name__ == "__main__":

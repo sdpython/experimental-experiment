@@ -447,6 +447,49 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{type(target_opset_or_existing_proto)} is not supported."
             )
 
+    def make_subset_builder(
+        self,
+        input_names: List[str],
+        name: str,
+        domain: str,
+    ) -> "GraphBuilder":
+        """
+        Creates a copy of the existing builder but with information reduced to the input_names
+        considered as inputs.
+
+        :param input_names: new inputs
+        :param name: function name
+        :param domain: domain name for the function
+        :return: shortened builder
+        """
+        new_builder = GraphBuilder(
+            target_opset_or_existing_proto=self.opsets,
+            input_names=input_names,
+            as_function=True,
+            optimization_options=self.optimization_options,
+            ir_version=self.ir_version,
+            verbose=max(self.verbose - 1, 0),
+            infer_shapes=False,
+            raise_list=self.raise_list,
+            local_domain=self.local_domain,
+        )
+
+        for n in input_names:
+            assert not self.is_sequence(
+                n
+            ), f"Input {n!r} is sequence but that's not yet supported{self.get_debug_msg()}"
+            new_builder.make_tensor_input(
+                n,
+                self.get_type(n),
+                self.get_shape(n) if self.has_shape(n) else None,
+                is_dimension=self.get_is_dimension(n),
+                marker="make_subset_builder",
+            )
+        for k, v in self.functions.items():
+            if v.domain != domain:
+                new_builder.functions[k] = v
+        return new_builder
+
     def _register_dynamic_object_from_dynamic_shapes_dict(self, pos, pos_vv, vv):
         # example:
         # args_0 {0: <class '._bash_bench_model_runner.batch'>}
@@ -1069,17 +1112,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"the interpret allows multiple types for simplicity"
             f"{self.get_debug_msg()}"
         )
-        d = dict(dtype=dtype, shapes=shapes, ranks=ranks)
-        if shapes is not None and ranks is None:
-            d["ranks"] = tuple(len(s) for s in shapes)
-        if name not in self._known_sequences:
-            self._known_sequences[name] = d
+        if isinstance(dtype, dict):
+            self._known_sequences[name] = dtype
         else:
-            assert self._known_sequences[name] == d, (
-                f"Sequence {name!r} was already declared with a different type "
-                f"or shape or rank, declared={self._known_sequences[name]}, "
-                f"new={d}{self.get_debug_msg()}"
-            )
+            d = dict(dtype=dtype, shapes=shapes, ranks=ranks)
+            if shapes is not None and ranks is None:
+                d["ranks"] = tuple(len(s) for s in shapes)
+            if name not in self._known_sequences:
+                self._known_sequences[name] = d
+            else:
+                assert self._known_sequences[name] == d, (
+                    f"Sequence {name!r} was already declared with a different type "
+                    f"or shape or rank, declared={self._known_sequences[name]}, "
+                    f"new={d}{self.get_debug_msg()}"
+                )
 
     def set_name(self, name: str, marker: str):
         """Adds a name to the list of known names."""
@@ -1156,6 +1202,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         elem_type: Optional[int] = None,
         shape: Optional[STATIC_SHAPE] = None,
         n_outputs: Optional[int] = None,
+        exc: bool = True,
     ) -> bool:
         """
         Tells if a result is a dynamic dimension or not.
@@ -1264,8 +1311,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 TensorProto.BOOL,
             }:
                 return False
+            if not exc:
+                # We return false by default.
+                return False
             raise RuntimeError(
-                f"Unable to gues if {name!r}, elem_type={elem_type}, "
+                f"Unable to guess if {name!r}, elem_type={elem_type}, "
                 f"shape={shape} is a dimension{self.get_debug_msg()}"
             )
         assert not res or (
@@ -4512,6 +4562,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param function_options: to be set to export as a function
         :return: the proto
         """
+        assert self.nodes, f"No node to convert{self.get_debug_msg()}"
         if function_options is None:
             function_options = FunctionOptions()
         if len(self.nodes) == 0:
@@ -4856,7 +4907,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     continue
                 assert i in known, (
                     f"Unknown input {i!r}, step {step!r} in node type "
-                    f"{node.op_type}, name is {node.name!r}\n{node}"
+                    f"{node.op_type}, name is {node.name!r}\n{node}{self.get_debug_msg()}"
                 )
             known |= set(node.output)
         for o in self.outputs:
@@ -6893,7 +6944,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         rename_allowed: bool = False,
         merge_allowed: bool = False,
         builder: Optional["GraphBuilder"] = None,
-    ):
+    ) -> Tuple[str, str]:
         """
         Adds a new local function.
 
@@ -6906,6 +6957,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param builder: GraphBuilder used to build the local function,
             it contains shape information the function does not have
         :return: function name
+
+        This function does not add the domain to the list of supported opsets.
+        You should use method :meth:`make_local_function` for this.
         """
         key = f.domain, f.name
         if merge_allowed and key in self.functions:

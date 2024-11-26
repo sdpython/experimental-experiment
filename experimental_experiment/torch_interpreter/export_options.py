@@ -20,6 +20,8 @@ class ExportOptions:
     :param tracing: use symbolic tracing
     :param jit: use jit to get a graph then converts it into a fx graph
     :param strategy: to overwrite all the previous parameters with just a value
+    :param aten_as_function: keeps aten function as local function to keep a faithful
+        translation of the fx graph.
 
     The fallback strategy tries the following in order:
 
@@ -58,6 +60,7 @@ class ExportOptions:
         ] = None,
         strategy: Optional[str] = None,
         dynamo: bool = False,
+        aten_as_function: bool = False,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -68,6 +71,7 @@ class ExportOptions:
         self.dynamo = dynamo
         self.strategy = strategy
         self.jit = jit
+        self.aten_as_function = aten_as_function
 
         if strategy is not None:
             assert strategy in self._allowed, (
