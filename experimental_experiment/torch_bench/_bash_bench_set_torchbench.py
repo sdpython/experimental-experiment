@@ -189,7 +189,7 @@ class TorchBenchRunner(BenchmarkRunner):
             all:
                 # OOMs (A100 40G)
                 - detectron2_maskrcnn
-                # TIMEOUT, https://github.com/pytorch/pytorch/issues/98467
+                # TIMEOUT
                 - tacotron2
                 # Failing in eager mode
                 - hf_clip
