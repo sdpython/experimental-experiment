@@ -155,7 +155,9 @@ def aten_add__Tensor(
     alpha: Optional[Any] = None,
 ) -> T:
     "add"
-    return aten_add_Tensor(g, sts, outputs, x, y, name="add__Tensor")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_addcmul(
@@ -298,12 +300,7 @@ def aten___and___Tensor(
     name: str = "__and___Tensor",
 ) -> T:
     "and"
-    res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
-    )
-    if not sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
-    return res
+    return aten_and(g, sts, outputs, x, y, name=name)
 
 
 def aten_or(
@@ -332,7 +329,9 @@ def aten_and_(
     name="and",
 ) -> T:
     "and"
-    return aten_and(g, sts, outputs, x, y, name="and_")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_logical_and(
@@ -1031,7 +1030,9 @@ def aten_bitwise_or__Tensor(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
     "bitwise or"
-    return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or__Tensor")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_bmm(
@@ -1770,7 +1771,9 @@ def aten_copy_(
     non_blocking: bool = False,
 ) -> T:
     "identity"
-    return aten_copy(g, sts, outputs, x, src, non_blocking, name="copy_")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_cos(
@@ -1932,7 +1935,9 @@ def aten_div__Tensor(
     name: str = "div__Tensor",
 ) -> T:
     "div"
-    return aten_div_Tensor(g, sts, outputs, x, y, alpha, name=name)
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_div_Tensor_mode(
@@ -3838,6 +3843,10 @@ def aten_index_put_(
     name="aten_index_put_",
 ) -> T:
     "M[..., :, ...] = ..."
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
+    """
     return aten_index_put(
         g,
         sts,
@@ -3848,6 +3857,7 @@ def aten_index_put_(
         accumulate=accumulate,
         name=aten__native_batch_norm_legit_no_training,
     )
+    """
 
 
 def aten_instance_norm(
@@ -5082,7 +5092,9 @@ def aten_mul__Tensor(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
 ) -> T:
     "mul"
-    return aten_mul(g, sts, outputs, x, y, name="mul__Tensor")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_multiply_Tensor(
@@ -5714,7 +5726,9 @@ def aten_not_(
     name: str = "not",
 ) -> T:
     "not"
-    return aten_not(g, sts, outputs, x, name="not_")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_ones(
@@ -7729,7 +7743,9 @@ def aten_sub__Tensor(
     name: str = "sub__Tensor",
 ) -> T:
     "sub"
-    return aten_sub_Tensor(g, sts, outputs, x, y, alpha, name=name)
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_sum(

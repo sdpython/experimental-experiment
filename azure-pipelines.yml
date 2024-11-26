@@ -19,7 +19,7 @@ jobs:
     displayName: 'Install Graphviz'
   - script: python -m pip install --upgrade pip wheel
     displayName: 'Install tools'
-  - script: pip install --index-url=https://download.pytorch.org/whl/nightly/cpu --pre torch==2.6.0.dev20241120 torchvision
+  - script: pip install --index-url=https://download.pytorch.org/whl/nightly/cpu --pre torch torchvision
     displayName: 'Install torch nightly'
   # - script: python -m pip install -i https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ORT-Nightly/pypi/simple/ onnxruntime-training
   #   displayName: 'Install onnxruntime-training nightly'

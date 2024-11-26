@@ -98,19 +98,7 @@ def aten_meth_masked_fill(
     mask: T,
     value: Any,
 ) -> T:
-    "constantofshape"
-    return aten_meth_masked_fill_(g, sts, outputs, x, mask, value)
-
-
-def aten_meth_masked_fill_(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    mask: T,
-    value: Any,
-) -> T:
-    "masked"
+    "masked_fill"
     if isinstance(value, float):
         itype = g.get_type(x)
         value_cast = g.make_initializer(
@@ -141,6 +129,20 @@ def aten_meth_masked_fill_(
         set_type_shape_binary_op(g, res, mask, value_cast, x, begin=1)
 
     return res
+
+
+def aten_meth_masked_fill_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value: Any,
+) -> T:
+    "masked"
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification."
+    )
 
 
 def aten_meth_mean(
