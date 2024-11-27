@@ -48,7 +48,7 @@ def _random_input(typ, shape, batch):
     return np.random.randn(*new_shape).astype(dtype)
 
 
-def random_feed(inputs, batch: int = 10, empty_dimension: int = 1) -> Dict[str, np.array]:
+def random_feed(inputs, batch: int = 10, empty_dimension: int = 1) -> Dict[str, np.ndarray]:
     """
     Creates a dictionary of random inputs.
 

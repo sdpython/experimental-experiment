@@ -408,6 +408,10 @@ class WrapExecutorchForTorch(WrapForTorch):
 
 
 class WrapInferenceSessionForTorch:
+    """
+    Wraps an `onnxruntime.InferenceSession` to overload method `run`
+    to support :class:`torch.Tensor`.
+    """
     def __init__(self, sess: Any, nvtx: bool = False):
         # onnxruntime is importing when needed as it takes a
         # couple of seconds if it contains CUDA EP.
