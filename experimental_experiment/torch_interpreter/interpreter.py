@@ -1287,6 +1287,12 @@ class DynamoInterpreter:
         can_set = self._can_set_shape_and_type(node)
         n_nodes = len(self.builder.nodes) + len(self.builder.initializers_dict)
 
+        assert len(node.users) > 0, (
+            f"This is probably one inplace function node={node!r}, "
+            f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
+            f"output_names={output_names!r}{self.builder.get_debug_msg()}"
+        )
+
         if self.export_options.aten_as_function:
             res = self.add_aten_as_function(
                 str(aten_name), fct, can_set, output_names, args=args, kwargs=fx_kwargs

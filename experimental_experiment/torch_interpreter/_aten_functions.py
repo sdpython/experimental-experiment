@@ -153,12 +153,11 @@ def aten_add__Tensor(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "add__Tensor",
 ) -> T:
     "add"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_add__Tensor)"
-    )
+    # inplace modifications but it seems to be correct.
+    return aten_add_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_addcmul(
@@ -1022,20 +1021,28 @@ def aten_bitwise_or(
 
 
 def aten_bitwise_or_Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_or_Tensor",
 ) -> T:
     "bitwise or"
-    return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or_Tensor")
+    return aten_bitwise_or(g, sts, outputs, x, y, name=name)
 
 
 def aten_bitwise_or__Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_or__Tensor",
 ) -> T:
     "bitwise or"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_bitwise_or__Tensor)."
-    )
+    # The fx graph is using the output, the modified inplace input.
+    return aten_bitwise_or_Tensor(g, sts, outputs, x, y, name=name)
 
 
 def aten_bmm(
@@ -1775,8 +1782,8 @@ def aten_copy_(
 ) -> T:
     "identity"
     raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_copy_)."
+        f"These calls should be removed from the fx graph as it is inplace modification "
+        f"(aten_copy_){g.get_debug_msg()}"
     )
 
 
@@ -5084,20 +5091,28 @@ def aten_mul_Scalar(
 
 
 def aten_mul_Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "mul_Tensor",
 ) -> T:
     "mul"
-    return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
+    return aten_mul(g, sts, outputs, x, y, name=name)
 
 
 def aten_mul__Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "mulà_Tensor",
 ) -> T:
     "mul"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_mul__Tensor)."
-    )
+    # The inline modification seems to be using the right output.
+    return aten_mul_Tensor(g, sts, outputs, x, y, name=name)
 
 
 def aten_multiply_Tensor(

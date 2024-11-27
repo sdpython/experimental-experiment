@@ -120,7 +120,9 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @requires_torch("2.5")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
-        self._untrained_export("custom", "Phi35MiniInstructLM_1Layer", verbose=1, debug=False)
+        self._untrained_export(
+            "custom-decomposition", "Phi35MiniInstructLM_1Layer", verbose=1, debug=False
+        )
 
 
 if __name__ == "__main__":
