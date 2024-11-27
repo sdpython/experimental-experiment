@@ -54,6 +54,7 @@ class TestDortBench(ExtTestCase):
     )
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training()
+    @requires_torch("2.7", "convert_element_type_default")
     def test_dort_bench_small_llama_cpu_custom(self):
         self._dort_bench_small_llama_cpu("custom")
 
