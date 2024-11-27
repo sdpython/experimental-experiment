@@ -1287,9 +1287,27 @@ class DynamoInterpreter:
         can_set = self._can_set_shape_and_type(node)
         n_nodes = len(self.builder.nodes) + len(self.builder.initializers_dict)
 
-        assert len(node.users) > 0, (
+        assert (
+            len(node.users) > 0
+            or aten_name
+            in {
+                self.torch._C._set_grad_enabled,
+                self.torch._C._log_api_usage_once,
+                self.torch.amp.autocast_mode._enter_autocast,
+                self.torch.amp.autocast_mode._exit_autocast,
+                self.torch.ops.aten._assert_scalar.default,
+                self.torch.torch.sym_constrain_range_for_size,
+                "aten__exit_autocast",
+                "aten__enter_autocast",
+            }
+            or (
+                hasattr(aten_name, "_opname")
+                and aten_name._opname in {"sym_constrain_range_for_size"}
+            )
+        ), (
             f"This is probably one inplace function node={node!r}, "
             f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
+            f"aten_name._opname={getattr(aten_name, '_opname', '?')}, "
             f"output_names={output_names!r}{self.builder.get_debug_msg()}"
         )
 

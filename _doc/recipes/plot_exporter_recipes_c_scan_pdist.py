@@ -18,7 +18,7 @@ import scipy.spatial.distance as spd
 import torch
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.helpers import pretty_onnx
-from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class ModuleWithControlFlowLoop(torch.nn.Module):
@@ -102,11 +102,20 @@ ep = torch.export.export(
 )
 print(ep.graph)
 
+########################################
+# The graph shows some unused results and this might confuse the exporter.
+# We need to run :meth:`torch.export.ExportedProgram.run_decompositions`.
+ep = ep.run_decompositions({})
+print(ep.graph)
+
 ####################################
 # Let's export again with ONNX.
 
 onx = to_onnx(
-    model, (x, y), dynamic_shapes={"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}}
+    model,
+    (x, y),
+    dynamic_shapes={"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}},
+    export_options=ExportOptions(decomposition_table="default"),
 )
 print(pretty_onnx(onx))
 
@@ -118,6 +127,7 @@ onx = to_onnx(
     (x, y),
     dynamic_shapes={"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}},
     inline=True,
+    export_options=ExportOptions(decomposition_table="default"),
 )
 print(pretty_onnx(onx))
 

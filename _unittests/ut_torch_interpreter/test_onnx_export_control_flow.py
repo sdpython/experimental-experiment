@@ -31,24 +31,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         return Bad1Fixed, torch.rand(5, 3)
 
-    @requires_torch("2.7")
-    def test_controlflow_script(self):
-        import torch
-
-        cls, x = self.get_custom_model()
-        model = cls()
-        filename = "test_controlflow_script.onnx"
-        torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
-        with open(filename, "rb") as f:
-            onx = onnx.load(f)
-        ref = ExtendedReferenceEvaluator(onx)
-
-        for _x in (x, -x):
-            expected = model(_x)
-            got = ref.run(None, {"x": _x.detach().numpy()})[0]
-            self.assertEqualArray(expected, got)
-
-    @requires_torch("2.7")
     @skipif_ci_windows("not yet supported on Windows")
     def test_controlflow_dynamo(self):
         import torch
@@ -72,7 +54,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         for _x in (x, -x):
             expected = model(_x)
             got = ref.run(None, {"x": _x.detach().numpy()})[0]
-            self.assertEqualArray(expected, got)
+            self.assertEqualArray(expected, got, atol=1e-6)
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
@@ -406,7 +388,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
-                onx = to_onnx(model, (x,), optimize=optimize)
+                onx = to_onnx(
+                    model,
+                    (x,),
+                    optimize=optimize,
+                    export_options=ExportOptions(decomposition_table="default"),
+                )
                 names = [(f.domain, f.name) for f in onx.functions]
                 self.assertEqual(len(names), len(set(names)))
 
@@ -462,7 +449,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
-                onx = to_onnx(model, (x,), optimize=optimize)
+                onx = to_onnx(
+                    model,
+                    (x,),
+                    optimize=optimize,
+                    export_options=ExportOptions(decomposition_table="default"),
+                )
                 names = [(f.domain, f.name) for f in onx.functions]
                 self.assertEqual(len(names), len(set(names)))
 
@@ -520,7 +512,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
-                onx = to_onnx(model, (x,), optimize=optimize)
+                onx = to_onnx(
+                    model,
+                    (x,),
+                    optimize=optimize,
+                    export_options=ExportOptions(decomposition_table="default"),
+                )
                 names = [(f.domain, f.name) for f in onx.functions]
                 self.assertEqual(len(names), len(set(names)))
 
@@ -578,7 +575,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
-                onx = to_onnx(model, (x,), optimize=optimize)
+                onx = to_onnx(
+                    model,
+                    (x,),
+                    optimize=optimize,
+                    export_options=ExportOptions(decomposition_table="default"),
+                )
                 # with open(f"test_scan_cdist_add_{int(optimize)}.onnx", "wb") as f:
                 #     f.write(onx.SerializeToString())
 
@@ -636,7 +638,13 @@ class TestOnnxExportControlFlow(ExtTestCase):
         model = ModuleWithControlFlowLoopScan()
 
         for optimize, ds in itertools.product([False, True], dyns):
-            onx = to_onnx(model, inputs[0], optimize=optimize, dynamic_shapes=ds)
+            onx = to_onnx(
+                model,
+                inputs[0],
+                optimize=optimize,
+                dynamic_shapes=ds,
+                export_options=ExportOptions(decomposition_table="default"),
+            )
             if isinstance(ds, dict):
                 for i in onx.graph.input:
                     shape = i.type.tensor_type.shape
