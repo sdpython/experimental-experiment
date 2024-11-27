@@ -15,6 +15,7 @@ from experimental_experiment.torch_models.training_helper import (
     train_loop_mixed_precision,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
+from experimental_experiment.torch_interpreter import ExportOptions
 
 
 class TestEdPhi3(ExtTestCase):
@@ -48,6 +49,7 @@ class TestEdPhi3(ExtTestCase):
                 rename_inputs=False,
                 optimize=True,
                 prefix="test_phi3_export",
+                export_options=ExportOptions(decomposition_table="default"),
             )
         onx = ret["proto"]
         names = [i.name for i in onx.graph.input]

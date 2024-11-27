@@ -971,6 +971,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @requires_torch("2.7")
     def test_full(self):
         x = torch.randn(3, 4, requires_grad=True)
         self.assertONNX(
@@ -979,6 +980,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
             verbose=0,
+            dynamic_axes=True,
         )
 
     def test_full_like(self):

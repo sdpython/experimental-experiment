@@ -1299,6 +1299,7 @@ class DynamoInterpreter:
                 self.torch.torch.sym_constrain_range_for_size,
                 "aten__exit_autocast",
                 "aten__enter_autocast",
+                "aten_FunctionCtx",
             }
             or (
                 hasattr(aten_name, "_opname")
