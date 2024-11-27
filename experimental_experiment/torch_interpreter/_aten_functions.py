@@ -620,6 +620,31 @@ def aten_as_strided(
         if np.prod(shape) == np.prod(size):
             return g.op.Reshape(x, np.array(size, dtype=np.int64), outputs=outputs, name=name)
 
+    if g.has_shape(x) and g.get_shape(x) == tuple(size):
+        # Identity
+        return g.op.Identity(x, outputs=outputs, name=name)
+
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)) and is_static_shape(size):
+        n_elems = np.prod(size)
+        indices = np.zeros(np.prod(size), dtype=np.int64)
+        shape_c = [1]
+        for r in reversed(size[1:]):
+            shape_c.append(shape_c[-1] * r)
+        shape_c = tuple(reversed(shape_c))
+        for dim, dimc, strid in zip(size, shape_c, stride):
+            i = ((np.arange(n_elems) // dimc) % dim) * strid
+            indices += i
+
+        flat = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+        g.set_type(flat, g.get_type(x))
+        g.set_shape(flat, (int(np.prod(g.get_shape(x))),))
+        new_values = g.op.Gather(flat, indices, name=name)
+        g.set_type(new_values, g.get_type(x))
+        g.set_shape(new_values, (int(np.prod(size)),))
+        return g.op.Reshape(
+            new_values, np.array(size, dtype=np.int64), name=name, outputs=outputs
+        )
+
     raise AssertionError(
         f"The implementation is still incorrect, x={x!r}, "
         f"shape={g.get_shape(x)}, size={size}, "

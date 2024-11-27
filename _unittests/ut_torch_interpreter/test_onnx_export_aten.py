@@ -1,10 +1,12 @@
 import unittest
 from typing import Any, List
 import numpy as np
+import onnx.helper as oh
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
 
 class TestOnnxExportAten(ExtTestCase):
@@ -243,6 +245,81 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqual(len(got), 2)
         for a, b in zip(expected, got):
             self.assertEqualArray(a, b, atol=1e-5)
+
+    def test_as_strided_numpy(self):
+        import torch
+
+        def np_as_strided_1(x, shape, strides):
+            assert len(shape) == len(x.shape) == 4
+            y = np.empty(
+                shape, dtype=oh.tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(x.dtype))
+            )
+            cs = (shape[1] * shape[2] * shape[3], shape[2] * shape[3], shape[3], 1)
+            x_flat = x.flatten()
+            y_flat = y.flatten()
+
+            for i in range(0, shape[0]):
+                for j in range(0, shape[1]):
+                    for k in range(0, shape[2]):
+                        for l in range(0, shape[3]):  # noqa: E741
+                            pos_y = i * cs[0] + j * cs[1] + k * cs[2] + l * cs[3]
+                            pos_x = (
+                                i * strides[0]
+                                + j * strides[1]
+                                + k * strides[2]
+                                + l * strides[3]
+                            )
+                            y_flat[pos_y] = x_flat[pos_x]
+            return y_flat.reshape(shape)
+
+        def np_as_strided_2(x, shape, strides):
+            assert len(shape) == len(x.shape) == 4
+            n_elems = np.prod(shape)
+            indices = np.zeros(np.prod(shape), dtype=np.int64)
+            shape_c = (shape[3] * shape[2] * shape[1], shape[2] * shape[3], shape[3], 1)
+            for dim, dimc, stride in zip(shape, shape_c, strides):
+                i = ((np.arange(n_elems) // dimc) % dim) * stride
+                indices += i
+            return x.flatten()[indices].reshape(shape)
+
+        shape_x = (2, 2, 8, 8)
+        shape = (2, 2, 8, 4)
+        strides = (128, 8, 16, 1)
+        x = torch.arange(np.prod(shape_x)).reshape(shape_x).to(int)
+        expected = torch.as_strided(x, shape, strides)
+        y = np_as_strided_1(x, shape, strides)
+        self.assertEqualArray(expected, y)
+        y = np_as_strided_2(x, shape, strides)
+        self.assertEqualArray(expected, y)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_as_strided(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                y = torch.as_strided(x, (2, 2, 8, 4), (128, 8, 16, 1))
+                return y
+
+        model = Model()
+        x = torch.randn((2, 2, 8, 8), requires_grad=False)
+        expected = model(x)
+        model_path = self._call_exporter("test_aten_as_strided", "custom", model, (x,))
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":

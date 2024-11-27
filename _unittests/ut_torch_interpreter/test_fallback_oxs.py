@@ -196,7 +196,7 @@ class TestFallbackOxs(ExtTestCase):
         import torch
         from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.xbuilder import OptimizationOptions
-        from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
         from experimental_experiment.torch_interpreter.oxs_dispatcher import (
             OxsDebugDispatcher,
         )
@@ -215,6 +215,7 @@ class TestFallbackOxs(ExtTestCase):
                     options=OptimizationOptions(patterns=None),
                     verbose=0,
                     dispatcher=OxsDebugDispatcher(verbose=2, raise_exc=False),
+                    export_options=ExportOptions(decomposition_table="default"),
                 )
             )
             self.assertIsInstance(onx, ModelProto)
