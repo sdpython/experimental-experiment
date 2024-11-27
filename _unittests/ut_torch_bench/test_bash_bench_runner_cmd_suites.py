@@ -117,7 +117,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 self.assertEqual(input_values[0], value[0])
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
+    @requires_torch("2.6")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
         self._untrained_export(
