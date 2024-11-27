@@ -103,7 +103,7 @@ def aten_add(
 ) -> T:
     "add"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts
+        g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts, op_type="Add"
     )
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)

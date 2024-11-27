@@ -90,6 +90,36 @@ def aten_meth_float(
     return aten_meth_to(g, sts, outputs, x, dtype=torch.float32)
 
 
+def aten_meth_item(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "aten_meth_item",
+) -> T:
+    "float(x)"
+    if not g.has_shape(x):
+        # Shape is unknown but using this operator means it is a number.
+        # Let's unsqueeze
+        res = g.op.Squeeze(x, outputs=outputs, name=name)
+    else:
+        assert g.get_shape(x) in (tuple(), (1,)), (
+            f"Missing shape or unexpected shape for {x!r}: has_shape={g.has_shape(x)}, "
+            f"has_rank={g.has_rank(x)}{g.get_debug_msg()}"
+        )
+        if g.has_shape() == (1,):
+            res = g.op.SqueezeAnyOpset(
+                x, np.array([0], dtype=np.int64), outputs=outputs, name=name
+            )
+        else:
+            res = g.op.Identity(x, outputs=outputs, name=name)
+    if not sts:
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        g.set_shape(res, tuple())
+    return res
+
+
 def aten_meth_masked_fill(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
