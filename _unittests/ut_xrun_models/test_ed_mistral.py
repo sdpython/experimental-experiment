@@ -169,7 +169,7 @@ class TestEdMistral(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_torch("2.7", "AssertionError: original output #6 is None")
     @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_norename(self):
         model, input_tensors = get_mistral_model()

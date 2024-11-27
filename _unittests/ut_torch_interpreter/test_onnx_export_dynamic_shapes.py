@@ -11,7 +11,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator, OrtEval
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.torch_models.llama_helper import get_llama_model
 
 
@@ -303,6 +303,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 model,
                 input_tensors[0],
                 dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}},
+                export_options=ExportOptions(decomposition_table="default"),
             )
 
             for i in range(0, len(input_tensors)):
@@ -342,6 +343,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                         1: torch.export.Dim("length", min=1, max=2048),
                     }
                 },
+                export_options=ExportOptions(decomposition_table="default"),
             )
 
             for i in range(0, len(input_tensors)):
@@ -384,6 +386,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 optimize=False,
                 verbose=0,
                 return_builder=True,
+                export_options=ExportOptions(decomposition_table="default"),
             )
             self.assertIn("+ 1)", builder.pretty_text())
             if __name__ == "__main__":
@@ -437,6 +440,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 model,
                 input_tensors[0],
                 dynamic_shapes={"input_ids": {0: torch.export.Dim("batch", min=2, max=8192)}},
+                export_options=ExportOptions(decomposition_table="default"),
             )
 
             for i in range(0, len(input_tensors)):
@@ -519,6 +523,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                     verbose=0,
                     processor="CUDA",
                 ),
+                export_options=ExportOptions(decomposition_table="default"),
             )
 
         if __name__ == "__main__":
@@ -537,8 +542,6 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             feeds = {}
             for n, t in zip(sess.get_inputs(), input_tensors[i]):
                 feeds[n.name] = t.detach().cpu().numpy()
-            if __name__ == "__main__":
-                self._investigate(expected, feeds, onx, opts, providers, atol=1e-2)
             results = sess.run(None, feeds)
             self.assertEqualArray(
                 expected[0].detach().cpu().numpy(),
@@ -585,6 +588,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                     verbose=0,
                     processor="CUDA",
                 ),
+                export_options=ExportOptions(decomposition_table="all"),
             )
 
         if __name__ == "__main__":

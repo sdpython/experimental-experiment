@@ -3848,11 +3848,8 @@ def aten_index_put_(
     name="aten_index_put_",
 ) -> T:
     "M[..., :, ...] = ..."
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_index_put_)."
-    )
-    """
+    # index_put_ is expected to be an inplace modification but the fx graph does
+    # not reflect that.
     return aten_index_put(
         g,
         sts,
@@ -3863,7 +3860,6 @@ def aten_index_put_(
         accumulate=accumulate,
         name=aten__native_batch_norm_legit_no_training,
     )
-    """
 
 
 def aten_instance_norm(
