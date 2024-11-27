@@ -66,6 +66,7 @@ class TestDortBench(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7", "convert_element_type_default")
     def test_dort_bench_small_llama_cpu_debug(self):
         self._dort_bench_small_llama_cpu("debug")
 

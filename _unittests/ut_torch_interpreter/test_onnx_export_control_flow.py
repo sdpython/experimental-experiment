@@ -32,6 +32,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         return Bad1Fixed, torch.rand(5, 3)
 
     @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.6", "export of torch.cond")
     def test_controlflow_dynamo(self):
         import torch
 

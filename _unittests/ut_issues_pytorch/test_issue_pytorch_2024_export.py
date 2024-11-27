@@ -100,7 +100,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         onx = to_onnx(
             model,
             (input_ids, attention_mask),
-            export_options=ExportOptions(aten_as_function=True),
+            export_options=ExportOptions(aten_as_function=True, decomposition_table="default"),
             optimize=False,
         )
         onnx.save(onx, "test_mistral_nousers_aten.onnx")

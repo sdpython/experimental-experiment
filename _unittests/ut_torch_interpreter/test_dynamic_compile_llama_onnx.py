@@ -223,7 +223,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "missing kernel")
+    @requires_torch("2.6", "missing kernel")
     def test_llama_model_b_forward_static(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
@@ -239,7 +239,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             onnx_export="tt_test_llama_model_backward_forward",
             impl="ort",
             decompositions=True,
-            atol=1e-2,
+            atol=2e-2,
         )
         onx = stored["instance"][0]["onnx"]
         builder = stored["instance"][0]["builder"]

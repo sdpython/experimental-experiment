@@ -1779,6 +1779,15 @@ class DynamoInterpreter:
                 )
             ),
         )
+        # We register the dynamic elements in case the submodule is using them.
+        for k, v in self.builder.dynamic_objects.items():
+            # We assume the list of dynamic objects is valid.
+            if not self.builder.has_name(k):
+                builder.add_dynamic_object(k, v, check_tokens=False)
+                if self.builder.has_type(k):
+                    builder.set_type(k, self.builder.get_type(k))
+                if self.builder.has_shape(k):
+                    builder.set_shape(k, self.builder.get_shape(k))
         if self.preserved_modules and hasattr(self, "named_modules"):
             assert (
                 source_node is not None

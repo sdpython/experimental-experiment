@@ -2634,6 +2634,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         name: Optional[str] = None,
         dim: Optional[int] = None,
         parse: bool = False,
+        check_tokens: bool = True,
     ):
         """
         Registers a dynamic object such as a dynamic dimension.
@@ -2643,6 +2644,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param name: input name it comes from
         :param dim: dimension for this dimension in input
         :param parse: parse the expression add pieces of it as well
+        :param check_token: check that the subtoken are
+            registered prior to this addition
         """
         assert not isinstance(
             value, self.torch.export.dynamic_shapes._Dim
@@ -2662,7 +2665,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if parse:
             self.register_dynamic_objects_from_dim(key)
-        else:
+        elif check_tokens:
             tokens = parse_expression_tokens(key)
             for t in tokens:
                 if isinstance(t, str):
