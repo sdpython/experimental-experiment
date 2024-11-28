@@ -582,6 +582,16 @@ def max_diff(
                     return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
                 expected = torch.view_as_real(expected)
 
+            if expected.shape != got.shape:
+                if verbose >= 10:
+                    # To understand the value it comes from.
+                    if debug_info:
+                        print("\n".join(debug_info))
+                    print(
+                        f"[max_diff-s] expected.shape={expected.shape}, "
+                        f"got.shape={got.shape}"
+                    )
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
             diff = (got.to(torch.float64) - expected.to(torch.float64)).abs()
             rdiff = diff / (expected.abs() + 1e-3)
             abs_diff, rel_diff, sum_diff, n_diff = (

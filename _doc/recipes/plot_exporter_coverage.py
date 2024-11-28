@@ -53,15 +53,19 @@ obs = evaluation(
 df = pandas.DataFrame(obs).sort_values(["dynamic", "name", "exporter"]).reset_index(drop=True)
 df.to_csv("plot-exporter-coverage.csv", index=False)
 df.to_excel("plot-exporter-coverage.xlsx")
+for c in ["error", "error_step"]:
+    if c in df.columns:
+        df[c] = df[c].fillna("")
 print(df)
 
 ######################################
-# Simple Results
+# Errors if any or all successes.
 
 piv = df.pivot(
     index=["dynamic", "name"],
     columns=["exporter"],
     values="error_step" if "error_step" in df.columns else "success",
-).fillna("")
+)
+
 piv.to_excel("plot-exporter-coverage-summary.xlsx")
 print(piv)

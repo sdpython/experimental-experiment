@@ -694,7 +694,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             s = " x ".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
             info.append(": ".join([t, s]))
         if node.name:
-            return f"{text}|{' '.join(info)}             - {node.name}"
+            s = f"{text}|{' '.join(info)}"
+            return f"{s}{' ' * (110 - len(s))}- {node.name}"
         return f"{text}|{' '.join(info)}"
 
     def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:

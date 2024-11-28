@@ -23,6 +23,7 @@ class TestEval(ExtTestCase):
             exporters=(
                 "export-strict",
                 "export-nostrict",
+                "export-tracing",
                 "custom-strict",
                 "custom-nostrict",
                 "custom-strict-dec",
@@ -37,7 +38,7 @@ class TestEval(ExtTestCase):
     @requires_torch("2.6", "ONNXProgram.optimize missing")
     def test_run_exporter(self):
         evaluation(
-            cases="SignatureList", exporters="custom-strict", quiet=False, dynamic=False
+            cases="SignatureFixedList", exporters="custom-strict", quiet=False, dynamic=False
         )
 
 

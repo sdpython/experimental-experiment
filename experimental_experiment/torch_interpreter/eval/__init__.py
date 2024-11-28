@@ -1,6 +1,7 @@
 import contextlib
 import io
 import itertools
+import re
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import onnx
@@ -37,6 +38,7 @@ def evaluation(
     exporters: Tuple[str] = (
         "export-strict",
         "export-nostrict",
+        "export-tracing",
         "custom-strict",
         "custom-nostrict",
         "custom-tracing",
@@ -63,7 +65,16 @@ def evaluation(
     if isinstance(exporters, str):
         exporters = (exporters,)
     if isinstance(cases, (list, tuple)):
-        cases = {k: v for k, v in discover().items() if k in set(cases)}
+        all_cases = discover()
+        new_cases = []
+        for c in cases:
+            if "*" in c or "?" in c:
+                # regex
+                reg = re.compile(c)
+                new_cases.extend(k for k in all_cases if reg.match(k))
+            else:
+                new_cases.append(c)
+        cases = {k: v for k, v in all_cases.items() if k in set(new_cases)}
     if isinstance(dynamic, (bool, int)):
         dynamic = (dynamic,)
     sorted_cases = sorted(cases.items())
@@ -134,7 +145,8 @@ def _make_feeds(names, args):
     if len(names) == len(args):
         return {k: _to_numpy(v) for k, v in zip(names, args)}
     if len(names) > len(args):
-        return {k: _to_numpy(v) for k, v in zip(names, flatten_inputs(args))}
+        flats = flatten_inputs(args)
+        return {k: _to_numpy(v) for k, v in zip(names, flats)}
     from ...helpers import string_type
 
     raise RuntimeError(f"Unable to handle names={names!r} and args={string_type(args)}")
@@ -184,35 +196,52 @@ def run_exporter(
         )
 
     builder = None
+    onx = None
 
-    if exporter == "export-strict":
-        import torch
+    if exporter.startswith("export-"):
+        if exporter == "export-strict":
+            import torch
 
-        try:
-            exported = torch.export.export(
-                model, inputs[0], dynamic_shapes=dynamic_shapes, strict=True
-            )
-        except Exception as e:
-            if not quiet:
-                raise
-            return dict(error=str(e), success=0, error_step="export")
-        if verbose >= 9:
-            print(exported.graph)
-        mod = exported.module()
-    elif exporter == "export-nostrict":
-        import torch
+            try:
+                exported = torch.export.export(
+                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=True
+                )
+            except Exception as e:
+                if not quiet:
+                    raise
+                return dict(error=str(e), success=0, error_step="export")
+            if verbose >= 9:
+                print(exported.graph)
+            mod = exported.module()
+        elif exporter == "export-nostrict":
+            import torch
 
-        try:
-            exported = torch.export.export(
-                model, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
-            )
-        except Exception as e:
-            if not quiet:
-                raise
-            return dict(error=str(e), success=0, error_step="export")
-        if verbose >= 9:
-            print(exported.graph)
-        mod = exported.module()
+            try:
+                exported = torch.export.export(
+                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
+                )
+            except Exception as e:
+                if not quiet:
+                    raise
+                return dict(error=str(e), success=0, error_step="export")
+            if verbose >= 9:
+                print(exported.graph)
+            mod = exported.module()
+        elif exporter == "export-tracing":
+            import torch
+
+            try:
+                tracer_class = torch.fx.Tracer
+                graph = tracer_class().trace(model)
+                mod = torch.fx.GraphModule(model, graph)
+            except Exception as e:
+                if not quiet:
+                    raise
+                return dict(error=str(e), success=0, error_step="export")
+            if verbose >= 9:
+                print(graph)
+        else:
+            raise AssertionError(f"Unexpected exporter={exporter!r}")
     else:
         import onnxruntime
 
@@ -383,8 +412,9 @@ def run_exporter(
         else:
             raise AssertionError(f"Unexpected exporter={exporter!r}")
 
-        if verbose >= 9 and builder is not None:
-            print(builder.pretty_text())
+        if verbose >= 9:
+            print("[run_exporter] onnx model")
+            print(builder.pretty_text() if builder is not None else pretty_onnx(onx))
         if verbose >= 2:
             onnx.save(onx, f"evaluation-{model.__class__.__name__}-{dynamic}-{exporter}.onnx")
 
@@ -412,7 +442,7 @@ def run_exporter(
                 raise
             return dict(error=str(e), success=0, error_step="ort-init")
 
-        mod = lambda *args: sess.run(None, _make_feeds(names, inputs[0]))  # noqa: E731
+        mod = lambda *args, names=names: sess.run(None, _make_feeds(names, args))  # noqa: E731
 
     expected = model(*inputs[0])
     try:
@@ -432,6 +462,16 @@ def run_exporter(
             raise
         return dict(error=str(e), success=0, error_step="discrepancy")
 
+    if verbose >= 5 and np.isinf(disc["abs"]):
+        print("[run_exporter] comparison issues with")
+        print(f"--   inputs={string_type(inputs[0], with_shape=True)}")
+        print(f"-- exported={string_type(expected, with_shape=True)}")
+        print(f"--      got={string_type(got, with_shape=True)}")
+    elif verbose >= 9:
+        print("[run_exporter] inputs and outputs")
+        print(f"--   inputs={string_type(inputs[0], with_shape=True, with_min_max=True)}")
+        print(f"-- exported={string_type(expected, with_shape=True, with_min_max=True)}")
+        print(f"--      got={string_type(got, with_shape=True, with_min_max=True)}")
     del disc["n"]
     del disc["sum"]
     disc.update(dict(success=1 if disc["abs"] < 0.1 else 0))
@@ -441,7 +481,7 @@ def run_exporter(
     else:
         disc["success"] = 1
 
-    if dynamic:
+    if dynamic and onx is not None:
         ds = []
         for i in onx.graph.input:
             if i.type.tensor_type:
@@ -473,11 +513,23 @@ def run_exporter(
                     raise
                 return dict(error=str(e), success=0, error_step=f"discrepancy.{index}")
 
+            if verbose >= 5 and np.isinf(d["abs"]):
+                print(f"[run_exporter] comparison issues iteration {index}")
+                print(f"--   inputs={string_type(i, with_shape=True)}")
+                print(f"-- exported={string_type(expected, with_shape=True)}")
+                print(f"--      got={string_type(got, with_shape=True)}")
+            elif verbose >= 9:
+                print(f"[run_exporter] inputs and outputs iteration {index}")
+                print(f"--   inputs={string_type(i, with_shape=True, with_min_max=True)}")
+                print(
+                    f"-- exported={string_type(expected, with_shape=True, with_min_max=True)}"
+                )
+                print(f"--      got={string_type(got, with_shape=True, with_min_max=True)}")
             del d["n"]
             del d["sum"]
             if d["abs"] >= 0.1:
                 d["error"] = f"diff.{index}"
                 d["error_step"] = f"diff.{index}"
-                return disc.update(d)
+                disc.update(d)
 
     return disc

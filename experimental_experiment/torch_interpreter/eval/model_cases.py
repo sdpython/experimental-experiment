@@ -387,7 +387,7 @@ class SignatureInt2(torch.nn.Module):
     }
 
 
-class SignatureList(torch.nn.Module):
+class SignatureFixedList(torch.nn.Module):
     def __init__(self, n_dims: int = 3, n_targets: int = 1):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
@@ -411,6 +411,41 @@ class SignatureList(torch.nn.Module):
             [
                 (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
                 (torch.arange(8 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
+        ),
+    ]
+    _dynamic = {
+        "x": {0: torch.export.Dim("batch")},
+        "lx": [{0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")}],
+    }
+
+
+class SignatureVariableList(torch.nn.Module):
+    def __init__(self, n_dims: int = 3, n_targets: int = 1):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+        self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+    def forward(self, x, lx):
+        t = lx[0] * lx[1].sum(axis=1, keepdim=True)
+        if len(lx) > 2:
+            t = t + lx[2].sum(axis=1, keepdim=True)
+        return torch.sigmoid(self.linear(x)) - self.buff + t
+
+    _inputs = [
+        (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(4) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
+        ),
+        (
+            (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(8 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+                (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
             ],
         ),
     ]
@@ -450,4 +485,41 @@ class TypeBFloat16(torch.nn.Module):
         return (xb + xb).to(torch.float32)
 
     _inputs = (torch.rand(4, 4).to(torch.float32),)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class CropLastDimensionWithTensorShape(torch.nn.Module):
+
+    def forward(self, x, y):
+        return x[..., : y.shape[0]]
+
+    _inputs = [
+        (
+            torch.rand(3, 4, 4).to(torch.float32),
+            torch.rand(
+                2,
+            ).to(torch.float32),
+        ),
+        (
+            torch.rand(6, 4, 4).to(torch.float32),
+            torch.rand(
+                3,
+            ).to(torch.float32),
+        ),
+    ]
+    _dynamic = {
+        "x": {0: torch.export.Dim("batch")},
+        "y": {0: torch.export.Dim("crop", min=1, max=3)},
+    }
+
+
+class CropLastDimensionWithTensorContent(torch.nn.Module):
+
+    def forward(self, x, shape):
+        return x[..., : shape[0]]
+
+    _inputs = [
+        (torch.rand(3, 4, 4).to(torch.float32), torch.tensor([2], dtype=torch.int64)),
+        (torch.rand(6, 4, 4).to(torch.float32), torch.tensor([3], dtype=torch.int64)),
+    ]
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
