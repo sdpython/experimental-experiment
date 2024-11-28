@@ -34,6 +34,12 @@ class TestEval(ExtTestCase):
         self.assertIsInstance(ev, list)
         self.assertIsInstance(ev[0], dict)
 
+    @requires_torch("2.6", "ONNXProgram.optimize missing")
+    def test_run_exporter(self):
+        evaluation(
+            cases="SignatureList", exporters="custom-strict", quiet=False, dynamic=False
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2,6 +2,8 @@ import contextlib
 import io
 import itertools
 from typing import Any, Dict, List, Optional, Tuple
+import numpy as np
+import onnx
 
 
 def discover():
@@ -56,8 +58,14 @@ def evaluation(
     """
     if cases is None:
         cases = discover()
-    if isinstance(cases, list):
+    elif isinstance(cases, str):
+        cases = (cases,)
+    if isinstance(exporters, str):
+        exporters = (exporters,)
+    if isinstance(cases, (list, tuple)):
         cases = {k: v for k, v in discover().items() if k in set(cases)}
+    if isinstance(dynamic, (bool, int)):
+        dynamic = (dynamic,)
     sorted_cases = sorted(cases.items())
     loop = list(itertools.product(sorted_cases, dynamic, exporters))
     if verbose:
@@ -72,17 +80,72 @@ def evaluation(
                     print(f"[evaluation] {_}")
                     yield _
 
+    assert len(loop) > 0, f"No case to test for cases={cases!r}."
     obs = []
     for case, dyn, exporter in loop:
         name, cls_model = case
-        res = run_exporter(exporter, cls_model, dyn, quiet=quiet)
+        res = run_exporter(exporter, cls_model, dyn, quiet=quiet, verbose=max(0, verbose - 1))
         res.update(dict(name=name, dynamic=int(dyn), exporter=exporter))
         obs.append(res)
     return obs
 
 
+def flatten_inputs(x: Any) -> List["torch.Tensor"]:  # noqa: F821
+    """
+    Flatten inputs.
+    """
+    if x is None:
+        return x
+    import torch
+
+    if isinstance(x, (list, tuple)):
+        res = []
+        for i in x:
+            if i is None or isinstance(
+                i,
+                (
+                    torch.Tensor,
+                    torch.SymInt,
+                    torch.SymFloat,
+                    int,
+                    float,
+                ),
+            ):
+                res.append(i)
+            else:
+                res.extend(flatten_inputs(i))
+        return tuple(res) if isinstance(x, tuple) else res
+    raise AssertionError(f"Unexpected type {type(x)} for x")
+
+
+def _to_numpy(x):
+    if hasattr(x, "numpy"):
+        return x.numpy()
+    if isinstance(x, int):
+        # onnxruntime does not like scalar
+        return np.array([x], dtype=np.int64)
+    if isinstance(x, float):
+        # onnxruntime does not like scalar
+        return np.array([x], dtype=np.float64)
+    raise TypeError(f"Unable to convert type {type(x)}, x={x} into numpy")
+
+
+def _make_feeds(names, args):
+    if len(names) == len(args):
+        return {k: _to_numpy(v) for k, v in zip(names, args)}
+    if len(names) > len(args):
+        return {k: _to_numpy(v) for k, v in zip(names, flatten_inputs(args))}
+    from ...helpers import string_type
+
+    raise RuntimeError(f"Unable to handle names={names!r} and args={string_type(args)}")
+
+
 def run_exporter(
-    exporter: str, cls_model: type, dynamic: bool = False, quiet: bool = False
+    exporter: str,
+    cls_model: type,
+    dynamic: bool = False,
+    quiet: bool = False,
+    verbose: int = 0,
 ) -> Dict[str, Any]:
     """
     Runs an exporter and returns whether it fails or not.
@@ -92,9 +155,11 @@ def run_exporter(
     :param inputs: list of inputs to try
     :param dynamic: use dynamic shape or not
     :param quiet: raise exception or not
+    :param verbose: verbosity
     :return: results
     """
     from ...bench_run import max_diff
+    from ...helpers import string_type, pretty_onnx
 
     assert hasattr(
         cls_model, "_inputs"
@@ -112,6 +177,14 @@ def run_exporter(
     else:
         dynamic_shapes = None
 
+    if verbose > 0:
+        print(
+            f"[run_exporter] exporter={exporter}, model={cls_model.__name__}, "
+            f"dynamic={dynamic}, inputs={string_type(inputs,with_shape=True)}"
+        )
+
+    builder = None
+
     if exporter == "export-strict":
         import torch
 
@@ -123,6 +196,8 @@ def run_exporter(
             if not quiet:
                 raise
             return dict(error=str(e), success=0, error_step="export")
+        if verbose >= 9:
+            print(exported.graph)
         mod = exported.module()
     elif exporter == "export-nostrict":
         import torch
@@ -135,8 +210,9 @@ def run_exporter(
             if not quiet:
                 raise
             return dict(error=str(e), success=0, error_step="export")
+        if verbose >= 9:
+            print(exported.graph)
         mod = exported.module()
-
     else:
         import onnxruntime
 
@@ -144,71 +220,101 @@ def run_exporter(
             from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
             try:
-                onx = to_onnx(
+                onx, builder = to_onnx(
                     model,
                     inputs[0],
                     dynamic_shapes=dynamic_shapes,
                     export_options=ExportOptions(strict=True),
+                    return_builder=True,
                 )
             except Exception as e:
                 if not quiet:
-                    raise
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
                 return dict(error=str(e), success=0, error_step="export")
         elif exporter == "custom-strict-dec":
             from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
             try:
-                onx = to_onnx(
+                onx, builder = to_onnx(
                     model,
                     inputs[0],
                     dynamic_shapes=dynamic_shapes,
                     export_options=ExportOptions(strict=True, decomposition_table="default"),
+                    return_builder=True,
                 )
             except Exception as e:
                 if not quiet:
-                    raise
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
                 return dict(error=str(e), success=0, error_step="export")
         elif exporter == "custom-nostrict":
             from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
             try:
-                onx = to_onnx(
+                onx, builder = to_onnx(
                     model,
                     inputs[0],
                     dynamic_shapes=dynamic_shapes,
                     export_options=ExportOptions(strict=False),
+                    return_builder=True,
                 )
             except Exception as e:
                 if not quiet:
-                    raise
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
                 return dict(error=str(e), success=0, error_step="export")
         elif exporter == "custom-nostrict-dec":
             from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
             try:
-                onx = to_onnx(
+                onx, builder = to_onnx(
                     model,
                     inputs[0],
                     dynamic_shapes=dynamic_shapes,
                     export_options=ExportOptions(strict=False, decomposition_table="default"),
+                    return_builder=True,
                 )
             except Exception as e:
                 if not quiet:
-                    raise
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
                 return dict(error=str(e), success=0, error_step="export")
         elif exporter == "custom-tracing":
             from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
             try:
-                onx = to_onnx(
+                onx, builder = to_onnx(
                     model,
                     inputs[0],
                     dynamic_shapes=dynamic_shapes,
                     export_options=ExportOptions(tracing=True),
+                    return_builder=True,
                 )
             except Exception as e:
                 if not quiet:
-                    raise
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
                 return dict(error=str(e), success=0, error_step="export")
         elif exporter == "dynamo":
             import torch
@@ -225,7 +331,12 @@ def run_exporter(
                     ).model_proto
             except Exception as e:
                 if not quiet:
-                    raise
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
                 return dict(error=str(e), success=0, error_step="export")
         elif exporter == "dynamo-ir":
             import torch
@@ -244,15 +355,36 @@ def run_exporter(
                     onx = ep.model_proto
             except Exception as e:
                 if not quiet:
-                    raise
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
                 return dict(error=str(e), success=0, error_step="export")
         else:
             raise AssertionError(f"Unexpected exporter={exporter!r}")
 
+        if verbose >= 9 and builder is not None:
+            print(builder.pretty_text())
+        if verbose >= 2:
+            onnx.save(onx, f"evaluation-{model.__class__.__name__}-{dynamic}-{exporter}.onnx")
+
         names = [i.name for i in onx.graph.input]
-        assert len(names) == len(
-            inputs[0]
-        ), f"Input mismatch, {len(inputs[0])} inputs but names={names!r}"
+        flats = flatten_inputs(inputs[0]) if len(names) > len(inputs[0]) else inputs[0]
+
+        assert quiet or len(names) == len(flats), (
+            f"Input mismatch, inputs[0]={string_type(inputs[0])} "
+            f"inputs but names={names!r}, "
+            f"model={cls_model.__name__}, export={exporter!r}"
+        )
+        if len(names) != len(flats):
+            return dict(
+                error=f"Input mismatch, inputs[0]={string_type(inputs[0])} "
+                f"but names={names!r}, model={cls_model.__name__}, export={exporter!r}",
+                success=0,
+                error_step="inputs",
+            )
         try:
             sess = onnxruntime.InferenceSession(
                 onx.SerializeToString(), providers=["CPUExecutionProvider"]
@@ -262,24 +394,25 @@ def run_exporter(
                 raise
             return dict(error=str(e), success=0, error_step="ort-init")
 
-        mod = lambda *args: sess.run(  # noqa: E731
-            None, {k: v.numpy() for k, v in zip(names, args)}
-        )
+        mod = lambda *args: sess.run(None, _make_feeds(names, inputs[0]))  # noqa: E731
 
     expected = model(*inputs[0])
     try:
         got = mod(*inputs[0])
     except Exception as e:
         if not quiet:
-            raise
-        return dict(error=str(e), success=0, error_step="run")
+            raise RuntimeError(
+                f"onnxruntime failed, feeds=\n{string_type(inputs[0], with_shape=True)} "
+                f"\nmodel=\n{pretty_onnx(onx)}"
+            ) from e
+        return dict(error=str(e), success=0, error_step="run.0")
 
     try:
         disc = max_diff(expected, got)
     except Exception as e:
         if not quiet:
             raise
-        return dict(error=str(e), success=0, error_step="DISCREPANCY")
+        return dict(error=str(e), success=0, error_step="discrepancy")
 
     del disc["n"]
     del disc["sum"]
@@ -289,4 +422,44 @@ def run_exporter(
         disc["error_step"] = "DIFF"
     else:
         disc["success"] = 1
+
+    if dynamic:
+        ds = []
+        for i in onx.graph.input:
+            if i.type.tensor_type:
+                for di, dim in enumerate(i.type.tensor_type.shape.dim):
+                    if dim.dim_param:
+                        ds.append((i.name, di, dim.dim_param))
+        if verbose >= 2:
+            print(f"[run_exporter] dynamic dimension={ds}")
+        if not ds:
+            return dict(error="no dynamic shape", success=0, error_step="dynamic")
+
+    if dynamic and len(inputs) > 1:
+        for index, i in enumerate(inputs):
+            expected = model(*i)
+            try:
+                got = mod(*i)
+            except Exception as e:
+                if not quiet:
+                    raise RuntimeError(
+                        f"onnxruntime failed,\n-- feeds=\n{string_type(i, with_shape=True)} "
+                        f"\n-- model=\n{pretty_onnx(onx)}"
+                    ) from e
+                return dict(error=str(e), success=0, error_step=f"run.{index}")
+
+            try:
+                d = max_diff(expected, got)
+            except Exception as e:
+                if not quiet:
+                    raise
+                return dict(error=str(e), success=0, error_step=f"discrepancy.{index}")
+
+            del d["n"]
+            del d["sum"]
+            if d["abs"] >= 0.1:
+                d["error"] = f"diff.{index}"
+                d["error_step"] = f"diff.{index}"
+                return disc.update(d)
+
     return disc

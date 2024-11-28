@@ -18,7 +18,8 @@ script_args = get_parsed_args(
     dynamic=("all", "use dyanmic shapes"),
     case=("all", "model cases"),
     quiet=("1", "0 or 1"),
-    expose="exporter,dyanmic,case,quiet",
+    verbose=("1", "verbosity"),
+    expose="exporter,dyanmic,case,quiet,verbose",
 )
 
 exporters = (
@@ -37,16 +38,19 @@ exporters = (
 dynamic = (0, 1) if script_args.dynamic == "all" else (int(script_args.dynamic),)
 cases = None if script_args.case == "all" else script_args.case.split(",")
 quiet = bool(int(script_args.quiet))
+verbose = int(script_args.verbose)
 
 import pandas
 from experimental_experiment.torch_interpreter.eval import evaluation
 
-obs = evaluation(exporters=exporters, dynamic=dynamic, cases=cases, quiet=quiet, verbose=1)
+obs = evaluation(
+    exporters=exporters, dynamic=dynamic, cases=cases, quiet=quiet, verbose=verbose
+)
 
 #####################################
 # The results
 
-df = pandas.DataFrame(obs)
+df = pandas.DataFrame(obs).sort_values(["dynamic", "name", "exporter"]).reset_index(drop=True)
 df.to_csv("plot-exporter-coverage.csv", index=False)
 df.to_excel("plot-exporter-coverage.xlsx")
 print(df)

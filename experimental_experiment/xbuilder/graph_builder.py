@@ -702,6 +702,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         def _d(d1):
             if isinstance(d1, self.torch.SymInt):
                 return f"SymInt({self._torch_sym_int_to_str(d1)})"
+            if isinstance(d1, self.torch.SymBool):
+                return f"SymBool({self._torch_sym_int_to_str(d1)})"
             if isinstance(d1, self.WrapSym):
                 return repr(d1)
             if isinstance(d1, self.torch.export.dynamic_shapes._DerivedDim):
