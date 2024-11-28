@@ -320,15 +320,23 @@ def run_exporter(
             import torch
 
             try:
-                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                    io.StringIO()
-                ):
+                if verbose >= 2:
                     onx = torch.onnx.export(
                         model,
                         inputs[0],
                         dynamic_shapes=dynamic_shapes,
                         dynamo=True,
                     ).model_proto
+                else:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                        io.StringIO()
+                    ):
+                        onx = torch.onnx.export(
+                            model,
+                            inputs[0],
+                            dynamic_shapes=dynamic_shapes,
+                            dynamo=True,
+                        ).model_proto
             except Exception as e:
                 if not quiet:
                     raise RuntimeError(
@@ -342,9 +350,7 @@ def run_exporter(
             import torch
 
             try:
-                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                    io.StringIO()
-                ):
+                if verbose >= 2:
                     ep = torch.onnx.export(
                         model,
                         inputs[0],
@@ -353,6 +359,18 @@ def run_exporter(
                     )
                     ep.optimize()
                     onx = ep.model_proto
+                else:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                        io.StringIO()
+                    ):
+                        ep = torch.onnx.export(
+                            model,
+                            inputs[0],
+                            dynamic_shapes=dynamic_shapes,
+                            dynamo=True,
+                        )
+                        ep.optimize()
+                        onx = ep.model_proto
             except Exception as e:
                 if not quiet:
                     raise RuntimeError(
