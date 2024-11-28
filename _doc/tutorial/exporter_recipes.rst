@@ -11,3 +11,6 @@ Exporter Recipes
     exporter_recipes_onnx_export
     errors
     exporter_strict
+
+The export success is evaluated by script
+:ref:`plot-exporter-coverage`.

@@ -54,6 +54,7 @@ select = [
 ]
 "_doc/examples/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
 "_doc/notebooks/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
+"_doc/recipes/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
 "_doc/examples/plot_first_example.py" = ["F811"]
 "experimental_experiment/checks.py" = ["F401"]
 "experimental_experiment/torch_bench/big_models/main_spy_phi_35_vision_dummy.py" = ["E501"]

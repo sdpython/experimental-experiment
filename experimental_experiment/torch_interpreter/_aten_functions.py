@@ -6636,6 +6636,9 @@ def aten_roll(
     name: str = "roll",
 ) -> T:
     "roll"
+    assert isinstance(shifts, list) and isinstance(
+        dims, list
+    ), f"Unexpected values for shifts={shifts} and dims={dims}{g.get_debug_msg()}"
     assert len(shifts) == len(
         dims
     ), f"Unexpected values for shifts={shifts} and dims={dims}{g.get_debug_msg()}"
