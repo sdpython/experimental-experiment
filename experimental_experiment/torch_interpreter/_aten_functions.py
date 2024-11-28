@@ -5717,7 +5717,10 @@ def aten_nonzero(
     """nonzero"""
     if as_tuple:
         return aten_nonzero_numpy(g, sts, outputs, x, name=f"{name}_astuple")
-    res = g.op.Transpose(g.op.NonZero(x, name=name), perm=[1, 0], name=name, outputs=outputs)
+    y = g.op.NonZero(x, name=name)
+    g.set_type(y, TensorProto.INT64)
+    g.set_rank(y, 2)
+    res = g.op.Transpose(y, perm=[1, 0], name=name, outputs=outputs)
     if not sts:
         g.set_type(res, TensorProto.INT64)
         g.set_rank(res, 2)
@@ -5733,9 +5736,14 @@ def aten_nonzero_numpy(
 ) -> T:
     """nonzero numpy"""
     if len(outputs) > 1:
-        return g.op.NonZero(x, name=name, outputs=outputs)
+        res = g.op.NonZero(x, name=name, outputs=outputs)
+        if not sts:
+            g.set_type(res, TensorProto.INT64)
+        return res
     res = g.op.NonZero(x, name=name)
+    g.set_type(res, TensorProto.INT64)
     seq = g.op.SplitToSequence(res, axis=0, keepdims=0, outputs=outputs)
+    g.set_sequence(seq, TensorProto.INT64, ranks=1)
     return seq
 
 

@@ -83,7 +83,7 @@ class AtenNonZeroTuple(torch.nn.Module):
 
     def forward(self, x):
         y = torch.nonzero(x, as_tuple=True)
-        return y
+        return y[0], y[1]
 
     _inputs = (torch.randn(3, 4, requires_grad=False),)
     _dynamic = {"x": {0: torch.export.Dim("batch")}}

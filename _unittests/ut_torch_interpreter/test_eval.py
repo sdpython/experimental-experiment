@@ -4,6 +4,7 @@ from experimental_experiment.torch_interpreter.eval import discover, evaluation
 
 
 class TestEval(ExtTestCase):
+    @requires_torch("2.6", "scan")
     def test_discover(self):
         res = discover()
         self.assertNotEmpty(res)

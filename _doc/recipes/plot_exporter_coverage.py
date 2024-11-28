@@ -24,6 +24,9 @@ script_args = get_parsed_args(
 
 exporters = (
     (
+        "export-strict",
+        "export-nostrict",
+        "export-tracing",
         "custom-strict",
         "custom-nostrict",
         "custom-strict-dec",
@@ -31,6 +34,7 @@ exporters = (
         "custom-tracing",
         "dynamo",
         "dynamo-ir",
+        "script",
     )
     if script_args.exporter == "all"
     else script_args.exporter.split(",")

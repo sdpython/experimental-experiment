@@ -345,6 +345,56 @@ def run_exporter(
                         f"exporter={exporter!r}"
                     ) from e
                 return dict(error=str(e), success=0, error_step="export")
+        elif exporter == "script":
+            import torch
+
+            f = f"evaluation-{model.__class__.__name__}-{dynamic}-{exporter}.onnx"
+            dynamic_axes = {}
+            input_names = []
+            if dynamic_shapes:
+                for k, v in dynamic_shapes.items():
+                    dynamic_axes[k] = {_k: _v.__name__ for _k, _v in v.items()}
+                    input_names.append(k)
+            while len(input_names) < len(inputs[0]):
+                input_names.append(f"args_{len(input_names)}")
+            if verbose >= 5:
+                print(
+                    f"[run_exporter] dynamic_axes={dynamic_axes}, "
+                    f"dynamic_shapes={dynamic_shapes}, input_names={input_names}"
+                )
+            try:
+                if verbose >= 2:
+                    torch.onnx.export(
+                        model,
+                        inputs[0],
+                        f,
+                        dynamic_axes=dynamic_axes,
+                        input_names=input_names if dynamic_axes else None,
+                        dynamo=False,
+                    )
+                    onx = onnx.load(f)
+                else:
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                        io.StringIO()
+                    ):
+                        torch.onnx.export(
+                            model,
+                            inputs[0],
+                            f,
+                            dynamic_axes=dynamic_axes,
+                            input_names=input_names if dynamic_axes else None,
+                            dynamo=False,
+                        )
+                        onx = onnx.load(f)
+            except Exception as e:
+                if not quiet:
+                    raise RuntimeError(
+                        f"Unable to convert model={model.__class__.__name__}, "
+                        f"input={string_type(inputs[0], with_shape=True)}, "
+                        f"dynamic_shapes={dynamic_shapes}, "
+                        f"exporter={exporter!r}"
+                    ) from e
+                return dict(error=str(e), success=0, error_step="export")
         elif exporter == "dynamo":
             import torch
 

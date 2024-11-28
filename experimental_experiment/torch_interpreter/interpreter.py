@@ -649,9 +649,17 @@ class DynamoInterpreter:
         if val is None:
             for a, o in outputs:
                 if a is None:
+                    assert not self.builder.is_sequence(o), (
+                        f"Output sequences are not implemented but {o!r} is one"
+                        f"{self.builder.get_debug_msg()}"
+                    )
                     elem_type = self.builder.get_type(o)
                     shape = self.builder.get_shape(o)
                 else:
+                    assert not self.builder.is_sequence(a), (
+                        f"Output sequences are not implemented but {a!r} is one"
+                        f"{self.builder.get_debug_msg()}"
+                    )
                     elem_type = self.builder.get_type(a)
                     if self.builder.has_shape(a):
                         shape = self.builder.get_shape(a)
@@ -1073,10 +1081,13 @@ class DynamoInterpreter:
                         self.builder.set_shape(
                             res, info["shapes"][min(index, len(info["shapes"]) - 1)]
                         )
-                    else:
-                        self.builder.set_rank(
-                            res, info["ranks"][min(index, len(info["ranks"]) - 1)]
-                        )
+                    elif info["ranks"] is not None:
+                        if isinstance(info["ranks"], int):
+                            self.builder.set_rank(res, info["ranks"])
+                        else:
+                            self.builder.set_rank(
+                                res, info["ranks"][min(index, len(info["ranks"]) - 1)]
+                            )
                 return res
             else:
                 # A tensor.

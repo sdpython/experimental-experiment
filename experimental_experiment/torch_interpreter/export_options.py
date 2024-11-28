@@ -49,6 +49,7 @@ class ExportOptions:
         "fallback-default": {"fallback": True, "decomposition_table": "default"},
         "default": {"decomposition_table": "default"},
         "decomposition": {"decomposition_table": "default"},
+        "dec": {"decomposition_table": "default"},
     }
 
     def __init__(

@@ -1099,16 +1099,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         self,
         name: str,
         dtype: Union[int, Tuple[int, ...]],
-        shapes: Optional[DYNAMIC_SHAPE] = None,
+        shapes: Optional[Tuple[DYNAMIC_SHAPE, ...]] = None,
         ranks: Optional[Tuple[int, ...]] = None,
         unknown: bool = False,
     ):
         """
         Defines a result as a sequence.
         """
-        assert (
-            shapes is not None or ranks is not None or unknown
-        ), f"shapes or ranks must be defines for name={name!r}{self.get_debug_msg()}"
         assert self.has_name(name), f"No result name={name!r}{self.get_debug_msg()}"
         assert isinstance(dtype, (int, tuple)), (
             f"Only one type is allowed in onnx sequences but dtype={dtype!r}, "
