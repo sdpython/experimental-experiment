@@ -274,13 +274,19 @@ def run_exporter(
             raise
         return dict(error=str(e), success=0, error_step="run")
 
-    disc = max_diff(expected, got)
+    try:
+        disc = max_diff(expected, got)
+    except Exception as e:
+        if not quiet:
+            raise
+        return dict(error=str(e), success=0, error_step="DISCREPANCY")
+
     del disc["n"]
     del disc["sum"]
     disc.update(dict(success=1 if disc["abs"] < 0.1 else 0))
     if disc["abs"] >= 0.1:
-        disc["error"] = "DISCREPANCY"
-        disc["error_step"] = "DISCREPANCY"
+        disc["error"] = "DIFF"
+        disc["error_step"] = "DIFF"
     else:
         disc["success"] = 1
     return disc

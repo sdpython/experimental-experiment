@@ -1,5 +1,5 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, requires_torch
 from experimental_experiment.torch_interpreter.eval import discover, evaluation
 
 
@@ -14,6 +14,7 @@ class TestEval(ExtTestCase):
             else:
                 m(*m._inputs[0])
 
+    @requires_torch("2.6", "ONNXProgram.optimize missing")
     def test_eval(self):
         d = list(discover().items())[0]  # noqa: RUF015
         ev = evaluation(

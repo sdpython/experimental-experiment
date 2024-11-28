@@ -100,3 +100,258 @@ class AtenAsStrided(torch.nn.Module):
 
     _inputs = (torch.randn((2, 2, 8, 8), requires_grad=False),)
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ComplexPolar(torch.nn.Module):
+    def forward(self, x, angle):
+        return torch.polar(x, angle)
+
+    _inputs = (torch.rand(4, 4), torch.rand(4, 4))
+    _dynamic = {"x": {0: torch.export.Dim("batch")}, "angle": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowCond(torch.nn.Module):
+    def forward(self, x):
+        def true_fn(x):
+            return torch.sin(x)
+
+        def false_fn(x):
+            return torch.cos(x)
+
+        return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+
+    _inputs = (torch.rand(5, 3),)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowCond2Outputs(torch.nn.Module):
+    def forward(self, x):
+        def true_fn(x):
+            return torch.sin(x), torch.cos(x)
+
+        def false_fn(x):
+            return torch.cos(x), torch.sin(x)
+
+        return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+
+    _inputs = (torch.rand(5, 3),)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFloxCond2Inputs(torch.nn.Module):
+    def forward(self, x, y):
+        def true_fn(x, y):
+            return torch.sin(x), torch.cos(x) + y
+
+        def false_fn(x, y):
+            return torch.cos(x), torch.sin(x) + y
+
+        return torch.cond(x.sum() > 0, true_fn, false_fn, [x, y])
+
+    _inputs = torch.rand(5, 3), torch.rand(5, 3)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}, "y": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowNestCond(torch.nn.Module):
+    def forward(self, x):
+        def true_fn2(x):
+            def true_fn1(x):
+                return torch.sin(x)
+
+            def false_fn1(x):
+                return torch.cos(x)
+
+            return torch.cond(x.sum() < 0, true_fn1, false_fn1, [x])
+
+        def false_fn2(x):
+            return -x
+
+        return torch.cond(x.sum() > 0, true_fn2, false_fn2, [x])
+
+    _inputs = (torch.rand(5, 3),)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowCondConstant(torch.nn.Module):
+    def forward(self, x):
+        def true_fn(x):
+            return torch.sin(x) - torch.ones(x.shape, dtype=x.dtype)
+
+        def false_fn(x):
+            return torch.cos(x) + torch.ones((1, 1024), dtype=x.dtype)
+
+        return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+
+    _inputs = (torch.rand(1024, 1024),)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowCondNestedModule(torch.nn.Module):
+
+    class Submodule(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            # Nested weight
+            self.weight = torch.nn.Parameter(torch.tensor([100.0]))
+
+        def forward(self, x):
+            def true_fn(x):
+                return x * self.weight
+
+            def false_fn(x):
+                return x / self.weight
+
+            y = torch.cond(torch.abs(x).sum() > 100, true_fn, false_fn, [x])
+            return y
+
+    def __init__(self):
+        super().__init__()
+        self.submodule = ControlFlowCondNestedModule.Submodule()
+        self.weight = torch.nn.Parameter(torch.tensor([42.0]))
+
+    def forward(self, x):
+        def true_fn(x):
+            return self.submodule(x)
+
+        def false_fn(x):
+            return x - self.weight
+
+        y = torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+        return y
+
+    _inputs = (torch.tensor([-1, 2]),)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowScan(torch.nn.Module):
+
+    @staticmethod
+    def add(carry: torch.Tensor, y: torch.Tensor):
+        next_carry = carry + y
+        return [next_carry, next_carry]
+
+    def forward(self, x):
+        init = torch.zeros_like(x[0])
+        carry, out = torch.ops.higher_order.scan(
+            ControlFlowScan.add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+        )
+        return carry
+
+    _inputs = (torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32),)
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowScan2Carried(torch.nn.Module):
+    @staticmethod
+    def add(carry1: torch.Tensor, carry2: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor):
+        next_carry1 = carry1 + y1
+        next_carry2 = carry2 * y2
+        return [next_carry1, next_carry2, next_carry1, next_carry2]
+
+    def forward(self, x):
+        init1 = torch.zeros_like(x[0])
+        init2 = torch.ones_like(x[0])
+        carry1, carry2, out1, out2 = torch.ops.higher_order.scan(
+            ControlFlowScan2Carried.add,
+            [init1, init2],
+            [x, x * 2],
+            dim=0,
+            reverse=False,
+            additional_inputs=[],
+        )
+        return carry1, carry2, out1, out2
+
+    _inputs = (
+        torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
+    )
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowScanCDist(torch.nn.Module):
+    @staticmethod
+    def dist(carry: torch.Tensor, x: torch.Tensor):
+        sub = carry - x.reshape((1, -1))
+        sq = sub * sub
+        rd = sq.sum(axis=1) ** 0.5
+        # clone --> UnsupportedAliasMutationException:
+        # Combine_fn might be aliasing the input!
+        return [carry.clone(), rd]
+
+    def forward(self, x):
+        carry, out = torch.ops.higher_order.scan(
+            ControlFlowScanCDist.dist,
+            [x],
+            [x],
+            dim=0,
+            reverse=False,
+            additional_inputs=[],
+        )
+        return out
+
+    _inputs = (
+        torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
+    )
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowScanCDist2(torch.nn.Module):
+    @staticmethod
+    def dist(unused: torch.Tensor, x: torch.Tensor, samex: torch.Tensor):
+        sub = samex - x.reshape((1, -1))
+        sq = sub * sub
+        rd = torch.sqrt(sq.sum(axis=1))
+        # clone --> UnsupportedAliasMutationException:
+        # Combine_fn might be aliasing the input!
+        return [unused.clone(), rd]
+
+    def forward(self, x):
+        z = torch.tensor([0], dtype=torch.float32)
+        y = x.clone()
+        out = torch.ops.higher_order.scan(
+            ControlFlowScanCDist2.dist,
+            [z],
+            [x],
+            dim=0,
+            reverse=False,
+            additional_inputs=[y],
+        )
+        return out[1]
+
+    _inputs = (
+        torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
+    )
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowScanCDistXY(torch.nn.Module):
+
+    @staticmethod
+    def dist(y: torch.Tensor, scanned_x: torch.Tensor):
+        sub = y - scanned_x.reshape((1, -1))
+        sq = sub * sub
+        rd = torch.sqrt(sq.sum(axis=1))
+        # clone --> UnsupportedAliasMutationException:
+        # Combine_fn might be aliasing the input!
+        return [y.clone(), rd]
+
+    def forward(self, x, y):
+        carry, out = torch.ops.higher_order.scan(
+            ControlFlowScanCDistXY.dist,
+            [y],
+            [x],
+            dim=0,
+            reverse=False,
+            additional_inputs=[],
+        )
+        return out
+
+    _inputs = [
+        (torch.randn(3, 4), torch.randn(5, 4)),
+        (torch.randn(13, 14), torch.randn(15, 14)),
+    ]
+    _dynamic = (
+        {
+            "x": {0: torch.export.Dim("x_rows"), 1: torch.export.Dim("dim")},
+            "y": {0: torch.export.Dim("y_rows"), 1: torch.export.Dim("dim")},
+        },
+    )
