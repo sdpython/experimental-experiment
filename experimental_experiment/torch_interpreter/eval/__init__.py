@@ -37,10 +37,14 @@ def discover():
 def evaluation(
     exporters: Tuple[str] = (
         "export-strict",
+        "export-strict-dec",
         "export-nostrict",
+        "export-nostrict-dec",
         "export-tracing",
         "custom-strict",
+        "custom-strict-dec",
         "custom-nostrict",
+        "custom-nostrict-dec",
         "custom-tracing",
     ),
     dynamic: Tuple[bool] = (False, True),
@@ -138,6 +142,8 @@ def _to_numpy(x):
     if isinstance(x, float):
         # onnxruntime does not like scalar
         return np.array([x], dtype=np.float64)
+    if isinstance(x, list):
+        return [_to_numpy(_) for _ in x]
     raise TypeError(f"Unable to convert type {type(x)}, x={x} into numpy")
 
 
@@ -213,6 +219,21 @@ def run_exporter(
             if verbose >= 9:
                 print(exported.graph)
             mod = exported.module()
+        elif exporter == "export-strict-dec":
+            import torch
+
+            try:
+                exported = torch.export.export(
+                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=True
+                )
+                exported.run_decompositions({})
+            except Exception as e:
+                if not quiet:
+                    raise
+                return dict(error=str(e), success=0, error_step="export")
+            if verbose >= 9:
+                print(exported.graph)
+            mod = exported.module()
         elif exporter == "export-nostrict":
             import torch
 
@@ -220,6 +241,21 @@ def run_exporter(
                 exported = torch.export.export(
                     model, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
                 )
+            except Exception as e:
+                if not quiet:
+                    raise
+                return dict(error=str(e), success=0, error_step="export")
+            if verbose >= 9:
+                print(exported.graph)
+            mod = exported.module()
+        elif exporter == "export-nostrict-dec":
+            import torch
+
+            try:
+                exported = torch.export.export(
+                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
+                )
+                exported.run_decompositions({})
             except Exception as e:
                 if not quiet:
                     raise
@@ -352,7 +388,19 @@ def run_exporter(
             dynamic_axes = {}
             input_names = []
             if dynamic_shapes:
+                if not isinstance(dynamic_shapes, dict):
+                    return dict(
+                        error=f"unable to convert dynamic shapes {dynamic_shapes}",
+                        success=0,
+                        error_step="input",
+                    )
                 for k, v in dynamic_shapes.items():
+                    if not isinstance(v, dict):
+                        return dict(
+                            error=f"unable to convert dynamic shapes {dynamic_shapes}",
+                            success=0,
+                            error_step="input",
+                        )
                     dynamic_axes[k] = {_k: _v.__name__ for _k, _v in v.items()}
                     input_names.append(k)
             while len(input_names) < len(inputs[0]):
@@ -515,12 +563,12 @@ def run_exporter(
     if verbose >= 5 and np.isinf(disc["abs"]):
         print("[run_exporter] comparison issues with")
         print(f"--   inputs={string_type(inputs[0], with_shape=True)}")
-        print(f"-- exported={string_type(expected, with_shape=True)}")
+        print(f"-- expected={string_type(expected, with_shape=True)}")
         print(f"--      got={string_type(got, with_shape=True)}")
     elif verbose >= 9:
         print("[run_exporter] inputs and outputs")
         print(f"--   inputs={string_type(inputs[0], with_shape=True, with_min_max=True)}")
-        print(f"-- exported={string_type(expected, with_shape=True, with_min_max=True)}")
+        print(f"-- expected={string_type(expected, with_shape=True, with_min_max=True)}")
         print(f"--      got={string_type(got, with_shape=True, with_min_max=True)}")
     del disc["n"]
     del disc["sum"]
@@ -528,6 +576,8 @@ def run_exporter(
     if disc["abs"] >= 0.1:
         disc["error"] = "DIFF"
         disc["error_step"] = "DIFF"
+        if verbose >= 9:
+            max_diff(expected, got, verbose=verbose)
     else:
         disc["success"] = 1
 
@@ -552,7 +602,8 @@ def run_exporter(
                 if not quiet:
                     raise RuntimeError(
                         f"onnxruntime failed,\n-- feeds=\n{string_type(i, with_shape=True)} "
-                        f"\n-- model=\n{pretty_onnx(onx)}"
+                        f"exporter={exporter!r}, dynamic_shapes={dynamic_shapes}"
+                        f"\n-- model=\n{pretty_onnx(onx) if onx is not None else type(model)}"
                     ) from e
                 return dict(error=str(e), success=0, error_step=f"run.{index}")
 
@@ -566,13 +617,13 @@ def run_exporter(
             if verbose >= 5 and np.isinf(d["abs"]):
                 print(f"[run_exporter] comparison issues iteration {index}")
                 print(f"--   inputs={string_type(i, with_shape=True)}")
-                print(f"-- exported={string_type(expected, with_shape=True)}")
+                print(f"-- expected={string_type(expected, with_shape=True)}")
                 print(f"--      got={string_type(got, with_shape=True)}")
             elif verbose >= 9:
                 print(f"[run_exporter] inputs and outputs iteration {index}")
                 print(f"--   inputs={string_type(i, with_shape=True, with_min_max=True)}")
                 print(
-                    f"-- exported={string_type(expected, with_shape=True, with_min_max=True)}"
+                    f"-- expected={string_type(expected, with_shape=True, with_min_max=True)}"
                 )
                 print(f"--      got={string_type(got, with_shape=True, with_min_max=True)}")
             del d["n"]

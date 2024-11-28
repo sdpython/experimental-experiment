@@ -138,7 +138,7 @@ class ControlFlowCond2Outputs(torch.nn.Module):
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
 
-class ControlFloxCond2Inputs(torch.nn.Module):
+class ControlFlowCond2Inputs(torch.nn.Module):
     def forward(self, x, y):
         def true_fn(x, y):
             return torch.sin(x), torch.cos(x) + y
@@ -368,7 +368,7 @@ class SignatureInt1(torch.nn.Module):
         ((torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32), 1),
         ((torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32), 2),
     ]
-    _dynamic = ({0: torch.export.Dim("batch", min=1)}, None)
+    _dynamic = ({0: torch.export.Dim("batch", min=1, max=1024)}, None)
 
 
 class SignatureInt2(torch.nn.Module):

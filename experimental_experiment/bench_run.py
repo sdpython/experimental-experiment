@@ -570,7 +570,9 @@ def max_diff(
                 # out of boundary
                 return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
             if expected.dtype in (torch.complex64, torch.complex128):
-                if got.dtype not in (torch.float32, torch.float64):
+                if got.dtype == expected.dtype:
+                    got = torch.view_as_real(got)
+                elif got.dtype not in (torch.float32, torch.float64):
                     if verbose >= 10:
                         # To understand the value it comes from.
                         if debug_info:

@@ -25,7 +25,9 @@ script_args = get_parsed_args(
 exporters = (
     (
         "export-strict",
+        "export-strict-dec",
         "export-nostrict",
+        "export-nostrict-dec",
         "export-tracing",
         "custom-strict",
         "custom-nostrict",

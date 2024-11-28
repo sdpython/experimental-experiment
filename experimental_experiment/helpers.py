@@ -68,6 +68,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, torch.Tensor):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
+            if obj.dtype in {torch.complex64, torch.complex128}:
+                return f"{s}[{obj.abs().min()}:{obj.abs().max()}]"
             return f"{s}[{obj.min()}:{obj.max()}]"
         from .xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
@@ -174,8 +176,10 @@ def pretty_onnx(onx: Union[FunctionProto, GraphProto, ModelProto, str]) -> str:
     """
     Displays an onnx prot in a better way.
     """
+    assert onx is not None, "onx cannot be None"
     if isinstance(onx, str):
         onx = onnx_load(onx, load_external_data=False)
+    assert onx is not None, "onx cannot be None"
     try:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 

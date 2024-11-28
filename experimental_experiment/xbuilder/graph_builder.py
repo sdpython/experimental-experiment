@@ -722,6 +722,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return f"{{{s}}}"
             if isinstance(d1, (str, int)):
                 return f"{d1!r}"
+            if d1 is None:
+                return "None"
             raise AssertionError(f"Unexpected type for {type(d1)}")
 
         def _v(v):
@@ -1121,11 +1123,22 @@ class GraphBuilder(_GraphBuilderRuntime):
             if name not in self._known_sequences:
                 self._known_sequences[name] = d
             else:
-                assert self._known_sequences[name] == d, (
-                    f"Sequence {name!r} was already declared with a different type "
-                    f"or shape or rank, declared={self._known_sequences[name]}, "
-                    f"new={d}{self.get_debug_msg()}"
-                )
+                old = self._known_sequences[name]
+                new_value = {}
+                for k in ["dtype", "shapes", "ranks"]:
+                    e = old.get(k, None)
+                    n = new_value.get(k, None)
+                    if e is None:
+                        new_value[k] = n
+                    elif n is None:
+                        new_value[k] = e
+                    else:
+                        assert n == e, (
+                            f"Sequence {name!r} was already declared with a different value "
+                            f"for k={k!r}, existing={e!r}, new={n!r}, declared={old}, "
+                            f"new={d}{self.get_debug_msg()}"
+                        )
+                self._known_sequences[name] = new_value
 
     def set_name(self, name: str, marker: str):
         """Adds a name to the list of known names."""
@@ -2799,7 +2812,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         if shape is None:
             return None
-        if is_static_shape(shape):
+        try:
+            is_static = is_static_shape(shape)
+        except AssertionError as e:
+            raise AssertionError(
+                f"Unable to check static shape {string_type(shape)}{self.get_debug_msg()}"
+            ) from e
+        if is_static:
             return tuple(int(i) for i in shape)
         new_shape = []
         for dim, d in enumerate(shape):
@@ -7468,15 +7487,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             return tuple(example_shape)
 
         if isinstance(example_value, list):
-            if isinstance(dynamic_shapes, tuple):
+            if dynamic_shapes is None:
+                # No info, we use the example values
+                return [tuple(map(self._torch_sym_int_to_str, example_value[0].shape))]
+            elif isinstance(dynamic_shapes, tuple):
                 info = dynamic_shapes[input_index]
             elif isinstance(dynamic_shapes, dict):
                 info = dynamic_shapes.get(name, None)
             else:
                 raise NotImplementedError(
-                    f"Unexpected type for dynamic_shapes={string_type(dynamic_shapes)}"
+                    f"Unexpected type for dynamic_shapes={dynamic_shapes}, "
+                    f"example_value={string_type(example_value)}"
+                    f"{self.get_debug_msg()}"
                 )
-            return self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))
+            return [self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))]
 
         if example_shape is None and example_shape is None:
             if input_index < len(self.input_args):

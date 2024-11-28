@@ -408,12 +408,16 @@ class DynamoInterpreter:
         shape = self.builder.get_input_dynamic_shape(
             name, self.current_input_, example_shape=None, example_value=example_value
         )
+        assert isinstance(shape, list) and len(shape) == 1, (
+            f"For a sequence, shapes should be specified as a list of 1 element, "
+            f"shape={string_type(shape)}{self.builder.get_debug_msg()}"
+        )
         elem_type = _get_type(example_value[0].dtype)
         self.current_input_ += 1
         return self.builder.make_tensor_sequence_input(
             name,
             elem_type,
-            shape,
+            shape[0],
             marker="DynamoInterpreter._make_list_input",
         )
 
@@ -1695,7 +1699,14 @@ class DynamoInterpreter:
                             f"but dtype={dtype}{self.builder.get_debug_msg()}"
                         )
                         itype = torch_dtype_to_onnx_dtype(dtype[0])
-                        self.builder.set_sequence(r, itype, shapes=(_.shape for _ in v))
+                        self.builder.set_sequence(
+                            r,
+                            itype,
+                            shapes=tuple(
+                                tuple(map(self.builder._torch_sym_int_to_str, _.shape))
+                                for _ in v
+                            ),
+                        )
                 else:
                     raise TypeError(
                         f"Unexpected type in node {node!r}, r={r!r}, "
