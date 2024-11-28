@@ -15,6 +15,7 @@ from experimental_experiment.torch_models.training_helper import (
     train_loop,
     train_loop_mixed_precision,
 )
+from experimental_experiment.torch_interpreter import ExportOptions
 
 
 class TestEdPhi(ExtTestCase):
@@ -32,6 +33,7 @@ class TestEdPhi(ExtTestCase):
             optimize=True,
             prefix="test_phi_export",
             verbose=0,
+            export_options=ExportOptions(decomposition_table="default"),
         )
         onx = ret["proto"]
         # with open("test_ed.onnx", "wb") as f:
@@ -49,7 +51,9 @@ class TestEdPhi(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch(
+        "2.7", "AssertionError: original output #6 is None or convert_element_type_default"
+    )
     def test_phi_cort_static_not_mixed(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]

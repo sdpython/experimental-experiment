@@ -1,5 +1,3 @@
-.. _l-exporter-recipes:
-
 ================================================
 Parameter torch.export.export(..., strict: bool)
 ================================================
@@ -43,7 +41,7 @@ Here is an example with scan.
     print(torch.export.export(model, (x,), strict=True).graph)
 
 strict=False
-===========
+============
 
 'from_node' missing in node.meta
 ++++++++++++++++++++++++++++++++

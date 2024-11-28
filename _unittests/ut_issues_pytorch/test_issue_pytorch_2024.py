@@ -149,7 +149,13 @@ class TestIssuesPytorch2024(ExtTestCase):
         model = Model()
         input_tensor = torch.randn((1, 3, 3))
         expected = model(input_tensor)
-        onx = to_onnx(model, (input_tensor,), verbose=0, optimize=False)
+        onx = to_onnx(
+            model,
+            (input_tensor,),
+            verbose=0,
+            optimize=False,
+            export_options=ExportOptions(decomposition_table="default"),
+        )
         session = rt.InferenceSession(
             onx.SerializeToString(),
             providers=["CPUExecutionProvider"],
@@ -758,7 +764,12 @@ class TestIssuesPytorch2024(ExtTestCase):
                 fallback=False,
             )
         else:
-            to_onnx(model, example_inputs, filename=onnx_file_path)
+            to_onnx(
+                model,
+                example_inputs,
+                filename=onnx_file_path,
+                export_options=ExportOptions(decomposition_table="default"),
+            )
 
         onx = onnx.load(onnx_file_path)
         # ref = ExtendedReferenceEvaluator(onnx_file_path)
@@ -790,7 +801,13 @@ class TestIssuesPytorch2024(ExtTestCase):
                 fallback=False,
             )
         else:
-            to_onnx(model, example_inputs, filename=onnx_file_path, optimize=False)
+            to_onnx(
+                model,
+                example_inputs,
+                filename=onnx_file_path,
+                optimize=False,
+                export_options=ExportOptions(decomposition_table="default"),
+            )
 
         onx = onnx.load(onnx_file_path)
         # ref = ExtendedReferenceEvaluator(onnx_file_path)
@@ -927,7 +944,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         for exporter, d3, decomposition, dynamic in itertools.product(
             ["custom", "onnx_dynamo", "torch_script"],
             [True, False],
-            [False, True],
+            [True],  # no decomposition is not safe for inplace
             [False, True],
         ):
             with self.subTest(

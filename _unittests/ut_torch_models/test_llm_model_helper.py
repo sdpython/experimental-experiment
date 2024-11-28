@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     skipif_ci_windows,
     long_test,
+    requires_torch,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_models import flatten_outputs
@@ -215,6 +216,7 @@ class TestLlmModelHelper(ExtTestCase):
         )
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @requires_torch("2.7", "no decompositions leads to inplace functions")
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)

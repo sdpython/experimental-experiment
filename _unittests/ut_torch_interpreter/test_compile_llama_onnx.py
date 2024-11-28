@@ -406,6 +406,7 @@ class TestDynamoLlama(ExtTestCase):
             test_backward=True,
             dynamic=True,
             onnx_export="test_llama_decoder_backward",
+            decompositions=True,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -444,6 +445,7 @@ class TestDynamoLlama(ExtTestCase):
             dynamic=False,
             onnx_export="test_llama_attention_backward",
             impl="ref",
+            decompositions=True,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
@@ -508,6 +510,7 @@ class TestDynamoLlama(ExtTestCase):
             fullgraph=True,
             onnx_export="test_llama_model_backward_forward",
             impl="ref",
+            decompositions=True,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

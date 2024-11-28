@@ -432,11 +432,15 @@ def prepare_inputs_homogeneous_operator(
             if op_type in {"Mul", "Div", "Add", "Sub"} and len(set_itypes) > 1:
                 if set_itypes == {TensorProto.FLOAT, TensorProto.INT64}:
                     itype = TensorProto.FLOAT
+                elif set_itypes == {TensorProto.FLOAT, TensorProto.DOUBLE} and len(args) == 2:
+                    # This is usually the multiplication by a constant.
+                    # This is not efficient but that what's the exported program expects.
+                    itype = TensorProto.DOUBLE
             assert itype or len(set_itypes) == 1, (
-                f"Too many choices for the output type, sts={sts} "
-                f"dtypes_list={dtypes_list}, name={name!r}, "
-                f"dtypes_list_not_none={dtypes_list_not_none}\nargs={args}"
-                f"{g.get_debug_msg()}"
+                f"Too many choices for the output type, sts={sts}, itype={itype!r}, "
+                f"dtypes_list={dtypes_list}, set_itypes={set_itypes}, name={name!r}, "
+                f"dtypes_list_not_none={dtypes_list_not_none}, op_type={op_type!r}, "
+                f"\nargs={args}\noutputs={outputs}{g.get_debug_msg()}"
             )
             if not itype:
                 itype = dtypes_list_not_none[0]

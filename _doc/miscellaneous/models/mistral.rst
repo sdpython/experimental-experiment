@@ -12,7 +12,7 @@ Mistral
     from transformers import MistralConfig
     from transformers.models.mistral.modeling_mistral import MistralModel
     from experimental_experiment.helpers import pretty_onnx
-    from experimental_experiment.torch_interpreter import to_onnx
+    from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
     def ids_tensor(shape, vocab_size):
@@ -50,7 +50,11 @@ Mistral
         model(input_ids, input_mask)
 
         try:
-            onx = to_onnx(model, (input_ids, input_mask))
+            onx = to_onnx(
+                model,
+                (input_ids, input_mask),
+                export_options=ExportOptions(decomposition_table="default"),
+            )
             print(pretty_onnx(onx))
         except Exception as e:
             print(f"conversion is broken due to {e}")

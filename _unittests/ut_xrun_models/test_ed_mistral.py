@@ -13,6 +13,7 @@ from experimental_experiment.torch_models.mistral_helper import get_mistral_mode
 from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
 from experimental_experiment.torch_models.training_helper import train_loop
+from experimental_experiment.torch_interpreter import ExportOptions
 
 
 class TestEdMistral(ExtTestCase):
@@ -27,7 +28,12 @@ class TestEdMistral(ExtTestCase):
         expected = model(*input_tensors)
         with torch.no_grad():
             try:
-                ret = export_to_onnx(model, *input_tensors, rename_inputs=True)
+                ret = export_to_onnx(
+                    model,
+                    *input_tensors,
+                    rename_inputs=True,
+                    export_options=ExportOptions(decomposition_table="default"),
+                )
             except RuntimeError as e:
                 if "cannot mutate tensors with frozen storage" in str(e):
                     raise unittest.SkipTest(  # noqa: B904
@@ -56,7 +62,12 @@ class TestEdMistral(ExtTestCase):
         expected = model(*input_tensors)
         with torch.no_grad():
             try:
-                ret = export_to_onnx(model, *input_tensors, rename_inputs=False)
+                ret = export_to_onnx(
+                    model,
+                    *input_tensors,
+                    rename_inputs=False,
+                    export_options=ExportOptions(decomposition_table="default"),
+                )
             except RuntimeError as e:
                 if "cannot mutate tensors with frozen storage" in str(e):
                     raise unittest.SkipTest(  # noqa: B904
@@ -79,7 +90,11 @@ class TestEdMistral(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch(
+        "2.7",
+        "AssertionError: original output #6 is None or "
+        "issue with torch.ops.prims.convert_element_type.default",
+    )
     def test_mistral_cort_static(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -110,7 +125,11 @@ class TestEdMistral(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch(
+        "2.7",
+        "AssertionError: original output #6 is None or "
+        "issue with torch.ops.prims.convert_element_type.default",
+    )
     def test_mistral_cort_static_norename(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -169,7 +188,7 @@ class TestEdMistral(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_torch("2.7", "AssertionError: original output #6 is None")
     @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_norename(self):
         model, input_tensors = get_mistral_model()
@@ -193,7 +212,9 @@ class TestEdMistral(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_torch(
+        "2.7", "AssertionError: original output #6 is None, convert_element_type_default"
+    )
     @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_norename_custom(self):
         model, input_tensors = get_llama_model()

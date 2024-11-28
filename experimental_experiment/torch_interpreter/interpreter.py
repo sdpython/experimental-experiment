@@ -1287,6 +1287,31 @@ class DynamoInterpreter:
         can_set = self._can_set_shape_and_type(node)
         n_nodes = len(self.builder.nodes) + len(self.builder.initializers_dict)
 
+        assert (
+            len(node.users) > 0
+            or aten_name
+            in {
+                self.torch._C._set_grad_enabled,
+                self.torch._C._log_api_usage_once,
+                self.torch.amp.autocast_mode._enter_autocast,
+                self.torch.amp.autocast_mode._exit_autocast,
+                self.torch.ops.aten._assert_scalar.default,
+                self.torch.torch.sym_constrain_range_for_size,
+                "aten__exit_autocast",
+                "aten__enter_autocast",
+                "aten_FunctionCtx",
+            }
+            or (
+                hasattr(aten_name, "_opname")
+                and aten_name._opname in {"sym_constrain_range_for_size"}
+            )
+        ), (
+            f"This is probably one inplace function node={node!r}, "
+            f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
+            f"aten_name._opname={getattr(aten_name, '_opname', '?')}, "
+            f"output_names={output_names!r}{self.builder.get_debug_msg()}"
+        )
+
         if self.export_options.aten_as_function:
             res = self.add_aten_as_function(
                 str(aten_name), fct, can_set, output_names, args=args, kwargs=fx_kwargs
@@ -1754,6 +1779,15 @@ class DynamoInterpreter:
                 )
             ),
         )
+        # We register the dynamic elements in case the submodule is using them.
+        for k, v in self.builder.dynamic_objects.items():
+            # We assume the list of dynamic objects is valid.
+            if not self.builder.has_name(k):
+                builder.add_dynamic_object(k, v, check_tokens=False)
+                if self.builder.has_type(k):
+                    builder.set_type(k, self.builder.get_type(k))
+                if self.builder.has_shape(k):
+                    builder.set_shape(k, self.builder.get_shape(k))
         if self.preserved_modules and hasattr(self, "named_modules"):
             assert (
                 source_node is not None

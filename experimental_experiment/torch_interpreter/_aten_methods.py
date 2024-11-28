@@ -90,6 +90,36 @@ def aten_meth_float(
     return aten_meth_to(g, sts, outputs, x, dtype=torch.float32)
 
 
+def aten_meth_item(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "aten_meth_item",
+) -> T:
+    "float(x)"
+    if not g.has_shape(x):
+        # Shape is unknown but using this operator means it is a number.
+        # Let's unsqueeze
+        res = g.op.Squeeze(x, outputs=outputs, name=name)
+    else:
+        assert g.get_shape(x) in (tuple(), (1,)), (
+            f"Missing shape or unexpected shape for {x!r}: has_shape={g.has_shape(x)}, "
+            f"has_rank={g.has_rank(x)}{g.get_debug_msg()}"
+        )
+        if g.has_shape() == (1,):
+            res = g.op.SqueezeAnyOpset(
+                x, np.array([0], dtype=np.int64), outputs=outputs, name=name
+            )
+        else:
+            res = g.op.Identity(x, outputs=outputs, name=name)
+    if not sts:
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        g.set_shape(res, tuple())
+    return res
+
+
 def aten_meth_masked_fill(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -98,19 +128,7 @@ def aten_meth_masked_fill(
     mask: T,
     value: Any,
 ) -> T:
-    "constantofshape"
-    return aten_meth_masked_fill_(g, sts, outputs, x, mask, value)
-
-
-def aten_meth_masked_fill_(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    mask: T,
-    value: Any,
-) -> T:
-    "masked"
+    "masked_fill"
     if isinstance(value, float):
         itype = g.get_type(x)
         value_cast = g.make_initializer(
@@ -141,6 +159,21 @@ def aten_meth_masked_fill_(
         set_type_shape_binary_op(g, res, mask, value_cast, x, begin=1)
 
     return res
+
+
+def aten_meth_masked_fill_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value: Any,
+) -> T:
+    "masked"
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_meth_masked_fill_)."
+    )
 
 
 def aten_meth_mean(

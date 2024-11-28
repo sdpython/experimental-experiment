@@ -11,7 +11,7 @@ Phi3
     import torch
     from transformers import Phi3Config, Phi3Model
     from experimental_experiment.helpers import pretty_onnx
-    from experimental_experiment.torch_interpreter import to_onnx
+    from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
     def ids_tensor(shape, vocab_size):
@@ -49,5 +49,9 @@ Phi3
 
         model(input_ids, input_mask)
 
-        onx = to_onnx(model, (input_ids, input_mask))
+        onx = to_onnx(
+            model,
+            (input_ids, input_mask),
+            export_options=ExportOptions(decomposition_table="default"),
+        )
         print(pretty_onnx(onx))

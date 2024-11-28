@@ -11,7 +11,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
 
     @skipif_ci_windows("not working")
     @requires_torch("2.7")
-    def test_index_put_none_decompositions(self):
+    def test_export_index_put_none_decompositions(self):
         # see issue https://github.com/pytorch/pytorch/issues/141336
         import torch
 
@@ -37,7 +37,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # print(ep.graph)
         ep.run_decompositions()  # Fails here
 
-    def test_mistral_nousers(self):
+    def test_export_mistral_nousers(self):
         import onnx
         import torch
         import transformers
@@ -100,7 +100,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         onx = to_onnx(
             model,
             (input_ids, attention_mask),
-            export_options=ExportOptions(aten_as_function=True),
+            export_options=ExportOptions(aten_as_function=True, decomposition_table="default"),
             optimize=False,
         )
         onnx.save(onx, "test_mistral_nousers_aten.onnx")
@@ -129,7 +129,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # )
         # assert_close(tuple(torch.from_numpy(t) for t in got), flatten(expected.to_tuple()))
 
-    def test_inplace_affectation(self):
+    def test_export_inplace_raise(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -208,6 +208,87 @@ class TestIssuesPytorch2024Export(ExtTestCase):
                 (args = (%clone, %slice_scatter, 0, 0, 9223372036854775807), kwargs = {})
             return (slice_scatter_1,)
         """
+
+    def test_export_list(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, yz):
+                return x + yz[0] + yz[1]
+
+        model = Model()
+        x = torch.ones((4, 4))
+        x2 = x * x
+        # torch.export.export(model, (x,[x2, x2])) fails because
+        # the export detect a duplicated input and reuse whatever is possible.
+        ep = torch.export.export(model, (x, [x2, x2 * 2]))
+        print(ep.graph)
+        # this test should fail but it does not because torch.ops.aten.copy_.default
+        # is executed inplace.
+        torch.testing.assert_close(model(x, [x * 2, x * 3]), ep.module()(x, [x * 2, x * 3]))
+        ep = ep.run_decompositions()
+        print(ep.graph)
+        self.assertIn("yz_0", str(ep.graph))
+        print("-----")
+        print(torch.fx.Tracer().trace(model))
+
+    def test_export_inplace_add_(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                a = torch.tensor([2])
+                x.add_(a)
+                return a
+
+        model = Model()
+        x = torch.ones((4, 4))
+        ep = torch.export.export(model, (x,))
+        ep = ep.run_decompositions({})
+        self.assertNotIn("add_", str(ep.graph))
+
+    def test_export_inplace_setitem(self):
+        import operator
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                xc = x.clone()
+                y = xc[:, :2] * 2
+                xc[:, :2] = y
+                return xc + 2
+
+        model = Model()
+        x = torch.ones((4, 4))
+        ep = torch.export.export(model, (x,))
+        print(ep.graph)
+        ep = ep.run_decompositions({})
+        print(ep.graph)
+        self.assertIn("slice_scatter", str(ep.graph))
+
+        # this test should fail but it does not because torch.ops.aten.copy_.default
+        # is executed inplace.
+        torch.testing.assert_close(model(x), ep.module()(x))
+
+        class MyProxy(torch.fx.proxy.Proxy):
+            def __setitem__(self, *args, **kwargs):
+                assert not kwargs, f"Unexpected not empty kwargs={kwargs!r}"
+                assert len(args) == 2, f"Unexpected number of args={len(args)}: {args}"
+                indices, values = args
+                node = self.tracer.create_node(
+                    "call_function", operator.setitem, args=(indices, values.node), kwargs={}
+                )
+                # node_to_replace = self.node
+                return self.tracer.proxy(node)
+
+        class MyTracer(torch.fx.Tracer):
+            def proxy(self, node: torch.fx.Node) -> torch.fx.Proxy:
+                return MyProxy(node, self)
+
+        graph = MyTracer(autowrap_functions=(operator.setitem,)).trace(
+            model,
+        )
+        self.assertIn("operator.setitem", str(graph))
 
 
 if __name__ == "__main__":

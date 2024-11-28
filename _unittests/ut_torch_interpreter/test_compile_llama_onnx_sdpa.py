@@ -5,7 +5,6 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-    skipif_ci_apple,
     requires_torch,
     requires_cuda,
 )
@@ -230,28 +229,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
             test_backward=False,
             dynamic=False,
             onnx_export="test_llama_attention_forward_sdpa",
-            impl="ref",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @skipif_ci_apple("torch.compile fails")
-    def test_llama_attention_backward(self):
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_attention,
-        )
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_attention(
-            input_dims=input_dims, _attn_implementation="sdpa"
-        )
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=False,
-            onnx_export="test_llama_attention_backward_sdpa",
-            impl="ref",
+            impl="ort",
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

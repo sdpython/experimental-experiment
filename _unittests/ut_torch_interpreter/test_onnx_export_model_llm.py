@@ -12,7 +12,7 @@ from experimental_experiment.ext_test_case import (
     has_cuda,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.torch_models.mistral_helper import get_mistral_model
 from experimental_experiment.torch_models.llama_helper import (
     get_llama_attention,
@@ -166,6 +166,7 @@ class TestOnnxExportLlama(ExtTestCase):
                 *input_tensors,
                 remove_unused=True,
                 verbose=0,
+                export_options=ExportOptions(decomposition_table="default"),
             )
             xp = [x.numpy() for x in input_tensors]
             feeds = {f"input{i}": x for i, x in enumerate(xp)}
@@ -225,6 +226,7 @@ class TestOnnxExportLlama(ExtTestCase):
             *input_tensors,
             remove_unused=False,
             return_builder=True,
+            export_options=ExportOptions(decomposition_table="default"),
         )
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}

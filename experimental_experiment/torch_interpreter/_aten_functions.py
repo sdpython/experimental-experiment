@@ -103,7 +103,7 @@ def aten_add(
 ) -> T:
     "add"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts
+        g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts, op_type="Add"
     )
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
@@ -153,9 +153,11 @@ def aten_add__Tensor(
     x: T,
     y: T,
     alpha: Optional[Any] = None,
+    name: str = "add__Tensor",
 ) -> T:
     "add"
-    return aten_add_Tensor(g, sts, outputs, x, y, name="add__Tensor")
+    # inplace modifications but it seems to be correct.
+    return aten_add_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_addcmul(
@@ -298,12 +300,7 @@ def aten___and___Tensor(
     name: str = "__and___Tensor",
 ) -> T:
     "and"
-    res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
-    )
-    if not sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
-    return res
+    return aten_and(g, sts, outputs, x, y, name=name)
 
 
 def aten_or(
@@ -332,7 +329,10 @@ def aten_and_(
     name="and",
 ) -> T:
     "and"
-    return aten_and(g, sts, outputs, x, y, name="and_")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_and_)."
+    )
 
 
 def aten_logical_and(
@@ -619,6 +619,31 @@ def aten_as_strided(
         shape = g.get_shape(x)
         if np.prod(shape) == np.prod(size):
             return g.op.Reshape(x, np.array(size, dtype=np.int64), outputs=outputs, name=name)
+
+    if g.has_shape(x) and g.get_shape(x) == tuple(size):
+        # Identity
+        return g.op.Identity(x, outputs=outputs, name=name)
+
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)) and is_static_shape(size):
+        n_elems = np.prod(size)
+        indices = np.zeros(np.prod(size), dtype=np.int64)
+        shape_c = [1]
+        for r in reversed(size[1:]):
+            shape_c.append(shape_c[-1] * r)
+        shape_c = tuple(reversed(shape_c))
+        for dim, dimc, strid in zip(size, shape_c, stride):
+            i = ((np.arange(n_elems) // dimc) % dim) * strid
+            indices += i
+
+        flat = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+        g.set_type(flat, g.get_type(x))
+        g.set_shape(flat, (int(np.prod(g.get_shape(x))),))
+        new_values = g.op.Gather(flat, indices, name=name)
+        g.set_type(new_values, g.get_type(x))
+        g.set_shape(new_values, (int(np.prod(size)),))
+        return g.op.Reshape(
+            new_values, np.array(size, dtype=np.int64), name=name, outputs=outputs
+        )
 
     raise AssertionError(
         f"The implementation is still incorrect, x={x!r}, "
@@ -1021,17 +1046,28 @@ def aten_bitwise_or(
 
 
 def aten_bitwise_or_Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_or_Tensor",
 ) -> T:
     "bitwise or"
-    return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or_Tensor")
+    return aten_bitwise_or(g, sts, outputs, x, y, name=name)
 
 
 def aten_bitwise_or__Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_or__Tensor",
 ) -> T:
     "bitwise or"
-    return aten_bitwise_or(g, sts, outputs, x, y, name="bitwise_or__Tensor")
+    # The fx graph is using the output, the modified inplace input.
+    return aten_bitwise_or_Tensor(g, sts, outputs, x, y, name=name)
 
 
 def aten_bmm(
@@ -1770,7 +1806,10 @@ def aten_copy_(
     non_blocking: bool = False,
 ) -> T:
     "identity"
-    return aten_copy(g, sts, outputs, x, src, non_blocking, name="copy_")
+    raise RuntimeError(
+        f"These calls should be removed from the fx graph as it is inplace modification "
+        f"(aten_copy_){g.get_debug_msg()}"
+    )
 
 
 def aten_cos(
@@ -1932,7 +1971,10 @@ def aten_div__Tensor(
     name: str = "div__Tensor",
 ) -> T:
     "div"
-    return aten_div_Tensor(g, sts, outputs, x, y, alpha, name=name)
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_div__Tensor)."
+    )
 
 
 def aten_div_Tensor_mode(
@@ -3838,6 +3880,8 @@ def aten_index_put_(
     name="aten_index_put_",
 ) -> T:
     "M[..., :, ...] = ..."
+    # index_put_ is expected to be an inplace modification but the fx graph does
+    # not reflect that.
     return aten_index_put(
         g,
         sts,
@@ -5072,17 +5116,28 @@ def aten_mul_Scalar(
 
 
 def aten_mul_Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "mul_Tensor",
 ) -> T:
     "mul"
-    return aten_mul(g, sts, outputs, x, y, name="mul_Tensor")
+    return aten_mul(g, sts, outputs, x, y, name=name)
 
 
 def aten_mul__Tensor(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "mulà_Tensor",
 ) -> T:
     "mul"
-    return aten_mul(g, sts, outputs, x, y, name="mul__Tensor")
+    # The inline modification seems to be using the right output.
+    return aten_mul_Tensor(g, sts, outputs, x, y, name=name)
 
 
 def aten_multiply_Tensor(
@@ -5714,7 +5769,10 @@ def aten_not_(
     name: str = "not",
 ) -> T:
     "not"
-    return aten_not(g, sts, outputs, x, name="not_")
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_not_)."
+    )
 
 
 def aten_ones(
@@ -7729,7 +7787,10 @@ def aten_sub__Tensor(
     name: str = "sub__Tensor",
 ) -> T:
     "sub"
-    return aten_sub_Tensor(g, sts, outputs, x, y, alpha, name=name)
+    raise RuntimeError(
+        "These calls should be removed from the fx graph as it is inplace modification "
+        "(aten_sub__Tensor)."
+    )
 
 
 def aten_sum(
