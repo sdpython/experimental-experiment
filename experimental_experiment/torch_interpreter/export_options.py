@@ -32,7 +32,9 @@ class ExportOptions:
         import pprint
         from experimental_experiment.torch_interpreter import ExportOptions
 
+        print("-- default fallback")
         pprint.pprint(ExportOptions().get_fallback_options())
+        print("-- default fallback with decomposition")
         pprint.pprint(
             ExportOptions(decomposition_table="default").get_fallback_options()
         )
