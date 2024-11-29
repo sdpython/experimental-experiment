@@ -589,6 +589,10 @@ def _make_builder_interpreter(
         parameter_naming=parameter_naming or ParameterNaming(mod),
         module_name=module_name,
     )
+    attr = getattr(export_options, "_last_working", None)
+    if attr:
+        # Tweak to retrieve that information
+        interpreter._working_export_options = attr
     return (exported_program or graph_module), builder, interpreter, mask_outputs
 
 
@@ -807,6 +811,18 @@ def to_onnx(
     add_stats = {}
     t = time.perf_counter()
     add_stats["time_export_graph_module"] = t - begin
+    winning_opt = getattr(interpreter, "_working_export_options", None)
+    if winning_opt:
+        add_stats["onnx_export_options_strict"] = 1 if winning_opt.strict else 0
+        if winning_opt.decomposition_table:
+            add_stats["onnx_export_options_decomp"] = winning_opt.decomposition_table
+        if winning_opt.tracing:
+            add_stats["onnx_export_options_tracing"] = 1
+        if winning_opt.jit:
+            add_stats["onnx_export_options_jit"] = 1
+        if winning_opt.dynamo:
+            add_stats["onnx_export_options_dynamo"] = 1
+
     if verbose:
         print(f"[to_onnx] graph module done in {t - begin} s")
 
