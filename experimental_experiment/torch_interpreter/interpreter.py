@@ -408,12 +408,16 @@ class DynamoInterpreter:
         shape = self.builder.get_input_dynamic_shape(
             name, self.current_input_, example_shape=None, example_value=example_value
         )
+        assert isinstance(shape, list) and len(shape) == 1, (
+            f"For a sequence, shapes should be specified as a list of 1 element, "
+            f"shape={string_type(shape)}{self.builder.get_debug_msg()}"
+        )
         elem_type = _get_type(example_value[0].dtype)
         self.current_input_ += 1
         return self.builder.make_tensor_sequence_input(
             name,
             elem_type,
-            shape,
+            shape[0],
             marker="DynamoInterpreter._make_list_input",
         )
 
@@ -649,9 +653,17 @@ class DynamoInterpreter:
         if val is None:
             for a, o in outputs:
                 if a is None:
+                    assert not self.builder.is_sequence(o), (
+                        f"Output sequences are not implemented but {o!r} is one"
+                        f"{self.builder.get_debug_msg()}"
+                    )
                     elem_type = self.builder.get_type(o)
                     shape = self.builder.get_shape(o)
                 else:
+                    assert not self.builder.is_sequence(a), (
+                        f"Output sequences are not implemented but {a!r} is one"
+                        f"{self.builder.get_debug_msg()}"
+                    )
                     elem_type = self.builder.get_type(a)
                     if self.builder.has_shape(a):
                         shape = self.builder.get_shape(a)
@@ -1073,10 +1085,13 @@ class DynamoInterpreter:
                         self.builder.set_shape(
                             res, info["shapes"][min(index, len(info["shapes"]) - 1)]
                         )
-                    else:
-                        self.builder.set_rank(
-                            res, info["ranks"][min(index, len(info["ranks"]) - 1)]
-                        )
+                    elif info["ranks"] is not None:
+                        if isinstance(info["ranks"], int):
+                            self.builder.set_rank(res, info["ranks"])
+                        else:
+                            self.builder.set_rank(
+                                res, info["ranks"][min(index, len(info["ranks"]) - 1)]
+                            )
                 return res
             else:
                 # A tensor.
@@ -1684,7 +1699,14 @@ class DynamoInterpreter:
                             f"but dtype={dtype}{self.builder.get_debug_msg()}"
                         )
                         itype = torch_dtype_to_onnx_dtype(dtype[0])
-                        self.builder.set_sequence(r, itype, shapes=(_.shape for _ in v))
+                        self.builder.set_sequence(
+                            r,
+                            itype,
+                            shapes=tuple(
+                                tuple(map(self.builder._torch_sym_int_to_str, _.shape))
+                                for _ in v
+                            ),
+                        )
                 else:
                     raise TypeError(
                         f"Unexpected type in node {node!r}, r={r!r}, "
@@ -1751,7 +1773,7 @@ class DynamoInterpreter:
                         f"Unable to process argument {type(a)}{self.get_debug_msg()}"
                     )
 
-        graph_module, builder, interpreter = _make_builder_interpreter(
+        graph_module, builder, interpreter, mask_outputs = _make_builder_interpreter(
             gm,
             args=None if new_args is None else tuple(new_args),
             kwargs=None if kwargs is None else kwargs,
@@ -1779,6 +1801,9 @@ class DynamoInterpreter:
                 )
             ),
         )
+        assert mask_outputs is None or all(
+            mask_outputs
+        ), f"Unexpected value for mask_outputs={mask_outputs}{self.get_debug_msg()}"
         # We register the dynamic elements in case the submodule is using them.
         for k, v in self.builder.dynamic_objects.items():
             # We assume the list of dynamic objects is valid.

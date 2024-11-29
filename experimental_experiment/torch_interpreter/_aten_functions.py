@@ -5712,9 +5712,15 @@ def aten_nonzero(
     outputs: List[str],
     x: T,
     name: str = "nonzero",
+    as_tuple: bool = False,
 ) -> T:
     """nonzero"""
-    res = g.op.Transpose(g.op.NonZero(x, name=name), perm=[1, 0], name=name, outputs=outputs)
+    if as_tuple:
+        return aten_nonzero_numpy(g, sts, outputs, x, name=f"{name}_astuple")
+    y = g.op.NonZero(x, name=name)
+    g.set_type(y, TensorProto.INT64)
+    g.set_rank(y, 2)
+    res = g.op.Transpose(y, perm=[1, 0], name=name, outputs=outputs)
     if not sts:
         g.set_type(res, TensorProto.INT64)
         g.set_rank(res, 2)
@@ -5730,9 +5736,14 @@ def aten_nonzero_numpy(
 ) -> T:
     """nonzero numpy"""
     if len(outputs) > 1:
-        return g.op.NonZero(x, name=name, outputs=outputs)
+        res = g.op.NonZero(x, name=name, outputs=outputs)
+        if not sts:
+            g.set_type(res, TensorProto.INT64)
+        return res
     res = g.op.NonZero(x, name=name)
+    g.set_type(res, TensorProto.INT64)
     seq = g.op.SplitToSequence(res, axis=0, keepdims=0, outputs=outputs)
+    g.set_sequence(seq, TensorProto.INT64, ranks=1)
     return seq
 
 
@@ -6636,6 +6647,13 @@ def aten_roll(
     name: str = "roll",
 ) -> T:
     "roll"
+    if isinstance(dims, int):
+        dims = [dims]
+    if isinstance(shifts, int):
+        shifts = [shifts]
+    assert isinstance(shifts, list) and isinstance(
+        dims, list
+    ), f"Unexpected values for shifts={shifts} and dims={dims}{g.get_debug_msg()}"
     assert len(shifts) == len(
         dims
     ), f"Unexpected values for shifts={shifts} and dims={dims}{g.get_debug_msg()}"
@@ -8753,6 +8771,50 @@ def aten_upsample_trilinear3d_vec(
     # )
     scales = [None, None, None]
     return aten_upsample_trilinear3d(g, sts, outputs, x, osize, *scales, name=name)
+
+
+def aten_interpolate(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    size: Optional[T] = None,
+    mode: str = "bilinear",
+    align_corners: Optional[bool] = None,
+    scale_factor: Optional[float] = None,
+    recompute_scale_factor: bool = False,
+    antialias: bool = False,
+    name: str = "interpolate",
+) -> T:
+    "interpolate"
+    assert g.has_rank(x), f"Rank is missing for {x!r} (interpolate){g.get_debug_msg()}"
+    rk = g.get_rank(x)
+    if rk - 2 == 2:
+        if mode == "bilinear":
+            assert not recompute_scale_factor, (
+                f"not implemented for recompute_scale_factor={recompute_scale_factor}"
+                f"{g.get_debug_msg()}"
+            )
+            assert (
+                not antialias
+            ), f"not implemented for antialias={antialias}{g.get_debug_msg()}"
+            return aten_upsample_bilinear2d_vec(
+                g,
+                sts,
+                outputs,
+                x,
+                output_size=size,
+                align_corners=align_corners,
+                scale_factors=[scale_factor, scale_factor],
+                name=name,
+            )
+    raise NotImplementedError(
+        f"aten_interpolate not implemented for rank(x)={rk}, "
+        f"size={size}, mode={mode!r}, align_corners={align_corners!r}, "
+        f"scale_factor={scale_factor!r}, "
+        f"recompute_scale_factor={recompute_scale_factor}, antialias={antialias}"
+        f"{g.get_debug_msg()}"
+    )
 
 
 def aten_view(

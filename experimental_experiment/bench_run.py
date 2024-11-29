@@ -521,7 +521,6 @@ def max_diff(
         output, this number will be the number of elements
         of this output
     """
-
     if hasattr(expected, "to_tuple"):
         return max_diff(
             expected.to_tuple(),
@@ -569,6 +568,31 @@ def max_diff(
             if _index < begin or (end != -1 and _index >= end):
                 # out of boundary
                 return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
+            if expected.dtype in (torch.complex64, torch.complex128):
+                if got.dtype == expected.dtype:
+                    got = torch.view_as_real(got)
+                elif got.dtype not in (torch.float32, torch.float64):
+                    if verbose >= 10:
+                        # To understand the value it comes from.
+                        if debug_info:
+                            print("\n".join(debug_info))
+                        print(
+                            f"[max_diff-c] expected.dtype={expected.dtype}, "
+                            f"got.dtype={got.dtype}"
+                        )
+                    return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+                expected = torch.view_as_real(expected)
+
+            if expected.shape != got.shape:
+                if verbose >= 10:
+                    # To understand the value it comes from.
+                    if debug_info:
+                        print("\n".join(debug_info))
+                    print(
+                        f"[max_diff-s] expected.shape={expected.shape}, "
+                        f"got.shape={got.shape}"
+                    )
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
             diff = (got.to(torch.float64) - expected.to(torch.float64)).abs()
             rdiff = diff / (expected.abs() + 1e-3)
             abs_diff, rel_diff, sum_diff, n_diff = (

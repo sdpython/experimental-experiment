@@ -36,6 +36,12 @@ class ExportOptions:
         pprint.pprint(
             ExportOptions(decomposition_table="default").get_fallback_options()
         )
+
+    Most of the models works with strict=True or False and no decompositions.
+    But if it contains control flows (test or loop), inplace modifications,
+    it may be useful to try different values for strict and to apply decompositions
+    ``decomposition_table='default'``. The decompositions removes unused results
+    coming from inplace modifications.
     """
 
     _allowed = {
@@ -47,8 +53,11 @@ class ExportOptions:
         "jit": {"jit": True},
         "fallback": {"fallback": True},
         "fallback-default": {"fallback": True, "decomposition_table": "default"},
+        "fallback-decomposition": {"fallback": True, "decomposition_table": "default"},
+        "fallback-dec": {"fallback": True, "decomposition_table": "default"},
         "default": {"decomposition_table": "default"},
         "decomposition": {"decomposition_table": "default"},
+        "dec": {"decomposition_table": "default"},
     }
 
     def __init__(

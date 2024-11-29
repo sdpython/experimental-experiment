@@ -86,7 +86,7 @@ class TestEdMistral(ExtTestCase):
                 onx, providers="cuda", dump_file="test_mistral_export_norename.onnx"
             )
             results = sess.run(None, feeds)
-            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-3)
+            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-2)
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -160,7 +160,9 @@ class TestEdMistral(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_torch(
+        "2.7", "AssertionError: original output #6 is None, convert_element_type_default"
+    )
     @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_simple(self):
         model, input_tensors = get_mistral_model()

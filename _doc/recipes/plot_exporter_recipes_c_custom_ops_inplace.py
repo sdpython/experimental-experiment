@@ -20,7 +20,7 @@ import torch
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.xbuilder import GraphBuilder
 from experimental_experiment.helpers import pretty_onnx
-from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
+from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
 
 
 #################################
@@ -115,13 +115,25 @@ dispatcher = Dispatcher({"mylib::numpy_sin": numpy_sin_to_onnx})
 #####################################
 # And we convert again.
 
-onx = to_onnx(model, (x,), dispatcher=dispatcher, optimize=False)
+onx = to_onnx(
+    model,
+    (x,),
+    dispatcher=dispatcher,
+    optimize=False,
+    export_options=ExportOptions(decomposition_table="default"),
+)
 print(pretty_onnx(onx))
 
 #####################################
 # And we convert again with optimization this time.
 
-onx = to_onnx(model, (x,), dispatcher=dispatcher, optimize=True)
+onx = to_onnx(
+    model,
+    (x,),
+    dispatcher=dispatcher,
+    optimize=True,
+    export_options=ExportOptions(decomposition_table="default"),
+)
 print(pretty_onnx(onx))
 
 ####################################

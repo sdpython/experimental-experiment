@@ -2,12 +2,9 @@
 experimental_experiment.torch_interpreter
 =========================================
 
-
-
 .. toctree::
     :maxdepth: 1
     :caption: modules
-
 
     _aten_functions
     _aten_functions_attention
@@ -25,6 +22,7 @@ experimental_experiment.torch_interpreter
     onnx_export_errors
     oxs_dispatcher
     oxs_opset
+    eval/index
 
 to_onnx
 +++++++

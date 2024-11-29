@@ -986,6 +986,8 @@ def _build_aggregated_document(
     for k, v in res.items():
         if k in {"0main"}:
             continue
+        if k.startswith("op_"):
+            continue
         for c in v.columns:
             if "output_names" in c or "input_names" in c:
                 continue

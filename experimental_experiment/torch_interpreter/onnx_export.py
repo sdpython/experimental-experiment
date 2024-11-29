@@ -176,6 +176,7 @@ def _retrieve(
             f"{name!r} mapped to buffer {new_name!r}."
         )
         return value
+
     if new_name in constants:
         value = constants[new_name]
         import torch
@@ -377,6 +378,7 @@ def _make_builder_interpreter(
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
     "DynamoInterpreter",  # noqa: F821
+    Optional[List[bool]],
 ]:
     """
     Exports a torch model into ONNX using
@@ -405,7 +407,7 @@ def _make_builder_interpreter(
     :param submodule_naming: a function which returns a submodule name in the onnx graph
     :param parameter_naming: a function which returns a parameter name in the onnx graph
     :param module_name: name of the module, to help retrieve the parameter name
-    :return: onnx model
+    :return: onnx model, interpreter, graph builder, mask_outputs
     """
 
     def _get(x, att=None):
@@ -427,6 +429,7 @@ def _make_builder_interpreter(
     if export_options is None:
         export_options = ExportOptions()
 
+    mask_outputs = None
     if isinstance(mod, torch.fx.GraphModule):
         if verbose > 0:
             print(f"[_make_builder_interpreter] use existing {type(mod)}")
@@ -495,6 +498,7 @@ def _make_builder_interpreter(
         else:
             # A bug may appear later.
             constants = {}
+
         if hasattr(exported_program, "graph_signature"):
             sig_mismatch_constants = set(k.replace(".", "_") for k in constants)
             signature = exported_program.graph_signature
@@ -527,6 +531,10 @@ def _make_builder_interpreter(
                     f"\ndir(export_mod)={dir(exported_program)}"
                     f"\ndir(mod)={dir(mod)}"
                 )
+            mask_outputs = [
+                spec.kind == torch.export.graph_signature.OutputKind.USER_OUTPUT
+                for spec in exported_program.graph_signature.output_specs
+            ]
         else:
             mapping = {}
             for k in weights:
@@ -581,7 +589,7 @@ def _make_builder_interpreter(
         parameter_naming=parameter_naming or ParameterNaming(mod),
         module_name=module_name,
     )
-    return (exported_program or graph_module), builder, interpreter
+    return (exported_program or graph_module), builder, interpreter, mask_outputs
 
 
 def _model_signature(
@@ -778,7 +786,7 @@ def to_onnx(
         if dynamic_shapes:
             print(f"[to_onnx] dynamic_shapes={dynamic_shapes}")
 
-    graph_module, builder, interpreter = _make_builder_interpreter(
+    graph_module, builder, interpreter, mask_outputs = _make_builder_interpreter(
         mod=mod,
         args=args,
         kwargs=kwargs,
@@ -838,7 +846,10 @@ def to_onnx(
     add_stats["time_export_builder_process"] = t - begin
     if verbose:
         print(f"[to_onnx] {len(builder.nodes)} onnx nodes done in {t - begin} s")
-        print("[to_onnx] start conversion to onnx (before optimization)")
+        print(
+            f"[to_onnx] start conversion to onnx (before optimization) "
+            f"mask_outputs={mask_outputs}"
+        )
 
     begin = t
     onx, stats = builder.to_onnx(
@@ -848,6 +859,7 @@ def to_onnx(
         return_optimize_report=True,
         inline=inline,
         function_options=function_options,
+        mask_outputs=mask_outputs,
     )
     all_stats = dict(builder=builder.statistics_)
     if stats:

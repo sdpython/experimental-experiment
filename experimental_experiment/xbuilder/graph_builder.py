@@ -694,7 +694,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             s = " x ".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
             info.append(": ".join([t, s]))
         if node.name:
-            return f"{text}|{' '.join(info)}             - {node.name}"
+            s = f"{text}|{' '.join(info)}"
+            return f"{s}{' ' * (110 - len(s))}- {node.name}"
         return f"{text}|{' '.join(info)}"
 
     def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
@@ -702,6 +703,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         def _d(d1):
             if isinstance(d1, self.torch.SymInt):
                 return f"SymInt({self._torch_sym_int_to_str(d1)})"
+            if isinstance(d1, self.torch.SymBool):
+                return f"SymBool({self._torch_sym_int_to_str(d1)})"
             if isinstance(d1, self.WrapSym):
                 return repr(d1)
             if isinstance(d1, self.torch.export.dynamic_shapes._DerivedDim):
@@ -719,6 +722,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return f"{{{s}}}"
             if isinstance(d1, (str, int)):
                 return f"{d1!r}"
+            if d1 is None:
+                return "None"
             raise AssertionError(f"Unexpected type for {type(d1)}")
 
         def _v(v):
@@ -1096,16 +1101,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         self,
         name: str,
         dtype: Union[int, Tuple[int, ...]],
-        shapes: Optional[DYNAMIC_SHAPE] = None,
+        shapes: Optional[Tuple[DYNAMIC_SHAPE, ...]] = None,
         ranks: Optional[Tuple[int, ...]] = None,
         unknown: bool = False,
     ):
         """
         Defines a result as a sequence.
         """
-        assert (
-            shapes is not None or ranks is not None or unknown
-        ), f"shapes or ranks must be defines for name={name!r}{self.get_debug_msg()}"
         assert self.has_name(name), f"No result name={name!r}{self.get_debug_msg()}"
         assert isinstance(dtype, (int, tuple)), (
             f"Only one type is allowed in onnx sequences but dtype={dtype!r}, "
@@ -1121,11 +1123,22 @@ class GraphBuilder(_GraphBuilderRuntime):
             if name not in self._known_sequences:
                 self._known_sequences[name] = d
             else:
-                assert self._known_sequences[name] == d, (
-                    f"Sequence {name!r} was already declared with a different type "
-                    f"or shape or rank, declared={self._known_sequences[name]}, "
-                    f"new={d}{self.get_debug_msg()}"
-                )
+                old = self._known_sequences[name]
+                new_value = {}
+                for k in ["dtype", "shapes", "ranks"]:
+                    e = old.get(k, None)
+                    n = new_value.get(k, None)
+                    if e is None:
+                        new_value[k] = n
+                    elif n is None:
+                        new_value[k] = e
+                    else:
+                        assert n == e, (
+                            f"Sequence {name!r} was already declared with a different value "
+                            f"for k={k!r}, existing={e!r}, new={n!r}, declared={old}, "
+                            f"new={d}{self.get_debug_msg()}"
+                        )
+                self._known_sequences[name] = new_value
 
     def set_name(self, name: str, marker: str):
         """Adds a name to the list of known names."""
@@ -2799,7 +2812,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         if shape is None:
             return None
-        if is_static_shape(shape):
+        try:
+            is_static = is_static_shape(shape)
+        except AssertionError as e:
+            raise AssertionError(
+                f"Unable to check static shape {string_type(shape)}{self.get_debug_msg()}"
+            ) from e
+        if is_static:
             return tuple(int(i) for i in shape)
         new_shape = []
         for dim, d in enumerate(shape):
@@ -4548,6 +4567,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return_optimize_report: bool = False,
         inline: bool = False,
         function_options: Optional[FunctionOptions] = None,
+        mask_outputs: Optional[List[bool]] = None,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer, Dict[str, Any]]:
         """
         Conversion to onnx. Only then the initializers are converted into TensorProto.
@@ -4563,6 +4583,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param inline: inline local functions, this is done before
             any optimization takes place
         :param function_options: to be set to export as a function
+        :param mask_outputs: to filter out some outputs if not None
         :return: the proto
         """
         assert self.nodes, f"No node to convert{self.get_debug_msg()}"
@@ -4603,6 +4624,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
+        if mask_outputs is None:
+            mask_outputs = [True for o in self.outputs]
+        else:
+            assert len(mask_outputs) == len(self.outputs), (
+                f"Length mismatch between mask={mask_outputs} and outputs "
+                f"{self.outputs}{self.get_debug_msg()}"
+            )
         if function_options.export_as_function:
             if self._debug_local_function:
                 print(f"[GraphBuilder.to_onnx] export_as_function {function_options}")
@@ -4646,7 +4674,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 function_options.domain,
                 function_options.name,
                 [i.name for i in self.inputs],
-                [o.name for o in self.outputs],
+                [o.name for mask, o in zip(mask_outputs, self.outputs) if mask],
                 self.nodes,
                 opsets,
             )
@@ -4702,7 +4730,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         model = ModelProto()
         model.graph.CopyFrom(GraphProto())
         model.graph.name = "experiment"
-        model.graph.output.extend(self.outputs)
+        model.graph.output.extend(o for mask, o in zip(mask_outputs, self.outputs) if mask)
 
         if self._parameter_renaming:
             assert self.initializers_dict, (
@@ -7468,15 +7496,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             return tuple(example_shape)
 
         if isinstance(example_value, list):
-            if isinstance(dynamic_shapes, tuple):
+            if dynamic_shapes is None:
+                # No info, we use the example values
+                return [tuple(map(self._torch_sym_int_to_str, example_value[0].shape))]
+            elif isinstance(dynamic_shapes, tuple):
                 info = dynamic_shapes[input_index]
             elif isinstance(dynamic_shapes, dict):
                 info = dynamic_shapes.get(name, None)
             else:
                 raise NotImplementedError(
-                    f"Unexpected type for dynamic_shapes={string_type(dynamic_shapes)}"
+                    f"Unexpected type for dynamic_shapes={dynamic_shapes}, "
+                    f"example_value={string_type(example_value)}"
+                    f"{self.get_debug_msg()}"
                 )
-            return self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))
+            return [self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))]
 
         if example_shape is None and example_shape is None:
             if input_index < len(self.input_args):
