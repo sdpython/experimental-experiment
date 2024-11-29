@@ -561,7 +561,7 @@ def run_exporter(
             quiet=quiet,
         )
     else:
-        onx, builder = _make_exporter_onnx(
+        res = _make_exporter_onnx(
             exporter,
             model,
             inputs[0],
@@ -569,7 +569,11 @@ def run_exporter(
             verbose=verbose,
             quiet=quiet,
         )
+        if isinstance(res, dict):
+            # something went wrong
+            return res
 
+        onx, builder = res
         if verbose >= 9:
             print("[run_exporter] onnx model")
             print(

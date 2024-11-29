@@ -524,7 +524,7 @@ class SignatureListVariableLength(torch.nn.Module):
         self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
 
     def forward(self, x, lx: list):
-        t = torch.cat(*lx).sum(axis=1, keepdim=True)
+        t = torch.cat(lx, axis=1).sum(axis=1, keepdim=True)
         return torch.sigmoid(self.linear(x)) - self.buff + t
 
     _inputs = [
@@ -592,10 +592,10 @@ class BuildInIsInstance(torch.nn.Module):
         self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
 
     def forward(self, x, lx: list | torch.Tensor):
-        if isinstance(x, list):
+        if isinstance(lx, list):
             t = lx[0] * lx[1].sum(axis=1, keepdim=True)
             return torch.sigmoid(self.linear(x)) - self.buff + t
-        return torch.sigmoid(self.linear(x)) - self.buff + t + lx
+        return torch.sigmoid(self.linear(x)) - self.buff + lx
 
     _inputs = [
         (
