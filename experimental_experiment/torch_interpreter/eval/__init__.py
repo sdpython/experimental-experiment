@@ -2,7 +2,7 @@ import contextlib
 import io
 import itertools
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import onnx
 
@@ -144,6 +144,8 @@ def _to_numpy(x):
         return np.array([x], dtype=np.float64)
     if isinstance(x, list):
         return [_to_numpy(_) for _ in x]
+    if isinstance(x, tuple):
+        return tuple(_to_numpy(_) for _ in x)
     raise TypeError(f"Unable to convert type {type(x)}, x={x} into numpy")
 
 
@@ -156,6 +158,351 @@ def _make_feeds(names, args):
     from ...helpers import string_type
 
     raise RuntimeError(f"Unable to handle names={names!r} and args={string_type(args)}")
+
+
+def _clone(x):
+    if hasattr(x, "clone"):
+        return x.clone()
+    if isinstance(x, int):
+        # onnxruntime does not like scalar
+        return np.array([x], dtype=np.int64)
+    if isinstance(x, float):
+        # onnxruntime does not like scalar
+        return np.array([x], dtype=np.float64)
+    if isinstance(x, list):
+        return [_clone(_) for _ in x]
+    if isinstance(x, tuple):
+        return tuple(_clone(_) for _ in x)
+    raise TypeError(f"Unable to clone type {type(x)}, x={x} into numpy")
+
+
+def _make_exporter_export(
+    exporter: str,
+    model: "torch.nn.Module",  # noqa: F821
+    inputs: Tuple[Any, ...],
+    dynamic_shapes: Optional[Any] = None,
+    verbose: int = 0,
+    quiet: bool = True,
+) -> Union[Dict, Callable]:
+    import torch
+
+    if exporter == "export-strict":
+        try:
+            exported = torch.export.export(
+                model, inputs, dynamic_shapes=dynamic_shapes, strict=True
+            )
+        except Exception as e:
+            if not quiet:
+                raise
+            return dict(error=str(e), success=0, error_step="export")
+        if verbose >= 9:
+            print("-- graph")
+            print(exported.graph)
+        return exported.module()
+    if exporter == "export-strict-dec":
+        try:
+            exported = torch.export.export(
+                model, inputs, dynamic_shapes=dynamic_shapes, strict=True
+            )
+            if verbose >= 9:
+                print("-- graph before decomposition")
+                print(exported.graph)
+            exported = exported.run_decompositions({})
+        except Exception as e:
+            if not quiet:
+                raise
+            return dict(error=str(e), success=0, error_step="export")
+        if verbose >= 9:
+            print("-- graph after decomposition")
+            print(exported.graph)
+        return exported.module()
+    if exporter == "export-nostrict":
+        try:
+            exported = torch.export.export(
+                model, inputs, dynamic_shapes=dynamic_shapes, strict=False
+            )
+        except Exception as e:
+            if not quiet:
+                raise
+            return dict(error=str(e), success=0, error_step="export")
+        if verbose >= 9:
+            print("-- graph")
+            print(exported.graph)
+        return exported.module()
+    if exporter == "export-nostrict-dec":
+        try:
+            exported = torch.export.export(
+                model, inputs, dynamic_shapes=dynamic_shapes, strict=False
+            )
+            if verbose >= 9:
+                print("-- graph before decomposition")
+                print(exported.graph)
+            exported = exported.run_decompositions({})
+        except Exception as e:
+            if not quiet:
+                raise
+            return dict(error=str(e), success=0, error_step="export")
+        if verbose >= 9:
+            print("-- graph after decomposition")
+            print(exported.graph)
+        return exported.module()
+    if exporter == "export-tracing":
+        try:
+            tracer_class = torch.fx.Tracer
+            graph = tracer_class().trace(model)
+            mod = torch.fx.GraphModule(model, graph)
+        except Exception as e:
+            if not quiet:
+                raise
+            return dict(error=str(e), success=0, error_step="export")
+        if verbose >= 9:
+            print("-- graph")
+            print(graph)
+        return mod
+    raise AssertionError(f"Unexpected exporter={exporter!r}")
+
+
+def _make_exporter_onnx(
+    exporter: str,
+    model: "torch.nn.Module",  # noqa: F821
+    inputs: Tuple[Any, ...],
+    dynamic_shapes: Optional[Any] = None,
+    verbose: int = 0,
+    quiet: bool = True,
+) -> Union[Dict, Tuple[onnx.ModelProto, Any]]:
+    from ...torch_interpreter import to_onnx, ExportOptions
+    from ...helpers import string_type
+
+    if exporter == "custom-strict":
+        try:
+            onx, builder = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=dynamic_shapes,
+                export_options=ExportOptions(strict=True),
+                return_builder=True,
+            )
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, builder
+    if exporter == "custom-strict-dec":
+        try:
+            onx, builder = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=dynamic_shapes,
+                export_options=ExportOptions(strict=True, decomposition_table="default"),
+                return_builder=True,
+            )
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, builder
+    if exporter == "custom-nostrict":
+        try:
+            onx, builder = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=dynamic_shapes,
+                export_options=ExportOptions(strict=False),
+                return_builder=True,
+            )
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, builder
+    if exporter == "custom-nostrict-dec":
+        try:
+            onx, builder = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=dynamic_shapes,
+                export_options=ExportOptions(strict=False, decomposition_table="default"),
+                return_builder=True,
+            )
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, builder
+    if exporter == "custom-tracing":
+        try:
+            onx, builder = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=dynamic_shapes,
+                export_options=ExportOptions(tracing=True),
+                return_builder=True,
+            )
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, builder
+    if exporter == "script":
+        import torch
+
+        f = (
+            f"evaluation-{model.__class__.__name__}-"
+            f"{int(bool(dynamic_shapes))}-{exporter}.onnx"
+        )
+        dynamic_axes = {}
+        input_names = []
+        if dynamic_shapes:
+            if not isinstance(dynamic_shapes, dict):
+                return dict(
+                    error=f"unable to convert dynamic shapes {dynamic_shapes}",
+                    success=0,
+                    error_step="input",
+                )
+            for k, v in dynamic_shapes.items():
+                if not isinstance(v, dict):
+                    return dict(
+                        error=f"unable to convert dynamic shapes {dynamic_shapes}",
+                        success=0,
+                        error_step="input",
+                    )
+                dynamic_axes[k] = {_k: _v.__name__ for _k, _v in v.items()}
+                input_names.append(k)
+        while len(input_names) < len(inputs[0]):
+            input_names.append(f"args_{len(input_names)}")
+        if verbose >= 5:
+            print(
+                f"[run_exporter] dynamic_axes={dynamic_axes}, "
+                f"dynamic_shapes={dynamic_shapes}, input_names={input_names}"
+            )
+        try:
+            if verbose >= 2:
+                torch.onnx.export(
+                    model,
+                    inputs,
+                    f,
+                    dynamic_axes=dynamic_axes,
+                    input_names=input_names if dynamic_axes else None,
+                    dynamo=False,
+                )
+                onx = onnx.load(f)
+            else:
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    torch.onnx.export(
+                        model,
+                        inputs,
+                        f,
+                        dynamic_axes=dynamic_axes,
+                        input_names=input_names if dynamic_axes else None,
+                        dynamo=False,
+                    )
+                    onx = onnx.load(f)
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, None
+    if exporter == "dynamo":
+        import torch
+
+        try:
+            if verbose >= 2:
+                onx = torch.onnx.export(
+                    model,
+                    inputs,
+                    dynamic_shapes=dynamic_shapes,
+                    dynamo=True,
+                    report=True,
+                ).model_proto
+            else:
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    onx = torch.onnx.export(
+                        model,
+                        inputs,
+                        dynamic_shapes=dynamic_shapes,
+                        dynamo=True,
+                    ).model_proto
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, None
+    if exporter == "dynamo-ir":
+        import torch
+
+        try:
+            if verbose >= 2:
+                ep = torch.onnx.export(
+                    model,
+                    inputs,
+                    dynamic_shapes=dynamic_shapes,
+                    dynamo=True,
+                    report=True,
+                )
+                ep.optimize()
+                onx = ep.model_proto
+            else:
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    ep = torch.onnx.export(
+                        model,
+                        inputs,
+                        dynamic_shapes=dynamic_shapes,
+                        dynamo=True,
+                    )
+                    ep.optimize()
+                    onx = ep.model_proto
+        except Exception as e:
+            if not quiet:
+                raise RuntimeError(
+                    f"Unable to convert model={model.__class__.__name__}, "
+                    f"input={string_type(inputs[0], with_shape=True)}, "
+                    f"dynamic_shapes={dynamic_shapes}, "
+                    f"exporter={exporter!r}"
+                ) from e
+            return dict(error=str(e), success=0, error_step="export")
+        return onx, None
+    raise AssertionError(f"Unexpected exporter={exporter!r}")
 
 
 def run_exporter(
@@ -205,314 +552,31 @@ def run_exporter(
     onx = None
 
     if exporter.startswith("export-"):
-        if exporter == "export-strict":
-            import torch
-
-            try:
-                exported = torch.export.export(
-                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=True
-                )
-            except Exception as e:
-                if not quiet:
-                    raise
-                return dict(error=str(e), success=0, error_step="export")
-            if verbose >= 9:
-                print(exported.graph)
-            mod = exported.module()
-        elif exporter == "export-strict-dec":
-            import torch
-
-            try:
-                exported = torch.export.export(
-                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=True
-                )
-                exported.run_decompositions({})
-            except Exception as e:
-                if not quiet:
-                    raise
-                return dict(error=str(e), success=0, error_step="export")
-            if verbose >= 9:
-                print(exported.graph)
-            mod = exported.module()
-        elif exporter == "export-nostrict":
-            import torch
-
-            try:
-                exported = torch.export.export(
-                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
-                )
-            except Exception as e:
-                if not quiet:
-                    raise
-                return dict(error=str(e), success=0, error_step="export")
-            if verbose >= 9:
-                print(exported.graph)
-            mod = exported.module()
-        elif exporter == "export-nostrict-dec":
-            import torch
-
-            try:
-                exported = torch.export.export(
-                    model, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
-                )
-                exported.run_decompositions({})
-            except Exception as e:
-                if not quiet:
-                    raise
-                return dict(error=str(e), success=0, error_step="export")
-            if verbose >= 9:
-                print(exported.graph)
-            mod = exported.module()
-        elif exporter == "export-tracing":
-            import torch
-
-            try:
-                tracer_class = torch.fx.Tracer
-                graph = tracer_class().trace(model)
-                mod = torch.fx.GraphModule(model, graph)
-            except Exception as e:
-                if not quiet:
-                    raise
-                return dict(error=str(e), success=0, error_step="export")
-            if verbose >= 9:
-                print(graph)
-        else:
-            raise AssertionError(f"Unexpected exporter={exporter!r}")
+        mod = _make_exporter_export(
+            exporter,
+            model,
+            inputs[0],
+            dynamic_shapes=dynamic_shapes,
+            verbose=verbose,
+            quiet=quiet,
+        )
     else:
-        import onnxruntime
-
-        if exporter == "custom-strict":
-            from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-
-            try:
-                onx, builder = to_onnx(
-                    model,
-                    inputs[0],
-                    dynamic_shapes=dynamic_shapes,
-                    export_options=ExportOptions(strict=True),
-                    return_builder=True,
-                )
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        elif exporter == "custom-strict-dec":
-            from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-
-            try:
-                onx, builder = to_onnx(
-                    model,
-                    inputs[0],
-                    dynamic_shapes=dynamic_shapes,
-                    export_options=ExportOptions(strict=True, decomposition_table="default"),
-                    return_builder=True,
-                )
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        elif exporter == "custom-nostrict":
-            from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-
-            try:
-                onx, builder = to_onnx(
-                    model,
-                    inputs[0],
-                    dynamic_shapes=dynamic_shapes,
-                    export_options=ExportOptions(strict=False),
-                    return_builder=True,
-                )
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        elif exporter == "custom-nostrict-dec":
-            from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-
-            try:
-                onx, builder = to_onnx(
-                    model,
-                    inputs[0],
-                    dynamic_shapes=dynamic_shapes,
-                    export_options=ExportOptions(strict=False, decomposition_table="default"),
-                    return_builder=True,
-                )
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        elif exporter == "custom-tracing":
-            from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-
-            try:
-                onx, builder = to_onnx(
-                    model,
-                    inputs[0],
-                    dynamic_shapes=dynamic_shapes,
-                    export_options=ExportOptions(tracing=True),
-                    return_builder=True,
-                )
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        elif exporter == "script":
-            import torch
-
-            f = f"evaluation-{model.__class__.__name__}-{dynamic}-{exporter}.onnx"
-            dynamic_axes = {}
-            input_names = []
-            if dynamic_shapes:
-                if not isinstance(dynamic_shapes, dict):
-                    return dict(
-                        error=f"unable to convert dynamic shapes {dynamic_shapes}",
-                        success=0,
-                        error_step="input",
-                    )
-                for k, v in dynamic_shapes.items():
-                    if not isinstance(v, dict):
-                        return dict(
-                            error=f"unable to convert dynamic shapes {dynamic_shapes}",
-                            success=0,
-                            error_step="input",
-                        )
-                    dynamic_axes[k] = {_k: _v.__name__ for _k, _v in v.items()}
-                    input_names.append(k)
-            while len(input_names) < len(inputs[0]):
-                input_names.append(f"args_{len(input_names)}")
-            if verbose >= 5:
-                print(
-                    f"[run_exporter] dynamic_axes={dynamic_axes}, "
-                    f"dynamic_shapes={dynamic_shapes}, input_names={input_names}"
-                )
-            try:
-                if verbose >= 2:
-                    torch.onnx.export(
-                        model,
-                        inputs[0],
-                        f,
-                        dynamic_axes=dynamic_axes,
-                        input_names=input_names if dynamic_axes else None,
-                        dynamo=False,
-                    )
-                    onx = onnx.load(f)
-                else:
-                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                        io.StringIO()
-                    ):
-                        torch.onnx.export(
-                            model,
-                            inputs[0],
-                            f,
-                            dynamic_axes=dynamic_axes,
-                            input_names=input_names if dynamic_axes else None,
-                            dynamo=False,
-                        )
-                        onx = onnx.load(f)
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        elif exporter == "dynamo":
-            import torch
-
-            try:
-                if verbose >= 2:
-                    onx = torch.onnx.export(
-                        model,
-                        inputs[0],
-                        dynamic_shapes=dynamic_shapes,
-                        dynamo=True,
-                    ).model_proto
-                else:
-                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                        io.StringIO()
-                    ):
-                        onx = torch.onnx.export(
-                            model,
-                            inputs[0],
-                            dynamic_shapes=dynamic_shapes,
-                            dynamo=True,
-                        ).model_proto
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        elif exporter == "dynamo-ir":
-            import torch
-
-            try:
-                if verbose >= 2:
-                    ep = torch.onnx.export(
-                        model,
-                        inputs[0],
-                        dynamic_shapes=dynamic_shapes,
-                        dynamo=True,
-                    )
-                    ep.optimize()
-                    onx = ep.model_proto
-                else:
-                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                        io.StringIO()
-                    ):
-                        ep = torch.onnx.export(
-                            model,
-                            inputs[0],
-                            dynamic_shapes=dynamic_shapes,
-                            dynamo=True,
-                        )
-                        ep.optimize()
-                        onx = ep.model_proto
-            except Exception as e:
-                if not quiet:
-                    raise RuntimeError(
-                        f"Unable to convert model={model.__class__.__name__}, "
-                        f"input={string_type(inputs[0], with_shape=True)}, "
-                        f"dynamic_shapes={dynamic_shapes}, "
-                        f"exporter={exporter!r}"
-                    ) from e
-                return dict(error=str(e), success=0, error_step="export")
-        else:
-            raise AssertionError(f"Unexpected exporter={exporter!r}")
+        onx, builder = _make_exporter_onnx(
+            exporter,
+            model,
+            inputs[0],
+            dynamic_shapes=dynamic_shapes,
+            verbose=verbose,
+            quiet=quiet,
+        )
 
         if verbose >= 9:
             print("[run_exporter] onnx model")
-            print(builder.pretty_text() if builder is not None else pretty_onnx(onx))
+            print(
+                builder.pretty_text(add_fx_graph=True)
+                if builder is not None
+                else pretty_onnx(onx)
+            )
         if verbose >= 2:
             onnx.save(onx, f"evaluation-{model.__class__.__name__}-{dynamic}-{exporter}.onnx")
 
@@ -531,6 +595,8 @@ def run_exporter(
                 success=0,
                 error_step="inputs",
             )
+        import onnxruntime
+
         try:
             sess = onnxruntime.InferenceSession(
                 onx.SerializeToString(), providers=["CPUExecutionProvider"]
@@ -542,7 +608,8 @@ def run_exporter(
 
         mod = lambda *args, names=names: sess.run(None, _make_feeds(names, args))  # noqa: E731
 
-    expected = model(*inputs[0])
+    # we need to clone for models modifying the inputs
+    expected = model(*_clone(inputs[0]))
     try:
         got = mod(*inputs[0])
     except Exception as e:
@@ -574,8 +641,8 @@ def run_exporter(
     del disc["sum"]
     disc.update(dict(success=1 if disc["abs"] < 0.1 else 0))
     if disc["abs"] >= 0.1:
-        disc["error"] = "DIFF"
-        disc["error_step"] = "DIFF"
+        disc["error"] = "diff.0"
+        disc["error_step"] = "diff.0"
         if verbose >= 9:
             max_diff(expected, got, verbose=verbose)
     else:
@@ -595,7 +662,7 @@ def run_exporter(
 
     if dynamic and len(inputs) > 1:
         for index, i in enumerate(inputs):
-            expected = model(*i)
+            expected = model(*_clone(i))
             try:
                 got = mod(*i)
             except Exception as e:

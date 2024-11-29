@@ -521,7 +521,6 @@ def max_diff(
         output, this number will be the number of elements
         of this output
     """
-
     if hasattr(expected, "to_tuple"):
         return max_diff(
             expected.to_tuple(),

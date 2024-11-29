@@ -39,8 +39,15 @@ class TestEval(ExtTestCase):
     @requires_torch("2.6", "ONNXProgram.optimize missing")
     def test_run_exporter(self):
         evaluation(
-            cases="SignatureFixedList", exporters="custom-strict", quiet=False, dynamic=False
+            cases="SignatureListFixedLength",
+            exporters="custom-strict",
+            quiet=False,
+            dynamic=False,
         )
+
+    @requires_torch("2.6", "ONNXProgram.optimize missing")
+    def test_run_exporter_regex(self):
+        evaluation(cases=".*List.*", exporters="custom-strict", quiet=False, dynamic=False)
 
 
 if __name__ == "__main__":

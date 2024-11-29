@@ -18,7 +18,94 @@ class AtenRollPos(torch.nn.Module):
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
 
-class AtenIndexPut3D_1(torch.nn.Module):
+class InplaceAdd(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.bias = torch.ones((1, 4), dtype=torch.float32)
+
+    def forward(self, x):
+        x += self.bias
+        return x
+
+    _inputs = [(torch.rand(3, 4),), (torch.rand(5, 4),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class InplaceAdd_(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.bias = torch.ones((1, 4), dtype=torch.float32)
+
+    def forward(self, x):
+        x.add_(self.bias)
+        return x
+
+    _inputs = [(torch.rand(3, 4),), (torch.rand(5, 4),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class InplaceAdd_Mul(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.bias = torch.ones((1, 4), dtype=torch.float32)
+
+    def forward(self, x):
+        x.add_(self.bias)
+        return x * 2
+
+    _inputs = [(torch.rand(3, 4),), (torch.rand(5, 4),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class InplaceCloneAdd_(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.bias = torch.ones((1, 4), dtype=torch.float32)
+
+    def forward(self, x):
+        x = x.clone()
+        x.add_(self.bias)
+        return x
+
+    _inputs = [(torch.rand(3, 4),), (torch.rand(5, 4),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class InplaceSetItemSquare(torch.nn.Module):
+
+    def forward(self, x):
+        x[:2, :3] = 1
+        return x
+
+    _inputs = [(torch.rand(5, 5),), (torch.rand(7, 5),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class InplaceSetItemSquareAdd(torch.nn.Module):
+
+    def forward(self, x):
+        x[:2, :3] = 1
+        return x + 2
+
+    _inputs = [(torch.rand(5, 5),), (torch.rand(7, 5),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class InplaceSetItemSquareAdd2(torch.nn.Module):
+
+    def forward(self, x):
+        x[:2, :3] = 1
+        return x + 2, x + 3
+
+    _inputs = [(torch.rand(5, 5),), (torch.rand(7, 5),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class InplaceSetItemEllipsis_1(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
@@ -36,7 +123,7 @@ class AtenIndexPut3D_1(torch.nn.Module):
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
 
-class AtenIndexPut3D_2(torch.nn.Module):
+class InplaceSetItemEllipsis_2(torch.nn.Module):
 
     def __init__(self):
         super().__init__()

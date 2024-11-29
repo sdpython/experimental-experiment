@@ -126,6 +126,8 @@ def _retrieve(
     :param exc: raises an exception if not found
     """
     if name not in mapping:
+        if value is None:
+            return True
         import torch
 
         # This is not a weight but a constant.
@@ -146,7 +148,10 @@ def _retrieve(
             )
         return None
 
-    new_name, is_weight = mapping[name]
+    val = mapping[name]
+    if val is False or val is True:
+        return val
+    new_name, is_weight = val
     if is_weight:
         # weights
         if new_name not in weights:
@@ -176,6 +181,7 @@ def _retrieve(
             f"{name!r} mapped to buffer {new_name!r}."
         )
         return value
+
     if new_name in constants:
         value = constants[new_name]
         import torch
@@ -495,6 +501,7 @@ def _make_builder_interpreter(
         else:
             # A bug may appear later.
             constants = {}
+
         if hasattr(exported_program, "graph_signature"):
             sig_mismatch_constants = set(k.replace(".", "_") for k in constants)
             signature = exported_program.graph_signature
@@ -527,6 +534,9 @@ def _make_builder_interpreter(
                     f"\ndir(export_mod)={dir(exported_program)}"
                     f"\ndir(mod)={dir(mod)}"
                 )
+            for spec in exported_program.graph_signature.output_specs:
+                if spec.kind != torch.export.graph_signature.OutputKind.USER_OUTPUT:
+                    mapping[spec.arg.name] = False
         else:
             mapping = {}
             for k in weights:

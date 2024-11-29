@@ -597,10 +597,12 @@ class DynamoInterpreter:
         output = declared[0]
         if hasattr(output, "name"):
             output = output.name
-            self.builder.make_node(
-                "Identity", [output], [output_name], check=False, name=".output"
-            )
-            outputs = [(output, output_name)]
+            if self.retriever(output, None, exc=False):
+                self.builder.make_node(
+                    "Identity", [output], [output_name], check=False, name=".output"
+                )
+                outputs = [(output, output_name)]
+            # otherwise, skipping, this output is not a USER_OUTPUT
         else:
             outputs = []
             for i, a in enumerate(output):
@@ -620,6 +622,9 @@ class DynamoInterpreter:
                 else:
                     cst = None
                     a_name = a if isinstance(a, str) else a.name
+                    if not self.retriever(a_name, None, exc=False):
+                        # skipping, this output is not a USER_OUTPUT
+                        continue
                     if self.builder.get_is_dimension(a_name, n_outputs=len(output)):
                         o = f"{output_name}_dim_{i}"
                     else:
