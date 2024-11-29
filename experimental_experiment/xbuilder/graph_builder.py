@@ -4567,6 +4567,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return_optimize_report: bool = False,
         inline: bool = False,
         function_options: Optional[FunctionOptions] = None,
+        mask_outputs: Optional[List[bool]] = None,
     ) -> Union[FunctionProto, ModelProto, TorchModelContainer, Dict[str, Any]]:
         """
         Conversion to onnx. Only then the initializers are converted into TensorProto.
@@ -4582,6 +4583,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param inline: inline local functions, this is done before
             any optimization takes place
         :param function_options: to be set to export as a function
+        :param mask_outputs: to filter out some outputs if not None
         :return: the proto
         """
         assert self.nodes, f"No node to convert{self.get_debug_msg()}"
@@ -4622,6 +4624,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
+        if mask_outputs is None:
+            mask_outputs = [True for o in self.outputs]
+        else:
+            assert len(mask_outputs) == len(self.outputs), (
+                f"Length mismatch between mask={mask_outputs} and outputs "
+                f"{self.outputs}{self.get_debug_msg()}"
+            )
         if function_options.export_as_function:
             if self._debug_local_function:
                 print(f"[GraphBuilder.to_onnx] export_as_function {function_options}")
@@ -4665,7 +4674,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 function_options.domain,
                 function_options.name,
                 [i.name for i in self.inputs],
-                [o.name for o in self.outputs],
+                [o.name for mask, o in zip(mask_outputs, self.outputs) if mask],
                 self.nodes,
                 opsets,
             )
@@ -4721,7 +4730,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         model = ModelProto()
         model.graph.CopyFrom(GraphProto())
         model.graph.name = "experiment"
-        model.graph.output.extend(self.outputs)
+        model.graph.output.extend(o for mask, o in zip(mask_outputs, self.outputs) if mask)
 
         if self._parameter_renaming:
             assert self.initializers_dict, (

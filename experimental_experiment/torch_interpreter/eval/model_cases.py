@@ -141,6 +141,16 @@ class InplaceSetItemEllipsis_2(torch.nn.Module):
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
 
+class InplaceSetItemMask(torch.nn.Module):
+    def forward(self, x):
+        mask = x.to(bool)
+        x[mask] = 2
+        return x
+
+    _inputs = [(torch.randn((2, 3, 3)),), (torch.randn((3, 3, 3)),)]
+    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
 class AtenInterpolate(torch.nn.Module):
 
     def forward(self, x):
@@ -514,6 +524,39 @@ class SignatureListVariableLength(torch.nn.Module):
         self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
 
     def forward(self, x, lx: list):
+        t = torch.cat(*lx).sum(axis=1, keepdim=True)
+        return torch.sigmoid(self.linear(x)) - self.buff + t
+
+    _inputs = [
+        (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(4) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
+        ),
+        (
+            (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(8 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+                (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            ],
+        ),
+    ]
+    _dynamic = {
+        "x": {0: torch.export.Dim("batch")},
+        "lx": [{0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")}],
+    }
+
+
+class BuildInLen(torch.nn.Module):
+    def __init__(self, n_dims: int = 3, n_targets: int = 1):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+        self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+    def forward(self, x, lx: list):
         t = lx[0] * lx[1].sum(axis=1, keepdim=True)
         if len(lx) > 2:
             t = t + lx[2].sum(axis=1, keepdim=True)
@@ -533,6 +576,40 @@ class SignatureListVariableLength(torch.nn.Module):
                 (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
                 (torch.arange(8 * 2) + 10).reshape((-1, 2)).to(torch.float32),
                 (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            ],
+        ),
+    ]
+    _dynamic = {
+        "x": {0: torch.export.Dim("batch")},
+        "lx": [{0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")}],
+    }
+
+
+class BuildInIsInstance(torch.nn.Module):
+    def __init__(self, n_dims: int = 3, n_targets: int = 1):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+        self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+    def forward(self, x, lx: list | torch.Tensor):
+        if isinstance(x, list):
+            t = lx[0] * lx[1].sum(axis=1, keepdim=True)
+            return torch.sigmoid(self.linear(x)) - self.buff + t
+        return torch.sigmoid(self.linear(x)) - self.buff + t + lx
+
+    _inputs = [
+        (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(4) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
+        ),
+        (
+            (torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(8) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(8 * 2) + 10).reshape((-1, 2)).to(torch.float32),
             ],
         ),
     ]

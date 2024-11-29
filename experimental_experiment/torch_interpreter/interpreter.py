@@ -597,12 +597,10 @@ class DynamoInterpreter:
         output = declared[0]
         if hasattr(output, "name"):
             output = output.name
-            if self.retriever(output, None, exc=False):
-                self.builder.make_node(
-                    "Identity", [output], [output_name], check=False, name=".output"
-                )
-                outputs = [(output, output_name)]
-            # otherwise, skipping, this output is not a USER_OUTPUT
+            self.builder.make_node(
+                "Identity", [output], [output_name], check=False, name=".output"
+            )
+            outputs = [(output, output_name)]
         else:
             outputs = []
             for i, a in enumerate(output):
@@ -622,9 +620,6 @@ class DynamoInterpreter:
                 else:
                     cst = None
                     a_name = a if isinstance(a, str) else a.name
-                    if not self.retriever(a_name, None, exc=False):
-                        # skipping, this output is not a USER_OUTPUT
-                        continue
                     if self.builder.get_is_dimension(a_name, n_outputs=len(output)):
                         o = f"{output_name}_dim_{i}"
                     else:
@@ -1778,7 +1773,7 @@ class DynamoInterpreter:
                         f"Unable to process argument {type(a)}{self.get_debug_msg()}"
                     )
 
-        graph_module, builder, interpreter = _make_builder_interpreter(
+        graph_module, builder, interpreter, mask_outputs = _make_builder_interpreter(
             gm,
             args=None if new_args is None else tuple(new_args),
             kwargs=None if kwargs is None else kwargs,
@@ -1806,6 +1801,9 @@ class DynamoInterpreter:
                 )
             ),
         )
+        assert all(
+            mask_outputs
+        ), f"Unexpected value for mask_outputs={mask_outputs}{self.get_debug_msg()}"
         # We register the dynamic elements in case the submodule is using them.
         for k, v in self.builder.dynamic_objects.items():
             # We assume the list of dynamic objects is valid.
