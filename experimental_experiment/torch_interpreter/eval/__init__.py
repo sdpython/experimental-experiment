@@ -15,7 +15,7 @@ def discover():
         :showcode:
 
         import pprint
-        from experimental_experiment.torch_interpret.eval import discover
+        from experimental_experiment.torch_interpreter.eval import discover
 
         pprint.pprint(discover())
     """
@@ -631,6 +631,7 @@ def run_exporter(
             if d["abs"] >= 0.1:
                 d["error"] = f"diff.{index}"
                 d["error_step"] = f"diff.{index}"
+                d["success"] = 0
                 disc.update(d)
 
     return disc

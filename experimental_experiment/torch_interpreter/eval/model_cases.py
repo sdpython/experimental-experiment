@@ -387,13 +387,13 @@ class SignatureInt2(torch.nn.Module):
     }
 
 
-class SignatureFixedList(torch.nn.Module):
+class SignatureListFixedLength(torch.nn.Module):
     def __init__(self, n_dims: int = 3, n_targets: int = 1):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
         self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
 
-    def forward(self, x, lx):
+    def forward(self, x, lx: list):
         return (
             torch.sigmoid(self.linear(x)) - self.buff + lx[0] * lx[1].sum(axis=1, keepdim=True)
         )
@@ -420,13 +420,13 @@ class SignatureFixedList(torch.nn.Module):
     }
 
 
-class SignatureVariableList(torch.nn.Module):
+class SignatureListVariableLength(torch.nn.Module):
     def __init__(self, n_dims: int = 3, n_targets: int = 1):
         super().__init__()
         self.linear = torch.nn.Linear(n_dims, n_targets)
         self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
 
-    def forward(self, x, lx):
+    def forward(self, x, lx: list):
         t = lx[0] * lx[1].sum(axis=1, keepdim=True)
         if len(lx) > 2:
             t = t + lx[2].sum(axis=1, keepdim=True)
