@@ -468,6 +468,22 @@ class SignatureInt1(torch.nn.Module):
     _dynamic = ({0: torch.export.Dim("batch", min=1, max=1024)}, None)
 
 
+class SignatureFloat1(torch.nn.Module):
+    def __init__(self, n_dims: int = 3, n_targets: int = 1):
+        super().__init__()
+        self.linear = torch.nn.Linear(n_dims, n_targets)
+        self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+    def forward(self, x, alpha: float = 2.0):
+        return torch.sigmoid(self.linear(x)) - self.buff * alpha
+
+    _inputs = [
+        ((torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32), 1.5),
+        ((torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32), 2.5),
+    ]
+    _dynamic = ({0: torch.export.Dim("batch", min=1, max=1024)}, None)
+
+
 class SignatureInt2(torch.nn.Module):
     def __init__(self, n_dims: int = 3, n_targets: int = 1):
         super().__init__()

@@ -141,7 +141,7 @@ def _to_numpy(x):
         return np.array([x], dtype=np.int64)
     if isinstance(x, float):
         # onnxruntime does not like scalar
-        return np.array([x], dtype=np.float64)
+        return np.array([x], dtype=np.float32)
     if isinstance(x, list):
         return [_to_numpy(_) for _ in x]
     if isinstance(x, tuple):
