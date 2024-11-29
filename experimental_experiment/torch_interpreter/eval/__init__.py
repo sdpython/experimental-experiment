@@ -29,7 +29,7 @@ def discover():
             continue
         assert m.__name__ not in res, f"Case {m.__name__!r} is duplicated."
         assert hasattr(m, "_inputs"), f"Attribute '_inputs' is missing from class {m}"
-        assert hasattr(m, "_dynamic"), f"Attribute '_inputs' is missing from class {m}"
+        assert hasattr(m, "_dynamic"), f"Attribute '_dynamic' is missing from class {m}"
         res[m.__name__] = m
     return res
 
