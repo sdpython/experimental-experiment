@@ -120,6 +120,8 @@ sphinx_gallery_conf = {
         "auto_examples",
         "auto_recipes",
     ],
+    # sorting
+    "within_subsection_order": "ExampleTitleSortKey",
 }
 
 if pv.Version(torch.__version__) < pv.Version("2.7"):

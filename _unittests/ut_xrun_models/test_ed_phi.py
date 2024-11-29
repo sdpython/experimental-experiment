@@ -51,9 +51,6 @@ class TestEdPhi(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch(
-        "2.7", "AssertionError: original output #6 is None or convert_element_type_default"
-    )
     def test_phi_cort_static_not_mixed(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]
@@ -175,9 +172,6 @@ class TestEdPhi(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch(
-        "2.7", "AssertionError: original output #6 is None, convert_element_type_default"
-    )
     @requires_onnxruntime_training(True)
     def test_phi_cort_dynamic(self):
         model, input_tensors = get_phi_model()

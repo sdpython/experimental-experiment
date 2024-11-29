@@ -268,7 +268,6 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.7", "cache limit and convert_element_type_default")
     def test_llama_model_backward_forward_decomposition_yes(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
@@ -325,7 +324,6 @@ class TestDynamoLlama(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.7", "cache limit and convert_element_type_default")
     def test_llama_model_backward_forward_decomposition_no(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
