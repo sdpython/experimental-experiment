@@ -92,15 +92,20 @@ intersphinx_mapping = {
 nitpicky = True
 # See also scikit-learn/scikit-learn#26761
 nitpick_ignore = [
+    ("py:class", "dtype"),
     ("py:class", "False"),
     ("py:class", "True"),
+    ("py:class", "torch.fx.passes.operator_support.OperatorSupport"),
+    ("py:class", "onnxscript.ir.Tuple"),
     ("py:class", "pipeline.Pipeline"),
     ("py:class", "default=sklearn.utils.metadata_routing.UNCHANGED"),
+    ("py:class", "Module"),
 ]
 
 nitpick_ignore_regex = [
     ("py:func", ".*numpy[.].*"),
     ("py:func", ".*scipy[.].*"),
+    ("py:func", ".*torch.ops.higher_order.*"),
     ("py:class", ".*onnxruntime[.].*"),
 ]
 
@@ -118,7 +123,7 @@ sphinx_gallery_conf = {
 }
 
 if pv.Version(torch.__version__) < pv.Version("2.7"):
-    sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_)|(_executorch_)).*"
+    sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_(modules)|(custom))|(_executorch_)).*"
 
 
 epkg_dictionary = {

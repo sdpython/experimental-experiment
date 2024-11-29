@@ -13,4 +13,4 @@ Exporter Recipes
     exporter_strict
 
 The export success is evaluated by script
-:ref:`plot-exporter-coverage`.
+:ref:`l-plot-exporter-coverage`.

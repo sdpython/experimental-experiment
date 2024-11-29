@@ -7,6 +7,6 @@ experimental_experiment.torch_interpreter.eval
 
     model_cases
 
-.. automdule:: experimental_experiment.torch_interpreter.eval
+.. automodule:: experimental_experiment.torch_interpreter.eval
     :members:
     :no-undoc-members:
