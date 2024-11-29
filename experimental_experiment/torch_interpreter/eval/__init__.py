@@ -163,12 +163,8 @@ def _make_feeds(names, args):
 def _clone(x):
     if hasattr(x, "clone"):
         return x.clone()
-    if isinstance(x, int):
-        # onnxruntime does not like scalar
-        return np.array([x], dtype=np.int64)
-    if isinstance(x, float):
-        # onnxruntime does not like scalar
-        return np.array([x], dtype=np.float64)
+    if isinstance(x, (int, float)):
+        return x
     if isinstance(x, list):
         return [_clone(_) for _ in x]
     if isinstance(x, tuple):
@@ -613,7 +609,15 @@ def run_exporter(
         mod = lambda *args, names=names: sess.run(None, _make_feeds(names, args))  # noqa: E731
 
     # we need to clone for models modifying the inputs
-    expected = model(*_clone(inputs[0]))
+    try:
+        expected = model(*_clone(inputs[0]))
+    except Exception as e:
+        if not quiet:
+            raise RuntimeError(
+                f"eager mode failed=\n{string_type(inputs[0], with_shape=True)} "
+                f"\nmodel=\n{type(model)}"
+            ) from e
+        return dict(error=str(e), success=0, error_step="eager")
     try:
         got = mod(*inputs[0])
     except Exception as e:

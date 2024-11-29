@@ -1801,7 +1801,7 @@ class DynamoInterpreter:
                 )
             ),
         )
-        assert all(
+        assert mask_outputs is None or all(
             mask_outputs
         ), f"Unexpected value for mask_outputs={mask_outputs}{self.get_debug_msg()}"
         # We register the dynamic elements in case the submodule is using them.
