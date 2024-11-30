@@ -64,6 +64,7 @@ class ExportOptions:
         "jit-dec": {"jit": True, "decomposition_table": "default"},
         "jit-decomposition": {"jit": True, "decomposition_table": "default"},
         "fallback": {"fallback": True},
+        "fallback-default": {"fallback": True, "decomposition_table": "default"},
         "fallback-dec": {"fallback": True, "decomposition_table": "default"},
         "fallback-decomposition": {"fallback": True, "decomposition_table": "default"},
         "default": {"decomposition_table": "default"},
@@ -226,7 +227,39 @@ class ExportOptions:
                     )
                     if verbose:
                         print(f"[ExportOptions.export] fails due to {excs[-1]}")
-                    continue
+
+                    if not opt.decomposition_table:
+                        # We try with decomposition if possible and to save time.
+                        if verbose:
+                            print(
+                                f"[ExportOptions.export] current decomposition_table="
+                                f"{opt.decomposition_table}, let's try with 'default'"
+                            )
+                        res = apply_decompositions(res, "default")
+                        if any(
+                            len(node.users) == 0
+                            for node in res.graph.nodes
+                            if node.op == "call_function"
+                        ):
+                            # it fails
+                            nousers = [
+                                node
+                                for node in res.graph.nodes
+                                if len(node.users) == 0
+                                if node.op == "call_function"
+                            ]
+                            excs.append(
+                                f"Probable inplace modifications, "
+                                f"even after decomposition. "
+                                f"there are nodes with no users: {nousers}."
+                            )
+                            if verbose:
+                                print(f"[ExportOptions.export] fails again with {excs[-1]}")
+                            continue
+                        opt.decomposition_table = "default"
+                    else:
+                        continue
+
                 if verbose:
                     print(f"[ExportOptions.export] winning options {opt}")
                 self._last_working = opt
