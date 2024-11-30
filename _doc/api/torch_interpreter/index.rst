@@ -16,13 +16,14 @@ experimental_experiment.torch_interpreter
     aten_functions
     aten_methods
     dispatcher
+    eval/index
     export_options
     interpreter
     onnx_export
     onnx_export_errors
     oxs_dispatcher
     oxs_opset
-    eval/index
+    tracing
 
 to_onnx
 +++++++
