@@ -436,7 +436,9 @@ class BenchmarkRunner:
             if "aten" in builder:
                 new_stat.update({f"op_torch_{k}": v for k, v in builder["aten"].items()})
 
-        new_stat.update({k: v for k, v in opt_stats.items() if k.startswith("time_")})
+        new_stat.update(
+            {k: v for k, v in opt_stats.items() if k.startswith(("time_", "onnx_export_"))}
+        )
         return new_stat
 
     @classmethod

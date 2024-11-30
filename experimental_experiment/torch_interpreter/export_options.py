@@ -32,7 +32,9 @@ class ExportOptions:
         import pprint
         from experimental_experiment.torch_interpreter import ExportOptions
 
+        print("-- default fallback")
         pprint.pprint(ExportOptions().get_fallback_options())
+        print("-- default fallback with decomposition")
         pprint.pprint(
             ExportOptions(decomposition_table="default").get_fallback_options()
         )
@@ -42,19 +44,29 @@ class ExportOptions:
     it may be useful to try different values for strict and to apply decompositions
     ``decomposition_table='default'``. The decompositions removes unused results
     coming from inplace modifications.
+
+    A graph is considered as invalid if decompositions were not run and
+    there is one node with no user. This usually indicates one inplace
+    operation is still part of the graph.
     """
 
     _allowed = {
         None: {},
         "none": {},
         "strict": {"strict": True},
+        "strict-dec": {"strict": True, "decomposition_table": "default"},
+        "strict-decomposition": {"strict": True, "decomposition_table": "default"},
         "tracing": {"tracing": True},
         "nostrict": {"strict": False},
+        "nostrict-dec": {"strict": False, "decomposition_table": "default"},
+        "nostrict-decomposition": {"strict": False, "decomposition_table": "default"},
         "jit": {"jit": True},
+        "jit-dec": {"jit": True, "decomposition_table": "default"},
+        "jit-decomposition": {"jit": True, "decomposition_table": "default"},
         "fallback": {"fallback": True},
         "fallback-default": {"fallback": True, "decomposition_table": "default"},
-        "fallback-decomposition": {"fallback": True, "decomposition_table": "default"},
         "fallback-dec": {"fallback": True, "decomposition_table": "default"},
+        "fallback-decomposition": {"fallback": True, "decomposition_table": "default"},
         "default": {"decomposition_table": "default"},
         "decomposition": {"decomposition_table": "default"},
         "dec": {"decomposition_table": "default"},
@@ -128,12 +140,14 @@ class ExportOptions:
     def get_fallback_options(self, kind: Optional[str] = None) -> List["ExportOptions"]:
         """Returns the fallback scenario."""
         if kind is None or kind in ("fallback", "fallback-default", "default"):
+            other_dec = None if self.decomposition_table else "default"
             return [
                 ExportOptions(strict=True, decomposition_table=self.decomposition_table),
                 ExportOptions(strict=False, decomposition_table=self.decomposition_table),
+                ExportOptions(strict=True, decomposition_table=other_dec),
+                ExportOptions(strict=False, decomposition_table=other_dec),
                 ExportOptions(dynamo=True, decomposition_table=self.decomposition_table),
-                ExportOptions(strict=True),
-                ExportOptions(strict=False),
+                ExportOptions(dynamo=True, decomposition_table=other_dec),
                 ExportOptions(jit=True, decomposition_table=self.decomposition_table),
             ]
         if kind == "strict":
@@ -158,11 +172,16 @@ class ExportOptions:
         input_names: Optional[List[str]] = None,
         exc: bool = True,
         verbose: int = 0,
-    ):
+    ) -> Union["torch.export.ExportedProgram", "torch.fx.GraphModule"]:  # noqa: F821
         """Exports the model into an exported program."""
         import torch
 
-        if self.fallback or self.strategy == "fallback":
+        if self.fallback or self.strategy in {
+            "fallback",
+            "fallback-dec",
+            "fallback-decomposition",
+        }:
+            self._last_working = None
             if verbose:
                 print("[ExportOptions.export] fallback")
             tries = self.get_fallback_options(self.strategy)
@@ -171,7 +190,7 @@ class ExportOptions:
                 if verbose:
                     print(f"[ExportOptions.export] tries {ion+1}/{len(tries)}: {opt}")
                 try:
-                    return opt.export(
+                    res = opt.export(
                         mod,
                         args,
                         kwargs,
@@ -180,10 +199,71 @@ class ExportOptions:
                         same_signature=same_signature,
                         input_names=input_names,
                         exc=False,
-                        verbose=verbose,
+                        verbose=max(verbose - 1, 0),
                     )
                 except Exception as e:
                     excs.append(e)
+                    if verbose:
+                        se = str(e).split("\n", maxsplit=1)[0]
+                        print(f"[ExportOptions.export] fails due to {se}")
+                    continue
+
+                if isinstance(res, torch.export.ExportedProgram) and any(
+                    len(node.users) == 0
+                    for node in res.graph.nodes
+                    if node.op == "call_function"
+                ):
+                    # One node has no users, this usually indicates an inplace modifications.
+                    # This is rejected.
+                    nousers = [
+                        node
+                        for node in res.graph.nodes
+                        if len(node.users) == 0
+                        if node.op == "call_function"
+                    ]
+                    excs.append(
+                        f"Probable inplace modifications, "
+                        f"there are nodes with no users: {nousers}."
+                    )
+                    if verbose:
+                        print(f"[ExportOptions.export] fails due to {excs[-1]}")
+
+                    if not opt.decomposition_table:
+                        # We try with decomposition if possible and to save time.
+                        if verbose:
+                            print(
+                                f"[ExportOptions.export] current decomposition_table="
+                                f"{opt.decomposition_table}, let's try with 'default'"
+                            )
+                        res = apply_decompositions(res, "default")
+                        if any(
+                            len(node.users) == 0
+                            for node in res.graph.nodes
+                            if node.op == "call_function"
+                        ):
+                            # it fails
+                            nousers = [
+                                node
+                                for node in res.graph.nodes
+                                if len(node.users) == 0
+                                if node.op == "call_function"
+                            ]
+                            excs.append(
+                                f"Probable inplace modifications, "
+                                f"even after decomposition. "
+                                f"there are nodes with no users: {nousers}."
+                            )
+                            if verbose:
+                                print(f"[ExportOptions.export] fails again with {excs[-1]}")
+                            continue
+                        opt.decomposition_table = "default"
+                    else:
+                        continue
+
+                if verbose:
+                    print(f"[ExportOptions.export] winning options {opt}")
+                self._last_working = opt
+                return res
 
             if exc:
                 raise RuntimeError(

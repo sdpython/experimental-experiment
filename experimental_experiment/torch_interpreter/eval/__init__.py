@@ -105,7 +105,7 @@ def evaluation(
     return obs
 
 
-def flatten_inputs(x: Any) -> List["torch.Tensor"]:  # noqa: F821
+def _flatten_inputs(x: Any) -> List["torch.Tensor"]:  # noqa: F821
     """
     Flatten inputs.
     """
@@ -128,7 +128,7 @@ def flatten_inputs(x: Any) -> List["torch.Tensor"]:  # noqa: F821
             ):
                 res.append(i)
             else:
-                res.extend(flatten_inputs(i))
+                res.extend(_flatten_inputs(i))
         return tuple(res) if isinstance(x, tuple) else res
     raise AssertionError(f"Unexpected type {type(x)} for x")
 
@@ -153,7 +153,7 @@ def _make_feeds(names, args):
     if len(names) == len(args):
         return {k: _to_numpy(v) for k, v in zip(names, args)}
     if len(names) > len(args):
-        flats = flatten_inputs(args)
+        flats = _flatten_inputs(args)
         return {k: _to_numpy(v) for k, v in zip(names, flats)}
     from ...helpers import string_type
 
@@ -581,7 +581,7 @@ def run_exporter(
             onnx.save(onx, f"evaluation-{model.__class__.__name__}-{dynamic}-{exporter}.onnx")
 
         names = [i.name for i in onx.graph.input]
-        flats = flatten_inputs(inputs[0]) if len(names) > len(inputs[0]) else inputs[0]
+        flats = _flatten_inputs(inputs[0]) if len(names) > len(inputs[0]) else inputs[0]
 
         assert quiet or len(names) == len(flats), (
             f"Input mismatch, inputs[0]={string_type(inputs[0])} "

@@ -355,6 +355,7 @@ def main(args=None):
         if memory is not None:
             stat_memory = flatten(memory.stop(), prefix="memory_")
             print(stat_memory)
+            print("-----------")
         else:
             stat_memory = None
 

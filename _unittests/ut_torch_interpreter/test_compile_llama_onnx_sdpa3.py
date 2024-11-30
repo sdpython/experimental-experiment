@@ -5,7 +5,6 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-    requires_torch,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -158,7 +157,6 @@ class TestDynamoLlamaSdpa3(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.7", "missing kernel and convert_element_type_default")
     def test_llama_model_backward_ref(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
