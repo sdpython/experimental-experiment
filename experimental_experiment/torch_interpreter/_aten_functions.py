@@ -2009,6 +2009,7 @@ def aten_dropout(
     x: T,
     p: T = 0.5,  # float
     training: T = True,  # bool
+    name: str = "dropout",
 ) -> T:
     "dropout"
     if len(outputs) == 1:
@@ -2018,10 +2019,23 @@ def aten_dropout(
         p = np.array(p, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
     if isinstance(training, bool):
         training = np.array(training, dtype=np.bool_)
-    result, _ = g.op.Dropout(x, p, training, outputs=outputs)
+    result, _ = g.op.Dropout(x, p, training, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return result
+
+
+def aten_dropout_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    p: T = 0.5,  # float
+    training: T = True,  # bool
+    name: str = "dropout_",
+) -> T:
+    "inplace dropout, we assume inplace modifications were removed"
+    return aten_dropout(g, sts, outputs, x, p=p, training=training, name=name)
 
 
 def aten_einsum(
@@ -3890,7 +3904,7 @@ def aten_index_put_(
         indices,
         values,
         accumulate=accumulate,
-        name=aten__native_batch_norm_legit_no_training,
+        name=name,
     )
 
 
@@ -4578,6 +4592,19 @@ def aten_masked_fill_Scalar(
         else:
             g.set_rank(res, g.get_rank(mask))
     return res
+
+
+def aten_masked_fill__Scalar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    value: T,
+    name="masked_fill__Scalar",
+) -> T:
+    "masked, inplace modifications but we assumes they are removed."
+    return aten_masked_fill_Scalar(g, sts, outputs, x, mask, value, name=name)
 
 
 def aten_masked_fill_Tensor(
@@ -5408,6 +5435,56 @@ def aten__native_batch_norm(
     m = g.op.Cast(running_mean_fp32, to=itype, name=name, outputs=outputs[1:2])
     s = g.op.Cast(invstd, to=itype, name=name, outputs=outputs[2:3])
     return norm, m, s
+
+
+def aten_batch_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    running_mean: Optional[T] = None,
+    running_var: Optional[T] = None,
+    training: bool = False,
+    momentum: float = 0.9,
+    eps: float = 1e-05,
+    cudnn_enabled: bool = False,
+    name: str = "batch_norm",
+) -> Tuple[T, T, T]:
+    """batch normalization"""
+    assert isinstance(
+        cudnn_enabled, bool
+    ), f"unexpected type for cudnn_enabled={cudnn_enabled!r}{g.get_debug_msg()}"
+    assert (
+        not training
+    ), f"aten_batch_norm not implemented for training=True{g.get_debug_msg()}"
+    assert (
+        len(outputs) == 1
+    ), f"aten_batch_norm not implemented for outputs={outputs}{g.get_debug_msg()}"
+    assert isinstance(name, str), (
+        f"unexpected value for name={name!r}, eps={eps!r}, "
+        f"momentum={momentum!r}, training={training!r}{g.get_debug_msg()}"
+    )
+    new_outputs = [
+        outputs[0],
+        g.unique_name(f"_unused_{name}_1"),
+        g.unique_name(f"_unused_{name}_2"),
+    ]
+    res = aten__native_batch_norm_legit_no_training(
+        g,
+        sts,
+        new_outputs,
+        x,
+        weight,
+        bias,
+        running_mean,
+        running_var,
+        momentum=momentum,
+        eps=eps,
+        name=name,
+    )
+    return res[0]
 
 
 def aten_cudnn_batch_norm(
@@ -6441,13 +6518,27 @@ def aten_relu(
     outputs: List[str],
     x: T,
     inplace: bool = False,
+    name: str = "relu",
 ) -> T:
     "relu"
     assert not inplace, f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
-    res = g.op.Relu(x, outputs=outputs)
+    res = g.op.Relu(x, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
+
+
+def aten_relu_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    inplace: bool = False,
+    name: str = "relu_",
+) -> T:
+    "inplace modifications are not allowed, we assume there were removed"
+    assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
+    return aten_relu(g, sts, outputs, x, inplace, name=name)
 
 
 def aten_rrelu_with_noise_backward(
