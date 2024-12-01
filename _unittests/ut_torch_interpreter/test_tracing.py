@@ -38,7 +38,7 @@ class TestTracing(ExtTestCase):
             def forward(self, x):
                 xc = x.clone()
                 xc += 2
-                return xc + 2
+                return xc + 3
 
         model = Model()
         x = torch.ones((4, 4))
@@ -54,7 +54,7 @@ class TestTracing(ExtTestCase):
             def forward(self, x):
                 xc = x.clone()
                 xc.add_(2)
-                return xc + 2
+                return xc + 3
 
         model = Model()
         x = torch.ones((4, 4))
@@ -66,14 +66,70 @@ class TestTracing(ExtTestCase):
         got = mod(x)
         self.assertEqualArray(expected, got)
 
-    @unittest.skip("not implemented yet")
+    def test_tracing_inplace_add_users(self):
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                xc = x.clone()
+                xc.add_(2)
+                return xc + 3
+
+        model = Model()
+        x = torch.ones((4, 4))
+        expected = model(x)
+        graph = CustomTracer().trace(model, remove_inplace=False)
+        self.assertEqual(
+            len(
+                [node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]
+            ),
+            1,
+        )
+        self.assertIn("(%clone, 3)", str(graph))
+        graph = CustomTracer().trace(model, remove_inplace=True)
+        self.assertEmpty(
+            [node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]
+        )
+        self.assertNotIn("(%clone, 3)", str(graph))
+        mod = torch.fx.GraphModule(model, graph)
+        self.assertNotIn("(%clone, 3)", str(mod.graph))
+        got = mod(x)
+        self.assertEqualArray(expected, got)
+
+    def test_tracing_inplace_add_mul_users(self):
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                xc = x.clone()
+                xc.add_(2)
+                xc.add_(5)
+                return xc + 3
+
+        model = Model()
+        x = torch.ones((4, 4))
+        expected = model(x)
+        graph = CustomTracer().trace(model, remove_inplace=False)
+        self.assertEqual(
+            len(
+                [node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]
+            ),
+            2,
+        )
+        self.assertIn("(%clone, 3)", str(graph))
+        graph = CustomTracer().trace(model, remove_inplace=True)
+        self.assertEmpty(
+            [node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]
+        )
+        self.assertNotIn("(%clone, 3)", str(graph))
+        mod = torch.fx.GraphModule(model, graph)
+        self.assertNotIn("(%clone, 3)", str(mod.graph))
+        got = mod(x)
+        self.assertEqualArray(expected, got)
+
     def test_tracing_inplace_setitem(self):
         class Model(torch.nn.Module):
             def forward(self, x):
                 xc = x.clone()
                 y = xc[:, :2] * 2
                 xc[:, :2] = y
-                return xc + 2
+                return xc + 3
 
         model = Model()
         x = torch.ones((4, 4))
@@ -130,6 +186,29 @@ class TestTracing(ExtTestCase):
         graph = CustomTracer().trace(model)
         mod = torch.fx.GraphModule(model, graph)
         expected = model(*inputs)
+        got = mod(*inputs)
+        self.assertEqualArray(expected, got)
+
+    def test_tracing_inplace_setitem_ellipsis(self):
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                self.params = torch.zeros((1, 8192, 4), dtype=torch.float32)
+
+            def forward(self, index, update):
+                copy = self.params.clone()
+                copy[..., index] = update
+                return copy
+
+        model = Model()
+        inputs = (
+            (torch.tensor([0, 3, 2, 1], dtype=torch.int64)),
+            (torch.arange(4 * 8192) + 10).reshape((-1, 4)).to(torch.float32),
+        )
+        expected = model(*inputs)
+        graph = CustomTracer().trace(model)
+        mod = torch.fx.GraphModule(model, graph)
         got = mod(*inputs)
         self.assertEqualArray(expected, got)
 

@@ -280,8 +280,9 @@ class ExportOptions:
             begin = time.perf_counter()
 
         if self.tracing:
-            tracer_class = torch.fx.Tracer
-            graph = tracer_class().trace(mod)
+            from .tracing import CustomTracer
+
+            graph = CustomTracer().trace(mod)
             gm = torch.fx.GraphModule(mod, graph)
             return gm
 

@@ -225,3 +225,97 @@ class CustomTracer(torch.fx.Tracer):
                 return maybe_buffer_proxy
 
         return attr_val
+
+    def trace(
+        self,
+        root: Union[torch.nn.Module, Callable[..., Any]],
+        concrete_args: Optional[Dict[str, Any]] = None,
+        remove_inplace: bool = True,
+    ) -> torch.fx.Graph:
+        """
+        Trace ``root`` and return the corresponding FX ``Graph`` representation. ``root``
+        can either be an ``nn.Module`` instance or a Python callable.
+
+        Note that after this call, ``self.root`` may be different from the ``root`` passed
+        in here. For example, when a free function is passed to ``trace()``, we will
+        create an ``nn.Module`` instance to use as the root and add embedded constants
+        to.
+
+
+        Args:
+
+            root (Union[Module, Callable]): Either a ``Module`` or a function to be
+                traced through. Backwards-compatibility for this parameter is
+                guaranteed.
+            concrete_args (Optional[Dict[str, any]]): Concrete arguments that should
+                not be treated as Proxies. This parameter is experimental and
+                its backwards-compatibility is *NOT* guaranteed.
+            remove_inplace (bool): Removes inplace nodes
+
+        Returns:
+
+            A ``Graph`` representing the semantics of the passed-in ``root``.
+        """
+        graph = super().trace(root, concrete_args)
+        if not remove_inplace:
+            return graph
+        return self.remove_inplace(graph)
+
+    def remove_inplace(self, graph: torch.fx.Graph) -> torch.fx.Graph:
+        """
+        Removes inplace operations.
+        """
+        inplace = [
+            (i, node)
+            for i, node in enumerate(graph.nodes)
+            if node.op != "output" and len(node.users) == 0 and node.op.startswith("call_")
+        ]
+        if len(inplace) == 0:
+            # No inplace.
+            return graph
+
+        def delete_user_cb(n, nodes_to_leave):
+            return n not in nodes_to_leave
+
+        existing_nodes = list(enumerate(graph.nodes))
+        for pos, node in reversed(inplace):
+            assert node.target in {
+                "add_",
+                "div_",
+                "mul_",
+                "sub_",
+                "mod_",
+                operator.setitem,
+                "__setitem__",
+            }, (
+                f"Unsupported target {node.target!r} at position {pos}/{len(graph.nodes)}"
+                f"\n--graph\n{graph}"
+            )
+            # We assume the first argument is the one modified inplace.
+            new_name = node
+            old_name = node.args[0]
+
+            # class Node can be used as a key
+            # We also assume a user is placed after this node.
+            nodes_to_leave = {n[1] for n in existing_nodes[: pos + 1]}
+
+            # let's replace
+            changed = old_name.replace_all_uses_with(
+                new_name,
+                delete_user_cb=lambda n, leave=nodes_to_leave: delete_user_cb(n, leave),
+            )
+            assert changed, (
+                f"No change applied, the inplace node [{node}] at position {pos} "
+                f"does not replace [{old_name}] in \n{graph}\n-- node to keep --"
+                f"\n{nodes_to_leave}"
+            )
+
+        inplace = [
+            (i, node)
+            for i, node in enumerate(graph.nodes)
+            if node.op != "output" and len(node.users) == 0 and node.op.startswith("call_")
+        ]
+        assert (
+            len(inplace) == 0
+        ), f"Inplace nodes remain at positions {sorted(_[0] for _ in inplace)} in\n{graph}"
+        return graph
