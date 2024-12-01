@@ -115,10 +115,11 @@ class CustomProxy(torch.fx.proxy.Proxy):
             return _torch_cat(tensors, dim)
         if axis is not None and dim == 0:
             dim = axis
-        root = tensors
-        tl = tensors.node
-        node = root.tracer.create_node("call_function", torch.cat, args=(tl, dim), kwargs={})
-        return root.proxy(node)
+        proxy = tensors
+        node = proxy.tracer.create_node(
+            "call_function", torch.cat, args=(proxy.node, dim), kwargs={}
+        )
+        return proxy.tracer.proxy(node)
 
 
 def _len(x: Any) -> Union[int, CustomProxy]:
@@ -217,14 +218,15 @@ class CustomParameterProxy(CustomProxy):
         return self.param.nelement()
 
 
-class CondOp(torch._ops.HigherOrderOperator):
+class CondCCOp(torch._ops.HigherOrderOperator):
     """
     Cannot be imported from torch.ops.higher_order.cond
     (function cond overwrite submodule cond).
     """
 
     def __init__(self):
-        super().__init__("cond")
+        # we cannot use "cond" to avoid confusion with the existing cond
+        super().__init__("condcc")
 
     def __call__(self, pred, true_fn, false_fn, operands):
         # torch._higher_order_ops.utils.validate_subgraph_args_types(operands)
@@ -244,7 +246,7 @@ def replace_problematic_function_before_tracing():
     }
     newf = {
         "cat": CustomProxy.cat,
-        "cond": CondOp(),
+        "cond": CondCCOp(),
         # ("torch.ops.higher_order", "cond"): CondOp(),
     }
     for k, v in newf.items():
@@ -418,10 +420,14 @@ class CustomTracer(torch.fx.Tracer):
         """
         replaces = {
             CustomProxy.cat: torch.cat,
+            # CondCCOp: torch.ops.higher_order.cond,
         }
         for node in graph.nodes:
-            if node.op == "call_function" and node.target in replaces:
-                node.target = replaces[node.target]
+            if node.op == "call_function":
+                if node.target in replaces:
+                    node.target = replaces[node.target]
+                elif isinstance(node.target, CondCCOp):
+                    node.target = torch.ops.higher_order.cond
 
     @classmethod
     def _inplace_nodes(cls, graph: torch.fx.Graph) -> List[Tuple[int, torch.fx.Node]]:

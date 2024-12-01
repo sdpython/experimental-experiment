@@ -11,7 +11,7 @@ from experimental_experiment.torch_interpreter.tracing import (
 
 class TestTracing(ExtTestCase):
 
-    def test__proxy(self):
+    def test_tracing_simple_proxy(self):
         graph = torch.fx.Graph()
         node = graph.create_node("placeholder", "tx", args=(), kwargs={}, name="txn")
         tr = CustomTracer()
