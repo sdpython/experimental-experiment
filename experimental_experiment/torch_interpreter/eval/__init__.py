@@ -243,9 +243,10 @@ def _make_exporter_export(
             print(exported.graph)
         return exported.module()
     if exporter == "export-tracing":
+        from ..tracing import CustomTracer
+
         try:
-            tracer_class = torch.fx.Tracer
-            graph = tracer_class().trace(model)
+            graph = CustomTracer().trace(model)
             mod = torch.fx.GraphModule(model, graph)
         except Exception as e:
             if not quiet:
