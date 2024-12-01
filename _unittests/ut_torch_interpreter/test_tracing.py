@@ -207,9 +207,55 @@ class TestTracing(ExtTestCase):
             (torch.arange(4 * 8192) + 10).reshape((-1, 4)).to(torch.float32),
         )
         expected = model(*inputs)
+        self.assertNotEmpty(expected)
         graph = CustomTracer().trace(model)
         mod = torch.fx.GraphModule(model, graph)
         got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
+    def test_tracing_list_variable_length(self):
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+
+            def forward(self, x, lx: list):
+                t = torch.cat(lx, axis=1).sum(axis=1, keepdim=True)
+                return torch.sigmoid(self.linear(x)) - self.buff + t
+
+        model = Model()
+        inputs = (
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            [
+                (torch.arange(4) + 10).reshape((-1, 1)).to(torch.float32),
+                (torch.arange(4 * 2) + 10).reshape((-1, 2)).to(torch.float32),
+            ],
+        )
+        expected = model(*inputs)
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
+    def test_tracing_setitem_mask(self):
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                mask = x.to(bool)
+                x[mask] = 2
+                return x
+
+        inputs = (torch.randn((2, 3, 3)),)
+        model = Model()
+        expected = model(*inputs)
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
         self.assertEqualArray(expected, got)
 
 

@@ -1,7 +1,8 @@
+import contextlib
 import inspect
 import math
 import operator
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.fx import Node
 from torch.fx.proxy import TracerBase
@@ -24,6 +25,10 @@ class CustomProxy(torch.fx.proxy.Proxy):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.node.name})"
 
+    def _custom_fx_repr_fn(self) -> str:
+        "To avoid bugs."
+        return f"CustomProxy(%{str(self.node)})"
+
     def __getattr__(self, k) -> "CustomAttribute":
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
@@ -33,10 +38,12 @@ class CustomProxy(torch.fx.proxy.Proxy):
         assert not kwargs, f"Unexpected not empty kwargs={kwargs!r}"
         assert len(args) == 2, f"Unexpected number of args={len(args)}: {args}"
         indices, values = args
+        if isinstance(indices, CustomProxy):
+            indices = indices.node
         node = self.tracer.create_node(
             "call_function",
             operator.setitem,
-            args=(self.node, indices, values.node),
+            args=(self.node, indices, values.node if hasattr(values, "node") else values),
             kwargs={},
         )
         # node_to_replace = self.node
@@ -56,6 +63,23 @@ class CustomProxy(torch.fx.proxy.Proxy):
     def instanceof(self, cls):
         """Tells if this proxy represents a specific class."""
         raise RuntimeError(f"Unable to know if cls is from type {cls}.")
+
+    @classmethod
+    def cat(
+        cls,
+        tensors: List["CustomProxy"],
+        dim: int = 0,
+        *,
+        out=None,
+        axis: Optional[int] = None,
+    ) -> "CustomProxy":
+        """Implements cat for tensors."""
+        if axis is not None and dim == 0:
+            dim = axis
+        node = tensors.tracer.create_node(
+            "call_function", torch.cat, args=(tensors.node, dim), kwargs={}
+        )
+        return tensors.tracer.proxy(node)
 
 
 def _len(x: Any) -> Union[int, CustomProxy]:
@@ -154,6 +178,27 @@ class CustomParameterProxy(CustomProxy):
         return self.param.nelement()
 
 
+@contextlib.contextmanager
+def replace_problematic_function_before_tracing():
+    """
+    Replaces function that cannot be traced with the default tracer
+    such as :func:`torch.cat`.
+    """
+    saved = {
+        "cat": torch.cat,
+    }
+    newf = {
+        "cat": CustomProxy.cat,
+    }
+    for k, v in newf.items():
+        setattr(torch, k, v)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            setattr(torch, k, v)
+
+
 class CustomTracer(torch.fx.Tracer):
     """
     Defines a custom tracer to trace the execution of a model
@@ -182,7 +227,24 @@ class CustomTracer(torch.fx.Tracer):
     def proxy(
         self, node: torch.fx.Node, cls: type[CustomProxy] = CustomProxy
     ) -> torch.fx.Proxy:
+        """
+        Overwrites this method to replace the default Proxy by CustomProxy.
+        """
         return cls(node, self)
+
+    def create_arg(self, a: Any) -> "Argument":  # noqa: F821
+        """
+        Overwrites this method to deal with more argument.
+        """
+        if a is bool:
+            return torch.bool
+        if a is int:
+            return torch.int64
+        if a is float:
+            return torch.float32
+        if a is complex:
+            return torch.complex64
+        return super().create_arg(a)
 
     def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
         """
@@ -238,9 +300,7 @@ class CustomTracer(torch.fx.Tracer):
 
         Note that after this call, ``self.root`` may be different from the ``root`` passed
         in here. For example, when a free function is passed to ``trace()``, we will
-        create an ``nn.Module`` instance to use as the root and add embedded constants
-        to.
-
+        create an ``nn.Module`` instance to use as the root and add embedded constants to.
 
         Args:
 
@@ -256,23 +316,83 @@ class CustomTracer(torch.fx.Tracer):
 
             A ``Graph`` representing the semantics of the passed-in ``root``.
         """
-        graph = super().trace(root, concrete_args)
+        with replace_problematic_function_before_tracing():
+            graph = super().trace(root, concrete_args)
+        self._replace_problematic_functions(graph)
         if not remove_inplace:
             return graph
         return self.remove_inplace(graph)
+
+    @classmethod
+    def _replace_problematic_functions(cls, graph: torch.fx.Graph):
+        """
+        The tracing introduced some problematic functions which need to be replaced.
+        """
+        replaces = {
+            CustomProxy.cat: torch.cat,
+        }
+        for node in graph.nodes:
+            if node.op == "call_function" and node.target in replaces:
+                node.target = replaces[node.target]
+
+    @classmethod
+    def _inplace_nodes(cls, graph: torch.fx.Graph) -> List[Tuple[int, torch.fx.Node]]:
+        """
+        Returns the position and the node involved in inplace modifications.
+        """
+        return [
+            (i, node)
+            for i, node in enumerate(graph.nodes)
+            if node.op != "output"
+            and len(node.users) == 0
+            and node.op.startswith("call_")
+            and node.target not in {operator.getitem}
+        ]
+
+    @classmethod
+    def _replace_meth_setitem(cls, graph: torch.fx.Graph) -> torch.fx.Graph:
+        """
+        The execution of ``op="call_method", target="__setitem__" `` returns None
+        We replace it by ``op="call_function", target="operator.setitem"``.
+        """
+        for node in graph.nodes:
+            if node.op == "call_method" and node.target == "__setitem__":
+                node.op = "call_function"
+                node.target = operator.setitem
+
+    @classmethod
+    def _replace_getattr(cls, graph: torch.fx.Graph) -> torch.fx.Graph:
+        """
+        Nodes such as
+        ``%_tensor_constant0_1 : [num_users=1] = get_attr[target=_tensor_constant0]``
+        are part of the replacement in function ``replace_all_uses_with``.
+        Let's remove the duplicates first.
+        """
+        targets = {}
+        to_replace = []
+        for node in graph.nodes:
+            if node.op == "get_attr":
+                if node.target in targets:
+                    # replacements
+                    to_replace.append((node, targets[node.target]))
+                else:
+                    targets[node.target] = node
+        if to_replace:
+            for node, by in to_replace:
+                node.replace_all_uses_with(by)
+                graph.erase_node(node)
 
     def remove_inplace(self, graph: torch.fx.Graph) -> torch.fx.Graph:
         """
         Removes inplace operations.
         """
-        inplace = [
-            (i, node)
-            for i, node in enumerate(graph.nodes)
-            if node.op != "output" and len(node.users) == 0 and node.op.startswith("call_")
-        ]
+        inplace = self._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace.
             return graph
+
+        self._replace_getattr(graph)
+        self._replace_meth_setitem(graph)
 
         def delete_user_cb(n, nodes_to_leave):
             return n not in nodes_to_leave
@@ -286,7 +406,6 @@ class CustomTracer(torch.fx.Tracer):
                 "sub_",
                 "mod_",
                 operator.setitem,
-                "__setitem__",
             }, (
                 f"Unsupported target {node.target!r} at position {pos}/{len(graph.nodes)}"
                 f"\n--graph\n{graph}"
@@ -310,11 +429,7 @@ class CustomTracer(torch.fx.Tracer):
                 f"\n{nodes_to_leave}"
             )
 
-        inplace = [
-            (i, node)
-            for i, node in enumerate(graph.nodes)
-            if node.op != "output" and len(node.users) == 0 and node.op.startswith("call_")
-        ]
+        inplace = self._inplace_nodes(graph)
         assert (
             len(inplace) == 0
         ), f"Inplace nodes remain at positions {sorted(_[0] for _ in inplace)} in\n{graph}"
