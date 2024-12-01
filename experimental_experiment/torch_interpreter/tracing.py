@@ -7,6 +7,8 @@ import torch
 from torch.fx import Node
 from torch.fx.proxy import TracerBase
 
+_torch_cat = torch.cat
+
 
 class CustomProxy(torch.fx.proxy.Proxy):
     """
@@ -33,6 +35,40 @@ class CustomProxy(torch.fx.proxy.Proxy):
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
         return CustomAttribute(self, k)
+
+    @classmethod
+    def __torch_function__(cls, orig_method, types, args=None, kwargs=None):
+        if isinstance(orig_method, torch._ops.HigherOrderOperator):
+            # not implemented by torch
+            if orig_method is torch.cond:
+                assert (
+                    not kwargs
+                ), f"Unexpected kwargs={kwargs}, args={args}, orig_method={orig_method}"
+                assert (
+                    len(args) == 4
+                ), f"Unexpected kwargs={kwargs}, args={args}, orig_method={orig_method}"
+                assert isinstance(
+                    args[3], list
+                ), f"Unexpected type {type(args[3])} for the last argument"
+                root = args[0]
+                cond_true = root.tracer.register_callable("cond", args[1])
+                cond_false = root.tracer.register_callable("cond", args[2])
+                node = root.tracer.create_node(
+                    "call_function",
+                    orig_method,
+                    args=(
+                        args[0].node,
+                        cond_true,
+                        cond_false,
+                        type(args[3])(a.node for a in args[3]),
+                    ),
+                    kwargs={},
+                )
+                return root.tracer.proxy(node)
+
+        return torch.fx.proxy.Proxy.__torch_function__(
+            orig_method, types, args=args, kwargs=kwargs
+        )
 
     def __setitem__(self, *args, **kwargs):
         assert not kwargs, f"Unexpected not empty kwargs={kwargs!r}"
@@ -74,12 +110,15 @@ class CustomProxy(torch.fx.proxy.Proxy):
         axis: Optional[int] = None,
     ) -> "CustomProxy":
         """Implements cat for tensors."""
+        assert out is None, "Tracing is not implementing is out is not None."
+        if isinstance(tensors, list):
+            return _torch_cat(tensors, dim)
         if axis is not None and dim == 0:
             dim = axis
-        node = tensors.tracer.create_node(
-            "call_function", torch.cat, args=(tensors.node, dim), kwargs={}
-        )
-        return tensors.tracer.proxy(node)
+        root = tensors
+        tl = tensors.node
+        node = root.tracer.create_node("call_function", torch.cat, args=(tl, dim), kwargs={})
+        return root.proxy(node)
 
 
 def _len(x: Any) -> Union[int, CustomProxy]:
@@ -178,6 +217,20 @@ class CustomParameterProxy(CustomProxy):
         return self.param.nelement()
 
 
+class CondOp(torch._ops.HigherOrderOperator):
+    """
+    Cannot be imported from torch.ops.higher_order.cond
+    (function cond overwrite submodule cond).
+    """
+
+    def __init__(self):
+        super().__init__("cond")
+
+    def __call__(self, pred, true_fn, false_fn, operands):
+        # torch._higher_order_ops.utils.validate_subgraph_args_types(operands)
+        return super().__call__(pred, true_fn, false_fn, operands)
+
+
 @contextlib.contextmanager
 def replace_problematic_function_before_tracing():
     """
@@ -186,17 +239,27 @@ def replace_problematic_function_before_tracing():
     """
     saved = {
         "cat": torch.cat,
+        "cond": torch.cond,
+        # ("torch.ops.higher_order", "cond"): torch.ops.higher_order.cond,
     }
     newf = {
         "cat": CustomProxy.cat,
+        "cond": CondOp(),
+        # ("torch.ops.higher_order", "cond"): CondOp(),
     }
     for k, v in newf.items():
-        setattr(torch, k, v)
+        if isinstance(k, tuple):
+            setattr(k[0], k[1], v)
+        else:
+            setattr(torch, k, v)
     try:
         yield
     finally:
         for k, v in saved.items():
-            setattr(torch, k, v)
+            if isinstance(k, tuple):
+                setattr(k[0], k[1], v)
+            else:
+                setattr(torch, k, v)
 
 
 class CustomTracer(torch.fx.Tracer):
@@ -223,6 +286,25 @@ class CustomTracer(torch.fx.Tracer):
             autowrap_functions=autowrap_functions,
             param_shapes_constant=param_shapes_constant,
         )
+        self._callables = {}
+
+    def register_callable(self, name: str, fn: Callable) -> torch.fx.Node:
+        """
+        Registers a function and return a unique name.
+
+        :param name: prefix to prepend to the function name
+        :param fn: function
+        :return new_name
+        """
+        cand = f"_cb_{name}_{fn.__name__}_0"
+        if cand in self._callables:
+            i = 1
+            cand = f"_cb_{name}_{fn.__name__}_{i}"
+            while cand in self._callables:
+                i += 1
+                cand = f"_cb_{name}_{fn.__name__}_{i}"
+        self._callables[cand] = fn
+        return self.create_node("get_attr", cand, args=(), kwargs={})
 
     def proxy(
         self, node: torch.fx.Node, cls: type[CustomProxy] = CustomProxy
@@ -293,6 +375,7 @@ class CustomTracer(torch.fx.Tracer):
         root: Union[torch.nn.Module, Callable[..., Any]],
         concrete_args: Optional[Dict[str, Any]] = None,
         remove_inplace: bool = True,
+        update_model_with_callable: bool = True,
     ) -> torch.fx.Graph:
         """
         Trace ``root`` and return the corresponding FX ``Graph`` representation. ``root``
@@ -311,6 +394,8 @@ class CustomTracer(torch.fx.Tracer):
                 not be treated as Proxies. This parameter is experimental and
                 its backwards-compatibility is *NOT* guaranteed.
             remove_inplace (bool): Removes inplace nodes
+            update_model_with_attribute (bool): in some cases (control flow),
+                the model needs to be
 
         Returns:
 
@@ -319,6 +404,9 @@ class CustomTracer(torch.fx.Tracer):
         with replace_problematic_function_before_tracing():
             graph = super().trace(root, concrete_args)
         self._replace_problematic_functions(graph)
+        if update_model_with_callable and self._callables:
+            for k, v in self._callables.items():
+                setattr(root, k, v)
         if not remove_inplace:
             return graph
         return self.remove_inplace(graph)

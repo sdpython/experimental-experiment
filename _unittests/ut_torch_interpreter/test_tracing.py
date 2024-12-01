@@ -258,6 +258,27 @@ class TestTracing(ExtTestCase):
         self.assertNotEmpty(got)
         self.assertEqualArray(expected, got)
 
+    def test_tracing_cond(self):
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                def true_fn(x):
+                    return torch.sin(x)
+
+                def false_fn(x):
+                    return torch.cos(x)
+
+                return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+
+        inputs = (torch.rand(5, 3),)
+        model = Model()
+        expected = model(*inputs)
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
