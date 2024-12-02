@@ -648,7 +648,9 @@ def run_exporter(
         print(f"--      got={string_type(got, with_shape=True, with_min_max=True)}")
     del disc["n"]
     del disc["sum"]
-    disc.update(dict(success=1 if disc["abs"] < 0.1 else 0))
+    disc.update(
+        dict(success=1 if disc["abs"] < 0.1 else 0, model_cls=model.__class__, exported=mod)
+    )
     if disc["abs"] >= 0.1:
         disc["error"] = "diff.0"
         disc["error_step"] = "diff.0"

@@ -233,9 +233,7 @@ class DynamoInterpreter:
             if self.builder.has_type(name):
                 itype = self.builder.get_type(name)
                 ttype = onnx_dtype_to_torch_dtype(itype)
-                aten_name = aten_name = (
-                    self._get_aten_name(node) if node.op == "call_function" else "-"
-                )
+                aten_name = self._get_aten_name(node) if node.op == "call_function" else "-"
                 assert ttype == exp_dtype, (
                     f"Type mismatch for {name!r}, node.op={node.op!r}, "
                     f"aten_name={aten_name!r}, "

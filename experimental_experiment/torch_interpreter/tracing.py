@@ -2,6 +2,7 @@ import contextlib
 import inspect
 import math
 import operator
+import types
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.fx import Node
@@ -439,6 +440,33 @@ class CustomTracer(torch.fx.Tracer):
         return n
 
     @classmethod
+    def _get_aten_name(cls, node: torch.fx.Node) -> str:
+        """
+        Returns the aten name for the target as a string.
+        """
+        if node.target == operator.getitem:
+            return "getitem"
+        if isinstance(node.target, torch._ops.OpOverloadPacket):
+            if node.target != torch.ops.aten.sym_size:
+                raise RuntimeError(f"Unsupported function {node!r}.")
+            raise NotImplementedError(f"Unsupported function {node!r} (not implemented).")
+
+        if isinstance(node.target, types.BuiltinFunctionType):
+            return str(node.target)
+
+        if isinstance(node.target, torch._ops.OpOverload):
+            return node.target.name()
+
+        if callable(node.target):
+            # a single function
+            return f"aten_{node.target.__name__}"
+
+        raise NotImplementedError(
+            f"Unsupported function {node!r} (not implemented), "
+            f"node.target={node.target}, type is {type(node.target)}."
+        )
+
+    @classmethod
     def _inplace_nodes(cls, graph: torch.fx.Graph) -> List[Tuple[int, torch.fx.Node]]:
         """
         Returns the position and the node involved in inplace modifications.
@@ -450,6 +478,14 @@ class CustomTracer(torch.fx.Tracer):
             and len(node.users) == 0
             and node.op.startswith("call_")
             and node.target not in {operator.getitem}
+            and cls._get_aten_name(node)
+            not in {
+                "aten::_assert_scalar",
+                "aten::sym_constrain_range_for_size",
+                "aten::_log_api_usage_once",
+                "aten::_enter_autocast",
+                "aten::_set_grad_enabled",
+            }
         ]
 
     @classmethod
