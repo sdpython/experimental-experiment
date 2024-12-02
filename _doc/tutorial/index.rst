@@ -13,5 +13,6 @@ The tutorial is a collection of examples or benchmark around that topic.
     
     pytorch
     onnx
+    exported
     exporter_recipes
     docker

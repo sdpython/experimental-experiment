@@ -2105,7 +2105,7 @@ def aten_elu_(
     inplace: bool = False,
     name="elu_",
 ) -> T:
-    "elu_, inplace modifications are not allowed, we assume there were removed"
+    "`elu_`, inplace modifications are not allowed, we assume there were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_elu(
         g,
@@ -3343,7 +3343,7 @@ def aten_hardswish_(
     inplace: bool = False,
     name: str = "hardswish_",
 ) -> T:
-    "hardswish_, inplace modifications are not allowed, we assume there were removed"
+    "`hardswish_`, inplace modifications are not allowed, we assume there were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_hardswish(g, sts, outputs, x, name=name)
 
@@ -3383,7 +3383,7 @@ def aten_hardtanh_(
     inplace: bool = False,
     name: str = "hardtanh_",
 ) -> T:
-    "hardswish_, inplace modifications are not allowed, we assume there were removed"
+    "`hardtanh_`, inplace modifications are not allowed, we assume there were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_hardtanh(
         g, sts, outputs, x, min_val=min_val, max_val=max_val, inplace=False, name=name
@@ -4347,7 +4347,7 @@ def aten_leaky_relu_(
     inplace: bool = False,
     name: str = "leaky_relu_",
 ) -> T:
-    "leaky_relu_, inplace modifications are not allowed, we assume there were removed"
+    "`leaky_relu_`, inplace modifications are not allowed, we assume there were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_leaky_relu(g, sts, outputs, a, negative_slope, inplace=False, name=name)
 
@@ -6641,7 +6641,7 @@ def aten_relu_(
     inplace: bool = False,
     name: str = "relu_",
 ) -> T:
-    "relu_, inplace modifications are not allowed, we assume there were removed"
+    "`relu_`, inplace modifications are not allowed, we assume there were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_relu(g, sts, outputs, x, inplace, name=name)
 
@@ -7579,7 +7579,7 @@ def aten_silu_(
     inplace: bool = False,
     name: str = "silu_",
 ) -> T:
-    "silu_, inplace modifications are not allowed, we assume there were removed"
+    "`silu_`, inplace modifications are not allowed, we assume there were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_silu(g, sts, outputs, x, inplace=inplace, name=name)
 
