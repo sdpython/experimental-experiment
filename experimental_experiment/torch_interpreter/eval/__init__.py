@@ -195,7 +195,7 @@ def _make_exporter_export(
             print("-- graph")
             print(exported.graph)
         return exported.module()
-    if exporter == "export-strict-dec":
+    if exporter in ("export-strict-dec", "export-strict-decomposition"):
         try:
             exported = torch.export.export(
                 model, inputs, dynamic_shapes=dynamic_shapes, strict=True
@@ -225,7 +225,7 @@ def _make_exporter_export(
             print("-- graph")
             print(exported.graph)
         return exported.module()
-    if exporter == "export-nostrict-dec":
+    if exporter in ("export-nostrict-dec", "export-nostrict-decomposition"):
         try:
             exported = torch.export.export(
                 model, inputs, dynamic_shapes=dynamic_shapes, strict=False
@@ -256,6 +256,43 @@ def _make_exporter_export(
             print("-- graph")
             print(graph)
         return mod
+    if exporter == "export-jit":
+        from torch._export.converter import TS2EPConverter
+
+        try:
+            jit_model = torch.jit.trace(
+                model, example_inputs=inputs, check_trace=False, strict=False
+            )
+            exported = TS2EPConverter(jit_model, inputs, {}).convert()
+            if verbose >= 9:
+                print("-- graph")
+                print(exported.graph)
+        except Exception as e:
+            if not quiet:
+                raise
+            return dict(error=str(e), success=0, error_step="export")
+        return exported.module()
+    if exporter in ("export-jit-dec", "export-jit-decomposition"):
+        from torch._export.converter import TS2EPConverter
+
+        try:
+            jit_model = torch.jit.trace(
+                model, example_inputs=inputs, check_trace=False, strict=False
+            )
+            exported = TS2EPConverter(jit_model, inputs, {}).convert()
+            if verbose >= 9:
+                print("-- graph before decomposition")
+                print(exported.graph)
+            exported = exported.run_decompositions({})
+            if verbose >= 9:
+                print("-- graph after decomposition")
+                print(exported.graph)
+        except Exception as e:
+            if not quiet:
+                raise
+            return dict(error=str(e), success=0, error_step="export")
+        return exported.module()
+
     raise AssertionError(f"Unexpected exporter={exporter!r}")
 
 
@@ -557,6 +594,9 @@ def run_exporter(
             verbose=verbose,
             quiet=quiet,
         )
+        if isinstance(mod, dict):
+            # something went wrong
+            return mod
     else:
         res = _make_exporter_onnx(
             exporter,
@@ -648,7 +688,9 @@ def run_exporter(
         print(f"--      got={string_type(got, with_shape=True, with_min_max=True)}")
     del disc["n"]
     del disc["sum"]
-    disc.update(dict(success=1 if disc["abs"] < 0.1 else 0))
+    disc.update(
+        dict(success=1 if disc["abs"] < 0.1 else 0, model_cls=model.__class__, exported=mod)
+    )
     if disc["abs"] >= 0.1:
         disc["error"] = "diff.0"
         disc["error_step"] = "diff.0"

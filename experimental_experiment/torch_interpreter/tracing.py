@@ -2,6 +2,7 @@ import contextlib
 import inspect
 import math
 import operator
+import types
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.fx import Node
@@ -185,7 +186,7 @@ class CustomParameterProxy(CustomProxy):
     """
     A special proxy which lets "shape", "size", "dim", and a few other
     attribute accesses pass through to the underlying  module parameter object,
-    so that conditional tests on these attributes will not throw exception during tracing
+    so that conditional tests on these attributes will not throw exception during tracing.
     """
 
     def __init__(self, tracer: TracerBase, node: Node, name, param):
@@ -296,7 +297,7 @@ class CustomTracer(torch.fx.Tracer):
 
         :param name: prefix to prepend to the function name
         :param fn: function
-        :return new_name
+        :return: new_name
         """
         cand = f"_cb_{name}_{fn.__name__}_0"
         if cand in self._callables:
@@ -332,7 +333,7 @@ class CustomTracer(torch.fx.Tracer):
 
     def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
         """
-        See :meth:`torch.fx.Tracer.getattr.
+        See :meth:`torch.fx.Tracer.getattr`.
         """
 
         def maybe_get_proxy_for_attr(attr_val, collection_to_search, parameter_proxy_cache):
@@ -387,21 +388,16 @@ class CustomTracer(torch.fx.Tracer):
         in here. For example, when a free function is passed to ``trace()``, we will
         create an ``nn.Module`` instance to use as the root and add embedded constants to.
 
-        Args:
-
-            root (Union[Module, Callable]): Either a ``Module`` or a function to be
-                traced through. Backwards-compatibility for this parameter is
-                guaranteed.
-            concrete_args (Optional[Dict[str, any]]): Concrete arguments that should
-                not be treated as Proxies. This parameter is experimental and
-                its backwards-compatibility is *NOT* guaranteed.
-            remove_inplace (bool): Removes inplace nodes
-            update_model_with_attribute (bool): in some cases (control flow),
-                the model needs to be
-
-        Returns:
-
-            A ``Graph`` representing the semantics of the passed-in ``root``.
+        :param root: Either a ``Module`` or a function to be
+            traced through. Backwards-compatibility for this parameter is
+            guaranteed.
+        :param concrete_args: Concrete arguments that should
+            not be treated as Proxies. This parameter is experimental and
+            its backwards-compatibility is *NOT* guaranteed.
+        :param remove_inplace: Removes inplace nodes
+        :param update_model_with_attribute: in some cases (control flow),
+            the model needs to be
+        :return: A ``Graph`` representing the semantics of the passed-in ``root``.
         """
         with replace_problematic_function_before_tracing():
             graph = super().trace(root, concrete_args)
@@ -410,24 +406,63 @@ class CustomTracer(torch.fx.Tracer):
             for k, v in self._callables.items():
                 setattr(root, k, v)
         if not remove_inplace:
+            graph.lint()
             return graph
-        return self.remove_inplace(graph)
+        self.remove_inplace(graph)
+        graph.lint()
+        return graph
 
     @classmethod
-    def _replace_problematic_functions(cls, graph: torch.fx.Graph):
+    def _replace_problematic_functions(cls, graph: torch.fx.Graph) -> int:
         """
         The tracing introduced some problematic functions which need to be replaced.
+
+        :return: number of impacted nodes
         """
         replaces = {
             CustomProxy.cat: torch.cat,
             # CondCCOp: torch.ops.higher_order.cond,
         }
+        n = 0
         for node in graph.nodes:
             if node.op == "call_function":
                 if node.target in replaces:
+                    n += 1
                     node.target = replaces[node.target]
                 elif isinstance(node.target, CondCCOp):
+                    n += 1
                     node.target = torch.ops.higher_order.cond
+        return n
+
+    @classmethod
+    def _get_aten_name(cls, node: torch.fx.Node) -> str:
+        """
+        Returns the aten name for the target as a string.
+        """
+        if node.target == operator.getitem:
+            return "getitem"
+        if isinstance(node.target, torch._ops.OpOverloadPacket):
+            if node.target != torch.ops.aten.sym_size:
+                raise RuntimeError(f"Unsupported function {node!r}.")
+            raise NotImplementedError(f"Unsupported function {node!r} (not implemented).")
+
+        if isinstance(node.target, types.BuiltinFunctionType):
+            return str(node.target)
+
+        if isinstance(node.target, torch._ops.OpOverload):
+            return node.target.name()
+
+        if callable(node.target):
+            # a single function
+            return f"aten_{node.target.__name__}"
+
+        if isinstance(node.target, str):
+            return node.target
+
+        raise NotImplementedError(
+            f"Unsupported function {node!r} (not implemented), "
+            f"node.target={node.target}, type is {type(node.target)}."
+        )
 
     @classmethod
     def _inplace_nodes(cls, graph: torch.fx.Graph) -> List[Tuple[int, torch.fx.Node]]:
@@ -441,26 +476,41 @@ class CustomTracer(torch.fx.Tracer):
             and len(node.users) == 0
             and node.op.startswith("call_")
             and node.target not in {operator.getitem}
+            and cls._get_aten_name(node)
+            not in {
+                "aten::_assert_scalar",
+                "aten::sym_constrain_range_for_size",
+                "aten::_log_api_usage_once",
+                "aten::_enter_autocast",
+                "aten::_set_grad_enabled",
+            }
         ]
 
     @classmethod
-    def _replace_meth_setitem(cls, graph: torch.fx.Graph) -> torch.fx.Graph:
+    def _replace_meth_setitem(cls, graph: torch.fx.Graph) -> int:
         """
         The execution of ``op="call_method", target="__setitem__" `` returns None
         We replace it by ``op="call_function", target="operator.setitem"``.
+
+        :return: number of impacted nodes
         """
+        n = 0
         for node in graph.nodes:
             if node.op == "call_method" and node.target == "__setitem__":
                 node.op = "call_function"
                 node.target = operator.setitem
+                n += 1
+        return n
 
     @classmethod
-    def _replace_getattr(cls, graph: torch.fx.Graph) -> torch.fx.Graph:
+    def _replace_getattr(cls, graph: torch.fx.Graph) -> int:
         """
         Nodes such as
         ``%_tensor_constant0_1 : [num_users=1] = get_attr[target=_tensor_constant0]``
         are part of the replacement in function ``replace_all_uses_with``.
         Let's remove the duplicates first.
+
+        :return: number of impacted get_attr nodes
         """
         targets = {}
         to_replace = []
@@ -475,18 +525,23 @@ class CustomTracer(torch.fx.Tracer):
             for node, by in to_replace:
                 node.replace_all_uses_with(by)
                 graph.erase_node(node)
+        return len(to_replace)
 
-    def remove_inplace(self, graph: torch.fx.Graph) -> torch.fx.Graph:
+    @classmethod
+    def remove_inplace(cls, graph: torch.fx.Graph) -> int:
         """
         Removes inplace operations.
+
+        :return: number of inplace nodes removed
         """
-        inplace = self._inplace_nodes(graph)
+        inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace.
-            return graph
+            return False
 
-        self._replace_getattr(graph)
-        self._replace_meth_setitem(graph)
+        n_inplace = len(inplace)
+        cls._replace_getattr(graph)
+        cls._replace_meth_setitem(graph)
 
         def delete_user_cb(n, nodes_to_leave):
             return n not in nodes_to_leave
@@ -523,8 +578,8 @@ class CustomTracer(torch.fx.Tracer):
                 f"\n{nodes_to_leave}"
             )
 
-        inplace = self._inplace_nodes(graph)
+        inplace = cls._inplace_nodes(graph)
         assert (
             len(inplace) == 0
         ), f"Inplace nodes remain at positions {sorted(_[0] for _ in inplace)} in\n{graph}"
-        return graph
+        return n_inplace

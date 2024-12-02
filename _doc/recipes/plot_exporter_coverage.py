@@ -6,6 +6,8 @@ Measures the exporter success on many test cases
 
 All test cases can be found in module
 :mod:`experimental_experiment.torch_interpreter.eval.model_cases`.
+Page :ref:`l-exported-program-cases` shows the exported
+program for many of those cases.
 
 """
 
@@ -28,6 +30,7 @@ exporters = (
         "export-strict-dec",
         "export-nostrict",
         "export-nostrict-dec",
+        "export-jit",
         "export-tracing",
         "custom-strict",
         "custom-nostrict",

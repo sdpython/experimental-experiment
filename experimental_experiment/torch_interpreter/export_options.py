@@ -21,6 +21,7 @@ class ExportOptions:
     :param tracing: use symbolic tracing
     :param jit: use jit to get a graph then converts it into a fx graph
     :param strategy: to overwrite all the previous parameters with just a value
+    :param remove_inplace: remove inplace nodes
     :param aten_as_function: keeps aten function as local function to keep a faithful
         translation of the fx graph.
 
@@ -84,6 +85,7 @@ class ExportOptions:
         strategy: Optional[str] = None,
         dynamo: bool = False,
         aten_as_function: bool = False,
+        remove_inplace: bool = True,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -95,6 +97,7 @@ class ExportOptions:
         self.strategy = strategy
         self.jit = jit
         self.aten_as_function = aten_as_function
+        self.remove_inplace = remove_inplace
 
         if strategy is not None:
             assert strategy in self._allowed, (
@@ -175,6 +178,7 @@ class ExportOptions:
     ) -> Union["torch.export.ExportedProgram", "torch.fx.GraphModule"]:  # noqa: F821
         """Exports the model into an exported program."""
         import torch
+        from .tracing import CustomTracer
 
         if self.fallback or self.strategy in {
             "fallback",
@@ -202,63 +206,56 @@ class ExportOptions:
                         verbose=max(verbose - 1, 0),
                     )
                 except Exception as e:
-                    excs.append(e)
+                    excs.append((opt, e))
                     if verbose:
                         se = str(e).split("\n", maxsplit=1)[0]
                         print(f"[ExportOptions.export] fails due to {se}")
                     continue
 
-                if isinstance(res, torch.export.ExportedProgram) and any(
-                    len(node.users) == 0
-                    for node in res.graph.nodes
-                    if node.op == "call_function"
-                ):
-                    # One node has no users, this usually indicates an inplace modifications.
-                    # This is rejected.
-                    nousers = [
-                        node
-                        for node in res.graph.nodes
-                        if len(node.users) == 0
-                        if node.op == "call_function"
-                    ]
-                    excs.append(
-                        f"Probable inplace modifications, "
-                        f"there are nodes with no users: {nousers}."
-                    )
-                    if verbose:
-                        print(f"[ExportOptions.export] fails due to {excs[-1]}")
-
-                    if not opt.decomposition_table:
-                        # We try with decomposition if possible and to save time.
-                        if verbose:
-                            print(
-                                f"[ExportOptions.export] current decomposition_table="
-                                f"{opt.decomposition_table}, let's try with 'default'"
-                            )
-                        res = apply_decompositions(res, "default")
-                        if any(
-                            len(node.users) == 0
-                            for node in res.graph.nodes
-                            if node.op == "call_function"
-                        ):
-                            # it fails
-                            nousers = [
-                                node
-                                for node in res.graph.nodes
-                                if len(node.users) == 0
-                                if node.op == "call_function"
-                            ]
-                            excs.append(
+                if isinstance(res, torch.export.ExportedProgram):
+                    inplace_nodes = CustomTracer._inplace_nodes(res.graph)
+                    if inplace_nodes:
+                        # One node has no users, this usually
+                        # indicates an inplace modifications.
+                        # This is rejected.
+                        excs.append(
+                            (
+                                opt,
                                 f"Probable inplace modifications, "
-                                f"even after decomposition. "
-                                f"there are nodes with no users: {nousers}."
+                                f"there are nodes with no users: {inplace_nodes}.",
                             )
+                        )
+                        if verbose:
+                            print(f"[ExportOptions.export] fails due to {excs[-1][-1]}")
+
+                        if not opt.decomposition_table:
+                            # We try with decomposition if possible and to save time.
                             if verbose:
-                                print(f"[ExportOptions.export] fails again with {excs[-1]}")
+                                print(
+                                    f"[ExportOptions.export] current decomposition_table="
+                                    f"{opt.decomposition_table}, let's try with 'default'"
+                                )
+                            res = apply_decompositions(res, "default")
+                            inplace_nodes = CustomTracer._inplace_nodes(res.graph)
+                            if inplace_nodes:
+                                # it fails
+                                excs.append(
+                                    (
+                                        opt,
+                                        f"Probable inplace modifications, "
+                                        f"even after decomposition. "
+                                        f"there are nodes with no users: {inplace_nodes}.",
+                                    )
+                                )
+                                if verbose:
+                                    print(
+                                        f"[ExportOptions.export] fails again with "
+                                        f"{excs[-1][-1]}"
+                                    )
+                                continue
+                            opt.decomposition_table = "default"
+                        else:
                             continue
-                        opt.decomposition_table = "default"
-                    else:
-                        continue
 
                 if verbose:
                     print(f"[ExportOptions.export] winning options {opt}")
@@ -378,6 +375,13 @@ class ExportOptions:
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
+
+        if self.remove_inplace:
+            modified = CustomTracer().remove_inplace(exported_program.graph)
+            if modified:
+                if verbose:
+                    print(f"[ExportOptions.export] {modified} inplaced nodes were removed")
+                res.graph.lint()
 
         if verbose:
             print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
