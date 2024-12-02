@@ -461,6 +461,9 @@ class CustomTracer(torch.fx.Tracer):
             # a single function
             return f"aten_{node.target.__name__}"
 
+        if isinstance(node.target, str):
+            return node.target
+
         raise NotImplementedError(
             f"Unsupported function {node!r} (not implemented), "
             f"node.target={node.target}, type is {type(node.target)}."
