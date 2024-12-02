@@ -591,7 +591,8 @@ def get_phi_35_vision_instruct(
         )
 
         data = restore_dummy_inputs_for_phi_35_vision_instruct(
-            num_hidden_layers=config["num_hidden_layers"]
+            num_hidden_layers=config["num_hidden_layers"],
+            with_images=input_kind & LLMInputKind.images,
         )
         args, kwargs = data
         inputs = {}

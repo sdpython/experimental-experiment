@@ -87,6 +87,8 @@ def obj_size(obj: Any) -> int:
         return sys.getsizeof(obj)
     if obj.__class__.__name__ == "MambaCache":
         return obj_size(obj.conv_states) + obj_size(obj.ssm_states)
+    if obj.__class__.__name__ == "DynamicCache":
+        return obj_size(obj.key_cache) + obj_size(obj.value_cache)
     raise AssertionError(f"input_size not implemented for type {type(obj)}")
 
 

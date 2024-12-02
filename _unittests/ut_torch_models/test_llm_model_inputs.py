@@ -28,14 +28,49 @@ class TestLlmModelInputs(ExtTestCase):
             num_hidden_layers=1,
             device="cuda",
             n_iterations=2,
+            with_images=False,
             prefix="test_",
             verbose=1,
         )
         for f in filenames:
             self.assertExists(f)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_cuda()
+    @hide_stdout()
+    def test_generate_dummy_inputs_with_images(self):
+
+        filenames = generate_dummy_inputs(
+            "microsoft/Phi-3.5-vision-instruct",
+            num_hidden_layers=1,
+            device="cuda",
+            n_iterations=2,
+            prefix="test_",
+            verbose=1,
+            with_images=True,
+        )
+        for f in filenames:
+            self.assertExists(f)
+
     def test_restore_dummy_inputs(self):
-        dummies = restore_dummy_inputs_for_phi_35_vision_instruct(num_hidden_layers=1)
+        dummies = restore_dummy_inputs_for_phi_35_vision_instruct(
+            num_hidden_layers=1, with_images=True
+        )
+        self.assertIsInstance(dummies, tuple)
+        self.assertEqual(len(dummies), 2)
+        self.assertIsInstance(dummies[0], tuple)
+        self.assertIsInstance(dummies[1], dict)
+        for k, v in dummies[1].items():
+            if k == "past_key_values":
+                self.assertIn("DynamicCache", str(type(v)))
+
+    def test_restore_dummy_inputs_with_images(self):
+        dummies = restore_dummy_inputs_for_phi_35_vision_instruct(
+            num_hidden_layers=1, with_images=True
+        )
         self.assertIsInstance(dummies, tuple)
         self.assertEqual(len(dummies), 2)
         self.assertIsInstance(dummies[0], tuple)
