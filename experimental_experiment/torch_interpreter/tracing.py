@@ -410,24 +410,33 @@ class CustomTracer(torch.fx.Tracer):
             for k, v in self._callables.items():
                 setattr(root, k, v)
         if not remove_inplace:
+            graph.lint()
             return graph
-        return self.remove_inplace(graph)
+        self.remove_inplace(graph)
+        graph.lint()
+        return graph
 
     @classmethod
-    def _replace_problematic_functions(cls, graph: torch.fx.Graph):
+    def _replace_problematic_functions(cls, graph: torch.fx.Graph) -> int:
         """
         The tracing introduced some problematic functions which need to be replaced.
+
+        :return: number of impacted nodes
         """
         replaces = {
             CustomProxy.cat: torch.cat,
             # CondCCOp: torch.ops.higher_order.cond,
         }
+        n = 0
         for node in graph.nodes:
             if node.op == "call_function":
                 if node.target in replaces:
+                    n += 1
                     node.target = replaces[node.target]
                 elif isinstance(node.target, CondCCOp):
+                    n += 1
                     node.target = torch.ops.higher_order.cond
+        return n
 
     @classmethod
     def _inplace_nodes(cls, graph: torch.fx.Graph) -> List[Tuple[int, torch.fx.Node]]:
@@ -444,23 +453,30 @@ class CustomTracer(torch.fx.Tracer):
         ]
 
     @classmethod
-    def _replace_meth_setitem(cls, graph: torch.fx.Graph) -> torch.fx.Graph:
+    def _replace_meth_setitem(cls, graph: torch.fx.Graph) -> int:
         """
         The execution of ``op="call_method", target="__setitem__" `` returns None
         We replace it by ``op="call_function", target="operator.setitem"``.
+
+        :return: number of impacted nodes
         """
+        n = 0
         for node in graph.nodes:
             if node.op == "call_method" and node.target == "__setitem__":
                 node.op = "call_function"
                 node.target = operator.setitem
+                n += 1
+        return n
 
     @classmethod
-    def _replace_getattr(cls, graph: torch.fx.Graph) -> torch.fx.Graph:
+    def _replace_getattr(cls, graph: torch.fx.Graph) -> int:
         """
         Nodes such as
         ``%_tensor_constant0_1 : [num_users=1] = get_attr[target=_tensor_constant0]``
         are part of the replacement in function ``replace_all_uses_with``.
         Let's remove the duplicates first.
+
+        :return: number of impacted get_attr nodes
         """
         targets = {}
         to_replace = []
@@ -475,18 +491,23 @@ class CustomTracer(torch.fx.Tracer):
             for node, by in to_replace:
                 node.replace_all_uses_with(by)
                 graph.erase_node(node)
+        return len(to_replace)
 
-    def remove_inplace(self, graph: torch.fx.Graph) -> torch.fx.Graph:
+    @classmethod
+    def remove_inplace(cls, graph: torch.fx.Graph) -> int:
         """
         Removes inplace operations.
+
+        :return: number of inplace nodes removed
         """
-        inplace = self._inplace_nodes(graph)
+        inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace.
-            return graph
+            return False
 
-        self._replace_getattr(graph)
-        self._replace_meth_setitem(graph)
+        n_inplace = len(inplace)
+        cls._replace_getattr(graph)
+        cls._replace_meth_setitem(graph)
 
         def delete_user_cb(n, nodes_to_leave):
             return n not in nodes_to_leave
@@ -523,8 +544,8 @@ class CustomTracer(torch.fx.Tracer):
                 f"\n{nodes_to_leave}"
             )
 
-        inplace = self._inplace_nodes(graph)
+        inplace = cls._inplace_nodes(graph)
         assert (
             len(inplace) == 0
         ), f"Inplace nodes remain at positions {sorted(_[0] for _ in inplace)} in\n{graph}"
-        return graph
+        return n_inplace

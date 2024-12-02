@@ -2025,6 +2025,20 @@ def aten_dropout(
     return result
 
 
+def aten_feature_dropout(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    p: float,
+    train: bool,
+    name: str = "feature_dropout",
+) -> T:
+    """feature_dropout"""
+    assert not train, f"feature dropout not implemented for train={train}{g.get_debug_msg()}"
+    return aten_dropout(g, sts, outputs, x, p=p, training=train, name=name)
+
+
 def aten_dropout_(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2078,6 +2092,32 @@ def aten_elu(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_elu_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    alpha: float = 1.0,
+    scale: float = 1.0,
+    input_scale: int = 1,
+    inplace: bool = False,
+    name="elu_",
+) -> T:
+    "elu_, inplace modifications are not allowed, we assume there were removed"
+    assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
+    return aten_elu(
+        g,
+        sts,
+        outputs,
+        x,
+        alpha=alpha,
+        scale=scale,
+        input_scale=input_scale,
+        inplace=False,
+        name=name,
+    )
 
 
 def aten_embedding(
@@ -2640,6 +2680,23 @@ def aten_expand(
     if not sts:
         g.set_type(res, g.get_type(x))
         g.set_rank(res, len(sizes))
+    return res
+
+
+def aten_expand_as(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    like: T,
+    name: str = "expand_as",
+) -> T:
+    """expand_as"""
+
+    shape = g.op.Shape(like, name=name)
+    res = g.op.Expand(x, shape, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, like, itype=g.get_type(x))
     return res
 
 
@@ -3267,13 +3324,28 @@ def aten_hardswish(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
+    inplace: bool = False,
     name: str = "hardswish",
 ) -> T:
     """hardswish"""
+    assert not inplace, f"Unexpected value for inplace{inplace}{g.get_debug_msg()}"
     res = g.op.HardSwish(x, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_hardswish_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    inplace: bool = False,
+    name: str = "hardswish_",
+) -> T:
+    "hardswish_, inplace modifications are not allowed, we assume there were removed"
+    assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
+    return aten_hardswish(g, sts, outputs, x, name=name)
 
 
 def aten_hardtanh(
@@ -3283,9 +3355,11 @@ def aten_hardtanh(
     x: T,
     min_val: float = -1.0,
     max_val: float = 1.0,
+    inplace: bool = False,
     name: str = "hardtanh",
 ) -> T:
     """hardtanh(Tensor self, Scalar min_val=-1, Scalar max_val=1) -> Tensor"""
+    assert not inplace, f"unexpected value for inplace={inplace}{g.get_debug_msg()}"
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     res = g.op.Clip(
         x,
@@ -3297,6 +3371,23 @@ def aten_hardtanh(
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_hardtanh_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min_val: float = -1.0,
+    max_val: float = 1.0,
+    inplace: bool = False,
+    name: str = "hardtanh_",
+) -> T:
+    "hardswish_, inplace modifications are not allowed, we assume there were removed"
+    assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
+    return aten_hardtanh(
+        g, sts, outputs, x, min_val=min_val, max_val=max_val, inplace=False, name=name
+    )
 
 
 def aten_hardtanh_backward(
@@ -4245,6 +4336,20 @@ def aten_leaky_relu(
     if not sts:
         set_type_shape_unary_op(g, res, a)
     return res
+
+
+def aten_leaky_relu_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    a: T,
+    negative_slope: float = 0.01,
+    inplace: bool = False,
+    name: str = "leaky_relu_",
+) -> T:
+    "leaky_relu_, inplace modifications are not allowed, we assume there were removed"
+    assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
+    return aten_leaky_relu(g, sts, outputs, a, negative_slope, inplace=False, name=name)
 
 
 def aten_leaky_relu_backward(
@@ -6493,7 +6598,7 @@ def aten_scatter_reduce_two(
         reduce != "mean"
     ), f"scatter_reduce_two not implemented for reduce={reduce!r}{g.get_debug_msg()}"
     assert g.has_rank(x), f"rank of {x!r} is expected{g.get_debug_msg()}"
-    assert not include_self, f"not implemented if include_self is True{g.get_debug_smg()}"
+    assert not include_self, f"not implemented if include_self is True{g.get_debug_msg()}"
     reduce_mode = {"mean": "none", "sum": "add", "prod": "mul", "amin": "min", "amax": "max"}
     onnx_reduce = reduce_mode[reduce]
     is_scalar = g.get_rank(x) == 0
@@ -6536,7 +6641,7 @@ def aten_relu_(
     inplace: bool = False,
     name: str = "relu_",
 ) -> T:
-    "inplace modifications are not allowed, we assume there were removed"
+    "relu_, inplace modifications are not allowed, we assume there were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_relu(g, sts, outputs, x, inplace, name=name)
 
@@ -7456,13 +7561,27 @@ def aten_silu(
     outputs: List[str],
     x: T,
     inplace: bool = False,
+    name: str = "silu",
 ) -> T:
     "silu"
     assert not inplace, f"inplace computation is not allowed with onnx{g.get_debug_msg()}"
-    res = g.op.Mul(x, g.op.Sigmoid(x, name="silu"), outputs=outputs, name="silu")
+    res = g.op.Mul(x, g.op.Sigmoid(x, name=name), outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_silu_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    inplace: bool = False,
+    name: str = "silu_",
+) -> T:
+    "silu_, inplace modifications are not allowed, we assume there were removed"
+    assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
+    return aten_silu(g, sts, outputs, x, inplace=inplace, name=name)
 
 
 def aten_sin(
