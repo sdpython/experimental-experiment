@@ -206,7 +206,7 @@ class ExportOptions:
                         verbose=max(verbose - 1, 0),
                     )
                 except Exception as e:
-                    excs.append(e)
+                    excs.append((opt, e))
                     if verbose:
                         se = str(e).split("\n", maxsplit=1)[0]
                         print(f"[ExportOptions.export] fails due to {se}")
@@ -219,11 +219,14 @@ class ExportOptions:
                         # indicates an inplace modifications.
                         # This is rejected.
                         excs.append(
-                            f"Probable inplace modifications, "
-                            f"there are nodes with no users: {inplace_nodes}."
+                            (
+                                opt,
+                                f"Probable inplace modifications, "
+                                f"there are nodes with no users: {inplace_nodes}.",
+                            )
                         )
                         if verbose:
-                            print(f"[ExportOptions.export] fails due to {excs[-1]}")
+                            print(f"[ExportOptions.export] fails due to {excs[-1][-1]}")
 
                         if not opt.decomposition_table:
                             # We try with decomposition if possible and to save time.
@@ -237,20 +240,22 @@ class ExportOptions:
                             if inplace_nodes:
                                 # it fails
                                 excs.append(
-                                    f"Probable inplace modifications, "
-                                    f"even after decomposition. "
-                                    f"there are nodes with no users: {inplace_nodes}."
+                                    (
+                                        opt,
+                                        f"Probable inplace modifications, "
+                                        f"even after decomposition. "
+                                        f"there are nodes with no users: {inplace_nodes}.",
+                                    )
                                 )
                                 if verbose:
                                     print(
-                                        f"[ExportOptions.export] fails again with {excs[-1]}"
+                                        f"[ExportOptions.export] fails again with "
+                                        f"{excs[-1][-1]}"
                                     )
                                 continue
                             opt.decomposition_table = "default"
                         else:
                             continue
-                    else:
-                        continue
 
                 if verbose:
                     print(f"[ExportOptions.export] winning options {opt}")
