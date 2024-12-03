@@ -260,14 +260,33 @@ class ParameterNaming:
     """
     A class which maps parameters name in the original module and the different
     they have in the fx.graph.
+
+    The exported program and the original model may have different parameter names.
     """
 
-    def __init__(self, mod: "torch.nn.Module"):  # noqa: F821
+    def __init__(
+        self,
+        mod: "torch.nn.Module",  # noqa: F821
+        exported_program: Optional["torch.export.ExportedProgram"] = None,  # noqa: F821
+    ):
         self.mod = mod
         self._idmap = {}
         self._id_modules = {}
         self.display = {}
         self._unable_to_map = set()
+        if exported_program is not None:
+            mod_names = set(k for k, v in mod.named_parameters())
+            exp_names = set(k for k, v in exported_program.named_parameters())
+            if mod_names != exp_names:
+                union = mod_names | exp_names
+                diff = []
+                for k in sorted(union):
+                    if k in mod_names and k in exp_names:
+                        continue
+                    diff.append((1 if k in mod_names else 0, 1 if k in exp_names else 0, k))
+                raise AssertionError(
+                    f"ExportedProgram and module do not have the same paramerters\n{diff}"
+                )
         for name, p in mod.named_parameters():
             self._idmap[name] = p
             self.display[name] = name
@@ -333,7 +352,7 @@ class ParameterNaming:
             assert prefix is not None, (
                 f"Unable to find parameter {name!r} from node {node!r} "
                 f"with a null prefix, "
-                f"with node.meta={pprint.pformat(node.meta)}\n"
+                f"with node.meta={pprint.pformat(node.meta)}\n--display--\n"
                 f"{pprint.pformat(self.display)}"
             )
 
@@ -586,7 +605,8 @@ def _make_builder_interpreter(
         optimize_submodules=optimize_submodules,
         function_options=function_options,
         submodule_naming=submodule_naming or SubModuleNaming(mod),
-        parameter_naming=parameter_naming or ParameterNaming(mod),
+        parameter_naming=parameter_naming
+        or ParameterNaming(mod, exported_program=exported_program),
         module_name=module_name,
     )
     attr = getattr(export_options, "_last_working", None)
