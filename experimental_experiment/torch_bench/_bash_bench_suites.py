@@ -45,21 +45,48 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "Phi35MiniInstructLMVision_1Layer": (
+                "Phi35MiniInstructLMVision_1Layer_it0": (
                     lambda: (
                         *get_phi_35_vision_instruct(
                             num_hidden_layers=1,
+                            n_iteration=0,
                             input_kind=LLMInputKind.input_ids
                             | LLMInputKind.attention_mask
-                            | LLMInputKind.position_ids,
+                            | LLMInputKind.position_ids
+                            | LLMInputKind.past_key_values,
                         ),
                         dict(strict=False),
                     )
                 ),
-                "Phi35MiniInstructLMVision_1Layer_Images": (
+                "Phi35MiniInstructLMVision_1Layer_it1": (
                     lambda: (
                         *get_phi_35_vision_instruct(
                             num_hidden_layers=1,
+                            n_iteration=1,
+                            input_kind=LLMInputKind.input_ids
+                            | LLMInputKind.attention_mask
+                            | LLMInputKind.position_ids
+                            | LLMInputKind.past_key_values,
+                        ),
+                        dict(strict=False),
+                    )
+                ),
+                "Phi35MiniInstructLMVision_1Layer_Images_it0": (
+                    lambda: (
+                        *get_phi_35_vision_instruct(
+                            num_hidden_layers=1,
+                            n_iteration=0,
+                            _attn_implementation="eager",
+                            input_kind=LLMInputKind.ALL,
+                        ),
+                        dict(strict=False),
+                    )
+                ),
+                "Phi35MiniInstructLMVision_1Layer_Images_it1": (
+                    lambda: (
+                        *get_phi_35_vision_instruct(
+                            num_hidden_layers=1,
+                            n_iteration=1,
                             _attn_implementation="eager",
                             input_kind=LLMInputKind.ALL,
                         ),

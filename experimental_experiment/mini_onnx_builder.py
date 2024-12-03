@@ -416,61 +416,62 @@ def create_onnx_model_from_input_tensors(
         switch_low_high = sys.byteorder != "big"
 
     def flatten(obj):
-        if isinstance(obj, np.ndarray):
-            yield "array", obj
-        elif isinstance(obj, torch.Tensor):
-            yield "tensor", obj
-        elif isinstance(obj, bool):
-            yield "bool", np.array([obj], dtype=np.bool_)
-        elif isinstance(obj, tuple):
-            if not obj:
-                yield "tuple.__empty", None
-            else:
-                for i, o in enumerate(obj):
-                    if i == len(obj) - 1:
-                        for p, oo in flatten(o):
-                            yield f"tuple.__{p}", oo
-                    else:
-                        for p, oo in flatten(o):
-                            yield f"tuple__{p}", oo
-        elif isinstance(obj, list):
-            if not obj:
-                yield "list.__empty", None
-            else:
-                for i, o in enumerate(obj):
-                    if i == len(obj) - 1:
-                        for p, oo in flatten(o):
-                            yield f"list.__{p}", oo
-                    else:
-                        for p, oo in flatten(o):
-                            yield f"list__{p}", oo
-        elif isinstance(obj, dict):
-            if not obj:
-                yield "dict.__empty", None
-            else:
-                for i, (k, v) in enumerate(obj.items()):
-                    assert "__" not in k, (
-                        f"Key {k!r} cannot contain '__'. "
-                        f"It would interfer with the serialization."
-                    )
-                    if i == len(obj) - 1:
-                        for p, o in flatten(v):
-                            yield f"dict._{k}__{p}", o
-                    else:
-                        for p, o in flatten(v):
-                            yield f"dict_{k}__{p}", o
-        elif obj.__class__.__name__ == "DynamicCache":
-            # transformers
-            import transformers
+        if obj is not None:
+            if isinstance(obj, np.ndarray):
+                yield "array", obj
+            elif isinstance(obj, torch.Tensor):
+                yield "tensor", obj
+            elif isinstance(obj, bool):
+                yield "bool", np.array([obj], dtype=np.bool_)
+            elif isinstance(obj, tuple):
+                if not obj:
+                    yield "tuple.__empty", None
+                else:
+                    for i, o in enumerate(obj):
+                        if i == len(obj) - 1:
+                            for p, oo in flatten(o):
+                                yield f"tuple.__{p}", oo
+                        else:
+                            for p, oo in flatten(o):
+                                yield f"tuple__{p}", oo
+            elif isinstance(obj, list):
+                if not obj:
+                    yield "list.__empty", None
+                else:
+                    for i, o in enumerate(obj):
+                        if i == len(obj) - 1:
+                            for p, oo in flatten(o):
+                                yield f"list.__{p}", oo
+                        else:
+                            for p, oo in flatten(o):
+                                yield f"list__{p}", oo
+            elif isinstance(obj, dict):
+                if not obj:
+                    yield "dict.__empty", None
+                else:
+                    for i, (k, v) in enumerate(obj.items()):
+                        assert "__" not in k, (
+                            f"Key {k!r} cannot contain '__'. "
+                            f"It would interfer with the serialization."
+                        )
+                        if i == len(obj) - 1:
+                            for p, o in flatten(v):
+                                yield f"dict._{k}__{p}", o
+                        else:
+                            for p, o in flatten(v):
+                                yield f"dict_{k}__{p}", o
+            elif obj.__class__.__name__ == "DynamicCache":
+                # transformers
+                import transformers
 
-            assert isinstance(
-                obj, transformers.cache_utils.DynamicCache
-            ), f"Unexpected type {type(obj)}"
-            new_obj = dict(key_cache=obj.key_cache, value_cache=obj.value_cache)
-            for p, o in flatten(new_obj):
-                yield f"DynamicCache.__{p}", o
-        else:
-            raise NotImplementedError(f"Unexpected type {type(obj)}")
+                assert isinstance(
+                    obj, transformers.cache_utils.DynamicCache
+                ), f"Unexpected type {type(obj)}"
+                new_obj = dict(key_cache=obj.key_cache, value_cache=obj.value_cache)
+                for p, o in flatten(new_obj):
+                    yield f"DynamicCache.__{p}", o
+            else:
+                raise NotImplementedError(f"Unexpected type {type(obj)}")
 
     builder = MiniOnnxBuilder()
     for prefix, o in flatten(inputs):

@@ -1,8 +1,13 @@
+import copy
 import os
 
 
 def restore_dummy_inputs_for_phi_35_vision_instruct(
-    num_hidden_layers: int = 2, device: str = "cpu", verbose: int = 0
+    num_hidden_layers: int = 2,
+    n_iteration: int = 2,
+    with_images: bool = False,
+    device: str = "cpu",
+    verbose: int = 0,
 ):
     """
     Restores dummy inputs produced by
@@ -12,7 +17,8 @@ def restore_dummy_inputs_for_phi_35_vision_instruct(
 
     filename = os.path.join(
         os.path.dirname(__file__),
-        f"dummy_microsoft_Phi-3.5-vision-instruct_{num_hidden_layers}.iter.0.onnx",
+        f"dummy_microsoft_Phi-3.5-vision-instruct_{num_hidden_layers}"
+        f"{'.images' if with_images else ''}.iter.{n_iteration}.onnx",
     )
     assert os.path.exists(filename), (
         f"unable to find {filename!r}, use "
@@ -22,7 +28,10 @@ def restore_dummy_inputs_for_phi_35_vision_instruct(
 
 
 def create_dummy_inputs_for_phi_35_vision_instruct(
-    num_hidden_layers: int = 2, device: str = "cpu", verbose: int = 0
+    num_hidden_layers: int = 2,
+    with_images: bool = False,
+    device: str = "cpu",
+    verbose: int = 0,
 ):
     """
     Generates dummy inputs for an untrained model using the same
@@ -43,24 +52,24 @@ def create_dummy_inputs_for_phi_35_vision_instruct(
     if verbose:
         print(
             f"[create_dummy_inputs_for_phi_35_vision_instruct] "
-            f"get processor for model {model_id!r}"
+            f"get processor for model {model_id!r}, with_images={with_images}"
         )
     processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True, num_crops=4)
 
     images = []
     placeholder = ""
-
-    for i in range(1, 3):
-        url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
-        if verbose:
-            print(
-                f"[create_dummy_inputs_for_phi_35_vision_instruct] "
-                f"download image from {url!r}"
-            )
-        img = Image.open(requests.get(url, stream=True).raw)
-        print(f"[create_dummy_inputs_for_phi_35_vision_instruct] image size {img.size}")
-        images.append(img)
-        placeholder += f"<|image_{i}|>\n"
+    if with_images:
+        for i in range(1, 3):
+            url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
+            if verbose:
+                print(
+                    f"[create_dummy_inputs_for_phi_35_vision_instruct] "
+                    f"download image from {url!r}"
+                )
+            img = Image.open(requests.get(url, stream=True).raw)
+            print(f"[create_dummy_inputs_for_phi_35_vision_instruct] image size {img.size}")
+            images.append(img)
+            placeholder += f"<|image_{i}|>\n"
 
     messages = [
         {"role": "user", "content": placeholder + "Summarize the deck of slides."},
@@ -72,7 +81,7 @@ def create_dummy_inputs_for_phi_35_vision_instruct(
 
     if verbose:
         print("[create_dummy_inputs_for_phi_35_vision_instruct] create inputs")
-    inputs = processor(prompt, images, return_tensors="pt").to(device)
+    inputs = processor(prompt, images if with_images else None, return_tensors="pt").to(device)
     if verbose:
         print(
             f"[create_dummy_inputs_for_phi_35_vision_instruct] types: "
@@ -88,7 +97,8 @@ def create_dummy_inputs_for_phi_35_vision_instruct(
     inputs_iteration = []
 
     def rewrite_forward(f, *args, **kwargs):
-        inputs_iteration.append((args, kwargs))
+        # a copy is necessary to keep the cache unmodified
+        inputs_iteration.append((copy.deepcopy(args), copy.deepcopy(kwargs)))
         return f(*args, **kwargs)
 
     model_forward = model.forward
