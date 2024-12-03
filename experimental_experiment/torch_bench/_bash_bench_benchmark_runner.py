@@ -867,6 +867,8 @@ class BenchmarkRunner:
             ]
             print(f"[BenchmarkRunner.benchmark] input device={devices}")
 
+        if self.verbose > 5:
+            print(f"[benchmarkrunner.benchmark] inputs={string_type(model_runner.inputs)}")
         begin = time.perf_counter()
         if quiet:
             try:

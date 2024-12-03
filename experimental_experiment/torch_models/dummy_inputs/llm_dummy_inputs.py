@@ -1,3 +1,4 @@
+import copy
 import os
 
 
@@ -95,7 +96,8 @@ def create_dummy_inputs_for_phi_35_vision_instruct(
     inputs_iteration = []
 
     def rewrite_forward(f, *args, **kwargs):
-        inputs_iteration.append((args, kwargs))
+        # a copy is necessary to keep the cache unmodified
+        inputs_iteration.append((copy.deepcopy(args), copy.deepcopy(kwargs)))
         return f(*args, **kwargs)
 
     model_forward = model.forward

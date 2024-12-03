@@ -11,6 +11,8 @@ from experimental_experiment.torch_models.dummy_inputs import generate_dummy_inp
 from experimental_experiment.torch_models.dummy_inputs.llm_dummy_inputs import (
     restore_dummy_inputs_for_phi_35_vision_instruct,
 )
+from experimental_experiment.mini_onnx_builder import create_input_tensors_from_onnx_model
+from experimental_experiment.helpers import string_type
 
 
 class TestLlmModelInputs(ExtTestCase):
@@ -22,11 +24,16 @@ class TestLlmModelInputs(ExtTestCase):
     @requires_cuda()
     @hide_stdout()
     def test_generate_dummy_inputs(self):
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_35_vision_instruct,
+        )
+
+        device = "cuda"
 
         filenames = generate_dummy_inputs(
             "microsoft/Phi-3.5-vision-instruct",
             num_hidden_layers=1,
-            device="cuda",
+            device=device,
             n_iterations=2,
             with_images=False,
             prefix="test_",
@@ -35,6 +42,15 @@ class TestLlmModelInputs(ExtTestCase):
         for f in filenames:
             self.assertExists(f)
 
+            model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
+            model = model.to(device)
+            args, kwargs = create_input_tensors_from_onnx_model(
+                f, device=device, engine="onnxruntime"
+            )
+            text = string_type((args, kwargs), with_shape=True, with_min_max=True)
+            self.assertIn("input_ids", text)
+            model(*args, **kwargs)
+
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
@@ -42,11 +58,16 @@ class TestLlmModelInputs(ExtTestCase):
     @requires_cuda()
     @hide_stdout()
     def test_generate_dummy_inputs_with_images(self):
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi_35_vision_instruct,
+        )
+
+        device = "cuda"
 
         filenames = generate_dummy_inputs(
             "microsoft/Phi-3.5-vision-instruct",
             num_hidden_layers=1,
-            device="cuda",
+            device=device,
             n_iterations=2,
             prefix="test_",
             verbose=1,
@@ -54,6 +75,13 @@ class TestLlmModelInputs(ExtTestCase):
         )
         for f in filenames:
             self.assertExists(f)
+
+            model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
+            model = model.to(device)
+            args, kwargs = create_input_tensors_from_onnx_model(
+                f, device=device, engine="onnxruntime"
+            )
+            model(*args, **kwargs)
 
     def test_restore_dummy_inputs(self):
         dummies = restore_dummy_inputs_for_phi_35_vision_instruct(
