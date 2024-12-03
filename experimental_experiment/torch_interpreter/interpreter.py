@@ -94,6 +94,7 @@ class DynamoInterpreter:
                         VirtualTensor,
                     ),
                 )
+                or t.__class__.__name__ in {"DynamicCache"}
             )
             for t in example_inputs
         ), (
@@ -160,6 +161,8 @@ class DynamoInterpreter:
                 else:
                     res.extend(self.flatten_inputs(i))
             return tuple(res) if isinstance(x, tuple) else res
+        if x.__class__.__name__ == "DynamicCache":
+            return self.flatten_inputs(x.key_cache) + self.flatten_inputs(x.value_cache)
         raise AssertionError(f"Unexpected type {type(x)} for x")
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821

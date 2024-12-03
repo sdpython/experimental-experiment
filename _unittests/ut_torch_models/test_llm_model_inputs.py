@@ -26,6 +26,7 @@ class TestLlmModelInputs(ExtTestCase):
     @requires_cuda()
     @hide_stdout()
     def test_generate_dummy_inputs_no_images(self):
+        # This test is used to generate dummy inputs.
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi_35_vision_instruct,
         )
@@ -61,6 +62,7 @@ class TestLlmModelInputs(ExtTestCase):
     @requires_cuda()
     @hide_stdout()
     def test_generate_dummy_inputs_with_images(self):
+        # This test is used to generate dummy inputs.
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi_35_vision_instruct,
         )
