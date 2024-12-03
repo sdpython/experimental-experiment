@@ -806,6 +806,19 @@ def max_diff(
     if isinstance(got, np.ndarray):
         return max_diff(expected, torch.from_numpy(got))
 
+    if expected.__class__.__name__ == "DynamicCache":
+        if got.__class__.__name__ == "DynamicCache":
+            return max_diff(
+                [expected.key_cache, expected.value_cache], [got.key_cache, got.value_cache]
+            )
+        raise AssertionError(
+            f"DynamicCache not fully implemented with type(expected)={type(expected)}, "
+            f"type(results)={type(got)},\n"
+            f"dir(expected)={dir(expected)}, level={level}\n"
+            f"expected={expected}\n"
+            f"got={got}"
+        )
+
     raise AssertionError(
         f"Not implemented with type(expected)={type(expected)}, "
         f"type(results)={type(got)},\n"

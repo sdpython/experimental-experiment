@@ -1581,6 +1581,12 @@ class BenchmarkRunner:
                         f"after export repeat"
                     )
         else:
+            if self.verbose > 1:
+                print(
+                    f"[BenchmarkRunner.benchmark] feeds="
+                    f"{string_type(feeds, with_shape=True, with_min_max=True)}"
+                )
+
             # This part is not about ONNX.
             # warmup session
             if exporter == "eager":
@@ -1652,7 +1658,12 @@ class BenchmarkRunner:
                         if time_first_iter is not None:
                             stats["time_warmup_first_iteration"] = time_first_iter
             else:
-                with bypass_export_some_errors():
+                with bypass_export_some_errors(verbose=max(self.verbose - 5, 0)):
+                    if self.verbose > 1:
+                        print(
+                            f"[BenchmarkRunner.benchmark] warmup exporter={exporter!r}, "
+                            f"quiet={quiet}"
+                        )
                     # flattened classes needs to be registered again to be able to
                     # execute the fx graph.
                     begin = time.perf_counter()
@@ -1754,7 +1765,7 @@ class BenchmarkRunner:
                 else:
                     # flattened classes needs to be registered again to be able to
                     # execute the fx graph.
-                    with bypass_export_some_errors():
+                    with bypass_export_some_errors(verbose=max(self.verbose - 5, 0)):
                         for _ in range(repeat):
                             if is_cuda:
                                 torch.cuda.synchronize()

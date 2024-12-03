@@ -1228,7 +1228,7 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
-        with bypass_export_some_errors():
+        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
             exported_mod = export_options.export(
                 self.model,
                 export_inputs,
@@ -1285,7 +1285,7 @@ class ModelRunner:
             print(f"[ModelRunner._to_executorch] type(model)={type(self.model)!r}")
             print("[ModelRunner._to_executorch] run torch.export.export")
 
-        with bypass_export_some_errors():
+        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
             exported_mod = export_options.export(
                 self.model,
                 export_inputs,
