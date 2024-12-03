@@ -1,4 +1,5 @@
 import collections
+import copy
 import enum
 import inspect
 import os
@@ -261,6 +262,15 @@ class ModelRunner:
             for k, v in o.items():
                 res[k] = cls._to_type_or_device(v, dtype_or_device)
             return res
+
+        if o.__class__.__name__ == "DynamicCache":
+            cp = copy.deepcopy(o)
+            for i in range(len(o.key_cache)):
+                cp.key_cache[i] = o.key_cache[i].to(dtype_or_device)
+            for i in range(len(o.value_cache)):
+                cp.value_cache[i] = o.value_cache[i].to(dtype_or_device)
+            return cp
+
         try:
             return o.to(dtype_or_device)
         except (AttributeError, AssertionError) as e:
@@ -385,6 +395,20 @@ class ModelRunner:
         assert self.autocast is not None
         self.std_to_dump = []
 
+    def get_devices(self):
+        """Returns the devices."""
+        devices = []
+        for i in self.inputs:
+            if i is None:
+                devices.append(None)
+            elif hasattr(i, "get_device"):
+                devices.append(i.get_device())
+            elif i.__class__.__name__ == "DynamicCache" and hasattr(i, "key_cache"):
+                devices.append(i.key_cache[0].get_device() if i.key_cache else None)
+            else:
+                raise AssertionError(f"Unable to process type {type(i)}")
+        return devices
+
     @property
     def input_names(self):
         return self.raw_input_names
@@ -405,18 +429,31 @@ class ModelRunner:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
 
+    def get_inputs(self):
+        """
+        LLM modifies the cache. It needs to be copied first.
+        """
+        args = []
+        for i in self.inputs:
+            if i.__class__.__name__ in {"DynamicCache"}:
+                args.append(copy.deepcopy(i))
+                continue
+            args.append(i)
+        return tuple(args)
+
     def run(self) -> Any:
+        inputs = self.get_inputs()
         if self.autocast:
             if self.nvtx:
                 torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast")
             with torch.autocast(device_type=self.device, dtype=self.dtype):
-                res = self.model(*self.inputs)
+                res = self.model(*inputs)
             if self.nvtx:
                 torch.cuda.nvtx.range_pop()
             return res
         if self.nvtx:
             torch.cuda.nvtx.range_push("ModelRunner.Eager")
-        res = self.model(*self.inputs)
+        res = self.model(*inputs)
         if self.nvtx:
             torch.cuda.nvtx.range_pop()
         return res
@@ -1735,7 +1772,7 @@ class ModelRunner:
 
             new_shape = self._get_input_shape_tensor(
                 export=export,
-                input_shape=inp.shape,
+                input_shape=inp.shape if hasattr(inp, "shape") else None,
                 dyn_shape=(
                     None
                     if dynamic_shapes is None or i >= len(dynamic_shapes)

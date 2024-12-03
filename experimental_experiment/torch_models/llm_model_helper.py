@@ -401,7 +401,9 @@ def get_phi_3_vision_128k_instruct(
 
 def get_phi_35_vision_instruct(
     inputs_as_tuple: bool = False,
+    n_iteration: int = 0,
     input_kind: LLMInputKind = LLMInputKind.input_ids,
+    device: str = "cpu",
     common_dynamic_shapes: bool = False,
     **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]], Optional[Any]]:
@@ -409,6 +411,8 @@ def get_phi_35_vision_instruct(
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param n_iteration: iteration to retrieve
+    :param device: move data and model to this specific device
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
@@ -574,7 +578,7 @@ def get_phi_35_vision_instruct(
     config.update(**kwargs)
     conf = Phi3VConfig(**config)
     model = Phi3VForCausalLM(conf)
-    model.eval()
+    model.eval().to(device)
 
     if input_kind == LLMInputKind.input_ids:
         dim = (1, 30)
@@ -592,7 +596,9 @@ def get_phi_35_vision_instruct(
 
         data = restore_dummy_inputs_for_phi_35_vision_instruct(
             num_hidden_layers=config["num_hidden_layers"],
+            n_iteration=n_iteration,
             with_images=input_kind & LLMInputKind.images,
+            device=device,
         )
         args, kwargs = data
         inputs = {}

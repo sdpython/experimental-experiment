@@ -4,6 +4,7 @@ import os
 
 def restore_dummy_inputs_for_phi_35_vision_instruct(
     num_hidden_layers: int = 2,
+    n_iteration: int = 2,
     with_images: bool = False,
     device: str = "cpu",
     verbose: int = 0,
@@ -17,7 +18,7 @@ def restore_dummy_inputs_for_phi_35_vision_instruct(
     filename = os.path.join(
         os.path.dirname(__file__),
         f"dummy_microsoft_Phi-3.5-vision-instruct_{num_hidden_layers}"
-        f"{'.images' if with_images else ''}.iter.0.onnx",
+        f"{'.images' if with_images else ''}.iter.{n_iteration}.onnx",
     )
     assert os.path.exists(filename), (
         f"unable to find {filename!r}, use "

@@ -857,18 +857,14 @@ class BenchmarkRunner:
         if self.verbose > 1:
             print(f"[BenchmarkRunner.benchmark] warmup model {model_name!r} - {warmup} times")
             print(f"[BenchmarkRunner.benchmark] device={model_runner.device!r}")
-            devices = [
-                (
-                    i.get_device()
-                    if hasattr(i, "get_device")
-                    else (None if i is None else type(i))
-                )
-                for i in model_runner.inputs
-            ]
+            devices = model_runner.get_devices()
             print(f"[BenchmarkRunner.benchmark] input device={devices}")
 
         if self.verbose > 5:
-            print(f"[benchmarkrunner.benchmark] inputs={string_type(model_runner.inputs)}")
+            snames = getattr(model_runner, "input_names", "?")
+            print(f"[benchmarkrunner.benchmark] input_names={snames}")
+            s = string_type(model_runner.inputs, with_shape=True, with_min_max=True)
+            print(f"[benchmarkrunner.benchmark] inputs={s}")
         begin = time.perf_counter()
         if quiet:
             try:
