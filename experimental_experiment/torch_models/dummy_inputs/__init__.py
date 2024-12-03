@@ -37,7 +37,7 @@ def generate_dummy_inputs(
         if n_iterations > 0 and len(inputs) > n_iterations:
             inputs = inputs[:n_iterations]
         for i, obj in enumerate(inputs):
-            filename = f"{prefix}.iter{'.images' if with_images else ''}.{i}.onnx"
+            filename = f"{prefix}{'.images' if with_images else ''}.iter.{i}.onnx"
             if verbose:
                 print(
                     (
