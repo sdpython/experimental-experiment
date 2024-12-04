@@ -613,7 +613,7 @@ def get_phi_35_vision_instruct(
         inputs = {}
         shapes = {}
 
-        batch = torch.export.Dim("batch",min=1,max=1024)
+        batch = torch.export.Dim("batch", min=1, max=1024)
         seq_length = torch.export.Dim("seq_length", min=1, max=4096)
         if input_kind & LLMInputKind.input_ids:
             inputs["input_ids"] = kwargs["input_ids"]
@@ -631,7 +631,7 @@ def get_phi_35_vision_instruct(
         if input_kind & LLMInputKind.images:
             inputs["pixel_values"] = kwargs["pixel_values"]
             inputs["image_sizes"] = kwargs["image_sizes"]
-            n_images = torch.export.Dim("n_images",min=0,max=1024)
+            n_images = torch.export.Dim("n_images", min=0, max=1024)
             shapes["pixel_values"] = shapes["image_sizes"] = {0: n_images}
 
     if inputs_as_tuple:

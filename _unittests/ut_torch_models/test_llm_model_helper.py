@@ -401,21 +401,34 @@ class TestLlmModelHelper(ExtTestCase):
             LLMInputKind,
         )
 
-        model, model_inputs = get_phi_35_vision_instruct(
+        model, model_inputs, dyn_shapes = get_phi_35_vision_instruct(
             num_hidden_layers=1, input_kind=LLMInputKind.input_ids
         )
         self.assertEqual(list(model_inputs), ["input_ids"])
+        self.assertEqual(list(dyn_shapes), ["input_ids"])
 
-        model, model_inputs = get_phi_35_vision_instruct(
+        model, model_inputs, dyn_shapes = get_phi_35_vision_instruct(
             num_hidden_layers=1, input_kind=LLMInputKind.input_ids | LLMInputKind.position_ids
         )
         self.assertEqual(list(model_inputs), ["input_ids", "position_ids"])
+        self.assertEqual(list(dyn_shapes), ["input_ids", "position_ids"])
 
-        model, model_inputs = get_phi_35_vision_instruct(
+        model, model_inputs, dyn_shapes = get_phi_35_vision_instruct(
             num_hidden_layers=1, input_kind=LLMInputKind.ALL
         )
         self.assertEqual(
             list(model_inputs),
+            [
+                "input_ids",
+                "position_ids",
+                "attention_mask",
+                "past_key_values",
+                "pixel_values",
+                "image_sizes",
+            ],
+        )
+        self.assertEqual(
+            list(dyn_shapes),
             [
                 "input_ids",
                 "position_ids",
