@@ -382,7 +382,7 @@ class ExportOptions:
             if modified:
                 if verbose:
                     print(f"[ExportOptions.export] {modified} inplaced nodes were removed")
-                res.graph.lint()
+                exported_program.graph.lint()
 
         if verbose:
             print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")

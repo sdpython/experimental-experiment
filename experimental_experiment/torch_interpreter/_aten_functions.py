@@ -3010,7 +3010,7 @@ def aten_full_like(
         g,
         sts,
         outputs,
-        g.op.Shape(x, name="full_like"),
+        g.op.Shape(x, name=name),
         fill_value,
         dtype=dtype or g.get_type(x),
         name=name,

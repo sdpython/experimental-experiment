@@ -552,12 +552,17 @@ class CustomTracer(torch.fx.Tracer):
                 "add_",
                 "div_",
                 "mul_",
-                "sub_",
                 "mod_",
+                "sub_",
+                operator.add,
+                operator.floordiv,
+                operator.mul,
+                operator.sub,
+                operator.mod,
                 operator.setitem,
             }, (
-                f"Unsupported target {node.target!r} at position {pos}/{len(graph.nodes)}"
-                f"\n--graph\n{graph}"
+                f"Unsupported target {node.target!r}, name={node.name!r} "
+                f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
             )
             # We assume the first argument is the one modified inplace.
             new_name = node

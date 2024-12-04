@@ -172,6 +172,7 @@ class ModelRunner:
     :param nvtx: enable nvtx events
     :param model_name: model name
     :param export_options: additional options when exporting if the default options never work
+    :param dynamic_shapes: dynamic shapes to use instead of using automated ones
     """
 
     _patched = None
@@ -295,6 +296,7 @@ class ModelRunner:
         nvtx: bool = False,
         model_name: Optional[str] = None,
         export_options: Optional[Dict[str, Any]] = None,
+        dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]] = None,
     ):
         if dtype is None:
             cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
@@ -395,7 +397,8 @@ class ModelRunner:
         self.model_name = model_name
         self.nvtx = nvtx
         self.export_options = export_options
-        assert self.autocast is not None
+        self.dynamic_shapes = dynamic_shapes
+        assert self.autocast is not None, "autocast not implemented"
         self.std_to_dump = []
 
     def get_devices(self):
@@ -766,7 +769,8 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
             print(
-                f"[ModelRunner._to_onnx_custom] export_inputs={string_type(export_inputs)!r}"
+                f"[ModelRunner._to_onnx_custom] export_inputs="
+                f"{string_type(export_inputs, with_shape=True)!r}"
             )
             print(
                 f"[ModelRunner._to_onnx_custom] export_kw_inputs="
@@ -1484,6 +1488,16 @@ class ModelRunner:
         """
         if not dynamic:
             return None
+        if self.dynamic_shapes is not None:
+            if isinstance(self.dynamic_shapes, tuple):
+                return self.dynamic_shapes
+            res = tuple(
+                self.dynamic_shapes.get(
+                    i, None if inp is None or isinstance(inp, (int, float, bool)) else {}
+                )
+                for i, inp in zip(self.input_names, self.inputs)
+            )
+            return res
         assert (
             input_names is None
         ), f"This method is not implemented if input_names={input_names!r}"
@@ -1715,7 +1729,7 @@ class ModelRunner:
             dyn_shape = dyn_shape[0]
         assert isinstance(dyn_shape, dict), (
             f"Unexpected type for input {i}, "
-            f"dyn_shape{dyn_shape}, shape of input[{i}]={input_shape}, "
+            f"dyn_shape={dyn_shape}, shape of input[{i}]={input_shape}, "
         )
         for j in range(len(input_shape)):
             if not export or j not in dyn_shape or input_shape[j] != 1:

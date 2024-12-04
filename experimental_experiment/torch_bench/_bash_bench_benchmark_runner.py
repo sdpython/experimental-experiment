@@ -1038,13 +1038,14 @@ class BenchmarkRunner:
         if memory_session is not None and self.verbose:
             print("[BenchmarkRunner.benchmark] start_spying_on")
 
+        if self.verbose and dynamic:
+            print(f"[BenchmarkRunner.benchmark] input_names={model_runner.input_names}")
+            print(
+                f"[BenchmarkRunner.benchmark] dynamic_shapes="
+                f"{model_runner.get_dynamic_shapes(dynamic)}"
+            )
         dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
         if self.verbose:
-            if dynamic:
-                print(
-                    f"[BenchmarkRunner.benchmark] dynamic_shapes="
-                    f"{model_runner.get_dynamic_shapes(dynamic)}"
-                )
             print(f"[BenchmarkRunner.benchmark] input shapes={dyn_shapes}")
             _ishapes = model_runner.get_input_shapes(dynamic=dynamic, export=True)
             print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
