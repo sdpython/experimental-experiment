@@ -3528,8 +3528,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         # break?
-        # if op_type == "ReduceSum":
-        #    raise AssertionError(f"MANUAL BREAK{self.get_debug_msg()}")
+        # if op_type == "Sub":
+        #     print("op_type", op_type, inputs, output_names)
+        #     raise AssertionError(f"MANUAL BREAK{self.get_debug_msg()}")
 
         # next
         try:
