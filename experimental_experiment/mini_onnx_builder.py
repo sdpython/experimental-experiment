@@ -1,6 +1,6 @@
 import ctypes
 import sys
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 from onnx import GraphProto, ModelProto, TensorProto
 import onnx.helper as oh
@@ -175,9 +175,10 @@ class MiniOnnxBuilder:
 
     :param target_opset: opset to specify
     :param ir_verison: IR version to use
+    :param sep: separator to build output names
     """
 
-    def __init__(self, target_opset: int = 18, ir_version: int = 10):
+    def __init__(self, target_opset: int = 18, ir_version: int = 10, sep: str = "___"):
         import torch
 
         self.initializers_dict = {}
@@ -187,6 +188,7 @@ class MiniOnnxBuilder:
         self.opsets = {"": target_opset}
         self.ir_version = ir_version
         self.torch = torch
+        self.sep = sep
 
     def append_output_initializer(
         self,
@@ -278,15 +280,15 @@ class MiniOnnxBuilder:
         Adds two outputs, a string tensors for the keys and a sequence of tensors
         for the values.
 
-        The output name is ``name__keys`` and ``name__values``.
+        The output name is ``name___keys`` and ``name___values``.
         """
         keys = []
         values = []
         for k, v in tensors.items():
             keys.append(k)
             values.append(v)
-        self.append_output_initializer(f"{name}__keys", np.array(keys, dtype=np.str_))
-        self.append_output_sequence(f"{name}__values", values)
+        self.append_output_initializer(f"{name}{self.sep}keys", np.array(keys, dtype=np.str_))
+        self.append_output_sequence(f"{name}{self.sep}values", values)
 
     def _build_initializers(
         self, switch_low_high: bool
@@ -324,6 +326,10 @@ class MiniOnnxBuilder:
                     from_np = True
                 elif isinstance(v, np.float32):
                     t = onh.from_array(np.array([v], dtype=np.float32), name=k)
+                    initializer.append(t)
+                    continue
+                elif isinstance(v, np.float64):
+                    t = onh.from_array(np.array([v], dtype=np.float64), name=k)
                     initializer.append(t)
                     continue
                 elif isinstance(v, np.float16):
@@ -394,8 +400,84 @@ class MiniOnnxBuilder:
         return model
 
 
+def flatten_iterator(obj: Any, sep: str) -> Iterator:
+    """
+    Iterates on all object.
+    """
+    if obj is not None:
+        import torch
+
+        if isinstance(obj, np.ndarray):
+            yield "array", obj
+        elif isinstance(obj, torch.Tensor):
+            yield "tensor", obj
+        elif isinstance(obj, bool):
+            yield "bool", np.array([obj], dtype=np.bool_)
+        elif isinstance(obj, int):
+            yield "int", np.array([obj], dtype=np.int64)
+        elif isinstance(obj, float):
+            yield "float", np.array([obj], dtype=np.float64)
+        elif isinstance(obj, tuple):
+            if not obj:
+                yield f"tuple.{sep}empty", None
+            else:
+                for i, o in enumerate(obj):
+                    if i == len(obj) - 1:
+                        for p, oo in flatten_iterator(o, sep):
+                            yield f"tuple.{sep}{p}", oo
+                    else:
+                        for p, oo in flatten_iterator(o, sep):
+                            yield f"tuple{sep}{p}", oo
+        elif isinstance(obj, list):
+            if not obj:
+                yield f"list.{sep}empty", None
+            else:
+                for i, o in enumerate(obj):
+                    if i == len(obj) - 1:
+                        for p, oo in flatten_iterator(o, sep):
+                            yield f"list.{sep}{p}", oo
+                    else:
+                        for p, oo in flatten_iterator(o, sep):
+                            yield f"list{sep}{p}", oo
+        elif isinstance(obj, dict):
+            if not obj:
+                yield f"dict.{sep}empty", None
+            else:
+                for i, (k, v) in enumerate(obj.items()):
+                    assert sep not in k, (
+                        f"Key {k!r} cannot contain '{sep}'. "
+                        f"It would interfer with the serialization."
+                    )
+                    if i == len(obj) - 1:
+                        for p, o in flatten_iterator(v, sep):
+                            yield f"dict._{k}{sep}{p}", o
+                    else:
+                        for p, o in flatten_iterator(v, sep):
+                            yield f"dict_{k}{sep}{p}", o
+        elif obj.__class__.__name__ == "DynamicCache":
+            # transformers
+            import transformers
+
+            assert isinstance(
+                obj, transformers.cache_utils.DynamicCache
+            ), f"Unexpected type {type(obj)}"
+            atts = ["key_cache", "value_cache", "_seen_tokens"]
+            for i, att in enumerate(atts):
+                if i == len(atts) - 1:
+                    for p, o in flatten_iterator(getattr(obj, att), sep):
+                        yield f"DynamicCache._{att}{sep}{p}", o
+                else:
+                    for p, o in flatten_iterator(getattr(obj, att), sep):
+                        yield f"DynamicCache_{att}{sep}{p}", o
+        else:
+            raise NotImplementedError(f"Unexpected type {type(obj)}")
+
+
 def create_onnx_model_from_input_tensors(
-    inputs: Any, switch_low_high: Optional[bool] = None, randomize: bool = False
+    inputs: Any,
+    switch_low_high: Optional[bool] = None,
+    randomize: bool = False,
+    sep: str = "___",
 ) -> ModelProto:
     """
     Creates a model proto including all the value as initializers.
@@ -406,75 +488,16 @@ def create_onnx_model_from_input_tensors(
     :param inputs: anything
     :param switch_low_high: if None, it is equal to ``switch_low_high=sys.byteorder != "big"``
     :param randomize: if True, float tensors are not stored but randomized to save space
+    :param sep: separator
     :return: ModelProto
 
     The function raises an error if not supported.
     """
-    import torch
-
     if switch_low_high is None:
         switch_low_high = sys.byteorder != "big"
 
-    def flatten(obj):
-        if obj is not None:
-            if isinstance(obj, np.ndarray):
-                yield "array", obj
-            elif isinstance(obj, torch.Tensor):
-                yield "tensor", obj
-            elif isinstance(obj, bool):
-                yield "bool", np.array([obj], dtype=np.bool_)
-            elif isinstance(obj, tuple):
-                if not obj:
-                    yield "tuple.__empty", None
-                else:
-                    for i, o in enumerate(obj):
-                        if i == len(obj) - 1:
-                            for p, oo in flatten(o):
-                                yield f"tuple.__{p}", oo
-                        else:
-                            for p, oo in flatten(o):
-                                yield f"tuple__{p}", oo
-            elif isinstance(obj, list):
-                if not obj:
-                    yield "list.__empty", None
-                else:
-                    for i, o in enumerate(obj):
-                        if i == len(obj) - 1:
-                            for p, oo in flatten(o):
-                                yield f"list.__{p}", oo
-                        else:
-                            for p, oo in flatten(o):
-                                yield f"list__{p}", oo
-            elif isinstance(obj, dict):
-                if not obj:
-                    yield "dict.__empty", None
-                else:
-                    for i, (k, v) in enumerate(obj.items()):
-                        assert "__" not in k, (
-                            f"Key {k!r} cannot contain '__'. "
-                            f"It would interfer with the serialization."
-                        )
-                        if i == len(obj) - 1:
-                            for p, o in flatten(v):
-                                yield f"dict._{k}__{p}", o
-                        else:
-                            for p, o in flatten(v):
-                                yield f"dict_{k}__{p}", o
-            elif obj.__class__.__name__ == "DynamicCache":
-                # transformers
-                import transformers
-
-                assert isinstance(
-                    obj, transformers.cache_utils.DynamicCache
-                ), f"Unexpected type {type(obj)}"
-                new_obj = dict(key_cache=obj.key_cache, value_cache=obj.value_cache)
-                for p, o in flatten(new_obj):
-                    yield f"DynamicCache.__{p}", o
-            else:
-                raise NotImplementedError(f"Unexpected type {type(obj)}")
-
-    builder = MiniOnnxBuilder()
-    for prefix, o in flatten(inputs):
+    builder = MiniOnnxBuilder(sep=sep)
+    for prefix, o in flatten_iterator(inputs, sep):
         if o is None:
             builder.append_output_initializer(prefix, np.array([]))
         else:
@@ -484,10 +507,94 @@ def create_onnx_model_from_input_tensors(
     return model
 
 
+def unflatten(
+    sep: str,
+    names: List[str],
+    outputs: List[Any],
+    pos: int = 0,
+    level: int = 0,
+    device: str = "cpu",
+):
+    """
+    Unflattens a list of outputs flattended with :func:`flatten_iterator`.
+    """
+    name = names[pos]
+    spl = name.split(sep)
+    if len(spl) == level + 1:
+        # A tensor.
+        if spl[-1] == "empty":
+            return pos + 1, None
+        if spl[-1] == "bool":
+            return pos + 1, bool(outputs[pos][0])
+        if spl[-1] == "int":
+            return pos + 1, int(outputs[pos][0])
+        if spl[-1] == "float":
+            return pos + 1, float(outputs[pos][0])
+        if spl[-1] == "array":
+            return pos + 1, outputs[pos]
+        if spl[-1] == "tensor":
+            import torch
+
+            return pos + 1, torch.from_numpy(outputs[pos]).to(device)
+        raise AssertionError(f"Unexpected name {name!r} in {names}")
+
+    res = []
+    while True:
+        assert pos < len(names), f"Something went wrong with names={names!r}\nres={res!r}"
+        name = names[pos]
+        spl = name.split(sep)
+        prefix = spl[level]
+        next_pos, value = unflatten(
+            sep, names, outputs, pos=pos, level=level + 1, device=device
+        )
+
+        if prefix.startswith("DynamicCache"):
+            key = prefix.split("_", maxsplit=1)[-1]
+            res.append((key, value))
+            lp = len("DynamicCache")
+            end = len(prefix) > lp and prefix[lp] == "."
+        elif prefix.startswith("dict"):
+            key = prefix.split("_", maxsplit=1)[-1]
+            res.append((key, value))
+            end = len(prefix) > 4 and prefix[4] == "."
+        else:
+            res.append(value)
+            end = prefix[-1] == "."
+
+        if end:
+            if prefix.startswith("dict"):
+                ty = dict
+            elif prefix.startswith("list"):
+                ty = list
+            elif prefix.startswith("tuple"):
+                ty = tuple
+            elif prefix.startswith("DynamicCache"):
+                from transformers.cache_utils import DynamicCache
+
+                ty = DynamicCache
+            else:
+                raise AssertionError(f"Unexpected prefix={prefix!r}")
+            break
+        pos = next_pos
+
+    def _make(ty: type, res: Any) -> Any:
+        if ty.__name__ == "DynamicCache":
+            r = ty()
+            for k, v in res:
+                setattr(r, k, v)
+            return r
+        return ty(res)
+
+    return next_pos, (
+        ty() if len(res) == 1 and res[0] in (("dict.", None), None) else _make(ty, res)
+    )
+
+
 def create_input_tensors_from_onnx_model(
     proto: Union[str, ModelProto],
     device: str = "cpu",
     engine: str = "ExtendedReferenceEvaluator",
+    sep: str = "___",
 ) -> Union[Tuple[Any, ...], Dict[str, Any]]:
     """
     Deserializes tensors stored with function
@@ -499,6 +606,7 @@ def create_input_tensors_from_onnx_model(
     :param proto: ModelProto or the file itself
     :param device: moves the tensor to this device
     :param engine: runtime to use, onnx, the default value, onnxruntime
+    :param sep: separator
     :return: ModelProto
     """
     if engine == "ExtendedReferenceEvaluator":
@@ -532,64 +640,14 @@ def create_input_tensors_from_onnx_model(
             return output
         if name == "bool":
             return bool(output[0])
+        if name == "int":
+            return int(output[0])
+        if name == "float":
+            return float(output[0])
         if name == "tensor":
             import torch
 
             return torch.from_numpy(output).to(device)
         raise AssertionError(f"Unexpected name {name!r} in {names}")
 
-    def unflatten(names, outputs, pos=0, level=0):
-        name = names[pos]
-        spl = name.split("__")
-        if len(spl) == level + 1:
-            # A tensor.
-            if spl[-1] == "empty":
-                return pos + 1, None
-            if spl[-1] == "bool":
-                return pos + 1, bool(outputs[pos][0])
-            if spl[-1] == "array":
-                return pos + 1, outputs[pos]
-            if spl[-1] == "tensor":
-                import torch
-
-                return pos + 1, torch.from_numpy(outputs[pos]).to(device)
-            raise AssertionError(f"Unexpected name {name!r} in {names}")
-
-        res = []
-        while True:
-            assert pos < len(names), f"Something went wrong with names={names!r}\nres={res!r}"
-            name = names[pos]
-            spl = name.split("__")
-            prefix = spl[level]
-            next_pos, value = unflatten(names, outputs, pos=pos, level=level + 1)
-
-            if prefix.startswith("DynamicCache"):
-                assert prefix == "DynamicCache.", f"This should be final but prefix={prefix!r}"
-                from transformers.cache_utils import DynamicCache
-
-                cache = DynamicCache()
-                for k, v in value.items():
-                    setattr(cache, k, v)
-                return next_pos, cache
-
-            if prefix.startswith("dict"):
-                key = prefix.split("_", maxsplit=1)[-1]
-                res.append((key, value))
-                end = prefix[4] == "."
-            else:
-                res.append(value)
-                end = prefix[-1] == "."
-            if end:
-                if prefix.startswith("dict"):
-                    ty = dict
-                elif prefix.startswith("list"):
-                    ty = list
-                else:
-                    ty = tuple
-                break
-            pos = next_pos
-        return next_pos, (
-            ty() if len(res) == 1 and res[0] in (("dict.", None), None) else ty(res)
-        )
-
-    return unflatten(names, got)[1]
+    return unflatten(sep, names, got, device=device)[1]

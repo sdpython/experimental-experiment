@@ -274,20 +274,32 @@ class ParameterNaming:
         self._id_modules = {}
         self.display = {}
         self._unable_to_map = set()
+
+        use_mod = mod
         if exported_program is not None:
-            mod_names = set(k for k, v in mod.named_parameters())
-            exp_names = set(k for k, v in exported_program.named_parameters())
+            mod_names = dict(mod.named_parameters())
+            exp_names = dict(exported_program.named_parameters())
             if mod_names != exp_names:
                 union = mod_names | exp_names
                 diff = []
                 for k in sorted(union):
                     if k in mod_names and k in exp_names:
                         continue
-                    diff.append((1 if k in mod_names else 0, 1 if k in exp_names else 0, k))
-                raise AssertionError(
-                    f"ExportedProgram and module do not have the same paramerters\n{diff}"
-                )
-        for name, p in mod.named_parameters():
+                    diff.append(
+                        (
+                            1 if k in mod_names else 0,
+                            1 if k in exp_names else 0,
+                            k,
+                            string_type(mod_names.get(k, None), with_shape=True),
+                            string_type(exp_names.get(k, None), with_shape=True),
+                        )
+                    )
+                assert all(
+                    _[1] == 1 for _ in diff
+                ), f"ExportedProgram and module do not have the same paramerters\n{diff}"
+                use_mod = exported_program
+
+        for name, p in use_mod.named_parameters():
             self._idmap[name] = p
             self.display[name] = name
             new_key = name.replace(".", "_")
