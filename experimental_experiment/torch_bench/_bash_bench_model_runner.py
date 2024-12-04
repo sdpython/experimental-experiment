@@ -655,11 +655,13 @@ class ModelRunner:
         if exporter == "export":
             assert strategy in {
                 None,
-                "default",
+                "dec",
+                "decall",
                 "nostrict",
                 "none",
                 "fallback",
-                "fallback-default",
+                "fallback-dec",
+                "fallback-decall",
                 "jit",
             }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_export(
@@ -1221,7 +1223,7 @@ class ModelRunner:
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
         opts = self.export_options or {}
-        if "fallback" not in opts:
+        if "fallback" not in opts and not strategy:
             opts["fallback"] = True
         export_options = ExportOptions(strategy=strategy or "strict", **opts)
         if verbose:
