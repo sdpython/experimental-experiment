@@ -614,20 +614,27 @@ def get_phi_35_vision_instruct(
         shapes = {}
 
         batch = torch.export.Dim("batch", min=1, max=1024)
-        seq_length = torch.export.Dim("seq_length", min=1, max=4096)
+        seq_length = torch.export.Dim("seq_length", min=1)
+        pos_length = torch.export.Dim("pos_length", min=1)
+        mask_length = torch.export.Dim("mask_length", min=1)
+        cache_length = torch.export.Dim("cache_length", min=1)
         if input_kind & LLMInputKind.input_ids:
             inputs["input_ids"] = kwargs["input_ids"]
             shapes["input_ids"] = {0: batch, 1: seq_length}
         if input_kind & LLMInputKind.position_ids:
             inputs["position_ids"] = kwargs["position_ids"]
-            shapes["position_ids"] = {0: batch, 1: seq_length}
+            shapes["position_ids"] = {0: batch, 1: pos_length}
         if input_kind & LLMInputKind.attention_mask:
             inputs["attention_mask"] = kwargs["attention_mask"]
-            shapes["attention_mask"] = {0: batch, 1: seq_length}
+            shapes["attention_mask"] = {0: batch, 1: mask_length}
         if input_kind & LLMInputKind.past_key_values:
             inputs["past_key_values"] = kwargs["past_key_values"]
             n = len(data[1]["past_key_values"].key_cache)
-            shapes["past_key_values"] = [None, [{} for _ in range(n)], [{} for _ in range(n)]]
+            shapes["past_key_values"] = [
+                None,
+                [{0: batch, 2: cache_length} for _ in range(n)],
+                [{0: batch, 2: cache_length} for _ in range(n)],
+            ]
         if input_kind & LLMInputKind.images:
             inputs["pixel_values"] = kwargs["pixel_values"]
             inputs["image_sizes"] = kwargs["image_sizes"]

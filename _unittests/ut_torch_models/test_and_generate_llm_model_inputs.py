@@ -46,7 +46,7 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
+                model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1)
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -82,7 +82,7 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
+                model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1)
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -115,7 +115,7 @@ class TestLlmModelInputs(ExtTestCase):
         )
 
         device = "cuda"
-        model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
+        model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1)
         model = model.to(device)
         for it in range(0, 2):
             with self.subTest(iteration=it):
@@ -153,7 +153,7 @@ class TestLlmModelInputs(ExtTestCase):
         device = "cuda"
         for it in range(2):
             with self.subTest(iteration=it):
-                model, kwargs = get_phi_35_vision_instruct(
+                model, kwargs, _ = get_phi_35_vision_instruct(
                     num_hidden_layers=1,
                     n_iteration=it,
                     device=device,

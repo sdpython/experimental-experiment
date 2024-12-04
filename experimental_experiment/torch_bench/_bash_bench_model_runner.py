@@ -1510,6 +1510,8 @@ class ModelRunner:
         seq_length = (
             (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
         )
+        # This default value won't probably work. This should be set up manually.
+        cache_length = torch.export.Dim("cachel", min=1, max=131072) if self.is_lm() else None
         res = []
         for i, x in enumerate(self.inputs):
             if x is None or isinstance(x, (int, float)):
@@ -1533,9 +1535,14 @@ class ModelRunner:
                 assert isinstance(
                     x, transformers.cache_utils.DynamicCache
                 ), f"Unexpected type {type(x)}, input types={string_type(self.inputs)}"
-                # The cache has no dynamic shapes.
                 length = len(x.key_cache)
-                res.append([None, [{} for _ in range(length)], [{} for _ in range(length)]])
+                res.append(
+                    [
+                        None,
+                        [{0: batch, 2: cache_length} for _ in range(length)],
+                        [{0: batch, 2: cache_length} for _ in range(length)],
+                    ]
+                )
                 continue
             assert hasattr(x, "shape"), (
                 f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}, "
@@ -1694,15 +1701,28 @@ class ModelRunner:
                     new_inputs.append(x if nds == ds else x.expand(nds))
                 dyn_inputs.append(new_inputs)
                 continue
+
             if inp.__class__.__name__ == "DynamicCache":
                 import transformers
 
                 assert isinstance(
                     inp, transformers.cache_utils.DynamicCache
                 ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
-                # The cache is static.
-                dyn_inputs.append(inp)
+                new_input = copy.deepcopy(inp)
+                ds = dynamic_shapes[i]
+                for i in range(len(new_input.key_cache)):
+                    new_shape = self._make_export_new_dynamic_shape(
+                        inp.key_cache[i].shape, ds[1][i], dyn_values=dyn_values, i=i
+                    )
+                    new_input.key_cache[i] = inp.key_cache[i].expand(new_shape)
+                for i in range(len(new_input.value_cache)):
+                    new_shape = self._make_export_new_dynamic_shape(
+                        inp.value_cache[i].shape, ds[1][i], dyn_values=dyn_values, i=i
+                    )
+                    new_input.value_cache[i] = inp.value_cache[i].expand(new_shape)
+                dyn_inputs.append(new_input)
                 continue
+
             new_shape = self._make_export_new_dynamic_shape(
                 inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
             )
@@ -1815,9 +1835,42 @@ class ModelRunner:
                 assert isinstance(
                     inp, transformers.cache_utils.DynamicCache
                 ), f"Unexpected type {type(inp)}"
-                dyn_input_shapes.append((1,))  # _seen_tokens
+
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append(
+                        [None, [{} for t in inp.key_cache], [{} for t in inp.value_cache]]
+                    )
+                    continue
+
                 dyn_input_shapes.append(
-                    [(1,), *[{} for t in (inp.key_cache + inp.value_cache)]]
+                    [
+                        (1,),
+                        [
+                            self._get_input_shape_tensor(
+                                export=export,
+                                input_shape=t.shape,
+                                dyn_shape=ds,
+                                dyn_values=dyn_values,
+                                i=i,
+                            )
+                            for t, ds in zip(inp.key_cache, dyn_shape[1])
+                        ],
+                        [
+                            self._get_input_shape_tensor(
+                                export=export,
+                                input_shape=t.shape,
+                                dyn_shape=ds,
+                                dyn_values=dyn_values,
+                                i=i,
+                            )
+                            for t, ds in zip(inp.value_cache, dyn_shape[2])
+                        ],
+                    ]
                 )
                 continue
 
@@ -1884,9 +1937,7 @@ class ModelRunner:
 
             if isinstance(dyn_shape, list):
                 if inp.__class__.__name__ == "DynamicCache":
-                    # The cache is static.
-                    dyn_inputs.append(inp)
-                    continue
+                    raise AssertionError("Not implemented yet.")
 
                 assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"
                 assert len(inp) == len(dyn_shape), (

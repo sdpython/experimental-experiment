@@ -45,7 +45,7 @@ def create_dummy_inputs_for_phi_35_vision_instruct(
     from ...helpers import string_type
     from ...torch_models.llm_model_helper import get_phi_35_vision_instruct
 
-    model, _ = get_phi_35_vision_instruct(num_hidden_layers=num_hidden_layers)
+    model, *_ = get_phi_35_vision_instruct(num_hidden_layers=num_hidden_layers)
     model = model.to(device)
 
     model_id = "microsoft/Phi-3.5-vision-instruct"
