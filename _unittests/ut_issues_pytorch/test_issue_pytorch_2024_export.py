@@ -337,24 +337,51 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         )
 
         class Model(torch.nn.Module):
-            def forward(self, cache: MyCache):
+            def forward(self, x, cache: MyCache):
                 kcat = torch.cat(cache.key_cache, axis=0)
                 vcat = torch.cat(cache.value_cache, axis=0)
                 s1 = kcat.sum(axis=1)
                 s2 = vcat.sum(axis=1)
-                return s1 + s2
+                return x @ (s1 + s2)
 
         cache = MyCache(
             [torch.ones([4, 4]), torch.ones([4, 4]) * 2],
             [-torch.ones([4, 4]), -torch.ones([4, 4]) * 2],
         )
+        x = torch.ones((2, 8))
         model = Model()
-        expected = model(cache)
+        expected = model(x, cache)
 
-        ep = torch.export.export(model, (cache,))
+        # static shape
+        ep = torch.export.export(model, (x, cache))
         ep = ep.run_decompositions()
         mod = ep.module()
-        got = mod(cache)
+        got = mod(x, cache)
+        self.assertEqualArray(expected, got)
+
+        # dynamic shape 1
+        ep = torch.export.export(
+            model,
+            (x, cache),
+            dynamic_shapes=({0: torch.export.Dim("batch")}, [[{}, {}], [{}, {}]]),
+        )
+        ep = ep.run_decompositions()
+        mod = ep.module()
+        got = mod(x, cache)
+        self.assertEqualArray(expected, got)
+
+        # dynamic shape 2
+        ep = torch.export.export(
+            model,
+            (x, cache),
+            dynamic_shapes={
+                "x": {0: torch.export.Dim("batch")},
+                "cache": [[{}, {}], [{}, {}]],
+            },
+        )
+        ep = ep.run_decompositions()
+        mod = ep.module()
+        got = mod(x, cache)
         self.assertEqualArray(expected, got)
 
         torch.utils._pytree.SUPPORTED_NODES.pop(MyCache)

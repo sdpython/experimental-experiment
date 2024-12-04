@@ -1470,6 +1470,10 @@ class BenchmarkRunner:
         if isinstance(exported_model, onnx.ModelProto):
             # This is an onnx model.
             # warmup session
+            if self.verbose:
+                print(
+                    f"[benchmarkrunner.benchmark] feeds={string_type(feeds, with_shape=True)}"
+                )
             begin = time.perf_counter()
             time_first_iter = None
             if quiet:

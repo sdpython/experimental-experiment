@@ -363,6 +363,8 @@ class ModelRunner:
             f"to_tuple, has config={hasattr(model, 'config')}."
         )
 
+        if wrap_kind is None and "DynamicCache" in model.__class__.__name__:
+            wrap_kind = "nowrap"
         model_cvt = cvt(model)
         del model
         if wrap_kind == "nowrap":
@@ -1504,15 +1506,27 @@ class ModelRunner:
             if seq_length is not None:
                 dyn_dims.update({1: seq_length})
             if isinstance(x, list):
-                assert all(
-                    _ is None or hasattr(_, "shape") for _ in x
-                ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
+                assert all(_ is None or hasattr(_, "shape") for _ in x), (
+                    f"Unsupported types in a list {[type(_) for _ in x]} at position {i}, "
+                    f"input types are {string_type(self.inputs)}"
+                )
                 tries = [dyn_dims if _ is not None and len(_.shape) > 1 else None for _ in x]
                 res.append(tries)
                 continue
-            assert hasattr(
-                x, "shape"
-            ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
+            if x.__class__.__name__ == "DynamicCache":
+                import transformers
+
+                assert isinstance(
+                    x, transformers.cache_utils.DynamicCache
+                ), f"Unexpected type {type(x)}, input types={string_type(self.inputs)}"
+                # The cache has no dynamic shapes.
+                length = len(x.key_cache)
+                res.append([None, [{} for _ in range(length)], [{} for _ in range(length)]])
+                continue
+            assert hasattr(x, "shape"), (
+                f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}, "
+                f"input types are {string_type(self.inputs)}"
+            )
             res.append(dyn_dims if len(x.shape) > 1 else None)
 
         final = tuple(res)
@@ -1665,6 +1679,15 @@ class ModelRunner:
                     )
                     new_inputs.append(x if nds == ds else x.expand(nds))
                 dyn_inputs.append(new_inputs)
+                continue
+            if inp.__class__.__name__ == "DynamicCache":
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.DynamicCache
+                ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
+                # The cache is static.
+                dyn_inputs.append(inp)
                 continue
             new_shape = self._make_export_new_dynamic_shape(
                 inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
@@ -1846,6 +1869,11 @@ class ModelRunner:
                 continue
 
             if isinstance(dyn_shape, list):
+                if inp.__class__.__name__ == "DynamicCache":
+                    # The cache is static.
+                    dyn_inputs.append(inp)
+                    continue
+
                 assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"
                 assert len(inp) == len(dyn_shape), (
                     f"Length mismatch len(self.inputs[i])={len(inp)} == "
@@ -1950,7 +1978,7 @@ class ModelRunner:
                 assert isinstance(
                     i, transformers.cache_utils.DynamicCache
                 ), f"Unexpected class {type(i)}"
-                new_inputs.extend(torch.Tensor([i._seen_tokens]).to(torch.int64))
+                new_inputs.append(torch.tensor([i._seen_tokens]).to(torch.int64))
                 new_inputs.extend(i.key_cache)
                 new_inputs.extend(i.value_cache)
                 continue

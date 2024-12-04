@@ -318,12 +318,13 @@ class ExportOptions:
             return dec
 
         if verbose:
-            print("[ExportOptions.export] torch.export.export")
+            print(
+                f"[ExportOptions.export] torch.export.export "
+                f"strict={self.strict}, verbose={verbose}"
+            )
             print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
-            print(f"[ExportOptions.export] strict={self.strict}")
             print(f"[ExportOptions.export] args={string_type(args)}")
             print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
-            print(f"[ExportOptions.export] verbose={verbose}")
         if exc:
             exported_program = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict

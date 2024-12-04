@@ -803,7 +803,7 @@ def to_onnx(
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
     information about the graph module is printed out.
 
-    Environment variable ``TO_ONNX_VERBOSE=1`` can be used to
+    Environment variable ``ONNXVERBOSE=1`` can be used to
     increase verbosity in this function.
     Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
     a progress bar on big models.
@@ -814,7 +814,7 @@ def to_onnx(
         options = OptimizationOptions()
     begin = time.perf_counter()
 
-    verbose = max(verbose, int(os.environ.get("TO_ONNX_VERBOSE", verbose)))
+    verbose = max(verbose, int(os.environ.get("ONNXVERBOSE", verbose)))
     if verbose:
         print(f"[to_onnx] build the graph module from {type(mod)}, type(args)={type(args)}")
         if input_names:

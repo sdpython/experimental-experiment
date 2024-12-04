@@ -83,7 +83,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        if debug or int(os.environ.get("TO_ONNX_VERBOSE", "0")) > 0:
+        if debug or int(os.environ.get("ONNXVERBOSE", "0")) > 0:
             main(args=args)
         else:
             with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
@@ -104,7 +104,10 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
         if dynamic:
             onx = onnx.load(filename)
             input_values = []
-            for i in onx.graph.input:
+            for posi, i in enumerate(onx.graph.input):
+                if posi > 0 and "DynamicCache" in models:
+                    # Only the first input is static
+                    break
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0", "s1"))
@@ -258,6 +261,27 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
                 self._export_cmd(
                     exporter, "101DummyNoneIntDict", dynamic=False, check_file=False
                 )
+
+    # DynamicCache
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_dynamic_cache_eager(self):
+        for exporter in ["eager", "export"]:
+            with self.subTest(exporter=exporter):
+                self._export_cmd(
+                    exporter, "101DummyDynamicCache", dynamic=False, check_file=False
+                )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_dynamic_cache_custom(self):
+        for exporter in ["custom"]:
+            for dyn in [True, False]:
+                with self.subTest(exporter=exporter, dynamic=dyn):
+                    self._export_cmd(
+                        exporter, "101DummyDynamicCache", dynamic=dyn, check_file=False
+                    )
 
 
 if __name__ == "__main__":

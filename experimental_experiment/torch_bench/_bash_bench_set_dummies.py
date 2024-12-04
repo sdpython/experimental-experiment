@@ -248,3 +248,22 @@ class NeuronNoneIntDict(torch.nn.Module):
         return {"x": torch.randn(1, 5).to(device)}
 
     config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronDynamicCache(torch.nn.Module):
+    "Dummy module with an optional integer and dictionary as inputs."
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, dc):
+        return x @ (torch.cat(dc.key_cache, axis=1) + torch.cat(dc.value_cache, axis=1))
+
+    def _get_random_inputs(self, device: str):
+        import transformers
+
+        cache = transformers.cache_utils.DynamicCache(1)
+        cache.update(torch.ones((8, 8)).to(device), (torch.ones((8, 8)) * 2).to(device), 0)
+        return {"x": torch.randn(3, 8), "dc": cache}
+
+    config = MakeConfig(download=False, to_tuple=False)
