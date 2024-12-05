@@ -14,6 +14,7 @@ to the original model.
     import textwrap
     import pandas
     from experimental_experiment.torch_interpreter.eval import discover, run_exporter
+    from experimental_experiment.ext_test_case import unit_test_going
 
     cases = discover()
     print()
@@ -57,12 +58,13 @@ to the original model.
             print()
             res = run_exporter(exporter, cls_model, False, quiet=True)
             case_ref = f":ref:`{name} <le-model-case-export-{name}>`"
+            expo = exporter.split("-", maxsplit=1)[-1]
             if "exported" in res:
                 print("::")
                 print()
                 print(textwrap.indent(str(res["exported"].graph), "    "))
                 print()
-                obs.append(dict(case=case_ref, error="", exporter=exporter))
+                obs.append(dict(case=case_ref, error="", exporter=expo))
             else:
                 print("**FAILED**")
                 print()
@@ -70,7 +72,7 @@ to the original model.
                 print()
                 print(textwrap.indent(str(res["error"]), "    "))
                 print()
-                obs.append(dict(case=case_ref, error="FAIL", exporter=exporter))
+                obs.append(dict(case=case_ref, error="FAIL", exporter=expo))
 
     print()
     print(".. _le-summary-exported-program:")

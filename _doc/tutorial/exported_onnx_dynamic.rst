@@ -29,7 +29,7 @@ to the original model.
     print()
 
     obs = []
-    for name, cls_model in sorted(cases.items())[:3]:
+    for name, cls_model in sorted(cases.items()):
         print()
         print(f".. _lod-model-case-export-{name}:")
         print()
