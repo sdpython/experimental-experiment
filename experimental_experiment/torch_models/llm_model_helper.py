@@ -421,8 +421,6 @@ def get_phi_35_vision_instruct(
     from .fromhub.configuration_phi3_v import Phi3VConfig
     from .fromhub.modeling_phi3_v import Phi3VForCausalLM
 
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
-
     config = {
         "_name_or_path": "Phi-3.5-vision-instruct",
         "architectures": ["Phi3VForCausalLM"],
@@ -645,7 +643,9 @@ def get_phi_35_vision_instruct(
         inputs = tuple(inputs.values())
         shapes = tuple(shapes.values())
 
-    return model, inputs, shapes
+    if common_dynamic_shapes:
+        return model, inputs, shapes
+    return model, inputs
 
 
 def get_ai21_jamba_15_mini(

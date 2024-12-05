@@ -46,7 +46,9 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1)
+                model, *_ = get_phi_35_vision_instruct(
+                    num_hidden_layers=1, common_dynamic_shapes=True
+                )
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -82,7 +84,9 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1)
+                model, *_ = get_phi_35_vision_instruct(
+                    num_hidden_layers=1, common_dynamic_shapes=True
+                )
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -115,7 +119,7 @@ class TestLlmModelInputs(ExtTestCase):
         )
 
         device = "cuda"
-        model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1)
+        model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)
         model = model.to(device)
         for it in range(0, 2):
             with self.subTest(iteration=it):
@@ -161,6 +165,7 @@ class TestLlmModelInputs(ExtTestCase):
                     | LLMInputKind.position_ids
                     | LLMInputKind.attention_mask
                     | LLMInputKind.past_key_values,
+                    common_dynamic_shapes=True,
                 )
                 model(**copy.deepcopy(kwargs))
                 model(*[kwargs.get(n, None) for n in input_names])

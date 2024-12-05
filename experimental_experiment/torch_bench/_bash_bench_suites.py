@@ -55,6 +55,7 @@ class UntrainedRunner(BenchmarkRunner):
                             | LLMInputKind.attention_mask
                             | LLMInputKind.position_ids
                             | LLMInputKind.past_key_values,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
@@ -68,6 +69,7 @@ class UntrainedRunner(BenchmarkRunner):
                             | LLMInputKind.attention_mask
                             | LLMInputKind.position_ids
                             | LLMInputKind.past_key_values,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
@@ -79,6 +81,7 @@ class UntrainedRunner(BenchmarkRunner):
                             n_iteration=0,
                             _attn_implementation="eager",
                             input_kind=LLMInputKind.ALL,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
@@ -90,6 +93,7 @@ class UntrainedRunner(BenchmarkRunner):
                             n_iteration=1,
                             _attn_implementation="eager",
                             input_kind=LLMInputKind.ALL,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
