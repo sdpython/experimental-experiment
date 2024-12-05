@@ -626,7 +626,7 @@ def get_phi_35_vision_instruct(
             )
         if input_kind & LLMInputKind.attention_mask:
             inputs["attention_mask"] = kwargs["attention_mask"]
-            shapes["attention_mask"] = {0: batch, 1: seq_length}
+            shapes["attention_mask"] = {0: batch, 1: cache_length + 1}
         if input_kind & LLMInputKind.past_key_values:
             inputs["past_key_values"] = kwargs["past_key_values"]
             n = len(data[1]["past_key_values"].key_cache)

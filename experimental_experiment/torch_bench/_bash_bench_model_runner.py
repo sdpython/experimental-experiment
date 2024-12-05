@@ -1712,16 +1712,16 @@ class ModelRunner:
                 ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
                 new_input = copy.deepcopy(inp)
                 ds = dynamic_shapes[i]
-                for i in range(len(new_input.key_cache)):
+                for k in range(len(new_input.key_cache)):
                     new_shape = self._make_export_new_dynamic_shape(
-                        inp.key_cache[i].shape, ds[1][i], dyn_values=dyn_values, i=i
+                        inp.key_cache[k].shape, ds[1][k], dyn_values=dyn_values, i=i
                     )
-                    new_input.key_cache[i] = inp.key_cache[i].expand(new_shape)
+                    new_input.key_cache[k] = inp.key_cache[k].expand(new_shape)
                 for i in range(len(new_input.value_cache)):
                     new_shape = self._make_export_new_dynamic_shape(
-                        inp.value_cache[i].shape, ds[1][i], dyn_values=dyn_values, i=i
+                        inp.value_cache[k].shape, ds[1][k], dyn_values=dyn_values, i=i
                     )
-                    new_input.value_cache[i] = inp.value_cache[i].expand(new_shape)
+                    new_input.value_cache[k] = inp.value_cache[k].expand(new_shape)
                 dyn_inputs.append(new_input)
                 continue
 
@@ -1942,7 +1942,41 @@ class ModelRunner:
                     if len(inp.key_cache) == 0:
                         dyn_inputs.append(inp)
                         continue
-                    raise AssertionError("Not implemented yet.")
+
+                    new_input = copy.deepcopy(inp)
+
+                    for k in range(len(inp.key_cache)):
+                        ns = self._make_dynamic_inputs_tensor(
+                            input_shape=inp.key_cache[k].shape,
+                            i=i,
+                            dyn_shape=dyn_shape[1][k],
+                            dyn_values=dyn_values,
+                        )
+                        zeros = torch.zeros(
+                            ns, dtype=inp.key_cache[k].dtype, device=inp.key_cache[k].device
+                        )
+                        slices = tuple(slice(0, s) for s in inp.key_cache[k].shape)
+                        zeros[slices] = inp.key_cache[k][slices]
+                        new_input.key_cache[k] = zeros
+
+                    for k in range(len(inp.value_cache)):
+                        ns = self._make_dynamic_inputs_tensor(
+                            input_shape=inp.value_cache[k].shape,
+                            i=i,
+                            dyn_shape=dyn_shape[2][k],
+                            dyn_values=dyn_values,
+                        )
+                        zeros = torch.zeros(
+                            ns,
+                            dtype=inp.value_cache[k].dtype,
+                            device=inp.value_cache[k].device,
+                        )
+                        slices = tuple(slice(0, s) for s in inp.value_cache[k].shape)
+                        zeros[slices] = inp.value_cache[k][slices]
+                        new_input.value_cache[k] = zeros
+
+                    dyn_inputs.append(new_input)
+                    continue
 
                 assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"
                 assert len(inp) == len(dyn_shape), (
