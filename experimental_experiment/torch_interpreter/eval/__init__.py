@@ -212,7 +212,7 @@ def _make_exporter_export(
             exported = (
                 exported.run_decompositions()
                 if "decall" in exporter
-                else run_decompositions({})
+                else exported.run_decompositions({})
             )
         except Exception as e:
             if not quiet:
@@ -246,7 +246,7 @@ def _make_exporter_export(
             exported = (
                 exported.run_decompositions()
                 if "decall" in exporter
-                else run_decompositions({})
+                else exported.run_decompositions({})
             )
         except Exception as e:
             if not quiet:
@@ -300,7 +300,7 @@ def _make_exporter_export(
             exported = (
                 exported.run_decompositions()
                 if "decall" in exporter
-                else run_decompositions({})
+                else exported.run_decompositions({})
             )
             if verbose >= 9:
                 print("-- graph after decomposition")
