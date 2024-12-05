@@ -522,7 +522,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     axis=_k,
                     input_name=pos,
                 )
-            else:
+            elif _v is not None:
                 raise AssertionError(
                     f"Unexpected type {type(_v)} in {vv} for dynamic "
                     f"dimension {pos!r}, pos_vv={pos_vv!r}, "

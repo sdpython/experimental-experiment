@@ -280,7 +280,12 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
             for dyn in [True, False]:
                 with self.subTest(exporter=exporter, dynamic=dyn):
                     self._export_cmd(
-                        exporter, "101DummyDynamicCache", dynamic=dyn, check_file=False
+                        exporter,
+                        "101DummyDynamicCache",
+                        dynamic=dyn,
+                        check_file=False,
+                        debug=False,
+                        verbose=30,
                     )
 
 

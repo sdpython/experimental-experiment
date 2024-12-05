@@ -1513,7 +1513,7 @@ class ModelRunner:
             (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
         )
         # This default value won't probably work. This should be set up manually.
-        cache_length = torch.export.Dim("cachel", min=1, max=131072) if self.is_lm() else None
+        cache_length = torch.export.Dim("cachel", min=1, max=131072)
         res = []
         for i, x in enumerate(self.inputs):
             if x is None or isinstance(x, (int, float)):
@@ -1538,13 +1538,22 @@ class ModelRunner:
                     x, transformers.cache_utils.DynamicCache
                 ), f"Unexpected type {type(x)}, input types={string_type(self.inputs)}"
                 length = len(x.key_cache)
-                res.append(
-                    [
-                        None,
-                        [{0: batch, 2: cache_length} for _ in range(length)],
-                        [{0: batch, 2: cache_length} for _ in range(length)],
-                    ]
-                )
+                if x.key_cache and len(x.key_cache[0].shape) > 2:
+                    res.append(
+                        [
+                            None,
+                            [{0: batch, 2: cache_length} for _ in range(length)],
+                            [{0: batch, 2: cache_length} for _ in range(length)],
+                        ]
+                    )
+                else:
+                    res.append(
+                        [
+                            None,
+                            [{0: batch} for _ in range(length)],
+                            [{0: batch} for _ in range(length)],
+                        ]
+                    )
                 continue
             assert hasattr(x, "shape"), (
                 f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}, "

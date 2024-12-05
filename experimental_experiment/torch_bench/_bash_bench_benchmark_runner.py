@@ -1449,6 +1449,11 @@ class BenchmarkRunner:
         if feeds_dynamic is None or not isinstance(exported_model, onnx.ModelProto):
             got_dynamic = None
         else:
+            if self.verbose > 1:
+                print(
+                    f"[BenchmarkRunner.benchmark] feeds_dynamic="
+                    f"{string_type(feeds_dynamic, with_shape=True)}"
+                )
             if self.verbose:
                 print("[benchmarkrunner.benchmark] check dynamic")
             if self.nvtx:
