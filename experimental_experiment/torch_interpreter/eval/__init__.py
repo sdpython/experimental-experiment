@@ -48,7 +48,7 @@ def evaluation(
         "custom-tracing",
     ),
     dynamic: Tuple[bool] = (False, True),
-    cases: Optional[Dict[str, type]] = None,
+    cases: Optional[Union[str, Dict[str, type]]] = None,
     verbose: int = 0,
     quiet: bool = True,
 ) -> List[Dict[str, Any]]:
@@ -62,12 +62,19 @@ def evaluation(
     :param quiet: catch exception
     :return: results, list of dictionaries
     """
-    if cases is None:
-        cases = discover()
-    elif isinstance(cases, str):
-        cases = (cases,)
     if isinstance(exporters, str):
         exporters = (exporters,)
+    if isinstance(dynamic, (bool, int)):
+        dynamic = (dynamic,)
+
+    if cases is None:
+        cases = discover()
+    elif cases in ("three", ["three"]):
+        all_cases = discover()
+        cases = dict(list(all_cases.items())[:3])
+    elif isinstance(cases, str):
+        cases = (cases,)
+
     if isinstance(cases, (list, tuple)):
         all_cases = discover()
         new_cases = []
@@ -79,8 +86,7 @@ def evaluation(
             else:
                 new_cases.append(c)
         cases = {k: v for k, v in all_cases.items() if k in set(new_cases)}
-    if isinstance(dynamic, (bool, int)):
-        dynamic = (dynamic,)
+
     sorted_cases = sorted(cases.items())
     loop = list(itertools.product(sorted_cases, dynamic, exporters))
     if verbose:

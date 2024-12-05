@@ -18,7 +18,11 @@ script_args = get_parsed_args(
     description=__doc__,
     exporter=("all", "an exporter to rerun"),
     dynamic=("all", "use dyanmic shapes"),
-    case=("all", "model cases"),
+    case=(
+        "three",
+        "model cases, two for the first two (to test), "
+        "all to select all, a name or a regular expression fior a subset",
+    ),
     quiet=("1", "0 or 1"),
     verbose=("1", "verbosity"),
     expose="exporter,dyanmic,case,quiet,verbose",
