@@ -6,7 +6,7 @@ Measures the exporter success on many test cases
 
 All test cases can be found in module
 :mod:`experimental_experiment.torch_interpreter.eval.model_cases`.
-Page :ref:`l-exported-program-cases` shows the exported
+Page :ref:`l-exp-cases` shows the exported
 program for many of those cases.
 
 """

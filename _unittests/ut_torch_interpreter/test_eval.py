@@ -47,7 +47,7 @@ class TestEval(ExtTestCase):
 
     @requires_torch("2.6", "ONNXProgram.optimize missing")
     def test_run_exporter_regex(self):
-        evaluation(cases=".*List.*", exporters="custom-strict", quiet=False, dynamic=False)
+        evaluation(cases=".*Aten.*", exporters="custom-strict", quiet=False, dynamic=False)
 
 
 if __name__ == "__main__":

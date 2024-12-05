@@ -37,14 +37,14 @@ def discover():
 def evaluation(
     exporters: Tuple[str] = (
         "export-strict",
-        "export-strict-dec",
+        "export-strict-decall",
         "export-nostrict",
-        "export-nostrict-dec",
+        "export-nostrict-decall",
         "export-tracing",
         "custom-strict",
-        "custom-strict-dec",
+        "custom-strict-decall",
         "custom-nostrict",
-        "custom-nostrict-dec",
+        "custom-nostrict-decall",
         "custom-tracing",
     ),
     dynamic: Tuple[bool] = (False, True),
@@ -201,7 +201,7 @@ def _make_exporter_export(
             print("-- graph")
             print(exported.graph)
         return exported.module()
-    if exporter in ("export-strict-dec", "export-strict-decomposition"):
+    if exporter in ("export-strict-dec", "export-strict-decall"):
         try:
             exported = torch.export.export(
                 model, inputs, dynamic_shapes=dynamic_shapes, strict=True
@@ -209,7 +209,11 @@ def _make_exporter_export(
             if verbose >= 9:
                 print("-- graph before decomposition")
                 print(exported.graph)
-            exported = exported.run_decompositions({})
+            exported = (
+                exported.run_decompositions()
+                if "decall" in exporter
+                else run_decompositions({})
+            )
         except Exception as e:
             if not quiet:
                 raise
@@ -231,7 +235,7 @@ def _make_exporter_export(
             print("-- graph")
             print(exported.graph)
         return exported.module()
-    if exporter in ("export-nostrict-dec", "export-nostrict-decomposition"):
+    if exporter in ("export-nostrict-dec", "export-nostrict-decall"):
         try:
             exported = torch.export.export(
                 model, inputs, dynamic_shapes=dynamic_shapes, strict=False
@@ -239,7 +243,11 @@ def _make_exporter_export(
             if verbose >= 9:
                 print("-- graph before decomposition")
                 print(exported.graph)
-            exported = exported.run_decompositions({})
+            exported = (
+                exported.run_decompositions()
+                if "decall" in exporter
+                else run_decompositions({})
+            )
         except Exception as e:
             if not quiet:
                 raise
@@ -278,7 +286,7 @@ def _make_exporter_export(
                 raise
             return dict(error=str(e), success=0, error_step="export")
         return exported.module()
-    if exporter in ("export-jit-dec", "export-jit-decomposition"):
+    if exporter in ("export-jit-dec", "export-jit-decall"):
         from torch._export.converter import TS2EPConverter
 
         try:
@@ -289,7 +297,11 @@ def _make_exporter_export(
             if verbose >= 9:
                 print("-- graph before decomposition")
                 print(exported.graph)
-            exported = exported.run_decompositions({})
+            exported = (
+                exported.run_decompositions()
+                if "decall" in exporter
+                else run_decompositions({})
+            )
             if verbose >= 9:
                 print("-- graph after decomposition")
                 print(exported.graph)
@@ -313,89 +325,20 @@ def _make_exporter_onnx(
     from ...torch_interpreter import to_onnx, ExportOptions
     from ...helpers import string_type
 
-    if exporter == "custom-strict":
+    if exporter.startswith("custom"):
+        opts = {}
+        opts["strict"] = "-nostrict" not in exporter
+        opts["fallback"] = "-fallback" in exporter
+        opts["tracing"] = "-tracing" in exporter
+        opts["jit"] = "-jit" in exporter
+        if "-dec" in exporter:
+            opts["decomposition_table"] = "all" if "-decall" in exporter else "default"
         try:
             onx, builder = to_onnx(
                 model,
                 inputs,
                 dynamic_shapes=dynamic_shapes,
-                export_options=ExportOptions(strict=True),
-                return_builder=True,
-            )
-        except Exception as e:
-            if not quiet:
-                raise RuntimeError(
-                    f"Unable to convert model={model.__class__.__name__}, "
-                    f"input={string_type(inputs[0], with_shape=True)}, "
-                    f"dynamic_shapes={dynamic_shapes}, "
-                    f"exporter={exporter!r}"
-                ) from e
-            return dict(error=str(e), success=0, error_step="export")
-        return onx, builder
-    if exporter == "custom-strict-dec":
-        try:
-            onx, builder = to_onnx(
-                model,
-                inputs,
-                dynamic_shapes=dynamic_shapes,
-                export_options=ExportOptions(strict=True, decomposition_table="default"),
-                return_builder=True,
-            )
-        except Exception as e:
-            if not quiet:
-                raise RuntimeError(
-                    f"Unable to convert model={model.__class__.__name__}, "
-                    f"input={string_type(inputs[0], with_shape=True)}, "
-                    f"dynamic_shapes={dynamic_shapes}, "
-                    f"exporter={exporter!r}"
-                ) from e
-            return dict(error=str(e), success=0, error_step="export")
-        return onx, builder
-    if exporter == "custom-nostrict":
-        try:
-            onx, builder = to_onnx(
-                model,
-                inputs,
-                dynamic_shapes=dynamic_shapes,
-                export_options=ExportOptions(strict=False),
-                return_builder=True,
-            )
-        except Exception as e:
-            if not quiet:
-                raise RuntimeError(
-                    f"Unable to convert model={model.__class__.__name__}, "
-                    f"input={string_type(inputs[0], with_shape=True)}, "
-                    f"dynamic_shapes={dynamic_shapes}, "
-                    f"exporter={exporter!r}"
-                ) from e
-            return dict(error=str(e), success=0, error_step="export")
-        return onx, builder
-    if exporter == "custom-nostrict-dec":
-        try:
-            onx, builder = to_onnx(
-                model,
-                inputs,
-                dynamic_shapes=dynamic_shapes,
-                export_options=ExportOptions(strict=False, decomposition_table="default"),
-                return_builder=True,
-            )
-        except Exception as e:
-            if not quiet:
-                raise RuntimeError(
-                    f"Unable to convert model={model.__class__.__name__}, "
-                    f"input={string_type(inputs[0], with_shape=True)}, "
-                    f"dynamic_shapes={dynamic_shapes}, "
-                    f"exporter={exporter!r}"
-                ) from e
-            return dict(error=str(e), success=0, error_step="export")
-        return onx, builder
-    if exporter == "custom-tracing":
-        try:
-            onx, builder = to_onnx(
-                model,
-                inputs,
-                dynamic_shapes=dynamic_shapes,
-                export_options=ExportOptions(tracing=True),
+                export_options=ExportOptions(**opts),
                 return_builder=True,
             )
         except Exception as e:
@@ -695,7 +638,12 @@ def run_exporter(
     del disc["n"]
     del disc["sum"]
     disc.update(
-        dict(success=1 if disc["abs"] < 0.1 else 0, model_cls=model.__class__, exported=mod)
+        dict(
+            success=1 if disc["abs"] < 0.1 else 0,
+            model_cls=model.__class__,
+            exported=mod,
+            onnx=onx,
+        )
     )
     if disc["abs"] >= 0.1:
         disc["error"] = "diff.0"
