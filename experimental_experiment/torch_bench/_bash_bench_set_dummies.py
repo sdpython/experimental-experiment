@@ -253,9 +253,6 @@ class NeuronNoneIntDict(torch.nn.Module):
 class NeuronDynamicCache(torch.nn.Module):
     "Dummy module with an optional integer and dictionary as inputs."
 
-    def __init__(self):
-        super().__init__()
-
     def forward(self, x, dc):
         return x @ (
             torch.cat(dc.key_cache, axis=1) + torch.cat(dc.value_cache, axis=1)

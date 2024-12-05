@@ -1106,7 +1106,9 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_dynamo] type(model)={type(self.model)!r}")
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad(), bypass_export_some_errors(verbose=max(verbose - 5, 0)):
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
@@ -1120,7 +1122,7 @@ class ModelRunner:
                     **additional_kwargs,
                 )
         else:
-            with torch.no_grad():
+            with torch.no_grad(), bypass_export_some_errors(verbose=max(verbose - 5, 0)):
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,

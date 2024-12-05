@@ -37,6 +37,7 @@ Examples
 * :ref:`l-plot-torch-export-201`
 * :ref:`l-plot-torch-dort-201`
 * :ref:`l-torch-aot-201`
+* :ref:`l-plot-torch-export-with-dynamic-cache-201`
 
 301
 +++
