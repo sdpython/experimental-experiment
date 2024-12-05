@@ -614,19 +614,19 @@ def get_phi_35_vision_instruct(
         shapes = {}
 
         batch = torch.export.Dim("batch", min=1, max=1024)
-        seq_length = torch.export.Dim("seq_length", min=1)
-        pos_length = torch.export.Dim("pos_length", min=1)
-        mask_length = torch.export.Dim("mask_length", min=1)
-        cache_length = torch.export.Dim("cache_length", min=1)
+        seq_length = torch.export.Dim("seq_length", min=1, max=4096)
+        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
         if input_kind & LLMInputKind.input_ids:
             inputs["input_ids"] = kwargs["input_ids"]
-            shapes["input_ids"] = {0: batch, 1: seq_length}
+            shapes["input_ids"] = {0: batch, 1: seq_length} if n_iteration == 0 else {0: batch}
         if input_kind & LLMInputKind.position_ids:
             inputs["position_ids"] = kwargs["position_ids"]
-            shapes["position_ids"] = {0: batch, 1: pos_length}
+            shapes["position_ids"] = (
+                {0: batch, 1: seq_length} if n_iteration == 0 else {0: batch}
+            )
         if input_kind & LLMInputKind.attention_mask:
             inputs["attention_mask"] = kwargs["attention_mask"]
-            shapes["attention_mask"] = {0: batch, 1: mask_length}
+            shapes["attention_mask"] = {0: batch, 1: seq_length}
         if input_kind & LLMInputKind.past_key_values:
             inputs["past_key_values"] = kwargs["past_key_values"]
             n = len(data[1]["past_key_values"].key_cache)

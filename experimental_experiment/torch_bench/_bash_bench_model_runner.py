@@ -676,11 +676,11 @@ class ModelRunner:
         if exporter == "executorch":
             assert strategy in {
                 None,
-                "default",
                 "nostrict",
                 "none",
                 "fallback",
-                "fallback-default",
+                "fallback-dec",
+                "fallback-decall",
                 "jit",
             }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_executorch(
@@ -1939,6 +1939,9 @@ class ModelRunner:
 
             if isinstance(dyn_shape, list):
                 if inp.__class__.__name__ == "DynamicCache":
+                    if len(inp.key_cache) == 0:
+                        dyn_inputs.append(inp)
+                        continue
                     raise AssertionError("Not implemented yet.")
 
                 assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"

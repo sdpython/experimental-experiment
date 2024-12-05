@@ -133,8 +133,8 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_export_default(self):
-        self._export_cmd("export-default", "101Dummy", check_file=False)
+    def test_export_dec(self):
+        self._export_cmd("export-dec", "101Dummy", check_file=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
@@ -148,8 +148,8 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_export_fallback_default(self):
-        self._export_cmd("export-fallback-default", "101Dummy", check_file=False)
+    def test_export_fallback_dec(self):
+        self._export_cmd("export-fallback-dec", "101Dummy", check_file=False)
 
     # custom
 
@@ -165,8 +165,8 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_custom_default(self):
-        self._export_cmd("custom-default", "101Dummy", check_file=True)
+    def test_custom_dec(self):
+        self._export_cmd("custom-dec", "101Dummy", check_file=True)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
@@ -185,8 +185,8 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_custom_fallback_default(self):
-        self._export_cmd("export-fallback-default", "101Dummy", check_file=False)
+    def test_custom_fallback_dec(self):
+        self._export_cmd("export-fallback-dec", "101Dummy", check_file=False)
 
     # onnx_dynamo
 
