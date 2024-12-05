@@ -140,7 +140,7 @@ class ExportOptions:
 
     def get_fallback_options(self, kind: Optional[str] = None) -> List["ExportOptions"]:
         """Returns the fallback scenario."""
-        if kind is None or kind in ("fallback", "fallback-default", "default"):
+        if kind is None or kind in ("fallback", "fallback-dec", "fallback-decall"):
             other_dec = None if self.decomposition_table else "default"
             return [
                 ExportOptions(strict=True, decomposition_table=self.decomposition_table),
