@@ -83,7 +83,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        if debug or int(os.environ.get("TO_ONNX_VERBOSE", "0")) > 0:
+        if debug or int(os.environ.get("ONNXVERBOSE", "0")) > 0:
             main(args=args)
         else:
             with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):
@@ -121,7 +121,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
         self._untrained_export(
-            "custom-decomposition", "Phi35MiniInstructLM_1Layer", verbose=1, debug=False
+            "custom-dec", "Phi35MiniInstructLM_1Layer", verbose=1, debug=False
         )
 
 

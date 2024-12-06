@@ -172,6 +172,7 @@ class ModelRunner:
     :param nvtx: enable nvtx events
     :param model_name: model name
     :param export_options: additional options when exporting if the default options never work
+    :param dynamic_shapes: dynamic shapes to use instead of using automated ones
     """
 
     _patched = None
@@ -294,6 +295,7 @@ class ModelRunner:
         nvtx: bool = False,
         model_name: Optional[str] = None,
         export_options: Optional[Dict[str, Any]] = None,
+        dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]] = None,
     ):
         if dtype is None:
             cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
@@ -362,6 +364,8 @@ class ModelRunner:
             f"to_tuple, has config={hasattr(model, 'config')}."
         )
 
+        if wrap_kind is None and "DynamicCache" in model.__class__.__name__:
+            wrap_kind = "nowrap"
         model_cvt = cvt(model)
         del model
         if wrap_kind == "nowrap":
@@ -392,7 +396,8 @@ class ModelRunner:
         self.model_name = model_name
         self.nvtx = nvtx
         self.export_options = export_options
-        assert self.autocast is not None
+        self.dynamic_shapes = dynamic_shapes
+        assert self.autocast is not None, "autocast not implemented"
         self.std_to_dump = []
 
     def get_devices(self):
@@ -649,11 +654,13 @@ class ModelRunner:
         if exporter == "export":
             assert strategy in {
                 None,
-                "default",
+                "dec",
+                "decall",
                 "nostrict",
                 "none",
                 "fallback",
-                "fallback-default",
+                "fallback-dec",
+                "fallback-decall",
                 "jit",
             }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_export(
@@ -668,11 +675,11 @@ class ModelRunner:
         if exporter == "executorch":
             assert strategy in {
                 None,
-                "default",
                 "nostrict",
                 "none",
                 "fallback",
-                "fallback-default",
+                "fallback-dec",
+                "fallback-decall",
                 "jit",
             }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_executorch(
@@ -763,7 +770,8 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
             print(
-                f"[ModelRunner._to_onnx_custom] export_inputs={string_type(export_inputs)!r}"
+                f"[ModelRunner._to_onnx_custom] export_inputs="
+                f"{string_type(export_inputs, with_shape=True)!r}"
             )
             print(
                 f"[ModelRunner._to_onnx_custom] export_kw_inputs="
@@ -1097,7 +1105,9 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_dynamo] type(model)={type(self.model)!r}")
 
         if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
+            with torch.autocast(
+                device_type=self.device, dtype=self.dtype
+            ), torch.no_grad(), bypass_export_some_errors(verbose=max(verbose - 5, 0)):
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
@@ -1111,7 +1121,7 @@ class ModelRunner:
                     **additional_kwargs,
                 )
         else:
-            with torch.no_grad():
+            with torch.no_grad(), bypass_export_some_errors(verbose=max(verbose - 5, 0)):
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
@@ -1214,7 +1224,7 @@ class ModelRunner:
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
         opts = self.export_options or {}
-        if "fallback" not in opts:
+        if "fallback" not in opts and not strategy:
             opts["fallback"] = True
         export_options = ExportOptions(strategy=strategy or "strict", **opts)
         if verbose:
@@ -1228,7 +1238,7 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
-        with bypass_export_some_errors():
+        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
             exported_mod = export_options.export(
                 self.model,
                 export_inputs,
@@ -1285,7 +1295,7 @@ class ModelRunner:
             print(f"[ModelRunner._to_executorch] type(model)={type(self.model)!r}")
             print("[ModelRunner._to_executorch] run torch.export.export")
 
-        with bypass_export_some_errors():
+        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
             exported_mod = export_options.export(
                 self.model,
                 export_inputs,
@@ -1481,6 +1491,16 @@ class ModelRunner:
         """
         if not dynamic:
             return None
+        if self.dynamic_shapes is not None:
+            if isinstance(self.dynamic_shapes, tuple):
+                return self.dynamic_shapes
+            res = tuple(
+                self.dynamic_shapes.get(
+                    i, None if inp is None or isinstance(inp, (int, float, bool)) else {}
+                )
+                for i, inp in zip(self.input_names, self.inputs)
+            )
+            return res
         assert (
             input_names is None
         ), f"This method is not implemented if input_names={input_names!r}"
@@ -1493,6 +1513,8 @@ class ModelRunner:
         seq_length = (
             (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
         )
+        # This default value won't probably work. This should be set up manually.
+        cache_length = torch.export.Dim("cachel", min=1, max=131072)
         res = []
         for i, x in enumerate(self.inputs):
             if x is None or isinstance(x, (int, float)):
@@ -1503,15 +1525,41 @@ class ModelRunner:
             if seq_length is not None:
                 dyn_dims.update({1: seq_length})
             if isinstance(x, list):
-                assert all(
-                    _ is None or hasattr(_, "shape") for _ in x
-                ), f"Unsupported types in a list {[type(_) for _ in x]} at position {i}"
+                assert all(_ is None or hasattr(_, "shape") for _ in x), (
+                    f"Unsupported types in a list {[type(_) for _ in x]} at position {i}, "
+                    f"input types are {string_type(self.inputs)}"
+                )
                 tries = [dyn_dims if _ is not None and len(_.shape) > 1 else None for _ in x]
                 res.append(tries)
                 continue
-            assert hasattr(
-                x, "shape"
-            ), f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}"
+            if x.__class__.__name__ == "DynamicCache":
+                import transformers
+
+                assert isinstance(
+                    x, transformers.cache_utils.DynamicCache
+                ), f"Unexpected type {type(x)}, input types={string_type(self.inputs)}"
+                length = len(x.key_cache)
+                if x.key_cache and len(x.key_cache[0].shape) > 2:
+                    res.append(
+                        [
+                            None,
+                            [{0: batch, 2: cache_length} for _ in range(length)],
+                            [{0: batch, 2: cache_length} for _ in range(length)],
+                        ]
+                    )
+                else:
+                    res.append(
+                        [
+                            None,
+                            [{0: batch} for _ in range(length)],
+                            [{0: batch} for _ in range(length)],
+                        ]
+                    )
+                continue
+            assert hasattr(x, "shape"), (
+                f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}, "
+                f"input types are {string_type(self.inputs)}"
+            )
             res.append(dyn_dims if len(x.shape) > 1 else None)
 
         final = tuple(res)
@@ -1665,6 +1713,28 @@ class ModelRunner:
                     new_inputs.append(x if nds == ds else x.expand(nds))
                 dyn_inputs.append(new_inputs)
                 continue
+
+            if inp.__class__.__name__ == "DynamicCache":
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.DynamicCache
+                ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
+                new_input = copy.deepcopy(inp)
+                ds = dynamic_shapes[i]
+                for k in range(len(new_input.key_cache)):
+                    new_shape = self._make_export_new_dynamic_shape(
+                        inp.key_cache[k].shape, ds[1][k], dyn_values=dyn_values, i=i
+                    )
+                    new_input.key_cache[k] = inp.key_cache[k].expand(new_shape)
+                for i in range(len(new_input.value_cache)):
+                    new_shape = self._make_export_new_dynamic_shape(
+                        inp.value_cache[k].shape, ds[1][k], dyn_values=dyn_values, i=i
+                    )
+                    new_input.value_cache[k] = inp.value_cache[k].expand(new_shape)
+                dyn_inputs.append(new_input)
+                continue
+
             new_shape = self._make_export_new_dynamic_shape(
                 inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
             )
@@ -1691,7 +1761,7 @@ class ModelRunner:
             dyn_shape = dyn_shape[0]
         assert isinstance(dyn_shape, dict), (
             f"Unexpected type for input {i}, "
-            f"dyn_shape{dyn_shape}, shape of input[{i}]={input_shape}, "
+            f"dyn_shape={dyn_shape}, shape of input[{i}]={input_shape}, "
         )
         for j in range(len(input_shape)):
             if not export or j not in dyn_shape or input_shape[j] != 1:
@@ -1770,6 +1840,52 @@ class ModelRunner:
                 dyn_input_shapes.append(new_shapes)
                 continue
 
+            if inp.__class__.__name__ == "DynamicCache":
+                # Cache is not dynamic
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.DynamicCache
+                ), f"Unexpected type {type(inp)}"
+
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append(
+                        [[{} for t in inp.key_cache], [{} for t in inp.value_cache]]
+                    )
+                    continue
+
+                dyn_input_shapes.append(
+                    [
+                        (1,),
+                        [
+                            self._get_input_shape_tensor(
+                                export=export,
+                                input_shape=t.shape,
+                                dyn_shape=ds,
+                                dyn_values=dyn_values,
+                                i=i,
+                            )
+                            for t, ds in zip(inp.key_cache, dyn_shape[1])
+                        ],
+                        [
+                            self._get_input_shape_tensor(
+                                export=export,
+                                input_shape=t.shape,
+                                dyn_shape=ds,
+                                dyn_values=dyn_values,
+                                i=i,
+                            )
+                            for t, ds in zip(inp.value_cache, dyn_shape[2])
+                        ],
+                    ]
+                )
+                continue
+
             new_shape = self._get_input_shape_tensor(
                 export=export,
                 input_shape=inp.shape if hasattr(inp, "shape") else None,
@@ -1832,6 +1948,46 @@ class ModelRunner:
                 continue
 
             if isinstance(dyn_shape, list):
+                if inp.__class__.__name__ == "DynamicCache":
+                    if len(inp.key_cache) == 0:
+                        dyn_inputs.append(inp)
+                        continue
+
+                    new_input = copy.deepcopy(inp)
+
+                    for k in range(len(inp.key_cache)):
+                        ns = self._make_dynamic_inputs_tensor(
+                            input_shape=inp.key_cache[k].shape,
+                            i=i,
+                            dyn_shape=dyn_shape[1][k],
+                            dyn_values=dyn_values,
+                        )
+                        zeros = torch.zeros(
+                            ns, dtype=inp.key_cache[k].dtype, device=inp.key_cache[k].device
+                        )
+                        slices = tuple(slice(0, s) for s in inp.key_cache[k].shape)
+                        zeros[slices] = inp.key_cache[k][slices]
+                        new_input.key_cache[k] = zeros
+
+                    for k in range(len(inp.value_cache)):
+                        ns = self._make_dynamic_inputs_tensor(
+                            input_shape=inp.value_cache[k].shape,
+                            i=i,
+                            dyn_shape=dyn_shape[2][k],
+                            dyn_values=dyn_values,
+                        )
+                        zeros = torch.zeros(
+                            ns,
+                            dtype=inp.value_cache[k].dtype,
+                            device=inp.value_cache[k].device,
+                        )
+                        slices = tuple(slice(0, s) for s in inp.value_cache[k].shape)
+                        zeros[slices] = inp.value_cache[k][slices]
+                        new_input.value_cache[k] = zeros
+
+                    dyn_inputs.append(new_input)
+                    continue
+
                 assert isinstance(inp, list), f"Unexpected type {type(inp)} for input {i}"
                 assert len(inp) == len(dyn_shape), (
                     f"Length mismatch len(self.inputs[i])={len(inp)} == "
@@ -1929,6 +2085,15 @@ class ModelRunner:
                     raise AssertionError(
                         f"Unable to process input type {type(u)} in input list"
                     )
+                continue
+            if i.__class__.__name__ == "DynamicCache":
+                import transformers
+
+                assert isinstance(
+                    i, transformers.cache_utils.DynamicCache
+                ), f"Unexpected class {type(i)}"
+                new_inputs.extend(i.key_cache)
+                new_inputs.extend(i.value_cache)
                 continue
             raise AssertionError(f"Unable to process input type {type(i)}")
 

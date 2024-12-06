@@ -1,4 +1,5 @@
 import unittest
+from typing import Any, Dict, List, Tuple
 import numpy as np
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -289,6 +290,103 @@ class TestIssuesPytorch2024Export(ExtTestCase):
             model,
         )
         self.assertIn("operator.setitem", str(graph))
+
+    def test_dynamic_cache(self):
+        import torch
+
+        class MyCache:
+            def __init__(self, key_cache=None, value_cache=None):
+                self.key_cache = key_cache
+                self.value_cache = value_cache
+
+        def flatten_my_cache(cache):
+            flat = [
+                (k, getattr(cache, k))
+                for k in ["key_cache", "value_cache"]
+                if hasattr(cache, k)
+            ]
+            return [f[1] for f in flat], [f[0] for f in flat]
+
+        def unflatten_my_cache(
+            values: List[Any],
+            context: "_torch_pytree.Context",  # noqa: F821
+            output_type=None,
+        ) -> MyCache:
+            cache = MyCache()
+            values = dict(zip(context, values))
+            for k, v in values.items():
+                setattr(cache, k, v)
+            return cache
+
+        def flatten_with_keys_my_cache(d: Dict[Any, Any]) -> Tuple:
+            values, context = flatten_my_cache(d)
+            return [
+                (torch.utils._pytree.MappingKey(k), v) for k, v in zip(context, values)
+            ], context
+
+        torch.utils._pytree.register_pytree_node(
+            MyCache,
+            flatten_my_cache,
+            unflatten_my_cache,
+            serialized_type_name=f"{MyCache.__module__}.{MyCache.__name__}",
+            flatten_with_keys_fn=flatten_with_keys_my_cache,
+        )
+
+        torch.fx._pytree.register_pytree_flatten_spec(
+            MyCache, lambda x, _: [x.key_cache, x.value_cache]
+        )
+
+        class Model(torch.nn.Module):
+            def forward(self, x, cache: MyCache):
+                kcat = torch.cat(cache.key_cache, axis=0)
+                vcat = torch.cat(cache.value_cache, axis=0)
+                s1 = kcat.sum(axis=1)
+                s2 = vcat.sum(axis=1)
+                return x @ (s1 + s2)
+
+        cache = MyCache(
+            [torch.ones([4, 4]), torch.ones([4, 4]) * 2],
+            [-torch.ones([4, 4]), -torch.ones([4, 4]) * 2],
+        )
+        x = torch.ones((2, 8))
+        model = Model()
+        expected = model(x, cache)
+
+        # static shape
+        ep = torch.export.export(model, (x, cache))
+        ep = ep.run_decompositions()
+        mod = ep.module()
+        got = mod(x, cache)
+        self.assertEqualArray(expected, got)
+
+        # dynamic shape 1
+        ep = torch.export.export(
+            model,
+            (x, cache),
+            dynamic_shapes=({0: torch.export.Dim("batch")}, [[{}, {}], [{}, {}]]),
+        )
+        ep = ep.run_decompositions()
+        mod = ep.module()
+        got = mod(x, cache)
+        self.assertEqualArray(expected, got)
+
+        # dynamic shape 2
+        ep = torch.export.export(
+            model,
+            (x, cache),
+            dynamic_shapes={
+                "x": {0: torch.export.Dim("batch")},
+                "cache": [[{}, {}], [{}, {}]],
+            },
+        )
+        ep = ep.run_decompositions()
+        mod = ep.module()
+        got = mod(x, cache)
+        self.assertEqualArray(expected, got)
+
+        torch.utils._pytree.SUPPORTED_NODES.pop(MyCache)
+        torch.fx._pytree.SUPPORTED_NODES.pop(MyCache)
+        torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(MyCache)
 
 
 if __name__ == "__main__":

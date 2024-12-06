@@ -548,16 +548,26 @@ class CustomTracer(torch.fx.Tracer):
 
         existing_nodes = list(enumerate(graph.nodes))
         for pos, node in reversed(inplace):
+            if node.target in {
+                operator.add,
+                operator.floordiv,
+                operator.mul,
+                operator.mod,
+                operator.sub,
+            }:
+                # This node cannot be one inplace modifications. The node is just node used.
+                graph.erase_node(node)
+                continue
             assert node.target in {
                 "add_",
                 "div_",
                 "mul_",
-                "sub_",
                 "mod_",
+                "sub_",
                 operator.setitem,
             }, (
-                f"Unsupported target {node.target!r} at position {pos}/{len(graph.nodes)}"
-                f"\n--graph\n{graph}"
+                f"Unsupported target {node.target!r}, name={node.name!r} "
+                f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
             )
             # We assume the first argument is the one modified inplace.
             new_name = node

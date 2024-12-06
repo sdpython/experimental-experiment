@@ -56,21 +56,19 @@ class ExportOptions:
         "none": {},
         "strict": {"strict": True},
         "strict-dec": {"strict": True, "decomposition_table": "default"},
-        "strict-decomposition": {"strict": True, "decomposition_table": "default"},
+        "strict-decall": {"strict": True, "decomposition_table": "all"},
         "tracing": {"tracing": True},
         "nostrict": {"strict": False},
         "nostrict-dec": {"strict": False, "decomposition_table": "default"},
-        "nostrict-decomposition": {"strict": False, "decomposition_table": "default"},
+        "nostrict-decall": {"strict": False, "decomposition_table": "all"},
         "jit": {"jit": True},
         "jit-dec": {"jit": True, "decomposition_table": "default"},
-        "jit-decomposition": {"jit": True, "decomposition_table": "default"},
+        "jit-decall": {"jit": True, "decomposition_table": "all"},
         "fallback": {"fallback": True},
-        "fallback-default": {"fallback": True, "decomposition_table": "default"},
         "fallback-dec": {"fallback": True, "decomposition_table": "default"},
-        "fallback-decomposition": {"fallback": True, "decomposition_table": "default"},
-        "default": {"decomposition_table": "default"},
-        "decomposition": {"decomposition_table": "default"},
+        "fallback-decall": {"fallback": True, "decomposition_table": "all"},
         "dec": {"decomposition_table": "default"},
+        "decall": {"decomposition_table": "all"},
     }
 
     def __init__(
@@ -142,7 +140,7 @@ class ExportOptions:
 
     def get_fallback_options(self, kind: Optional[str] = None) -> List["ExportOptions"]:
         """Returns the fallback scenario."""
-        if kind is None or kind in ("fallback", "fallback-default", "default"):
+        if kind is None or kind in ("fallback", "fallback-dec", "fallback-decall"):
             other_dec = None if self.decomposition_table else "default"
             return [
                 ExportOptions(strict=True, decomposition_table=self.decomposition_table),
@@ -318,12 +316,13 @@ class ExportOptions:
             return dec
 
         if verbose:
-            print("[ExportOptions.export] torch.export.export")
+            print(
+                f"[ExportOptions.export] torch.export.export "
+                f"strict={self.strict}, verbose={verbose}"
+            )
             print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
-            print(f"[ExportOptions.export] strict={self.strict}")
             print(f"[ExportOptions.export] args={string_type(args)}")
             print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
-            print(f"[ExportOptions.export] verbose={verbose}")
         if exc:
             exported_program = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
@@ -381,7 +380,7 @@ class ExportOptions:
             if modified:
                 if verbose:
                     print(f"[ExportOptions.export] {modified} inplaced nodes were removed")
-                res.graph.lint()
+                exported_program.graph.lint()
 
         if verbose:
             print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")

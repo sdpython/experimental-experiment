@@ -3,6 +3,7 @@ from torch._dynamo.testing import reset_rng_state
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import ModelRunner
 from ._bash_bench_models_helper import get_llama_model_layer
+from ..helpers import string_type
 from ..torch_models.diffusion_model_helper import (
     get_stable_diffusion_2_unet,
 )
@@ -54,6 +55,7 @@ class UntrainedRunner(BenchmarkRunner):
                             | LLMInputKind.attention_mask
                             | LLMInputKind.position_ids
                             | LLMInputKind.past_key_values,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
@@ -67,6 +69,7 @@ class UntrainedRunner(BenchmarkRunner):
                             | LLMInputKind.attention_mask
                             | LLMInputKind.position_ids
                             | LLMInputKind.past_key_values,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
@@ -78,6 +81,7 @@ class UntrainedRunner(BenchmarkRunner):
                             n_iteration=0,
                             _attn_implementation="eager",
                             input_kind=LLMInputKind.ALL,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
@@ -89,6 +93,7 @@ class UntrainedRunner(BenchmarkRunner):
                             n_iteration=1,
                             _attn_implementation="eager",
                             input_kind=LLMInputKind.ALL,
+                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
                     )
@@ -151,11 +156,18 @@ class UntrainedRunner(BenchmarkRunner):
         use_eval_mode = self.use_eval_mode
         reset_rng_state()
         tu = self._get_model_cls_and_config(model_name)()
+
+        dynamic_shapes = None
         if len(tu) == 2:
             model_cls, example_inputs = tu
             export_options = None
-        else:
+        elif len(tu) == 3:
             model_cls, example_inputs, export_options = tu
+        elif len(tu) == 4:
+            model_cls, example_inputs, dynamic_shapes, export_options = tu
+        else:
+            raise AssertionError(f"Unable to handle {len(tu)} elements: {string_type(tu)}")
+
         model = model_cls() if isinstance(model_cls, type) else model_cls
         if str(type(model)) == "<class 'function'>":
             model = model()
@@ -178,6 +190,7 @@ class UntrainedRunner(BenchmarkRunner):
             wrap_kind="nowrap",
             model_name=model_name,
             export_options=export_options,
+            dynamic_shapes=dynamic_shapes,
         )
 
     def iter_model_names(self):

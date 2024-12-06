@@ -6,7 +6,7 @@ Measures the exporter success on many test cases
 
 All test cases can be found in module
 :mod:`experimental_experiment.torch_interpreter.eval.model_cases`.
-Page :ref:`l-exported-program-cases` shows the exported
+Page :ref:`l-exp-cases` shows the exported
 program for many of those cases.
 
 """
@@ -18,7 +18,11 @@ script_args = get_parsed_args(
     description=__doc__,
     exporter=("all", "an exporter to rerun"),
     dynamic=("all", "use dyanmic shapes"),
-    case=("all", "model cases"),
+    case=(
+        "three",
+        "model cases, two for the first two (to test), "
+        "all to select all, a name or a regular expression fior a subset",
+    ),
     quiet=("1", "0 or 1"),
     verbose=("1", "verbosity"),
     expose="exporter,dyanmic,case,quiet,verbose",

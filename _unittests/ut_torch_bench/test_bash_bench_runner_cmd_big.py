@@ -82,7 +82,7 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
             print("CMD")
             print(" ".join(args))
         st = io.StringIO()
-        if debug or int(os.environ.get("TO_ONNX_VERBOSE", "0")) > 0:
+        if debug or int(os.environ.get("ONNXVERBOSE", "0")) > 0:
             main(args=args)
         else:
             with contextlib.redirect_stderr(st), contextlib.redirect_stdout(st):

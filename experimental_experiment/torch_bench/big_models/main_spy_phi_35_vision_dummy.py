@@ -14,7 +14,6 @@ From `microsoft/Phi-3.5-vision-instruct
 -- inputs type: BatchFeature(data=dict(input_ids:T7r2,attention_mask:T7r2,pixel_values:T1r5,image_sizes:T7r2))
         transformers/generation/configuration_utils.py:590: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.0` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
   warnings.warn(
-The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` model input instead.
 `get_max_cache()` is deprecated for all Cache classes. Use `get_max_cache_shape()` instead. Calling `get_max_cache()` will raise error from v4.48
 forward input:
 args: ()
@@ -222,7 +221,7 @@ from transformers import AutoProcessor
 from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_models.llm_model_helper import get_phi_35_vision_instruct
 
-model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
+model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1)
 model = model.to("cuda")
 
 # for best performance, use num_crops=4 for multi-frame, num_crops=16 for single-frame.
@@ -234,7 +233,7 @@ images = []
 placeholder = ""
 
 # Note: if OOM, you might consider reduce number of frames in this example.
-for i in range(1, 3):
+for i in range(1, 1):
     url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
     print(f"-- download image from {url!r}")
     img = Image.open(requests.get(url, stream=True).raw)
@@ -243,21 +242,34 @@ for i in range(1, 3):
     placeholder += f"<|image_{i}|>\n"
 
 messages = [
-    {"role": "user", "content": placeholder + "Summarize the deck of slides."},
+    {
+        "role": "user",
+        "content": placeholder
+        + "Summarize the deck of slides and a long one to overcome some limitations.",
+    },
 ]
 
 prompt = processor.tokenizer.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
 )
 
-print("-- create inputs")
-inputs = processor(prompt, images, return_tensors="pt").to("cuda:0")
+batch_size = 2
+print(f"-- create inputs with batch_size={batch_size!r}")
+if images:
+    inputs = processor(prompt, images, return_tensors="pt").to("cuda:0")
+    print(f"-- image_sizes {inputs.image_sizes}")
+else:
+    inputs = processor(prompt, return_tensors="pt").to("cuda:0")
+    # To see what's happening if the batch size is changed.
+    if batch_size > 1:
+        inputs.data["input_ids"] = inputs.data["input_ids"].expand(
+            (batch_size, inputs.data["input_ids"].shape[1])
+        )
+        inputs.data["attention_mask"] = inputs.data["attention_mask"].expand(
+            (batch_size, inputs.data["attention_mask"].shape[1])
+        )
+
 print(f"-- types: {string_type(inputs, with_shape=True, with_min_max=True)}")
-print(f"-- image_sizes {inputs.image_sizes}")
-# BatchFeature(data=dict(input_ids:T7s1x777[-1:32010],
-#                        attention_mask:T7s1x777[1:1],
-#                        pixel_values:T1s1x5x3x336x336[-2.063474178314209:2.305359125137329],
-#                        image_sizes:T7s1x2[672:672]))
 
 generation_args = {
     "max_new_tokens": 30,

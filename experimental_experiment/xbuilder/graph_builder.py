@@ -522,7 +522,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     axis=_k,
                     input_name=pos,
                 )
-            else:
+            elif _v is not None:
                 raise AssertionError(
                     f"Unexpected type {type(_v)} in {vv} for dynamic "
                     f"dimension {pos!r}, pos_vv={pos_vv!r}, "
@@ -3528,8 +3528,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         # break?
-        # if op_type == "ReduceSum":
-        #    raise AssertionError(f"MANUAL BREAK{self.get_debug_msg()}")
+        # if op_type == "Sub":
+        #     print("op_type", op_type, inputs, output_names)
+        #     raise AssertionError(f"MANUAL BREAK{self.get_debug_msg()}")
 
         # next
         try:

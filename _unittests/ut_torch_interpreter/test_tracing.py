@@ -279,6 +279,80 @@ class TestTracing(ExtTestCase):
         self.assertNotEmpty(got)
         self.assertEqualArray(expected, got)
 
+    @unittest.skip("TODO: fix it")
+    def test_tracing_fixed_list_with_none(self):
+        class Model(torch.nn.Module):
+
+            def forward(self, lx):
+                x = lx[0]
+                if lx[1] is not None:
+                    x += lx[1]
+                if lx[2] is not None:
+                    x += lx[1]
+                return x
+
+            _inputs = [
+                ([torch.rand((4, 4)), torch.rand((4, 4)), None],),
+                ([torch.rand((4, 4)), torch.rand((4, 4)), torch.rand((4, 4))],),
+            ]
+
+        inputs = Model._inputs
+        model = Model()
+        graph = CustomTracer().trace(model)
+        for inp in inputs:
+            # print(torch.export.export(model, inp).graph)
+            expected = model(*inp)
+            mod = torch.fx.GraphModule(model, graph)
+            got = mod(*inp)
+            self.assertEqualArray(expected, got)
+
+    @unittest.skip("TODO: fix it")
+    def test_tracing_int_shape(self):
+        class Model(torch.nn.Module):
+            @staticmethod
+            def add_one(dim: int) -> int:
+                return dim + 1
+
+            def forward(self, x):
+                y = torch.ones((x.shape[0], x.shape[1] + 1))
+                return y
+
+            _inputs = [(torch.rand((4, 4)),), (torch.rand((5, 5)),)]
+            _dynamic = {"x": {0: torch.export.Dim("dx"), 1: torch.export.Dim("dy")}}
+
+        inputs = Model._inputs
+        model = Model()
+        graph = CustomTracer().trace(model, dynamic_shapes=Model._dynamic)
+        for inp in inputs:
+            expected = model(*inp)
+            mod = torch.fx.GraphModule(model, graph)
+            got = mod(*inp)
+            self.assertEqualArray(expected, got)
+
+    @unittest.skip("TODO: fix it")
+    def test_tracing_function_int_shape(self):
+        class Model(torch.nn.Module):
+            @staticmethod
+            def add_one(dim: int) -> int:
+                return dim + 1
+
+            def forward(self, x):
+                dy1 = Model.add_one(x.shape[1])
+                y = torch.ones((x.shape[0], dy1))
+                return y
+
+            _inputs = [(torch.rand((4, 4)),), (torch.rand((5, 5)),)]
+            _dynamic = {"x": {0: torch.export.Dim("dx"), 1: torch.export.Dim("dy")}}
+
+        inputs = Model._inputs
+        model = Model()
+        graph = CustomTracer().trace(model, dynamic_shapes=Model._dynamic)
+        for inp in inputs:
+            expected = model(*inp)
+            mod = torch.fx.GraphModule(model, graph)
+            got = mod(*inp)
+            self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

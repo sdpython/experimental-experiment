@@ -162,7 +162,8 @@ class DynamoInterpreter:
                     res.extend(self.flatten_inputs(i))
             return tuple(res) if isinstance(x, tuple) else res
         if x.__class__.__name__ == "DynamicCache":
-            return self.flatten_inputs(x.key_cache) + self.flatten_inputs(x.value_cache)
+            res = self.flatten_inputs(x.key_cache) + self.flatten_inputs(x.value_cache)
+            return tuple(res)
         raise AssertionError(f"Unexpected type {type(x)} for x")
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
@@ -494,8 +495,9 @@ class DynamoInterpreter:
                 return self._make_list_input(node.name, example_value, users=node.users)
 
             raise NotImplementedError(
-                f"Unable to create an input with type {string_type(example_value)}"
-                f"{self.get_debug_msg()}"
+                f"Unable to create an input {node.name!r} "
+                f"with type {string_type(example_value)}"
+                f"{self.builder.get_debug_msg()}"
             )
 
         if isinstance(val, (self.torch.Tensor, self.torch._subclasses.fake_tensor.FakeTensor)):
@@ -1568,11 +1570,11 @@ class DynamoInterpreter:
             if isinstance(val, (tuple, list)):
                 # Type list comes from SplitToSequence.
                 return tuple((None if v is None else v.dtype) for v in val)
-            if isinstance(val, self.torch.SymInt):
+            if isinstance(val, (int, self.torch.SymInt)):
                 return self.torch.SymInt
             if isinstance(val, self.torch.SymBool):
                 return self.torch.SymBool
-            if isinstance(val, self.torch.SymFloat):
+            if isinstance(val, (float, self.torch.SymFloat)):
                 return self.torch.SymFloat
             exa = node.meta.get("example_value", None)
             assert exa is None or val.dtype == exa.dtype, (

@@ -415,13 +415,11 @@ def get_phi_35_vision_instruct(
     :param device: move data and model to this specific device
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: model, inputs
+    :return: model, inputs, dynamic shapes
     """
     import torch
     from .fromhub.configuration_phi3_v import Phi3VConfig
     from .fromhub.modeling_phi3_v import Phi3VForCausalLM
-
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "Phi-3.5-vision-instruct",
@@ -583,12 +581,21 @@ def get_phi_35_vision_instruct(
     if input_kind == LLMInputKind.input_ids:
         dim = (1, 30)
         inputs = dict(input_ids=torch.randint(0, 32064, dim).to(torch.int64))
+        shapes = {
+            "input_ids": {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")}
+        }
     elif input_kind == LLMInputKind.input_ids | LLMInputKind.attention_mask:
         dim = (1, 30)
         inputs = dict(
             input_ids=torch.randint(0, 32064, dim).to(torch.int64),
             attention_mask=torch.ones(*dim, dtype=torch.int64),
         )
+        batch = torch.export.Dim("batch")
+        seq_length = torch.export.Dim("seq_length")
+        shapes = {
+            "input_ids": {0: batch, 1: seq_length},
+            "attention_mask": {0: batch, 1: seq_length},
+        }
     else:
         from .dummy_inputs.llm_dummy_inputs import (
             restore_dummy_inputs_for_phi_35_vision_instruct,
@@ -602,21 +609,41 @@ def get_phi_35_vision_instruct(
         )
         args, kwargs = data
         inputs = {}
+        shapes = {}
+
+        batch = torch.export.Dim("batch", min=1, max=1024)
+        seq_length = torch.export.Dim("seq_length", min=1, max=4096)
+        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
         if input_kind & LLMInputKind.input_ids:
             inputs["input_ids"] = kwargs["input_ids"]
+            shapes["input_ids"] = {0: batch, 1: seq_length} if n_iteration == 0 else {0: batch}
         if input_kind & LLMInputKind.position_ids:
             inputs["position_ids"] = kwargs["position_ids"]
+            shapes["position_ids"] = (
+                {0: batch, 1: seq_length} if n_iteration == 0 else {0: batch}
+            )
         if input_kind & LLMInputKind.attention_mask:
             inputs["attention_mask"] = kwargs["attention_mask"]
+            shapes["attention_mask"] = {0: batch, 1: cache_length + 1}
         if input_kind & LLMInputKind.past_key_values:
             inputs["past_key_values"] = kwargs["past_key_values"]
+            n = len(data[1]["past_key_values"].key_cache)
+            shapes["past_key_values"] = [
+                [{0: batch, 2: cache_length} for _ in range(n)],
+                [{0: batch, 2: cache_length} for _ in range(n)],
+            ]
         if input_kind & LLMInputKind.images:
             inputs["pixel_values"] = kwargs["pixel_values"]
             inputs["image_sizes"] = kwargs["image_sizes"]
+            n_images = torch.export.Dim("n_images", min=0, max=1024)
+            shapes["pixel_values"] = shapes["image_sizes"] = {0: n_images}
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())
+        shapes = tuple(shapes.values())
 
+    if common_dynamic_shapes:
+        return model, inputs, shapes
     return model, inputs
 
 

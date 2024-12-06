@@ -11,13 +11,23 @@ from experimental_experiment.helpers import string_type
 
 
 class TestMiniOnnxBuilder(ExtTestCase):
-    def test_mini_onnx_builder_sequence(self):
+    def test_mini_onnx_builder_sequence_onnx(self):
         builder = MiniOnnxBuilder()
         builder.append_output_sequence("name", [np.array([6, 7])])
         onx = builder.to_onnx()
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, {})
-        self.assertEqualAny([np.array([6, 7])], got)
+        self.assertEqualAny([np.array([6, 7])], got[0])
+
+    def test_mini_onnx_builder_sequence_ort(self):
+        from onnxruntime import InferenceSession
+
+        builder = MiniOnnxBuilder()
+        builder.append_output_sequence("name", [np.array([6, 7])])
+        onx = builder.to_onnx()
+        ref = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        got = ref.run(None, {})
+        self.assertEqualAny([np.array([6, 7])], got[0])
 
     def test_mini_onnx_builder(self):
         import torch
@@ -113,6 +123,40 @@ class TestMiniOnnxBuilder(ExtTestCase):
             with self.subTest(types=string_type(inputs)):
                 model = create_onnx_model_from_input_tensors(inputs)
                 restored = create_input_tensors_from_onnx_model(model)
+                self.assertEqualAny(inputs, restored)
+
+    def test_mini_onnx_builder_transformers(self):
+        import torch
+        import transformers
+
+        cache = transformers.cache_utils.DynamicCache(1)
+        cache.update(torch.ones((3, 3)), torch.ones((3, 3)) * 2, 0)
+        self.assertEqual(len(cache.key_cache), 1)
+        self.assertEqual(len(cache.value_cache), 1)
+
+        data = [(cache,), cache]
+
+        for inputs in data:
+            with self.subTest(types=string_type(inputs)):
+                model = create_onnx_model_from_input_tensors(inputs)
+                restored = create_input_tensors_from_onnx_model(model)
+                self.assertEqualAny(inputs, restored)
+
+    def test_mini_onnx_builder_transformers_sep(self):
+        import torch
+        import transformers
+
+        cache = transformers.cache_utils.DynamicCache(1)
+        cache.update(torch.ones((3, 3)), torch.ones((3, 3)) * 2, 0)
+        self.assertEqual(len(cache.key_cache), 1)
+        self.assertEqual(len(cache.value_cache), 1)
+
+        data = [(cache,), cache]
+
+        for inputs in data:
+            with self.subTest(types=string_type(inputs)):
+                model = create_onnx_model_from_input_tensors(inputs, sep="#")
+                restored = create_input_tensors_from_onnx_model(model, sep="#")
                 self.assertEqualAny(inputs, restored)
 
 

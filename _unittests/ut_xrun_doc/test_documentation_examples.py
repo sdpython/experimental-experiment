@@ -90,6 +90,7 @@ class TestDocumentationExamples(ExtTestCase):
                     "plot_llama_diff_export_301.py",
                     "plot_profile_existing_onnx_101.py",
                     "plot_torch_export_201.py",
+                    "plot_torch_export_with_dyamic_cache_201",
                 }
             ):
                 if sys.platform == "win32":
@@ -193,12 +194,12 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 
-            if not reason and name.startswith("plot_exporter_recipes_oe_"):
+            if not reason and (
+                name.startswith("plot_exporter_recipes_oe_")
+                or name == "plot_torch_export_with_dyamic_cache_201.py"
+            ):
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.7"):
                     reason = "requires torch 2.7"
-
-            if name == "plot_exporter_recipes_oe_cond.py":
-                reason = "torch.cond not working yet"
 
             if reason:
 

@@ -2932,7 +2932,7 @@ def aten_full(
         if g.has_shape(size) and is_static_shape(size):
             tsize = np.array(g.get_shape(size), dtype=np.int64)
         else:
-            tsize = g.op.Shape(size, name=f"{name}_shape")
+            tsize = size
     else:
         raise RuntimeError(f"Unexpected type {type(size)} for size.")
 
@@ -3010,7 +3010,7 @@ def aten_full_like(
         g,
         sts,
         outputs,
-        g.op.Shape(x, name="full_like"),
+        g.op.Shape(x, name=name),
         fill_value,
         dtype=dtype or g.get_type(x),
         name=name,

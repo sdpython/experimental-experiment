@@ -703,3 +703,47 @@ class CropLastDimensionWithTensorContent(torch.nn.Module):
         (torch.rand(6, 4, 4).to(torch.float32), torch.tensor([3], dtype=torch.int64)),
     ]
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class SignatureListFixedWithNone(torch.nn.Module):
+
+    def forward(self, lx):
+        print(lx)
+        print(lx[1])
+        x = lx[0]
+        if lx[1] is not None:
+            x += lx[1]
+        if lx[2] is not None:
+            x += lx[1]
+        return x
+
+    _inputs = [
+        ([torch.rand((4, 4)), torch.rand((4, 4)), None],),
+        ([torch.rand((4, 4)), torch.rand((4, 4)), torch.rand((4, 4))],),
+    ]
+    _dynamic = {
+        "lx": [{0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")}],
+    }
+
+
+class CreateFromShape(torch.nn.Module):
+    def forward(self, x):
+        y = torch.ones((x.shape[0], x.shape[1] + 1))
+        return y
+
+    _inputs = [(torch.rand((4, 4)),), (torch.rand((5, 5)),)]
+    _dynamic = {"x": {0: torch.export.Dim("dx"), 1: torch.export.Dim("dy")}}
+
+
+class CreateFromShapeThroughFunction(torch.nn.Module):
+    @staticmethod
+    def add_one(dim: int) -> int:
+        return dim + 1
+
+    def forward(self, x):
+        dy1 = CreateFromShapeThroughFunction.add_one(x.shape[1])
+        y = torch.ones((x.shape[0], dy1))
+        return y
+
+    _inputs = [(torch.rand((4, 4)),), (torch.rand((5, 5)),)]
+    _dynamic = {"x": {0: torch.export.Dim("dx"), 1: torch.export.Dim("dy")}}
