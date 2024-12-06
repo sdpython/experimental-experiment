@@ -8,7 +8,7 @@ def flatten_mamba_cache(
     flat = [
         (k, getattr(mamba_cache, k))
         for k in [
-            "batch_size",
+            "max_batch_size",  # new in transformers 4.47
             "intermediate_size",
             "ssm_state_size",
             "conv_kernel_size",
