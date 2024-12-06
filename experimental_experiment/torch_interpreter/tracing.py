@@ -405,6 +405,7 @@ class CustomTracer(torch.fx.Tracer):
         if update_model_with_callable and self._callables:
             for k, v in self._callables.items():
                 setattr(root, k, v)
+        self.remove_unnecessary_slices(graph)
         if not remove_inplace:
             graph.lint()
             return graph
@@ -528,11 +529,63 @@ class CustomTracer(torch.fx.Tracer):
         return len(to_replace)
 
     @classmethod
+    def remove_unnecessary_slices(cls, graph: torch.fx.Graph) -> int:
+        """
+        Removes unnecessary slices:
+
+        :param graph: graph to modify
+        :return: number of inplace nodes removed
+
+        ::
+
+            %slice_11 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+        """
+        nodes = list(enumerate(graph.nodes))
+
+        removed = 0
+        for pos, node in nodes:
+            if not hasattr(node.target, "name"):
+                continue
+            if node.target.name() != "aten::slice.Tensor":
+                continue
+            if len(node.args) != 4 or node.args[2] != 0 or node.args[3] != 9223372036854775807:
+                continue
+
+            # The first argument is the node to keep.
+            new_name = node.args[0]
+            old_name = node
+
+            # Let's replace.
+            changed = old_name.replace_all_uses_with(new_name)
+            assert changed, (
+                f"No change applied, the node [{node}] at position {pos} "
+                f"can be removed and replaced by {old_name} in \n{graph}."
+            )
+            graph.erase_node(old_name)
+            removed += 1
+        return removed
+
+    @classmethod
     def remove_inplace(cls, graph: torch.fx.Graph) -> int:
         """
         Removes inplace operations.
 
+        :param graph: graph to modify
         :return: number of inplace nodes removed
+
+        The most difficult pattern is the following:
+
+        ::
+
+            %slice_11 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
+            %slice_12 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_11, 1, 0, 9223372036854775807), kwargs = {})
+            %slice_13 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
+                (args = (%slice_12, 2, 0, 9223372036854775807), kwargs = {})
+            %copy_ : [num_users=0] = call_function[target=torch.ops.aten.copy_.default]
+                (args = (%slice_13, %masked_fill), kwargs = {})
         """
         inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
@@ -555,7 +608,7 @@ class CustomTracer(torch.fx.Tracer):
                 operator.mod,
                 operator.sub,
             }:
-                # This node cannot be one inplace modifications. The node is just node used.
+                # This node cannot be one inplace modifications. The node is just not used.
                 graph.erase_node(node)
                 continue
             assert node.target in {

@@ -376,7 +376,12 @@ class ExportOptions:
             return dec
 
         if self.remove_inplace:
-            modified = CustomTracer().remove_inplace(exported_program.graph)
+            removed = CustomTracer.remove_unnecessary_slices(exported_program.graph)
+            if removed:
+                if removed:
+                    print(f"[ExportOptions.export] {removed} slices nodes were removed")
+                exported_program.graph.lint()
+            modified = CustomTracer.remove_inplace(exported_program.graph)
             if modified:
                 if verbose:
                     print(f"[ExportOptions.export] {modified} inplaced nodes were removed")

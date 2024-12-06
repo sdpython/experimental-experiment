@@ -99,7 +99,7 @@ class UntrainedRunner(BenchmarkRunner):
                     )
                 ),
                 "Phi35MiniInstructLM": (
-                    lambda: (*get_phi_35_mini_instruct(), dict(strict=False)),
+                    lambda: (*get_phi_35_mini_instruct(), dict(strict=False))
                 ),
                 "SmolLM17b": get_smollm_1_7b,
             }
@@ -155,7 +155,8 @@ class UntrainedRunner(BenchmarkRunner):
         is_training = self.training
         use_eval_mode = self.use_eval_mode
         reset_rng_state()
-        tu = self._get_model_cls_and_config(model_name)()
+        tu = self._get_model_cls_and_config(model_name)
+        tu = tu()
 
         dynamic_shapes = None
         if len(tu) == 2:
