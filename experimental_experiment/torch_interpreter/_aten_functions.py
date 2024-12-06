@@ -2435,7 +2435,7 @@ def aten_empty_like(
     memory_format=None,
 ) -> T:
     "constantofshape"
-    return aten_full(
+    return aten_full_like(
         g,
         sts,
         outputs,
@@ -2719,7 +2719,7 @@ def aten_fill_Scalar(
             dtype=g.get_type(x),
             name=f"{name}_static",
         )
-    return aten_full(
+    return aten_full_like(
         g,
         sts,
         outputs,
@@ -2940,28 +2940,34 @@ def aten_full(
         if fill_value is None or isinstance(fill_value, float):
             value = np.array(fill_value, dtype=np.float32).reshape((1,))
             itype = TensorProto.FLOAT
+            suffx = "A"
         elif isinstance(fill_value, int):
             value = np.array(fill_value, dtype=np.int64).reshape((1,))
             itype = TensorProto.INT64
+            suffx = "B"
         else:
             itype = torch_dtype_to_onnx_dtype(type(fill_value))
             ntype = tensor_dtype_to_np_dtype(itype)
             value = np.array(fill_value, dtype=ntype).reshape((1,))
+            suffx = "C"
     else:
         itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
         ntype = tensor_dtype_to_np_dtype(itype)
-        value = np.array(fill_value or 0, dtype=ntype).reshape((1,))
+        value = np.array(0 if fill_value is None else fill_value, dtype=ntype).reshape((1,))
+        suffx = "D"
 
     if tsize is None:
         # A scalar
         v = from_array(value.squeeze())
-        res = g.op.Constant(value=v, outputs=outputs, name=name)
+        res = g.op.Constant(value=v, outputs=outputs, name=f"{name}{suffx}1")
         if not sts:
             g.set_type(res, itype)
             g.set_shape(res, tuple())
         return res
 
-    res = g.op.ConstantOfShape(tsize, value=from_array(value), outputs=outputs, name=name)
+    res = g.op.ConstantOfShape(
+        tsize, value=from_array(value), outputs=outputs, name=f"{name}{suffx}2"
+    )
     if not sts:
         g.set_type(res, itype)
         if new_shape:

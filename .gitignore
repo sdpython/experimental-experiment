@@ -49,6 +49,7 @@ _cache/*
 dist/*
 build/*
 .eggs/*
+.olive-cache/*
 .hypothesis/*
 *egg-info/*
 onnxruntime_profile*
