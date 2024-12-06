@@ -90,6 +90,7 @@ class TestDocumentationExamples(ExtTestCase):
                     "plot_llama_diff_export_301.py",
                     "plot_profile_existing_onnx_101.py",
                     "plot_torch_export_201.py",
+                    "plot_torch_export_with_dyamic_cache_201",
                 }
             ):
                 if sys.platform == "win32":

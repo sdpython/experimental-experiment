@@ -125,14 +125,14 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
         MambaCache = None
         DynamicCache = None
 
-    unregistered = True
+    unregistered_mamba_cache = True
     if MambaCache is not None and DynamicCache is not None:
         if MambaCache in torch.utils._pytree.SUPPORTED_NODES:
             # It is already registered because bypass_export_some_errors was called
             # within a section already calling bypass_export_some_errors or transformers
             # has updated its code to do it.
             # No need to register and unregister then.
-            unregistered = False
+            unregistered_mamba_cache = False
         else:
             if verbose:
                 print("[bypass_export_some_errors] register MambaCache")
@@ -144,21 +144,22 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
                 flatten_with_keys_fn=flatten_with_keys_mamba_cache,
             )
 
-        if DynamicCache in torch.utils._pytree.SUPPORTED_NODES:
-            unregistered = False
-        else:
-            if verbose:
-                print("[bypass_export_some_errors] register DynamicCache")
-            torch.utils._pytree.register_pytree_node(
-                DynamicCache,
-                flatten_dynamic_cache,
-                unflatten_dynamic_cache,
-                serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
-                flatten_with_keys_fn=flatten_with_keys_dynamic_cache,
-            )
-            torch.fx._pytree.register_pytree_flatten_spec(
-                DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
-            )
+    unregistered_dynamic_cache = True
+    if DynamicCache is not None and DynamicCache in torch.utils._pytree.SUPPORTED_NODES:
+        unregistered_dynamic_cache = False
+    else:
+        if verbose:
+            print("[bypass_export_some_errors] register DynamicCache")
+        torch.utils._pytree.register_pytree_node(
+            DynamicCache,
+            flatten_dynamic_cache,
+            unflatten_dynamic_cache,
+            serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+            flatten_with_keys_fn=flatten_with_keys_dynamic_cache,
+        )
+        torch.fx._pytree.register_pytree_flatten_spec(
+            DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
+        )
 
     if patch_transformers:
         from transformers.modeling_attn_mask_utils import AttentionMaskConverter
@@ -181,16 +182,19 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
                 "[bypass_export_some_errors] restored torch.jit.isinstance, "
                 "torch._dynamo.mark_static_address"
             )
-        if unregistered and MambaCache is not None:
+
+        if unregistered_mamba_cache and MambaCache is not None:
             torch.utils._pytree.SUPPORTED_NODES.pop(MambaCache)
             if verbose:
                 print("[bypass_export_some_errors] unregistered MambaCache")
-        if unregistered and DynamicCache is not None:
+
+        if unregistered_dynamic_cache and DynamicCache is not None:
             torch.utils._pytree.SUPPORTED_NODES.pop(DynamicCache)
             torch.fx._pytree.SUPPORTED_NODES.pop(DynamicCache)
             torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(DynamicCache)
             if verbose:
                 print("[bypass_export_some_errors] unregistered DynamicCache")
+
         if patch_transformers:
             AttentionMaskConverter._make_causal_mask = keep__make_causal_mask
             if verbose:

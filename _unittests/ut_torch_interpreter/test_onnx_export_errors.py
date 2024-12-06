@@ -11,6 +11,7 @@ from experimental_experiment.torch_interpreter.onnx_export_errors import (
 
 class TestOnnxExportErrors(ExtTestCase):
     @requires_transformers("4.43")
+    @skipif_ci_windows("not working on Windows")
     def test_pytree_flatten(self):
         import torch
         import torch.utils._pytree as py_pytree
