@@ -475,7 +475,7 @@ class ExtTestCase(unittest.TestCase):
                 for e, g in zip(expected, value):
                     self.assertEqualAny(e, g, msg=msg)
         elif expected.__class__.__name__ == "DynamicCache":
-            atts = {"_seen_tokens", "key_cache", "value_cache"}
+            atts = {"key_cache", "value_cache"}
             self.assertEqualAny(
                 {k: expected.__dict__.get(k, None) for k in atts},
                 {k: value.__dict__.get(k, None) for k in atts},

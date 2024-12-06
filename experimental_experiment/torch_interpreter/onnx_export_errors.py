@@ -57,11 +57,7 @@ def flatten_dynamic_cache(
 ) -> Tuple[List[Any], "torch.utils._pytree.Context"]:  # noqa: F821
     flat = [
         (k, getattr(dynamic_cache, k))
-        for k in [
-            "_seen_tokens",
-            "key_cache",
-            "value_cache",
-        ]
+        for k in ["key_cache", "value_cache"]
         if hasattr(dynamic_cache, k)
     ]
     return [f[1] for f in flat], [f[0] for f in flat]
@@ -161,7 +157,7 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
                 flatten_with_keys_fn=flatten_with_keys_dynamic_cache,
             )
             torch.fx._pytree.register_pytree_flatten_spec(
-                DynamicCache, lambda x, _: [x._seen_tokens, x.key_cache, x.value_cache]
+                DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
             )
 
     if patch_transformers:

@@ -14,7 +14,6 @@ From `microsoft/Phi-3.5-vision-instruct
 -- inputs type: BatchFeature(data=dict(input_ids:T7r2,attention_mask:T7r2,pixel_values:T1r5,image_sizes:T7r2))
         transformers/generation/configuration_utils.py:590: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.0` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
   warnings.warn(
-The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` model input instead.
 `get_max_cache()` is deprecated for all Cache classes. Use `get_max_cache_shape()` instead. Calling `get_max_cache()` will raise error from v4.48
 forward input:
 args: ()

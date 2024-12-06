@@ -163,7 +163,7 @@ class DynamoInterpreter:
             return tuple(res) if isinstance(x, tuple) else res
         if x.__class__.__name__ == "DynamicCache":
             res = self.flatten_inputs(x.key_cache) + self.flatten_inputs(x.value_cache)
-            return (x._seen_tokens, *res)
+            return tuple(res)
         raise AssertionError(f"Unexpected type {type(x)} for x")
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821

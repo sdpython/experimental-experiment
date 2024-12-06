@@ -629,7 +629,6 @@ def get_phi_35_vision_instruct(
             inputs["past_key_values"] = kwargs["past_key_values"]
             n = len(data[1]["past_key_values"].key_cache)
             shapes["past_key_values"] = [
-                None,
                 [{0: batch, 2: cache_length} for _ in range(n)],
                 [{0: batch, 2: cache_length} for _ in range(n)],
             ]

@@ -461,7 +461,7 @@ def flatten_iterator(obj: Any, sep: str) -> Iterator:
             assert isinstance(
                 obj, transformers.cache_utils.DynamicCache
             ), f"Unexpected type {type(obj)}"
-            atts = ["key_cache", "value_cache", "_seen_tokens"]
+            atts = ["key_cache", "value_cache"]
             for i, att in enumerate(atts):
                 if i == len(atts) - 1:
                     for p, o in flatten_iterator(getattr(obj, att), sep):

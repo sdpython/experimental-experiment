@@ -154,3 +154,11 @@ if failed:
         print(f"{node.name} -> {node.meta.get('val', '-')}")
         # it prints out ``dc_key_cache_0 -> FakeTensor(..., size=(4, 8, 11, 6))``
         # but it should be ``dc_key_cache_0 -> FakeTensor(..., size=(s0, 8, s1, 6))``
+
+
+######################################
+# Let's undo the registration.
+
+torch.utils._pytree.SUPPORTED_NODES.pop(transformers.cache_utils.DynamicCache)
+torch.fx._pytree.SUPPORTED_NODES.pop(transformers.cache_utils.DynamicCache)
+torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(transformers.cache_utils.DynamicCache)

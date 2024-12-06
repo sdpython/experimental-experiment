@@ -266,7 +266,6 @@ class ModelRunner:
 
         if o.__class__.__name__ == "DynamicCache":
             cp = copy.deepcopy(o)
-            cp._seen_tokens = o._seen_tokens
             for i in range(len(o.key_cache)):
                 cp.key_cache[i] = o.key_cache[i].to(dtype_or_device)
             for i in range(len(o.value_cache)):
@@ -1856,7 +1855,7 @@ class ModelRunner:
                 )
                 if dyn_shape is None:
                     dyn_input_shapes.append(
-                        [None, [{} for t in inp.key_cache], [{} for t in inp.value_cache]]
+                        [[{} for t in inp.key_cache], [{} for t in inp.value_cache]]
                     )
                     continue
 
@@ -2093,7 +2092,6 @@ class ModelRunner:
                 assert isinstance(
                     i, transformers.cache_utils.DynamicCache
                 ), f"Unexpected class {type(i)}"
-                new_inputs.append(torch.tensor([i._seen_tokens]).to(torch.int64))
                 new_inputs.extend(i.key_cache)
                 new_inputs.extend(i.value_cache)
                 continue
