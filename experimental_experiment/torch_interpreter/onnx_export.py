@@ -280,24 +280,32 @@ class ParameterNaming:
             mod_names = dict(mod.named_parameters())
             exp_names = dict(exported_program.named_parameters())
             if mod_names != exp_names:
-                union = mod_names | exp_names
-                diff = []
-                for k in sorted(union):
-                    if k in mod_names and k in exp_names:
-                        continue
-                    diff.append(
-                        (
-                            1 if k in mod_names else 0,
-                            1 if k in exp_names else 0,
-                            k,
-                            string_type(mod_names.get(k, None), with_shape=True),
-                            string_type(exp_names.get(k, None), with_shape=True),
+                mod_ptr = set(m.data_ptr() for m in mod_names.values())
+                exp_ptr = set(m.data_ptr() for m in exp_names.values())
+                if mod_ptr != exp_ptr:
+                    # If names and pointers are different, it is more difficult
+                    # to map parameters after exporting the model.
+                    union = mod_names | exp_names
+                    diff = []
+                    for k in sorted(union):
+                        if k in mod_names and k in exp_names:
+                            continue
+                        diff.append(
+                            (
+                                1 if k in mod_names else 0,
+                                1 if k in exp_names else 0,
+                                k,
+                                string_type(mod_names.get(k, None), with_shape=True),
+                                mod_names[k].data_ptr() if k in mod_names else None,
+                                string_type(exp_names.get(k, None), with_shape=True),
+                                exp_names[k].data_ptr() if k in exp_names else None,
+                            )
                         )
+                    assert all(_[1] == 1 for _ in diff), (
+                        f"ExportedProgram and module do not have the same parameters\n"
+                        f"{pprint.pformat(diff)}\n----\n{exported_program.graph}"
                     )
-                assert all(
-                    _[1] == 1 for _ in diff
-                ), f"ExportedProgram and module do not have the same paramerters\n{diff}"
-                use_mod = exported_program
+                    use_mod = exported_program
 
         for name, p in use_mod.named_parameters():
             self._idmap[name] = p
