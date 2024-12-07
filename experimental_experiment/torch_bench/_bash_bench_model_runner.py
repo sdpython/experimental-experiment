@@ -404,7 +404,7 @@ class ModelRunner:
         """Returns the devices."""
         devices = []
         for i in self.inputs:
-            if i is None:
+            if i is None or isinstance(i, (int, float)):
                 devices.append(None)
             elif hasattr(i, "get_device"):
                 devices.append(i.get_device())

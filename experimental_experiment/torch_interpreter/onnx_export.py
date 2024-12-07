@@ -608,6 +608,10 @@ def _make_builder_interpreter(
 
     from .interpreter import DynamoInterpreter
 
+    if not submodule_naming:
+        submodule_naming = SubModuleNaming(mod)
+    if not parameter_naming:
+        parameter_naming = ParameterNaming(mod, exported_program=exported_program)
     interpreter = DynamoInterpreter(
         builder,
         retrieve,
@@ -616,9 +620,8 @@ def _make_builder_interpreter(
         export_options=export_options,
         optimize_submodules=optimize_submodules,
         function_options=function_options,
-        submodule_naming=submodule_naming or SubModuleNaming(mod),
-        parameter_naming=parameter_naming
-        or ParameterNaming(mod, exported_program=exported_program),
+        submodule_naming=submodule_naming,
+        parameter_naming=parameter_naming,
         module_name=module_name,
     )
     attr = getattr(export_options, "_last_working", None)
