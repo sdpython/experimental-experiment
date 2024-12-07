@@ -276,6 +276,7 @@ class ParameterNaming:
         self._unable_to_map = set()
 
         use_mod = mod
+        add_names = {}
         if exported_program is not None:
             mod_names = dict(mod.named_parameters())
             exp_names = dict(exported_program.named_parameters())
@@ -306,8 +307,21 @@ class ParameterNaming:
                         f"{pprint.pformat(diff)}\n----\n{exported_program.graph}"
                     )
                     use_mod = exported_program
+                else:
+                    # It means we probably needs to add an alias.
+                    # We assume all used parametes in the exported program
+                    # are part of the exported program.
+                    # Maybe the conversion had to add a name.
+                    for m in exp_names:
+                        if m not in mod_names:
+                            add_names[m] = exp_names[m]
 
-        for name, p in use_mod.named_parameters():
+        # parameter names
+        def _chain(use_mod, add_names):
+            yield from use_mod.named_parameters()
+            yield from add_names.items()
+
+        for name, p in _chain(use_mod, add_names):
             self._idmap[name] = p
             self.display[name] = name
             new_key = name.replace(".", "_")
@@ -319,6 +333,8 @@ class ParameterNaming:
                 self.display[new_key] = name
             else:
                 self._idmap[new_key] = name
+
+        # modules names
         for name, submod in mod.named_modules():
             if not name:
                 continue
@@ -332,6 +348,8 @@ class ParameterNaming:
             else:
                 self._id_modules[new_key] = name
         updates = {}
+
+        # final step
         for k in self._idmap:
             kl = k.lower()
             if kl == k:
@@ -348,6 +366,7 @@ class ParameterNaming:
         value: "torch.nn.Parameter",  # noqa: F821
         node: "torch.fx.Node",  # noqa: F821
         prefix: Optional[str] = None,
+        msg: Optional[Callable] = None,
     ) -> str:
         assert isinstance(
             name, str
@@ -373,7 +392,7 @@ class ParameterNaming:
                 f"Unable to find parameter {name!r} from node {node!r} "
                 f"with a null prefix, "
                 f"with node.meta={pprint.pformat(node.meta)}\n--display--\n"
-                f"{pprint.pformat(self.display)}"
+                f"{pprint.pformat(self.display)}{msg() if msg else ''}"
             )
 
             key = f"{prefix}.{name}"
