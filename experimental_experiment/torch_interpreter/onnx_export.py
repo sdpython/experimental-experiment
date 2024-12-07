@@ -276,30 +276,52 @@ class ParameterNaming:
         self._unable_to_map = set()
 
         use_mod = mod
+        add_names = {}
         if exported_program is not None:
             mod_names = dict(mod.named_parameters())
             exp_names = dict(exported_program.named_parameters())
             if mod_names != exp_names:
-                union = mod_names | exp_names
-                diff = []
-                for k in sorted(union):
-                    if k in mod_names and k in exp_names:
-                        continue
-                    diff.append(
-                        (
-                            1 if k in mod_names else 0,
-                            1 if k in exp_names else 0,
-                            k,
-                            string_type(mod_names.get(k, None), with_shape=True),
-                            string_type(exp_names.get(k, None), with_shape=True),
+                mod_ptr = set(m.data_ptr() for m in mod_names.values())
+                exp_ptr = set(m.data_ptr() for m in exp_names.values())
+                if mod_ptr != exp_ptr:
+                    # If names and pointers are different, it is more difficult
+                    # to map parameters after exporting the model.
+                    union = mod_names | exp_names
+                    diff = []
+                    for k in sorted(union):
+                        if k in mod_names and k in exp_names:
+                            continue
+                        diff.append(
+                            (
+                                1 if k in mod_names else 0,
+                                1 if k in exp_names else 0,
+                                k,
+                                string_type(mod_names.get(k, None), with_shape=True),
+                                mod_names[k].data_ptr() if k in mod_names else None,
+                                string_type(exp_names.get(k, None), with_shape=True),
+                                exp_names[k].data_ptr() if k in exp_names else None,
+                            )
                         )
+                    assert all(_[1] == 1 for _ in diff), (
+                        f"ExportedProgram and module do not have the same parameters\n"
+                        f"{pprint.pformat(diff)}\n----\n{exported_program.graph}"
                     )
-                assert all(
-                    _[1] == 1 for _ in diff
-                ), f"ExportedProgram and module do not have the same paramerters\n{diff}"
-                use_mod = exported_program
+                    use_mod = exported_program
+                else:
+                    # It means we probably needs to add an alias.
+                    # We assume all used parametes in the exported program
+                    # are part of the exported program.
+                    # Maybe the conversion had to add a name.
+                    for m in exp_names:
+                        if m not in mod_names:
+                            add_names[m] = exp_names[m]
 
-        for name, p in use_mod.named_parameters():
+        # parameter names
+        def _chain(use_mod, add_names):
+            yield from use_mod.named_parameters()
+            yield from add_names.items()
+
+        for name, p in _chain(use_mod, add_names):
             self._idmap[name] = p
             self.display[name] = name
             new_key = name.replace(".", "_")
@@ -311,6 +333,8 @@ class ParameterNaming:
                 self.display[new_key] = name
             else:
                 self._idmap[new_key] = name
+
+        # modules names
         for name, submod in mod.named_modules():
             if not name:
                 continue
@@ -324,6 +348,8 @@ class ParameterNaming:
             else:
                 self._id_modules[new_key] = name
         updates = {}
+
+        # final step
         for k in self._idmap:
             kl = k.lower()
             if kl == k:
@@ -340,6 +366,7 @@ class ParameterNaming:
         value: "torch.nn.Parameter",  # noqa: F821
         node: "torch.fx.Node",  # noqa: F821
         prefix: Optional[str] = None,
+        msg: Optional[Callable] = None,
     ) -> str:
         assert isinstance(
             name, str
@@ -365,7 +392,7 @@ class ParameterNaming:
                 f"Unable to find parameter {name!r} from node {node!r} "
                 f"with a null prefix, "
                 f"with node.meta={pprint.pformat(node.meta)}\n--display--\n"
-                f"{pprint.pformat(self.display)}"
+                f"{pprint.pformat(self.display)}{msg() if msg else ''}"
             )
 
             key = f"{prefix}.{name}"
@@ -608,6 +635,10 @@ def _make_builder_interpreter(
 
     from .interpreter import DynamoInterpreter
 
+    if not submodule_naming:
+        submodule_naming = SubModuleNaming(mod)
+    if not parameter_naming:
+        parameter_naming = ParameterNaming(mod, exported_program=exported_program)
     interpreter = DynamoInterpreter(
         builder,
         retrieve,
@@ -616,9 +647,8 @@ def _make_builder_interpreter(
         export_options=export_options,
         optimize_submodules=optimize_submodules,
         function_options=function_options,
-        submodule_naming=submodule_naming or SubModuleNaming(mod),
-        parameter_naming=parameter_naming
-        or ParameterNaming(mod, exported_program=exported_program),
+        submodule_naming=submodule_naming,
+        parameter_naming=parameter_naming,
         module_name=module_name,
     )
     attr = getattr(export_options, "_last_working", None)

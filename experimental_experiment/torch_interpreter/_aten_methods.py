@@ -120,6 +120,27 @@ def aten_meth_item(
     return res
 
 
+def aten_meth_expand_as(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "aten_meth_expand_as",
+) -> T:
+    "expand_as"
+    shape = g.op.Shape(y, name=name)
+    res = g.op.Expand(x, shape, name=name, outputs=outputs)
+    if not sts:
+        if g.has_shape(y):
+            g.set_shape(res, g.get_shape(y))
+        elif g.has_rank(y):
+            g.set_rank(res, g.get_rank(y))
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+    return res
+
+
 def aten_meth_masked_fill(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

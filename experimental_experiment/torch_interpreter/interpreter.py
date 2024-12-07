@@ -341,7 +341,7 @@ class DynamoInterpreter:
                 and self.flat_example_inputs_[self.current_input_] is None
             ):
                 # We skip it.
-                assert len(users) == 0, (
+                assert users is None or len(users) == 0, (
                     f"Input {name!r} (index {self.current_input_}"
                     f"/{len(self.flat_example_inputs_)}) "
                     f"is None but it is used by {users}, "
@@ -372,6 +372,7 @@ class DynamoInterpreter:
         is_dimension: bool,
         users: Iterable[str],
         fake_tensor: bool = False,
+        default_initializer: Optional[Any] = None,
     ) -> str:
         ret = self._make_tensor_check(name, fake_tensor, users)
         if ret is not None:
@@ -384,6 +385,7 @@ class DynamoInterpreter:
             elem_type,
             shape,
             is_dimension=is_dimension,
+            default_initializer=default_initializer,
             marker="DynamoInterpreter._make_tensor_input",
         )
 
@@ -432,6 +434,7 @@ class DynamoInterpreter:
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.placeholder][{node.name}]")
         val = node.meta.get("val", None)
+        _msg = lambda _=self: _.builder.get_debug_msg()  # noqa: E731
 
         if val is None:
             example_value = node.meta.get("example_value", None)
@@ -494,6 +497,24 @@ class DynamoInterpreter:
             ):
                 return self._make_list_input(node.name, example_value, users=node.users)
 
+            if example_value.__class__.__name__ == "DynamicCache":
+                import transformers
+
+                assert isinstance(example_value, transformers.cache_utils.DynamicCache), (
+                    f"Unexpected type {type(example_value)} for an input"
+                    f"{self.builder.get_debug_msg()}"
+                )
+                if not example_value.key_cache:
+                    # The cache is empty. We create a dummy input with a default value
+                    return self._make_tensor_input(
+                        node.name,
+                        elem_type=np.float32,
+                        shape=(1,),
+                        is_dimension=False,
+                        users=None,
+                        default_initializer=np.array([0], dtype=np.float32),
+                    )
+
             raise NotImplementedError(
                 f"Unable to create an input {node.name!r} "
                 f"with type {string_type(example_value)}"
@@ -552,7 +573,7 @@ class DynamoInterpreter:
                     )
                 raise RuntimeError(f"value is None, unable to retrieve target {node.target!r}")
             parameter_name = (
-                self.parameter_naming(node.name, value, node=node)
+                self.parameter_naming(node.name, value, node=node, msg=_msg)
                 if isinstance(value, self.builder.torch.nn.Parameter)
                 else None
             )

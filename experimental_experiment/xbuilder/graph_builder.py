@@ -2873,6 +2873,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape: DYNAMIC_SHAPE,
         is_dimension: bool,
         marker: str = "",
+        default_initializer: Optional[Any] = None,
     ) -> str:
         """
         Adds a tensor input to the onnx graph.
@@ -2883,6 +2884,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param is_dimension: torch is using torch.SymInt to add a dynamic input
             to the graph
         :param marker: to known from this input was created
+        :param default_initializer: add an initializer with the same name of the input
         :return: input name
         """
         assert (
@@ -2999,6 +3001,15 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         add_node()
+
+        if default_initializer is not None:
+            init_name = self.add_initializer(
+                name, value=default_initializer, source="default_initilizer"
+            )
+            assert init_name == name, (
+                f"The initializer {name!r} should not be renamed into {init_name!r}"
+                f"{self.get_debug_msg()}"
+            )
         return name
 
     def make_tensor_sequence_input(

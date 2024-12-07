@@ -372,18 +372,34 @@ class ExportOptions:
         if self.decomposition_table:
             dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
-                print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
+                print(
+                    f"[ExportOptions.export] done after decomposition "
+                    f"in {time.perf_counter() - begin}"
+                )
             return dec
 
         if self.remove_inplace:
-            modified = CustomTracer().remove_inplace(exported_program.graph)
+            removed = CustomTracer.remove_unnecessary_slices(exported_program.graph)
+            if removed:
+                if verbose:
+                    print(
+                        f"[ExportOptions.export] slices: {removed} slices nodes were removed"
+                    )
+                exported_program.graph.lint()
+            modified = CustomTracer.remove_inplace(exported_program.graph)
             if modified:
                 if verbose:
-                    print(f"[ExportOptions.export] {modified} inplaced nodes were removed")
+                    print(
+                        f"[ExportOptions.export] inplaces: "
+                        f"{modified} inplaced nodes were removed"
+                    )
                 exported_program.graph.lint()
 
         if verbose:
-            print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
+            print(
+                f"[ExportOptions.export] done with no decomposition "
+                f"in {time.perf_counter() - begin}"
+            )
         return exported_program
 
 
