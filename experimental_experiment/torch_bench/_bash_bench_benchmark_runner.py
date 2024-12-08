@@ -503,6 +503,9 @@ class BenchmarkRunner:
         if isinstance(value, (list, tuple)):
             for v in value:
                 res.extend(cls._flatten(v))
+        elif value.__class__.__name__ == "DynamicCache":
+            res.extend(value.key_cache)
+            res.extend(value.value_cache)
         else:
             res.append(value)
         return tuple(res)
@@ -547,15 +550,7 @@ class BenchmarkRunner:
                 cls._flatten(got),
                 verbose=verbose,
                 flatten=False,
-                debug_info=(
-                    debug_info
-                    if verbose < 10
-                    else (
-                        [f"{' ' * level}flatten"]
-                        if not debug_info
-                        else ([*debug_info, f"{' ' * level}flatten"])
-                    )
-                ),
+                debug_info=[*(debug_info if debug_info else []), f"{' ' * level}flatten"],
                 level=level,
                 begin=begin,
                 end=end,

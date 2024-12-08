@@ -11,6 +11,7 @@ from argparse import Namespace
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
+from .helpers import string_type
 
 _DEFAULT_STRING_LIMIT = 2000
 
@@ -489,6 +490,26 @@ def measure_discrepancies(
     return dict(abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs))
 
 
+def flatten_object(x: Any) -> List[Any]:
+    """
+    Flatten the object.
+    """
+    if x is None:
+        return x
+    if isinstance(x, (list, tuple)):
+        res = []
+        for i in x:
+            if i is None or hasattr(i, "shape") or isinstance(i, (int, float, str)):
+                res.append(i)
+            else:
+                res.extend(flatten_object(i))
+        return tuple(res) if isinstance(x, tuple) else res
+    if x.__class__.__name__ == "DynamicCache":
+        res = flatten_object(x.key_cache) + flatten_object(x.value_cache)
+        return tuple(res)
+    raise TypeError(f"Unexpected type {type(x)} for x")
+
+
 def max_diff(
     expected: Any,
     got: Any,
@@ -521,10 +542,6 @@ def max_diff(
         output, this number will be the number of elements
         of this output
     """
-    from .helpers import string_type
-
-    print("----", hasattr(expected, "to_tuple"), string_type(expected))
-    print("++++", hasattr(got, "to_tuple"), string_type(got))
     if hasattr(expected, "to_tuple"):
         return max_diff(
             expected.to_tuple(),
@@ -532,17 +549,14 @@ def max_diff(
             verbose=verbose,
             level=level + 1,
             debug_info=(
-                debug_info
-                if verbose < 10
-                else (
-                    [f"{' ' * level}to_tupleA"]
-                    if not debug_info
-                    else ([*debug_info, f"{' ' * level}to_tupleA"])
-                )
+                [*(debug_info if debug_info else []), f"{' ' * level}to_tupleA"]
+                if verbose > 5
+                else None
             ),
             begin=begin,
             end=end,
             _index=_index,
+            flatten=flatten,
         )
 
     if hasattr(got, "to_tuple"):
@@ -552,17 +566,14 @@ def max_diff(
             verbose=verbose,
             level=level + 1,
             debug_info=(
-                debug_info
-                if verbose < 10
-                else (
-                    [f"{' ' * level}to_tupleB"]
-                    if not debug_info
-                    else ([*debug_info, f"{' ' * level}to_tupleB"])
-                )
+                [*(debug_info if debug_info else []), f"{' ' * level}to_tupleB"]
+                if verbose > 5
+                else None
             ),
             begin=begin,
             end=end,
             _index=_index,
+            flatten=flatten,
         )
 
     import torch
@@ -597,8 +608,9 @@ def max_diff(
                         f"got.shape={got.shape}"
                     )
                 return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            diff = (got.to(torch.float64) - expected.to(torch.float64)).abs()
-            rdiff = diff / (expected.abs() + 1e-3)
+            exp_cpu = expected.to(torch.float64).cpu()
+            diff = (got.to(torch.float64).cpu() - exp_cpu).abs()
+            rdiff = diff / (exp_cpu.abs() + 1e-3)
             abs_diff, rel_diff, sum_diff, n_diff = (
                 float(diff.max()),
                 float(rdiff.max()),
@@ -665,6 +677,7 @@ def max_diff(
                 end=end,
                 _index=_index,
                 debug_info=debug_info,
+                flatten=flatten,
             )
 
     if isinstance(expected, (tuple, list)):
@@ -678,6 +691,7 @@ def max_diff(
                 end=end,
                 _index=_index,
                 debug_info=debug_info,
+                flatten=flatten,
             )
         if not isinstance(got, (tuple, list)):
             if verbose > 2:
@@ -687,6 +701,35 @@ def max_diff(
                 )
             return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
         if len(got) != len(expected):
+            if flatten:
+                # Let's flatten.
+                if verbose > 2:
+                    print(
+                        f"[max_diff] flattening because of length mismatch, "
+                        f"expected is {string_type(expected)} and got is {string_type(got)}"
+                    )
+                return max_diff(
+                    flatten_object(expected),
+                    flatten_object(got),
+                    verbose=verbose,
+                    level=level,
+                    begin=begin,
+                    end=end,
+                    _index=_index,
+                    debug_info=(
+                        [
+                            *(debug_info if debug_info else []),
+                            (
+                                f"{' ' * level}flatten["
+                                f"{string_type(expected)},{string_type(got)}]"
+                            ),
+                        ]
+                        if verbose > 5
+                        else None
+                    ),
+                    flatten=flatten,
+                )
+
             if verbose > 2:
                 print(
                     f"[max_diff] (b) inf because len(expected)={len(expected)}, "
@@ -709,22 +752,17 @@ def max_diff(
                 verbose=verbose,
                 level=level + 1,
                 debug_info=(
-                    debug_info
-                    if verbose < 10
-                    else (
-                        [f"{' ' * level}[{ip}] so far abs {am} - rel {rm}"]
-                        if not debug_info
-                        else (
-                            [
-                                *debug_info,
-                                f"{' ' * level}[{ip}] so far abs {am} - rel {rm}",
-                            ]
-                        )
-                    )
+                    [
+                        *(debug_info if debug_info else []),
+                        f"{' ' * level}[{ip}] so far abs {am} - rel {rm}",
+                    ]
+                    if verbose > 5
+                    else None
                 ),
                 begin=begin,
                 end=end,
                 _index=_index + ip,
+                flatten=flatten,
             )
             am = max(am, d["abs"])
             rm = max(rm, d["rel"])
@@ -781,6 +819,7 @@ def max_diff(
             begin=begin,
             end=end,
             _index=_index,
+            flatten=flatten,
         )
 
     if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):

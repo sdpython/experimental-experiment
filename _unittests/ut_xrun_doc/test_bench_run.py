@@ -8,10 +8,10 @@ from experimental_experiment.bench_run import (
     run_benchmark,
     max_diff,
 )
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 
 
-class TestBenchScript(ExtTestCase):
+class TestBenchRun(ExtTestCase):
     def test_reg(self):
         text = ":m,6;"
         m = _extract_metrics(text)
@@ -135,6 +135,22 @@ class TestBenchScript(ExtTestCase):
             ),
             {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
         )
+
+    @hide_stdout()
+    def test_max_diff_dynamic_cache(self):
+        import torch
+        import transformers
+
+        t1 = torch.tensor([0, 1], dtype=torch.float32)
+        cache = transformers.cache_utils.DynamicCache(1)
+        cache.update(torch.ones((2, 2)), (torch.ones((2, 2)) * 2), 0)
+        md = max_diff(
+            (t1, cache),
+            (t1, cache.key_cache[0], cache.value_cache[0]),
+            flatten=True,
+            verbose=10,
+        )
+        self.assertEqual(md, {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 10.0})
 
 
 if __name__ == "__main__":
