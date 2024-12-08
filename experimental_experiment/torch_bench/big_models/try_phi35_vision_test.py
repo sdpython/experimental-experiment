@@ -16,7 +16,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.torch_bench.big_models.try_phi_35_vision import (
+from experimental_experiment.torch_bench.big_models.try_phi35_vision import (
     get_model_inputs,
 )
 
@@ -45,14 +45,14 @@ class TestPhi35Vision(ExtTestCase):
     def test_export_onnx_dynamo_f16(self):
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="float16")
         model = model_fct()
-        torch.onnx.export(model, inputs, "test_phi_35_vision_dynamo_f16.onnx", dynamo=True)
+        torch.onnx.export(model, inputs, "test_phi35_vision_dynamo_f16.onnx", dynamo=True)
 
     @long_test()
     @requires_cuda(memory=24)
     def test_export_onnx_dynamo_auto(self):
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="auto")
         model = model_fct()
-        torch.onnx.export(model, inputs, "test_phi_35_vision_dynamo_auto.onnx", dynamo=True)
+        torch.onnx.export(model, inputs, "test_phi35_vision_dynamo_auto.onnx", dynamo=True)
 
     @long_test()
     @requires_cuda(memory=24)
@@ -68,7 +68,7 @@ class TestPhi35Vision(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False),
         )
-        onx.save("test_phi_35_vision_custom_f16.onnx", all_tensors_to_one_file=True)
+        onx.save("test_phi35_vision_custom_f16.onnx", all_tensors_to_one_file=True)
 
     @long_test()
     @requires_cuda(memory=24)
@@ -88,7 +88,7 @@ class TestPhi35Vision(ExtTestCase):
                 export_modules_as_functions=True,
             )
             onx.save(
-                "test_phi_35_vision_custom_f16_submodule.onnx", all_tensors_to_one_file=True
+                "test_phi35_vision_custom_f16_submodule.onnx", all_tensors_to_one_file=True
             )
 
     @long_test()
@@ -104,7 +104,7 @@ class TestPhi35Vision(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False),  # , decomposition_table="all"),
         )
-        onx.save("test_phi_35_vision_custom_auto.onnx", all_tensors_to_one_file=True)
+        onx.save("test_phi35_vision_custom_auto.onnx", all_tensors_to_one_file=True)
 
 
 if __name__ == "__main__":

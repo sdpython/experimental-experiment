@@ -10,7 +10,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 from experimental_experiment.torch_models.dummy_inputs import generate_dummy_inputs
 from experimental_experiment.torch_models.dummy_inputs.llm_dummy_inputs import (
-    restore_dummy_inputs_for_phi_35_vision_instruct,
+    restore_dummy_inputs_for_phi35_vision_instruct,
 )
 from experimental_experiment.mini_onnx_builder import create_input_tensors_from_onnx_model
 from experimental_experiment.helpers import string_type
@@ -28,7 +28,7 @@ class TestLlmModelInputs(ExtTestCase):
     def test_generate_dummy_inputs_no_images(self):
         # This test is used to generate dummy inputs.
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_phi_35_vision_instruct,
+            get_phi35_vision_instruct,
         )
 
         device = "cuda"
@@ -46,7 +46,7 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi_35_vision_instruct(
+                model, *_ = get_phi35_vision_instruct(
                     num_hidden_layers=1, common_dynamic_shapes=True
                 )
                 model = model.to(device)
@@ -66,7 +66,7 @@ class TestLlmModelInputs(ExtTestCase):
     def test_generate_dummy_inputs_with_images(self):
         # This test is used to generate dummy inputs.
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_phi_35_vision_instruct,
+            get_phi35_vision_instruct,
         )
 
         device = "cuda"
@@ -84,7 +84,7 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi_35_vision_instruct(
+                model, *_ = get_phi35_vision_instruct(
                     num_hidden_layers=1, common_dynamic_shapes=True
                 )
                 model = model.to(device)
@@ -96,7 +96,7 @@ class TestLlmModelInputs(ExtTestCase):
     def test_restore_dummy_inputs_no_images(self):
         for it in range(0, 2):
             with self.subTest(iteration=it):
-                dummies = restore_dummy_inputs_for_phi_35_vision_instruct(
+                dummies = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=False, n_iteration=it
                 )
                 self.assertIsInstance(dummies, tuple)
@@ -115,15 +115,15 @@ class TestLlmModelInputs(ExtTestCase):
     @hide_stdout()
     def test_restore_dummy_inputs_no_images_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_phi_35_vision_instruct,
+            get_phi35_vision_instruct,
         )
 
         device = "cuda"
-        model, *_ = get_phi_35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)
+        model, *_ = get_phi35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)
         model = model.to(device)
         for it in range(0, 2):
             with self.subTest(iteration=it):
-                args, kwargs = restore_dummy_inputs_for_phi_35_vision_instruct(
+                args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=False, n_iteration=it, device=device
                 )
                 model(*args, **kwargs)
@@ -136,7 +136,7 @@ class TestLlmModelInputs(ExtTestCase):
     @hide_stdout()
     def test_get_dummy_inputs_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_phi_35_vision_instruct,
+            get_phi35_vision_instruct,
         )
 
         input_names = [
@@ -157,7 +157,7 @@ class TestLlmModelInputs(ExtTestCase):
         device = "cuda"
         for it in range(2):
             with self.subTest(iteration=it):
-                model, kwargs, _ = get_phi_35_vision_instruct(
+                model, kwargs, _ = get_phi35_vision_instruct(
                     num_hidden_layers=1,
                     n_iteration=it,
                     device=device,
@@ -173,7 +173,7 @@ class TestLlmModelInputs(ExtTestCase):
     def test_restore_dummy_inputs_with_images(self):
         for it in range(0, 2):
             with self.subTest(iteration=it):
-                dummies = restore_dummy_inputs_for_phi_35_vision_instruct(
+                dummies = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=True, n_iteration=it
                 )
                 self.assertIsInstance(dummies, tuple)
@@ -192,15 +192,15 @@ class TestLlmModelInputs(ExtTestCase):
     @hide_stdout()
     def test_restore_dummy_inputs_with_images_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_phi_35_vision_instruct,
+            get_phi35_vision_instruct,
         )
 
         device = "cuda"
-        model, _ = get_phi_35_vision_instruct(num_hidden_layers=1)
+        model, _ = get_phi35_vision_instruct(num_hidden_layers=1)
         model = model.to(device)
         for it in range(0, 2):
             with self.subTest(iteration=it):
-                args, kwargs = restore_dummy_inputs_for_phi_35_vision_instruct(
+                args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=True, n_iteration=it, device=device
                 )
                 model(*args, **kwargs)
@@ -213,13 +213,13 @@ class TestLlmModelInputs(ExtTestCase):
     @hide_stdout()
     def test_get_dummy_inputs_with_imgaes_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_phi_35_vision_instruct,
+            get_phi35_vision_instruct,
         )
 
         device = "cuda"
         for it in range(2):
             with self.subTest(iteration=it):
-                model, kwargs = get_phi_35_vision_instruct(
+                model, kwargs = get_phi35_vision_instruct(
                     num_hidden_layers=1,
                     n_iteration=it,
                     device=device,
