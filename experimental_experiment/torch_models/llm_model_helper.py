@@ -38,6 +38,75 @@ class LLMInputKind(enum.IntEnum):
     ALL = 255
 
 
+def get_phi2(
+    inputs_as_tuple: bool = False,
+    batch: int = 1,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param batch: batch size
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: model, inputs
+
+    See `Phi-2/config.json
+    <https://huggingface.co/microsoft/phi-2/blob/main/config.json>`_.
+    """
+    import torch
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+
+    config = {
+        "_name_or_path": "microsoft/phi-2",
+        "architectures": ["PhiForCausalLM"],
+        "attention_dropout": 0.0,
+        "bos_token_id": 50256,
+        "embd_pdrop": 0.0,
+        "eos_token_id": 50256,
+        "hidden_act": "gelu_new",
+        "hidden_size": 2560,
+        "initializer_range": 0.02,
+        "intermediate_size": 10240,
+        "layer_norm_eps": 1e-05,
+        "max_position_embeddings": 2048,
+        "model_type": "phi",
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32,
+        "partial_rotary_factor": 0.4,
+        "qk_layernorm": False,
+        "resid_pdrop": 0.1,
+        "rope_scaling": None,
+        "rope_theta": 10000.0,
+        "tie_word_embeddings": False,
+        "torch_dtype": "float16",
+        "transformers_version": "4.37.0",
+        "use_cache": True,
+        "vocab_size": 51200,
+    }
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.PhiConfig(**config)
+    model = transformers.PhiForCausalLM(conf)
+    model.eval()
+
+    dim = (batch, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 32064, dim).to(torch.int64),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_tuple:
+        inputs = tuple(inputs.values())
+
+    return model, inputs
+
+
 def get_phi35_mini_instruct(
     inputs_as_tuple: bool = False,
     batch: int = 1,

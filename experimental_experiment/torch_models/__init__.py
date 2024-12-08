@@ -13,6 +13,9 @@ def flatten_outputs(output: Any) -> Iterator[Any]:
         yield from flatten_outputs(output.to_tuple())
     elif hasattr(output, "shape"):
         yield output
+    elif output.__class__.__name__ == "MambaCache":
+        yield output.conv_states
+        yield output.ssm_states
     else:
         raise TypeError(f"Unable to flatten type {type(output)}")
 
