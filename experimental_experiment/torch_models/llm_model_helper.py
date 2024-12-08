@@ -869,7 +869,7 @@ def get_all_mini_ml_l6_v1(
     return model, inputs
 
 
-def get_llama_32_9b_vision(
+def get_llama32_9b_vision(
     inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """

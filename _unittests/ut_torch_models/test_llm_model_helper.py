@@ -347,16 +347,16 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @unittest.skip("Wrong setting for the images")
     @long_test()
-    def test_get_llama_32_9b_vision(self):
+    def test_get_llama32_9b_vision(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
-            get_llama_32_9b_vision,
+            get_llama32_9b_vision,
         )
         from experimental_experiment.torch_interpreter.onnx_export_errors import (
             bypass_export_some_errors,
         )
 
-        model, model_inputs = get_llama_32_9b_vision(
+        model, model_inputs = get_llama32_9b_vision(
             num_hidden_layers=1,
             num_global_layers=1,
             rope_scaling={

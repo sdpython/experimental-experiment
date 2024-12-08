@@ -12,7 +12,7 @@ from ..torch_models.llm_model_helper import (
     get_ai21_jamba_15_mini,
     get_all_mini_ml_l6_v1,
     get_falcon_mamba_7b,
-    get_llama_32_9b_vision,
+    get_llama32_9b_vision,
     get_phi35_mini_instruct,
     get_phi35_vision_instruct,
     get_smollm_1_7b,
@@ -37,9 +37,7 @@ class UntrainedRunner(BenchmarkRunner):
                 "AllMiniLML6v1": get_all_mini_ml_l6_v1,
                 "FalconMamba7bLM": get_falcon_mamba_7b,
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
-                "Llama_9b_vision_8Layer": (
-                    lambda: get_llama_32_9b_vision(num_hidden_layers=8)
-                ),
+                "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),
                 "Phi35MiniInstructLM_1Layer": (
                     lambda: (
                         *get_phi35_mini_instruct(num_hidden_layers=1),
