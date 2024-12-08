@@ -521,6 +521,10 @@ def max_diff(
         output, this number will be the number of elements
         of this output
     """
+    from .helpers import string_type
+
+    print("----", hasattr(expected, "to_tuple"), string_type(expected))
+    print("++++", hasattr(got, "to_tuple"), string_type(got))
     if hasattr(expected, "to_tuple"):
         return max_diff(
             expected.to_tuple(),
