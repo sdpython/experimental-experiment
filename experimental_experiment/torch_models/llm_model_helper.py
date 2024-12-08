@@ -38,7 +38,7 @@ class LLMInputKind(enum.IntEnum):
     ALL = 255
 
 
-def get_phi_35_mini_instruct(
+def get_phi35_mini_instruct(
     inputs_as_tuple: bool = False,
     batch: int = 1,
     common_dynamic_shapes: bool = False,
@@ -214,7 +214,7 @@ def get_phi_35_mini_instruct(
     return model, inputs
 
 
-def get_phi_3_vision_128k_instruct(
+def get_phi3_vision_128k_instruct(
     inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
@@ -399,7 +399,7 @@ def get_phi_3_vision_128k_instruct(
     return model, inputs
 
 
-def get_phi_35_vision_instruct(
+def get_phi35_vision_instruct(
     inputs_as_tuple: bool = False,
     n_iteration: int = 0,
     input_kind: LLMInputKind = LLMInputKind.input_ids,
@@ -598,10 +598,10 @@ def get_phi_35_vision_instruct(
         }
     else:
         from .dummy_inputs.llm_dummy_inputs import (
-            restore_dummy_inputs_for_phi_35_vision_instruct,
+            restore_dummy_inputs_for_phi35_vision_instruct,
         )
 
-        data = restore_dummy_inputs_for_phi_35_vision_instruct(
+        data = restore_dummy_inputs_for_phi35_vision_instruct(
             num_hidden_layers=config["num_hidden_layers"],
             n_iteration=n_iteration,
             with_images=input_kind & LLMInputKind.images,

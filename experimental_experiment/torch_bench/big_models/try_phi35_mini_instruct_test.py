@@ -5,7 +5,7 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     long_test,
 )
-from experimental_experiment.torch_bench.big_models.try_phi_35_mini_instruct import (
+from experimental_experiment.torch_bench.big_models.try_phi35_mini_instruct import (
     get_model_inputs,
 )
 
@@ -36,7 +36,7 @@ class TestPhi35MiniInstruct(ExtTestCase):
 
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="float16")
         model = model_fct()
-        torch.onnx.export(model, inputs, "test_phi_35_mini_instruct_dynamo.onnx", dynamo=True)
+        torch.onnx.export(model, inputs, "test_phi35_mini_instruct_dynamo.onnx", dynamo=True)
 
     @long_test()
     @requires_cuda(memory=24)
@@ -46,7 +46,7 @@ class TestPhi35MiniInstruct(ExtTestCase):
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="auto")
         model = model_fct()
         torch.onnx.export(
-            model, inputs, "test_phi_35_mini_instruct_dynamo_auto.onnx", dynamo=True
+            model, inputs, "test_phi35_mini_instruct_dynamo_auto.onnx", dynamo=True
         )
 
     @long_test()
@@ -65,7 +65,7 @@ class TestPhi35MiniInstruct(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False, decomposition=True),
         )
-        onx.save("test_phi_35_mini_instruct_custom_f16.onnx", all_tensors_to_one_file=True)
+        onx.save("test_phi35_mini_instruct_custom_f16.onnx", all_tensors_to_one_file=True)
 
     @long_test()
     @requires_cuda(memory=24)
@@ -83,7 +83,7 @@ class TestPhi35MiniInstruct(ExtTestCase):
             options=OptimizationOptions(max_iter=10),
             export_options=ExportOptions(strict=False, decomposition_table="all"),
         )
-        onx.save("test_phi_35_mini_instruct_custom_auto.onnx", all_tensors_to_one_file=True)
+        onx.save("test_phi35_mini_instruct_custom_auto.onnx", all_tensors_to_one_file=True)
 
 
 if __name__ == "__main__":

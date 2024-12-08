@@ -13,8 +13,8 @@ from ..torch_models.llm_model_helper import (
     get_all_mini_ml_l6_v1,
     get_falcon_mamba_7b,
     get_llama_32_9b_vision,
-    get_phi_35_mini_instruct,
-    get_phi_35_vision_instruct,
+    get_phi35_mini_instruct,
+    get_phi35_vision_instruct,
     get_smollm_1_7b,
 )
 
@@ -42,13 +42,13 @@ class UntrainedRunner(BenchmarkRunner):
                 ),
                 "Phi35MiniInstructLM_1Layer": (
                     lambda: (
-                        *get_phi_35_mini_instruct(num_hidden_layers=1),
+                        *get_phi35_mini_instruct(num_hidden_layers=1),
                         dict(strict=False),
                     )
                 ),
                 "Phi35MiniInstructLMVision_1Layer_it0": (
                     lambda: (
-                        *get_phi_35_vision_instruct(
+                        *get_phi35_vision_instruct(
                             num_hidden_layers=1,
                             n_iteration=0,
                             input_kind=LLMInputKind.input_ids
@@ -62,7 +62,7 @@ class UntrainedRunner(BenchmarkRunner):
                 ),
                 "Phi35MiniInstructLMVision_1Layer_it1": (
                     lambda: (
-                        *get_phi_35_vision_instruct(
+                        *get_phi35_vision_instruct(
                             num_hidden_layers=1,
                             n_iteration=1,
                             input_kind=LLMInputKind.input_ids
@@ -76,7 +76,7 @@ class UntrainedRunner(BenchmarkRunner):
                 ),
                 "Phi35MiniInstructLMVision_1Layer_Images_it0": (
                     lambda: (
-                        *get_phi_35_vision_instruct(
+                        *get_phi35_vision_instruct(
                             num_hidden_layers=1,
                             n_iteration=0,
                             _attn_implementation="eager",
@@ -88,7 +88,7 @@ class UntrainedRunner(BenchmarkRunner):
                 ),
                 "Phi35MiniInstructLMVision_1Layer_Images_it1": (
                     lambda: (
-                        *get_phi_35_vision_instruct(
+                        *get_phi35_vision_instruct(
                             num_hidden_layers=1,
                             n_iteration=1,
                             _attn_implementation="eager",
@@ -99,7 +99,7 @@ class UntrainedRunner(BenchmarkRunner):
                     )
                 ),
                 "Phi35MiniInstructLM": (
-                    lambda: (*get_phi_35_mini_instruct(), dict(strict=False))
+                    lambda: (*get_phi35_mini_instruct(), dict(strict=False))
                 ),
                 "SmolLM17b": get_smollm_1_7b,
             }
