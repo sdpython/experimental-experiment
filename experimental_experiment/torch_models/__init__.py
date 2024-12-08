@@ -11,8 +11,10 @@ def flatten_outputs(output: Any) -> Iterator[Any]:
         yield from flatten_outputs(list(output.values()))
     elif hasattr(output, "to_tuple"):
         yield from flatten_outputs(output.to_tuple())
-    else:
+    elif hasattr(output, "shape"):
         yield output
+    else:
+        raise TypeError(f"Unable to flatten type {type(output)}")
 
 
 def assert_found(kwargs: Dict[str, Any], config: Dict[str, Any]):
