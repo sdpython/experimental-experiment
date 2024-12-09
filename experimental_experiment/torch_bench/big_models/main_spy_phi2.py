@@ -36,12 +36,14 @@ def rewrite_forward(f, *args, **kwargs):
 
 
 print("-- intercept forward")
-print(f"-- inputs type: {string_type(inputs)}")
+print(f"-- inputs type: {string_type(inputs, with_shape=True)}")
 
 model_forward = model.forward
 model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(f, *args, **kwargs)
 
-outputs = model.generate(**inputs, max_length=30)
+inputs = {k: v.expand((v.shape[0] * 2, *v.shape[1:])) for k, v in inputs.items()}
+print(f"-- inputs type: {string_type(inputs, with_shape=True)}")
+outputs = model.generate(**inputs, max_length=35)
 
 # remove input tokens
 response = tokenizer.batch_decode(outputs)[0]

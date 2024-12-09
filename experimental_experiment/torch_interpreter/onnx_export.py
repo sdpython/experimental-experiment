@@ -654,6 +654,7 @@ def _make_builder_interpreter(
         submodule_naming=submodule_naming,
         parameter_naming=parameter_naming,
         module_name=module_name,
+        default_values=_default_values_from_sig(mod),
     )
     attr = getattr(export_options, "_last_working", None)
     if attr:
@@ -668,6 +669,15 @@ def _model_signature(
     import torch
 
     return inspect.signature(model.forward if isinstance(model, torch.nn.Module) else model)
+
+
+def _default_values_from_sig(mod: "torch.nn.Module") -> Dict[str, Any]:  # noqa: F821
+    sig = _model_signature(mod)
+    res = {}
+    for name, p in sig.parameters.items():
+        if p.default not in (None, inspect.Parameter.empty):
+            res[name] = p.default
+    return res
 
 
 def _replacements_dynamic_shapes(

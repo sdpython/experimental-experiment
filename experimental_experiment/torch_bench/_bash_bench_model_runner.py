@@ -317,6 +317,7 @@ class ModelRunner:
             raise AssertionError - (f"Input type is {type(inputs)}")
         assert not kw_inputs, "Keyword inputs are not yet implemented."
         self.kw_inputs = kw_inputs
+        self.sig_input_names = list(inspect.signature(model.forward).parameters)
 
         if isinstance(inputs, dict):
             # torch.export.export does not allow that.
@@ -769,6 +770,10 @@ class ModelRunner:
         if verbose:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
+            print(
+                f"[ModelRunner._to_onnx_custom] sig_input_names="
+                f"{', '.join(self.sig_input_names)}"
+            )
             print(
                 f"[ModelRunner._to_onnx_custom] export_inputs="
                 f"{string_type(export_inputs, with_shape=True)!r}"
@@ -1958,7 +1963,7 @@ class ModelRunner:
                         ns = self._make_dynamic_inputs_tensor(
                             input_shape=inp.key_cache[k].shape,
                             i=i,
-                            dyn_shape=dyn_shape[1][k],
+                            dyn_shape=dyn_shape[0][k],
                             dyn_values=dyn_values,
                         )
                         zeros = torch.zeros(
@@ -1972,7 +1977,7 @@ class ModelRunner:
                         ns = self._make_dynamic_inputs_tensor(
                             input_shape=inp.value_cache[k].shape,
                             i=i,
-                            dyn_shape=dyn_shape[2][k],
+                            dyn_shape=dyn_shape[1][k],
                             dyn_values=dyn_values,
                         )
                         zeros = torch.zeros(
@@ -2019,7 +2024,13 @@ class ModelRunner:
             dyn_inputs.append(zeros)
         return tuple(dyn_inputs)
 
-    def make_feeds(self, exporter: str, filename: Optional[str] = None, dynamic: bool = False):
+    def make_feeds(
+        self,
+        exporter: str,
+        filename: Optional[str] = None,
+        dynamic: bool = False,
+        remove_int: bool = False,
+    ):
         """Creates feed inputs."""
         if exporter.split("-", maxsplit=1)[0] in {
             "eager",
@@ -2035,6 +2046,17 @@ class ModelRunner:
             return self.inputs
 
         use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs()
+        if remove_int:
+            ui = use_inputs
+            use_inputs = []
+            raw_use_defaults = []
+            for a, b in zip(ui, self.raw_use_defaults):
+                if isinstance(a, (int, float)):
+                    continue
+                use_inputs.append(a)
+                raw_use_defaults.append(b)
+        else:
+            raw_use_defaults = self.raw_use_defaults
 
         # for onnx
         onx = onnx.load(filename, load_external_data=False)
@@ -2045,14 +2067,13 @@ class ModelRunner:
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
             return self.inputs
-        assert len(use_inputs) == len(self.raw_use_defaults), (
-            f"Mismatch len(use_inputs)={len(use_inputs)}, "
-            f"len(self.raw_use_defaults)={len(self.raw_use_defaults)}, "
-            f"self.raw_use_defaults={self.raw_use_defaults}"
+        assert len(use_inputs) == len(raw_use_defaults), (
+            f"Mismatch use_inputs={string_type(use_inputs)}, "
+            f"raw_use_defaults={string_type(raw_use_defaults)}"
         )
         inputs = [
             i
-            for i, d in zip(use_inputs, self.raw_use_defaults)
+            for i, d in zip(use_inputs, raw_use_defaults)
             if d != UseDefaultValue.TRUE or i is not None
         ]
 
@@ -2102,7 +2123,7 @@ class ModelRunner:
                 # onnx_dynamo does not seem to consider int or float as inputs
                 or (exporter == "onnx_dynamo" and isinstance(i, (int, float)))
             )
-            for i, r in zip(use_inputs[len(names) :], self.raw_use_defaults[len(names) :])
+            for i, r in zip(use_inputs[len(names) :], raw_use_defaults[len(names) :])
         ):
             new_inputs = new_inputs[: len(names)]
 
@@ -2114,7 +2135,7 @@ class ModelRunner:
             f"named parameters={sorted(p[0] for p in self.model.named_parameters())}"
             f"\n----\nnamed buffers={sorted(p[0] for p in self.model.named_buffers())}"
             f"\n----\nself.raw_input_names={self.raw_input_names}\n----\n"
-            f"self.raw_use_defaults={self.raw_use_defaults}\n----\n"
+            f"raw_use_defaults={raw_use_defaults}\n----\n"
             f"initializer_names={sorted(initializer_names)}\n----\n"
         )
         return dict(zip(names, new_inputs))

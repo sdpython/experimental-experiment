@@ -1164,7 +1164,9 @@ class BenchmarkRunner:
                 return stats, context
 
         else:
-            feeds = model_runner.make_feeds(exporter, filename)
+            feeds = model_runner.make_feeds(
+                exporter, filename, remove_int=exporter in {"onnx_dynamo"}
+            )
             feeds_dynamic = (
                 model_runner.make_feeds(exporter, filename, dynamic=True) if dynamic else None
             )

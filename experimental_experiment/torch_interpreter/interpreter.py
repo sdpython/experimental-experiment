@@ -55,6 +55,7 @@ class DynamoInterpreter:
         submodule_naming: Optional[Callable] = None,
         parameter_naming: Optional[Callable] = None,
         module_name: Optional[str] = None,
+        default_values: Optional[Dict[str, Any]] = None,
     ):
         import torch
         from ..xbuilder import FunctionOptions
@@ -109,6 +110,7 @@ class DynamoInterpreter:
         self.parameter_naming = parameter_naming
         self.submodule_naming = submodule_naming
         self.module_name = module_name
+        self.default_values = default_values or {}
         self._debug_aten_as_function = int(os.environ.get("ATENDEBUG", "0"))
 
     def register_named_modules(
@@ -438,13 +440,10 @@ class DynamoInterpreter:
 
         if val is None:
             example_value = node.meta.get("example_value", None)
-            index_input = len(self.builder.inputs)
-            if (
-                example_value is None
-                and self.builder.input_args
-                and index_input < len(self.builder.input_args)
-            ):
-                example_value = self.builder.input_args[index_input]
+            # index_input may be wrong because torch.export.export may flatten the inputs.
+            # gathering the default value may not be optimal here.
+            if example_value is None and node.name in self.default_values:
+                example_value = self.default_values[node.name]
 
             if self.builder.as_function and example_value is None:
                 return self._make_tensor_input(
@@ -483,7 +482,6 @@ class DynamoInterpreter:
                     is_dimension=False,
                     users=node.users,
                 )
-
             if isinstance(example_value, (self.torch.Tensor, VirtualTensor)):
                 return self._make_tensor_input(
                     node.name,
