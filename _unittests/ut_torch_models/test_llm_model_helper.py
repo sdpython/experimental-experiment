@@ -441,6 +441,36 @@ class TestLlmModelHelper(ExtTestCase):
             ],
         )
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @skipif_ci_windows("not supported")
+    @long_test()
+    def test_get_phi2(self):
+        # import torch
+        from experimental_experiment.torch_models.llm_model_helper import get_phi2
+
+        model, model_inputs = get_phi2(num_hidden_layers=1)
+        expected = list(flatten_outputs(model(**model_inputs)))
+        onx = to_onnx(
+            model,
+            None,  # args
+            model_inputs,  # kwargs
+            large_model=True,
+            verbose=0,
+            options=OptimizationOptions(max_iter=10),
+            export_options=ExportOptions(strict=False),
+        )
+        filename = "test_phi2.onnx"
+        onx.save(filename, all_tensors_to_one_file=True)
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(filename, providers=["CPUExecutionProvider"])
+        got = sess.run(None, {k: v.numpy() for k, v in model_inputs.items()})
+        self.assertEqual(len(expected), len(got))
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
