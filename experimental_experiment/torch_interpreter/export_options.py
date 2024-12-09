@@ -386,7 +386,9 @@ class ExportOptions:
                         f"[ExportOptions.export] slices: {removed} slices nodes were removed"
                     )
                 exported_program.graph.lint()
-            modified = CustomTracer.remove_inplace(exported_program.graph)
+            modified = CustomTracer.remove_inplace(
+                exported_program.graph, exported_program=exported_program
+            )
             if modified:
                 if verbose:
                     print(

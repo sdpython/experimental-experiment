@@ -567,11 +567,35 @@ class CustomTracer(torch.fx.Tracer):
         return removed
 
     @classmethod
-    def remove_inplace(cls, graph: torch.fx.Graph) -> int:
+    def graph_erase_node(cls, graph: torch.fx.Graph, node: torch.fx.Node):
+        """
+        Removes a node all predecessors with are only consumed by this one.
+        """
+        nodes = [node]
+        while (
+            node.op == "call_function"
+            and node.args
+            and isinstance(node.args[0], torch.fx.Node)
+            and all(isinstance(_, (int, float)) for _ in node.args[1:])
+            and len(node.args[0].users) == 1
+        ):
+            node = node.args[0]
+            nodes.append(node)
+        for node in nodes:
+            graph.erase_node(node)
+
+    @classmethod
+    def remove_inplace(
+        cls,
+        graph: torch.fx.Graph,
+        exported_program: Optional[torch.export.ExportedProgram] = None,
+    ) -> int:
         """
         Removes inplace operations.
 
         :param graph: graph to modify
+        :param exported_program: if available, it is used in the error message
+            to make it easier to trace the code source
         :return: number of inplace nodes removed
 
         The most difficult pattern is the following:
@@ -599,6 +623,8 @@ class CustomTracer(torch.fx.Tracer):
         def delete_user_cb(n, nodes_to_leave):
             return n not in nodes_to_leave
 
+        err_graph = str(graph)
+
         existing_nodes = list(enumerate(graph.nodes))
         for pos, node in reversed(inplace):
             if node.target in {
@@ -613,10 +639,24 @@ class CustomTracer(torch.fx.Tracer):
                 continue
 
             if hasattr(node.target, "name"):
+                if node.target.name() in {
+                    "aten::view",
+                    "aten::detach_",  # outout = input
+                    "aten::add.Tensor",  # it happens when running
+                    "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
+                    "aten::mul.Tensor",
+                    "aten::sub.Tensor",
+                }:
+                    # This node cannot be one inplace modifications. The node is just not used.
+                    cls.graph_erase_node(graph, node)
+                    continue
+
                 assert node.target.name() in {"aten::copy_"} and len(node.args) == 2, (
-                    f"Unsupported target {node.target!r}, target_name="
+                    f"(inplace) Unsupported target {node.target!r}, target_name="
                     f"{node.target.name()!r}, name={node.name!r}, node.args={node.args} "
-                    f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
+                    f"at position {pos}/{len(graph.nodes)}"
+                    f"\n--original graph--\n{err_graph}"
+                    f"\n--graph\n{exported_program or graph}"
                 )
 
                 # We change the predecessor of the node is a node clone.
@@ -625,9 +665,11 @@ class CustomTracer(torch.fx.Tracer):
                     hasattr(predecessor.target, "name")
                     and predecessor.target.name() == "aten::clone"
                 ), (
-                    f"Unexpected predecessor {predecessor.target!r} for node {node.name!r} "
-                    f"with args={node.args} at position {pos}/{len(graph.nodes)}"
-                    f"\n--graph\n{graph}"
+                    f"(inplace) Unexpected predecessor {predecessor.target!r} "
+                    f"for node {node.name!r} with args={node.args} at position "
+                    f"{pos}/{len(graph.nodes)}"
+                    f"\n--original graph--\n{err_graph}"
+                    f"\n--graph\n{exported_program or graph}"
                 )
 
                 # class Node can be used as a key
@@ -658,7 +700,8 @@ class CustomTracer(torch.fx.Tracer):
                     f"new_node.args={new_node.args}, predecessor="
                     f"[{predecessor}] with target={predecessor.target!r}, "
                     f"p_users={list(p_users)}, predecessor.users={list(predecessor.users)}, "
-                    f"new_node.users={list(new_node.users)} in \n{graph}"
+                    f"new_node.users={list(new_node.users)} in "
+                    f"\n{exported_program or graph}"
                 )
             else:
                 assert node.target in {
@@ -694,7 +737,8 @@ class CustomTracer(torch.fx.Tracer):
                 )
 
         inplace = cls._inplace_nodes(graph)
-        assert (
-            len(inplace) == 0
-        ), f"Inplace nodes remain at positions {sorted(_[0] for _ in inplace)} in\n{graph}"
+        assert len(inplace) == 0, (
+            f"Inplace nodes remain at positions {sorted(_[0] for _ in inplace)} "
+            f"in\n{graph}\n--original graph--\n{err_graph}"
+        )
         return n_inplace
