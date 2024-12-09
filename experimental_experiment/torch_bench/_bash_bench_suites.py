@@ -13,6 +13,7 @@ from ..torch_models.llm_model_helper import (
     get_all_mini_ml_l6_v1,
     get_falcon_mamba_7b,
     get_llama32_9b_vision,
+    get_phi2,
     get_phi35_mini_instruct,
     get_phi35_vision_instruct,
     get_smollm_1_7b,
@@ -38,6 +39,28 @@ class UntrainedRunner(BenchmarkRunner):
                 "FalconMamba7bLM": get_falcon_mamba_7b,
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
                 "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),
+                "Phi2LM_1Layer_it0": (
+                    lambda: (
+                        *get_phi2(
+                            num_hidden_layers=1,
+                            n_iteration=0,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(strict=False),
+                    )
+                ),
+                "Phi2LM_1Layer_it1": (
+                    lambda: (
+                        *get_phi2(
+                            num_hidden_layers=1,
+                            n_iteration=1,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(strict=False),
+                    )
+                ),
                 "Phi35MiniInstructLM_1Layer": (
                     lambda: (
                         *get_phi35_mini_instruct(num_hidden_layers=1),

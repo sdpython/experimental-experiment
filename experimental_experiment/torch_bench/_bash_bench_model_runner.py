@@ -1861,7 +1861,6 @@ class ModelRunner:
 
                 dyn_input_shapes.append(
                     [
-                        (1,),
                         [
                             self._get_input_shape_tensor(
                                 export=export,
@@ -1870,7 +1869,7 @@ class ModelRunner:
                                 dyn_values=dyn_values,
                                 i=i,
                             )
-                            for t, ds in zip(inp.key_cache, dyn_shape[1])
+                            for t, ds in zip(inp.key_cache, dyn_shape[0])
                         ],
                         [
                             self._get_input_shape_tensor(
@@ -1880,7 +1879,7 @@ class ModelRunner:
                                 dyn_values=dyn_values,
                                 i=i,
                             )
-                            for t, ds in zip(inp.value_cache, dyn_shape[2])
+                            for t, ds in zip(inp.value_cache, dyn_shape[1])
                         ],
                     ]
                 )

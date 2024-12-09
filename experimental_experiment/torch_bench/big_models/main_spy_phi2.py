@@ -41,7 +41,7 @@ print(f"-- inputs type: {string_type(inputs)}")
 model_forward = model.forward
 model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(f, *args, **kwargs)
 
-outputs = model.generate(**inputs, max_length=10)
+outputs = model.generate(**inputs, max_length=30)
 
 # remove input tokens
 response = tokenizer.batch_decode(outputs)[0]

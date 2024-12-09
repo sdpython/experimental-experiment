@@ -40,26 +40,28 @@ class LLMInputKind(enum.IntEnum):
 
 def get_phi2(
     inputs_as_tuple: bool = False,
-    batch: int = 1,
+    n_iteration: int = 0,
+    batch_size: int = 1,
     common_dynamic_shapes: bool = False,
     **kwargs,
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+) -> Tuple[
+    Any, Union[Tuple[Any, ...], Dict[str, Any]], Union[Tuple[Any, ...], Dict[str, Any]]
+]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param batch: batch size
+    :param generate data for this size
+    :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :return: model, inputs
+    :return: model, inputs, shape
 
     See `Phi-2/config.json
     <https://huggingface.co/microsoft/phi-2/blob/main/config.json>`_.
     """
     import torch
     import transformers
-
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "microsoft/phi-2",
@@ -95,15 +97,45 @@ def get_phi2(
     model = transformers.PhiForCausalLM(conf)
     model.eval()
 
-    dim = (batch, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 32064, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
+    batch = torch.export.Dim("batch", min=1, max=1024)
+    seq_length = torch.export.Dim("seq_length", min=1, max=4096)
+    shapes = {}
+
+    if n_iteration == 0:
+        dim = (batch_size, 30)
+        inputs = dict(
+            input_ids=torch.randint(0, 50285, dim).to(torch.int64),
+            attention_mask=torch.ones(*dim, dtype=torch.int64),
+        )
+        shapes["input_ids"] = {0: batch, 1: seq_length}
+        shapes["attention_mask"] = {0: batch, 1: seq_length}
+    else:
+        cache = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
+        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
+        for i in range(config["num_hidden_layers"]):
+            cache.update(
+                torch.randn(batch_size, 32, 30, 80), torch.randn(batch_size, 32, 30, 80), i
+            )
+
+        inputs = dict(
+            input_ids=torch.randint(0, 50285, (batch_size, 1)).to(torch.int64),
+            cache_position=torch.tensor([30], dtype=torch.int64),
+            past_key_values=cache,
+        )
+        shapes["input_ids"] = {0: batch}
+        shapes["cache_position"] = {0: batch}
+        n = len(cache.key_cache)
+        shapes["past_key_values"] = [
+            [{0: batch, 2: cache_length} for _ in range(n)],
+            [{0: batch, 2: cache_length} for _ in range(n)],
+        ]
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())
+        shapes = tuple(shapes.values())
 
+    if common_dynamic_shapes:
+        return model, inputs, shapes
     return model, inputs
 
 
