@@ -4211,6 +4211,48 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
         self.assertEqualArray(expected[1], got[1], atol=1e-5)
 
+    def test_shape_eval(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["ids_weight"], ["shape"], start=0, end=2),
+                    oh.make_node("Concat", ["shape", "init328"], ["new_shape"], axis=0),
+                    oh.make_node("MatMul", ["ids_weight", "A"], ["A1"]),
+                    oh.make_node("MatMul", ["ids_weight", "B"], ["B1"]),
+                    oh.make_node("MatMul", ["ids_weight", "C"], ["C1"]),
+                    oh.make_node("Reshape", ["A1", "new_shape"], ["A41"]),
+                    oh.make_node("Reshape", ["B1", "new_shape"], ["B41"]),
+                    oh.make_node("Reshape", ["C1", "new_shape"], ["C41"]),
+                    oh.make_node("Transpose", ["A41"], ["At"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["B41"], ["Bt"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["C41"], ["Ct"], perm=[0, 2, 1, 3]),
+                ],
+                "dummy",
+                [_mkv_("ids_weight", TFLOAT, ["batch", "seq", 256])],
+                [
+                    _mkv_("At", TFLOAT, ["batch", 32, "seq", 8]),
+                    _mkv_("Bt", TFLOAT, ["batch", 32, "seq", 8]),
+                    _mkv_("Ct", TFLOAT, ["batch", 32, "seq", 8]),
+                ],
+                [
+                    onh.from_array(np.array([32, 8], dtype=np.int64), name="init328"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="A"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="B"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="C"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes=True,
+            verbose=0,
+        )
+        shapes = gr._known_shapes
+        self.assertEqual(shapes["A41"], ("batch", "seq", 32, 8))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
