@@ -114,7 +114,7 @@ def numpy_sin_to_onnx(x):
 ep = torch.onnx.export(
     model,
     (x,),
-    custom_translation_table={torch.ops.mylib.numpy_sin: numpy_sin_to_onnx},
+    custom_translation_table={torch.ops.mylib.numpy_sin.default: numpy_sin_to_onnx},
     dynamo=True,
 )
 print(to_text(ep.model_proto))

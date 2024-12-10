@@ -396,6 +396,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi35_vision_instruct_input_kind(self):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_vision_instruct,
@@ -460,6 +461,8 @@ class TestLlmModelHelper(ExtTestCase):
                             num_hidden_layers=1,
                             n_iteration=n_iter,
                             common_dynamic_shapes=ds,
+                            intermediate_size=5120,
+                            # hidden_size=1280,
                             batch_size=29,
                         )
                         model(**model_inputs)
@@ -475,6 +478,8 @@ class TestLlmModelHelper(ExtTestCase):
                     else:
                         model, model_inputs = get_phi2(
                             num_hidden_layers=1,
+                            intermediate_size=5120,
+                            # hidden_size=1280,
                             n_iteration=n_iter,
                             common_dynamic_shapes=ds,
                             batch_size=2,

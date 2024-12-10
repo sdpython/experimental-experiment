@@ -15,6 +15,7 @@ rm onnx_export*.md
 rm *.xlsx
 rm *.sarif
 rm *.svg
+rm .pymon
 rm nohup.out
 rm output_data_bash*
 rm dump_models -rf
