@@ -187,7 +187,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
                 return x + list_yz[0] + list_yz[1] + self.p
 
         x = torch.rand(4, 4)
-        list_yz = [torch.rand(4, 1), torch.rand(1, 4)]
+        list_yz = [torch.rand(4, 1), torch.rand(4, 1)]
         model = RawTest()
 
         batch = torch.export.Dim("batch", min=1, max=2048)
