@@ -119,11 +119,9 @@ def get_phi2(
 
         inputs = dict(
             input_ids=torch.randint(0, 50285, (batch_size, 1)).to(torch.int64),
-            cache_position=torch.tensor([30], dtype=torch.int64),
             past_key_values=cache,
         )
         shapes["input_ids"] = {}  # 0: batch}
-        shapes["cache_position"] = {}
         n = len(cache.key_cache)
         shapes["past_key_values"] = [
             [{2: cache_length} for _ in range(n)],  # 0: batch,
