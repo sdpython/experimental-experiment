@@ -110,6 +110,12 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         s = string_type(obj.data, with_shape=with_shape, with_min_max=with_min_max)
         return f"BatchEncoding(data={s})"
 
+    if obj.__class__.__name__ == "VirtualTensor":
+        return (
+            f"{obj.__class__.__name__}(name={obj.name!r}, "
+            f"dtype={obj.dtype}, shape={obj.shape})"
+        )
+
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 
 

@@ -236,6 +236,8 @@ class DynamoInterpreter:
         name = node.name
         if val and len(val) == 3:
             exp_dtype, exp_shape = val[1:]
+            if isinstance(exp_dtype, int):
+                exp_dtype = onnx_dtype_to_torch_dtype(exp_dtype)
             if self.builder.has_type(name):
                 itype = self.builder.get_type(name)
                 ttype = onnx_dtype_to_torch_dtype(itype)
@@ -438,8 +440,18 @@ class DynamoInterpreter:
         val = node.meta.get("val", None)
         _msg = lambda _=self: _.builder.get_debug_msg()  # noqa: E731
 
+        if self.builder.verbose > 2:
+            print(
+                f"[DynamoInterpreter-{self._hash()}.placeholder]"
+                f"[{node.name}] val={string_type(val)}"
+            )
         if val is None:
             example_value = node.meta.get("example_value", None)
+            if self.builder.verbose > 2:
+                print(
+                    f"[DynamoInterpreter-{self._hash()}.placeholder]"
+                    f"[{node.name}] example_value={string_type(val)}"
+                )
             # index_input may be wrong because torch.export.export may flatten the inputs.
             # gathering the default value may not be optimal here.
             if example_value is None and node.name in self.default_values:
@@ -595,6 +607,15 @@ class DynamoInterpreter:
                 node.name,
                 elem_type=TensorProto.INT64 if isinstance(val, int) else TensorProto.FLOAT,
                 shape=(1,),
+                is_dimension=False,
+                users=node.users,
+            )
+
+        if isinstance(val, VirtualTensor):
+            return self._make_tensor_input(
+                node.name,
+                elem_type=val.dtype,
+                shape=val.shape,
                 is_dimension=False,
                 users=node.users,
             )
@@ -1750,20 +1771,6 @@ class DynamoInterpreter:
     ):
         from .onnx_export import _make_builder_interpreter
 
-        if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
-            gm = sub_module
-        elif (
-            hasattr(sub_module, "graph")
-            and isinstance(sub_module, self.torch.nn.Module)
-            and sub_module.__class__.__name__ == "InterpreterModule"
-        ):
-            gm = sub_module
-        else:
-            # https://pytorch.org/docs/stable/fx.html
-            tracer_class = self.torch.fx.Tracer
-            graph = tracer_class().trace(sub_module)
-            gm = self.torch.fx.GraphModule(sub_module, graph)
-
         assert not kwargs, (
             f"This functionality is not implemented kwargs={string_type(kwargs)}"
             f"{self.get_debug_msg()}"
@@ -1794,6 +1801,34 @@ class DynamoInterpreter:
                     raise NotImplementedError(
                         f"Unable to process argument {type(a)}{self.get_debug_msg()}"
                     )
+
+        if hasattr(sub_module, "graph") and isinstance(sub_module, self.torch.fx.GraphModule):
+            gm = sub_module
+        elif (
+            hasattr(sub_module, "graph")
+            and isinstance(sub_module, self.torch.nn.Module)
+            and sub_module.__class__.__name__ == "InterpreterModule"
+        ):
+            gm = sub_module
+        else:
+            # https://pytorch.org/docs/stable/fx.html
+            tracer_class = self.torch.fx.Tracer
+            graph = tracer_class().trace(sub_module)
+            # Let's propulate with type
+            if new_args:
+                ii = 0
+                for node in graph.nodes:
+                    if node.op == "placeholder":
+                        if ii >= len(new_args) or "val" in node.meta:
+                            ii += 1
+                            continue
+                        ag = new_args[ii]
+                        if isinstance(ag, VirtualTensor):
+                            node.meta["val"] = ag
+                        else:
+                            node.meta["example_value"] = ag
+                        ii += 1
+            gm = self.torch.fx.GraphModule(sub_module, graph)
 
         graph_module, builder, interpreter, mask_outputs = _make_builder_interpreter(
             gm,

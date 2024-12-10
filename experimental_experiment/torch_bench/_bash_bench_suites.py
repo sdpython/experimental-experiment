@@ -39,10 +39,10 @@ class UntrainedRunner(BenchmarkRunner):
                 "FalconMamba7bLM": get_falcon_mamba_7b,
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
                 "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),
-                "Phi2LM_1Layer_it0": (
+                "Phi2LM_2Layer_it0": (
                     lambda: (
                         *get_phi2(
-                            num_hidden_layers=1,
+                            num_hidden_layers=2,
                             n_iteration=0,
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
@@ -50,10 +50,10 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "Phi2LM_1Layer_it1": (
+                "Phi2LM_2Layer_it1": (
                     lambda: (
                         *get_phi2(
-                            num_hidden_layers=1,
+                            num_hidden_layers=2,
                             n_iteration=1,
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,

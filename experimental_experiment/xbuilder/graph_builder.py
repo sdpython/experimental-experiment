@@ -5218,22 +5218,32 @@ class GraphBuilder(_GraphBuilderRuntime):
                 else:
                     rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]} -SIG- {k[2]}")
         else:
-            cc = Counter([self.get_type(i) for i in self.input_names])
+            cc = Counter(
+                [self.get_type(i) for i in self.input_names if not self.is_sequence(i)]
+            )
             for k, v in assert_sorted(cc.items()):
-                rows.append(f"     INPUT: {v:3d} x {k}t")
-            cc = Counter([self.get_type(i) for i in self.output_names])
+                rows.append(f"         INPUT: {v:3d} x {k}t")
+            cc = Counter([self.is_sequence(i) for i in self.input_names])
             for k, v in assert_sorted(cc.items()):
-                rows.append(f"    OUTPUT: {v:3d} x {k}t")
+                rows.append(f"     INPUT-SEQ: {v:3d} x {k}t")
+            cc = Counter(
+                [self.get_type(i) for i in self.output_names if not self.is_sequence(i)]
+            )
+            for k, v in assert_sorted(cc.items()):
+                rows.append(f"        OUTPUT: {v:3d} x {k}t")
+            cc = Counter([self.is_sequence(i) for i in self.output_names])
+            for k, v in assert_sorted(cc.items()):
+                rows.append(f"    OUTPUT-SEQ: {v:3d} x {k}t")
             cc = Counter([self.get_type(i) for i in self.initializers_dict])
             for k, v in assert_sorted(cc.items()):
-                rows.append(f"      INIT: {v:3d} x {k}t")
+                rows.append(f"          INIT: {v:3d} x {k}t")
             op_types = [(n.domain, n.op_type) for n in self.nodes]
             cc = Counter(op_types)
             for k, v in assert_sorted(cc.items()):
                 if k[0] == "":
-                    rows.append(f"      NODE: {v:3d} x {k[1]}")
+                    rows.append(f"          NODE: {v:3d} x {k[1]}")
                 else:
-                    rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]}")
+                    rows.append(f"          NODE: {v:3d} x {k[0]}.{k[1]}")
         return "\n".join(rows)
 
     def optimize_with_patterns(self) -> List[Dict[str, Any]]:
@@ -7563,10 +7573,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             info = dynamic_shapes[input_index] if input_index < len(dynamic_shapes) else None
         elif isinstance(dynamic_shapes, dict):
             info = dynamic_shapes.get(name, None)
+        elif dynamic_shapes is None:
+            info = None
         else:
             raise NotImplementedError(
-                f"Unexpected type for dynamic_shapes={string_type(dynamic_shapes)} "
-                f"({type(dynamic_shapes)}){self.get_debug_msg()}"
+                f"Unexpected type for dynamic_shapes={string_type(dynamic_shapes)}, "
+                f"self.dynamic_shapes={string_type(self.dynamic_shapes)}, "
+                f"example_value={string_type(example_value)}, name={name!r}, "
+                f"example_shape={example_shape}{self.get_debug_msg()}"
             )
 
         # We could return example_shape.shape (s0, ...) when info is (batch, ...)

@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.fx import Node
 from torch.fx.proxy import TracerBase
+from ..helpers import string_type
 
 _torch_cat = torch.cat
 
@@ -399,8 +400,17 @@ class CustomTracer(torch.fx.Tracer):
             the model needs to be
         :return: A ``Graph`` representing the semantics of the passed-in ``root``.
         """
+        assert concrete_args is None or isinstance(
+            concrete_args, dict
+        ), f"Unexpected type for concrete_args: {string_type(concrete_args)}"
         with replace_problematic_function_before_tracing():
-            graph = super().trace(root, concrete_args)
+            graph = super().trace(root)
+        if concrete_args:
+            for node in graph.nodes:
+                if node.op == "placeholder":
+                    if node.name in concrete_args:
+                        node.meta["example_value"] = concrete_args[node.name]
+
         self._replace_problematic_functions(graph)
         if update_model_with_callable and self._callables:
             for k, v in self._callables.items():

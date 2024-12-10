@@ -1,3 +1,4 @@
+import inspect
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -277,7 +278,13 @@ class ExportOptions:
         if self.tracing:
             from .tracing import CustomTracer
 
-            graph = CustomTracer().trace(mod)
+            concrete_args = kwargs.copy() if kwargs else {}
+            if args:
+                sig = inspect.signature(mod.forward)
+                for p, a in zip(sig.parameters, args):
+                    if a is not None and p not in concrete_args:
+                        concrete_args[p] = a
+            graph = CustomTracer().trace(mod, concrete_args=concrete_args)
             gm = torch.fx.GraphModule(mod, graph)
             return gm
 
