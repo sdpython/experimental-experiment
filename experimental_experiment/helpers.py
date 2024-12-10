@@ -90,7 +90,7 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, slice):
         return "slice"
     if type(obj).__name__ == "MambaCache":
-        return "MambaCache"
+        return "MambaCache(**)"
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):
         # torch.fx.node.Node
         return f"%{obj.target}"
@@ -105,6 +105,16 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if obj.__class__.__name__ == "BatchFeature":
         s = string_type(obj.data, with_shape=with_shape, with_min_max=with_min_max)
         return f"BatchFeature(data={s})"
+
+    if obj.__class__.__name__ == "BatchEncoding":
+        s = string_type(obj.data, with_shape=with_shape, with_min_max=with_min_max)
+        return f"BatchEncoding(data={s})"
+
+    if obj.__class__.__name__ == "VirtualTensor":
+        return (
+            f"{obj.__class__.__name__}(name={obj.name!r}, "
+            f"dtype={obj.dtype}, shape={obj.shape})"
+        )
 
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 

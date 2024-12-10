@@ -1,6 +1,6 @@
 import inspect
 import unittest
-from typing import Any, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import onnx
 import numpy as np
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
@@ -74,6 +74,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         target_opset: int = 18,
         others: Optional[Tuple[Any, ...]] = None,
         flatten_inputs: bool = False,
+        feeds: Optional[Dict[str, Any]] = None,
     ) -> str:
         if isinstance(exporter, tuple):
             for export in exporter:
@@ -92,6 +93,7 @@ class TestOnnxExportSignatures(ExtTestCase):
                         dynamic_shapes=dynamic_shapes,
                         flatten_inputs=flatten_inputs,
                         others=others,
+                        feeds=feeds,
                     )
             return
         import torch
@@ -137,9 +139,10 @@ class TestOnnxExportSignatures(ExtTestCase):
 
         # feeds
         tracing = "-tracing" in exporter
-        feeds = self._make_feeds(
-            names, inputs, tracing, exporter=exporter, flatten_inputs=flatten_inputs
-        )
+        if feeds is None:
+            feeds = self._make_feeds(
+                names, inputs, tracing, exporter=exporter, flatten_inputs=flatten_inputs
+            )
 
         from onnxruntime import InferenceSession
 
@@ -492,6 +495,117 @@ class TestOnnxExportSignatures(ExtTestCase):
             expected_signature=(("input_ids", 7, ("batch", "length")),),
             others=others,
         )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_simple_none(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def forward(self, x=None, y=None, z=None):
+                if y is None:
+                    return x * z
+                return x + y - z
+
+        inputs = (
+            (torch.arange(4 * 3) + 1).reshape((-1, 3)).to(torch.float32),
+            None,
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+        )
+        dyn = {}
+        sname = inspect.currentframe().f_code.co_name
+        sig_tracing = "NOCHECK"
+        self._check_exporter(
+            sname,
+            Neuron(),
+            inputs,
+            sig_tracing,
+            dynamic_shapes=dyn,
+            others=None,
+            feeds=dict(x=inputs[0].numpy(), z=inputs[2].numpy()),
+            exporter="custom-nostrict",
+        )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_list_none(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def forward(self, x=None, y=None, z=None, w=None):
+                return x * (z[0] + z[1]) + w
+
+        inputs = (
+            (torch.arange(4 * 3) + 1).reshape((-1, 3)).to(torch.float32),
+            None,
+            [
+                (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+                (torch.arange(4 * 3) + 5).reshape((-1, 3)).to(torch.float32),
+            ],
+            (torch.arange(4 * 3) + 0.5).reshape((-1, 3)).to(torch.float32),
+        )
+        dyn = {}
+        sname = inspect.currentframe().f_code.co_name
+        sig_tracing = "NOCHECK"
+        self._check_exporter(
+            sname,
+            Neuron(),
+            inputs,
+            sig_tracing,
+            dynamic_shapes=dyn,
+            others=None,
+            feeds=dict(
+                x=inputs[0].numpy(),
+                z_0=inputs[2][0].numpy(),
+                z_1=inputs[2][1].numpy(),
+                w=inputs[3].numpy(),
+            ),
+            exporter="custom-nostrict",
+        )
+
+    @skipif_ci_windows("not working on windows")
+    def test_signature_dc_none(self):
+        import torch
+        import transformers
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        class Neuron(torch.nn.Module):
+            def forward(self, x=None, y=None, z=None, w=None, ww=None):
+                return x * (z.key_cache[0] + z.value_cache[0]) + ww
+
+        cache = transformers.cache_utils.DynamicCache(1)
+        cache.update(
+            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+            (torch.arange(4 * 3) + 5).reshape((-1, 3)).to(torch.float32),
+            0,
+        )
+
+        inputs = (
+            (torch.arange(4 * 3) + 1).reshape((-1, 3)).to(torch.float32),
+            None,
+            cache,
+            None,
+            (torch.arange(4 * 3) + 0.5).reshape((-1, 3)).to(torch.float32),
+        )
+        dyn = {}
+        sname = inspect.currentframe().f_code.co_name
+        sig_tracing = "NOCHECK"
+        with bypass_export_some_errors():
+            self._check_exporter(
+                sname,
+                Neuron(),
+                inputs,
+                sig_tracing,
+                dynamic_shapes=dyn,
+                others=None,
+                feeds=dict(
+                    x=inputs[0].numpy(),
+                    z_key_cache_0=inputs[2].key_cache[0].numpy(),
+                    z_value_cache_0=inputs[2].value_cache[0].numpy(),
+                    ww=inputs[4].numpy(),
+                ),
+                exporter="custom-nostrict",
+            )
 
 
 if __name__ == "__main__":
