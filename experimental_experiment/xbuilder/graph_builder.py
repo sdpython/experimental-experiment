@@ -6386,11 +6386,52 @@ class GraphBuilder(_GraphBuilderRuntime):
         for val in new_proto.graph.value_info:
             self._update_shape_types_with_proto_one_result(val)
 
+        if infer_shapes:
+            self.infer_shapes()
+
         if self.verbose > 1:
             print(
                 f"[GraphBuilder._update_shape_types_with_proto] ends in "
                 f"{time.perf_counter() - begin_} seconds."
             )
+
+    def infer_shapes(self) -> Dict[str, Tuple[DYNAMIC_SHAPE, DYNAMIC_SHAPE]]:
+        """
+        Runs custom shape inference. Returns the updates.
+        """
+        if self.verbose > 1:
+            begin = time.perf_counter()
+            print("[GraphBuilder.infer_shapes]")
+        res = {}
+        for node in self.nodes:
+            old_shapes = [
+                (self.get_shape(o) if self.has_shape(o) else None) for o in node.output
+            ]
+            self._make_node_set_type_shape(node)
+            new_shapes = [
+                (self.get_shape(o) if self.has_shape(o) else None) for o in node.output
+            ]
+            diff = {}
+            for n, a, b in zip(node.output, old_shapes, new_shapes):
+                if a != b:
+                    diff[n] = (a, b)
+            if diff and self.verbose > 2:
+                print(
+                    f"[GraphBuilder.infer_shapes] update node {node.op_type!r}, "
+                    f"name {node.name!r}, updates={diff}"
+                )
+            elif self.verbose > 4:
+                print(
+                    f"[GraphBuilder.infer_shapes] update node {node.op_type!r}, "
+                    f"name {node.name!r}, shape={dict(zip(node.output, new_shapes))}"
+                )
+            res.update(diff)
+        if self.verbose > 1:
+            print(
+                f"[GraphBuilder.infer_shapes] done in "
+                f"{time.perf_counter() - begin} with {len(diff)} changes"
+            )
+        return res
 
     def _update_structures_with_proto(self, proto: ModelProto, bypass_shape: bool):
         """

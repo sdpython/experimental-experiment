@@ -4248,7 +4248,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes=True,
-            verbose=0,
+            verbose=5,
         )
         shapes = gr._known_shapes
         self.assertEqual(shapes["A41"], ("batch", "seq", 32, 8))
