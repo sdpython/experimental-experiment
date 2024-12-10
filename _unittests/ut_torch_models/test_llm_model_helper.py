@@ -12,6 +12,7 @@ from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_models import flatten_outputs
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.helpers import string_type
 
 
 class TestLlmModelHelper(ExtTestCase):
@@ -395,6 +396,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi35_vision_instruct_input_kind(self):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_vision_instruct,
@@ -440,6 +442,51 @@ class TestLlmModelHelper(ExtTestCase):
                 "image_sizes",
             ],
         )
+
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @skipif_ci_windows("not supported")
+    def test_get_phi2(self):
+        import torch
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+        from experimental_experiment.torch_models.llm_model_helper import get_phi2
+
+        for n_iter in [1, 0]:
+            for ds in [True, False]:
+                with self.subTest(n_iteration=n_iter, ds=ds):
+                    if ds:
+                        model, model_inputs, dyn_shapes = get_phi2(
+                            num_hidden_layers=1,
+                            n_iteration=n_iter,
+                            common_dynamic_shapes=ds,
+                            intermediate_size=5120,
+                            # hidden_size=1280,
+                            batch_size=29,
+                        )
+                        model(**model_inputs)
+                        with bypass_export_some_errors():
+                            torch.export.export(
+                                model,
+                                (),
+                                kwargs=model_inputs,
+                                dynamic_shapes=dyn_shapes,
+                                strict=False,
+                            )
+                        self.assertIn("dict(", string_type(model_inputs))
+                    else:
+                        model, model_inputs = get_phi2(
+                            num_hidden_layers=1,
+                            intermediate_size=5120,
+                            # hidden_size=1280,
+                            n_iteration=n_iter,
+                            common_dynamic_shapes=ds,
+                            batch_size=2,
+                        )
+                        model(**model_inputs)
+                        with bypass_export_some_errors():
+                            torch.export.export(model, (), model_inputs, strict=False)
 
 
 if __name__ == "__main__":

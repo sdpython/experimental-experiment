@@ -543,6 +543,8 @@ def max_diff(
         of this output
     """
     if hasattr(expected, "to_tuple"):
+        if verbose >= 6:
+            print(f"[max_diff] to_tuple1: {string_type(expected)} ? {string_type(got)}")
         return max_diff(
             expected.to_tuple(),
             got,
@@ -560,6 +562,8 @@ def max_diff(
         )
 
     if hasattr(got, "to_tuple"):
+        if verbose >= 6:
+            print(f"[max_diff] to_tuple2: {string_type(expected)} ? {string_type(got)}")
         return max_diff(
             expected,
             got.to_tuple(),
@@ -580,6 +584,8 @@ def max_diff(
 
     if isinstance(expected, torch.Tensor):
         if isinstance(got, torch.Tensor):
+            if verbose >= 6:
+                print(f"[max_diff] tensor: {string_type(expected)} ? {string_type(got)}")
             if _index < begin or (end != -1 and _index >= end):
                 # out of boundary
                 return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
@@ -651,6 +657,11 @@ def max_diff(
 
         if isinstance(got, (list, tuple)):
             if len(got) != 1:
+                if verbose >= 6:
+                    print(
+                        f"[max_diff] list,tuple,2: {string_type(expected)} "
+                        f"? {string_type(got)}"
+                    )
                 if verbose > 2:
                     print(
                         f"[max_diff] (a) inf because len(expected)={len(expected)}!=1, "
@@ -668,6 +679,8 @@ def max_diff(
                                 f"b is {type(b)}, _index={_index}"
                             )
                 return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            if verbose >= 6:
+                print(f"[max_diff] list,tuple,1: {string_type(expected)} ? {string_type(got)}")
             return max_diff(
                 expected,
                 got[0],
@@ -681,7 +694,11 @@ def max_diff(
             )
 
     if isinstance(expected, (tuple, list)):
-        if len(expected) == 1:
+        if verbose >= 6:
+            print(f"[max_diff] list,tuple,0: {string_type(expected)} ? {string_type(got)}")
+        if len(expected) == 1 and not isinstance(got, type(expected)):
+            if verbose >= 6:
+                print(f"[max_diff] list,tuple,3: {string_type(expected)} ? {string_type(got)}")
             return max_diff(
                 expected[0],
                 got,
@@ -694,6 +711,8 @@ def max_diff(
                 flatten=flatten,
             )
         if not isinstance(got, (tuple, list)):
+            if verbose >= 6:
+                print(f"[max_diff] list,tuple,4: {string_type(expected)} ? {string_type(got)}")
             if verbose > 2:
                 print(
                     f"[max_diff] inf because type(expected)={type(expected)}, "
@@ -702,6 +721,11 @@ def max_diff(
             return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
         if len(got) != len(expected):
             if flatten:
+                if verbose >= 6:
+                    print(
+                        f"[max_diff] list,tuple,5: {string_type(expected)} "
+                        f"? {string_type(got)}"
+                    )
                 # Let's flatten.
                 if verbose > 2:
                     print(
@@ -744,6 +768,9 @@ def max_diff(
                     else:
                         print(f"    i={i} a is {type(a)}, b is {type(b)}")
             return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+
+        if verbose >= 6:
+            print(f"[max_diff] list,tuple,6: {string_type(expected)} ? {string_type(got)}")
         am, rm, sm, n = 0, 0, 0.0, 0.0
         for ip, (e, g) in enumerate(zip(expected, got)):
             d = max_diff(
@@ -771,6 +798,8 @@ def max_diff(
         return dict(abs=am, rel=rm, sum=sm, n=n)
 
     if isinstance(expected, dict):
+        if verbose >= 6:
+            print(f"[max_diff] dict: {string_type(expected)} ? {string_type(got)}")
         assert (
             begin == 0 and end == -1
         ), f"begin={begin}, end={end} not compatible with dictionaries"
@@ -789,6 +818,7 @@ def max_diff(
                 begin=begin,
                 end=end,
                 _index=_index,
+                verbose=verbose,
             )
 
         if not isinstance(got, (tuple, list)):
@@ -804,9 +834,12 @@ def max_diff(
             begin=begin,
             end=end,
             _index=_index,
+            verbose=verbose,
         )
 
     if "SquashedNormal" in expected.__class__.__name__:
+        if verbose >= 6:
+            print(f"[max_diff] SquashedNormal: {string_type(expected)} ? {string_type(got)}")
         values = (
             expected.mean.detach().to("cpu"),
             expected.scale.detach().to("cpu"),
@@ -823,6 +856,8 @@ def max_diff(
         )
 
     if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):
+        if verbose >= 6:
+            print(f"[max_diff] MambaCache: {string_type(expected)} ? {string_type(got)}")
         if got.__class__.__name__ != expected.__class__.__name__:
             # This case happens with onnx where the outputs are flattened.
             return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
@@ -841,18 +876,27 @@ def max_diff(
             begin=begin,
             end=end,
             _index=_index,
+            verbose=verbose,
         )
 
     if isinstance(expected, np.ndarray):
-        return max_diff(torch.from_numpy(expected), got)
+        if verbose >= 6:
+            print(f"[max_diff] array1: {string_type(expected)} ? {string_type(got)}")
+        return max_diff(torch.from_numpy(expected), got, verbose=verbose)
 
     if isinstance(got, np.ndarray):
-        return max_diff(expected, torch.from_numpy(got))
+        if verbose >= 6:
+            print(f"[max_diff] array2: {string_type(expected)} ? {string_type(got)}")
+        return max_diff(expected, torch.from_numpy(got), verbose=verbose)
 
     if expected.__class__.__name__ == "DynamicCache":
         if got.__class__.__name__ == "DynamicCache":
+            if verbose >= 6:
+                print(f"[max_diff] DynamicCache: {string_type(expected)} ? {string_type(got)}")
             return max_diff(
-                [expected.key_cache, expected.value_cache], [got.key_cache, got.value_cache]
+                [expected.key_cache, expected.value_cache],
+                [got.key_cache, got.value_cache],
+                verbose=verbose,
             )
         raise AssertionError(
             f"DynamicCache not fully implemented with type(expected)={type(expected)}, "

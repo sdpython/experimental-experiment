@@ -264,6 +264,10 @@ class ParameterNaming:
     The exported program and the original model may have different parameter names.
     """
 
+    @classmethod
+    def _local_rendering(cls, diff):
+        return "\n".join([", ".join(map(str, _)) for _ in diff])
+
     def __init__(
         self,
         mod: "torch.nn.Module",  # noqa: F821
@@ -283,7 +287,7 @@ class ParameterNaming:
             if mod_names != exp_names:
                 mod_ptr = set(m.data_ptr() for m in mod_names.values())
                 exp_ptr = set(m.data_ptr() for m in exp_names.values())
-                if mod_ptr != exp_ptr:
+                if mod_ptr != exp_ptr and None in exp_ptr:
                     # If names and pointers are different, it is more difficult
                     # to map parameters after exporting the model.
                     union = mod_names | exp_names
@@ -304,7 +308,7 @@ class ParameterNaming:
                         )
                     assert all(_[1] == 1 for _ in diff), (
                         f"ExportedProgram and module do not have the same parameters\n"
-                        f"{pprint.pformat(diff)}\n----\n{exported_program.graph}"
+                        f"{self._local_rendering(diff)}\n----\n{exported_program.graph}"
                     )
                     use_mod = exported_program
                 else:
@@ -650,6 +654,7 @@ def _make_builder_interpreter(
         submodule_naming=submodule_naming,
         parameter_naming=parameter_naming,
         module_name=module_name,
+        default_values=_default_values_from_sig(mod),
     )
     attr = getattr(export_options, "_last_working", None)
     if attr:
@@ -664,6 +669,15 @@ def _model_signature(
     import torch
 
     return inspect.signature(model.forward if isinstance(model, torch.nn.Module) else model)
+
+
+def _default_values_from_sig(mod: "torch.nn.Module") -> Dict[str, Any]:  # noqa: F821
+    sig = _model_signature(mod)
+    res = {}
+    for name, p in sig.parameters.items():
+        if p.default not in (None, inspect.Parameter.empty):
+            res[name] = p.default
+    return res
 
 
 def _replacements_dynamic_shapes(

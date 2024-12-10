@@ -1,3 +1,4 @@
+import inspect
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -277,7 +278,13 @@ class ExportOptions:
         if self.tracing:
             from .tracing import CustomTracer
 
-            graph = CustomTracer().trace(mod)
+            concrete_args = kwargs.copy() if kwargs else {}
+            if args:
+                sig = inspect.signature(mod.forward)
+                for p, a in zip(sig.parameters, args):
+                    if a is not None and p not in concrete_args:
+                        concrete_args[p] = a
+            graph = CustomTracer().trace(mod, concrete_args=concrete_args)
             gm = torch.fx.GraphModule(mod, graph)
             return gm
 
@@ -386,7 +393,9 @@ class ExportOptions:
                         f"[ExportOptions.export] slices: {removed} slices nodes were removed"
                     )
                 exported_program.graph.lint()
-            modified = CustomTracer.remove_inplace(exported_program.graph)
+            modified = CustomTracer.remove_inplace(
+                exported_program.graph, exported_program=exported_program
+            )
             if modified:
                 if verbose:
                     print(

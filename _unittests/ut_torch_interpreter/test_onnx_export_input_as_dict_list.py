@@ -179,11 +179,15 @@ class TestOnnxExportInputDictList(ExtTestCase):
         import torch
 
         class RawTest(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.p = torch.nn.Parameter(torch.tensor([2], dtype=torch.float32))
+
             def forward(self, x, list_yz):
-                return x + list_yz[0] + list_yz[1]
+                return x + list_yz[0] + list_yz[1] + self.p
 
         x = torch.rand(4, 4)
-        list_yz = [torch.rand(4, 1), torch.rand(1, 4)]
+        list_yz = [torch.rand(4, 1), torch.rand(4, 1)]
         model = RawTest()
 
         batch = torch.export.Dim("batch", min=1, max=2048)
@@ -192,6 +196,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
             (x, list_yz),
             dynamic_shapes=({0: batch}, [{0: batch}]),
             export_options=ExportOptions(tracing=True),
+            verbose=0,
         )
         import onnx
 

@@ -545,6 +545,11 @@ class BenchmarkRunner:
           of this output
         """
         if flatten:
+            if verbose >= 4:
+                print(
+                    f"[BenchmarkRunner.max_diff] compare after flattened "
+                    f"{string_type(expected)} and {string_type(got)}"
+                )
             return cls.max_diff(
                 cls._flatten(expected),
                 cls._flatten(got),
@@ -557,6 +562,11 @@ class BenchmarkRunner:
                 _index=_index,
             )
 
+        if verbose >= 4:
+            print(
+                f"[BenchmarkRunner.max_diff] compare {string_type(expected)}"
+                f" and {string_type(got)}"
+            )
         return max_diff(
             expected=expected,
             got=got,
@@ -1154,7 +1164,9 @@ class BenchmarkRunner:
                 return stats, context
 
         else:
-            feeds = model_runner.make_feeds(exporter, filename)
+            feeds = model_runner.make_feeds(
+                exporter, filename, remove_int=exporter in {"onnx_dynamo"}
+            )
             feeds_dynamic = (
                 model_runner.make_feeds(exporter, filename, dynamic=True) if dynamic else None
             )

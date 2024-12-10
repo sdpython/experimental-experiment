@@ -2158,18 +2158,31 @@ def aten_embedding(
                 f"indices: {g.get_shape(indices) if g.has_shape(indices) else '?'}"
                 f"{g.get_debug_msg()}"
             )
-    if g.get_type(weight) == 7:
+    if (g.has_type(weight) and g.get_type(weight) == TensorProto.INT64) or (
+        g.has_type(indices)
+        and g.get_type(indices) not in (TensorProto.UNDEFINED, TensorProto.INT64)
+    ):
         # Sometimes it is switched
         indices, weight = weight, indices
-        assert g.get_type(indices) == 7, (
-            f"indices ({indices!r}) must be integer not {g.get_type(indices)}, "
-            f"weight ({weight!r}) is {g.get_type(weight)} (switched)"
+        assert (g.has_type(indices) and g.get_type(indices) == TensorProto.INT64) or (
+            g.has_type(weight)
+            and g.get_type(weight) not in (TensorProto.INT64, TensorProto.UNDEFINED)
+        ), (
+            f"indices ({indices!r}) must be integer not "
+            f"{g.get_type(indices) if g.has_type(indices) else '-'}, "
+            f"weight ({weight!r}) is "
+            f"{g.get_type(weight) if g.has_type(weight) else '-'} (switched)"
             f"{g.get_debug_msg()}"
         )
     else:
-        assert g.get_type(indices) == 7, (
-            f"indices ({indices!r}) must be integer not {g.get_type(indices)}, "
-            f"weight ({weight!r}) is {g.get_type(weight)}"
+        assert (g.has_type(indices) and g.get_type(indices) == TensorProto.INT64) or (
+            g.has_type(weight)
+            and g.get_type(weight) not in (TensorProto.INT64, TensorProto.UNDEFINED)
+        ), (
+            f"indices ({indices!r}) must be integer not "
+            f"{g.get_type(indices) if g.has_type(indices) else 0}, "
+            f"weight ({weight!r}) is "
+            f"{g.get_type(weight) if g.has_type(weight) else 0}"
             f"{g.get_debug_msg()}"
         )
 
@@ -4488,7 +4501,10 @@ def aten_linear(
     else:
         res = g.op.MatMul(x, weight_transposed, outputs=outputs, name="linear")
     if not sts:
-        g.set_type(res, g.get_type(x))
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        elif g.has_type(weight):
+            g.set_type(res, g.get_type(weight))
         if g.has_shape(x) and g.has_shape(weight):
             shape_x = g.get_shape(x)
             shape_w = g.get_shape(weight)
