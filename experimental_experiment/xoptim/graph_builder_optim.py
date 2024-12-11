@@ -1,7 +1,7 @@
 import os
 import pprint
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import AttributeProto, NodeProto, TensorProto
 from onnx.shape_inference import infer_shapes
@@ -168,6 +168,12 @@ class GraphBuilderPatternOptimization:
 
     def get_position(self, node: NodeProto) -> int:
         return self.positions_[id(node)]
+
+    def get_registered_constraints(self) -> Dict[str, Set[Union[str, int]]]:
+        """
+        Returns the constraints registered so far.
+        """
+        return self.builder.get_registered_constraints()
 
     def is_used_by_subgraph(self, name: str) -> bool:
         """

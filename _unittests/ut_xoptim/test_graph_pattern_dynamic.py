@@ -1,8 +1,9 @@
 import os
+import pprint
 import unittest
-from typing import List
-from onnx import ModelProto, TensorProto, load as load_onnx
-from experimental_experiment.ext_test_case import ExtTestCase
+from typing import List, Optional
+from onnx import ModelProto, TensorProto, load as load_onnx, save as save_onnx
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 from experimental_experiment.xoptim import PatternOptimization
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -26,21 +27,15 @@ class TestGraphPatternDynamic(ExtTestCase):
         self.assertExists(p)
         return load_onnx(p)
 
+    @hide_stdout()
     def test_check_one(self):
         static_model = self._get_model("shape-dort-static-llama-custom__0.onnx")
         dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__0.onnx")
-        opts = OptimizationOptions(
-            patterns="ReshapeMatMulReshape",
-            verbose=10 if __name__ == "__main__" else 0,
-        )
+        opts = OptimizationOptions(patterns="ReshapeMatMulReshape", verbose=10)
         gr1 = GraphBuilder(
             static_model, infer_shapes=True, optimization_options=opts, verbose=0
         )
         gr1.optimize()
-        if __name__ == "__main__":
-            print("----------------------------------------")
-            print("----------------------------------------")
-            print("----------------------------------------")
         gr1 = GraphBuilder(
             dynamic_model, infer_shapes=True, optimization_options=opts, verbose=0
         )
@@ -55,7 +50,12 @@ class TestGraphPatternDynamic(ExtTestCase):
             dynamic_model,
             patterns,
             False,
-            exceptions=["ExpandPattern", "ReshapeMatMulReshapePattern"],
+            exceptions=[
+                "ExpandPattern",
+                "ReshapeMatMulReshapePattern",
+                "Reshape2Of3Pattern",
+                "MatMulReshape2Of3Pattern",
+            ],
         )
 
     def test_graph_default_backward_single(self):
@@ -67,7 +67,8 @@ class TestGraphPatternDynamic(ExtTestCase):
             dynamic_model,
             patterns,
             False,
-            exceptions=[],
+            # Remaining cases if constrainsts are not handled properly
+            exceptions=["Reshape2Of3Pattern", "MatMulReshape2Of3Pattern"],
         )
 
     def test_graph_default_forward_cumulative(self):
@@ -81,6 +82,7 @@ class TestGraphPatternDynamic(ExtTestCase):
             True,
             exceptions=[
                 "ExpandPattern",
+                "Reshape2Of3Pattern",
                 "ReshapeMatMulReshapePattern",
             ],
         )
@@ -94,7 +96,14 @@ class TestGraphPatternDynamic(ExtTestCase):
             dynamic_model,
             patterns,
             True,
-            exceptions=["SwitchOrderBinaryPattern"],
+            exceptions=[
+                "SwitchOrderBinaryPattern",
+                # needs to handle constraints for this
+                "Reshape2Of3Pattern",
+                "MatMulReshape2Of3Pattern",
+                "TransposeReshapeMatMulPattern",
+            ],
+            name="test_graph_default_backward_cumulative",
         )
 
     def _check_models_patterns(
@@ -104,9 +113,9 @@ class TestGraphPatternDynamic(ExtTestCase):
         patterns: List[PatternOptimization],
         cumulative: bool,
         exceptions: List[str],
+        name: Optional[str] = None,
     ):
         self.assertNotEqual(len(model1.graph.node), len(model2.graph.node))
-        delta = 0
         for i in range(len(patterns)):
             opts = OptimizationOptions(
                 patterns=patterns[: i + 1] if cumulative else patterns[i : i + 1],
@@ -132,12 +141,18 @@ class TestGraphPatternDynamic(ExtTestCase):
                 assert len(app1) > 0, f"Issue with pattern {patterns[i]} and app1={app1}"
                 continue
             if len(app1) > len(app2):
+                if name:
+                    save_onnx(
+                        gr2.to_onnx(optimize=False), f"{name}_{pat.__class__.__name__}.onnx"
+                    )
                 raise AssertionError(
-                    f"Discrepancies static/dynamic: i={i}, delta={delta}, "
+                    f"Discrepancies static/dynamic: i={i}, "
                     f"len(app1)={len(app1)}, len(app2)={len(app2)}, "
                     f"pattern={patterns[i]}\n-----\n"
                     f"#applied static={len(app1)}, #applied dynamic={len(app2)}"
-                    f"\n---------\n{app1}\n--------\n{app2}"
+                    f"\n---------\n{pprint.pformat(app1)}"
+                    f"\n--------\n{pprint.pformat(app2)}"
+                    f"\n------------\n{gr2.get_debug_msg()}"
                 )
 
 

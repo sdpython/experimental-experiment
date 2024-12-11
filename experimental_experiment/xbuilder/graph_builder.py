@@ -1717,6 +1717,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             tuple()
         }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
         if equal_to is None:
+            if name in self._known_value_shape:
+                existing = self._known_value_shape[name]
+                if (
+                    isinstance(existing, tuple)
+                    and isinstance(value, tuple)
+                    and len(existing) == len(value) == 1
+                    and isinstance(existing[0], str)
+                ):
+                    self.register_constraint_dimension("existing", value)
+                    return
             assert (
                 name not in self._known_value_shape or self._known_value_shape[name] == value
             ), (
@@ -1900,6 +1910,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{type(value)} for value{self.get_debug_msg()}"
             )
             # torch.compile adds input for dynamic shapes
+            if not self.value_as_shape(name):
+                # Let's mark  this input as a shape
+                self.set_value_shape(name, name)
             return self.make_tensor_input(
                 self._known_value_shape[name],
                 (
@@ -6423,18 +6436,68 @@ class GraphBuilder(_GraphBuilderRuntime):
                 # This cannot be a shape anymore.
                 node.doc_string += "#SV-Unsq/2"
                 return False
+            if isinstance(values[0], int) and values[1] == (0,):
+                node.doc_string += "#SV-Unsq/3"
+                self.set_value_shape(node.output[0], (values[0],))
+                return True
+
+        if node.op_type == "Mul":
+            if (
+                isinstance(values[0], tuple)
+                and len(values[0]) == 1
+                and isinstance(values[1], tuple)
+                and len(values[1]) == 1
+            ):
+                m1 = values[0][0]
+                m2 = values[1][0]
+                if isinstance(m1, int) and isinstance(m2, int):
+                    node.doc_string += "#SV-Mul/1"
+                    self.set_value_shape(node.output[0], (m1 * m2,))
+                    return True
+                node.doc_string += "#SV-Mul/1"
+                self.set_value_shape(node.output[0], (f"{m1}*{m2}",))
+                return True
 
         if node.op_type == "Add":
             if isinstance(values[0], tuple) and len(values[0]) > 16:
                 # It should not be a shape.
                 node.doc_string += "#SV-Add/1"
                 return False
+            if isinstance(values[1], tuple) and len(values[1]) == 1:
+                d = values[1][0]
+                if isinstance(values[0], int) and isinstance(d, int):
+                    node.doc_string += "#SV-Add/2"
+                    self.set_value_shape(node.output[0], (values[0] + d,))
+                    return True
+                node.doc_string += "#SV-Add/3"
+                self.set_value_shape(node.output[0], (f"{values[0]}+{d}",))
+                return True
 
         if node.op_type == "Sub":
             if isinstance(values[0], tuple) and len(values[0]) > 16:
                 # It should not be a shape.
-                node.doc_string += "#SV-Add/1"
+                node.doc_string += "#SV-Sub/1"
                 return False
+            if isinstance(values[1], tuple) and len(values[1]) == 1:
+                d = values[1][0]
+                if isinstance(values[0], int) and isinstance(d, int):
+                    node.doc_string += "#SV-Sub/2"
+                    self.set_value_shape(node.output[0], (values[0] - d,))
+                    return True
+                node.doc_string += "#SV-Sub/3"
+                self.set_value_shape(node.output[0], (f"{values[0]}-{d}",))
+                return True
+
+        if node.op_type == "Gather":
+            if isinstance(values[1], tuple) and all_int(values[1]):
+                shape = (values[0],) if not isinstance(values[0], tuple) else values[0]
+                node.doc_string += "#SV-Ga/10"
+                assert max(values[1]) < len(shape), (
+                    f"Unable to compute new value shape when values={values}"
+                    f"{self.get_debug_msg()}"
+                )
+                self.set_value_shape(node.output[0], tuple(shape[i] for i in values[1]))
+                return True
 
         raise RuntimeError(
             f"Unable to compute a shape for node {self.pretty_node(node)} "
@@ -7179,6 +7242,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         if dim_name not in self.constraints_:
             self.constraints_[dim_name] = set()
         self.constraints_[dim_name].add(value)
+
+    def get_registered_constraints(self) -> Dict[str, Set[Union[str, int]]]:
+        """
+        Returns the constraints registered so far.
+        """
+        return self.constraints_
 
     def _to_torch_tensor(self, a: Any) -> "torch.Tensor":  # noqa: F821
         """
