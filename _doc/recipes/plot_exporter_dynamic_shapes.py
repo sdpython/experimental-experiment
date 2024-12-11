@@ -39,7 +39,7 @@ dy = torch.export.Dim("dy")
 try:
     dz = dx + dy
 except Exception as e:
-    print(e)
+    print(f"unable to add dimension because {e}")
 
 ##########################################
 # Then we could make it a different one.
@@ -72,3 +72,18 @@ ep = torch.export.export(
 )
 
 print(ep)
+
+#####################################
+# Still no luck but with ``torch.export.Dim.AUTO``.
+
+print(
+    torch.export.export(
+        model,
+        (x, y, z),
+        dynamic_shapes=(
+            {0: batch, 1: torch.export.Dim.STATIC},
+            {0: batch, 1: torch.export.Dim.AUTO},
+            {0: batch, 1: torch.export.Dim.AUTO},
+        ),
+    )
+)

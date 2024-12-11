@@ -6250,7 +6250,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     node.output[0], value, equal_to=(node.input[0], node.output[0])
                 )
                 return True
-            node.doc_string += "#SV-Id2"
+            node.doc_string += "#SV-Id/2"
             return False
 
         if node.op_type == "Squeeze":
@@ -6258,6 +6258,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.doc_string += "#SV-Sq1"
                 y = self.value_as_shape(node.input[0])
                 if y is None:
+                    node.doc_string += "#SV-Sq/3"
                     return False
                 i = self.get_constant_or_attribute(node, 1, "axes")
                 if isinstance(i, int):
@@ -6287,7 +6288,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
                 self.set_value_shape(node.output[0], y[0])
                 return True
-            node.doc_string += "#SV-Sq2"
+            node.doc_string += "#SV-Sq/2"
             return False
 
         if node.op_type == "Shape":
@@ -6340,7 +6341,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
             if end is None:
                 self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
-                node.doc_string += "#SV-Sh6"
+                node.doc_string += "#SV-Sh/6"
                 return False
 
             self.set_value_shape(
@@ -6355,7 +6356,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.doc_string += "#SV-Ga1"
                 y = self.value_as_shape(node.input[0])
                 if y is None:
-                    node.doc_string += "#SV-Ga2"
+                    node.doc_string += "#SV-Ga/2"
                     return False
                 i = self.get_constant(node.input[1], computed_value=True)
                 if isinstance(y, str) and isinstance(i, int):
@@ -6394,7 +6395,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"Not implemented when node Gather with inputs={node.input}, "
                     f"y={y!r}, i={i!r}{self.get_debug_msg()}"
                 )
-            node.doc_string += "#SV-Ga7"
+            node.doc_string += "#SV-Ga/7"
             return False
 
         values = [self.value_as_shape(x) for x in node.input]
@@ -6436,7 +6437,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 # This cannot be a shape anymore.
                 node.doc_string += "#SV-Unsq/2"
                 return False
-            if isinstance(values[0], int) and values[1] == (0,):
+            if isinstance(values[0], (int, str)) and values[1] == (0,):
                 node.doc_string += "#SV-Unsq/3"
                 self.set_value_shape(node.output[0], (values[0],))
                 return True
@@ -6497,6 +6498,24 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"{self.get_debug_msg()}"
                 )
                 self.set_value_shape(node.output[0], tuple(shape[i] for i in values[1]))
+                return True
+
+        if node.op_type == "Slice":
+            if len(values) >= 3 and values[1] == (0,) and values[2] == (9223372036854775807,):
+                node.doc_string += "#SV-Sl/1"
+                self.set_value_shape(node.output[0], values[0])
+                return True
+            if len(values) < 4 or values[3] != (0,):
+                # Not a shape.
+                node.doc_string += "#SV-Sl/2"
+                return False
+            if len(values) == 4 and all_int(values[1]) and all_int(values[2]):
+                assert len(values[1]) == len(values[2]) == 1, (
+                    f"Unexpected values {values} to compute a shape from node "
+                    f"{self.pretty_node(node)}{self.get_debug_msg()}"
+                )
+                node.doc_string += "#SV-Sl/1"
+                self.set_value_shape(node.output[0], values[0][values[1][0] : values[2][0]])
                 return True
 
         raise RuntimeError(
