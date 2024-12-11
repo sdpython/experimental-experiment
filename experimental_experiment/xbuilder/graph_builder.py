@@ -1510,7 +1510,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         #     or not shape_int
         #    or min(shape_int) > 0
         # ), f"Zero value in shape {shape} for {name!r}{self.get_debug_msg()}"
-
         if name in self._known_shapes:
             old_shape = self._known_shapes[name]
             if len(shape) == len(old_shape) and set_if_more_precise:
@@ -1536,6 +1535,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return
             else:
                 return
+
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_shape] {name}:{shape}")
         for s in shape:
@@ -1727,7 +1727,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
             if self.verbose > 2:
-                print(f"[GraphBuilder-{self._hash()}.set_value_shape] {name}[{value}]")
+                print(f"[GraphBuilder-{self._hash()}.set_value_shape] {name}:{value}")
             self._known_value_shape[name] = value
             return
 
@@ -1867,8 +1867,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         ):
             # Then an input is a shape.
             self.add_dynamic_object(str(value), value)
-        if name not in self._known_value_shape:
-            self._known_value_shape[name] = name
+
+        # Do we need this?
+        # if name not in self._known_value_shape:
+        #    self._known_value_shape[name] = name
 
         key = None
         if isinstance(value, (self.torch.SymInt, self.torch.SymFloat)):
@@ -1909,7 +1911,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 is_dimension=True,
                 marker="make_dynamic_object",
             )
-        return self._known_value_shape[name]
+        return self._known_value_shape.get(name, name)
 
     def get_dimension_as_result(self, name: str) -> str:
         if self.has_name(name):
@@ -2356,203 +2358,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 ), f"Not Implemented when att.type={att.type}{self.get_debug_msg()}"
                 return np.array(list(att.ints), dtype=np.int64)
         return None
-
-    def simple_update_value_shape_with_node(self, node) -> bool:
-        if node.domain != "":
-            return False
-        if node.op_type not in {
-            "Abs",
-            "Add",
-            "Concat",
-            "Div",
-            "Gather",
-            "Greater",
-            "GreaterOrEqual",
-            "Equal",
-            "Identity",
-            "Less",
-            "LessOrEqual",
-            "Mod",
-            "Mul",
-            "Not",
-            "Range",
-            "Scatter",
-            "Shape",
-            "Slice",
-            "Squeeze",
-            "Sub",
-            "Unsqueeze",
-        }:
-            return False
-
-        if node.op_type == "Identity":
-            value = self.value_as_shape(node.input[0])
-            if value is not None:
-                node.doc_string += "#II1"
-                self.set_value_shape(
-                    node.output[0], value, equal_to=(node.input[0], node.output[0])
-                )
-                return True
-            node.doc_string += "#II2"
-            return False
-
-        if node.op_type == "Squeeze":
-            if self.is_constant_or_attribute(node, 1, "axes"):
-                node.doc_string += "#ISq1"
-                y = self.value_as_shape(node.input[0])
-                if y is None:
-                    return False
-                i = self.get_constant_or_attribute(node, 1, "axes")
-                if isinstance(i, int):
-                    ii = i
-                elif (
-                    isinstance(i, np.ndarray)
-                    and i.dtype == np.int64
-                    and i.shape in ((1,), tuple())
-                ):
-                    ii = int(i[0]) if i.shape == (1,) else int(i)
-                else:
-                    raise RuntimeError(
-                        f"Not implemented when node Squeeze with inputs={node.input}, "
-                        f"y={y!r}, i={i!r}{self.get_debug_msg()}"
-                    )
-                assert (
-                    ii == 0
-                ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
-                if isinstance(y, str):
-                    self.set_value_shape(node.output[0], f"squeeze({y})")
-                    return True
-                if isinstance(y, int):
-                    self.set_value_shape(node.output[0], y)
-                    return True
-                assert isinstance(
-                    y, tuple
-                ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
-                self.set_value_shape(node.output[0], y[0])
-                return True
-            node.doc_string += "#ISq2"
-            return False
-
-        if node.op_type == "Shape":
-            if len(node.attribute) == 0:
-                node.doc_string += "#IS1"
-                if self.has_shape(node.input[0]):
-                    shape = self.get_shape(node.input[0])
-                    self.set_value_shape(node.output[0], shape)
-                    if all_int(shape):
-                        self.update_node_constant(node.output[0], node)
-                    self.set_shape(node.output[0], (len(shape),))
-                else:
-                    self.set_value_shape(node.output[0], node.output[0])
-                return True
-
-            node.doc_string += "#IS2"
-            start = self.get_attribute(node, "start", exc=False) or 0
-            end = self.get_attribute(node, "end", exc=False)
-            if end is None:
-                if self.has_rank(node.input[0]):
-                    end = self.get_rank(node.input[0])
-            if self.has_shape(node.input[0]):
-                node.doc_string += "#IS3"
-                shape = self.get_shape(node.input[0])
-                assert start.i < len(shape), (
-                    f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
-                    f"is {shape}{self.get_debug_msg()}"
-                )
-                if end is None:
-                    n_shape = shape[start.i :]
-                    self.set_value_shape(node.output[0], n_shape)
-                    if all_int(shape):
-                        self.update_node_constant(node.output[0], node)
-                    self.set_shape(node.output[0], (len(n_shape),))
-                    node.doc_string += "#IS4"
-                    return True
-                assert getattr(end, "i", end) <= len(shape), (
-                    f"Shape mismatch, end={getattr(end, 'i', end)}, "
-                    f"shape of {node.input[0]!r} "
-                    f"is {shape}{self.get_debug_msg()}"
-                )
-                n_shape = shape[start.i : getattr(end, "i", end)]
-                if all_int(shape):
-                    node.doc_string += "#IS5"
-                    self.update_node_constant(node.output[0], node)
-                self.set_value_shape(node.output[0], n_shape)
-                self.set_shape(node.output[0], (len(n_shape),))
-                node.doc_string += "#IS6"
-                return True
-
-            if end is None:
-                self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
-                node.doc_string += "#IS6"
-                return False
-
-            self.set_value_shape(
-                node.output[0],
-                f"{node.input[0]}[{start.i}:{getattr(end, 'i', end)}]",
-            )
-            node.doc_string += "#IS7"
-            return True
-
-        if node.op_type == "Gather":
-            if self.is_constant(node.input[1]):
-                node.doc_string += "#IG1"
-                y = self.value_as_shape(node.input[0])
-                if y is None:
-                    node.doc_string += "#IG2"
-                    return False
-                i = self.get_constant(node.input[1], computed_value=True)
-                if isinstance(y, str) and isinstance(i, int):
-                    self.set_value_shape(node.output[0], f"{y}[{i}]")
-                    node.doc_string += "#IG3"
-                    return True
-                if (
-                    isinstance(y, str)
-                    and isinstance(i, np.ndarray)
-                    and i.dtype == np.int64
-                    and i.shape in ((1,), tuple())
-                ):
-                    ii = int(i[0]) if i.shape == (1,) else int(i)
-                    self.set_value_shape(node.output[0], f"{y}[{ii}]")
-                    node.doc_string += "#IG4"
-                    return True
-                if isinstance(y, tuple) and isinstance(i, int):
-                    self.set_value_shape(node.output[0], y[i])
-                    node.doc_string += "#IG5"
-                    return True
-                if (
-                    isinstance(y, tuple)
-                    and isinstance(i, np.ndarray)
-                    and i.dtype == np.int64
-                    and i.shape in ((1,), tuple())
-                ):
-                    ii = int(i[0]) if i.shape == (1,) else int(i)
-                    assert ii < len(y), (
-                        f"Unexpected value for y={y!r}, i={i!r} in node Gather "
-                        f"with inputs={node.input}{self.get_debug_msg()}"
-                    )
-                    self.set_value_shape(node.output[0], y[ii])
-                    node.doc_string += "#IG6"
-                    return True
-                raise RuntimeError(
-                    f"Not implemented when node Gather with inputs={node.input}, "
-                    f"y={y!r}, i={i!r}{self.get_debug_msg()}"
-                )
-            node.doc_string += "#IG7"
-            return False
-
-        values = [self.value_as_shape(x) for x in node.input[0]]
-        if any(x is None for x in values):
-            # it is not a shape
-            node.doc_string += "#IZ"
-            return False
-        if node.op_type == "Concat":
-            node.doc_string += "#IC1"
-            self.set_shape_value(node.output[0], tuple(values))
-            return True
-        raise RuntimeError(
-            f"Unable to compute a shape for node {node.op_type!r} "
-            f"with inputs={node.input}{self.get_debug_msg()}"
-        )
 
     def is_dynamic_dimension(
         self, dim: Any, verify: bool = True, allow_none: bool = False
@@ -3857,17 +3662,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             if k not in res:
                 res[k] = v
         return res
-
-    def _make_node_set_type_shape(self, node: NodeProto):
-        if node.domain != "":
-            node.doc_string += "#Io1"
-            set_shape_type_custom(self, node)
-        else:
-            if node.input and not self.has_type(node.input[0]):
-                # It is probably coming from an inlined function.
-                return
-            node.doc_string += "#Io2"
-            set_shape_type_op_any(self, node)
 
     def make_nodes(
         self,
@@ -6395,6 +6189,278 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{time.perf_counter() - begin_} seconds."
             )
 
+    def simple_update_value_shape_with_node(self, node) -> bool:
+        """
+        Updates ``_known`_value_shape`` for a particular node.
+        """
+        if node.domain != "" or node.op_type not in {
+            "Abs",
+            "Add",
+            "Concat",
+            "Div",
+            "Gather",
+            "Greater",
+            "GreaterOrEqual",
+            "Equal",
+            "Identity",
+            "Less",
+            "LessOrEqual",
+            "Mod",
+            "Mul",
+            "Not",
+            "Range",
+            "Scatter",
+            "Shape",
+            "Slice",
+            "Squeeze",
+            "Sub",
+            "Unsqueeze",
+        }:
+            return False
+
+        # Constant can be considered as possible shape.
+        for i in node.input:
+            known = self.value_as_shape(i)
+            if known is not None:
+                continue
+            if not self.is_constant(i):
+                continue
+            if not self.has_type(i) or self.get_type(i) != TensorProto.INT64:
+                # No chance for this to be used a shape computation.
+                continue
+            cst = self.get_constant(i, exc=False, computed_value=True)
+            if cst is None or len(cst.shape) > 1:
+                continue
+            self.set_value_shape(
+                i, tuple(map(int, cst)) if len(cst.shape) > 0 else (int(cst),)
+            )
+
+        if node.op_type == "Identity":
+            value = self.value_as_shape(node.input[0])
+            if value is not None:
+                node.doc_string += "#SV-Id1"
+                self.set_value_shape(
+                    node.output[0], value, equal_to=(node.input[0], node.output[0])
+                )
+                return True
+            node.doc_string += "#SV-Id2"
+            return False
+
+        if node.op_type == "Squeeze":
+            if self.is_constant_or_attribute(node, 1, "axes"):
+                node.doc_string += "#SV-Sq1"
+                y = self.value_as_shape(node.input[0])
+                if y is None:
+                    return False
+                i = self.get_constant_or_attribute(node, 1, "axes")
+                if isinstance(i, int):
+                    ii = i
+                elif (
+                    isinstance(i, np.ndarray)
+                    and i.dtype == np.int64
+                    and i.shape in ((1,), tuple())
+                ):
+                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                else:
+                    raise RuntimeError(
+                        f"Not implemented when node Squeeze with inputs={node.input}, "
+                        f"y={y!r}, i={i!r}{self.get_debug_msg()}"
+                    )
+                assert (
+                    ii == 0
+                ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
+                if isinstance(y, str):
+                    self.set_value_shape(node.output[0], f"squeeze({y})")
+                    return True
+                if isinstance(y, int):
+                    self.set_value_shape(node.output[0], y)
+                    return True
+                assert isinstance(
+                    y, tuple
+                ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
+                self.set_value_shape(node.output[0], y[0])
+                return True
+            node.doc_string += "#SV-Sq2"
+            return False
+
+        if node.op_type == "Shape":
+            if len(node.attribute) == 0:
+                node.doc_string += "#SV-Sh1"
+                if self.has_shape(node.input[0]):
+                    shape = self.get_shape(node.input[0])
+                    self.set_value_shape(node.output[0], shape)
+                    if all_int(shape):
+                        self.update_node_constant(node.output[0], node)
+                    self.set_shape(node.output[0], (len(shape),))
+                else:
+                    self.set_value_shape(node.output[0], node.output[0])
+                return True
+
+            node.doc_string += "#SV-Sh2"
+            start = self.get_attribute(node, "start", exc=False) or 0
+            end = self.get_attribute(node, "end", exc=False)
+            if end is None:
+                if self.has_rank(node.input[0]):
+                    end = self.get_rank(node.input[0])
+            if self.has_shape(node.input[0]):
+                node.doc_string += "#SV-Sh3"
+                shape = self.get_shape(node.input[0])
+                assert start.i < len(shape), (
+                    f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
+                    f"is {shape}{self.get_debug_msg()}"
+                )
+                if end is None:
+                    n_shape = shape[start.i :]
+                    self.set_value_shape(node.output[0], n_shape)
+                    if all_int(shape):
+                        self.update_node_constant(node.output[0], node)
+                    self.set_shape(node.output[0], (len(n_shape),))
+                    node.doc_string += "#SV-Sh4"
+                    return True
+                assert getattr(end, "i", end) <= len(shape), (
+                    f"Shape mismatch, end={getattr(end, 'i', end)}, "
+                    f"shape of {node.input[0]!r} "
+                    f"is {shape}{self.get_debug_msg()}"
+                )
+                n_shape = shape[start.i : getattr(end, "i", end)]
+                if all_int(shape):
+                    node.doc_string += "#SV-Sh5"
+                    self.update_node_constant(node.output[0], node)
+                self.set_value_shape(node.output[0], n_shape)
+                self.set_shape(node.output[0], (len(n_shape),))
+                node.doc_string += "#SV-Sh6"
+                return True
+
+            if end is None:
+                self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
+                node.doc_string += "#SV-Sh6"
+                return False
+
+            self.set_value_shape(
+                node.output[0],
+                f"{node.input[0]}[{start.i}:{getattr(end, 'i', end)}]",
+            )
+            node.doc_string += "#SV-Sh7"
+            return True
+
+        if node.op_type == "Gather":
+            if self.is_constant(node.input[1]):
+                node.doc_string += "#SV-Ga1"
+                y = self.value_as_shape(node.input[0])
+                if y is None:
+                    node.doc_string += "#SV-Ga2"
+                    return False
+                i = self.get_constant(node.input[1], computed_value=True)
+                if isinstance(y, str) and isinstance(i, int):
+                    self.set_value_shape(node.output[0], f"{y}[{i}]")
+                    node.doc_string += "#SV-Ga3"
+                    return True
+                if (
+                    isinstance(y, str)
+                    and isinstance(i, np.ndarray)
+                    and i.dtype == np.int64
+                    and i.shape in ((1,), tuple())
+                ):
+                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                    self.set_value_shape(node.output[0], f"{y}[{ii}]")
+                    node.doc_string += "#SV-Ga4"
+                    return True
+                if isinstance(y, tuple) and isinstance(i, int):
+                    self.set_value_shape(node.output[0], y[i])
+                    node.doc_string += "#SV-Ga5"
+                    return True
+                if (
+                    isinstance(y, tuple)
+                    and isinstance(i, np.ndarray)
+                    and i.dtype == np.int64
+                    and i.shape in ((1,), tuple())
+                ):
+                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                    assert ii < len(y), (
+                        f"Unexpected value for y={y!r}, i={i!r} in node Gather "
+                        f"with inputs={node.input}{self.get_debug_msg()}"
+                    )
+                    self.set_value_shape(node.output[0], y[ii])
+                    node.doc_string += "#SV-Ga6"
+                    return True
+                raise RuntimeError(
+                    f"Not implemented when node Gather with inputs={node.input}, "
+                    f"y={y!r}, i={i!r}{self.get_debug_msg()}"
+                )
+            node.doc_string += "#SV-Ga7"
+            return False
+
+        values = [self.value_as_shape(x) for x in node.input]
+        if any(x is None for x in values):
+            # it is not a shape
+            node.doc_string += "#SV-All/0"
+            return False
+
+        if node.op_type == "Concat":
+            node.doc_string += "#SV-Co1"
+            concatenated = []
+            for v in values:
+                concatenated.extend(v if isinstance(v, tuple) else (v,))
+            self.set_value_shape(node.output[0], tuple(concatenated))
+            return True
+
+        if node.op_type == "Range":
+            if len(values) == 3:
+                args = []
+                for v in values:
+                    if len(v) == 1:
+                        args.append(v[0])
+                    else:
+                        node.doc_string += "#SV-Ra/1"
+                        return False
+                if not all_int(args):
+                    node.doc_string += "#SV-Ra/2"
+                    return False
+            node.doc_string += "#SV-Ra"
+            self.set_value_shape(node.output[0], tuple(range(*args)))
+            return True
+
+        if node.op_type == "Unsqueeze":
+            if isinstance(values[0], tuple) and len(values[0]) > 1:
+                # This cannot be a shape anymore.
+                node.doc_string += "#SV-Unsq/1"
+                return False
+            if self.has_rank(node.input[0]) and self.get_rank(node.input[0]) > 0:
+                # This cannot be a shape anymore.
+                node.doc_string += "#SV-Unsq/2"
+                return False
+
+        if node.op_type == "Add":
+            if isinstance(values[0], tuple) and len(values[0]) > 16:
+                # It should not be a shape.
+                node.doc_string += "#SV-Add/1"
+                return False
+
+        if node.op_type == "Sub":
+            if isinstance(values[0], tuple) and len(values[0]) > 16:
+                # It should not be a shape.
+                node.doc_string += "#SV-Add/1"
+                return False
+
+        raise RuntimeError(
+            f"Unable to compute a shape for node {self.pretty_node(node)} "
+            f"with values={values}{self.get_debug_msg()}"
+        )
+
+    def _make_node_set_type_shape(self, node: NodeProto):
+        """
+        Updates shapes for a node.
+        """
+        if node.domain != "":
+            node.doc_string += "#Io1"
+            set_shape_type_custom(self, node)
+        else:
+            if node.input and not self.has_type(node.input[0]):
+                # It is probably coming from an inlined function.
+                return
+            node.doc_string += "#Io2"
+            set_shape_type_op_any(self, node)
+
     def infer_shapes(self) -> Dict[str, Tuple[DYNAMIC_SHAPE, DYNAMIC_SHAPE]]:
         """
         Runs custom shape inference. Returns the updates.
@@ -6407,6 +6473,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             old_shapes = [
                 (self.get_shape(o) if self.has_shape(o) else None) for o in node.output
             ]
+            self.simple_update_value_shape_with_node(node)
             self._make_node_set_type_shape(node)
             new_shapes = [
                 (self.get_shape(o) if self.has_shape(o) else None) for o in node.output

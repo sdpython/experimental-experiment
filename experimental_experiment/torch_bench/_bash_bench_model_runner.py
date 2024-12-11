@@ -1547,7 +1547,6 @@ class ModelRunner:
                 if x.key_cache and len(x.key_cache[0].shape) > 2:
                     res.append(
                         [
-                            None,
                             [{0: batch, 2: cache_length} for _ in range(length)],
                             [{0: batch, 2: cache_length} for _ in range(length)],
                         ]
@@ -1555,7 +1554,6 @@ class ModelRunner:
                 else:
                     res.append(
                         [
-                            None,
                             [{0: batch} for _ in range(length)],
                             [{0: batch} for _ in range(length)],
                         ]

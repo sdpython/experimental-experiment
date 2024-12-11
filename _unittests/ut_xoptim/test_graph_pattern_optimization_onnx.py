@@ -28,6 +28,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_onnx,
     requires_torch,
+    hide_stdout,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -3857,6 +3858,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    @hide_stdout()
     def test_matmul_add_reshape_2_dyn(self):
         model = oh.make_model(
             oh.make_graph(
@@ -4211,6 +4213,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
         self.assertEqualArray(expected[1], got[1], atol=1e-5)
 
+    @hide_stdout()
     def test_shape_eval(self):
         model = oh.make_model(
             oh.make_graph(
@@ -4220,12 +4223,12 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("MatMul", ["ids_weight", "A"], ["A1"]),
                     oh.make_node("MatMul", ["ids_weight", "B"], ["B1"]),
                     oh.make_node("MatMul", ["ids_weight", "C"], ["C1"]),
-                    oh.make_node("Reshape", ["A1", "new_shape"], ["A41"]),
-                    oh.make_node("Reshape", ["B1", "new_shape"], ["B41"]),
-                    oh.make_node("Reshape", ["C1", "new_shape"], ["C41"]),
-                    oh.make_node("Transpose", ["A41"], ["At"], perm=[0, 2, 1, 3]),
-                    oh.make_node("Transpose", ["B41"], ["Bt"], perm=[0, 2, 1, 3]),
-                    oh.make_node("Transpose", ["C41"], ["Ct"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Reshape", ["A1", "new_shape"], ["Areshaped"]),
+                    oh.make_node("Reshape", ["B1", "new_shape"], ["Breshaped"]),
+                    oh.make_node("Reshape", ["C1", "new_shape"], ["Creshaped"]),
+                    oh.make_node("Transpose", ["Areshaped"], ["At"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Breshaped"], ["Bt"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Creshaped"], ["Ct"], perm=[0, 2, 1, 3]),
                 ],
                 "dummy",
                 [_mkv_("ids_weight", TFLOAT, ["batch", "seq", 256])],
@@ -4251,7 +4254,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             verbose=5,
         )
         shapes = gr._known_shapes
-        self.assertEqual(shapes["A41"], ("batch", "seq", 32, 8))
+        self.assertEqual(shapes["Areshaped"], ("batch", "seq", 32, 8))
 
 
 if __name__ == "__main__":
