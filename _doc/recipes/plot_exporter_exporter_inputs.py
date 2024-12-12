@@ -88,8 +88,8 @@ class ModelTakingDynamicCacheAsInput(torch.nn.Module):
                 dc.key_cache[0].shape[-1],
             )
         )
-        catones = torch.cat((kc + vc, ones), dim=1)
-        y = catones.sum(axis=2, keepdim=True)
+        w = vc + kc + ones
+        y = w.sum(axis=2, keepdim=True)
         return x + y
 
 
@@ -267,8 +267,8 @@ class ModelTakingDynamicCacheAsInput(torch.nn.Module):
                 dc.key_cache[0].shape[-1],
             )
         )
-        catones = torch.cat((kc + vc, ones), dim=1)
-        y = catones.sum(axis=2, keepdim=True)
+        w = vc + kc + ones
+        y = w.sum(axis=2, keepdim=True)
         return x + y
 
 
@@ -360,6 +360,24 @@ try:
 except Exception as e:
     print(f"It did not work: {e}")
 
+
+######################################
+# There exists a little trick to bypass that issue:
+# we changed the base class.
+
+
+class BaseDummyClass:
+    pass
+
+
+DynamicCache.__bases__ = (BaseDummyClass,)
+
+ep = torch.export.export(
+    model,
+    (x, cache),
+    dynamic_shapes=({0: batch}, [[{0: batch, 2: clength}], [{0: batch, 2: clength}]]),
+)
+print(ep)
 
 #####################################
 # We remove the changes for pytorch.

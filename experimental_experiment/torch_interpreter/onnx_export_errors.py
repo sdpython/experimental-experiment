@@ -79,6 +79,21 @@ def unflatten_dynamic_cache(
     return cache
 
 
+def unflatten_pached_dynamic_cache(
+    values: List[Any],
+    context: "torch.utils._pytree.Context",  # noqa: F821
+    output_type=None,
+) -> "DynamicCache":  # noqa: F821
+
+    from .patches.patch_transformers import patched_DynamicCache
+
+    cache = patched_DynamicCache()
+    values = dict(zip(context, values))
+    for k, v in values.items():
+        setattr(cache, k, v)
+    return cache
+
+
 def flatten_with_keys_dynamic_cache(d: Dict[Any, Any]) -> Tuple[
     List[Tuple["torch.utils._pytree.KeyEntry", Any]],  # noqa: F821
     "torch.utils._pytree.Context",  # noqa: F821
@@ -176,12 +191,19 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
     )
 
     ####################
-    # patch trasnformers
+    # patch transformers
     ####################
 
     if patch_transformers:
+        import transformers
         from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-        from .patches.patch_transformers import patched_AttentionMaskConverter
+        from .patches.patch_transformers import (
+            patched_AttentionMaskConverter,
+            patched_DynamicCache,
+        )
+
+        def raise_assert():
+            raise AssertionError("One replacement of DynamicCache was not patched.")
 
         if verbose:
             print("[bypass_export_some_errors] patch transformers")
@@ -189,6 +211,12 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
         AttentionMaskConverter._make_causal_mask = (
             patched_AttentionMaskConverter._make_causal_mask
         )
+
+        keep_DynamicCache = transformers.cache_utils.DynamicCache
+        keep_DynamicCache_init = keep_DynamicCache.__init__
+        keep_DynamicCache.__init__ = lambda *args, **kwargs: raise_assert()
+        transformers.cache_utils.DynamicCache = patched_DynamicCache
+        transformers.models.phi.modeling_phi.DynamicCache = patched_DynamicCache
 
     #####################
     # Cache Serialization
@@ -225,23 +253,39 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
     if DynamicCache is not None and DynamicCache in torch.utils._pytree.SUPPORTED_NODES:
         unregistered_dynamic_cache = False
     else:
+        from .patches.patch_transformers import patched_DynamicCache
+
+        if not patch_transformers:
+            if verbose:
+                print("[bypass_export_some_errors] register DynamicCache")
+            torch.utils._pytree.register_pytree_node(
+                DynamicCache,
+                flatten_dynamic_cache,
+                unflatten_dynamic_cache,
+                serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+                flatten_with_keys_fn=flatten_with_keys_dynamic_cache,
+            )
+            torch.fx._pytree.register_pytree_flatten_spec(
+                DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
+            )
+
         if verbose:
-            print("[bypass_export_some_errors] register DynamicCache")
+            print("[bypass_export_some_errors] register patched_DynamicCache")
         torch.utils._pytree.register_pytree_node(
-            DynamicCache,
+            patched_DynamicCache,
             flatten_dynamic_cache,
-            unflatten_dynamic_cache,
-            serialized_type_name=f"{DynamicCache.__module__}.{DynamicCache.__name__}",
+            unflatten_pached_dynamic_cache,
+            serialized_type_name=f"{patched_DynamicCache.__module__}.{patched_DynamicCache.__name__}",
             flatten_with_keys_fn=flatten_with_keys_dynamic_cache,
         )
         torch.fx._pytree.register_pytree_flatten_spec(
-            DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
+            patched_DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
         )
 
     # export
 
     try:
-        yield
+        yield replacement_before_exporting
     finally:
 
         # restores everything
@@ -258,6 +302,10 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
 
         if patch_transformers:
             AttentionMaskConverter._make_causal_mask = keep__make_causal_mask
+            keep_DynamicCache.__init__ = keep_DynamicCache_init
+            transformers.cache_utils.DynamicCache = keep_DynamicCache
+            transformers.models.phi.modeling_phi.DynamicCache = keep_DynamicCache
+
             if verbose:
                 print("[bypass_export_some_errors] restored transformer")
 
@@ -267,8 +315,46 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
                 print("[bypass_export_some_errors] unregistered MambaCache")
 
         if unregistered_dynamic_cache and DynamicCache is not None:
-            torch.utils._pytree.SUPPORTED_NODES.pop(DynamicCache)
-            torch.fx._pytree.SUPPORTED_NODES.pop(DynamicCache)
-            torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(DynamicCache)
+            from .patches.patch_transformers import patched_DynamicCache
+
+            if not patch_transformers:
+                torch.utils._pytree.SUPPORTED_NODES.pop(DynamicCache)
+                torch.fx._pytree.SUPPORTED_NODES.pop(DynamicCache)
+                torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(DynamicCache)
+                if verbose:
+                    print("[bypass_export_some_errors] unregistered DynamicCache")
+            torch.utils._pytree.SUPPORTED_NODES.pop(patched_DynamicCache)
+            torch.fx._pytree.SUPPORTED_NODES.pop(patched_DynamicCache)
+            torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(patched_DynamicCache)
             if verbose:
-                print("[bypass_export_some_errors] unregistered DynamicCache")
+                print("[bypass_export_some_errors] unregistered patched_DynamicCache")
+
+
+def replacement_before_exporting(args: Any) -> Any:
+    """
+    Does replacements on the given inputs such replacing
+    :class:`transformers.cache_utils.DynamicCache` by
+    :class:`experimental_experiment.torch_interpreter.patches.
+    patched_transformers.patched_DynamicCache`.
+    """
+    if args is None:
+        return None
+    if isinstance(args, (int, float)):
+        return args
+    if isinstance(args, dict):
+        return {k: replacement_before_exporting(v) for k, v in args.items()}
+    if isinstance(args, tuple):
+        return tuple(replacement_before_exporting(v) for v in args)
+    if isinstance(args, list):
+        return [replacement_before_exporting(v) for v in args]
+
+    if args.__class__.__name__ == "DynamicCache":
+        # Do not use isinstance, the class may have been replaced.
+        from .patches.patch_transformers import patched_DynamicCache
+
+        patched = patched_DynamicCache()
+        for k in ["_seen_tokens", "key_cache", "value_cache"]:
+            setattr(patched, k, getattr(args, k))
+        return patched
+
+    return args

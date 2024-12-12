@@ -97,10 +97,10 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if type(obj).__name__ == "ValueInfoProto":
         return f"OT{obj.type.tensor_type.elem_type}"
 
-    if obj.__class__.__name__ == "DynamicCache":
+    if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
         kc = string_type(obj.key_cache, with_shape=with_shape, with_min_max=with_min_max)
         vc = string_type(obj.value_cache, with_shape=with_shape, with_min_max=with_min_max)
-        return f"DynamicCache(key_cache={kc}, value_cache={vc})"
+        return f"{obj.__class__.__name__}(key_cache={kc}, value_cache={vc})"
 
     if obj.__class__.__name__ == "BatchFeature":
         s = string_type(obj.data, with_shape=with_shape, with_min_max=with_min_max)

@@ -473,11 +473,11 @@ class TestLlmModelHelper(ExtTestCase):
                             res["dynamic_shapes"],
                         )
                         model(**copy.deepcopy(model_inputs))
-                        with bypass_export_some_errors():
+                        with bypass_export_some_errors(patch_transformers=True) as modificator:
                             torch.export.export(
                                 model,
                                 (),
-                                kwargs=model_inputs,
+                                kwargs=modificator(model_inputs),
                                 dynamic_shapes=dyn_shapes,
                                 strict=False,
                             )

@@ -51,7 +51,7 @@ def get_phi2(
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param generate data for this size
+    :param n_iteration: generate data for this iteration
     :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``

@@ -813,11 +813,13 @@ class ModelRunner:
         if self.autocast:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
-            ), torch.no_grad(), bypass_export_some_errors():
+            ), torch.no_grad(), bypass_export_some_errors(
+                patch_transformers=True, verbose=max(verbose - 2, 0)
+            ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
-                    export_inputs,
-                    export_kw_inputs,
+                    modificator(export_inputs),
+                    modificator(export_kw_inputs),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=max(verbose - 2, 0),
@@ -830,11 +832,13 @@ class ModelRunner:
                     inline=True,
                 )
         else:
-            with torch.no_grad(), bypass_export_some_errors():
+            with torch.no_grad(), bypass_export_some_errors(
+                patch_transformers=True, verbose=max(verbose - 2, 0)
+            ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
-                    export_inputs,
-                    export_kw_inputs,
+                    modificator(export_inputs),
+                    modificator(export_kw_inputs),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=max(verbose - 2, 0),
@@ -1268,11 +1272,13 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
-        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
+        with bypass_export_some_errors(
+            patch_transformers=True, verbose=max(verbose - 5, 0)
+        ) as modificator:
             exported_mod = export_options.export(
                 self.model,
-                export_inputs,
-                export_kw_inputs,
+                modificator(export_inputs),
+                modificator(export_kw_inputs),
                 dynamic_shapes=dynamic_shapes,
                 tracing_mode=False,
                 same_signature=False,
@@ -1325,11 +1331,13 @@ class ModelRunner:
             print(f"[ModelRunner._to_executorch] type(model)={type(self.model)!r}")
             print("[ModelRunner._to_executorch] run torch.export.export")
 
-        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
+        with bypass_export_some_errors(
+            patch_transformers=True, verbose=max(verbose - 5, 0)
+        ) as modificator:
             exported_mod = export_options.export(
                 self.model,
-                export_inputs,
-                export_kw_inputs,
+                modificator(export_inputs),
+                modificator(export_kw_inputs),
                 dynamic_shapes=dynamic_shapes,
                 tracing_mode=False,
                 same_signature=False,

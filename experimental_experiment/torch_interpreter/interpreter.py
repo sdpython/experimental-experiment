@@ -95,7 +95,7 @@ class DynamoInterpreter:
                         VirtualTensor,
                     ),
                 )
-                or t.__class__.__name__ in {"DynamicCache"}
+                or t.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}
             )
             for t in example_inputs
         ), (
@@ -163,7 +163,7 @@ class DynamoInterpreter:
                 else:
                     res.extend(self.flatten_inputs(i))
             return tuple(res) if isinstance(x, tuple) else res
-        if x.__class__.__name__ == "DynamicCache":
+        if x.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
             res = self.flatten_inputs(x.key_cache) + self.flatten_inputs(x.value_cache)
             return tuple(res)
         raise AssertionError(f"Unexpected type {type(x)} for x")
