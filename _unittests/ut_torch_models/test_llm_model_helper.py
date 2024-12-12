@@ -447,6 +447,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
+    @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
     def test_get_phi2(self):
         import torch
         from experimental_experiment.torch_interpreter.onnx_export_errors import (

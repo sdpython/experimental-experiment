@@ -375,6 +375,7 @@ class ParameterNaming:
         assert isinstance(
             name, str
         ), f"Unexpected type {type(name)} for name{self.get_debug_msg()}"
+        from_node = None
         if "from_node" in node.meta:
             from_node = node.meta["from_node"]
             assert (
@@ -385,8 +386,10 @@ class ParameterNaming:
             key = name[2:]
         elif name.startswith("p_fn_"):
             key = name[len("p_fn_") :]
-        elif "from_node" in node.meta:
-            key = f"{from_node[0][1]}_{name}"
+        elif from_node is not None:
+            # Only valid for pytorch >= 2.6
+            parent_name = from_node[0].node_info.target
+            key = f"{parent_name}_{name}"
             if key.startswith("L__self___"):
                 key = key[len("L__self___") :]
         elif name in self._idmap:
