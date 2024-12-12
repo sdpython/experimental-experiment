@@ -1050,12 +1050,13 @@ class BenchmarkRunner:
                 f"{model_runner.get_dynamic_shapes(dynamic)}"
             )
         dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
+        stats["onnx_type_input"] = string_type(model_runner.inputs)
         if self.verbose:
+            print(f"[BenchmarkRunner.benchmark] inputs={stats['onnx_type_input']}")
             print(f"[BenchmarkRunner.benchmark] input shapes={dyn_shapes}")
             _ishapes = model_runner.get_input_shapes(dynamic=dynamic, export=True)
             print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
 
-        stats["onnx_type_input"] = string_type(model_runner.inputs)
         if dynamic:
             stats["onnx_type_dynshapes"] = string_type(
                 model_runner.get_dynamic_shapes(dynamic=dynamic)

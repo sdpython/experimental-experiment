@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import NodeProto
 from ...xbuilder._shape_helper import (
@@ -323,11 +323,15 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         g: "GraphBuilderPatternOptimization",  # noqa: F821,
         sh1: Tuple[int, ...],
         sh2: Tuple[int, ...],
+        constraints: Dict[str, Set[Union[int, str]]],
     ) -> bool:
         # We cannot handle all the case.
         if is_static_shape(sh1) and is_static_shape(sh2):
             return np.prod(sh1) == np.prod(sh2)
-        return sh1 == sh2
+        if sh1 == sh2:
+            return True
+        # The constraints should be applied here.
+        return False
 
     def match(
         self,
@@ -387,10 +391,14 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         if (
             shape_left_left is not None
-            and not self.same_size(g, shape_left[-2:], shape_left_left[-2:])
+            and not self.same_size(
+                g, shape_left[-2:], shape_left_left[-2:], g.get_registered_constraints()
+            )
         ) or (
             shape_right_right is not None
-            and not self.same_size(g, shape_right[-2:], shape_right_right[-2:])
+            and not self.same_size(
+                g, shape_right[-2:], shape_right_right[-2:], g.get_registered_constraints()
+            )
         ):
             # last dimension are the same
             return self.none(node, inspect.currentframe().f_lineno)
@@ -399,7 +407,9 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         the_shape_right = shape_right_right or shape_right
         if not is_static_shape(the_shape_left) or not is_static_shape(the_shape_right):
             return self.none(node, inspect.currentframe().f_lineno)
-        if not self.same_size(g, the_shape_left[:-2], the_shape_right[:-2]):
+        if not self.same_size(
+            g, the_shape_left[:-2], the_shape_right[:-2], g.get_registered_constraints()
+        ):
             # first dimension are the same
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -407,7 +417,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             next_shape = g.get_shape(next_node.output[0])
             matmul_shape = the_shape_left[:-1] + (shape_right[-1],)
             if matmul_shape[-2:] != next_shape[-2:] and not self.same_size(
-                g, matmul_shape[:-2], next_shape[:-2]
+                g, matmul_shape[:-2], next_shape[:-2], g.get_registered_constraints()
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
             first_dims = {next_shape[:-2], the_shape_left[:-2], the_shape_right[:-2]}

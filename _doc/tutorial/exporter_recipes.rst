@@ -5,8 +5,9 @@ Exporter Recipes
 ================
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
 
+    exporter_recipes_export
     exporter_recipes_custom
     exporter_recipes_onnx_export
     errors

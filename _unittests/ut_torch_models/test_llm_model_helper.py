@@ -1,3 +1,4 @@
+import copy
 import unittest
 import onnx
 from experimental_experiment.ext_test_case import (
@@ -457,15 +458,20 @@ class TestLlmModelHelper(ExtTestCase):
             for ds in [True, False]:
                 with self.subTest(n_iteration=n_iter, ds=ds):
                     if ds:
-                        model, model_inputs, dyn_shapes = get_phi2(
+                        res = get_phi2(
                             num_hidden_layers=1,
                             n_iteration=n_iter,
                             common_dynamic_shapes=ds,
                             intermediate_size=5120,
                             # hidden_size=1280,
-                            batch_size=29,
+                            batch_size=2,
                         )
-                        model(**model_inputs)
+                        model, model_inputs, dyn_shapes = (
+                            res["model"],
+                            res["inputs"],
+                            res["dynamic_shapes"],
+                        )
+                        model(**copy.deepcopy(model_inputs))
                         with bypass_export_some_errors():
                             torch.export.export(
                                 model,
@@ -476,7 +482,7 @@ class TestLlmModelHelper(ExtTestCase):
                             )
                         self.assertIn("dict(", string_type(model_inputs))
                     else:
-                        model, model_inputs = get_phi2(
+                        res = get_phi2(
                             num_hidden_layers=1,
                             intermediate_size=5120,
                             # hidden_size=1280,
@@ -484,7 +490,8 @@ class TestLlmModelHelper(ExtTestCase):
                             common_dynamic_shapes=ds,
                             batch_size=2,
                         )
-                        model(**model_inputs)
+                        model, model_inputs = res["model"], res["inputs"]
+                        model(**copy.deepcopy(model_inputs))
                         with bypass_export_some_errors():
                             torch.export.export(model, (), model_inputs, strict=False)
 
