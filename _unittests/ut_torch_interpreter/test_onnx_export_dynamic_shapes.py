@@ -289,7 +289,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.4", "bug")
+    @requires_torch("2.6", "node_info")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @ignore_warnings(DeprecationWarning)
     def test_export_llama_model_dynamic_shapes_x1_cpu(self):
@@ -323,7 +323,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 )
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.4", "bug")
+    @requires_torch("2.6", "node_info")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @requires_onnxruntime("1.18")
     @ignore_warnings(DeprecationWarning)
@@ -363,7 +363,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 )
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.5", "bug")
+    @requires_torch("2.6", "node_info")
     @requires_transformers("4.41.0", "dynamic shapes issue")
     @requires_onnxruntime("1.18")
     @ignore_warnings(DeprecationWarning)

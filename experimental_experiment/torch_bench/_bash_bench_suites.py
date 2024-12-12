@@ -193,10 +193,11 @@ class UntrainedRunner(BenchmarkRunner):
                 export_options = None
         elif len(tu) == 3:
             model_cls, example_inputs, export_options = tu
-        elif len(tu) == 4:
-            model_cls, example_inputs, dynamic_shapes, export_options = tu
         else:
-            raise AssertionError(f"Unable to handle {len(tu)} elements: {string_type(tu)}")
+            raise AssertionError(
+                f"Unable to handle {len(tu)} elements: {string_type(tu)}, "
+                f"it can be (dict, dict), (model, inputs), (model, inputs, dict))"
+            )
 
         model = model_cls() if isinstance(model_cls, type) else model_cls
         if str(type(model)) == "<class 'function'>":

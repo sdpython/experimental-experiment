@@ -541,6 +541,9 @@ def _make_builder_interpreter(
             input_names=input_names,
             verbose=verbose,
         )
+        if os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1"):
+            print("-- EXPORTED PROGRAM")
+            print(exported_program)
 
         graph_module = (
             exported_program

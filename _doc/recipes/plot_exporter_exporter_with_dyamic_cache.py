@@ -1,8 +1,8 @@
 """
 .. _l-plot-torch-export-with-dynamic-cache-201:
 
-201: Export a model using a custom type as input
-================================================
+Export a model using a custom type as input
+===========================================
 
 We will a class used in many model: :class:`transformers.cache_utils.DynamicCache`.
 

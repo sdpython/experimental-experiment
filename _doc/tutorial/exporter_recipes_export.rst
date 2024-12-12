@@ -10,3 +10,6 @@ Dynamic Shapes
 ++++++++++++++
 
 * :ref:`l-plot-exporter-dynamic_shapes`
+* :ref:`l-plot-torch-export-with-dynamic-cache-201`
+* :ref:`l-plot-exporter-nn_modules_inputs`
+
