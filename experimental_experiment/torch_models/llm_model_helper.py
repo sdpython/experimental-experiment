@@ -107,6 +107,11 @@ def get_phi2(
             input_ids=torch.randint(0, 50285, dim).to(torch.int64),
             attention_mask=torch.ones(*dim, dtype=torch.int64),
         )
+        dim = (batch_size + 1, 31)
+        inputs2 = dict(
+            input_ids=torch.randint(0, 50285, dim).to(torch.int64),
+            attention_mask=torch.ones(*dim, dtype=torch.int64),
+        )
         shapes.update(
             {
                 "input_ids": {0: batch, 1: seq_length},
@@ -115,10 +120,16 @@ def get_phi2(
         )
     else:
         cache = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
-        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
         for i in range(config["num_hidden_layers"]):
             cache.update(
                 torch.randn(batch_size, 32, 30, 80), torch.randn(batch_size, 32, 30, 80), i
+            )
+        cache2 = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
+        for i in range(config["num_hidden_layers"]):
+            cache2.update(
+                torch.randn(batch_size + 1, 32, 31, 80),
+                torch.randn(batch_size + 1, 32, 31, 80),
+                i,
             )
 
         inputs = dict(
@@ -126,7 +137,13 @@ def get_phi2(
             attention_mask=torch.ones((batch_size, 33)).to(torch.int64),
             past_key_values=cache,
         )
+        inputs2 = dict(
+            input_ids=torch.randint(0, 50285, (batch_size + 1, 4)).to(torch.int64),
+            attention_mask=torch.ones((batch_size + 1, 35)).to(torch.int64),
+            past_key_values=cache2,
+        )
         n = len(cache.key_cache)
+        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
         shapes.update(
             {
                 "input_ids": {0: batch, 1: seq_length},
@@ -146,8 +163,8 @@ def get_phi2(
         shapes = tuple(shapes.values())
 
     if common_dynamic_shapes:
-        return model, inputs, shapes
-    return model, inputs
+        return dict(inputs=inputs, model=model, dynamic_shapes=shapes, inputs2=inputs2)
+    return dict(inputs=inputs, model=model)
 
 
 def get_phi35_mini_instruct(

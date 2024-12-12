@@ -173,6 +173,8 @@ class ModelRunner:
     :param model_name: model name
     :param export_options: additional options when exporting if the default options never work
     :param dynamic_shapes: dynamic shapes to use instead of using automated ones
+    :param inputs2: second set of inputs to check the model handles differents shapes
+        when they are dynamic
     """
 
     _patched = None
@@ -280,6 +282,39 @@ class ModelRunner:
                 f"(namedtuple={cls.isinstance_namedtuple(o)}), o={o})"
             ) from e
 
+    @classmethod
+    def _pre_process_inputs(cls, inputs, kw_inputs, dtype, device):
+        if dtype is None:
+            cvt = lambda o: cls._to_type_or_device(o, device)  # noqa: E731
+        else:
+            cvt = lambda o: cls._to_type_or_device(  # noqa: E731
+                cls._to_type_or_device(o, dtype), device
+            )
+
+        assert (
+            not isinstance(inputs, tuple)
+            or not isinstance(inputs[0], torch.Tensor)
+            or "cuda" not in device
+            or inputs[0].get_device() >= 0
+        ), (
+            f"device={device!r} but input device is {inputs[0].get_device()} "
+            f"(check {cvt(inputs[0]).get_device()})"
+        )
+
+        if isinstance(inputs, dict):
+            inputs = {k: cvt(v) for k, v in inputs.items()}
+        elif isinstance(inputs, (list, tuple)):
+            inputs = tuple(cvt(v) for v in inputs)
+        else:
+            raise AssertionError - (f"Input type is {type(inputs)}")
+
+        if isinstance(kw_inputs, dict):
+            kw_inputs = {k: cvt(v) for k, v in kw_inputs.items()}
+        elif kw_inputs is not None:
+            raise AssertionError - (f"Input type is {type(inputs)}")
+        assert not kw_inputs, "Keyword inputs are not yet implemented."
+        return inputs, kw_inputs, cvt
+
     def __init__(
         self,
         model: Any,
@@ -296,27 +331,16 @@ class ModelRunner:
         model_name: Optional[str] = None,
         export_options: Optional[Dict[str, Any]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]] = None,
+        inputs2: Optional[Any] = None,
+        kw_inputs2: Optional[Dict[str, Any]] = None,
     ):
-        if dtype is None:
-            cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
-        else:
-            cvt = lambda o: self._to_type_or_device(  # noqa: E731
-                self._to_type_or_device(o, dtype), device
+        inputs, kw_inputs, cvt = self._pre_process_inputs(inputs, kw_inputs, dtype, device)
+        if inputs2:
+            inputs2, kw_inputs2s, _ = self._pre_process_inputs(
+                inputs2, kw_inputs2, dtype, device
             )
-
-        if isinstance(inputs, dict):
-            inputs = {k: cvt(v) for k, v in inputs.items()}
-        elif isinstance(inputs, (list, tuple)):
-            inputs = tuple(cvt(v) for v in inputs)
-        else:
-            raise AssertionError - (f"Input type is {type(inputs)}")
-
-        if isinstance(kw_inputs, dict):
-            kw_inputs = {k: cvt(v) for k, v in kw_inputs.items()}
-        elif kw_inputs is not None:
-            raise AssertionError - (f"Input type is {type(inputs)}")
-        assert not kw_inputs, "Keyword inputs are not yet implemented."
         self.kw_inputs = kw_inputs
+        self.kw_inputs2 = kw_inputs2
         self.sig_input_names = list(inspect.signature(model.forward).parameters)
 
         if isinstance(inputs, dict):
@@ -324,11 +348,14 @@ class ModelRunner:
             sig = inspect.signature(model.forward)
             added = 0
             new_inputs = []
+            new_inputs2 = []
             new_names = []
             use_default = []
             for n in sig.parameters:
                 if n in inputs:
                     new_inputs.append(inputs[n])
+                    if inputs2:
+                        new_inputs2.append(inputs2[n])
                     added += 1
                     use_default.append(
                         UseDefaultValue.FALSE
@@ -340,6 +367,8 @@ class ModelRunner:
                         # probably one optional input
                         continue
                     new_inputs.append(sig.parameters[n].default)
+                    if inputs2:
+                        new_inputs2.append(sig.parameters[n].default)
                     use_default.append(UseDefaultValue.TRUE)
                 new_names.append(n)
             assert added == len(inputs), (
@@ -347,6 +376,8 @@ class ModelRunner:
                 f"parameters={list(sig.parameters)}"
             )
             inputs = tuple(new_inputs)
+            if inputs2:
+                inputs2 = tuple(new_inputs2)
             self.raw_input_names = new_names
             self.raw_use_defaults = use_default
         else:
@@ -378,19 +409,10 @@ class ModelRunner:
             else:
                 self.model = WrappedModelBase(model_cvt)
 
-        assert (
-            not isinstance(inputs, tuple)
-            or not isinstance(inputs[0], torch.Tensor)
-            or "cuda" not in device
-            or inputs[0].get_device() >= 0
-        ), (
-            f"device={device!r} but input device is {inputs[0].get_device()} "
-            f"(check {cvt(inputs[0]).get_device()})"
-        )
         self.device = device
         self.dtype = dtype
-        self.inputs = inputs
-        self.inputs = self.get_inputs()
+        self.inputs = self.get_inputs(inputs)
+        self.inputs2 = self.get_inputs(inputs2) if inputs2 else None
         self.repeat = repeat
         self.warmup = warmup
         self.suite = suite
@@ -436,12 +458,14 @@ class ModelRunner:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
 
-    def get_inputs(self):
+    def get_inputs(self, inputs: Optional[Any] = None) -> Any:
         """
         LLM modifies the cache. It needs to be copied first.
         """
+        if inputs is None:
+            inputs = self.inputs
         args = []
-        for i in self.inputs:
+        for i in inputs:
             if i.__class__.__name__ in {"DynamicCache"}:
                 args.append(copy.deepcopy(i))
                 continue
@@ -1937,6 +1961,8 @@ class ModelRunner:
         assert isinstance(
             self.inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
+        if self.inputs2:
+            return self.get_inputs(self.inputs2)
         dynamic_shapes = self.get_dynamic_shapes(True)
         dyn_inputs = []
         dyn_values = {}
