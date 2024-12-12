@@ -107,8 +107,12 @@ def get_phi2(
             input_ids=torch.randint(0, 50285, dim).to(torch.int64),
             attention_mask=torch.ones(*dim, dtype=torch.int64),
         )
-        shapes["input_ids"] = {0: batch, 1: seq_length}
-        shapes["attention_mask"] = {0: batch, 1: seq_length}
+        shapes.update(
+            {
+                "input_ids": {0: batch, 1: seq_length},
+                "attention_mask": {0: batch, 1: seq_length},
+            }
+        )
     else:
         cache = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
         cache_length = torch.export.Dim("cache_length", min=1, max=4096)
@@ -118,15 +122,24 @@ def get_phi2(
             )
 
         inputs = dict(
-            input_ids=torch.randint(0, 50285, (batch_size, 1)).to(torch.int64),
+            input_ids=torch.randint(0, 50285, (batch_size, 3)).to(torch.int64),
+            attention_mask=torch.ones((batch_size, 33)).to(torch.int64),
             past_key_values=cache,
         )
-        shapes["input_ids"] = {}  # 0: batch}
         n = len(cache.key_cache)
-        shapes["past_key_values"] = [
-            [{2: cache_length} for _ in range(n)],  # 0: batch,
-            [{2: cache_length} for _ in range(n)],  # 0: batch,
-        ]
+        shapes.update(
+            {
+                "input_ids": {0: batch, 1: seq_length},
+                "attention_mask": {
+                    0: batch,
+                    1: torch.export.Dim.DYNAMIC,  # cache_length + seq_length
+                },
+                "past_key_values": [
+                    [{0: batch, 2: cache_length} for _ in range(n)],  # 0: batch,
+                    [{0: batch, 2: cache_length} for _ in range(n)],  # 0: batch,
+                ],
+            }
+        )
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())

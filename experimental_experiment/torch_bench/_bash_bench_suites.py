@@ -57,6 +57,7 @@ class UntrainedRunner(BenchmarkRunner):
                             n_iteration=1,
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
+                            batch_size=2,
                         ),
                         dict(strict=False),
                     )

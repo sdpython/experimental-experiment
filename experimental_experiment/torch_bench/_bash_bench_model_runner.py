@@ -390,6 +390,7 @@ class ModelRunner:
         self.device = device
         self.dtype = dtype
         self.inputs = inputs
+        self.inputs = self.get_inputs()
         self.repeat = repeat
         self.warmup = warmup
         self.suite = suite
@@ -973,7 +974,7 @@ class ModelRunner:
             # ([{'file_name': ..., 'height': ..., 'image': torch.Tensor(...)}])
             inputs = (self.inputs[0][0]["image"],)
         else:
-            inputs = self.inputs
+            inputs = self.get_inputs()
 
         dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
         inputs, kw_inputs = self.make_export_inputs(dynamic, inputs=inputs)
@@ -1180,7 +1181,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.inputs,
+                    *self.get_inputs(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1190,7 +1191,7 @@ class ModelRunner:
             with torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.inputs,
+                    *self.get_inputs(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1623,7 +1624,7 @@ class ModelRunner:
                 return self.inputs if inputs is None else inputs, self.kw_inputs
 
             if inputs is None:
-                inputs = self.inputs
+                inputs = self.get_inputs()
             if kw_inputs is None:
                 kw_inputs = self.kw_inputs
 
@@ -1657,7 +1658,7 @@ class ModelRunner:
             return tuple(new_inputs), new_kw_inputs
 
         if inputs is None:
-            inputs = self.inputs
+            inputs = self.get_inputs()
         if kw_inputs is None:
             kw_inputs = self.kw_inputs
 
@@ -1939,8 +1940,9 @@ class ModelRunner:
         dynamic_shapes = self.get_dynamic_shapes(True)
         dyn_inputs = []
         dyn_values = {}
-        for i in range(len(self.inputs)):
-            inp = self.inputs[i]
+        inputs = self.get_inputs()  # we need a copy for the cache
+        for i in range(len(inputs)):
+            inp = inputs[i]
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
@@ -2041,9 +2043,9 @@ class ModelRunner:
             "executorch",
             "flaggems",
         }:
-            return self.inputs
+            return self.get_inputs()
 
-        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs()
+        use_inputs = self.get_inputs() if not dynamic else self.make_dynamic_inputs()
         if remove_int:
             ui = use_inputs
             use_inputs = []
@@ -2064,7 +2066,7 @@ class ModelRunner:
             assert set(names) == set(
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
-            return self.inputs
+            return self.get_inputs()
         assert len(use_inputs) == len(raw_use_defaults), (
             f"Mismatch use_inputs={string_type(use_inputs)}, "
             f"raw_use_defaults={string_type(raw_use_defaults)}"

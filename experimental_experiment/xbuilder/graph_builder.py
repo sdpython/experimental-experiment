@@ -356,7 +356,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.ir_version = ir_version
         self._debug_msg = {}
         self.dynamic_dimensions_source = {}
-        self.dynamic_shapes = dynamic_shapes
+        self.dynamic_shapes = self._pre_process_dynamic_shape(dynamic_shapes)
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
         self.functions = {}
@@ -472,6 +472,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             infer_shapes=False,
             raise_list=self.raise_list,
             local_domain=self.local_domain,
+            dynamic_shapes=self.dynamic_shapes,
         )
 
         for n in input_names:
@@ -489,6 +490,41 @@ class GraphBuilder(_GraphBuilderRuntime):
             if v.domain != domain:
                 new_builder.functions[k] = v
         return new_builder
+
+    @classmethod
+    def _pre_process_dynamic_shape(
+        cls,
+        dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+        unique_names: Optional[Set[str]] = None,
+    ) -> Optional[Union[Dict[str, Any], Tuple[Any]]]:
+        """
+        Replaces Hints by true DynamicShapes.
+        """
+        import torch
+
+        if isinstance(dynamic_shapes, torch.export.dynamic_shapes._Dim):
+            return dynamic_shapes
+        if not dynamic_shapes:
+            return dynamic_shapes
+        if unique_names is None:
+            unique_names = set()
+        if isinstance(dynamic_shapes, (tuple, list)):
+            return type(dynamic_shapes)(
+                cls._pre_process_dynamic_shape(i, unique_names) for i in dynamic_shapes
+            )
+        if isinstance(dynamic_shapes, dict):
+            return {
+                k: cls._pre_process_dynamic_shape(v, unique_names)
+                for k, v in dynamic_shapes.items()
+            }
+        if dynamic_shapes in (torch.export.Dim.DYNAMIC, torch.export.Dim.AUTO):
+            i = 0
+            name = "DYN0"
+            while name in unique_names:
+                i += 1
+                name = f"DYN{i}"
+            return torch.export.Dim(name)
+        raise AssertionError(f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes")
 
     def _register_dynamic_object_from_dynamic_shapes_dict(self, pos, pos_vv, vv):
         # example:
@@ -6238,9 +6274,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             cst = self.get_constant(i, exc=False, computed_value=True)
             if cst is None or len(cst.shape) > 1:
                 continue
-            self.set_value_shape(
-                i, tuple(map(int, cst)) if len(cst.shape) > 0 else (int(cst),)
-            )
+            with self.maybe_disable_fake_tensor_mode():
+                tu = tuple(map(int, cst)) if len(cst.shape) > 0 else (int(cst),)
+            self.set_value_shape(i, tu)
 
         if node.op_type == "Identity":
             value = self.value_as_shape(node.input[0])
