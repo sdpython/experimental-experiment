@@ -5,7 +5,7 @@ import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import ModelProto, load, TensorProto
-from ..helpers import tensor_dtype_to_np_dtype
+from .helpers import tensor_dtype_to_np_dtype
 
 
 def _make_stat(init: TensorProto) -> Dict[str, float]:

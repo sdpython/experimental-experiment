@@ -102,6 +102,7 @@ nitpick_ignore = [
     ("py:class", "pipeline.Pipeline"),
     ("py:class", "default=sklearn.utils.metadata_routing.UNCHANGED"),
     ("py:class", "Module"),
+    ("py:class", "transformers.cache_utils.DynamicCache"),
 ]
 
 nitpick_ignore_regex = [
