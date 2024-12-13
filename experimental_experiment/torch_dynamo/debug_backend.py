@@ -2,8 +2,8 @@ import os
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import ModelProto, TensorProto
-from onnx.helper import tensor_dtype_to_np_dtype
 import torch
+from ..helpers import tensor_dtype_to_np_dtype
 from ..xbuilder import OptimizationOptions
 from ..torch_interpreter._torch_helper import create_input_names
 from ..torch_interpreter import to_onnx

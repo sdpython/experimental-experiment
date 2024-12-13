@@ -2,8 +2,8 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array
+from ...helpers import tensor_dtype_to_np_dtype
 from ..patterns_api import MatchResult, PatternOptimization
 
 

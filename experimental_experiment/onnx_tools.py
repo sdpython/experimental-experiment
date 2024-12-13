@@ -5,6 +5,7 @@ import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import ModelProto, load, TensorProto
+from ..helpers import tensor_dtype_to_np_dtype
 
 
 def _make_stat(init: TensorProto) -> Dict[str, float]:
@@ -68,7 +69,7 @@ def onnx_lighten(
 def _get_tensor(min=None, max=None, mean=None, std=None, shape=None, itype=None):
     assert itype is not None, "itype must be specified."
     assert shape is not None, "shape must be specified."
-    dtype = oh.tensor_dtype_to_np_dtype(itype)
+    dtype = tensor_dtype_to_np_dtype(itype)
     if (mean is None or std is None) or (
         min is not None and max is not None and abs(max - min - 1) < 0.01
     ):

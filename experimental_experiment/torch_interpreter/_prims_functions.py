@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
-from onnx.helper import tensor_dtype_to_np_dtype
+from ..helpers import tensor_dtype_to_np_dtype
 from ..xbuilder._shape_helper import all_int
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 from ..xbuilder.graph_builder import GraphBuilder

@@ -10,7 +10,6 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import onnx
-from onnx.helper import tensor_dtype_to_np_dtype
 import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
@@ -27,7 +26,7 @@ from .export_model_helper import (
 from ..bench_run import max_diff
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
-from ..helpers import string_type
+from ..helpers import string_type, tensor_dtype_to_np_dtype
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 from ..torch_interpreter.onnx_export_errors import register_additional_serialization_functions
 

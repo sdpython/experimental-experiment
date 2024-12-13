@@ -10,12 +10,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import TensorProto, ValueInfoProto
 from onnx.helper import (
-    tensor_dtype_to_np_dtype,
     make_graph,
     make_node,
     make_tensor_value_info,
 )
 from onnx.numpy_helper import from_array
+from ..helpers import tensor_dtype_to_np_dtype
 from ..xbuilder._shape_helper import (
     all_float,
     all_int,

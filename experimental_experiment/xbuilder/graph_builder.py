@@ -34,7 +34,14 @@ import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
-from ..helpers import make_hash, string_sig, pretty_onnx, string_signature, string_type
+from ..helpers import (
+    make_hash,
+    string_sig,
+    pretty_onnx,
+    string_signature,
+    string_type,
+    tensor_dtype_to_np_dtype,
+)
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
     DYNAMIC_SHAPE,
@@ -1777,9 +1784,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert value not in {
             tuple()
         }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
-        assert all(
+        assert not isinstance(value, tuple) or all(
             not isinstance(d, str) or d[0] != "(" for d in value
-        ), f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
+        ), f"Unexpected value for shape {name!r}, value={value!r}{self.get_debug_msg()}"
         if equal_to is None:
             if name in self._known_value_shape:
                 existing = self._known_value_shape[name]
@@ -5467,7 +5474,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if hasattr(val, "detach"):
                         val = val.to(onnx_dtype_to_torch_dtype(itype))
                     else:
-                        val = val.astype(oh.tensor_dtype_to_np_dtype(itype))
+                        val = val.astype(tensor_dtype_to_np_dtype(itype))
                 self.constants_computed_[n] = val
                 if name == n:
                     cst = val

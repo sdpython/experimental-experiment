@@ -3,8 +3,8 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, load
-from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import to_array
+from ..helpers import tensor_dtype_to_np_dtype
 
 
 @contextlib.contextmanager

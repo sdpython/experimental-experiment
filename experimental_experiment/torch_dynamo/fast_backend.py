@@ -4,11 +4,11 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, TensorProto, load
-from onnx.helper import tensor_dtype_to_np_dtype
 from onnx.numpy_helper import from_array, to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
+from ..helpers import tensor_dtype_to_np_dtype
 from ..convert.ort_helper import append_custom_libraries
 from ..xbuilder import OptimizationOptions
 from ..xbuilder._dtype_helper import onnx_dtype_to_torch_dtype
