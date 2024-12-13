@@ -116,6 +116,9 @@ class patched_DynamicCache:
         ), f"Unexpected layer_idx={layer_idx}, len(key_cache)={len(self.key_cache)}"
         return self.key_cache[layer_idx].shape[-2]
 
+    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
+        return self.get_seq_length(layer_idx)
+
     def get_max_cache_shape(self) -> Optional[int]:
         return None
 

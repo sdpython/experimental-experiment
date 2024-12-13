@@ -1297,6 +1297,10 @@ class ModelRunner:
                 verbose=verbose,
             )
 
+            if os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1"):
+                print("-- EXPORTED PROGRAM")
+                print(exported_mod)
+
         root_name = os.path.splitext(name)[0]
         if verbose:
             print(f"[ModelRunner._to_export] write fx graph intp {root_name!r}")

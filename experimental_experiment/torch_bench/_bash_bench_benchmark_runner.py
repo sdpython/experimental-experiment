@@ -29,6 +29,7 @@ from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
 from ..helpers import string_type
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from ..torch_interpreter.onnx_export_errors import register_additional_serialization_functions
 
 
 class BenchmarkRunner:
@@ -1707,17 +1708,21 @@ class BenchmarkRunner:
                         stats["time_warmup_fail"] = time.perf_counter() - begin
                         return stats
                 else:
-                    for _ in range(warmup):
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_push("CPL-WARMUP")
-                        if _ == warmup - 1:
-                            got = sess.run(feeds)
-                        else:
-                            sess.run(feeds)
-                        if time_first_iter is None:
-                            time_first_iter = time.perf_counter() - begin
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_pop()
+                    with register_additional_serialization_functions(
+                        verbose=max(self.verbose - 5, 0)
+                    ) as modificator:
+                        new_feeds = modificator(feeds)
+                        for _ in range(warmup):
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("CPL-WARMUP")
+                            if _ == warmup - 1:
+                                got = sess.run(new_feeds)
+                            else:
+                                sess.run(new_feeds)
+                            if time_first_iter is None:
+                                time_first_iter = time.perf_counter() - begin
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
                 stats["time_warmup"] = (time.perf_counter() - begin) / warmup
                 if time_first_iter is not None:
                     stats["time_warmup_first_iteration"] = time_first_iter
@@ -1783,18 +1788,22 @@ class BenchmarkRunner:
                 else:
                     # flattened classes needs to be registered again to be able to
                     # execute the fx graph.
-                    for _ in range(repeat):
-                        if is_cuda:
-                            torch.cuda.synchronize()
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_push("CPL-ITER")
-                        begin = time.perf_counter()
-                        sess.run(feeds)
-                        if is_cuda:
-                            torch.cuda.synchronize()
-                        lats.append(time.perf_counter() - begin)
-                        if self.nvtx:
-                            torch.cuda.nvtx.range_pop()
+                    with register_additional_serialization_functions(
+                        verbose=max(self.verbose - 5, 0)
+                    ) as modificator:
+                        new_feeds = modificator(feeds)
+                        for _ in range(repeat):
+                            if is_cuda:
+                                torch.cuda.synchronize()
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_push("CPL-ITER")
+                            begin = time.perf_counter()
+                            sess.run(new_feeds)
+                            if is_cuda:
+                                torch.cuda.synchronize()
+                            lats.append(time.perf_counter() - begin)
+                            if self.nvtx:
+                                torch.cuda.nvtx.range_pop()
 
                 if len(lats) > 0:
                     stats["time_latency"] = sum(lats) / len(lats)
