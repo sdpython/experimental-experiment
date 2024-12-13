@@ -9,12 +9,12 @@ We use a dummy model. The main difficulty is to set the dynamic shapes properly.
 
 """
 
+import copy
 from typing import Any, Dict
 import onnx
 import torch
 import transformers
-from experimental_experiment.helpers import string_type
-from experimental_experiment.xbuilder import GraphBuilder
+from experimental_experiment.helpers import string_type, pretty_onnx
 
 
 def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
@@ -118,7 +118,10 @@ print("dynamic_shapes", dynamic_shapes)
 
 ###################################
 # Let's check it is working.
-model(**inputs)
+# We need to copy the input before calling the model
+# because it modified the inputs and they are not properly
+# set up when the export starts.
+model(**copy.deepcopy(inputs))
 
 ###################################
 # Let's export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
@@ -128,7 +131,9 @@ from experimental_experiment.torch_interpreter.onnx_export_errors import (
 )
 
 
-with bypass_export_some_errors(patch_transformers=True, verbose=1) as modificator:
+with bypass_export_some_errors(
+    patch_transformers=True, replace_dynamic_cache=True, verbose=1
+) as modificator:
     print("inputs before", string_type(inputs))
     inputs = modificator(inputs)
     print("inputs after", string_type(inputs))
@@ -142,5 +147,4 @@ with bypass_export_some_errors(patch_transformers=True, verbose=1) as modificato
 # Let's display the model.
 
 onx = onnx.load("plot_exporter_recipes_oe_phi2.onnx")
-gr = GraphBuilder(onx, infer_shapes=False)
-print(gr.pretty_text())
+print(pretty_onnx(onx))

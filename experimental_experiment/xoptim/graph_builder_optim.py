@@ -948,9 +948,9 @@ class GraphBuilderPatternOptimization:
                 f"tA={tA}, tB={tB}."
             )
 
-    def _check_graph_verifies_whole(self):
+    def _check_graph_verifies_whole(self, data_prop: bool = True):
         onx = self.builder.to_onnx(optimize=False)
-        new_shapes = infer_shapes(onx)
+        new_shapes = infer_shapes(onx, data_prop=data_prop)
         for val in new_shapes.graph.value_info:
             itype = val.type.tensor_type.elem_type
             shape = tuple(

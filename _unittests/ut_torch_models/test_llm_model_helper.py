@@ -387,9 +387,11 @@ class TestLlmModelHelper(ExtTestCase):
 
         model, model_inputs = get_phi35_vision_instruct(num_hidden_layers=1)
 
-        with bypass_export_some_errors(patch_transformers=True):
+        with bypass_export_some_errors(
+            patch_transformers=True, replace_dynamic_cache=True
+        ) as modificator:
             exported_program = torch.export.export(model, tuple(), model_inputs, strict=True)
-            onx = to_onnx(model, tuple(), model_inputs)
+            onx = to_onnx(model, tuple(), modificator(model_inputs))
             onnx.save(onx, "test_get_phi35_vision_instruct.onnx")
         self.assertNotEmpty(exported_program)
 
@@ -473,7 +475,9 @@ class TestLlmModelHelper(ExtTestCase):
                             res["dynamic_shapes"],
                         )
                         model(**copy.deepcopy(model_inputs))
-                        with bypass_export_some_errors(patch_transformers=True) as modificator:
+                        with bypass_export_some_errors(
+                            patch_transformers=True, replace_dynamic_cache=True
+                        ) as modificator:
                             torch.export.export(
                                 model,
                                 (),
@@ -493,8 +497,12 @@ class TestLlmModelHelper(ExtTestCase):
                         )
                         model, model_inputs = res["model"], res["inputs"]
                         model(**copy.deepcopy(model_inputs))
-                        with bypass_export_some_errors():
-                            torch.export.export(model, (), model_inputs, strict=False)
+                        with bypass_export_some_errors(
+                            patch_transformers=True, replace_dynamic_cache=True
+                        ) as modificator:
+                            torch.export.export(
+                                model, (), modificator(model_inputs), strict=False
+                            )
 
 
 if __name__ == "__main__":

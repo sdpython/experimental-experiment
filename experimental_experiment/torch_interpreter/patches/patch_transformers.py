@@ -109,6 +109,8 @@ class patched_DynamicCache:
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        if not self.key_cache:
+            return 0
         assert layer_idx < len(
             self.key_cache
         ), f"Unexpected layer_idx={layer_idx}, len(key_cache)={len(self.key_cache)}"

@@ -138,7 +138,9 @@ def _catch_produce_guards_and_solve_constraints(
 
 
 @contextlib.contextmanager
-def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0):
+def bypass_export_some_errors(
+    patch_transformers: bool = False, replace_dynamic_cache: bool = False, verbose: int = 0
+):
     """
     Tries to bypass some functions :func:`torch.export.export` does not
     support:
@@ -149,7 +151,10 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
     * Serialialization of `DynamicCache` (in :epkg:`transformers`)
     * reduce errors due to shape inference
 
-    :param patch_transformers: patches transformers
+    :param patch_transformers: patches transformers with supported implementation
+    :param replace_dynamic_cache: replaces DynamicCache by a patched class
+        avoiding issues with the dynamic shapes inferences,
+        it should be True with LLM using that class and only during the export
 
     * ``AttentionMaskConverter._make_causal_mask``
 
@@ -208,6 +213,10 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
         if verbose:
             print("[bypass_export_some_errors] patch transformers")
         keep__make_causal_mask = AttentionMaskConverter._make_causal_mask
+
+    if replace_dynamic_cache:
+        if verbose:
+            print("[bypass_export_some_errors] replace DynamicCache")
         AttentionMaskConverter._make_causal_mask = (
             patched_AttentionMaskConverter._make_causal_mask
         )
@@ -302,12 +311,15 @@ def bypass_export_some_errors(patch_transformers: bool = False, verbose: int = 0
 
         if patch_transformers:
             AttentionMaskConverter._make_causal_mask = keep__make_causal_mask
+            if verbose:
+                print("[bypass_export_some_errors] restored transformer")
+
+        if replace_dynamic_cache:
             keep_DynamicCache.__init__ = keep_DynamicCache_init
             transformers.cache_utils.DynamicCache = keep_DynamicCache
             transformers.models.phi.modeling_phi.DynamicCache = keep_DynamicCache
-
             if verbose:
-                print("[bypass_export_some_errors] restored transformer")
+                print("[bypass_export_some_errors] restored DynamicCache")
 
         if unregistered_mamba_cache and MambaCache is not None:
             torch.utils._pytree.SUPPORTED_NODES.pop(MambaCache)

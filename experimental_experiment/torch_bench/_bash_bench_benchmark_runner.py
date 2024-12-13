@@ -29,7 +29,6 @@ from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
 from ..helpers import string_type
 from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
-from ..torch_interpreter.onnx_export_errors import bypass_export_some_errors
 
 
 class BenchmarkRunner:
@@ -1143,7 +1142,9 @@ class BenchmarkRunner:
             del onx_with_shapes.graph.value_info[:]
             if self.verbose > 1:
                 print("[benchmarkrunner.benchmark] do shape inference again")
-            onx_with_shapes = onnx.shape_inference.infer_shapes(onx_with_shapes)
+            onx_with_shapes = onnx.shape_inference.infer_shapes(
+                onx_with_shapes, data_prop=True
+            )
             if self.verbose > 1:
                 print(f"[benchmarkrunner.benchmark] saves {filename!r}")
             onnx.save(onx_with_shapes, filename, save_as_external_data=False)
@@ -1676,37 +1677,17 @@ class BenchmarkRunner:
                         if time_first_iter is not None:
                             stats["time_warmup_first_iteration"] = time_first_iter
             else:
-                with bypass_export_some_errors(verbose=max(self.verbose - 5, 0)):
-                    if self.verbose > 1:
-                        print(
-                            f"[BenchmarkRunner.benchmark] warmup exporter={exporter!r}, "
-                            f"quiet={quiet}"
-                        )
-                    # flattened classes needs to be registered again to be able to
-                    # execute the fx graph.
-                    begin = time.perf_counter()
-                    time_first_iter = None
-                    if quiet:
-                        try:
-                            for _ in range(warmup):
-                                if self.nvtx:
-                                    torch.cuda.nvtx.range_push("CPL-WARMUP")
-                                if _ == warmup - 1:
-                                    got = sess.run(feeds)
-                                else:
-                                    sess.run(feeds)
-                                if time_first_iter is None:
-                                    time_first_iter = time.perf_counter() - begin
-                                if self.nvtx:
-                                    torch.cuda.nvtx.range_pop()
-                        except Exception as e:
-                            if self.verbose:
-                                print(f"[benchmarkrunner.benchmark] err_warmup {e}")
-                                traceback.print_tb(e.__traceback__, file=sys.stdout)
-                            stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
-                            stats["time_warmup_fail"] = time.perf_counter() - begin
-                            return stats
-                    else:
+                if self.verbose > 1:
+                    print(
+                        f"[BenchmarkRunner.benchmark] warmup exporter={exporter!r}, "
+                        f"quiet={quiet}"
+                    )
+                # flattened classes needs to be registered again to be able to
+                # execute the fx graph.
+                begin = time.perf_counter()
+                time_first_iter = None
+                if quiet:
+                    try:
                         for _ in range(warmup):
                             if self.nvtx:
                                 torch.cuda.nvtx.range_push("CPL-WARMUP")
@@ -1718,9 +1699,28 @@ class BenchmarkRunner:
                                 time_first_iter = time.perf_counter() - begin
                             if self.nvtx:
                                 torch.cuda.nvtx.range_pop()
-                    stats["time_warmup"] = (time.perf_counter() - begin) / warmup
-                    if time_first_iter is not None:
-                        stats["time_warmup_first_iteration"] = time_first_iter
+                    except Exception as e:
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_warmup {e}")
+                            traceback.print_tb(e.__traceback__, file=sys.stdout)
+                        stats["ERR_warmup"] = _clean_string(str(e)).replace("\n", "_ ")
+                        stats["time_warmup_fail"] = time.perf_counter() - begin
+                        return stats
+                else:
+                    for _ in range(warmup):
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("CPL-WARMUP")
+                        if _ == warmup - 1:
+                            got = sess.run(feeds)
+                        else:
+                            sess.run(feeds)
+                        if time_first_iter is None:
+                            time_first_iter = time.perf_counter() - begin
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
+                stats["time_warmup"] = (time.perf_counter() - begin) / warmup
+                if time_first_iter is not None:
+                    stats["time_warmup_first_iteration"] = time_first_iter
 
             if self.device.startswith("cuda"):
                 stats["mema_gpu_8_after_export_warmup"] = torch.cuda.max_memory_allocated(
@@ -1783,19 +1783,18 @@ class BenchmarkRunner:
                 else:
                     # flattened classes needs to be registered again to be able to
                     # execute the fx graph.
-                    with bypass_export_some_errors(verbose=max(self.verbose - 5, 0)):
-                        for _ in range(repeat):
-                            if is_cuda:
-                                torch.cuda.synchronize()
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_push("CPL-ITER")
-                            begin = time.perf_counter()
-                            sess.run(feeds)
-                            if is_cuda:
-                                torch.cuda.synchronize()
-                            lats.append(time.perf_counter() - begin)
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_pop()
+                    for _ in range(repeat):
+                        if is_cuda:
+                            torch.cuda.synchronize()
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_push("CPL-ITER")
+                        begin = time.perf_counter()
+                        sess.run(feeds)
+                        if is_cuda:
+                            torch.cuda.synchronize()
+                        lats.append(time.perf_counter() - begin)
+                        if self.nvtx:
+                            torch.cuda.nvtx.range_pop()
 
                 if len(lats) > 0:
                     stats["time_latency"] = sum(lats) / len(lats)

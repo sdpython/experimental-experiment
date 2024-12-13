@@ -4,6 +4,7 @@ import time
 import os
 import sys
 from collections import Counter
+from enum import IntEnum
 from typing import (
     Any,
     Dict,
@@ -143,6 +144,19 @@ class FunctionOptions:
         return string_sig(self)
 
 
+class InferShapesOptions(IntEnum):
+    """
+    Defines options when running shape inference on an existing model.
+    Options ``NEW`` means shapes informations is removed by running it again.
+    """
+
+    NONE = 0
+    NEW = 1
+    ONNX = 2
+    DATA_PROP = 4
+    BUILDER = 8
+
+
 class GraphBuilder(_GraphBuilderRuntime):
     """
     Simplifies the creation of a model.
@@ -158,8 +172,8 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param kwargs: example of inputs
     :param ir_version: ir version when exporting
     :param verbose: verbosity
-    :param infer_shapes: run shape inference, if the value is `'new'`,
-        existing shapes are ignored
+    :param infer_shapes_options: options when running
+        shape inference for an existing model
     :param raise_list: raise an exception if a new operator belongs to that list
     :param dynamic_shapes: dynamic shapes
     :param local_domain: domain name to use for local functions if not specified
@@ -333,7 +347,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         kwargs: Optional[Dict[str, Any]] = None,
         ir_version: Optional[int] = None,
         verbose: int = 0,
-        infer_shapes: Union[bool, str] = False,
+        infer_shapes_options: InferShapesOptions = InferShapesOptions.NONE,
         raise_list: Optional[Set[str]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         local_domain: str = "local_function",
@@ -422,7 +436,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
-            assert not infer_shapes, "infer_shapes is used if an existing model is loaded"
+            assert (
+                not infer_shapes_options
+            ), "infer_shapes_options is used if an existing model is loaded"
             self.opsets = (
                 {"": target_opset_or_existing_proto}
                 if isinstance(target_opset_or_existing_proto, int)
@@ -439,9 +455,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                     "input_names must be empty if the input is an existing model."
                 )
             self.current_input = len(self.inputs)
-            self._update_structures_with_proto(target_opset_or_existing_proto, infer_shapes)
+            self._update_structures_with_proto(
+                target_opset_or_existing_proto, infer_shapes_options
+            )
             self.constant_folding(convert_into_initializer=False)
-            self._update_shape_types_with_proto(target_opset_or_existing_proto, infer_shapes)
+            self._update_shape_types_with_proto(
+                target_opset_or_existing_proto, infer_shapes_options
+            )
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -6174,13 +6194,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.set_shape(val.name, shape, exc=False)
 
     def _update_shape_types_with_proto(
-        self, proto: ModelProto, infer_shapes: Union[bool, str] = False
+        self,
+        proto: ModelProto,
+        infer_shapes_options: InferShapesOptions = InferShapesOptions.NONE,
     ):
         """
         Updates the shapes and types for an existing model.
 
         :param proto: model proto
-        :param infer_shapes: infer shapes to fill information about type and shapes
+        :param infer_shapes_options: infer shapes to fill information about type and shapes
             run shape inference, if the value is `'new'`,
             existing shapes are ignored
         """
@@ -6192,12 +6214,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"shapes."
             )
         assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)} for proto"
-        if infer_shapes:
+        if infer_shapes_options & InferShapesOptions.ONNX:
             if self.verbose > 1:
                 print("[GraphBuilder._update_shape_types_with_proto] infer shapes")
-            if infer_shapes == "new":
+            if infer_shapes_options & InferShapesOptions.NEW:
                 del proto.graph.value_info[:]
-            new_proto = onnx_infer_shapes(proto)
+            new_proto = onnx_infer_shapes(
+                proto, data_prop=infer_shapes_options & InferShapesOptions.DATA_PROP
+            )
             if self.verbose > 1:
                 print(
                     "[GraphBuilder._update_shape_types_with_proto] "
@@ -6229,7 +6253,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for val in new_proto.graph.value_info:
             self._update_shape_types_with_proto_one_result(val)
 
-        if infer_shapes:
+        if infer_shapes_options & InferShapesOptions.BUILDER:
             self.infer_shapes()
 
         if self.verbose > 1:
@@ -6508,6 +6532,36 @@ class GraphBuilder(_GraphBuilderRuntime):
                     return True
                 node.doc_string += "#SV-Add/3"
                 self.set_value_shape(node.output[0], (f"{values[0]}+{d}",))
+                return True
+
+        if node.op_type == "Div":
+            if isinstance(values[0], tuple) and len(values[0]) > 16:
+                # It should not be a shape.
+                node.doc_string += "#SV-Div/1"
+                return False
+            if isinstance(values[1], tuple) and len(values[1]) == 1:
+                d = values[1][0]
+                if isinstance(values[0], int) and isinstance(d, int):
+                    node.doc_string += "#SV-Div/2"
+                    self.set_value_shape(node.output[0], (values[0] // d,))
+                    return True
+                node.doc_string += "#SV-Div/3"
+                self.set_value_shape(node.output[0], (f"{values[0]}//{d}",))
+                return True
+
+        if node.op_type == "Mul":
+            if isinstance(values[0], tuple) and len(values[0]) > 16:
+                # It should not be a shape.
+                node.doc_string += "#SV-Mul/1"
+                return False
+            if isinstance(values[1], tuple) and len(values[1]) == 1:
+                d = values[1][0]
+                if isinstance(values[0], int) and isinstance(d, int):
+                    node.doc_string += "#SV-Mul/2"
+                    self.set_value_shape(node.output[0], (values[0] * d,))
+                    return True
+                node.doc_string += "#SV-Mul/3"
+                self.set_value_shape(node.output[0], (f"{values[0]}*{d}",))
                 return True
 
         if node.op_type == "Sub":

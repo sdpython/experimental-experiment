@@ -33,6 +33,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
+    InferShapesOptions,
 )
 from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
@@ -4214,7 +4215,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(expected[1], got[1], atol=1e-5)
 
     @hide_stdout()
-    def test_shape_eval(self):
+    def test_shape_eval_no_data_prop(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -4250,7 +4251,142 @@ class TestGraphPatternOptimization(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=InferShapesOptions.ONNX | InferShapesOptions.BUILDER,
+            verbose=5,
+        )
+        shapes = gr._known_shapes
+        self.assertEqual(shapes["Areshaped"], ("batch", "seq", 32, 8))
+
+    @hide_stdout()
+    def test_shape_eval_data_prop(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["ids_weight"], ["shape"], start=0, end=2),
+                    oh.make_node("Concat", ["shape", "init328"], ["new_shape"], axis=0),
+                    oh.make_node("MatMul", ["ids_weight", "A"], ["A1"]),
+                    oh.make_node("MatMul", ["ids_weight", "B"], ["B1"]),
+                    oh.make_node("MatMul", ["ids_weight", "C"], ["C1"]),
+                    oh.make_node("Reshape", ["A1", "new_shape"], ["Areshaped"]),
+                    oh.make_node("Reshape", ["B1", "new_shape"], ["Breshaped"]),
+                    oh.make_node("Reshape", ["C1", "new_shape"], ["Creshaped"]),
+                    oh.make_node("Transpose", ["Areshaped"], ["At"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Breshaped"], ["Bt"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Creshaped"], ["Ct"], perm=[0, 2, 1, 3]),
+                ],
+                "dummy",
+                [_mkv_("ids_weight", TFLOAT, ["batch", "seq", 256])],
+                [
+                    _mkv_("At", TFLOAT, ["batch", 32, "seq", 8]),
+                    _mkv_("Bt", TFLOAT, ["batch", 32, "seq", 8]),
+                    _mkv_("Ct", TFLOAT, ["batch", 32, "seq", 8]),
+                ],
+                [
+                    onh.from_array(np.array([32, 8], dtype=np.int64), name="init328"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="A"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="B"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="C"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.ONNX | InferShapesOptions.DATA_PROP,
+            verbose=5,
+        )
+        shapes = gr._known_shapes
+        self.assertEqual(shapes["Areshaped"], ("batch", "seq", 32, 8))
+
+    @hide_stdout()
+    def test_shape_eval_data_prop_2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["ids_weight"], ["shape"], start=0, end=2),
+                    oh.make_node("Div", ["shape", "two"], ["shape_by_2"]),
+                    oh.make_node("Mul", ["init328", "two"], ["init328_2"]),
+                    oh.make_node("Concat", ["shape_by_2", "init328_2"], ["new_shape"], axis=0),
+                    oh.make_node("MatMul", ["ids_weight", "A"], ["A1"]),
+                    oh.make_node("MatMul", ["ids_weight", "B"], ["B1"]),
+                    oh.make_node("MatMul", ["ids_weight", "C"], ["C1"]),
+                    oh.make_node("Reshape", ["A1", "new_shape"], ["Areshaped"]),
+                    oh.make_node("Reshape", ["B1", "new_shape"], ["Breshaped"]),
+                    oh.make_node("Reshape", ["C1", "new_shape"], ["Creshaped"]),
+                    oh.make_node("Transpose", ["Areshaped"], ["At"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Breshaped"], ["Bt"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Creshaped"], ["Ct"], perm=[0, 2, 1, 3]),
+                ],
+                "dummy",
+                [_mkv_("ids_weight", TFLOAT, ["batch", "seq", 256])],
+                [
+                    _mkv_("At", TFLOAT, ["a", "b", "c", "d"]),
+                    _mkv_("Bt", TFLOAT, ["a", "b", "c", "d"]),
+                    _mkv_("Ct", TFLOAT, ["a", "b", "c", "d"]),
+                ],
+                [
+                    onh.from_array(np.array([32, 8], dtype=np.int64), name="init328"),
+                    onh.from_array(np.array([2], dtype=np.int64), name="two"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="A"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="B"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="C"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.ONNX | InferShapesOptions.DATA_PROP,
+            verbose=5,
+        )
+        shapes = gr._known_shapes
+        self.assertEqual(shapes["Areshaped"], ("batch", "seq", 32, 8))
+
+    @hide_stdout()
+    def test_shape_eval_no_data_prop_2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["ids_weight"], ["shape"], start=0, end=2),
+                    oh.make_node("Div", ["shape", "two"], ["shape_by_2"]),
+                    oh.make_node("Mul", ["init328", "two"], ["init328_2"]),
+                    oh.make_node("Concat", ["shape_by_2", "init328_2"], ["new_shape"], axis=0),
+                    oh.make_node("MatMul", ["ids_weight", "A"], ["A1"]),
+                    oh.make_node("MatMul", ["ids_weight", "B"], ["B1"]),
+                    oh.make_node("MatMul", ["ids_weight", "C"], ["C1"]),
+                    oh.make_node("Reshape", ["A1", "new_shape"], ["Areshaped"]),
+                    oh.make_node("Reshape", ["B1", "new_shape"], ["Breshaped"]),
+                    oh.make_node("Reshape", ["C1", "new_shape"], ["Creshaped"]),
+                    oh.make_node("Transpose", ["Areshaped"], ["At"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Breshaped"], ["Bt"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["Creshaped"], ["Ct"], perm=[0, 2, 1, 3]),
+                ],
+                "dummy",
+                [_mkv_("ids_weight", TFLOAT, ["batch", "seq", 256])],
+                [
+                    _mkv_("At", TFLOAT, ["a", "b", "c", "d"]),
+                    _mkv_("Bt", TFLOAT, ["a", "b", "c", "d"]),
+                    _mkv_("Ct", TFLOAT, ["a", "b", "c", "d"]),
+                ],
+                [
+                    onh.from_array(np.array([32, 8], dtype=np.int64), name="init328"),
+                    onh.from_array(np.array([2], dtype=np.int64), name="two"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="A"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="B"),
+                    onh.from_array(np.random.randn(256, 256).astype(np.float32), name="C"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.ONNX | InferShapesOptions.BUILDER,
             verbose=5,
         )
         shapes = gr._known_shapes
