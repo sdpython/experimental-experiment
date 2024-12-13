@@ -134,7 +134,7 @@ class TestGraphPatternOptimizationEasy(ExtTestCase):
         for model in models:
             gr = GraphBuilder(
                 model,
-                infer_shapes=True,
+                infer_shapes_options=True,
                 optimization_options=OptimizationOptions(
                     patterns=["SoftmaxCrossEntropyLossCast"], verbose=0
                 ),

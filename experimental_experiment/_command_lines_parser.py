@@ -282,7 +282,7 @@ def _cmd_optimize(argv: List[Any]):
         print(f"begin optimization with {len(pats)} patterns")
     gr = GraphBuilder(
         onx,
-        infer_shapes=args.infer_shapes,
+        infer_shapes_options=args.infer_shapes,
         optimization_options=OptimizationOptions(
             patterns=pats,
             verbose=args.verbose,

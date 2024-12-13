@@ -434,6 +434,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.dynamic_shapes:
             self._register_dynamic_object_from_dynamic_shapes()
 
+        if isinstance(infer_shapes_options, bool):
+            infer_shapes_options = (
+                InferShapesOptions.ONNX if infer_shapes_options else InferShapesOptions.NONE
+            )
         if isinstance(target_opset_or_existing_proto, (int, dict)):
             # starts a model from nothing
             assert (
@@ -489,7 +493,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             optimization_options=self.optimization_options,
             ir_version=self.ir_version,
             verbose=max(self.verbose - 1, 0),
-            infer_shapes=False,
+            infer_shapes_options=False,
             raise_list=self.raise_list,
             local_domain=self.local_domain,
             dynamic_shapes=self.dynamic_shapes,

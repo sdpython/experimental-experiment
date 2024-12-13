@@ -98,7 +98,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         onx = onnx.load(filename)
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             verbose=0,
             optimization_options=OptimizationOptions(
                 remove_identity=False,
@@ -149,7 +149,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
     def test_shape_inference0(self):
         origin = self._get_model("dort-c-custom__0.onnx")
-        gr = GraphBuilder(origin, infer_shapes=True)
+        gr = GraphBuilder(origin, infer_shapes_options=True)
         gro = GraphBuilderPatternOptimization(gr)
         shape = gro.try_infer_shape("_onx_tile0", exc=True)
         self.assertEqual(shape, (2, 1, 1024, 1024))
@@ -200,7 +200,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(
                 patterns=["ReshapeMatMulReshape"], verbose=10
             ),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
@@ -252,7 +252,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr, _, __ = self.capture(
             lambda: GraphBuilder(
                 model,
-                infer_shapes=True,
+                infer_shapes_options=True,
                 optimization_options=OptimizationOptions(
                     patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
                     verbose=10,
@@ -310,7 +310,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(
                 patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
             ),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node])
@@ -357,7 +357,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(
                 patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"]
             ),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node])
@@ -403,7 +403,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
                     verbose=10,
                 ),
-                infer_shapes=True,
+                infer_shapes_options=True,
                 verbose=10,
             )
         )
@@ -427,7 +427,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(patterns=["ReshapeReshape"]),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "Reshape"]
@@ -464,7 +464,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ReshapeReshape"]),
         )
         s = str(gr.optimization_options)
@@ -486,7 +486,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Expand"]
         gr = GraphBuilder(
             origin,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Expand"]),
         )
         onx = gr.to_onnx(optimize=True)
@@ -522,7 +522,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Expand"]),
         )
         s = str(gr.optimization_options)
@@ -575,7 +575,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["TransposeTranspose"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -615,7 +615,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["TransposeTranspose"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -636,7 +636,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Transpose"]
         gr = GraphBuilder(
             origin,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["TransposeMatMul"]),
         )
         onx = gr.to_onnx(optimize=True)
@@ -665,7 +665,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["TransposeMatMul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -706,7 +706,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["TransposeMatMul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -726,7 +726,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "ConstantOfShape"]
@@ -741,7 +741,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(
                 patterns=["RotaryConcatPart"], verbose=20
             ),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "ConstantOfShape"]
@@ -795,7 +795,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -856,7 +856,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -902,7 +902,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -948,7 +948,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -989,7 +989,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Sub1Mul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1050,7 +1050,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MulMulMulScalar"]),
         )
         stats = gr.optimize()
@@ -1115,7 +1115,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ExpandBroadcast"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1140,7 +1140,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         node_list = [n.op_type for n in origin.graph.node]
         gr = GraphBuilder(
             origin,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ExpandBroadcast"]),
         )
         stat = gr.optimize()
@@ -1175,7 +1175,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Reshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1212,7 +1212,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Reshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1247,7 +1247,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Reshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1282,7 +1282,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Reshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1317,7 +1317,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Reshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1354,7 +1354,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1392,7 +1392,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1427,7 +1427,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1463,7 +1463,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1499,7 +1499,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["MatMulReshape2Of3"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1533,7 +1533,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1567,7 +1567,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1602,7 +1602,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1638,7 +1638,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ReduceReshape"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1670,7 +1670,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["TransposeReshapeMatMul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1704,7 +1704,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["TransposeReshapeMatMul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1737,7 +1737,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ExpandSwap"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1771,7 +1771,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ExpandSwap"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1802,7 +1802,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ExpandSwap"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1819,7 +1819,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self._check_with_ort(origin)
         gr = GraphBuilder(
             origin,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MatMulReshape2Of3"],
                 verbose=0,  # stop_after=2
@@ -1855,7 +1855,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SlicesSplit"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1873,7 +1873,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self._check_with_ort(origin)
         gr = GraphBuilder(
             origin,
-            infer_shapes=False,
+            infer_shapes_options=False,
             optimization_options=OptimizationOptions(
                 patterns=["SlicesSplit"],
                 verbose=0,
@@ -1900,7 +1900,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         # The optimization may do something wrong.
         gr = GraphBuilder(
             origin,
-            infer_shapes="new",
+            infer_shapes_options=InferShapesOptions.NEW | InferShapesOptions.ONNX,
             optimization_options=OptimizationOptions(
                 patterns=["SlicesSplit"],
                 verbose=0,
@@ -1941,7 +1941,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -1981,7 +1981,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2011,7 +2011,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["CastCastBinary"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2045,7 +2045,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["ReshapeReshapeBinary"]),
             verbose=0,
         )
@@ -2084,7 +2084,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SwitchOrderBinary"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2124,7 +2124,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SwitchOrderBinary"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2143,7 +2143,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(patterns=["RotaryConcatPart"], verbose=0),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         onx = gr.to_onnx(optimize=True)
         after = [node for node in onx.graph.node if node.op_type == "Transpose"]
@@ -2170,7 +2170,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SameChildren"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2206,7 +2206,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SameChildren"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2244,7 +2244,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SameChildren"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2288,7 +2288,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SameChildren"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2327,7 +2327,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["CastOpCast"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2365,7 +2365,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ComputationCastOpCast"], verbose=0
             ),
@@ -2406,7 +2406,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["CastOpCast"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2443,7 +2443,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2480,7 +2480,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2519,7 +2519,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2556,7 +2556,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2598,7 +2598,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ReduceSumNormalize"], verbose=0
             ),
@@ -2623,7 +2623,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self._check_with_ort(origin)
         gr = GraphBuilder(
             origin,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["Expand", "ReshapeReshape", "MatMulReshape2Of3"],
                 verbose=0,
@@ -2661,7 +2661,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["UnsqueezeEqual"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2684,7 +2684,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["LayerNormalization"], verbose=0
             ),
@@ -2706,7 +2706,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Cast", "Gelu"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2722,7 +2722,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["Dropout"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2779,7 +2779,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
             gr = GraphBuilder(
                 model,
-                infer_shapes=True,
+                infer_shapes_options=True,
                 optimization_options=OptimizationOptions(
                     patterns=["LayerNormalizationScale"], verbose=0
                 ),
@@ -2875,7 +2875,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
             gr = GraphBuilder(
                 model,
-                infer_shapes=True,
+                infer_shapes_options=True,
                 optimization_options=OptimizationOptions(
                     patterns=["LayerNormalizationScale"], verbose=0
                 ),
@@ -2961,7 +2961,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["LayerNormalization"], verbose=0
                     ),
@@ -3024,7 +3024,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MulMulMatMul"],
                 verbose=0,
@@ -3060,7 +3060,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TransposeReshapeTranspose"],
                 verbose=0,
@@ -3103,7 +3103,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TransposeReshapeTranspose"],
                 verbose=0,
@@ -3154,7 +3154,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["CastLayerNormalizationCast"],
                 verbose=0,
@@ -3199,7 +3199,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["LeakyRelu"],
                 verbose=0,
@@ -3248,7 +3248,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["LeakyRelu"],
                 verbose=0,
@@ -3305,7 +3305,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ConvBiasNull"],
                 verbose=0,
@@ -3373,7 +3373,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ConvBiasNull"],
                 verbose=0,
@@ -3434,7 +3434,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["Cast"], verbose=0, constant_folding=True
             ),
@@ -3486,7 +3486,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["BatchNormalization"], verbose=0, constant_folding=True
             ),
@@ -3540,7 +3540,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["BatchNormalizationTraining"], verbose=0, constant_folding=True
             ),
@@ -3597,7 +3597,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["BatchNormalizationTraining"], verbose=0, constant_folding=True
             ),
@@ -3649,7 +3649,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MatMulAdd"], verbose=0, constant_folding=True
             ),
@@ -3696,7 +3696,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MatMulAdd"], verbose=0, constant_folding=True
             ),
@@ -3745,7 +3745,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MatMulAdd"], verbose=0, constant_folding=True
             ),
@@ -3792,7 +3792,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MatMulAdd"], verbose=0, constant_folding=True
             ),
@@ -3841,7 +3841,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MatMulAdd"], verbose=0, constant_folding=True
             ),
@@ -3891,7 +3891,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MatMulAdd"],
                 verbose=10,
@@ -3935,7 +3935,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["GemmTranspose"],
                 verbose=0,
@@ -3978,7 +3978,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["SliceSlice"],
                 verbose=0,
@@ -4020,7 +4020,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["SliceSlice"],
                 verbose=0,
@@ -4062,7 +4062,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["SliceSlice"],
                 verbose=0,
@@ -4104,7 +4104,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["SliceSlice"],
                 verbose=0,
@@ -4146,7 +4146,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ClipClip"],
                 verbose=0,
@@ -4194,7 +4194,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["SequenceConstructAt"],
                 verbose=0,

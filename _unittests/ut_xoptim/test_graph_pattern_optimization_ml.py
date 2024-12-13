@@ -80,7 +80,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorMul"], verbose=0
             ),
@@ -167,7 +167,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorMul"], verbose=0
             ),
@@ -296,7 +296,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorConcat"], verbose=0
             ),
@@ -437,7 +437,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorConcat"], verbose=0
             ),
@@ -574,7 +574,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorConcat"], verbose=0
             ),
@@ -719,7 +719,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorConcat"], verbose=0
             ),
@@ -857,7 +857,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorConcat"], verbose=0
             ),
@@ -992,7 +992,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TreeEnsembleRegressorConcat"], verbose=0
             ),

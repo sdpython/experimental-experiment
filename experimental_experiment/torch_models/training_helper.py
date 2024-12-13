@@ -151,7 +151,7 @@ def make_aot_ort(
 
             gr = GraphBuilder(
                 next_model,
-                infer_shapes=True,
+                infer_shapes_options=True,
                 optimization_options=OptimizationOptions(
                     patterns=patterns,
                     processor=processor,

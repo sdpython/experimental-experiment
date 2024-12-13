@@ -223,7 +223,7 @@ We then apply the optimizations by writing the following code:
     # It creates dictionnaires to store shapes, ranks, types
     # to make it easier to the optimizers to find the information
     # they need. It still uses NodeProto to store nodes
-    gr = GraphBuilder(onx, infer_shapes=True)
+    gr = GraphBuilder(onx, infer_shapes_options=True)
 
     # Let's optimize.
     opt_onx = gr.to_onnx(optimize=True)
@@ -254,7 +254,7 @@ Verbosity
 
     onx = onnx.load("temp_doc_mlp.onnx")
 
-    gr = GraphBuilder(onx, infer_shapes=True, verbose=1)
+    gr = GraphBuilder(onx, infer_shapes_options=True, verbose=1)
     opt_onx = gr.to_onnx(optimize=True)
 
 With more verbosity:
@@ -267,7 +267,7 @@ With more verbosity:
 
     onx = onnx.load("temp_doc_mlp.onnx")
 
-    gr = GraphBuilder(onx, infer_shapes=True, verbose=11)
+    gr = GraphBuilder(onx, infer_shapes_options=True, verbose=11)
     opt_onx = gr.to_onnx(optimize=True)
 
 Select the pattern to use
@@ -286,7 +286,7 @@ is used to enable or disable patterns.
 
     gr = GraphBuilder(
         onx,
-        infer_shapes=True,
+        infer_shapes_options=True,
         optimization_options=OptimizationOptions(
             patterns="TransposeTranspose,TransposeMatMul", verbose=1
         ),
@@ -310,7 +310,7 @@ There exists some predefined lists of patterns:
 
     gr = GraphBuilder(
         onx,
-        infer_shapes=True,
+        infer_shapes_options=True,
         optimization_options=OptimizationOptions(
             patterns="default+onnxruntime", verbose=1
         ),
@@ -333,7 +333,7 @@ This can be used to see when a pattern is applied and how long it takes.
 
     gr = GraphBuilder(
         onx,
-        infer_shapes=True,
+        infer_shapes_options=True,
         optimization_options=OptimizationOptions(patterns="default"),
     )
     stat = gr.optimize()
@@ -353,7 +353,7 @@ It can be aggregated:
 
     gr = GraphBuilder(
         onx,
-        infer_shapes=True,
+        infer_shapes_options=True,
         optimization_options=OptimizationOptions(patterns="default"),
     )
     stat = gr.optimize()

@@ -221,7 +221,7 @@ class TestGraphPatternCombination(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[
                     "Cast",
@@ -276,7 +276,7 @@ class TestGraphPatternCombination(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[
                     "Cast",
@@ -340,7 +340,7 @@ class TestGraphPatternCombination(ExtTestCase):
                     "ReshapeReshape",
                 ]
             ),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node])
@@ -397,7 +397,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 ],
                 verbose=10,
             ),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         s = str(gr.optimization_options)
         self.assertIn("OptimizationOptions(", s)
@@ -423,7 +423,7 @@ class TestGraphPatternCombination(ExtTestCase):
                         patterns=["SimplifiedLayerNormalization"],
                         verbose=0,
                     ),
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                 )
                 onx = gr.to_onnx(optimize=True)
                 types = set(n.op_type for n in onx.graph.node)
@@ -507,7 +507,7 @@ class TestGraphPatternCombination(ExtTestCase):
             gr = GraphBuilder(
                 onx,
                 optimization_options=options,
-                infer_shapes=True,
+                infer_shapes_options=True,
             )
             new_onx = None
             try:
@@ -573,7 +573,7 @@ class TestGraphPatternCombination(ExtTestCase):
             gr = GraphBuilder(
                 onx,
                 optimization_options=options,
-                infer_shapes=False,
+                infer_shapes_options=False,
                 verbose=2 if __name__ == "__main__" else 0,
             )
             return gr.to_onnx(optimize=True, large_model=False)

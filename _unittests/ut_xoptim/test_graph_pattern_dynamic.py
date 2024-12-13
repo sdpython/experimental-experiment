@@ -33,11 +33,11 @@ class TestGraphPatternDynamic(ExtTestCase):
         dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__0.onnx")
         opts = OptimizationOptions(patterns="ReshapeMatMulReshape", verbose=10)
         gr1 = GraphBuilder(
-            static_model, infer_shapes=True, optimization_options=opts, verbose=0
+            static_model, infer_shapes_options=True, optimization_options=opts, verbose=0
         )
         gr1.optimize()
         gr1 = GraphBuilder(
-            dynamic_model, infer_shapes=True, optimization_options=opts, verbose=0
+            dynamic_model, infer_shapes_options=True, optimization_options=opts, verbose=0
         )
         gr1.optimize()
 
@@ -121,9 +121,9 @@ class TestGraphPatternDynamic(ExtTestCase):
                 patterns=patterns[: i + 1] if cumulative else patterns[i : i + 1],
                 verbose=0,
             )
-            gr1 = GraphBuilder(model1, infer_shapes=True, optimization_options=opts)
+            gr1 = GraphBuilder(model1, infer_shapes_options=True, optimization_options=opts)
             stat1 = gr1.optimize()
-            gr2 = GraphBuilder(model2, infer_shapes=True, optimization_options=opts)
+            gr2 = GraphBuilder(model2, infer_shapes_options=True, optimization_options=opts)
             stat2 = gr2.optimize()
             pat = patterns[i]
             prefix = f"apply_{pat.__class__.__name__}"
