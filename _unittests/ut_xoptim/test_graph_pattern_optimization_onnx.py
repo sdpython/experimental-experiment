@@ -4344,7 +4344,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             verbose=5,
         )
         shapes = gr._known_shapes
-        self.assertEqual(shapes["Areshaped"], ("batch", "seq", 32, 8))
+        self.assertEqual(shapes["Areshaped"], ("batch/2", "seq/2", 64, 16))
 
     @hide_stdout()
     def test_shape_eval_no_data_prop_2(self):
@@ -4386,11 +4386,14 @@ class TestGraphPatternOptimization(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes_options=InferShapesOptions.ONNX | InferShapesOptions.BUILDER,
+            infer_shapes_options=InferShapesOptions.BUILDER,
             verbose=5,
         )
         shapes = gr._known_shapes
-        self.assertEqual(shapes["Areshaped"], ("batch", "seq", 32, 8))
+        assert (
+            "new_shape" in gr._known_value_shape
+        ), f"Missing value for 'new_shape'{gr.get_debug_msg()}"
+        self.assertEqual(shapes["Areshaped"], ("batch/2", "seq/2", 64, 16))
 
 
 if __name__ == "__main__":

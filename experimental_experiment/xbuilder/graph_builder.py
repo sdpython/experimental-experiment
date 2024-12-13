@@ -737,7 +737,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{tensor.dtype}:{tuple(tensor.shape)}"
         return f"no pretty: {type(tensor)}"
 
-    def pretty_node(self, node: NodeProto, limit: int = 80):
+    def pretty_node(self, node: NodeProto, limit: int = 80, short: bool = False):
         text = (
             (
                 f"{node.op_type}[{node.domain}]: "
@@ -746,6 +746,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if node.domain
             else f"{node.op_type}: {', '.join(node.input)} -> {', '.join(node.output)}"
         )
+        if short:
+            return text
         add = " " * abs(80 - len(text))
         text += add
         info = []
@@ -1545,10 +1547,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
             raise AssertionError(f"Requested stop, name={name!r}, shape={shape}")
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        assert "torch.Size" not in str(
-            shape
-        ), f"Unexpected type {type(shape)} for a shape={shape}{self.get_debug_msg()}"
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
+        assert not shape or not isinstance(shape[0], tuple), f"Unexpected shape {shape}"
+        assert "torch.Size" not in str(shape), f"Unexpected shape {shape}"
         for sdim in shape:
             if not isinstance(sdim, str):
                 continue
@@ -1776,6 +1777,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert value not in {
             tuple()
         }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
+        assert all(
+            not isinstance(d, str) or d[0] != "(" for d in value
+        ), f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
         if equal_to is None:
             if name in self._known_value_shape:
                 existing = self._known_value_shape[name]
@@ -5340,7 +5344,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             v, NodeProto
         ), f"Unexpected type {type(v)} for constant name={name!r}"
         if self._debug_get_constant:
-            print(f"[GraphBuilder.compute_constant] {self.pretty_node(v)}")
+            print(f"[GraphBuilder.compute_constant] {self.pretty_node(v, short=True)}")
 
         if v.op_type == "Shape":
             if not self.has_shape(v.input[0]):
@@ -6109,7 +6113,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             max_position = min(needed_at.get(o, N) for o in node.output)
 
             assert min_position <= max_position, (
-                f"Unable to insert node {self.pretty_node(node)}, "
+                f"Unable to insert node {self.pretty_node(node, short=True)}, "
                 f"min_position={min_position}, max_position={max_position}, "
                 f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
                 f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}, "
@@ -6125,7 +6129,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
 
             assert local_min_position <= local_max_position, (
-                f"Unable to insert node {self.pretty_node(node)}, "
+                f"Unable to insert node {self.pretty_node(node, short=True)}, "
                 f"local_min_position={local_min_position}, "
                 f"local_max_position={local_max_position}, "
                 f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
@@ -6173,7 +6177,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         del proto.value_info[:]
         proto.value_info.extend(new_shapes)
 
-    def _update_shape_types_with_proto_one_result(self, val):
+    def _update_shape_types_with_proto_one_result(self, val: ValueInfoProto):
         itype = val.type.tensor_type.elem_type
         if itype > 0:
             self.set_type(val.name, itype)
@@ -6319,7 +6323,6 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if node.op_type == "Squeeze":
             if self.is_constant_or_attribute(node, 1, "axes"):
-                node.doc_string += "#SV-Sq1"
                 y = self.value_as_shape(node.input[0])
                 if y is None:
                     node.doc_string += "#SV-Sq/3"
@@ -6342,14 +6345,17 @@ class GraphBuilder(_GraphBuilderRuntime):
                     ii == 0
                 ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
                 if isinstance(y, str):
+                    node.doc_string += "#SV-Sq1"
                     self.set_value_shape(node.output[0], f"squeeze({y})")
                     return True
                 if isinstance(y, int):
+                    node.doc_string += "#SV-Sq2"
                     self.set_value_shape(node.output[0], y)
                     return True
                 assert isinstance(
                     y, tuple
                 ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
+                node.doc_string += "#SV-Sq3"
                 self.set_value_shape(node.output[0], y[0])
                 return True
             node.doc_string += "#SV-Sq/2"
@@ -6368,14 +6374,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     self.set_value_shape(node.output[0], node.output[0])
                 return True
 
-            node.doc_string += "#SV-Sh2"
             start = self.get_attribute(node, "start", exc=False) or 0
             end = self.get_attribute(node, "end", exc=False)
             if end is None:
                 if self.has_rank(node.input[0]):
                     end = self.get_rank(node.input[0])
             if self.has_shape(node.input[0]):
-                node.doc_string += "#SV-Sh3"
                 shape = self.get_shape(node.input[0])
                 assert start.i < len(shape), (
                     f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
@@ -6396,7 +6400,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
                 n_shape = shape[start.i : getattr(end, "i", end)]
                 if all_int(shape):
-                    node.doc_string += "#SV-Sh5"
                     self.update_node_constant(node.output[0], node)
                 self.set_value_shape(node.output[0], n_shape)
                 self.set_shape(node.output[0], (len(n_shape),))
@@ -6417,7 +6420,6 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if node.op_type == "Gather":
             if self.is_constant(node.input[1]):
-                node.doc_string += "#SV-Ga1"
                 y = self.value_as_shape(node.input[0])
                 if y is None:
                     node.doc_string += "#SV-Ga/2"
@@ -6502,91 +6504,76 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.doc_string += "#SV-Unsq/2"
                 return False
             if isinstance(values[0], (int, str)) and values[1] == (0,):
-                node.doc_string += "#SV-Unsq/3"
+                node.doc_string += "#SV-Unsq3"
                 self.set_value_shape(node.output[0], (values[0],))
                 return True
 
-        if node.op_type == "Mul":
-            if (
-                isinstance(values[0], tuple)
-                and len(values[0]) == 1
-                and isinstance(values[1], tuple)
-                and len(values[1]) == 1
-            ):
-                m1 = values[0][0]
-                m2 = values[1][0]
-                if isinstance(m1, int) and isinstance(m2, int):
-                    node.doc_string += "#SV-Mul/1"
-                    self.set_value_shape(node.output[0], (m1 * m2,))
-                    return True
-                node.doc_string += "#SV-Mul/1"
-                self.set_value_shape(node.output[0], (f"{m1}*{m2}",))
+        if node.op_type in {"Mul", "Add", "Div", "Sub"}:
+            fct, symbol = {
+                "Add": ((lambda x, y: x + y), "+"),
+                "Div": ((lambda x, y: x // y), "/"),
+                "Mul": ((lambda x, y: x * y), "*"),
+                "Sub": ((lambda x, y: x - y), "-"),
+            }[node.op_type]
+            m1 = values[0]
+            m2 = values[1]
+            if isinstance(m1, int) and isinstance(m2, int):
+                node.doc_string += f"#SV-{node.op_type}1"
+                self.set_value_shape(node.output[0], (fct(m1, m2),))
+                return True
+            if isinstance(m1, (int, str)) and isinstance(m2, (int, str)):
+                node.doc_string += f"#SV-{node.op_type}2"
+                self.set_value_shape(node.output[0], (fct(m1, m2),))
                 return True
 
-        if node.op_type == "Add":
-            if isinstance(values[0], tuple) and len(values[0]) > 16:
-                # It should not be a shape.
-                node.doc_string += "#SV-Add/1"
-                return False
-            if isinstance(values[1], tuple) and len(values[1]) == 1:
-                d = values[1][0]
-                if isinstance(values[0], int) and isinstance(d, int):
-                    node.doc_string += "#SV-Add/2"
-                    self.set_value_shape(node.output[0], (values[0] + d,))
-                    return True
-                node.doc_string += "#SV-Add/3"
-                self.set_value_shape(node.output[0], (f"{values[0]}+{d}",))
+            # One of them is a tuple.
+            if not isinstance(m1, tuple):
+                m1 = (m1,)
+            if not isinstance(m2, tuple):
+                m2 = (m2,)
+            if len(m1) == len(m2):
+                res = []
+                for s1, s2 in zip(m1, m2):
+                    res.append(
+                        fct(s1, s2)
+                        if isinstance(s1, int) and isinstance(s2, int)
+                        else f"{s1}{symbol}{s2}"
+                    )
+                self.set_value_shape(node.output[0], tuple(res))
+                node.doc_string += f"#SV-{node.op_type}3"
                 return True
 
-        if node.op_type == "Div":
-            if isinstance(values[0], tuple) and len(values[0]) > 16:
-                # It should not be a shape.
-                node.doc_string += "#SV-Div/1"
-                return False
-            if isinstance(values[1], tuple) and len(values[1]) == 1:
-                d = values[1][0]
-                if isinstance(values[0], int) and isinstance(d, int):
-                    node.doc_string += "#SV-Div/2"
-                    self.set_value_shape(node.output[0], (values[0] // d,))
-                    return True
-                node.doc_string += "#SV-Div/3"
-                self.set_value_shape(node.output[0], (f"{values[0]}//{d}",))
+            if len(m1) == 1:
+                res = []
+                for s2 in m2:
+                    res.append(
+                        fct(m1[0], s2)
+                        if isinstance(m1[0], int) and isinstance(s2, int)
+                        else f"{m1[0]}{symbol}{s2}"
+                    )
+                self.set_value_shape(node.output[0], tuple(res))
+                node.doc_string += f"#SV-{node.op_type}4"
+                return True
+            if len(m2) == 1:
+                res = []
+                for s1 in m1:
+                    res.append(
+                        fct(s1, m2[0])
+                        if isinstance(s1, int) and isinstance(m2[0], int)
+                        else f"{s1}{symbol}{m2[0]}"
+                    )
+                self.set_value_shape(node.output[0], tuple(res))
+                node.doc_string += f"#SV-{node.op_type}4"
                 return True
 
-        if node.op_type == "Mul":
-            if isinstance(values[0], tuple) and len(values[0]) > 16:
-                # It should not be a shape.
-                node.doc_string += "#SV-Mul/1"
-                return False
-            if isinstance(values[1], tuple) and len(values[1]) == 1:
-                d = values[1][0]
-                if isinstance(values[0], int) and isinstance(d, int):
-                    node.doc_string += "#SV-Mul/2"
-                    self.set_value_shape(node.output[0], (values[0] * d,))
-                    return True
-                node.doc_string += "#SV-Mul/3"
-                self.set_value_shape(node.output[0], (f"{values[0]}*{d}",))
-                return True
-
-        if node.op_type == "Sub":
-            if isinstance(values[0], tuple) and len(values[0]) > 16:
-                # It should not be a shape.
-                node.doc_string += "#SV-Sub/1"
-                return False
-            if isinstance(values[1], tuple) and len(values[1]) == 1:
-                d = values[1][0]
-                if isinstance(values[0], int) and isinstance(d, int):
-                    node.doc_string += "#SV-Sub/2"
-                    self.set_value_shape(node.output[0], (values[0] - d,))
-                    return True
-                node.doc_string += "#SV-Sub/3"
-                self.set_value_shape(node.output[0], (f"{values[0]}-{d}",))
-                return True
+            # This cannot be a shape anymore.
+            node.doc_string += f"#SV-{node.op_type}/0"
+            return False
 
         if node.op_type == "Gather":
             if isinstance(values[1], tuple) and all_int(values[1]):
                 shape = (values[0],) if not isinstance(values[0], tuple) else values[0]
-                node.doc_string += "#SV-Ga/10"
+                node.doc_string += "#SV-Ga1"
                 assert max(values[1]) < len(shape), (
                     f"Unable to compute new value shape when values={values}"
                     f"{self.get_debug_msg()}"
@@ -6596,7 +6583,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if node.op_type == "Slice":
             if len(values) >= 3 and values[1] == (0,) and values[2] == (9223372036854775807,):
-                node.doc_string += "#SV-Sl/1"
+                node.doc_string += "#SV-Sl1"
                 self.set_value_shape(node.output[0], values[0])
                 return True
             if len(values) < 4 or values[3] != (0,):
@@ -6606,14 +6593,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             if len(values) == 4 and all_int(values[1]) and all_int(values[2]):
                 assert len(values[1]) == len(values[2]) == 1, (
                     f"Unexpected values {values} to compute a shape from node "
-                    f"{self.pretty_node(node)}{self.get_debug_msg()}"
+                    f"{self.pretty_node(node, short=True)}{self.get_debug_msg()}"
                 )
-                node.doc_string += "#SV-Sl/1"
+                node.doc_string += "#SV-Sl3"
                 self.set_value_shape(node.output[0], values[0][values[1][0] : values[2][0]])
                 return True
 
         raise RuntimeError(
-            f"Unable to compute a shape for node {self.pretty_node(node)} "
+            f"Unable to compute a shape for node {self.pretty_node(node, short=True)} "
             f"with values={values}{self.get_debug_msg()}"
         )
 
@@ -6659,7 +6646,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             elif self.verbose > 4:
                 print(
-                    f"[GraphBuilder.infer_shapes] update node {node.op_type!r}, "
+                    f"[GraphBuilder.infer_shapes] node {node.op_type!r}, "
                     f"name {node.name!r}, shape={dict(zip(node.output, new_shapes))}"
                 )
             res.update(diff)
@@ -6755,6 +6742,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self._unique_node_names.add(node.name)
 
             if shape_set:
+                self._make_node_set_type_shape_constant(node, {})
+                self._make_node_set_type_shape(node)
                 for o in node.output:
                     if not self.has_name(o):
                         self.set_name(o, f"_update_structures_with_proto_n_{o}")
@@ -6894,7 +6883,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if not self.has_name(o):
                         self.set_name(o, f"_update_structures_with_proto_l_{o}")
 
-                self._make_node_set_type_shape_constant(node, True)
+                self._make_node_set_type_shape_constant(node, {})
                 self._make_node_set_type_shape(node)
 
             new_nodes.append(node)
