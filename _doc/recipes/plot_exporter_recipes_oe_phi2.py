@@ -141,6 +141,7 @@ with bypass_export_some_errors(
     ep = torch.onnx.export(
         model, (), kwargs=inputs, dynamic_shapes=dynamic_shapes, dynamo=True
     )
+    ep.optimize()
     ep.save("plot_exporter_recipes_oe_phi2.onnx")
 
 ########################################

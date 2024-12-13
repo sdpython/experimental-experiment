@@ -190,7 +190,7 @@ class TestFallbackOxs(ExtTestCase):
         self.assertEqual(got.shape, (5, 1))
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.3", "bug")
+    @requires_torch("2.6", "bug")
     @ignore_warnings(DeprecationWarning)
     def test_llama_model_fallback_debug(self):
         import torch
