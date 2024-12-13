@@ -189,6 +189,7 @@ class TestLlmModelHelper(ExtTestCase):
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported")
+    @requires_torch("2.6", "bug")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     def test_get_phi35_mini_instruct_auto(self):
