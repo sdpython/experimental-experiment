@@ -72,7 +72,10 @@ class FunctionPackedMatMulPattern(PatternOptimization):
         if len(tr_nodes) != len(matmul_nodes):
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(
-            self, [*matmul_nodes, *reshape_nodes, *tr_nodes], self.apply, insert_at=node
+            self,
+            [*matmul_nodes, *reshape_nodes, *tr_nodes],
+            self.apply,
+            insert_at=reshape_nodes[0],
         )
 
     def apply(
