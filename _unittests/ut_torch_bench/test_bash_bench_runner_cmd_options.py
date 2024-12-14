@@ -267,10 +267,14 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_dynamic_cache_eager(self):
-        for exporter in ["eager", "export"]:
+        for exporter in ["export", "eager"]:
             with self.subTest(exporter=exporter):
                 self._export_cmd(
-                    exporter, "101DummyDynamicCache", dynamic=False, check_file=False
+                    exporter,
+                    "101DummyDynamicCache",
+                    dynamic=False,
+                    check_file=False,
+                    debug=False,
                 )
 
     @unittest.skip("issue https://github.com/pytorch/pytorch/issues/142161")

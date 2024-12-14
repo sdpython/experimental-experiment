@@ -46,7 +46,7 @@ plot_dot(proto)
 
 gr = GraphBuilder(
     proto,
-    infer_shapes=True,
+    infer_shapes_options=True,
     optimization_options=OptimizationOptions(
         patterns="default",
         verbose=1,  # a higher value increases the verbosity when optimizations for patterns
@@ -112,7 +112,7 @@ plot_dot(optimized_proto)
 
 gr = GraphBuilder(
     optimized_proto,
-    infer_shapes=True,
+    infer_shapes_options=True,
     optimization_options=OptimizationOptions(
         patterns="SwitchOrderBinary",
         verbose=10,

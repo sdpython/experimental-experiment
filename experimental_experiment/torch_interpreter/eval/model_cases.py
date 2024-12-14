@@ -714,7 +714,7 @@ class SignatureListFixedWithNone(torch.nn.Module):
         if lx[1] is not None:
             x += lx[1]
         if lx[2] is not None:
-            x += lx[1]
+            x += lx[2]
         return x
 
     _inputs = [

@@ -2,8 +2,8 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-import onnx.helper as oh
 import onnx.numpy_helper as onh
+from ...helpers import tensor_dtype_to_np_dtype
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -106,7 +106,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             shape
         ), f"axis={axis} and shape={shape} don't match for {node_reduce.input[0]!r}"
         stash_type = g.get_type(node_reduce.input[0])
-        dtype = oh.tensor_dtype_to_np_dtype(stash_type)
+        dtype = tensor_dtype_to_np_dtype(stash_type)
         if shape is not None and isinstance(shape[axis], int):
             # a constant
             scale = g.make_initializer(

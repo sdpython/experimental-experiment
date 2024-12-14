@@ -173,6 +173,8 @@ class ModelRunner:
     :param model_name: model name
     :param export_options: additional options when exporting if the default options never work
     :param dynamic_shapes: dynamic shapes to use instead of using automated ones
+    :param inputs2: second set of inputs to check the model handles differents shapes
+        when they are dynamic
     """
 
     _patched = None
@@ -280,6 +282,39 @@ class ModelRunner:
                 f"(namedtuple={cls.isinstance_namedtuple(o)}), o={o})"
             ) from e
 
+    @classmethod
+    def _pre_process_inputs(cls, inputs, kw_inputs, dtype, device):
+        if dtype is None:
+            cvt = lambda o: cls._to_type_or_device(o, device)  # noqa: E731
+        else:
+            cvt = lambda o: cls._to_type_or_device(  # noqa: E731
+                cls._to_type_or_device(o, dtype), device
+            )
+
+        assert (
+            not isinstance(inputs, tuple)
+            or not isinstance(inputs[0], torch.Tensor)
+            or "cuda" not in device
+            or inputs[0].get_device() >= 0
+        ), (
+            f"device={device!r} but input device is {inputs[0].get_device()} "
+            f"(check {cvt(inputs[0]).get_device()})"
+        )
+
+        if isinstance(inputs, dict):
+            inputs = {k: cvt(v) for k, v in inputs.items()}
+        elif isinstance(inputs, (list, tuple)):
+            inputs = tuple(cvt(v) for v in inputs)
+        else:
+            raise AssertionError - (f"Input type is {type(inputs)}")
+
+        if isinstance(kw_inputs, dict):
+            kw_inputs = {k: cvt(v) for k, v in kw_inputs.items()}
+        elif kw_inputs is not None:
+            raise AssertionError - (f"Input type is {type(inputs)}")
+        assert not kw_inputs, "Keyword inputs are not yet implemented."
+        return inputs, kw_inputs, cvt
+
     def __init__(
         self,
         model: Any,
@@ -296,27 +331,16 @@ class ModelRunner:
         model_name: Optional[str] = None,
         export_options: Optional[Dict[str, Any]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]] = None,
+        inputs2: Optional[Any] = None,
+        kw_inputs2: Optional[Dict[str, Any]] = None,
     ):
-        if dtype is None:
-            cvt = lambda o: self._to_type_or_device(o, device)  # noqa: E731
-        else:
-            cvt = lambda o: self._to_type_or_device(  # noqa: E731
-                self._to_type_or_device(o, dtype), device
+        inputs, kw_inputs, cvt = self._pre_process_inputs(inputs, kw_inputs, dtype, device)
+        if inputs2:
+            inputs2, kw_inputs2s, _ = self._pre_process_inputs(
+                inputs2, kw_inputs2, dtype, device
             )
-
-        if isinstance(inputs, dict):
-            inputs = {k: cvt(v) for k, v in inputs.items()}
-        elif isinstance(inputs, (list, tuple)):
-            inputs = tuple(cvt(v) for v in inputs)
-        else:
-            raise AssertionError - (f"Input type is {type(inputs)}")
-
-        if isinstance(kw_inputs, dict):
-            kw_inputs = {k: cvt(v) for k, v in kw_inputs.items()}
-        elif kw_inputs is not None:
-            raise AssertionError - (f"Input type is {type(inputs)}")
-        assert not kw_inputs, "Keyword inputs are not yet implemented."
         self.kw_inputs = kw_inputs
+        self.kw_inputs2 = kw_inputs2
         self.sig_input_names = list(inspect.signature(model.forward).parameters)
 
         if isinstance(inputs, dict):
@@ -324,11 +348,14 @@ class ModelRunner:
             sig = inspect.signature(model.forward)
             added = 0
             new_inputs = []
+            new_inputs2 = []
             new_names = []
             use_default = []
             for n in sig.parameters:
                 if n in inputs:
                     new_inputs.append(inputs[n])
+                    if inputs2:
+                        new_inputs2.append(inputs2[n])
                     added += 1
                     use_default.append(
                         UseDefaultValue.FALSE
@@ -340,6 +367,8 @@ class ModelRunner:
                         # probably one optional input
                         continue
                     new_inputs.append(sig.parameters[n].default)
+                    if inputs2:
+                        new_inputs2.append(sig.parameters[n].default)
                     use_default.append(UseDefaultValue.TRUE)
                 new_names.append(n)
             assert added == len(inputs), (
@@ -347,6 +376,8 @@ class ModelRunner:
                 f"parameters={list(sig.parameters)}"
             )
             inputs = tuple(new_inputs)
+            if inputs2:
+                inputs2 = tuple(new_inputs2)
             self.raw_input_names = new_names
             self.raw_use_defaults = use_default
         else:
@@ -378,18 +409,10 @@ class ModelRunner:
             else:
                 self.model = WrappedModelBase(model_cvt)
 
-        assert (
-            not isinstance(inputs, tuple)
-            or not isinstance(inputs[0], torch.Tensor)
-            or "cuda" not in device
-            or inputs[0].get_device() >= 0
-        ), (
-            f"device={device!r} but input device is {inputs[0].get_device()} "
-            f"(check {cvt(inputs[0]).get_device()})"
-        )
         self.device = device
         self.dtype = dtype
-        self.inputs = inputs
+        self.inputs = self.get_inputs(inputs)
+        self.inputs2 = self.get_inputs(inputs2) if inputs2 else None
         self.repeat = repeat
         self.warmup = warmup
         self.suite = suite
@@ -435,12 +458,14 @@ class ModelRunner:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
 
-    def get_inputs(self):
+    def get_inputs(self, inputs: Optional[Any] = None) -> Any:
         """
         LLM modifies the cache. It needs to be copied first.
         """
+        if inputs is None:
+            inputs = self.inputs
         args = []
-        for i in self.inputs:
+        for i in inputs:
             if i.__class__.__name__ in {"DynamicCache"}:
                 args.append(copy.deepcopy(i))
                 continue
@@ -788,11 +813,15 @@ class ModelRunner:
         if self.autocast:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
-            ), torch.no_grad(), bypass_export_some_errors():
+            ), torch.no_grad(), bypass_export_some_errors(
+                patch_transformers=True,
+                replace_dynamic_cache=True,
+                verbose=max(verbose - 2, 0),
+            ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
-                    export_inputs,
-                    export_kw_inputs,
+                    modificator(export_inputs),
+                    modificator(export_kw_inputs),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=max(verbose - 2, 0),
@@ -805,11 +834,15 @@ class ModelRunner:
                     inline=True,
                 )
         else:
-            with torch.no_grad(), bypass_export_some_errors():
+            with torch.no_grad(), bypass_export_some_errors(
+                patch_transformers=True,
+                replace_dynamic_cache=True,
+                verbose=max(verbose - 2, 0),
+            ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
-                    export_inputs,
-                    export_kw_inputs,
+                    modificator(export_inputs),
+                    modificator(export_kw_inputs),
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=max(verbose - 2, 0),
@@ -973,7 +1006,7 @@ class ModelRunner:
             # ([{'file_name': ..., 'height': ..., 'image': torch.Tensor(...)}])
             inputs = (self.inputs[0][0]["image"],)
         else:
-            inputs = self.inputs
+            inputs = self.get_inputs()
 
         dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
         inputs, kw_inputs = self.make_export_inputs(dynamic, inputs=inputs)
@@ -1112,7 +1145,11 @@ class ModelRunner:
         if self.autocast:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
-            ), torch.no_grad(), bypass_export_some_errors(verbose=max(verbose - 5, 0)):
+            ), torch.no_grad(), bypass_export_some_errors(
+                patch_transformers=True,
+                replace_dynamic_cache=True,
+                verbose=max(verbose - 5, 0),
+            ):
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
@@ -1126,7 +1163,11 @@ class ModelRunner:
                     **additional_kwargs,
                 )
         else:
-            with torch.no_grad(), bypass_export_some_errors(verbose=max(verbose - 5, 0)):
+            with torch.no_grad(), bypass_export_some_errors(
+                patch_transformers=True,
+                replace_dynamic_cache=True,
+                verbose=max(verbose - 5, 0),
+            ):
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
@@ -1180,7 +1221,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.inputs,
+                    *self.get_inputs(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1190,7 +1231,7 @@ class ModelRunner:
             with torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.inputs,
+                    *self.get_inputs(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1243,16 +1284,22 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] export_options={export_options!r}")
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
-        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
+        with bypass_export_some_errors(
+            patch_transformers=True, replace_dynamic_cache=True, verbose=max(verbose - 5, 0)
+        ) as modificator:
             exported_mod = export_options.export(
                 self.model,
-                export_inputs,
-                export_kw_inputs,
+                modificator(export_inputs),
+                modificator(export_kw_inputs),
                 dynamic_shapes=dynamic_shapes,
                 tracing_mode=False,
                 same_signature=False,
                 verbose=verbose,
             )
+
+            if os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1"):
+                print("-- EXPORTED PROGRAM")
+                print(exported_mod)
 
         root_name = os.path.splitext(name)[0]
         if verbose:
@@ -1300,11 +1347,13 @@ class ModelRunner:
             print(f"[ModelRunner._to_executorch] type(model)={type(self.model)!r}")
             print("[ModelRunner._to_executorch] run torch.export.export")
 
-        with bypass_export_some_errors(verbose=max(verbose - 5, 0)):
+        with bypass_export_some_errors(
+            patch_transformers=True, replace_dynamic_cache=True, verbose=max(verbose - 5, 0)
+        ) as modificator:
             exported_mod = export_options.export(
                 self.model,
-                export_inputs,
-                export_kw_inputs,
+                modificator(export_inputs),
+                modificator(export_kw_inputs),
                 dynamic_shapes=dynamic_shapes,
                 tracing_mode=False,
                 same_signature=False,
@@ -1547,7 +1596,6 @@ class ModelRunner:
                 if x.key_cache and len(x.key_cache[0].shape) > 2:
                     res.append(
                         [
-                            None,
                             [{0: batch, 2: cache_length} for _ in range(length)],
                             [{0: batch, 2: cache_length} for _ in range(length)],
                         ]
@@ -1555,7 +1603,6 @@ class ModelRunner:
                 else:
                     res.append(
                         [
-                            None,
                             [{0: batch} for _ in range(length)],
                             [{0: batch} for _ in range(length)],
                         ]
@@ -1625,7 +1672,7 @@ class ModelRunner:
                 return self.inputs if inputs is None else inputs, self.kw_inputs
 
             if inputs is None:
-                inputs = self.inputs
+                inputs = self.get_inputs()
             if kw_inputs is None:
                 kw_inputs = self.kw_inputs
 
@@ -1659,7 +1706,7 @@ class ModelRunner:
             return tuple(new_inputs), new_kw_inputs
 
         if inputs is None:
-            inputs = self.inputs
+            inputs = self.get_inputs()
         if kw_inputs is None:
             kw_inputs = self.kw_inputs
 
@@ -1938,11 +1985,14 @@ class ModelRunner:
         assert isinstance(
             self.inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
+        if self.inputs2:
+            return self.get_inputs(self.inputs2)
         dynamic_shapes = self.get_dynamic_shapes(True)
         dyn_inputs = []
         dyn_values = {}
-        for i in range(len(self.inputs)):
-            inp = self.inputs[i]
+        inputs = self.get_inputs()  # we need a copy for the cache
+        for i in range(len(inputs)):
+            inp = inputs[i]
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
                 continue
@@ -2043,9 +2093,9 @@ class ModelRunner:
             "executorch",
             "flaggems",
         }:
-            return self.inputs
+            return self.get_inputs()
 
-        use_inputs = self.inputs if not dynamic else self.make_dynamic_inputs()
+        use_inputs = self.get_inputs() if not dynamic else self.make_dynamic_inputs()
         if remove_int:
             ui = use_inputs
             use_inputs = []
@@ -2066,7 +2116,7 @@ class ModelRunner:
             assert set(names) == set(
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
-            return self.inputs
+            return self.get_inputs()
         assert len(use_inputs) == len(raw_use_defaults), (
             f"Mismatch use_inputs={string_type(use_inputs)}, "
             f"raw_use_defaults={string_type(raw_use_defaults)}"

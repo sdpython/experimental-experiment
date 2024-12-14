@@ -68,7 +68,7 @@ class MulMulSigmoidPattern(EasyPatternOptimization):
 
 gr = GraphBuilder(
     proto,
-    infer_shapes=True,
+    infer_shapes_options=True,
     optimization_options=OptimizationOptions(
         patterns=[MulMulSigmoidPattern(verbose=1)],
         verbose=1,  # a higher value increases the verbosity when optimizations for patterns
@@ -125,7 +125,7 @@ class MulMulSigmoidPattern2(EasyPatternOptimization):
 
 gr = GraphBuilder(
     proto,
-    infer_shapes=True,
+    infer_shapes_options=True,
     optimization_options=OptimizationOptions(
         patterns=[MulMulSigmoidPattern2(verbose=1)],
         verbose=0,

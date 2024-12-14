@@ -36,7 +36,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["BinaryInvestigation"], verbose=1
             ),
@@ -50,7 +50,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["RotaryConcatPart"],
                 dump_applied_patterns="test_dump_applied_patterns",

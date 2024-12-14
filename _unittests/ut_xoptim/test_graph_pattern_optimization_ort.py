@@ -90,7 +90,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self._check_with_ort(origin)
         gr = GraphBuilder(
             origin,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["FusedMatMul"],
                 verbose=0,  # stop_after=2
@@ -155,7 +155,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["FusedMatMul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -212,7 +212,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["FusedMatMul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -269,7 +269,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["FusedMatMul"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -332,7 +332,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["FusedMatMulDiv"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -397,7 +397,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 model = self.get_simplified_layer_normalization_model(div=div, dyn=dyn)
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["SimplifiedLayerNormalization"]
                     ),
@@ -486,7 +486,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 model = self.get_simplified_layer_normalization_model_output(div=div, dyn=dyn)
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["SimplifiedLayerNormalization"]
                     ),
@@ -565,7 +565,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["SoftmaxGrad"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -617,7 +617,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=[GatherGradPattern()]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -690,7 +690,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["FusedMatMulx2"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -743,7 +743,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["FusedMatMulTranspose"], verbose=0
             ),
@@ -771,7 +771,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["Cast", "Gelu", "FastGelu"], verbose=0
             ),
@@ -792,7 +792,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["Cast", "GeluOrt", "FastGelu"], verbose=0
             ),
@@ -843,7 +843,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["BiasGelu"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -900,7 +900,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["AddAddMulMul", "AddAddMulMulBroadcast", "BiasGelu"],
                 verbose=0,
@@ -955,7 +955,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[GeluErfPattern(verbose=0)],
                 verbose=0,
@@ -1006,7 +1006,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["BiasSoftmax"], processor="CPU,CUDA", verbose=0
             ),
@@ -1062,7 +1062,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(patterns=["FusedConv"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)

@@ -31,7 +31,7 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(patterns=["TransposeMatMul"]),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         onx = gr.to_onnx(optimize=True)
         after = [n.op_type for n in onx.graph.node if n.op_type == "Gemm"]
@@ -45,7 +45,7 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(patterns=["FusedMatMul"], verbose=0),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         onx = gr.to_onnx(optimize=True)
         after = [n.op_type for n in onx.graph.node if n.op_type == "FusedMatMul"]
@@ -63,7 +63,7 @@ class TestGraphFullModelPatternOptimization(ExtTestCase):
                 verbose=0,
                 processor="CUDA",
             ),
-            infer_shapes=True,
+            infer_shapes_options=True,
         )
         onx = gr.to_onnx(optimize=True)
         after = [n.op_type for n in onx.graph.node if n.op_type == "ScatterNDOfShape"]

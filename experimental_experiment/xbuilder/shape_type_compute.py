@@ -1,8 +1,9 @@
 from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from onnx import NodeProto, TensorProto
-from onnx.helper import np_dtype_to_tensor_dtype, tensor_dtype_to_np_dtype
-from ..xbuilder._shape_helper import STATIC_SHAPE, is_static_shape, all_int
+from onnx.helper import np_dtype_to_tensor_dtype
+from ..helpers import tensor_dtype_to_np_dtype
+from ..xbuilder._shape_helper import STATIC_SHAPE, is_static_shape, all_int, all_int_or_str
 from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
 
 
@@ -500,20 +501,24 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
     if self.has_type(node.input[0]):
         self.set_type(k, self.get_type(node.input[0]))
     shape_set = False
+    value = None
     if self.is_constant(node.input[1]):
         value = self.get_constant(node.input[1], computed_value=True, as_shape=True, exc=False)
-        if value is not None:
-            cst = tuple(value)
-            if all_int(cst):
-                if -1 not in cst:
-                    self.set_shape(k, cst)
+    if value is None:
+        value = self.value_as_shape(node.input[1])
+    if value is not None:
+        cst = tuple(value)
+        if all_int_or_str(cst):
+            if -1 not in cst:
+                self.set_shape(k, cst)
+                shape_set = True
+            elif all_int(cst) and self.has_shape(node.input[0]):
+                sh = self.get_shape(node.input[0])
+                new_shape = self._apply_reshape_to_shape(sh, cst)
+                if new_shape is not None:
+                    self.set_shape(k, new_shape)
                     shape_set = True
-                elif all_int(cst) and self.has_shape(node.input[0]):
-                    sh = self.get_shape(node.input[0])
-                    new_shape = self._apply_reshape_to_shape(sh, cst)
-                    if new_shape is not None:
-                        self.set_shape(k, new_shape)
-                        shape_set = True
+
     if not shape_set:
         if self.has_shape(node.input[1]):
             rk = self.get_shape(node.input[1])

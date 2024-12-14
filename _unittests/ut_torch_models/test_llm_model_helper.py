@@ -1,3 +1,4 @@
+import copy
 import unittest
 import onnx
 from experimental_experiment.ext_test_case import (
@@ -188,6 +189,7 @@ class TestLlmModelHelper(ExtTestCase):
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported")
+    @requires_torch("2.6", "bug")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     def test_get_phi35_mini_instruct_auto(self):
@@ -198,7 +200,7 @@ class TestLlmModelHelper(ExtTestCase):
 
         model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
         model = model
-        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+        with torch.autocast(device_type="cpu", dtype=torch.float16):
             onx = to_onnx(
                 model,
                 None,  # args
@@ -386,9 +388,11 @@ class TestLlmModelHelper(ExtTestCase):
 
         model, model_inputs = get_phi35_vision_instruct(num_hidden_layers=1)
 
-        with bypass_export_some_errors(patch_transformers=True):
+        with bypass_export_some_errors(
+            patch_transformers=True, replace_dynamic_cache=True
+        ) as modificator:
             exported_program = torch.export.export(model, tuple(), model_inputs, strict=True)
-            onx = to_onnx(model, tuple(), model_inputs)
+            onx = to_onnx(model, tuple(), modificator(model_inputs))
             onnx.save(onx, "test_get_phi35_vision_instruct.onnx")
         self.assertNotEmpty(exported_program)
 
@@ -446,6 +450,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
+    @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
     def test_get_phi2(self):
         import torch
         from experimental_experiment.torch_interpreter.onnx_export_errors import (
@@ -457,26 +462,33 @@ class TestLlmModelHelper(ExtTestCase):
             for ds in [True, False]:
                 with self.subTest(n_iteration=n_iter, ds=ds):
                     if ds:
-                        model, model_inputs, dyn_shapes = get_phi2(
+                        res = get_phi2(
                             num_hidden_layers=1,
                             n_iteration=n_iter,
                             common_dynamic_shapes=ds,
                             intermediate_size=5120,
                             # hidden_size=1280,
-                            batch_size=29,
+                            batch_size=2,
                         )
-                        model(**model_inputs)
-                        with bypass_export_some_errors():
+                        model, model_inputs, dyn_shapes = (
+                            res["model"],
+                            res["inputs"],
+                            res["dynamic_shapes"],
+                        )
+                        model(**copy.deepcopy(model_inputs))
+                        with bypass_export_some_errors(
+                            patch_transformers=True, replace_dynamic_cache=True
+                        ) as modificator:
                             torch.export.export(
                                 model,
                                 (),
-                                kwargs=model_inputs,
+                                kwargs=modificator(model_inputs),
                                 dynamic_shapes=dyn_shapes,
                                 strict=False,
                             )
                         self.assertIn("dict(", string_type(model_inputs))
                     else:
-                        model, model_inputs = get_phi2(
+                        res = get_phi2(
                             num_hidden_layers=1,
                             intermediate_size=5120,
                             # hidden_size=1280,
@@ -484,9 +496,14 @@ class TestLlmModelHelper(ExtTestCase):
                             common_dynamic_shapes=ds,
                             batch_size=2,
                         )
-                        model(**model_inputs)
-                        with bypass_export_some_errors():
-                            torch.export.export(model, (), model_inputs, strict=False)
+                        model, model_inputs = res["model"], res["inputs"]
+                        model(**copy.deepcopy(model_inputs))
+                        with bypass_export_some_errors(
+                            patch_transformers=True, replace_dynamic_cache=True
+                        ) as modificator:
+                            torch.export.export(
+                                model, (), modificator(model_inputs), strict=False
+                            )
 
 
 if __name__ == "__main__":

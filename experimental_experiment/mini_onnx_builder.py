@@ -5,7 +5,7 @@ import numpy as np
 from onnx import GraphProto, ModelProto, TensorProto
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from .helpers import string_type
+from .helpers import string_type, tensor_dtype_to_np_dtype
 
 STORAGE_TYPE = {
     TensorProto.FLOAT16: np.int16,
@@ -158,12 +158,12 @@ def proto_from_array(
         byte_data = (ctypes.c_ubyte * numel * element_size).from_address(np_arr.data_ptr())
         tensor.raw_data = bytes(byte_data)
         if sys.byteorder == "big":
-            np_dtype = oh.tensor_dtype_to_np_dtype(STORAGE_TYPE[tensor.data_type])
+            np_dtype = tensor_dtype_to_np_dtype(STORAGE_TYPE[tensor.data_type])
             np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
     else:
         tensor.raw_data = np_arr.tobytes()
         if sys.byteorder == "big":
-            np_dtype = oh.tensor_dtype_to_np_dtype(tensor.data_type)
+            np_dtype = tensor_dtype_to_np_dtype(tensor.data_type)
             np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
 
     return tensor

@@ -24,3 +24,8 @@ Submodules
 ==========
 
 * :ref:`l-plot-exporter-recipes-custom-modules`
+
+Model
+=====
+
+* :ref:`l-plot-exporter-recipes-custom-phi2`

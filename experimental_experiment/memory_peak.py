@@ -219,7 +219,7 @@ def start_spying_on(
     :param delay: delay between two measures.
     :param cuda: True or False to get memory for cuda devices
 
-    Example::
+    Example:
 
     .. code-block:: python
 

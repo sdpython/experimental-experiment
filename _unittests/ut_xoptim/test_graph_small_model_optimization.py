@@ -39,7 +39,7 @@ class TestGraphSmallModelOptimization(ExtTestCase):
         )
         check_model(model)
 
-        gr = GraphBuilder(model, infer_shapes=True)
+        gr = GraphBuilder(model, infer_shapes_options=True)
         onx = gr.to_onnx(optimize=False)
         before = [n.op_type for n in onx.graph.node if n.op_type == "Sqrt"]
         self.assertEqual(len(before), 1)
@@ -47,7 +47,7 @@ class TestGraphSmallModelOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             optimization_options=OptimizationOptions(constant_folding=True, patterns=None),
-            infer_shapes=True,
+            infer_shapes_options=True,
             verbose=0,
         )
         onx = gr.to_onnx(optimize=True)

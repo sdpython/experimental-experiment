@@ -160,7 +160,7 @@ class TestGraphOrderOptimization(ExtTestCase):
         verbose = 10
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=None, verbose=verbose, order=OrderAlgorithm.RANDOM
             ),
@@ -202,7 +202,7 @@ class TestGraphOrderOptimization(ExtTestCase):
             with self.subTest(model=model):
                 gr = GraphBuilder(
                     onx,
-                    infer_shapes=False,
+                    infer_shapes_options=False,
                     optimization_options=OptimizationOptions(
                         patterns=None, verbose=0, order=OrderAlgorithm.RANDOM
                     ),

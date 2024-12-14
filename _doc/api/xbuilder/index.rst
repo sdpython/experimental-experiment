@@ -27,6 +27,18 @@ GraphBuilder
 .. autoclass:: experimental_experiment.xbuilder.GraphBuilder
     :members:
 
+FunctionOptions
++++++++++++++++
+
+.. autoclass:: experimental_experiment.xbuilder.FunctionOptions
+    :members:
+
+InferShapesOptions
+++++++++++++++++++
+
+.. autoclass:: experimental_experiment.xbuilder.InferShapesOptions
+    :members:
+
 OptimizationOptions
 +++++++++++++++++++
 

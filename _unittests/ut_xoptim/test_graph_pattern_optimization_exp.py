@@ -87,7 +87,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ConstantOfShapeScatterND"], processor="CPU,CUDA"
             ),
@@ -163,7 +163,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 self.assertEqual(len(model.graph.node), 2)
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["AddAddMulMul"], processor="CPU,CUDA"
                     ),
@@ -205,7 +205,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["MulSigmoid"], processor="CPU,CUDA"
             ),
@@ -261,7 +261,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["SimpleRotary"], processor="CPU,CUDA", verbose=0
             ),
@@ -300,7 +300,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 self.assertEqual(len(model.graph.node), 2)
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["AddMul"], processor="CPU,CUDA"
                     ),
@@ -345,7 +345,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ReplaceZero"], processor="CPU,CUDA", verbose=0
             ),
@@ -391,7 +391,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["NegXplus1"], processor="CPU,CUDA", verbose=0
             ),
@@ -456,7 +456,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TriMatrix"], processor="CPU,CUDA", verbose=0
             ),
@@ -509,7 +509,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         )
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["TransposeCast"], processor="CPU,CUDA", verbose=0
             ),
@@ -558,7 +558,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 self.assertEqual(len(model.graph.node), 2)
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["SubMul"], processor="CPU,CUDA"
                     ),
@@ -619,7 +619,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 self.assertEqual(len(model.graph.node), 2)
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["AddMulSharedInput"], processor="CPU,CUDA"
                     ),
@@ -687,7 +687,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 self.assertEqual(len(model.graph.node), 2)
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=["AddMulTranspose"], processor="CPU,CUDA", verbose=0
                     ),
@@ -755,7 +755,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
 
         gr = GraphBuilder(
             model1,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=["ConstantOfShapeScatterND", "MaskedShapeScatterND"],
                 processor="CPU,CUDA",

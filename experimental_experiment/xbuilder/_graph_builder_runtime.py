@@ -2,7 +2,7 @@ import contextlib
 from typing import Dict, Generator, List, Tuple
 import numpy as np
 from onnx import NodeProto
-import onnx.helper as oh
+from ..helpers import tensor_dtype_to_np_dtype
 from ._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
 from ._dtype_helper import dtype_to_tensor_dtype, onnx_dtype_to_torch_dtype
 
@@ -268,7 +268,7 @@ class _GraphBuilderRuntime:
         x = feeds[node.input[0]]
         itype = dtype_to_tensor_dtype(x.dtype)
         if isinstance(x, np.ndarray):
-            ttype = oh.tensor_dtype_to_np_dtype(itype)
+            ttype = tensor_dtype_to_np_dtype(itype)
             if node.op_type == "Sqrt":
                 return [np.sqrt(x).astype(ttype)]
             raise AssertionError(

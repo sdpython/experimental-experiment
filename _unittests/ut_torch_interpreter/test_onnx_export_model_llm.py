@@ -151,7 +151,7 @@ class TestOnnxExportLlama(ExtTestCase):
             self.check_model_ort(onx)
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.4", "Unable to find input 'x' in known results")
+    @requires_torch("2.6", "bug")
     @ignore_warnings(DeprecationWarning)
     def test_llama_model_dynamo_false(self):
         import torch

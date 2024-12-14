@@ -41,7 +41,7 @@ class UntrainedRunner(BenchmarkRunner):
                 "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),
                 "Phi2LM_2Layer_it0": (
                     lambda: (
-                        *get_phi2(
+                        get_phi2(
                             num_hidden_layers=2,
                             n_iteration=0,
                             _attn_implementation="eager",
@@ -52,11 +52,12 @@ class UntrainedRunner(BenchmarkRunner):
                 ),
                 "Phi2LM_2Layer_it1": (
                     lambda: (
-                        *get_phi2(
+                        get_phi2(
                             num_hidden_layers=2,
                             n_iteration=1,
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
+                            batch_size=2,
                         ),
                         dict(strict=False),
                     )
@@ -180,15 +181,23 @@ class UntrainedRunner(BenchmarkRunner):
         tu = tu()
 
         dynamic_shapes = None
+        inputs2 = None
         if len(tu) == 2:
-            model_cls, example_inputs = tu
-            export_options = None
+            if isinstance(tu[0], dict):
+                model_cls, example_inputs = tu[0]["model"], tu[0]["inputs"]
+                dynamic_shapes = tu[0].get("dynamic_shapes", None)
+                inputs2 = tu[0].get("inputs2", None)
+                export_options = tu[1]
+            else:
+                model_cls, example_inputs = tu
+                export_options = None
         elif len(tu) == 3:
             model_cls, example_inputs, export_options = tu
-        elif len(tu) == 4:
-            model_cls, example_inputs, dynamic_shapes, export_options = tu
         else:
-            raise AssertionError(f"Unable to handle {len(tu)} elements: {string_type(tu)}")
+            raise AssertionError(
+                f"Unable to handle {len(tu)} elements: {string_type(tu)}, "
+                f"it can be (dict, dict), (model, inputs), (model, inputs, dict))"
+            )
 
         model = model_cls() if isinstance(model_cls, type) else model_cls
         if str(type(model)) == "<class 'function'>":
@@ -213,6 +222,7 @@ class UntrainedRunner(BenchmarkRunner):
             model_name=model_name,
             export_options=export_options,
             dynamic_shapes=dynamic_shapes,
+            inputs2=inputs2,
         )
 
     def iter_model_names(self):

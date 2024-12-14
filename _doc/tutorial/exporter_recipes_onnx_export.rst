@@ -20,3 +20,8 @@ Submodules
 ==========
 
 * :ref:`l-plot-exporter-recipes-onnx-exporter-modules`
+
+Models
+======
+
+* :ref:`l-plot-exporter-recipes-onnx_exporter-phi2`

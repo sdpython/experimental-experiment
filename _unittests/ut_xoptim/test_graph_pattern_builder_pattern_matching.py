@@ -78,7 +78,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[AddAddPattern(verbose=0)],
                 verbose=0,
@@ -160,7 +160,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[AddAddAddAddPattern(verbose=0)],
                 verbose=0,
@@ -270,7 +270,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             onx = pat.builder.to_onnx(optimize=False)
             gr = GraphBuilder(
                 onx,
-                infer_shapes=False,
+                infer_shapes_options=False,
                 optimization_options=OptimizationOptions(
                     patterns=[RotaryEmbeddingPattern(verbose=10)],
                     verbose=10,
@@ -367,7 +367,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             onx = pat.builder.to_onnx(optimize=False)
             gr = GraphBuilder(
                 onx,
-                infer_shapes=False,
+                infer_shapes_options=False,
                 optimization_options=OptimizationOptions(
                     patterns=[RotaryEmbeddingPattern(verbose=10)],
                     verbose=10,
@@ -440,7 +440,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         onx = load(model)
         gr = GraphBuilder(
             onx,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[RotaryEmbeddingPattern(verbose=0)],
                 remove_identity=False,
@@ -529,7 +529,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[
                     make_pattern_from_onnx(
@@ -609,7 +609,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
         gr = GraphBuilder(
             proto,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[MulMulSigmoidPattern(verbose=1)],
                 verbose=0,
@@ -670,7 +670,7 @@ class TestGraphPatternBuilder(ExtTestCase):
         check_model(model)
         gr = GraphBuilder(
             model,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[SliceSplitPattern(verbose=0)],
                 verbose=0,
@@ -738,7 +738,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
         gr = GraphBuilder(
             proto,
-            infer_shapes=True,
+            infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[TransposeMatMulPattern(verbose=0)],
                 verbose=0,
@@ -882,7 +882,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 gr = GraphBuilder(
                     proto,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=[
                             Rotary1(verbose=verbose),
@@ -1046,7 +1046,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 gr = GraphBuilder(
                     model,
-                    infer_shapes=True,
+                    infer_shapes_options=True,
                     optimization_options=OptimizationOptions(
                         patterns=[
                             AddSharedInput1(verbose=verbose),
