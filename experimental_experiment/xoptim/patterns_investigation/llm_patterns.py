@@ -3,6 +3,7 @@ from collections import Counter
 from typing import List, Optional
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
+from ...xbuilder import GraphBuilder, FunctionOptions
 
 
 class FunctionPackedMatMulPattern(PatternOptimization):
@@ -76,7 +77,7 @@ class FunctionPackedMatMulPattern(PatternOptimization):
 
     def apply(
         self,
-        g: "GraphBuilder",  # noqa: F821
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
         *nodes: NodeProto,
     ) -> List[NodeProto]:
         matmul_nodes = [n for n in nodes if n.op_type == "MatMul"]
@@ -86,7 +87,8 @@ class FunctionPackedMatMulPattern(PatternOptimization):
         perm = list(g.get_attribute(tr_nodes[0], "perm").ints)
         str_perm = "_".join(map(str, perm))
         f_name = f"PackedMatMulReshapeTranspose{len(matmul_nodes)}_{str_perm}"
-        return [
+        domain = "SimplifyingFunction"
+        nodes_to_return = [
             g.make_node(
                 f_name,
                 [
@@ -95,103 +97,56 @@ class FunctionPackedMatMulPattern(PatternOptimization):
                     reshape_nodes[0].input[1],
                 ],
                 [_.output[0] for _ in tr_nodes],
-                domain="SimplifyingFunction",
+                domain=domain,
                 name=f"{self.__class__.__name__}--{matmul_nodes[0].name}",
             )
         ]
 
-    """
-        mm_name = g.unique_name(
-            f"{self.__class__.__name__}--{matmul_nodes[0].input[1]}-matmul"
+        # Creates the local function
+        if g.builder.has_local_function(f_name, domain=domain):
+            return nodes_to_return
+
+        self._add_local_function(
+            g.builder,
+            domain,
+            f_name,
+            len(matmul_nodes),
+            g.get_rank(matmul_nodes[0].output[0]),
+            perm,
         )
-        c_name = g.unique_name(f"{self.__class__.__name__}--{matmul_nodes[0].input[1]}-concat")
-        concat_node = g.make_node(
-            "Concat",
-            [n.input[1] for n in matmul_nodes],
-            [c_name],
+        assert g.builder.has_local_function(
+            f_name, domain=domain
+        ), f"The function {domain}.{f_name} was not added to the builder."
+        return nodes_to_return
+
+    @classmethod
+    def _add_local_function(
+        cls, g: GraphBuilder, domain: str, f_name: str, n_nodes: int, rk: int, perm: List[int]
+    ):
+        local_g = GraphBuilder(g.main_opset, as_function=True)
+        local_g.make_tensor_input("X")
+        for i in range(n_nodes):
+            local_g.make_tensor_input(f"W{i}")
+        local_g.make_tensor_input("shape")
+
+        all_weights = local_g.op.Concat(
+            *[f"W{i}" for i in range(n_nodes)], axis=-1, name="merge_weights"
+        )
+        y = local_g.op.MatMul("X", all_weights, name="packed_matmul")
+        names = local_g.op.Split(
+            y,
+            num_outputs=n_nodes,
+            name="split",
+            outputs=[f"p{i}" for i in range(n_nodes)],
             axis=-1,
-            name=f"{self.__class__.__name__}--{matmul_nodes[0].name}",
-            doc_string=matmul_nodes[0].doc_string,
         )
-        matmul_node = g.make_node(
-            "MatMul",
-            [matmul_nodes[0].input[0], c_name],
-            [mm_name],
-            name=f"{self.__class__.__name__}--{matmul_nodes[0].name}",
-            doc_string=matmul_nodes[0].doc_string,
-        )
-        r_nodes = [concat_node, matmul_node]
-
-        # Reshape
-        reshape_nodes = [n for n in nodes if n.op_type == "Reshape"]
-        sh_names = [
-            g.unique_name(f"{self.__class__.__name__}--{reshape_nodes[0].input[1]}-last1"),
-            g.unique_name(f"{self.__class__.__name__}--{reshape_nodes[0].input[1]}-last2"),
+        reshaped = [local_g.op.Reshape(n, "shape", name="reshape") for n in names]
+        _transposed = [
+            local_g.op.Transpose(n, perm=perm, outputs=[f"Z{i}"], name="transpose")
+            for i, n in enumerate(reshaped)
         ]
-        rk = g.get_rank(matmul_nodes[0].output[0])
-        splits = g.make_initializer("", np.array([rk, 1], dtype=np.int64))
-        split_node = g.make_node(
-            "Split",
-            [reshape_nodes[0].input[1], splits],
-            sh_names,
-            name=f"{self.__class__.__name__}--{reshape_nodes[0].name}",
-        )
-        r_nodes.append(split_node)
-        multiply = g.make_initializer("", np.array([rk], dtype=np.int64))
-        mul_name = g.unique_name(f"{self.__class__.__name__}--{reshape_nodes[0].input[1]}-mul")
-        mul_node = g.make_node(
-            "Mul",
-            [sh_names[1], multiply],
-            [mul_name],
-            name=f"{self.__class__.__name__}--{reshape_nodes[0].name}",
-        )
-        r_nodes.append(mul_node)
-        new_shape = g.unique_name(
-            f"{self.__class__.__name__}--{reshape_nodes[0].input[1]}-shape"
-        )
-        concat_node = g.make_node(
-            "Concat",
-            [sh_names[0], mul_name],
-            [new_shape],
-            axis=0,
-            name=f"{self.__class__.__name__}--{reshape_nodes[0].name}",
-        )
-        r_nodes.append(concat_node)
-        reshaped = g.unique_name(
-            f"{self.__class__.__name__}--{reshape_nodes[0].input[1]}-reshaped"
-        )
-        reshape_node = g.make_node(
-            "Reshape",
-            [mm_name, new_shape],
-            [reshaped],
-            name=f"{self.__class__.__name__}--{reshape_nodes[0].name}",
-        )
-        r_nodes.append(reshape_node)
+        for i in range(n_nodes):
+            local_g.make_tensor_output(f"Z{i}")
 
-        # Transpose
-        transpose_nodes = [n for n in nodes if n.op_type == "Transpose"]
-        perm = list(g.get_attribute(transpose_nodes[0], "perm").ints)
-        transposed = g.unique_name(
-            f"{self.__class__.__name__}--{transpose_nodes[0].input[0]}-tr"
-        )
-        tr_node = g.make_node(
-            "Transpose",
-            [reshaped],
-            [transposed],
-            perm=perm,
-            name=f"{self.__class__.__name__}--{transpose_nodes[0].name}",
-        )
-        r_nodes.append(tr_node)
-
-        # Split
-        split_node = g.make_node(
-            "Split",
-            [transposed],
-            [_.output[0] for _ in transpose_nodes],
-            num_outputs=len(transpose_nodes),
-            axis=perm[-1],
-            name=f"{self.__class__.__name__}--{transpose_nodes[0].name}",
-        )
-        r_nodes.append(split_node)
-        return r_nodes
-    """
+        function_options = FunctionOptions(export_as_function=True, name=f_name, domain=domain)
+        g.make_local_function(local_g, function_options=function_options)

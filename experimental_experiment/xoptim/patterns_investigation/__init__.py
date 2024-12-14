@@ -18,7 +18,7 @@ def get_investigation_patterns(
         pprint.pprint(get_investigation_patterns())
     """
     from .element_wise import BinaryInvestigation
-    from .onnx_matmul import FunctionPackedMatMulPattern
+    from .llm_patterns import FunctionPackedMatMulPattern
 
     return [
         BinaryInvestigation(verbose=verbose),

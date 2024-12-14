@@ -2758,9 +2758,9 @@ class GraphBuilder(_GraphBuilderRuntime):
     def make_tensor_input(
         self,
         name: str,
-        elem_type: Any,
-        shape: DYNAMIC_SHAPE,
-        is_dimension: bool,
+        elem_type: Optional[Any] = None,
+        shape: Optional[DYNAMIC_SHAPE] = None,
+        is_dimension: bool = False,
         marker: str = "",
         default_initializer: Optional[Any] = None,
     ) -> str:
@@ -3115,7 +3115,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             to the graph
         :return: output name
         """
-        assert is_dimension is not None, (
+        assert self.as_function or is_dimension is not None, (
             f"is_dimension must be specified for output name={name!r}, "
             f"elem_type={elem_type}, shape={shape!r}."
         )
@@ -3130,7 +3130,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return res
 
         assert (
-            not indexed or "_" in name
+            self.as_function or not indexed or "_" in name
         ), f"Name {name!r} is not indexed like 'output_0'{self.get_debug_msg()}"
         assert (is_dimension and "_dim_" in name) or (
             not is_dimension and "_dim_" not in name
@@ -7004,7 +7004,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def make_local_function(
         self,
         builder: "GraphBuilder",
-        function_options,
+        function_options: FunctionOptions,
         optimize: bool = False,
     ) -> Tuple[List[str], Tuple[str, str]]:
         """
@@ -7019,7 +7019,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             it can be changed if one is already existing
 
         Method :meth:`GraphBuilder.inline_functions`,
-        meth:`GraphBuilder.move_initializers_to_constant` are called on
+        :meth:`GraphBuilder.move_initializers_to_constant` are called on
         the builder if *move_initializer_to_constant* is True.
         It modifies the builder inplace.
         """
@@ -7054,20 +7054,21 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 self._check_constants("after-inline_functions")
 
-        assert function_options.return_initializer, (
+        assert not builder.initializers_dict or function_options.return_initializer, (
             f"incompatible options, return_initializer must be True "
-            f"but function_options={function_options!r}"
+            f"but function_options={function_options!r} with {len(self.initializers_dict)} "
+            f"initiliazers"
         )
         fct = builder.to_onnx(
             function_options=function_options,
             optimize=optimize,
         )
-        assert isinstance(fct, dict), (
+        assert isinstance(fct, (dict, FunctionProto)), (
             f"Unexpected type {type(fct)}, function_options={function_options}"
             f"{self.get_debug_msg()}"
         )
-        onx = fct["proto"]
-        if self._debug_local_function:
+        onx = fct["proto"] if isinstance(fct, dict) else fct
+        if self._debug_local_function and isinstance(fct, dict):
             print(f"[GraphBuilder.make_local_function] keys={', '.join(fct)}")
             if "initializers_name" in fct:
                 print(
@@ -7118,7 +7119,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 print(f"[GraphBuilder.make_local_function] renamed inputs={onx.input}")
 
         # Let's rename the initializers.
-        if "initializers_dict" in fct:
+        if isinstance(fct, dict) and "initializers_dict" in fct:
             assert len(fct["initializers_dict"]) == len(fct["initializers_name"]), (
                 f"Names mismatch between {fct['initializers_name']} and "
                 f"{list(fct['initializers_dict'])}{builder.get_debug_msg()}"
