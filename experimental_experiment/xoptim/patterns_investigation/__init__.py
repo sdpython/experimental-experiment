@@ -18,9 +18,10 @@ def get_investigation_patterns(
         pprint.pprint(get_investigation_patterns())
     """
     from .element_wise import BinaryInvestigation
-    from .llm_patterns import FunctionPackedMatMulPattern
+    from .llm_patterns import FunctionPackedMatMulPattern, FunctionSplitRotaryMulPattern
 
     return [
         BinaryInvestigation(verbose=verbose),
         FunctionPackedMatMulPattern(verbose=verbose),
+        FunctionSplitRotaryMulPattern(verbose=verbose),
     ]

@@ -2,7 +2,7 @@ import inspect
 from collections import Counter
 from typing import List, Optional
 from onnx import NodeProto
-from ..patterns_api import MatchResult, PatternOptimization
+from ..patterns_api import MatchResult, PatternOptimization, EasyPatternOptimization
 from ...xbuilder import GraphBuilder, FunctionOptions
 
 
@@ -150,6 +150,43 @@ class FunctionPackedMatMulPattern(PatternOptimization):
         ]
         for i in range(n_nodes):
             local_g.make_tensor_output(f"Z{i}")
+
+        function_options = FunctionOptions(export_as_function=True, name=f_name, domain=domain)
+        g.make_local_function(local_g, function_options=function_options)
+
+
+class FunctionSplitRotaryMulPattern(EasyPatternOptimization):
+    """
+    Moves the nodes in match_pattern in a local function.
+    """
+
+    def match_pattern(self, g: GraphBuilder, X, split1, split2, C1, C2):
+        rot, part = g.op.Split(X, split1, outputs=2, axis=-1)
+        s1, s2 = g.op.Split(rot, split2, outputs=2, axis=-1)
+        neg = g.op.Neg(s2)
+        fullrot = g.op.Concat(neg, s1, axis=-1)
+        add = g.op.Add(
+            g.op.Mul(fullrot, C1),
+            g.op.Mul(rot, C2),
+        )
+        return g.op.Concat(add, part, axis=-1)
+
+    def apply_pattern(self, g, X, split1, split2, C1, C2):
+        return g.anyop.SplitRotaryMul(X, split1, split2, C1, C2, domain="SimplifyingFunction")
+
+    def post_apply_pattern(self, g, *nodes):
+        f_name = "SplitRotaryMul"
+        domain = "SimplifyingFunction"
+
+        if not g.builder.has_local_function(f_name, domain=domain):
+            self._add_local_function(g.builder, domain, f_name)
+
+    def _add_local_function(self, g: GraphBuilder, domain: str, f_name: str):
+        local_g = GraphBuilder(g.main_opset, as_function=True)
+        inputs = "X", "split1", "split2", "C1", "C2"
+        local_g.make_tensor_input(inputs)
+        last = self.match_pattern(local_g, *inputs)
+        local_g.make_tensor_output(last)
 
         function_options = FunctionOptions(export_as_function=True, name=f_name, domain=domain)
         g.make_local_function(local_g, function_options=function_options)

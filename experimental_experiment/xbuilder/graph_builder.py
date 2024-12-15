@@ -2757,7 +2757,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def make_tensor_input(
         self,
-        name: str,
+        name: Union[str, Tuple[str]],
         elem_type: Optional[Any] = None,
         shape: Optional[DYNAMIC_SHAPE] = None,
         is_dimension: bool = False,
@@ -2767,7 +2767,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         Adds a tensor input to the onnx graph.
 
-        :param name: name
+        :param name: name or tuple of names, in case, all inputs are create
+            with the same element type and shape
         :param elem_type: element type
         :param shape: shape
         :param is_dimension: torch is using torch.SymInt to add a dynamic input
@@ -2776,6 +2777,21 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param default_initializer: add an initializer with the same name of the input
         :return: input name
         """
+        if isinstance(name, (tuple, list)):
+            res = []
+            for n in name:
+                res.append(
+                    self.make_tensor_input(
+                        n,
+                        elem_type,
+                        shape,
+                        is_dimension=is_dimension,
+                        marker=marker,
+                        default_initializer=default_initializer,
+                    )
+                )
+            return res
+
         assert (
             self.as_function or elem_type
         ), f"elem_type is unknown for name={name!r}{self.get_debug_msg()}"
@@ -5502,7 +5518,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.verbose > 1:
             begin_ = time.perf_counter()
             print(
-                f"[GraphBuilder.constant_folding] starts with "
+                f"[GraphBuilder.constant_folding] -- starts with "
                 f"{len(self.constants_)} constants and "
                 f"{len(self.nodes)} nodes."
             )
@@ -5707,7 +5723,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         # make_initializer
         if self.verbose > 1:
             begin_ = time.perf_counter()
-            print(f"[GraphBuilder.remove_identity_nodes] starts with {len(self.nodes)}")
+            print(f"[GraphBuilder.remove_identity_nodes] -- starts with {len(self.nodes)}")
         # first pass: detect replacements
         new_nodes = []
         input_names = set(i.name for i in self.inputs)
@@ -6224,7 +6240,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.verbose > 1:
             begin_ = time.perf_counter()
             print(
-                f"[GraphBuilder._update_shape_types_with_proto] starts with "
+                f"[GraphBuilder._update_shape_types_with_proto] -- starts with "
                 f"{len(self.nodes)} nodes and {len(getattr(proto.graph, 'value_info', 0))} "
                 f"shapes."
             )
@@ -6671,7 +6687,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.verbose > 1:
             begin_ = time.perf_counter()
             print(
-                f"[GraphBuilder._update_structures_with_proto] starts with "
+                f"[GraphBuilder._update_structures_with_proto] -- starts with "
                 f"{len(proto.graph.node)} nodes"
             )
         self.opsets = {d.domain: d.version for d in proto.opset_import}

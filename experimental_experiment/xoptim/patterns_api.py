@@ -610,9 +610,8 @@ class EasyPatternOptimization(PatternOptimization):
                     res += 1
                 continue
 
-            # And now another fun part, let's try to handle the case when
-            # there is only one option, matching on node type only returns one
-            # option.
+            # And now another fun part, let's try to handle the case when there
+            # is only one option, matching on node type only returns one option.
             expected_op_type = [_.op_type for _ in p_marked]
 
             ec = Counter(expected_op_type)
@@ -763,15 +762,50 @@ class EasyPatternOptimization(PatternOptimization):
             in_graph = {att.name: att for att in node.attribute}
             for att in pat_node.attribute:
                 if att.name not in in_graph:
+                    if self.verbose >= 5:
+                        print(
+                            f"[EasyPatternOptimization.validate_attribute_mapping] failed "
+                            f"attribute {att.name!r} (missing), nodes: "
+                            f"{g.builder.pretty_node(node, short=True)} / "
+                            f"{g.builder.pretty_node(pat_node, short=True)}"
+                        )
                     return False
                 n_att = in_graph[att.name]
                 if att.type != n_att.type:
+                    if self.verbose >= 5:
+                        print(
+                            f"[EasyPatternOptimization.validate_attribute_mapping] failed "
+                            f"attribute {att.name!r} (type), "
+                            f"nodes: {g.builder.pretty_node(node, short=True)} / "
+                            f"{g.builder.pretty_node(pat_node, short=True)}"
+                        )
                     return False
                 if att.type == AttributeProto.INT and att.i != n_att.i:
+                    if self.verbose >= 5:
+                        print(
+                            f"[EasyPatternOptimization.validate_attribute_mapping] failed "
+                            f"attribute {att.name!r} (value int), nodes: "
+                            f"{g.builder.pretty_node(node, short=True)} / "
+                            f"{g.builder.pretty_node(pat_node, short=True)}"
+                        )
                     return False
                 if att.type == AttributeProto.FLOAT and att.f != n_att.f:
+                    if self.verbose >= 5:
+                        print(
+                            f"[EasyPatternOptimization.validate_attribute_mapping] failed "
+                            f"attribute {att.name!r} (value float), nodes: "
+                            f"{g.builder.pretty_node(node, short=True)} / "
+                            f"{g.builder.pretty_node(pat_node, short=True)}"
+                        )
                     return False
                 if att.type == AttributeProto.STRING and att.s != n_att.s:
+                    if self.verbose >= 5:
+                        print(
+                            f"[EasyPatternOptimization.validate_attribute_mapping] "
+                            f"failed attribute {att.name!r} (value string), "
+                            f"nodes: {g.builder.pretty_node(node, short=True)} / "
+                            f"{g.builder.pretty_node(pat_node, short=True)}"
+                        )
                     return False
                 assert att.type in {
                     AttributeProto.INT,
@@ -832,7 +866,7 @@ class EasyPatternOptimization(PatternOptimization):
         check_ids = set(id(n) for n in pat.nodes)
         if self.verbose > 5:
             print(
-                f"[EasyPatternOptimization.match] starts with "
+                f"[EasyPatternOptimization.match] -- starts with "
                 f"{node.op_type}({', '.join(node.input)})"
             )
             if self.verbose >= 10:
@@ -1125,7 +1159,13 @@ class EasyPatternOptimization(PatternOptimization):
         if g.verbose > 5:
             print(f"[EasyPatternOptimization.apply] done with {len(new_nodes)} nodes")
 
+        self.post_apply_pattern(g, *nodes)
         return new_nodes
+
+    def post_apply_pattern(self, g, *nodes):
+        """
+        Method to overload to apply as step after the pattern was applied.
+        """
 
 
 class OnnxEasyPatternOptimization(EasyPatternOptimization):

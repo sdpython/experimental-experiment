@@ -5,7 +5,7 @@ import onnx
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from typing import Optional
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -14,6 +14,7 @@ from experimental_experiment.xoptim import get_pattern_list
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 TFLOAT = onnx.TensorProto.FLOAT
+TINT64 = onnx.TensorProto.INT64
 _mkv_ = oh.make_tensor_value_info
 
 
@@ -73,7 +74,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
             f"{os.listdir('test_dump_applied_patterns')}"
         )
 
-    # @hide_stdout()
+    @hide_stdout()
     def test_packed_matmul(self):
         model = oh.make_model(
             oh.make_graph(
@@ -129,6 +130,62 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
         expected = ref.run(None, feeds)
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx, verbose=10)
+        got = opt_ref.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-2)
+
+    def test_split_rotary_mul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X", "split1"], ["p1", "p2"], axis=-1),
+                    oh.make_node("Split", ["p1", "split2"], ["pp1", "pp2"], axis=-1),
+                    oh.make_node("Neg", ["pp2"], ["neg"]),
+                    oh.make_node("Concat", ["neg", "pp1"], ["cat"], axis=-1),
+                    oh.make_node("Mul", ["cat", "C1"], ["M1"]),
+                    oh.make_node("Mul", ["p1", "C2"], ["M2"]),
+                    oh.make_node("Add", ["M1", "M2"], ["A"]),
+                    oh.make_node("Concat", ["A", "p2"], ["Y"], axis=-1),
+                ],
+                "dummy",
+                [
+                    _mkv_("X", TFLOAT, ["batch", 32, "seq_length", 80]),
+                    _mkv_("split1", TINT64, [2]),
+                    _mkv_("split2", TINT64, [2]),
+                    _mkv_("C1", TFLOAT, [1, 1, "seq_length", 32]),
+                    _mkv_("C2", TFLOAT, [1, 1, "seq_length", 32]),
+                ],
+                [_mkv_("Y", TFLOAT, ["batch", 32, "seq_length", 80])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionSplitRotaryMul"],
+                verbose=0,
+                constant_folding=True,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["SplitRotaryMul"], [_.op_type for _ in opt_onx.graph.node])
+
+        feeds = {
+            "X": self._range(2, 32, 8, 80),
+            "split1": np.array([32, 38], dtype=np.int64),
+            "split2": np.array([16, 16], dtype=np.int64),
+            "C1": self._range(1, 1, 8, 32),
+            "C2": self._range(1, 1, 8, 32) + 1.0,
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
         got = opt_ref.run(None, feeds)
         self.assertEqual(len(expected), len(got))
         for a, b in zip(expected, got):

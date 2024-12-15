@@ -215,7 +215,7 @@ class TestLlmModelHelper(ExtTestCase):
         m = onnx.load(filename, load_external_data=False)
         self.assertEqual(
             set(i.type.tensor_type.elem_type for i in m.graph.output),
-            {onnx.TensorProto.BFLOAT16},
+            {onnx.TensorProto.FLOAT16},
         )
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
