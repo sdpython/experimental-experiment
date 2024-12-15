@@ -85,6 +85,8 @@ class PatternOptimization:
     or better ``self.none(node, inspect.currentframe().f_lineno)``.
     That allows the user to know which line rejected a specific pattern
     by setting environment variable ``LOG_PATTERN_OPTIMIZE=10``.
+    An environment variable equal to the class name can be set as well to
+    track this specific pattern.
 
     :param verbose: determine the verbosity, this can be also dermine by setting up
         environment variable ``LOG_PATTERN_OPTIMIZE=10``
@@ -97,6 +99,8 @@ class PatternOptimization:
     def __init__(self, verbose: int = 0, priority: int = 1, min_opset: int = 1):
         value = os.environ.get("LOG_PATTERN_OPTIMIZE", "0")
         self.verbose = max(verbose, int(value))
+        value = os.environ.get(self.__class__.__name__, "0")
+        self.verbose = max(self.verbose, int(value))
         self.priority = priority
         self.min_opset = min_opset
 
@@ -400,8 +404,13 @@ class EasyPatternOptimization(PatternOptimization):
             )
             return self.none(node, inspect.currentframe().f_lineno)
 
+        pattern_input_names = set(pat.input_names)
         for nr, pnr in zip(n.input, pn.input):
-            if not g.is_constant(nr) and len(g.next_nodes(nr)) != len(pat.next_nodes(pnr)):
+            if (
+                pnr not in pattern_input_names
+                and not g.is_constant(nr)
+                and len(g.next_nodes(nr)) != len(pat.next_nodes(pnr))
+            ):
                 self._hint(
                     "BACKWARD: one input is used outside the pattern",
                     "-- pattern input and pattern node",
@@ -548,7 +557,10 @@ class EasyPatternOptimization(PatternOptimization):
                     self._hint(
                         "BACKWARD: ambiguities with names",
                         "-- ambiguities",
-                        amb,
+                        ns[0],
+                        pns[0],
+                        "-- pairs",
+                        pair_results_names,
                     )
                     return self.none(node, inspect.currentframe().f_lineno)
 
@@ -598,7 +610,8 @@ class EasyPatternOptimization(PatternOptimization):
                     self._hint(
                         "FORWARD: ambiguities with names",
                         "-- ambiguities",
-                        amb,
+                        free[0],
+                        p_marked[0],
                     )
                     return self.none(node, inspect.currentframe().f_lineno)
 
@@ -751,8 +764,8 @@ class EasyPatternOptimization(PatternOptimization):
         :return: validate the mapping or not, default is True
         """
         assert len(deleted_nodes) == len(pattern_nodes), (
-            f"Mismatch number of nodes len(deleted_nodes)={len(deleted_nodes)}, "
-            f"Mismatch number of nodes len(pattern_nodes)={len(pattern_nodes)}"
+            f"Mismatched number of nodes len(deleted_nodes)={len(deleted_nodes)}, "
+            f"len(pattern_nodes)={len(pattern_nodes)}"
         )
         for i, (node, pat_node) in enumerate(zip(deleted_nodes, pattern_nodes)):
             assert node.op_type == pat_node.op_type or node.domain != pat_node.domain, (
@@ -781,14 +794,24 @@ class EasyPatternOptimization(PatternOptimization):
                         )
                     return False
                 if att.type == AttributeProto.INT and att.i != n_att.i:
-                    if self.verbose >= 5:
-                        print(
-                            f"[EasyPatternOptimization.validate_attribute_mapping] failed "
-                            f"attribute {att.name!r} (value int), nodes: "
-                            f"{g.builder.pretty_node(node, short=True)} / "
-                            f"{g.builder.pretty_node(pat_node, short=True)}"
-                        )
-                    return False
+                    if (
+                        att.name == "axis"
+                        and node.op_type in {"Split", "Concat"}
+                        and g.has_rank(node.input[0])
+                    ):
+                        # Let's compare negative value.
+                        rk = g.get_rank(node.input[0])
+                        i1 = (att.i + rk) % rk
+                        i2 = (n_att.i + rk) % rk
+                    if i1 != i2:
+                        if self.verbose >= 5:
+                            print(
+                                f"[EasyPatternOptimization.validate_attribute_mapping] failed "
+                                f"attribute {att.name!r} (value int), nodes: "
+                                f"{g.builder.pretty_node(node, short=True)} / "
+                                f"{g.builder.pretty_node(pat_node, short=True)}"
+                            )
+                        return False
                 if att.type == AttributeProto.FLOAT and att.f != n_att.f:
                     if self.verbose >= 5:
                         print(
@@ -838,6 +861,9 @@ class EasyPatternOptimization(PatternOptimization):
     def _has_ambiguities(
         self, pair_results_names, node: NodeProto, pattern_node: NodeProto
     ) -> bool:
+        if node.domain == "" and node.op_type in {"Add", "Mul"}:
+            # commutative operators, ambiguities is allowed
+            return False
         for a, b in zip(node.input, pattern_node.input):
             if b in pair_results_names and pair_results_names[b] != a:
                 return True
@@ -988,7 +1014,7 @@ class EasyPatternOptimization(PatternOptimization):
         if not self.validate_attribute_mapping(g, matched_nodes, pat.nodes):
             if self.verbose >= 2:
                 print(
-                    f"[EasyPatternOptimization.match] attribute validation failed "
+                    f"[EasyPatternOptimization.match] attribute validation failed-1 "
                     f"{len(marked)} marked nodes with {iteration} iterations"
                 )
             return None
@@ -996,7 +1022,7 @@ class EasyPatternOptimization(PatternOptimization):
         if not self.validate_mapping(g, matched_nodes, pat.nodes):
             if self.verbose >= 2:
                 print(
-                    f"[EasyPatternOptimization.match] validation failed "
+                    f"[EasyPatternOptimization.match] validation failed-2 "
                     f"{len(marked)} marked nodes with {iteration} iterations"
                 )
             return None
