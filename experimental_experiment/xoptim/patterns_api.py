@@ -618,7 +618,14 @@ class EasyPatternOptimization(PatternOptimization):
                 key = id(p_marked[0])
                 if key not in marked:
                     marked[key] = free[0], p_marked[0]
-                    self._update_ambiguities(pair_results_names, free[0], p_marked[0])
+                    self._update_ambiguities(
+                        pair_results_names,
+                        free[0],
+                        p_marked[0],
+                        debug_msg=lambda: textwrap.indent(
+                            self.display_pattern(g, self.match_pattern), "    "
+                        ),
+                    )
                     stacked.append(key)
                     res += 1
                 continue
@@ -841,29 +848,31 @@ class EasyPatternOptimization(PatternOptimization):
         return True
 
     def _update_ambiguities(
-        self, pair_results_names, node: NodeProto, pattern_node: NodeProto
+        self, pair_results_names, node: NodeProto, pattern_node: NodeProto, debug_msg=Callable
     ):
         for a, b in zip(node.input, pattern_node.input):
             if b in pair_results_names:
-                assert (
-                    pair_results_names[b] == a
-                ), f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r}."
+                assert pair_results_names[b] == a, (
+                    f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r} "
+                    f"pair_results_names={pair_results_names}, pattern is\n"
+                    f"{debug_msg()}"
+                )
+
             else:
                 pair_results_names[b] = a
         for a, b in zip(node.output, pattern_node.output):
             if b in pair_results_names:
-                assert (
-                    pair_results_names[b] == a
-                ), f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r}."
+                assert pair_results_names[b] == a, (
+                    f"Ambiguity {b!r} is mapped to {pair_results_names[b]!r} and {a!r} "
+                    f"pair_results_names={pair_results_names}, pattern is\n"
+                    f"{debug_msg()}"
+                )
             else:
                 pair_results_names[b] = a
 
     def _has_ambiguities(
         self, pair_results_names, node: NodeProto, pattern_node: NodeProto
     ) -> bool:
-        if node.domain == "" and node.op_type in {"Add", "Mul"}:
-            # commutative operators, ambiguities is allowed
-            return False
         for a, b in zip(node.input, pattern_node.input):
             if b in pair_results_names and pair_results_names[b] != a:
                 return True
