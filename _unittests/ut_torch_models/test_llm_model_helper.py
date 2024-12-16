@@ -460,11 +460,11 @@ class TestLlmModelHelper(ExtTestCase):
 
         for n_iter in [1, 0]:
             for ds in [True, False]:
-                with self.subTest(n_iteration=n_iter, ds=ds):
+                with self.subTest(input_cache=n_iter, ds=ds):
                     if ds:
                         res = get_phi2(
                             num_hidden_layers=1,
-                            n_iteration=n_iter,
+                            input_cache=n_iter == 1,
                             common_dynamic_shapes=ds,
                             intermediate_size=5120,
                             # hidden_size=1280,
@@ -492,7 +492,7 @@ class TestLlmModelHelper(ExtTestCase):
                             num_hidden_layers=1,
                             intermediate_size=5120,
                             # hidden_size=1280,
-                            n_iteration=n_iter,
+                            input_cache=n_iter == 1,
                             common_dynamic_shapes=ds,
                             batch_size=2,
                         )

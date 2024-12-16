@@ -38,6 +38,11 @@ class LLMInputKind(enum.IntEnum):
     ALL = 255
 
 
+############
+# Phi Series
+############
+
+
 def finalize_llm_setup(
     model: Any,
     batch_size: int,
@@ -46,25 +51,42 @@ def finalize_llm_setup(
     common_dynamic_shapes: bool = True,
     inputs_as_tuple: bool = False,
     num_hidden_layers: int = 2,
-    n_iteration: int = 1,
+    input_cache: bool = True,
+    device: str = "cpu",
+    seq_length_multiple: int = 1,
 ) -> Dict[str, Any]:
+    """
+    Creates dummy inputs for a model ran as if it were the second iteration.
+    Inputs contains cache.
+    """
     import torch
     import transformers
 
     batch = torch.export.Dim("batch", min=1, max=1024)
     seq_length = torch.export.Dim("seq_length", min=1, max=4096)
+    if seq_length_multiple > 1:
+        seq_length = seq_length * seq_length_multiple
+
     shapes = {}
 
-    if n_iteration == 0:
-        dim = (batch_size, 30)
+    sequence_length = 30
+    sequence_inc = 1
+    sequence_length2 = 3
+    if seq_length_multiple > 1:
+        sequence_length = (sequence_length + seq_length_multiple) // seq_length_multiple
+        sequence_inc = seq_length_multiple
+        sequence_length2 = seq_length_multiple
+
+    if not input_cache:
+        dim = (batch_size, sequence_length)
         inputs = dict(
-            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64),
-            attention_mask=torch.ones(*dim, dtype=torch.int64),
+            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64).to(device),
+            attention_mask=torch.ones(*dim, dtype=torch.int64).to(device),
         )
-        dim = (batch_size + 1, 31)
+        dim = (batch_size + 1, sequence_length + sequence_inc)
         inputs2 = dict(
-            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64),
-            attention_mask=torch.ones(*dim, dtype=torch.int64),
+            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64).to(device),
+            attention_mask=torch.ones(*dim, dtype=torch.int64).to(device),
         )
         shapes.update(
             {
@@ -76,25 +98,35 @@ def finalize_llm_setup(
         cache = transformers.cache_utils.DynamicCache(num_hidden_layers)
         for i in range(num_hidden_layers):
             cache.update(
-                torch.randn(batch_size, 32, 30, cache_last_dim),
-                torch.randn(batch_size, 32, 30, cache_last_dim),
+                torch.randn(batch_size, 32, sequence_length, cache_last_dim).to(device),
+                torch.randn(batch_size, 32, sequence_length, cache_last_dim).to(device),
                 i,
             )
         cache2 = transformers.cache_utils.DynamicCache(num_hidden_layers)
         for i in range(num_hidden_layers):
             cache2.update(
-                torch.randn(batch_size + 1, 32, 31, cache_last_dim),
-                torch.randn(batch_size + 1, 32, 31, cache_last_dim),
+                torch.randn(
+                    batch_size + 1, 32, sequence_length + sequence_inc, cache_last_dim
+                ).to(device),
+                torch.randn(
+                    batch_size + 1, 32, sequence_length + sequence_inc, cache_last_dim
+                ).to(device),
                 i,
             )
 
         inputs = dict(
-            input_ids=torch.randint(0, max_token_id, (batch_size, 3)).to(torch.int64),
-            attention_mask=torch.ones((batch_size, 33)).to(torch.int64),
+            input_ids=torch.randint(0, max_token_id, (batch_size, sequence_length2))
+            .to(torch.int64)
+            .to(device),
+            attention_mask=torch.ones((batch_size, sequence_length + sequence_length2))
+            .to(torch.int64)
+            .to(device),
             past_key_values=cache,
         )
         inputs2 = dict(
-            input_ids=torch.randint(0, max_token_id, (batch_size + 1, 4)).to(torch.int64),
+            input_ids=torch.randint(
+                0, max_token_id, (batch_size + 1, sequence_length2 + sequence_inc)
+            ).to(torch.int64),
             attention_mask=torch.ones((batch_size + 1, 35)).to(torch.int64),
             past_key_values=cache2,
         )
@@ -125,7 +157,7 @@ def finalize_llm_setup(
 
 def get_phi2(
     inputs_as_tuple: bool = False,
-    n_iteration: int = 0,
+    input_cache: bool = True,
     batch_size: int = 1,
     common_dynamic_shapes: bool = False,
     **kwargs,
@@ -136,7 +168,7 @@ def get_phi2(
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param n_iteration: generate data for this iteration, caches are used after iteration >= 1
+    :param input_cache: generate data for this iteration with or without cache
     :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
@@ -188,13 +220,13 @@ def get_phi2(
         common_dynamic_shapes=common_dynamic_shapes,
         inputs_as_tuple=inputs_as_tuple,
         num_hidden_layers=config["num_hidden_layers"],
-        n_iteration=n_iteration,
+        input_cache=input_cache,
     )
 
 
 def get_phi35_mini_instruct(
     inputs_as_tuple: bool = False,
-    n_iteration: int = 0,
+    input_cache: bool = True,
     batch_size: int = 1,
     common_dynamic_shapes: bool = False,
     **kwargs,
@@ -204,7 +236,7 @@ def get_phi35_mini_instruct(
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param batch_size: batch size
-    :param n_iteration: generate data for this iteration, caches are used after iteration >= 1
+    :param input_cache: generate data for this iteration with or without cache
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :return: model, inputs
@@ -362,198 +394,98 @@ def get_phi35_mini_instruct(
         common_dynamic_shapes=common_dynamic_shapes,
         inputs_as_tuple=inputs_as_tuple,
         num_hidden_layers=config["num_hidden_layers"],
-        n_iteration=n_iteration,
+        input_cache=input_cache,
     )
 
 
-def get_phi3_vision_128k_instruct(
-    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+def finalize_llm_vision_setup(
+    model: Any,
+    input_kind: LLMInputKind,
+    batch_size: int,
+    max_token_id: int = 50285,
+    cache_last_dim: int = 80,
+    common_dynamic_shapes: bool = True,
+    inputs_as_tuple: bool = False,
+    num_hidden_layers: int = 2,
+    device: str = "cpu",
+) -> Dict[str, Any]:
     """
-    Gets a non initialized model.
-
-    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: model, inputs
-
-    See `Phi-3-vision-128k-instruct/config.json
-    <https://huggingface.co/microsoft/Phi-3-vision-128k-instruct/blob/main/config.json>`_.
+    Creates dummy inputs for a model ran as if it were the second iteration.
+    Inputs contains cache.
     """
     import torch
-    from .configuration_phi3_v import Phi3VConfig
-    from .modeling_phi3_v import Phi3VForCausalLM
 
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+    if input_kind == LLMInputKind.input_ids:
+        dim = (1, 30)
+        inputs = dict(input_ids=torch.randint(0, max_token_id, dim).to(torch.int64))
+        shapes = {
+            "input_ids": {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")}
+        }
+    elif input_kind == LLMInputKind.input_ids | LLMInputKind.attention_mask:
+        dim = (1, 30)
+        inputs = dict(
+            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64),
+            attention_mask=torch.ones(*dim, dtype=torch.int64),
+        )
+        batch = torch.export.Dim("batch")
+        seq_length = torch.export.Dim("seq_length")
+        shapes = {
+            "input_ids": {0: batch, 1: seq_length},
+            "attention_mask": {0: batch, 1: seq_length},
+        }
+    else:
+        from .dummy_inputs.llm_dummy_inputs import (
+            restore_dummy_inputs_for_phi35_vision_instruct,
+        )
 
-    config = {
-        "_name_or_path": "Phi-3-vision-128k-instruct",
-        "architectures": ["Phi3VForCausalLM"],
-        "attention_dropout": 0.0,
-        "auto_map": {
-            "AutoConfig": "configuration_phi3_v.Phi3VConfig",
-            "AutoModelForCausalLM": "modeling_phi3_v.Phi3VForCausalLM",
-        },
-        "bos_token_id": 1,
-        "embd_layer": {
-            "embedding_cls": "image",
-            "hd_transform_order": "sub_glb",
-            "projection_cls": "mlp",
-            "use_hd_transform": True,
-            "with_learnable_separator": True,
-        },
-        "eos_token_id": 2,
-        "hidden_act": "silu",
-        "hidden_size": 3072,
-        "img_processor": {
-            "image_dim_out": 1024,
-            "model_name": "openai/clip-vit-large-patch14-336",
-            "name": "clip_vision_model",
-            "num_img_tokens": 144,
-        },
-        "initializer_range": 0.02,
-        "intermediate_size": 8192,
-        "max_position_embeddings": 131072,
-        "model_type": "phi3_v",
-        "num_attention_heads": 32,
-        "num_hidden_layers": 32,
-        "num_key_value_heads": 32,
-        "original_max_position_embeddings": 4096,
-        "rms_norm_eps": 1e-05,
-        "rope_scaling": {
-            "long_factor": [
-                1.0299999713897705,
-                1.0499999523162842,
-                1.0499999523162842,
-                1.0799999237060547,
-                1.2299998998641968,
-                1.2299998998641968,
-                1.2999999523162842,
-                1.4499999284744263,
-                1.5999999046325684,
-                1.6499998569488525,
-                1.8999998569488525,
-                2.859999895095825,
-                3.68999981880188,
-                5.419999599456787,
-                5.489999771118164,
-                5.489999771118164,
-                9.09000015258789,
-                11.579999923706055,
-                15.65999984741211,
-                15.769999504089355,
-                15.789999961853027,
-                18.360000610351562,
-                21.989999771118164,
-                23.079999923706055,
-                30.009998321533203,
-                32.35000228881836,
-                32.590003967285156,
-                35.56000518798828,
-                39.95000457763672,
-                53.840003967285156,
-                56.20000457763672,
-                57.95000457763672,
-                59.29000473022461,
-                59.77000427246094,
-                59.920005798339844,
-                61.190006256103516,
-                61.96000671386719,
-                62.50000762939453,
-                63.3700065612793,
-                63.48000717163086,
-                63.48000717163086,
-                63.66000747680664,
-                63.850006103515625,
-                64.08000946044922,
-                64.760009765625,
-                64.80001068115234,
-                64.81001281738281,
-                64.81001281738281,
-            ],
-            "short_factor": [
-                1.05,
-                1.05,
-                1.05,
-                1.1,
-                1.1,
-                1.1,
-                1.2500000000000002,
-                1.2500000000000002,
-                1.4000000000000004,
-                1.4500000000000004,
-                1.5500000000000005,
-                1.8500000000000008,
-                1.9000000000000008,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.000000000000001,
-                2.1000000000000005,
-                2.1000000000000005,
-                2.2,
-                2.3499999999999996,
-                2.3499999999999996,
-                2.3499999999999996,
-                2.3499999999999996,
-                2.3999999999999995,
-                2.3999999999999995,
-                2.6499999999999986,
-                2.6999999999999984,
-                2.8999999999999977,
-                2.9499999999999975,
-                3.049999999999997,
-                3.049999999999997,
-                3.049999999999997,
-            ],
-            "type": "su",
-        },
-        "rope_theta": 10000.0,
-        "sliding_window": 131072,
-        "tie_word_embeddings": False,
-        "torch_dtype": "bfloat16",
-        "transformers_version": "4.38.1",
-        "use_cache": True,
-        "vocab_size": 32064,
-        "_attn_implementation": "flash_attention_2",
-    }
+        input_cache = input_kind & LLMInputKind.past_key_values
+        data = restore_dummy_inputs_for_phi35_vision_instruct(
+            num_hidden_layers=num_hidden_layers,
+            n_iteration=1 if input_cache else 0,
+            with_images=input_kind & LLMInputKind.images,
+            device=device,
+        )
+        args, kwargs = data
+        inputs = {}
+        shapes = {}
 
-    assert_found(kwargs, config)
-    config.update(**kwargs)
-    conf = Phi3VConfig(**config)
-    model = Phi3VForCausalLM(conf)
-    model.eval()
-
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 32064, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
+        batch = torch.export.Dim("batch", min=1, max=1024)
+        seq_length = torch.export.Dim("seq_length", min=1, max=4096)
+        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
+        if input_kind & LLMInputKind.input_ids:
+            inputs["input_ids"] = kwargs["input_ids"]
+            shapes["input_ids"] = {0: batch, 1: seq_length} if not input_cache else {0: batch}
+        if input_kind & LLMInputKind.position_ids:
+            inputs["position_ids"] = kwargs["position_ids"]
+            shapes["position_ids"] = {0: batch, 1: seq_length}
+        if input_kind & LLMInputKind.attention_mask:
+            inputs["attention_mask"] = kwargs["attention_mask"]
+            shapes["attention_mask"] = {0: batch, 1: cache_length + 1}
+        if input_kind & LLMInputKind.past_key_values:
+            inputs["past_key_values"] = kwargs["past_key_values"]
+            n = len(data[1]["past_key_values"].key_cache)
+            shapes["past_key_values"] = [
+                [{0: batch, 2: cache_length} for _ in range(n)],
+                [{0: batch, 2: cache_length} for _ in range(n)],
+            ]
+        if input_kind & LLMInputKind.images:
+            inputs["pixel_values"] = kwargs["pixel_values"]
+            inputs["image_sizes"] = kwargs["image_sizes"]
+            n_images = torch.export.Dim("n_images", min=0, max=1024)
+            shapes["pixel_values"] = shapes["image_sizes"] = {0: n_images}
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())
+        shapes = tuple(shapes.values())
 
+    if common_dynamic_shapes:
+        return model, inputs, shapes
     return model, inputs
 
 
 def get_phi35_vision_instruct(
     inputs_as_tuple: bool = False,
-    n_iteration: int = 0,
+    batch_size: int = 2,
     input_kind: LLMInputKind = LLMInputKind.input_ids,
     device: str = "cpu",
     common_dynamic_shapes: bool = False,
@@ -562,14 +494,12 @@ def get_phi35_vision_instruct(
     """
     Gets a non initialized model.
 
+    :param batch_size: batch size to use
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param n_iteration: iteration to retrieve
-    :param device: move data and model to this specific device
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs, dynamic shapes
     """
-    import torch
     from .fromhub.configuration_phi3_v import Phi3VConfig
     from .fromhub.modeling_phi3_v import Phi3VForCausalLM
 
@@ -730,73 +660,236 @@ def get_phi35_vision_instruct(
     model = Phi3VForCausalLM(conf)
     model.eval().to(device)
 
-    if input_kind == LLMInputKind.input_ids:
-        dim = (1, 30)
-        inputs = dict(input_ids=torch.randint(0, 32064, dim).to(torch.int64))
-        shapes = {
-            "input_ids": {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")}
-        }
-    elif input_kind == LLMInputKind.input_ids | LLMInputKind.attention_mask:
-        dim = (1, 30)
-        inputs = dict(
-            input_ids=torch.randint(0, 32064, dim).to(torch.int64),
-            attention_mask=torch.ones(*dim, dtype=torch.int64),
-        )
-        batch = torch.export.Dim("batch")
-        seq_length = torch.export.Dim("seq_length")
-        shapes = {
-            "input_ids": {0: batch, 1: seq_length},
-            "attention_mask": {0: batch, 1: seq_length},
-        }
-    else:
-        from .dummy_inputs.llm_dummy_inputs import (
-            restore_dummy_inputs_for_phi35_vision_instruct,
-        )
-
-        data = restore_dummy_inputs_for_phi35_vision_instruct(
+    if (
+        input_kind
+        == LLMInputKind.input_ids | LLMInputKind.attention_mask | LLMInputKind.past_key_values
+    ):
+        return finalize_llm_setup(
+            model,
+            batch_size=batch_size,
+            max_token_id=32064,
+            cache_last_dim=96,
+            common_dynamic_shapes=common_dynamic_shapes,
+            inputs_as_tuple=inputs_as_tuple,
             num_hidden_layers=config["num_hidden_layers"],
-            n_iteration=n_iteration,
-            with_images=input_kind & LLMInputKind.images,
+            input_cache=True,
             device=device,
         )
-        args, kwargs = data
-        inputs = {}
-        shapes = {}
+    return finalize_llm_vision_setup(
+        model,
+        input_kind,
+        batch_size=batch_size,
+        max_token_id=32064,
+        cache_last_dim=96,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        num_hidden_layers=config["num_hidden_layers"],
+        device=device,
+    )
 
-        batch = torch.export.Dim("batch", min=1, max=1024)
-        seq_length = torch.export.Dim("seq_length", min=1, max=4096)
-        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
-        if input_kind & LLMInputKind.input_ids:
-            inputs["input_ids"] = kwargs["input_ids"]
-            shapes["input_ids"] = {0: batch, 1: seq_length} if n_iteration == 0 else {0: batch}
-        if input_kind & LLMInputKind.position_ids:
-            inputs["position_ids"] = kwargs["position_ids"]
-            shapes["position_ids"] = (
-                {0: batch, 1: seq_length} if n_iteration == 0 else {0: batch}
-            )
-        if input_kind & LLMInputKind.attention_mask:
-            inputs["attention_mask"] = kwargs["attention_mask"]
-            shapes["attention_mask"] = {0: batch, 1: cache_length + 1}
-        if input_kind & LLMInputKind.past_key_values:
-            inputs["past_key_values"] = kwargs["past_key_values"]
-            n = len(data[1]["past_key_values"].key_cache)
-            shapes["past_key_values"] = [
-                [{0: batch, 2: cache_length} for _ in range(n)],
-                [{0: batch, 2: cache_length} for _ in range(n)],
-            ]
-        if input_kind & LLMInputKind.images:
-            inputs["pixel_values"] = kwargs["pixel_values"]
-            inputs["image_sizes"] = kwargs["image_sizes"]
-            n_images = torch.export.Dim("n_images", min=0, max=1024)
-            shapes["pixel_values"] = shapes["image_sizes"] = {0: n_images}
 
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-        shapes = tuple(shapes.values())
+def get_phi3_vision_128k_instruct(
+    inputs_as_tuple: bool = False,
+    batch_size: int = 2,
+    input_kind: LLMInputKind = LLMInputKind.input_ids,
+    device: str = "cpu",
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]], Optional[Any]]:
+    """
+    Gets a non initialized model.
 
-    if common_dynamic_shapes:
-        return model, inputs, shapes
-    return model, inputs
+    :param batch_size: batch size to use
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs, dynamic shapes
+
+    See `Phi-3-vision-128k-instruct/config.json
+    <https://huggingface.co/microsoft/Phi-3-vision-128k-instruct/blob/main/config.json>`_.
+    """
+    from .configuration_phi3_v import Phi3VConfig
+    from .modeling_phi3_v import Phi3VForCausalLM
+
+    config = {
+        "_name_or_path": "Phi-3-vision-128k-instruct",
+        "architectures": ["Phi3VForCausalLM"],
+        "attention_dropout": 0.0,
+        "auto_map": {
+            "AutoConfig": "configuration_phi3_v.Phi3VConfig",
+            "AutoModelForCausalLM": "modeling_phi3_v.Phi3VForCausalLM",
+        },
+        "bos_token_id": 1,
+        "embd_layer": {
+            "embedding_cls": "image",
+            "hd_transform_order": "sub_glb",
+            "projection_cls": "mlp",
+            "use_hd_transform": True,
+            "with_learnable_separator": True,
+        },
+        "eos_token_id": 2,
+        "hidden_act": "silu",
+        "hidden_size": 3072,
+        "img_processor": {
+            "image_dim_out": 1024,
+            "model_name": "openai/clip-vit-large-patch14-336",
+            "name": "clip_vision_model",
+            "num_img_tokens": 144,
+        },
+        "initializer_range": 0.02,
+        "intermediate_size": 8192,
+        "max_position_embeddings": 131072,
+        "model_type": "phi3_v",
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32,
+        "original_max_position_embeddings": 4096,
+        "rms_norm_eps": 1e-05,
+        "rope_scaling": {
+            "long_factor": [
+                1.0299999713897705,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0799999237060547,
+                1.2299998998641968,
+                1.2299998998641968,
+                1.2999999523162842,
+                1.4499999284744263,
+                1.5999999046325684,
+                1.6499998569488525,
+                1.8999998569488525,
+                2.859999895095825,
+                3.68999981880188,
+                5.419999599456787,
+                5.489999771118164,
+                5.489999771118164,
+                9.09000015258789,
+                11.579999923706055,
+                15.65999984741211,
+                15.769999504089355,
+                15.789999961853027,
+                18.360000610351562,
+                21.989999771118164,
+                23.079999923706055,
+                30.009998321533203,
+                32.35000228881836,
+                32.590003967285156,
+                35.56000518798828,
+                39.95000457763672,
+                53.840003967285156,
+                56.20000457763672,
+                57.95000457763672,
+                59.29000473022461,
+                59.77000427246094,
+                59.920005798339844,
+                61.190006256103516,
+                61.96000671386719,
+                62.50000762939453,
+                63.3700065612793,
+                63.48000717163086,
+                63.48000717163086,
+                63.66000747680664,
+                63.850006103515625,
+                64.08000946044922,
+                64.760009765625,
+                64.80001068115234,
+                64.81001281738281,
+                64.81001281738281,
+            ],
+            "short_factor": [
+                1.05,
+                1.05,
+                1.05,
+                1.1,
+                1.1,
+                1.1,
+                1.2500000000000002,
+                1.2500000000000002,
+                1.4000000000000004,
+                1.4500000000000004,
+                1.5500000000000005,
+                1.8500000000000008,
+                1.9000000000000008,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.000000000000001,
+                2.1000000000000005,
+                2.1000000000000005,
+                2.2,
+                2.3499999999999996,
+                2.3499999999999996,
+                2.3499999999999996,
+                2.3499999999999996,
+                2.3999999999999995,
+                2.3999999999999995,
+                2.6499999999999986,
+                2.6999999999999984,
+                2.8999999999999977,
+                2.9499999999999975,
+                3.049999999999997,
+                3.049999999999997,
+                3.049999999999997,
+            ],
+            "type": "su",
+        },
+        "rope_theta": 10000.0,
+        "sliding_window": 131072,
+        "tie_word_embeddings": False,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.38.1",
+        "use_cache": True,
+        "vocab_size": 32064,
+        "_attn_implementation": "flash_attention_2",
+    }
+
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = Phi3VConfig(**config)
+    model = Phi3VForCausalLM(conf)
+    model.eval()
+
+    if (
+        input_kind
+        == LLMInputKind.input_ids | LLMInputKind.attention_mask | LLMInputKind.past_key_values
+    ):
+        return finalize_llm_setup(
+            model,
+            batch_size=batch_size,
+            max_token_id=32064,
+            cache_last_dim=96,
+            common_dynamic_shapes=common_dynamic_shapes,
+            inputs_as_tuple=inputs_as_tuple,
+            num_hidden_layers=config["num_hidden_layers"],
+            input_cache=True,
+            device=device,
+        )
+    return finalize_llm_vision_setup(
+        model,
+        input_kind,
+        batch_size=batch_size,
+        max_token_id=32064,
+        cache_last_dim=96,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        num_hidden_layers=config["num_hidden_layers"],
+        device=device,
+    )
 
 
 def get_ai21_jamba_15_mini(
@@ -1065,12 +1158,18 @@ def get_llama32_9b_vision(
 
 
 def get_smollm_1_7b(
-    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+    batch_size: int = 2,
+    input_cache: bool = True,
+    inputs_as_tuple: bool = False,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param batch_size: batch size
+    :param input_cache: generate data for this iteration with or without cache
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: model, inputs
@@ -1078,10 +1177,7 @@ def get_smollm_1_7b(
     See `SmolLM-1.7B
     <https://huggingface.co/HuggingFaceTB/SmolLM-1.7B/blob/main/config.json>`_.
     """
-    import torch
     import transformers
-
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "/fsx/loubna/checkpoints/cosmo2_1T/500000",
@@ -1123,13 +1219,14 @@ def get_smollm_1_7b(
     model = transformers.LlamaForCausalLM(conf)
     model.eval()
 
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    return finalize_llm_setup(
+        model,
+        batch_size,
+        max_token_id=49152,
+        cache_last_dim=64,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        num_hidden_layers=config["num_hidden_layers"],
+        input_cache=input_cache,
+        seq_length_multiple=8,
     )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs

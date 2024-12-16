@@ -39,11 +39,11 @@ class UntrainedRunner(BenchmarkRunner):
                 "FalconMamba7bLM": get_falcon_mamba_7b,
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
                 "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),
-                "Phi2LM_2Layer_it0": (
+                "Phi2LM_2LayerNoCache": (
                     lambda: (
                         get_phi2(
                             num_hidden_layers=2,
-                            n_iteration=0,
+                            input_cache=False,
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
                         ),
@@ -54,7 +54,7 @@ class UntrainedRunner(BenchmarkRunner):
                     lambda: (
                         get_phi2(
                             num_hidden_layers=2,
-                            n_iteration=1,
+                            input_cache=True,
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
                             batch_size=2,
@@ -66,48 +66,21 @@ class UntrainedRunner(BenchmarkRunner):
                     lambda: (
                         get_phi35_mini_instruct(
                             num_hidden_layers=2,
-                            n_iteration=1,
+                            input_cache=True,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
                         dict(strict=False),
                     )
                 ),
-                "Phi35MiniInstructLMVision_1Layer_it0": (
+                "Phi35MiniInstructLMVision_2Layer": (
                     lambda: (
-                        *get_phi35_vision_instruct(
-                            num_hidden_layers=1,
-                            n_iteration=0,
+                        get_phi35_vision_instruct(
+                            num_hidden_layers=2,
+                            input_cache=True,
                             input_kind=LLMInputKind.input_ids
                             | LLMInputKind.attention_mask
-                            | LLMInputKind.position_ids
                             | LLMInputKind.past_key_values,
-                            common_dynamic_shapes=True,
-                        ),
-                        dict(strict=False),
-                    )
-                ),
-                "Phi35MiniInstructLMVision_1Layer": (
-                    lambda: (
-                        *get_phi35_vision_instruct(
-                            num_hidden_layers=1,
-                            n_iteration=1,
-                            input_kind=LLMInputKind.input_ids
-                            | LLMInputKind.attention_mask
-                            | LLMInputKind.position_ids
-                            | LLMInputKind.past_key_values,
-                            common_dynamic_shapes=True,
-                        ),
-                        dict(strict=False),
-                    )
-                ),
-                "Phi35MiniInstructLMVision_1Layer_Images_it0": (
-                    lambda: (
-                        *get_phi35_vision_instruct(
-                            num_hidden_layers=1,
-                            n_iteration=0,
-                            _attn_implementation="eager",
-                            input_kind=LLMInputKind.ALL,
                             common_dynamic_shapes=True,
                         ),
                         dict(strict=False),
@@ -115,9 +88,9 @@ class UntrainedRunner(BenchmarkRunner):
                 ),
                 "Phi35MiniInstructLMVision_1Layer_Images": (
                     lambda: (
-                        *get_phi35_vision_instruct(
+                        get_phi35_vision_instruct(
                             num_hidden_layers=1,
-                            n_iteration=1,
+                            input_cache=True,
                             _attn_implementation="eager",
                             input_kind=LLMInputKind.ALL,
                             common_dynamic_shapes=True,
@@ -125,7 +98,12 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "SmolLM17b": get_smollm_1_7b,
+                "SmolLM17b_2LayerNoCache": lambda: get_smollm_1_7b(
+                    input_cache=False, num_hidden_layers=2
+                ),
+                "SmolLM17b_2Layer": lambda: get_smollm_1_7b(
+                    input_cache=True, num_hidden_layers=2
+                ),
             }
         )
 
@@ -184,7 +162,12 @@ class UntrainedRunner(BenchmarkRunner):
 
         dynamic_shapes = None
         inputs2 = None
-        if len(tu) == 2:
+        if isinstance(tu, dict):
+            model_cls, example_inputs = tu["model"], tu["inputs"]
+            dynamic_shapes = tu.get("dynamic_shapes", None)
+            inputs2 = tu.get("inputs2", None)
+            export_options = None
+        elif len(tu) == 2:
             if isinstance(tu[0], dict):
                 model_cls, example_inputs = tu[0]["model"], tu[0]["inputs"]
                 dynamic_shapes = tu[0].get("dynamic_shapes", None)

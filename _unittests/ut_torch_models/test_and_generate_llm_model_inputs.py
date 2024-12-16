@@ -97,7 +97,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=False, n_iteration=it
+                    num_hidden_layers=1, with_images=False, input_cache=it == 1
                 )
                 self.assertIsInstance(dummies, tuple)
                 self.assertEqual(len(dummies), 2)
@@ -124,7 +124,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=False, n_iteration=it, device=device
+                    num_hidden_layers=1, with_images=False, input_cache=it == 1, device=device
                 )
                 model(*args, **kwargs)
 
@@ -159,7 +159,7 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(iteration=it):
                 model, kwargs, _ = get_phi35_vision_instruct(
                     num_hidden_layers=1,
-                    n_iteration=it,
+                    input_cache=it == 1,
                     device=device,
                     input_kind=LLMInputKind.input_ids
                     | LLMInputKind.position_ids
@@ -174,7 +174,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=True, n_iteration=it
+                    num_hidden_layers=1, with_images=True, input_cache=it == 1
                 )
                 self.assertIsInstance(dummies, tuple)
                 self.assertEqual(len(dummies), 2)
@@ -201,7 +201,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=True, n_iteration=it, device=device
+                    num_hidden_layers=1, with_images=True, input_cache=it == 1, device=device
                 )
                 model(*args, **kwargs)
 
@@ -221,7 +221,7 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(iteration=it):
                 model, kwargs = get_phi35_vision_instruct(
                     num_hidden_layers=1,
-                    n_iteration=it,
+                    input_cache=it == 1,
                     device=device,
                     input_kind=LLMInputKind.ALL,
                 )

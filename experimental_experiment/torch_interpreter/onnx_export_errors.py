@@ -360,6 +360,7 @@ def bypass_export_some_errors(
             patched_AttentionMaskConverter,
             patched_DynamicCache,
         )
+        import experimental_experiment.torch_models.fromhub.modeling_phi3_v as modeling_phi3_v
 
         def raise_assert():
             raise AssertionError("One replacement of DynamicCache was not patched.")
@@ -381,6 +382,7 @@ def bypass_export_some_errors(
         transformers.cache_utils.DynamicCache = patched_DynamicCache
         transformers.models.phi.modeling_phi.DynamicCache = patched_DynamicCache
         transformers.models.phi3.modeling_phi3.DynamicCache = patched_DynamicCache
+        modeling_phi3_v.DynamicCache = patched_DynamicCache
 
     ########
     # export
@@ -417,6 +419,7 @@ def bypass_export_some_errors(
             transformers.cache_utils.DynamicCache = keep_DynamicCache
             transformers.models.phi.modeling_phi.DynamicCache = keep_DynamicCache
             transformers.models.phi3.modeling_phi3.DynamicCache = keep_DynamicCache
+            modeling_phi3_v.DynamicCache = keep_DynamicCache
             if verbose:
                 print("[bypass_export_some_errors] restored DynamicCache")
 
