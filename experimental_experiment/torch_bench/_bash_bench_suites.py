@@ -50,7 +50,7 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "Phi2LM_2Layer_it1": (
+                "Phi2LM_2Layer": (
                     lambda: (
                         get_phi2(
                             num_hidden_layers=2,
@@ -62,9 +62,14 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "Phi35MiniInstructLM_1Layer": (
+                "Phi35MiniInstructLM_2Layer": (
                     lambda: (
-                        *get_phi35_mini_instruct(num_hidden_layers=1),
+                        get_phi35_mini_instruct(
+                            num_hidden_layers=2,
+                            n_iteration=1,
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
                         dict(strict=False),
                     )
                 ),
@@ -82,7 +87,7 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "Phi35MiniInstructLMVision_1Layer_it1": (
+                "Phi35MiniInstructLMVision_1Layer": (
                     lambda: (
                         *get_phi35_vision_instruct(
                             num_hidden_layers=1,
@@ -108,7 +113,7 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "Phi35MiniInstructLMVision_1Layer_Images_it1": (
+                "Phi35MiniInstructLMVision_1Layer_Images": (
                     lambda: (
                         *get_phi35_vision_instruct(
                             num_hidden_layers=1,
@@ -119,9 +124,6 @@ class UntrainedRunner(BenchmarkRunner):
                         ),
                         dict(strict=False),
                     )
-                ),
-                "Phi35MiniInstructLM": (
-                    lambda: (*get_phi35_mini_instruct(), dict(strict=False))
                 ),
                 "SmolLM17b": get_smollm_1_7b,
             }
