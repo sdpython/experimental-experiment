@@ -9,7 +9,7 @@ def flatten_mamba_cache(
     flat = [
         (k, getattr(mamba_cache, k))
         for k in [
-            "max_batch_size",  # new in transformers 4.47
+            "max_batch_size",  # new in transformers==4.47
             "intermediate_size",
             "ssm_state_size",
             "conv_kernel_size",
@@ -26,7 +26,6 @@ def unflatten_mamba_cache(
     context: "torch.utils._pytree.Context",  # noqa: F821
     output_type=None,
 ) -> "MambaCache":  # noqa: F821
-
     class _config:
         def __init__(self):
             self.intermediate_size = 16
@@ -69,7 +68,6 @@ def unflatten_dynamic_cache(
     context: "torch.utils._pytree.Context",  # noqa: F821
     output_type=None,
 ) -> "DynamicCache":  # noqa: F821
-
     from transformers.cache_utils import DynamicCache
 
     cache = DynamicCache()
