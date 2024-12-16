@@ -166,8 +166,8 @@ class FunctionSplitRotaryMulPattern(EasyPatternOptimization):
         neg = g.op.Neg(s2)
         fullrot = g.op.Concat(neg, s1, axis=-1)
         add = g.op.Add(
-            g.op.Mul(fullrot, C1),
             g.op.Mul(rot, C2),
+            g.op.Mul(fullrot, C1),
         )
         return g.op.Concat(add, part, axis=-1)
 

@@ -1,5 +1,6 @@
 import inspect
 import os
+import pprint
 import textwrap
 from collections import Counter
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
@@ -247,12 +248,15 @@ class EasyPatternOptimization(PatternOptimization):
     Implements a pattern optimization for quick experimentation.
     The current implementation does not match on domain name.
     It does not compares attributes either.
+    The environment variable ``AMBIGUITIES=1`` can be set to one to
+    raise an exception when this case happens.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0, min_opset: int = 1):
         super().__init__(verbose=verbose, priority=priority, min_opset=min_opset)
         self._cache = {}
         self._validate_parameters = {}
+        self._debug_ambiguities = int(os.environ.get("AMBIGUITIES", 0)) == 1
 
     def add_validate_param(self, key: str, value: Any):
         """
@@ -561,7 +565,18 @@ class EasyPatternOptimization(PatternOptimization):
                         pns[0],
                         "-- pairs",
                         pair_results_names,
+                        "-- pattern",
+                        self._pattern_to_string(g),
                     )
+                    if self._debug_ambiguities:
+                        raise AssertionError(
+                            f"An ambiguities was detected, ns[0]="
+                            f"{g.builder.pretty_node(ns[0], short=True)}, "
+                            f"pns[0]={g.builder.pretty_node(pns[0], short=True)},\n"
+                            f"pairs={pprint.pformat(pair_results_names)}\n-- pattern -- \n"
+                            f"{self._pattern_to_string(g)}\n-- graph --\n"
+                            f"{g.builder.pretty_text()}"
+                        )
                     return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(pns[0])
@@ -612,7 +627,18 @@ class EasyPatternOptimization(PatternOptimization):
                         "-- ambiguities",
                         free[0],
                         p_marked[0],
+                        "-- pairs",
+                        pair_results_names,
                     )
+                    if self._debug_ambiguities:
+                        raise AssertionError(
+                            f"An ambiguities was detected, free[0]="
+                            f"{g.builder.pretty_node(free[0], short=True)}, "
+                            f"p_marked[0]={g.builder.pretty_node(p_marked[0], short=True)}, "
+                            f"pairs={pprint.pformat(pair_results_names)}\n-- pattern -- \n"
+                            f"{self._pattern_to_string(g)}\n-- graph --\n"
+                            f"{g.builder.pretty_text()}"
+                        )
                     return self.none(node, inspect.currentframe().f_lineno)
 
                 key = id(p_marked[0])
@@ -881,6 +907,9 @@ class EasyPatternOptimization(PatternOptimization):
                 return True
         return False
 
+    def _pattern_to_string(self, g: "GraphBuilder"):  # noqa: F821
+        return textwrap.indent(self.display_pattern(g, self.match_pattern), "    ")
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -906,7 +935,7 @@ class EasyPatternOptimization(PatternOptimization):
             )
             if self.verbose >= 10:
                 print("[EasyPatternOptimization.match] match pattern")
-                print(textwrap.indent(self.display_pattern(g, self.match_pattern), "    "))
+                print(self._pattern_to_string(g))
 
         pair_results_names = {}
         self._update_ambiguities(pair_results_names, node, p_node)
