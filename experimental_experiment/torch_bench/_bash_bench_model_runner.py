@@ -1338,6 +1338,7 @@ class ModelRunner:
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
         from ..torch_interpreter import ExportOptions
+
         # Avoid heavy dependencies of an exporter
         from executorch.exir import ExecutorchBackendConfig, to_edge
 
@@ -2105,7 +2106,9 @@ class ModelRunner:
         }:
             return self.get_inputs_with_copied_cache()
 
-        use_inputs = self.get_inputs_with_copied_cache() if not dynamic else self.make_dynamic_inputs()
+        use_inputs = (
+            self.get_inputs_with_copied_cache() if not dynamic else self.make_dynamic_inputs()
+        )
         if remove_int:
             ui = use_inputs
             use_inputs = []
