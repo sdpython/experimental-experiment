@@ -193,6 +193,7 @@ def merge_benchmark_reports(
         "control_flow",
         "pass_rate",
         "accuracy_rate",
+        "accuracy_dynamic_rate",
         "date",
         "correction",
         "error",
