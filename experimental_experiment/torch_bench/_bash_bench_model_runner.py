@@ -415,8 +415,8 @@ class ModelRunner:
 
         self.device = device
         self.dtype = dtype
-        self.inputs = self.get_inputs(inputs)
-        self.inputs2 = self.get_inputs(inputs2) if inputs2 else None
+        self.inputs = self.get_inputs_with_copied_dynamic_cache(inputs)
+        self.inputs2 = self.get_inputs_with_copied_dynamic_cache(inputs2) if inputs2 else None
         self.repeat = repeat
         self.warmup = warmup
         self.suite = suite
@@ -1019,7 +1019,7 @@ class ModelRunner:
             # ([{'file_name': ..., 'height': ..., 'image': torch.Tensor(...)}])
             inputs = (self.inputs[0][0]["image"],)
         else:
-            inputs = self.get_inputs_with_copied_cache()
+            inputs = self.get_inputs_with_copied_dynamic_cache()
 
         dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
         inputs, kw_inputs = self.make_export_inputs(dynamic, inputs=inputs)
@@ -1230,7 +1230,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.get_inputs_with_copied_cache(),
+                    *self.get_inputs_with_copied_dynamic_cache(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1240,7 +1240,7 @@ class ModelRunner:
             with torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.get_inputs_with_copied_cache(),
+                    *self.get_inputs_with_copied_dynamic_cache(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1683,7 +1683,7 @@ class ModelRunner:
                 return self.inputs if inputs is None else inputs, self.kw_inputs
 
             if inputs is None:
-                inputs = self.get_inputs_with_copied_cache()
+                inputs = self.get_inputs_with_copied_dynamic_cache()
             if kw_inputs is None:
                 kw_inputs = self.kw_inputs
 
@@ -1717,7 +1717,7 @@ class ModelRunner:
             return tuple(new_inputs), new_kw_inputs
 
         if inputs is None:
-            inputs = self.get_inputs_with_copied_cache()
+            inputs = self.get_inputs_with_copied_dynamic_cache()
         if kw_inputs is None:
             kw_inputs = self.kw_inputs
 
@@ -1997,11 +1997,11 @@ class ModelRunner:
             self.inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
         if self.inputs2:
-            return self.get_inputs_with_copied_cache(self.inputs2)
+            return self.get_inputs_with_copied_dynamic_cache(self.inputs2)
         dynamic_shapes = self.get_dynamic_shapes(True)
         dyn_inputs = []
         dyn_values = {}
-        inputs = self.get_inputs_with_copied_cache()  # we need a copy for the cache
+        inputs = self.get_inputs_with_copied_dynamic_cache()  # we need a copy for the cache
         for i in range(len(inputs)):
             inp = inputs[i]
             if i >= len(dynamic_shapes):
@@ -2104,10 +2104,12 @@ class ModelRunner:
             "executorch",
             "flaggems",
         }:
-            return self.get_inputs_with_copied_cache()
+            return self.get_inputs_with_copied_dynamic_cache()
 
         use_inputs = (
-            self.get_inputs_with_copied_cache() if not dynamic else self.make_dynamic_inputs()
+            self.get_inputs_with_copied_dynamic_cache()
+            if not dynamic
+            else self.make_dynamic_inputs()
         )
         if remove_int:
             ui = use_inputs
@@ -2129,7 +2131,7 @@ class ModelRunner:
             assert set(names) == set(
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
-            return self.get_inputs_with_copied_cache()
+            return self.get_inputs_with_copied_dynamic_cache()
         assert len(use_inputs) == len(raw_use_defaults), (
             f"Mismatch use_inputs={string_type(use_inputs)}, "
             f"raw_use_defaults={string_type(raw_use_defaults)}"
