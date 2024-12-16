@@ -251,6 +251,64 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
         for a, b in zip(expected, got):
             self.assertEqualArray(a, b, atol=1e-2)
 
+    def test_pow_tanh(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Pow", ["X", "three"], ["pow"]),
+                    oh.make_node("Mul", ["pow", "o_o_four"], ["mul1"]),
+                    oh.make_node("Add", ["X", "mul1"], ["add"]),
+                    oh.make_node("Mul", ["add", "o_height"], ["mul2"]),
+                    oh.make_node("Tanh", ["mul2"], ["th"]),
+                    oh.make_node("Add", ["th", "one"], ["add2"]),
+                    oh.make_node("Mul", ["X", "half"], ["mul3"]),
+                    oh.make_node("Mul", ["mul3", "add2"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("X", TFLOAT, ["batch", 32, "seq_length", 80]),
+                    _mkv_("three", TFLOAT, [1]),
+                    _mkv_("o_o_four", TFLOAT, [1]),
+                    _mkv_("o_height", TFLOAT, [1]),
+                    _mkv_("one", TFLOAT, [1]),
+                    _mkv_("half", TFLOAT, [1]),
+                ],
+                [_mkv_("Y", TFLOAT, ["batch", 32, "seq_length", 80])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionPowTanh"],
+                verbose=0,
+                constant_folding=True,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["PowTanh"], [_.op_type for _ in opt_onx.graph.node])
+
+        feeds = {
+            "X": self._range(2, 32, 8, 80),
+            "three": np.array([3], dtype=np.float32),
+            "o_o_four": np.array([0.04], dtype=np.float32),
+            "o_height": np.array([0.8], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+            "half": np.array([0.5], dtype=np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+        got = opt_ref.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

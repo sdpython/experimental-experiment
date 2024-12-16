@@ -2,8 +2,9 @@ import inspect
 from collections import Counter
 from typing import List, Optional
 from onnx import NodeProto
-from ..patterns_api import MatchResult, PatternOptimization, EasyPatternOptimization
 from ...xbuilder import GraphBuilder, FunctionOptions
+from ..patterns_api import MatchResult, PatternOptimization
+from . import SimplifyingEasyPatternFunction
 
 
 class FunctionPackedMatMulPattern(PatternOptimization):
@@ -155,9 +156,22 @@ class FunctionPackedMatMulPattern(PatternOptimization):
         g.make_local_function(local_g, function_options=function_options)
 
 
-class FunctionSplitRotaryMulPattern(EasyPatternOptimization):
+class FunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
     """
-    Moves the nodes in match_pattern in a local function.
+    Moves the nodes in match_pattern into a local function.
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xoptim import GraphBuilderPatternOptimization
+        from experimental_experiment.xoptim.patterns_investigation.llm_patterns import (
+            FunctionSplitRotaryMulPattern,
+        )
+
+        pat = FunctionSplitRotaryMulPattern()
+        g = GraphBuilderPatternOptimization(GraphBuilder(18))
+        print(pat._pattern_to_string(g))
     """
 
     def match_pattern(self, g: GraphBuilder, X, split1, split2, C1, C2):
@@ -172,21 +186,34 @@ class FunctionSplitRotaryMulPattern(EasyPatternOptimization):
         return g.op.Concat(add, part, axis=-1)
 
     def apply_pattern(self, g, X, split1, split2, C1, C2):
+        assert self.f_name() == "SplitRotaryMul", f"Name mismatch {self.f_name()!r}"
         return g.anyop.SplitRotaryMul(X, split1, split2, C1, C2, domain="SimplifyingFunction")
 
-    def post_apply_pattern(self, g, *nodes):
-        f_name = "SplitRotaryMul"
-        domain = "SimplifyingFunction"
 
-        if not g.builder.has_local_function(f_name, domain=domain):
-            self._add_local_function(g.builder, domain, f_name)
+class FunctionPowTanhPattern(SimplifyingEasyPatternFunction):
+    """
+    Moves the nodes in match_pattern into a local function.
 
-    def _add_local_function(self, g: GraphBuilder, domain: str, f_name: str):
-        local_g = GraphBuilder(g.main_opset, as_function=True)
-        inputs = "X", "split1", "split2", "C1", "C2"
-        local_g.make_tensor_input(inputs)
-        last = self.match_pattern(local_g, *inputs)
-        local_g.make_tensor_output(last)
+    .. runpython::
+        :showcode:
 
-        function_options = FunctionOptions(export_as_function=True, name=f_name, domain=domain)
-        g.make_local_function(local_g, function_options=function_options)
+        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xoptim import GraphBuilderPatternOptimization
+        from experimental_experiment.xoptim.patterns_investigation.llm_patterns import (
+            FunctionPowTanhPattern,
+        )
+
+        pat = FunctionPowTanhPattern()
+        g = GraphBuilderPatternOptimization(GraphBuilder(18))
+        print(pat._pattern_to_string(g))
+    """
+
+    def match_pattern(self, g: GraphBuilder, X, three, o_o_four, half, o_height, one):
+        add = g.op.Add(X, g.op.Mul(g.op.Pow(X, three), o_o_four))
+        return g.op.Mul(g.op.Mul(X, half), g.op.Add(g.op.Tanh(g.op.Mul(add, o_height)), one))
+
+    def apply_pattern(self, g, X, three, o_o_four, half, o_height, one):
+        assert self.f_name() == "PowTanh", f"Name mismatch {self.f_name()!r}"
+        return g.anyop.PowTanh(
+            X, three, o_o_four, half, o_height, one, domain="SimplifyingFunction"
+        )
