@@ -141,7 +141,7 @@ class WrappedModelBase(torch.nn.Module):
 
 class WrappedModelToTuple(WrappedModelBase):
     """
-    Wrapper around a module, flattens outputs and outputs so that every
+    Wrapper around a module, flattens inputs and outputs so that every
     exporter can use it.
     """
 
@@ -184,11 +184,13 @@ class ModelRunner:
     def allowed_configuration(cls, exporter: str, optimization: Optional[str] = None) -> bool:
         """Defines the allowed configurations."""
         if not optimization or optimization == "none":
-            # always possible
+            # Always allowed if no optimization
             return True
-        if exporter in {"custom", "custom-fallback"}:
+        if exporter.startswith("custom"):
+            # custom exporter is not limited by optimization methods
             return True
         if exporter in {"torch_script", "dynamo_export"}:
+            # torch_script and dynamo_export only allow default optimization
             return optimization in {"default"}
         if exporter in {"onnx_dynamo", "onnx_dynamo-fallback", "onnx_dynamo-detailed"}:
             return optimization in {"default", "ir"}
@@ -464,10 +466,8 @@ class ModelRunner:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
 
-    def get_inputs(self, inputs: Optional[Any] = None) -> Any:
-        """
-        LLM modifies the cache. It needs to be copied first.
-        """
+    def get_inputs_with_copied_dynamic_cache(self, inputs: Optional[Any] = None) -> Any:
+        """LLM modifies the cache. It needs to be copied first."""
         if inputs is None:
             inputs = self.inputs
         args = []
@@ -479,7 +479,7 @@ class ModelRunner:
         return tuple(args)
 
     def run(self) -> Any:
-        inputs = self.get_inputs()
+        inputs = self.get_inputs_with_copied_dynamic_cache()
         if self.autocast:
             if self.nvtx:
                 torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast")
@@ -808,6 +808,7 @@ class ModelRunner:
         export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
+
         if verbose:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
@@ -821,7 +822,7 @@ class ModelRunner:
             )
             print(
                 f"[ModelRunner._to_onnx_custom] export_kw_inputs="
-                f"{string_type(export_kw_inputs)!r}"
+                f"{string_type(export_kw_inputs, with_shape=True)!r}"
             )
             print(f"[ModelRunner._to_onnx_custom] self.export_options={self.export_options!r}")
             print(f"[ModelRunner._to_onnx_custom] export_options={export_options!r}")
@@ -1018,7 +1019,7 @@ class ModelRunner:
             # ([{'file_name': ..., 'height': ..., 'image': torch.Tensor(...)}])
             inputs = (self.inputs[0][0]["image"],)
         else:
-            inputs = self.get_inputs()
+            inputs = self.get_inputs_with_copied_cache()
 
         dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
         inputs, kw_inputs = self.make_export_inputs(dynamic, inputs=inputs)
@@ -1229,7 +1230,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.get_inputs(),
+                    *self.get_inputs_with_copied_cache(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1239,7 +1240,7 @@ class ModelRunner:
             with torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.get_inputs(),
+                    *self.get_inputs_with_copied_cache(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1337,7 +1338,8 @@ class ModelRunner:
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
         from ..torch_interpreter import ExportOptions
-        from executorch.exir import to_edge, ExecutorchBackendConfig
+        # Avoid heavy dependencies of an exporter
+        from executorch.exir import ExecutorchBackendConfig, to_edge
 
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
@@ -1680,7 +1682,7 @@ class ModelRunner:
                 return self.inputs if inputs is None else inputs, self.kw_inputs
 
             if inputs is None:
-                inputs = self.get_inputs()
+                inputs = self.get_inputs_with_copied_cache()
             if kw_inputs is None:
                 kw_inputs = self.kw_inputs
 
@@ -1714,7 +1716,7 @@ class ModelRunner:
             return tuple(new_inputs), new_kw_inputs
 
         if inputs is None:
-            inputs = self.get_inputs()
+            inputs = self.get_inputs_with_copied_cache()
         if kw_inputs is None:
             kw_inputs = self.kw_inputs
 
@@ -1994,11 +1996,11 @@ class ModelRunner:
             self.inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
         if self.inputs2:
-            return self.get_inputs(self.inputs2)
+            return self.get_inputs_with_copied_cache(self.inputs2)
         dynamic_shapes = self.get_dynamic_shapes(True)
         dyn_inputs = []
         dyn_values = {}
-        inputs = self.get_inputs()  # we need a copy for the cache
+        inputs = self.get_inputs_with_copied_cache()  # we need a copy for the cache
         for i in range(len(inputs)):
             inp = inputs[i]
             if i >= len(dynamic_shapes):
@@ -2101,9 +2103,9 @@ class ModelRunner:
             "executorch",
             "flaggems",
         }:
-            return self.get_inputs()
+            return self.get_inputs_with_copied_cache()
 
-        use_inputs = self.get_inputs() if not dynamic else self.make_dynamic_inputs()
+        use_inputs = self.get_inputs_with_copied_cache() if not dynamic else self.make_dynamic_inputs()
         if remove_int:
             ui = use_inputs
             use_inputs = []
@@ -2124,7 +2126,7 @@ class ModelRunner:
             assert set(names) == set(
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
-            return self.get_inputs()
+            return self.get_inputs_with_copied_cache()
         assert len(use_inputs) == len(raw_use_defaults), (
             f"Mismatch use_inputs={string_type(use_inputs)}, "
             f"raw_use_defaults={string_type(raw_use_defaults)}"

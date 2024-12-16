@@ -40,10 +40,8 @@ def generate_dummy_inputs(
             filename = f"{prefix}{'.images' if with_images else ''}.iter.{i}.onnx"
             if verbose:
                 print(
-                    (
-                        f"[generate_dummy_inputs] write {filename!r} "
-                        f"with {string_type(inputs, True,True)}"
-                    )
+                    f"[generate_dummy_inputs] write {filename!r} "
+                    f"with {string_type(inputs, True,True)}"
                 )
             onx = create_onnx_model_from_input_tensors(obj, randomize=True)
             onnx_save(onx, filename)

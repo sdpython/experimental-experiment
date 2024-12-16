@@ -869,6 +869,7 @@ class BenchmarkRunner:
             print(f"[benchmarkrunner.benchmark] input_names={snames}")
             s = string_type(model_runner.inputs, with_shape=True, with_min_max=True)
             print(f"[benchmarkrunner.benchmark] inputs={s}")
+
         begin = time.perf_counter()
         if quiet:
             try:
@@ -1048,6 +1049,7 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] dynamic_shapes="
                 f"{model_runner.get_dynamic_shapes(dynamic)}"
             )
+
         dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
         stats["onnx_type_input"] = string_type(
             model_runner.inputs, with_shape=True, with_min_max=True
@@ -1400,7 +1402,7 @@ class BenchmarkRunner:
                 os.remove(session_options.optimized_model_filepath)
         elif "ExecutorchProgramManager" in str(type(exported_model)):
             # executorch
-            from executorch.runtime import Verification, Runtime
+            from executorch.runtime import Runtime, Verification
 
             stats["onnx_model"] = "0"
             if quiet:
@@ -1608,7 +1610,6 @@ class BenchmarkRunner:
                     f"[BenchmarkRunner.benchmark] feeds="
                     f"{string_type(feeds, with_shape=True, with_min_max=True)}"
                 )
-
             # This part is not about ONNX.
             # warmup session
             if exporter == "eager":

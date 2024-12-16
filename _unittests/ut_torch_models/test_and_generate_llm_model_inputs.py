@@ -94,7 +94,7 @@ class TestLlmModelInputs(ExtTestCase):
                 model(*args, **kwargs)
 
     def test_restore_dummy_inputs_no_images(self):
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=False, n_iteration=it
@@ -121,7 +121,7 @@ class TestLlmModelInputs(ExtTestCase):
         device = "cuda"
         model, *_ = get_phi35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)
         model = model.to(device)
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=False, n_iteration=it, device=device
@@ -171,7 +171,7 @@ class TestLlmModelInputs(ExtTestCase):
                 model(*[kwargs.get(n, None) for n in input_names])
 
     def test_restore_dummy_inputs_with_images(self):
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=True, n_iteration=it
@@ -198,7 +198,7 @@ class TestLlmModelInputs(ExtTestCase):
         device = "cuda"
         model, _ = get_phi35_vision_instruct(num_hidden_layers=1)
         model = model.to(device)
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=True, n_iteration=it, device=device
@@ -224,6 +224,7 @@ class TestLlmModelInputs(ExtTestCase):
                     input_cache=it == 1,
                     device=device,
                     input_kind=LLMInputKind.ALL,
+                    common_dynamic_shapes=True,
                 )
                 model(**kwargs)
 
