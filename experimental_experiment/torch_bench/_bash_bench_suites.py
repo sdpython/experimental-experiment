@@ -98,11 +98,19 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "SmolLM17b_2LayerNoCache": lambda: get_smollm_1_7b(
-                    input_cache=False, num_hidden_layers=2
+                "SmolLM17b_2LayerNoCache": (
+                    lambda: (
+                        get_smollm_1_7b(
+                            input_cache=False,
+                            num_hidden_layers=2,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(replace_dynamic_cache=False),
+                    )
                 ),
                 "SmolLM17b_2Layer": lambda: get_smollm_1_7b(
-                    input_cache=True, num_hidden_layers=2
+                    input_cache=True, num_hidden_layers=2, common_dynamic_shapes=True
                 ),
             }
         )
@@ -193,6 +201,13 @@ class UntrainedRunner(BenchmarkRunner):
         else:
             model.eval()
 
+        if export_options and "replace_dynamic_cache" in export_options:
+            patch_options = dict(
+                replace_dynamic_cache=export_options.pop("replace_dynamic_cache")
+            )
+        else:
+            patch_options = None
+
         return ModelRunner(
             model,
             example_inputs,
@@ -206,6 +221,7 @@ class UntrainedRunner(BenchmarkRunner):
             wrap_kind="nowrap",
             model_name=model_name,
             export_options=export_options,
+            patch_options=patch_options,
             dynamic_shapes=dynamic_shapes,
             inputs2=inputs2,
         )

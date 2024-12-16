@@ -172,6 +172,7 @@ class ModelRunner:
     :param nvtx: enable nvtx events
     :param model_name: model name
     :param export_options: additional options when exporting if the default options never work
+    :param patch_options: patching options, applied before exporting a model
     :param dynamic_shapes: dynamic shapes to use instead of using automated ones
     :param inputs2: second set of inputs to check the model handles differents shapes
         when they are dynamic
@@ -330,6 +331,7 @@ class ModelRunner:
         nvtx: bool = False,
         model_name: Optional[str] = None,
         export_options: Optional[Dict[str, Any]] = None,
+        patch_options: Optional[Dict[str, Any]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]] = None,
         inputs2: Optional[Any] = None,
         kw_inputs2: Optional[Dict[str, Any]] = None,
@@ -420,6 +422,10 @@ class ModelRunner:
         self.model_name = model_name
         self.nvtx = nvtx
         self.export_options = export_options
+        self.patch_options = dict(patch_transformers=True, replace_dynamic_cache=True)
+        if patch_options:
+            self.patch_options.update(patch_options)
+
         self.dynamic_shapes = dynamic_shapes
         assert self.autocast is not None, "autocast not implemented"
         self.std_to_dump = []
@@ -762,6 +768,16 @@ class ModelRunner:
             )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
+    def _patch_patch_options(self, verbose: int = 0, dynamic: int = 0) -> Dict[str, Any]:
+        """Updates the patch options.
+        DynamicCache does not need to be replaced if there is no dynamic shapes involved.
+        """
+        options = self.patch_options.copy()
+        if dynamic:
+            options["replace_dynamic_cache"] = False
+        options["verbose"] = max(verbose - 2, 0)
+        return options
+
     def _to_onnx_custom(
         self,
         name: str,
@@ -814,9 +830,7 @@ class ModelRunner:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 2, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
@@ -835,9 +849,7 @@ class ModelRunner:
                 )
         else:
             with torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 2, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
@@ -1146,9 +1158,7 @@ class ModelRunner:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 5, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ):
                 onnx_program = torch.onnx.export(
                     self.model,
@@ -1164,9 +1174,7 @@ class ModelRunner:
                 )
         else:
             with torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 5, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ):
                 onnx_program = torch.onnx.export(
                     self.model,
@@ -1285,7 +1293,7 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
         with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True, verbose=max(verbose - 5, 0)
+            **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
         ) as modificator:
             exported_mod = export_options.export(
                 self.model,
@@ -1348,7 +1356,7 @@ class ModelRunner:
             print("[ModelRunner._to_executorch] run torch.export.export")
 
         with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True, verbose=max(verbose - 5, 0)
+            **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
         ) as modificator:
             exported_mod = export_options.export(
                 self.model,

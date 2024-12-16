@@ -97,7 +97,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=False, input_cache=it == 1
+                    num_hidden_layers=1, with_images=False, n_iteration=it
                 )
                 self.assertIsInstance(dummies, tuple)
                 self.assertEqual(len(dummies), 2)
@@ -124,7 +124,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=False, input_cache=it == 1, device=device
+                    num_hidden_layers=1, with_images=False, n_iteration=it, device=device
                 )
                 model(*args, **kwargs)
 
@@ -174,7 +174,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=True, input_cache=it == 1
+                    num_hidden_layers=1, with_images=True, n_iteration=it
                 )
                 self.assertIsInstance(dummies, tuple)
                 self.assertEqual(len(dummies), 2)
@@ -201,7 +201,7 @@ class TestLlmModelInputs(ExtTestCase):
         for it in range(0, 2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
-                    num_hidden_layers=1, with_images=True, input_cache=it == 1, device=device
+                    num_hidden_layers=1, with_images=True, n_iteration=it, device=device
                 )
                 model(*args, **kwargs)
 

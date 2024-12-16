@@ -1049,7 +1049,9 @@ class BenchmarkRunner:
                 f"{model_runner.get_dynamic_shapes(dynamic)}"
             )
         dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
-        stats["onnx_type_input"] = string_type(model_runner.inputs)
+        stats["onnx_type_input"] = string_type(
+            model_runner.inputs, with_shape=True, with_min_max=True
+        )
         if self.verbose:
             print(f"[BenchmarkRunner.benchmark] inputs={stats['onnx_type_input']}")
             print(f"[BenchmarkRunner.benchmark] input shapes={dyn_shapes}")
@@ -1487,7 +1489,8 @@ class BenchmarkRunner:
             # warmup session
             if self.verbose:
                 print(
-                    f"[benchmarkrunner.benchmark] feeds={string_type(feeds, with_shape=True)}"
+                    f"[benchmarkrunner.benchmark] feeds="
+                    f"{string_type(feeds, with_shape=True, with_min_max=True)}"
                 )
             begin = time.perf_counter()
             time_first_iter = None

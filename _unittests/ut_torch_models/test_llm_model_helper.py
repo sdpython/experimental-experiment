@@ -198,7 +198,8 @@ class TestLlmModelHelper(ExtTestCase):
             get_phi35_mini_instruct,
         )
 
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
+        data = get_phi35_mini_instruct(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
         model = model
         with torch.autocast(device_type="cpu", dtype=torch.float16):
             onx = to_onnx(

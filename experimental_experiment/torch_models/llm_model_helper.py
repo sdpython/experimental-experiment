@@ -73,7 +73,11 @@ def finalize_llm_setup(
     sequence_inc = 1
     sequence_length2 = 3
     if seq_length_multiple > 1:
-        sequence_length = (sequence_length + seq_length_multiple) // seq_length_multiple
+        sequence_length = (
+            (sequence_length + seq_length_multiple)
+            // seq_length_multiple
+            * seq_length_multiple
+        )
         sequence_inc = seq_length_multiple
         sequence_length2 = seq_length_multiple
 
