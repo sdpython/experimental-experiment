@@ -9,7 +9,7 @@ class patched_AttentionMaskConverter:
     Patches
     ``transformers.modeling_attn_mask_utils.AttentionMaskConverter._make_causal_mask``.
     """
-	
+
     @staticmethod
     def _make_causal_mask(
         self,
