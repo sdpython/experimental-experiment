@@ -197,27 +197,31 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-
-        data = get_phi35_mini_instruct(num_hidden_layers=1)
-        model, model_inputs = data["model"], data["inputs"]
-        model = model
-        with torch.autocast(device_type="cpu", dtype=torch.float16):
-            onx = to_onnx(
-                model,
-                None,  # args
-                model_inputs,  # kwargs
-                large_model=True,
-                verbose=0,
-                options=OptimizationOptions(max_iter=10),
-                export_options=ExportOptions(strict=False, decomposition_table="all"),
-            )
-        filename = "test_phi35_mini_instruct_custom_auto.onnx"
-        onx.save(filename, all_tensors_to_one_file=True)
-        m = onnx.load(filename, load_external_data=False)
-        self.assertEqual(
-            set(i.type.tensor_type.elem_type for i in m.graph.output),
-            {onnx.TensorProto.FLOAT16},
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
         )
+
+        with bypass_export_some_errors():
+            data = get_phi35_mini_instruct(num_hidden_layers=1)
+            model, model_inputs = data["model"], data["inputs"]
+            model = model
+            with torch.autocast(device_type="cpu", dtype=torch.float16):
+                onx = to_onnx(
+                    model,
+                    None,  # args
+                    model_inputs,  # kwargs
+                    large_model=True,
+                    verbose=0,
+                    options=OptimizationOptions(max_iter=10),
+                    export_options=ExportOptions(strict=False, decomposition_table="all"),
+                )
+            filename = "test_phi35_mini_instruct_custom_auto.onnx"
+            onx.save(filename, all_tensors_to_one_file=True)
+            m = onnx.load(filename, load_external_data=False)
+            self.assertEqual(
+                set(i.type.tensor_type.elem_type for i in m.graph.output),
+                {onnx.TensorProto.FLOAT16},
+            )
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @requires_torch("2.7", "no decompositions leads to inplace functions")
