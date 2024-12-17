@@ -47,7 +47,7 @@ class UntrainedRunner(BenchmarkRunner):
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
                         ),
-                        dict(strict=False),
+                        dict(strict=False, replace_dynamic_cache=True),
                     )
                 ),
                 "Phi2LM_2Layer": (
@@ -59,7 +59,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False),
+                        dict(strict=False, replace_dynamic_cache=True),
                     )
                 ),
                 "Phi35MiniInstructLM_2Layer": (
@@ -70,7 +70,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False),
+                        dict(strict=False, replace_dynamic_cache=True),
                     )
                 ),
                 "Phi35MiniInstructLMVision_2Layer": (
@@ -83,7 +83,7 @@ class UntrainedRunner(BenchmarkRunner):
                             | LLMInputKind.past_key_values,
                             common_dynamic_shapes=True,
                         ),
-                        dict(strict=False),
+                        dict(strict=False, replace_dynamic_cache=True),
                     )
                 ),
                 "Phi35MiniInstructLMVision_1Layer_Images": (
@@ -95,7 +95,7 @@ class UntrainedRunner(BenchmarkRunner):
                             input_kind=LLMInputKind.ALL,
                             common_dynamic_shapes=True,
                         ),
-                        dict(strict=False),
+                        dict(strict=False, replace_dynamic_cache=True),
                     )
                 ),
                 "SmolLM17b_2LayerNoCache": (

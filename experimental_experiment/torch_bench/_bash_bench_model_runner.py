@@ -773,7 +773,7 @@ class ModelRunner:
         DynamicCache does not need to be replaced if there is no dynamic shapes involved.
         """
         options = self.patch_options.copy()
-        if dynamic:
+        if not dynamic:
             options["replace_dynamic_cache"] = False
         options["verbose"] = max(verbose - 2, 0)
         return options
