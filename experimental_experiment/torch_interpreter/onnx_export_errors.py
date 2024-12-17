@@ -377,30 +377,32 @@ def bypass_export_some_errors(
     if patch_transformers:
         import transformers
         from transformers.modeling_attn_mask_utils import AttentionMaskConverter
-        from .patches.patch_transformers import (
-            patched_AttentionMaskConverter,
-            patched_DynamicCache,
+        from .patches.patch_transformers import patched_AttentionMaskConverter
+
+        if verbose:
+            print("[bypass_export_some_errors] patch transformers")
+        keep__make_causal_mask = AttentionMaskConverter._make_causal_mask
+        AttentionMaskConverter._make_causal_mask = (
+            patched_AttentionMaskConverter._make_causal_mask
         )
+
+    if replace_dynamic_cache:
+        import transformers
+        from transformers.modeling_attn_mask_utils import AttentionMaskConverter
         import experimental_experiment.torch_models.fromhub.modeling_phi3_v as modeling_phi3_v
+        from .patches.patch_transformers import patched_DynamicCache
 
         def raise_assert():
             raise AssertionError("One replacement of DynamicCache was not patched.")
 
         if verbose:
-            print("[bypass_export_some_errors] patch transformers")
-        keep__make_causal_mask = AttentionMaskConverter._make_causal_mask
-
-    if replace_dynamic_cache:
-        if verbose:
             print("[bypass_export_some_errors] replace DynamicCache")
-        AttentionMaskConverter._make_causal_mask = (
-            patched_AttentionMaskConverter._make_causal_mask
-        )
-
         keep_DynamicCache = transformers.cache_utils.DynamicCache
         keep_DynamicCache_init = keep_DynamicCache.__init__
         keep_DynamicCache.__init__ = lambda *args, **kwargs: raise_assert()
         transformers.cache_utils.DynamicCache = patched_DynamicCache
+
+        transformers.models.llama.modeling_llama.DynamicCache = patched_DynamicCache
         transformers.models.phi.modeling_phi.DynamicCache = patched_DynamicCache
         transformers.models.phi3.modeling_phi3.DynamicCache = patched_DynamicCache
         modeling_phi3_v.DynamicCache = patched_DynamicCache
@@ -440,6 +442,7 @@ def bypass_export_some_errors(
         if replace_dynamic_cache:
             keep_DynamicCache.__init__ = keep_DynamicCache_init
             transformers.cache_utils.DynamicCache = keep_DynamicCache
+            transformers.models.llama.modeling_llama.DynamicCache = keep_DynamicCache
             transformers.models.phi.modeling_phi.DynamicCache = keep_DynamicCache
             transformers.models.phi3.modeling_phi3.DynamicCache = keep_DynamicCache
             modeling_phi3_v.DynamicCache = keep_DynamicCache
