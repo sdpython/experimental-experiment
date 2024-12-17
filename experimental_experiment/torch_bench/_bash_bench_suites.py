@@ -117,7 +117,7 @@ class UntrainedRunner(BenchmarkRunner):
                             batch_size=2,
                             common_dynamic_shapes=True,
                         ),
-                        dict(replace_dynamic_cache=False, strict=False),
+                        dict(replace_dynamic_cache=True, strict=False),
                     )
                 ),
             }
