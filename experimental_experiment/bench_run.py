@@ -898,18 +898,20 @@ def max_diff(
                 [got.key_cache, got.value_cache],
                 verbose=verbose,
             )
+        if isinstance(got, tuple) and len(got) == 2:
+            return max_diff(
+                [expected.key_cache, expected.value_cache],
+                [got[0], got[1]],
+                verbose=verbose,
+            )
         raise AssertionError(
-            f"DynamicCache not fully implemented with type(expected)={type(expected)}, "
-            f"type(results)={type(got)},\n"
-            f"dir(expected)={dir(expected)}, level={level}\n"
-            f"expected={expected}\n"
-            f"got={got}"
+            f"DynamicCache not fully implemented with expected="
+            f"{string_type(expected)}, got={string_type(got)},\n"
+            f"level={level}"
         )
 
     raise AssertionError(
-        f"Not implemented with type(expected)={type(expected)}, "
-        f"type(results)={type(got)},\n"
-        f"dir(expected)={dir(expected)}, level={level}\n"
-        f"expected={expected}\n"
-        f"got={got}"
+        f"Not implemented with implemented with expected="
+        f"{string_type(expected)}, got={string_type(got)},\n"
+        f"level={level}"
     )

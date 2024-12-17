@@ -488,8 +488,8 @@ def finalize_llm_vision_setup(
         shapes = tuple(shapes.values())
 
     if common_dynamic_shapes:
-        return model, inputs, shapes
-    return model, inputs
+        return dict(model=model, inputs=inputs, dynamic_shapes=shapes)
+    return dict(model=model, inputs=inputs)
 
 
 def get_phi35_vision_instruct(

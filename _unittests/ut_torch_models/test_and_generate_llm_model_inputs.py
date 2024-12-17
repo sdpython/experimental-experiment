@@ -214,7 +214,7 @@ class TestLlmModelInputs(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings((UserWarning, FutureWarning))
     @requires_cuda()
-    @hide_stdout()
+    # @hide_stdout()
     def test_get_dummy_inputs_with_imgaes_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_vision_instruct,
@@ -223,13 +223,21 @@ class TestLlmModelInputs(ExtTestCase):
         device = "cuda"
         for it in range(2):
             with self.subTest(iteration=it):
-                model, kwargs = get_phi35_vision_instruct(
+                data = get_phi35_vision_instruct(
                     num_hidden_layers=1,
-                    input_cache=it == 1,
+                    input_kind=(
+                        LLMInputKind.ALL
+                        if it == 1
+                        else (
+                            LLMInputKind.input_ids
+                            | LLMInputKind.attention_mask
+                            | LLMInputKind.images
+                        )
+                    ),
                     device=device,
-                    input_kind=LLMInputKind.ALL,
                     common_dynamic_shapes=True,
                 )
+                model, kwargs = data["model"], data["inputs"]
                 model(**kwargs)
 
 

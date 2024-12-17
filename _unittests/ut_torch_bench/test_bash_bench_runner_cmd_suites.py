@@ -124,6 +124,14 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             "custom-dec", "Phi35MiniInstructLM_2Layer", verbose=1, debug=False
         )
 
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.6")
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    def test_untrained_export_bench_export_cpu(self):
+        self._untrained_export(
+            "export", "Phi35MiniInstructLM_2Layer", verbose=1, debug=False, check_file=False
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
