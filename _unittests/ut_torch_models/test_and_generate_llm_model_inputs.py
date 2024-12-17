@@ -132,7 +132,6 @@ class TestLlmModelInputs(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings((UserWarning, FutureWarning))
-    @requires_cuda()
     @hide_stdout()
     def test_get_dummy_inputs_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -154,17 +153,22 @@ class TestLlmModelInputs(ExtTestCase):
             "return_dict",
         ]
 
-        device = "cuda"
+        device = "cpu"
         for it in range(2):
             with self.subTest(iteration=it):
                 model, kwargs, _ = get_phi35_vision_instruct(
                     num_hidden_layers=1,
-                    input_cache=it == 1,
                     device=device,
-                    input_kind=LLMInputKind.input_ids
-                    | LLMInputKind.position_ids
-                    | LLMInputKind.attention_mask
-                    | LLMInputKind.past_key_values,
+                    input_kind=(
+                        (
+                            LLMInputKind.input_ids
+                            | LLMInputKind.position_ids
+                            | LLMInputKind.attention_mask
+                            | LLMInputKind.past_key_values
+                        )
+                        if it == 1
+                        else (LLMInputKind.input_ids | LLMInputKind.attention_mask)
+                    ),
                     common_dynamic_shapes=True,
                 )
                 model(**copy.deepcopy(kwargs))
