@@ -242,14 +242,26 @@ def register_additional_serialization_functions(verbose: int = 0) -> Callable:
 
 @contextlib.contextmanager
 def bypass_export_some_errors(
-    patch_transformers: bool = False, replace_dynamic_cache: bool = False, verbose: int = 0
+    patch_torch: bool = True,
+    patch_transformers: bool = False,
+    replace_dynamic_cache: bool = False,
+    verbose: int = 0,
 ) -> Callable:
     """
-    Tries to bypass some functions :func:`torch.export.export` does not
-    support:
+    Tries to bypass some situations :func:`torch.export.export` does not support.
+
+    :param patch_torch: patches :epkg:`torch` with supported implementation
+    :param patch_transformers: patches :epkg:`transformers` with supported implementation
+    :param replace_dynamic_cache: replaces DynamicCache by a patched class
+        avoiding issues with the dynamic shapes inferences,
+        it should be True with LLM using that class and only during the export
+
+    The list of available patches.
 
     * ``torch.jit.isinstance``
     * ``torch._dynamo.mark_static_address``
+    * ``torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite``
+    * ``torch._subclasses.fake_impls.infer_size``
     * ``AttentionMaskConverter._make_causal_mask``
     * Serialialization of ``MambaCache`` (in :epkg:`transformers`)
     * Serialialization of ``DynamicCache`` (in :epkg:`transformers`)
@@ -258,11 +270,6 @@ def bypass_export_some_errors(
       :class:`patched_DynamicCache
       <experimental_experiment.torch_interpreter.
       patches.patch_transformers.patched_DynamicCache>`
-
-    :param patch_transformers: patches transformers with supported implementation
-    :param replace_dynamic_cache: replaces DynamicCache by a patched class
-        avoiding issues with the dynamic shapes inferences,
-        it should be True with LLM using that class and only during the export
 
     Serialization issues happen when a module takes one input or output
     has a type :func:`torch.export.export` cannot serialize.
@@ -306,6 +313,10 @@ def bypass_export_some_errors(
         with register_additional_serialization_functions() as modificator:
             inputs = modificator(inputs)
             ep = torch.export.export(..., inputs, ...)
+
+    When exporting a model with a cache, the following error message
+    may appear ``AssertionError: Mutating module attribute _seen_tokens during export.``.
+    It can be avoided by setting ``strict=False`` when call :func:`torch.export.export`.
     """
     import torch
     import torch.jit
@@ -326,26 +337,40 @@ def bypass_export_some_errors(
     ###############
     # patch pytorch
     ###############
-    if verbose:
-        print("[bypass_export_some_errors] patch pytorch")
 
-    # torch.jit.isinstance
-    f_jit_isinstance = torch.jit.isinstance
-    torch.jit.isinstance = isinstance
+    if patch_torch:
+        from .patches.patch_torch import patched_EqualityConstraint, patched_infer_size
 
-    # torch._dynamo.mark_static_address
-    f_mark_static_address = torch._dynamo.mark_static_address
-    torch._dynamo.mark_static_address = lambda *_, **y_: None
+        if verbose:
+            print("[bypass_export_some_errors] patch pytorch")
 
-    # torch._export.non_strict_utils.produce_guards_and_solve_constraints
-    f_produce_guards_and_solve_constraints = (
-        torch._export.non_strict_utils.produce_guards_and_solve_constraints
-    )
-    torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
-        lambda *args, **kwargs: _catch_produce_guards_and_solve_constraints(
-            f_produce_guards_and_solve_constraints, *args, verbose=verbose, **kwargs
+        # torch.jit.isinstance
+        f_jit_isinstance = torch.jit.isinstance
+        torch.jit.isinstance = isinstance
+
+        # torch._dynamo.mark_static_address
+        f_mark_static_address = torch._dynamo.mark_static_address
+        torch._dynamo.mark_static_address = lambda *_, **y_: None
+
+        # torch._export.non_strict_utils.produce_guards_and_solve_constraints
+        f_produce_guards_and_solve_constraints = (
+            torch._export.non_strict_utils.produce_guards_and_solve_constraints
         )
-    )
+        torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
+            lambda *args, **kwargs: _catch_produce_guards_and_solve_constraints(
+                f_produce_guards_and_solve_constraints, *args, verbose=verbose, **kwargs
+            )
+        )
+
+        # torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite
+        f_rewrite = torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite
+        torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite = (
+            patched_EqualityConstraint._rewrite
+        )
+
+        # torch._subclasses.fake_impls.infer_size
+        f_infer_size = torch._subclasses.fake_impls.infer_size
+        torch._subclasses.fake_impls.infer_size = patched_infer_size
 
     ####################
     # patch transformers
@@ -394,14 +419,17 @@ def bypass_export_some_errors(
         # torch
         #######
 
-        torch.jit.isinstance = f_jit_isinstance
-        torch._dynamo.mark_static_address = f_mark_static_address
-        torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
-            f_produce_guards_and_solve_constraints
-        )
+        if patch_torch:
+            torch.jit.isinstance = f_jit_isinstance
+            torch._dynamo.mark_static_address = f_mark_static_address
+            torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
+                f_produce_guards_and_solve_constraints
+            )
+            torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite = f_rewrite
+            torch._subclasses.fake_impls.infer_size = f_infer_size
 
-        if verbose:
-            print("[bypass_export_some_errors] restored pytorch functions")
+            if verbose:
+                print("[bypass_export_some_errors] restored pytorch functions")
 
         ##############
         # transformers

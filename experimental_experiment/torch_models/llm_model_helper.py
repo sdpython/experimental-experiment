@@ -131,7 +131,12 @@ def finalize_llm_setup(
             input_ids=torch.randint(
                 0, max_token_id, (batch_size + 1, sequence_length2 + sequence_inc)
             ).to(torch.int64),
-            attention_mask=torch.ones((batch_size + 1, 35)).to(torch.int64),
+            attention_mask=torch.ones(
+                (
+                    batch_size + 1,
+                    sequence_length + sequence_inc + sequence_length2 + sequence_inc,
+                )
+            ).to(torch.int64),
             past_key_values=cache2,
         )
         n = len(cache.key_cache)
@@ -1208,6 +1213,7 @@ def get_smollm_1_7b(
         "transformers_version": "4.39.3",
         "use_cache": True,
         "vocab_size": 49152,
+        "_attn_implementation": "eager",
     }
     config.update(
         {

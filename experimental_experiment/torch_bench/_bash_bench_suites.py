@@ -109,8 +109,16 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(replace_dynamic_cache=False),
                     )
                 ),
-                "SmolLM17b_2Layer": lambda: get_smollm_1_7b(
-                    input_cache=True, num_hidden_layers=2, common_dynamic_shapes=True
+                "SmolLM17b_2Layer": (
+                    lambda: (
+                        get_smollm_1_7b(
+                            input_cache=True,
+                            num_hidden_layers=2,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(replace_dynamic_cache=False, strict=False),
+                    )
                 ),
             }
         )

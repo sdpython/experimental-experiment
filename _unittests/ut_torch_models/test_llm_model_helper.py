@@ -220,7 +220,7 @@ class TestLlmModelHelper(ExtTestCase):
             m = onnx.load(filename, load_external_data=False)
             self.assertEqual(
                 set(i.type.tensor_type.elem_type for i in m.graph.output),
-                {onnx.TensorProto.FLOAT16},
+                {onnx.TensorProto.FLOAT, onnx.TensorProto.FLOAT16},
             )
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
@@ -302,6 +302,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
     def test_get_smollm_1_7b(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -510,6 +511,29 @@ class TestLlmModelHelper(ExtTestCase):
                             torch.export.export(
                                 model, (), modificator(model_inputs), strict=False
                             )
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    def test_get_smollm_1_7b_cache(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_smollm_1_7b,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        data = get_smollm_1_7b(
+            batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
+        )
+        model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+        with bypass_export_some_errors(replace_dynamic_cache=False):
+            torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
 
 
 if __name__ == "__main__":
