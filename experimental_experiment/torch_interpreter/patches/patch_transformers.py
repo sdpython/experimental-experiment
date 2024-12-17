@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 
@@ -9,7 +9,7 @@ class patched_AttentionMaskConverter:
     Patches
     ``transformers.modeling_attn_mask_utils.AttentionMaskConverter._make_causal_mask``.
     """
-
+	
     @staticmethod
     def _make_causal_mask(
         self,

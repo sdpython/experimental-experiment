@@ -140,7 +140,7 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
     import torch
 
     try:
-        from transformers.cache_utils import MambaCache, DynamicCache
+        from transformers.cache_utils import DynamicCache, MambaCache
     except ImportError:
         MambaCache = None
         DynamicCache = None
@@ -230,9 +230,7 @@ def _unregister_cache_serialization(undo: Dict[str, bool], verbose: int = 0):
 
 @contextlib.contextmanager
 def register_additional_serialization_functions(verbose: int = 0) -> Callable:
-    """
-    The necessary modification to run the fx Graph.
-    """
+    """The necessary modification to run the fx Graph."""
     done = _register_cache_serialization(verbose=verbose)
     try:
         yield replacement_before_exporting
@@ -319,8 +317,8 @@ def bypass_export_some_errors(
     It can be avoided by setting ``strict=False`` when call :func:`torch.export.export`.
     """
     import torch
-    import torch.jit
     import torch._export.non_strict_utils  # produce_guards_and_solve_constraints
+    import torch.jit
 
     if verbose:
         print(
@@ -414,7 +412,6 @@ def bypass_export_some_errors(
     try:
         yield replacement_before_exporting
     finally:
-
         #######
         # torch
         #######
