@@ -393,7 +393,8 @@ class TestLlmModelHelper(ExtTestCase):
             bypass_export_some_errors,
         )
 
-        model, model_inputs = get_phi35_vision_instruct(num_hidden_layers=1)
+        data = get_phi35_vision_instruct(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
 
         with bypass_export_some_errors(
             patch_transformers=True, replace_dynamic_cache=True
@@ -414,17 +415,19 @@ class TestLlmModelHelper(ExtTestCase):
             LLMInputKind,
         )
 
-        model, model_inputs, dyn_shapes = get_phi35_vision_instruct(
+        data = get_phi35_vision_instruct(
             num_hidden_layers=1, input_kind=LLMInputKind.input_ids, common_dynamic_shapes=True
         )
+        model, model_inputs, dyn_shapes = data["model"], data["inputs"], data["dynamic_shapes"]
         self.assertEqual(list(model_inputs), ["input_ids"])
         self.assertEqual(list(dyn_shapes), ["input_ids"])
 
-        model, model_inputs, dyn_shapes = get_phi35_vision_instruct(
+        data = get_phi35_vision_instruct(
             num_hidden_layers=1,
             input_kind=LLMInputKind.input_ids | LLMInputKind.position_ids,
             common_dynamic_shapes=True,
         )
+        model, model_inputs, dyn_shapes = data["model"], data["inputs"], data["dynamic_shapes"]
         self.assertEqual(list(model_inputs), ["input_ids", "position_ids"])
         self.assertEqual(list(dyn_shapes), ["input_ids", "position_ids"])
 

@@ -46,9 +46,9 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi35_vision_instruct(
+                model = get_phi35_vision_instruct(
                     num_hidden_layers=1, common_dynamic_shapes=True
-                )
+                )["model"]
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -84,9 +84,9 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi35_vision_instruct(
+                model = get_phi35_vision_instruct(
                     num_hidden_layers=1, common_dynamic_shapes=True
-                )
+                )["model"]
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -119,7 +119,9 @@ class TestLlmModelInputs(ExtTestCase):
         )
 
         device = "cuda"
-        model, *_ = get_phi35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)
+        model = get_phi35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)[
+            "model"
+        ]
         model = model.to(device)
         for it in range(2):
             with self.subTest(iteration=it):
@@ -156,7 +158,7 @@ class TestLlmModelInputs(ExtTestCase):
         device = "cpu"
         for it in range(2):
             with self.subTest(iteration=it):
-                model, kwargs, _ = get_phi35_vision_instruct(
+                data = get_phi35_vision_instruct(
                     num_hidden_layers=1,
                     device=device,
                     input_kind=(
@@ -171,6 +173,7 @@ class TestLlmModelInputs(ExtTestCase):
                     ),
                     common_dynamic_shapes=True,
                 )
+                model, kwargs = data["model"], data["inputs"]
                 model(**copy.deepcopy(kwargs))
                 model(*[kwargs.get(n, None) for n in input_names])
 
@@ -200,7 +203,7 @@ class TestLlmModelInputs(ExtTestCase):
         )
 
         device = "cuda"
-        model, _ = get_phi35_vision_instruct(num_hidden_layers=1)
+        model = get_phi35_vision_instruct(num_hidden_layers=1)["model"]
         model = model.to(device)
         for it in range(2):
             with self.subTest(iteration=it):
@@ -214,7 +217,6 @@ class TestLlmModelInputs(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings((UserWarning, FutureWarning))
     @requires_cuda()
-    # @hide_stdout()
     def test_get_dummy_inputs_with_imgaes_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_vision_instruct,
