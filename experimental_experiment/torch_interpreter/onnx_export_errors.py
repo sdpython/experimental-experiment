@@ -260,8 +260,8 @@ def bypass_export_some_errors(
 
     * ``torch.jit.isinstance``
     * ``torch._dynamo.mark_static_address``
-    * ``torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite``
     * ``torch._subclasses.fake_impls.infer_size``
+    * fix missing method ``name`` for ``sympy.S.IntegerConstant``
     * ``AttentionMaskConverter._make_causal_mask``
     * Serialialization of ``MambaCache`` (in :epkg:`transformers`)
     * Serialialization of ``DynamicCache`` (in :epkg:`transformers`)
@@ -430,6 +430,7 @@ def bypass_export_some_errors(
 
         if patch_sympy:
 
+            # tracked by https://github.com/pytorch/pytorch/issues/143494
             if f_sympy_name:
                 sympy.core.numbers.IntegerConstant.name = f_sympy_name
             else:
@@ -448,6 +449,7 @@ def bypass_export_some_errors(
             torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
                 f_produce_guards_and_solve_constraints
             )
+            # tracked by https://github.com/pytorch/pytorch/issues/143495
             torch._subclasses.fake_impls.infer_size = f_infer_size
 
             if verbose:

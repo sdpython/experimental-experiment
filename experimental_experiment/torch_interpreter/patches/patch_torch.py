@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import torch
 
 
@@ -39,30 +38,3 @@ def patched_infer_size(a, b):
             # Try model SmolLM.
             expandedSizes[i] = torch.sym_max(sizeA, sizeB)
     return tuple(expandedSizes)
-
-
-@dataclass
-class patched_EqualityConstraint:
-    """Patches ``torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite``."""
-
-    def _rewrite(self, src: "Source") -> "sympy.Expr":  # noqa: F821
-        """Patched method."""
-        # always represent the given source by the root of its equivalence class
-        src = self._find(src)
-        if src in self._defs:
-            # simply look up the definition if it exists
-            # NOTE(avik): This works because definitions are always transitively-closed;
-            # otherwise we would have to do recursive rewriting.
-            return self._defs[src]
-        else:
-            import sympy
-
-            # otherwise, create a symbol representing the source
-            try:
-                name = src.name()
-            except AttributeError:
-                # A constant has no name.
-                # In this case, the current implementation of torch fails (17/12/2024).
-                # Try model SmolLM.
-                name = str(src)
-            return sympy.Symbol(name)

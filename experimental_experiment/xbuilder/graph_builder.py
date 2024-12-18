@@ -6546,7 +6546,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return True
             if isinstance(m1, (int, str)) and isinstance(m2, (int, str)):
                 node.doc_string += f"#SV-{node.op_type}2"
-                self.set_value_shape(node.output[0], (fct(m1, m2),))
+                self.set_value_shape(node.output[0], (f"{m1}{symbol}{m2}",))
                 return True
 
             # One of them is a tuple.
