@@ -879,7 +879,7 @@ class BenchmarkRunner:
                         if self.nvtx:
                             torch.cuda.nvtx.range_push("EAGER-WARMUP")
                         if w == warmup - 1:
-                            expected = model_runner.run()
+                            expected = model_runner.run(copy=True)
                         else:
                             model_runner.run()
                             # we don't plan to keep expected on CUDA
@@ -907,7 +907,7 @@ class BenchmarkRunner:
                     if self.nvtx:
                         torch.cuda.nvtx.range_push("EAGER-WARMUP")
                     if w == warmup - 1:
-                        expected = model_runner.run()
+                        expected = model_runner.run(copy=True)
                     else:
                         model_runner.run()
                         # we don't plan to keep expected on CUDA
@@ -1201,7 +1201,7 @@ class BenchmarkRunner:
         #########
 
         if dynamic:
-            expected_dynamic = model_runner.run_dynamic()
+            expected_dynamic = model_runner.run_dynamic(copy=True)
             expected_dynamic = self.move_to("cpu", expected_dynamic)
         else:
             expected_dynamic = None

@@ -466,19 +466,51 @@ class ModelRunner:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
 
+    def _copy_cache(self, i):
+        if isinstance(i, (int, float)):
+            return i
+        if isinstance(i, torch.Tensor):
+            return i.clone()
+        if isinstance(i, list):
+            return [self._copy_cache(_) for _ in i]
+        if isinstance(i, tuple):
+            return tuple(self._copy_cache(_) for _ in i)
+        if isinstance(i, dict):
+            return {k: self._copy_cache(_) for k, _ in i.items()}
+        if i.__class__.__name__ == "DynamicCache":
+            import transformers
+
+            if isinstance(i, transformers.cache_utils.DynamicCache):
+                inst = type(i)()
+                for k in ["key_cache", "value_cache", "_seen_tokens"]:
+                    if hasattr(i, k):
+                        setattr(inst, k, self._copy_cache(getattr(i, k)))
+                return inst
+            else:
+                return copy.deepcopy(i)
+        raise NotImplementedError(f"Unable to copy {string_type(i)}")
+
     def get_inputs_with_copied_dynamic_cache(self, inputs: Optional[Any] = None) -> Any:
         """LLM modifies the cache. It needs to be copied first."""
         if inputs is None:
             inputs = self.inputs
+        if isinstance(inputs, dict):
+            args = {}
+            for k, i in inputs.items():
+                if i.__class__.__name__ in {"DynamicCache"}:
+                    args[k] = self._copy_cache(i)
+                    continue
+                args[k] = i
+            return args
         args = []
         for i in inputs:
             if i.__class__.__name__ in {"DynamicCache"}:
-                args.append(copy.deepcopy(i))
+                args.append(self._copy_cache(i))
                 continue
             args.append(i)
         return tuple(args)
 
-    def run(self) -> Any:
+    def run(self, copy: bool = False) -> Any:
         inputs = self.get_inputs_with_copied_dynamic_cache()
         if self.autocast:
             if self.nvtx:
@@ -493,9 +525,13 @@ class ModelRunner:
         res = self.model(*inputs)
         if self.nvtx:
             torch.cuda.nvtx.range_pop()
+        if copy:
+            # This is then to keep the expected value. The cache must be copied
+            # to avoid any noise when comparing the exported model output.
+            return self.get_inputs_with_copied_dynamic_cache(res)
         return res
 
-    def run_dynamic(self) -> Any:
+    def run_dynamic(self, copy: bool = False) -> Any:
         dynamic_inputs = self.make_dynamic_inputs()
         if self.autocast:
             if self.nvtx:
@@ -510,6 +546,10 @@ class ModelRunner:
         res = self.model(*dynamic_inputs)
         if self.nvtx:
             torch.cuda.nvtx.range_pop()
+        if copy:
+            # This is then to keep the expected value. The cache must be copied
+            # to avoid any noise when comparing the exported model output.
+            return self.get_inputs_with_copied_dynamic_cache(res)
         return res
 
     def compute_weight_size(self) -> int:
