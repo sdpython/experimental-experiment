@@ -546,12 +546,19 @@ class BenchmarkRunner:
         if flatten:
             if verbose >= 4:
                 print(
-                    f"[BenchmarkRunner.max_diff] compare after flattened "
+                    f"[BenchmarkRunner.max_diff] compare before flattened "
                     f"{string_type(expected)} and {string_type(got)}"
                 )
+            flatten_expected = cls._flatten(expected)
+            flatten_got = cls._flatten(got)
+            if verbose >= 4:
+                print(
+                    f"[BenchmarkRunner.max_diff] compare after flattened "
+                    f"{string_type(flatten_expected)} and {string_type(flatten_got)}"
+                )
             return cls.max_diff(
-                cls._flatten(expected),
-                cls._flatten(got),
+                flatten_expected,
+                flatten_got,
                 verbose=verbose,
                 flatten=False,
                 debug_info=[*(debug_info if debug_info else []), f"{' ' * level}flatten"],

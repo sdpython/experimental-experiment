@@ -502,13 +502,15 @@ class ModelRunner:
                     continue
                 args[k] = i
             return args
-        args = []
-        for i in inputs:
-            if i.__class__.__name__ in {"DynamicCache"}:
-                args.append(self._copy_cache(i))
-                continue
-            args.append(i)
-        return tuple(args)
+        if isinstance(inputs, (list, tuple)):
+            args = []
+            for i in inputs:
+                if i.__class__.__name__ in {"DynamicCache"}:
+                    args.append(self._copy_cache(i))
+                    continue
+                args.append(i)
+            return tuple(args) if isinstance(inputs, tuple) else args
+        return inputs
 
     def run(self, copy: bool = False) -> Any:
         inputs = self.get_inputs_with_copied_dynamic_cache()
@@ -528,7 +530,8 @@ class ModelRunner:
         if copy:
             # This is then to keep the expected value. The cache must be copied
             # to avoid any noise when comparing the exported model output.
-            return self.get_inputs_with_copied_dynamic_cache(res)
+            r = self.get_inputs_with_copied_dynamic_cache(res)
+            return r
         return res
 
     def run_dynamic(self, copy: bool = False) -> Any:
