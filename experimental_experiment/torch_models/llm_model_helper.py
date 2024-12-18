@@ -170,9 +170,7 @@ def get_phi2(
     batch_size: int = 1,
     common_dynamic_shapes: bool = False,
     **kwargs,
-) -> Tuple[
-    Any, Union[Tuple[Any, ...], Dict[str, Any]], Union[Tuple[Any, ...], Dict[str, Any]]
-]:
+) -> Dict[str, Any]:
     """
     Gets a non initialized model.
 
@@ -181,7 +179,7 @@ def get_phi2(
     :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :return: model, inputs, shape
+    :return: dict
 
     See `Phi-2/config.json
     <https://huggingface.co/microsoft/phi-2/blob/main/config.json>`_.
@@ -239,7 +237,7 @@ def get_phi35_mini_instruct(
     batch_size: int = 1,
     common_dynamic_shapes: bool = False,
     **kwargs,
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+) -> Dict[str, Any]:
     """
     Gets a non initialized model.
 
@@ -248,7 +246,7 @@ def get_phi35_mini_instruct(
     :param input_cache: generate data for this iteration with or without cache
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :return: model, inputs
+    :return: dictionary
 
     See `Phi-3.5-mini-instruct/config.json
     <https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/config.json>`_.
@@ -902,23 +900,25 @@ def get_phi3_vision_128k_instruct(
 
 
 def get_ai21_jamba_15_mini(
-    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    inputs_as_tuple: bool = False,
+    input_cache: bool = True,
+    batch_size: int = 1,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Dict[str, Any]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: model, inputs
+    :return: dictionary
 
     See `ai21labs/AI21-Jamba-1.5-Mini/config.json
     <https://huggingface.co/ai21labs/AI21-Jamba-1.5-Mini/blob/main/config.json>`_.
     """
-    import torch
     import transformers
-
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "architectures": ["JambaForCausalLM"],
@@ -974,16 +974,16 @@ def get_ai21_jamba_15_mini(
     model = transformers.JambaForCausalLM(conf)
     model.eval()
 
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 63028, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    return finalize_llm_setup(
+        model,
+        batch_size,
+        max_token_id=63028,
+        cache_last_dim=80,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        num_hidden_layers=config["num_hidden_layers"],
+        input_cache=input_cache,
     )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
 
 
 def get_falcon_mamba_7b(
@@ -1065,23 +1065,25 @@ def get_falcon_mamba_7b(
 
 
 def get_all_mini_ml_l6_v1(
-    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    inputs_as_tuple: bool = False,
+    input_cache: bool = True,
+    batch_size: int = 1,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Dict[str, Any]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: model, inputs
+    :return: dicionary
 
     See `all-MiniLM-L6-v1
     <https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1/blob/main/config.json>`_.
     """
-    import torch
     import transformers
-
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "nreimers/MiniLM-L6-H384-uncased",
@@ -1111,16 +1113,16 @@ def get_all_mini_ml_l6_v1(
     model = transformers.BertModel(conf)
     model.eval()
 
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 30522, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    return finalize_llm_setup(
+        model,
+        batch_size,
+        max_token_id=30522,
+        cache_last_dim=80,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        num_hidden_layers=config["num_hidden_layers"],
+        input_cache=input_cache,
     )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
 
 
 def get_llama32_9b_vision(

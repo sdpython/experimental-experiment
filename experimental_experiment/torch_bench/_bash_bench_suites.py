@@ -32,10 +32,54 @@ class UntrainedRunner(BenchmarkRunner):
                 # diffusion
                 "SableDiffusion2Unet": get_stable_diffusion_2_unet,
                 # LLM
-                "AI21Jamba15MiniLM16Layer": lambda: get_ai21_jamba_15_mini(
-                    num_hidden_layers=16
+                "AI21Jamba15MiniLM_1LayerNoCache": (
+                    lambda: (
+                        get_ai21_jamba_15_mini(
+                            num_hidden_layers=1,
+                            input_cache=False,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=True, replace_dynamic_cache=False),
+                    )
                 ),
-                "AllMiniLML6v1": get_all_mini_ml_l6_v1,
+                "AI21Jamba15MiniLM_1Layer": (
+                    lambda: (
+                        get_ai21_jamba_15_mini(
+                            num_hidden_layers=1,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(replace_dynamic_cache=True, strict=False),
+                    )
+                ),
+                "AllMiniLML6v1_1Layer": (
+                    lambda: (
+                        get_all_mini_ml_l6_v1(
+                            num_hidden_layers=1,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=False),
+                    )
+                ),
+                "AllMiniLML6v1_1LayerNoCache": (
+                    lambda: (
+                        get_all_mini_ml_l6_v1(
+                            num_hidden_layers=1,
+                            input_cache=False,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=False),
+                    )
+                ),
                 "FalconMamba7bLM": get_falcon_mamba_7b,
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
                 "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),

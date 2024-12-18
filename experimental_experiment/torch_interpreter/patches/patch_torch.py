@@ -27,11 +27,19 @@ def patched_infer_size(a, b):
         # expression of an or statement as-is, without bool()'ing it; if this
         # were not the case, we'd need to write this using torch.sym_or() or
         # something like that).
-        if (
-            guard_size_oblivious(sizeA == 1)
-            or guard_size_oblivious(sizeB == 1)
-            or sizeA == sizeB
-        ):
+        try:
+            b1 = guard_size_oblivious(sizeA == 1)
+        except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode:
+            b1 = False
+        try:
+            b2 = guard_size_oblivious(sizeB == 1)
+        except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode:
+            b2 = False
+        try:
+            b3 = guard_size_oblivious(sizeA == sizeB)
+        except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode:
+            b3 = False
+        if b1 or b2 or b3:
             expandedSizes[i] = sizeB if guard_size_oblivious(sizeA == 1) else sizeA
         else:
             # In this case, the current implementation of torch fails (17/12/2024).

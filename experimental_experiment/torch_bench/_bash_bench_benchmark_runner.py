@@ -496,7 +496,7 @@ class BenchmarkRunner:
     @classmethod
     def _flatten(cls, value, transpose_cache: bool = True):
         """
-        Flattens the output so be able to compare to what
+        Flattens the output to be able to compare to what
         onnx produces. The cache usually appears like
         key1, value1, key2, value2, ...
         """

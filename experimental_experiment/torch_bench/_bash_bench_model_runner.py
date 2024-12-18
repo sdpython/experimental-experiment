@@ -188,12 +188,12 @@ class ModelRunner:
             return True
         if exporter.startswith("custom"):
             # custom exporter is not limited by optimization methods
-            return True
+            return optimization not in {"ir"}
         if exporter in {"torch_script", "dynamo_export"}:
             # torch_script and dynamo_export only allow default optimization
             return optimization in {"default"}
         if exporter in {"onnx_dynamo", "onnx_dynamo-fallback", "onnx_dynamo-detailed"}:
-            return optimization in {"default", "ir"}
+            return optimization in {"ir"}
         return False
 
     @classmethod
