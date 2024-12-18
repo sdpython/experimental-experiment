@@ -12,7 +12,6 @@ class patched_AttentionMaskConverter:
 
     @staticmethod
     def _make_causal_mask(
-        self,
         input_ids_shape: torch.Size,
         dtype: torch.dtype,
         device: torch.device,

@@ -240,6 +240,7 @@ def register_additional_serialization_functions(verbose: int = 0) -> Callable:
 
 @contextlib.contextmanager
 def bypass_export_some_errors(
+    patch_sympy: bool = True,
     patch_torch: bool = True,
     patch_transformers: bool = False,
     replace_dynamic_cache: bool = False,
@@ -248,6 +249,7 @@ def bypass_export_some_errors(
     """
     Tries to bypass some situations :func:`torch.export.export` does not support.
 
+    :param patch_sympy: fix missing method ``name`` for IntegerConstant
     :param patch_torch: patches :epkg:`torch` with supported implementation
     :param patch_transformers: patches :epkg:`transformers` with supported implementation
     :param replace_dynamic_cache: replaces DynamicCache by a patched class
@@ -332,12 +334,26 @@ def bypass_export_some_errors(
 
     cache_done = _register_cache_serialization(verbose=verbose)
 
+    #############
+    # patch sympy
+    #############
+
+    if patch_sympy:
+        import sympy
+
+        f_sympy_name = getattr(sympy.core.numbers.IntegerConstant, "name", None)
+
+        if verbose:
+            print("[bypass_export_some_errors] patch sympy")
+
+        sympy.core.numbers.IntegerConstant.name = lambda self: f"IntCst{str(self)}"
+
     ###############
     # patch pytorch
     ###############
 
     if patch_torch:
-        from .patches.patch_torch import patched_EqualityConstraint, patched_infer_size
+        from .patches.patch_torch import patched_infer_size
 
         if verbose:
             print("[bypass_export_some_errors] patch pytorch")
@@ -358,12 +374,6 @@ def bypass_export_some_errors(
             lambda *args, **kwargs: _catch_produce_guards_and_solve_constraints(
                 f_produce_guards_and_solve_constraints, *args, verbose=verbose, **kwargs
             )
-        )
-
-        # torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite
-        f_rewrite = torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite
-        torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite = (
-            patched_EqualityConstraint._rewrite
         )
 
         # torch._subclasses.fake_impls.infer_size
@@ -415,6 +425,20 @@ def bypass_export_some_errors(
         yield replacement_before_exporting
     finally:
         #######
+        # sympy
+        #######
+
+        if patch_sympy:
+
+            if f_sympy_name:
+                sympy.core.numbers.IntegerConstant.name = f_sympy_name
+            else:
+                delattr(sympy.core.numbers.IntegerConstant, "name")
+
+            if verbose:
+                print("[bypass_export_some_errors] restored sympy functions")
+
+        #######
         # torch
         #######
 
@@ -424,7 +448,6 @@ def bypass_export_some_errors(
             torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
                 f_produce_guards_and_solve_constraints
             )
-            torch.fx.experimental.symbolic_shapes.EqualityConstraint._rewrite = f_rewrite
             torch._subclasses.fake_impls.infer_size = f_infer_size
 
             if verbose:
