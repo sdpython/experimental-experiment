@@ -444,8 +444,10 @@ def bypass_export_some_errors(
         #######
 
         if patch_torch:
+            # this should disappear when torch.jit is removed
             torch.jit.isinstance = f_jit_isinstance
             torch._dynamo.mark_static_address = f_mark_static_address
+            # to catch or skip dynamic_shapes issues
             torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
                 f_produce_guards_and_solve_constraints
             )

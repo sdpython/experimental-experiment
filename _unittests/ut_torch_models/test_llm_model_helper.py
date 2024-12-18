@@ -528,6 +528,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    @long_test()
     def test_get_smollm_1_7b_cache(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
