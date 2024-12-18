@@ -39,6 +39,29 @@ class UntrainedRunner(BenchmarkRunner):
                 "FalconMamba7bLM": get_falcon_mamba_7b,
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
                 "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),
+                "Phi2LM_1LayerNoCache": (
+                    lambda: (
+                        get_phi2(
+                            num_hidden_layers=1,
+                            input_cache=False,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=True),
+                    )
+                ),
+                "Phi2LM_1Layer": (
+                    lambda: (
+                        get_phi2(
+                            num_hidden_layers=1,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=True),
+                    )
+                ),
                 "Phi2LM_2LayerNoCache": (
                     lambda: (
                         get_phi2(

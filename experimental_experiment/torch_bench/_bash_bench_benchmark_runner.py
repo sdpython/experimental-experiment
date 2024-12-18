@@ -494,7 +494,12 @@ class BenchmarkRunner:
         return stats
 
     @classmethod
-    def _flatten(cls, value):
+    def _flatten(cls, value, transpose_cache: bool = True):
+        """
+        Flattens the output so be able to compare to what
+        onnx produces. The cache usually appears like
+        key1, value1, key2, value2, ...
+        """
         res = []
         if isinstance(value, dict):
             # We assume the dictionary is ordered.
@@ -503,8 +508,13 @@ class BenchmarkRunner:
             for v in value:
                 res.extend(cls._flatten(v))
         elif value.__class__.__name__ == "DynamicCache":
-            res.extend(value.key_cache)
-            res.extend(value.value_cache)
+            if transpose_cache:
+                for i in range(len(value.key_cache)):
+                    res.append(value.key_cache[i])
+                    res.append(value.value_cache[i])
+            else:
+                res.extend(value.key_cache)
+                res.extend(value.value_cache)
         else:
             res.append(value)
         return tuple(res)
@@ -698,6 +708,15 @@ class BenchmarkRunner:
                     f"[BenchmarkRunner.benchmark] done model {model_name!r} "
                     f"with exporter={exporter!r} in {total_time}"
                 )
+                print(
+                    f"[BenchmarkRunner.benchmark] filename is {stats.get('filename', '?')!r}"
+                )
+
+            # saving stats in a file
+            if os.path.exists(stats.get("filename", "NONE")):
+                with open(f"{os.path.splitext(stats['filename'])[0]}.stats", "w") as f:
+                    for k, v in sorted(stats.items()):
+                        f.write(f":{k},{v};\n")
             yield stats
 
         # final steps
@@ -820,7 +839,9 @@ class BenchmarkRunner:
         stats["model_name"] = model_name
         stats["torch_model_name"] = model_name
         stats["torch_model_type"] = type(model_runner.model).__name__
-        stats["torch_model_inputs"] = string_type(model_runner.inputs)
+        stats["torch_type_inputs"] = string_type(
+            model_runner.inputs, with_shape=True, with_min_max=True
+        )
         stats["suite"] = model_runner.suite
         stats["time_load"] = time.perf_counter() - begin
         stats["params_size"] = model_runner.compute_weight_size()
@@ -931,7 +952,7 @@ class BenchmarkRunner:
             stats["time_warmup_eager"] = (time.perf_counter() - begin) / warmup
 
         expected = self.move_to("cpu", expected)
-        stats["torch_model_outputs"] = string_type(expected)
+        stats["torch_type_outputs"] = string_type(expected, with_shape=True, with_min_max=True)
         stats["output_size"] = self.obj_size(expected)
         if self.verbose > 1:
             print(f"[benchmarkrunner.benchmark] output_size={stats['output_size']}")
@@ -1058,11 +1079,11 @@ class BenchmarkRunner:
             )
 
         dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
-        stats["onnx_type_input"] = string_type(
+        stats["onnx_type_inputs"] = string_type(
             model_runner.inputs, with_shape=True, with_min_max=True
         )
         if self.verbose:
-            print(f"[BenchmarkRunner.benchmark] inputs={stats['onnx_type_input']}")
+            print(f"[BenchmarkRunner.benchmark] inputs={stats['onnx_type_inputs']}")
             print(f"[BenchmarkRunner.benchmark] input shapes={dyn_shapes}")
             _ishapes = model_runner.get_input_shapes(dynamic=dynamic, export=True)
             print(f"[BenchmarkRunner.benchmark] export input shapes={_ishapes}")
@@ -1557,6 +1578,7 @@ class BenchmarkRunner:
             got = self.move_to("cpu", got)
             if got_dynamic is not None:
                 got_dynamic = self.move_to("cpu", got_dynamic)
+            stats["onnx_type_outputs"] = string_type(got, with_shape=True, with_min_max=True)
 
             if self.verbose > 1:
                 print(f"[BenchmarkRunner.benchmark] repeat ort {model_name!r}")
