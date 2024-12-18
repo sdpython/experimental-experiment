@@ -60,6 +60,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_cuda()
+    @long_test()
     def test_get_phi35_mini_instruct_cuda(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -96,6 +97,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_cuda()
+    @long_test()
     def test_get_phi35_mini_instruct_cuda_modules(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -134,6 +136,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_cuda()
+    @long_test()
     def test_get_phi35_mini_instruct_cuda_modules_dynshapes(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -192,6 +195,7 @@ class TestLlmModelHelper(ExtTestCase):
     @requires_torch("2.6", "bug")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi35_mini_instruct_auto(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -228,6 +232,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi35_mini_instruct_no_decomposition(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -259,6 +264,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_ai21_jamba_15_mini(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -288,6 +294,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_all_mini_ml_l6_v1(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -303,6 +310,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    @long_test()
     def test_get_smollm_1_7b(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
