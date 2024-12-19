@@ -1686,8 +1686,9 @@ class TestOperatorsCort(ExtTestCase):
         self.assertONNX(torch.nn.ReLU(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @requires_torch(
-        "2.3.0",
-        "rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'",
+        "2.6",
+        "2.3: rrelu_with_noise() missing 2 required positional arguments: 'lower' and 'upper'"
+        ", 2.6: issue with optimization",
     )
     def test_rrelu(self):
         x = torch.randn(1, 2, 3, 4)

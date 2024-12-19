@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """ PyTorch Phi-3-V model."""
-
 import inspect
 import math
 import warnings

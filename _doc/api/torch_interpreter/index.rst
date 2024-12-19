@@ -23,6 +23,7 @@ experimental_experiment.torch_interpreter
     onnx_export_errors
     oxs_dispatcher
     oxs_opset
+    patches/index
     tracing
 
 to_onnx

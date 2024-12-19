@@ -317,6 +317,13 @@ class ExtTestCase(unittest.TestCase):
         unittest.TestCase.setUpClass()
 
     def print_model(self, model: "ModelProto"):  # noqa: F821
+        "Prints a ModelProto"
+        from experimental_experiment.helpers import pretty_onnx
+
+        print(pretty_onnx(model))
+
+    def print_onnx(self, model: "ModelProto"):  # noqa: F821
+        "Prints a ModelProto"
         from experimental_experiment.helpers import pretty_onnx
 
         print(pretty_onnx(model))

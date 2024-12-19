@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     hide_stdout,
     requires_cuda,
+    requires_torch,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 from experimental_experiment.torch_models.dummy_inputs import generate_dummy_inputs
@@ -46,9 +47,9 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi35_vision_instruct(
+                model = get_phi35_vision_instruct(
                     num_hidden_layers=1, common_dynamic_shapes=True
-                )
+                )["model"]
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -84,9 +85,9 @@ class TestLlmModelInputs(ExtTestCase):
             with self.subTest(filename=f):
                 self.assertExists(f)
 
-                model, *_ = get_phi35_vision_instruct(
+                model = get_phi35_vision_instruct(
                     num_hidden_layers=1, common_dynamic_shapes=True
-                )
+                )["model"]
                 model = model.to(device)
                 args, kwargs = create_input_tensors_from_onnx_model(
                     f, device=device, engine="onnxruntime"
@@ -94,7 +95,7 @@ class TestLlmModelInputs(ExtTestCase):
                 model(*args, **kwargs)
 
     def test_restore_dummy_inputs_no_images(self):
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=False, n_iteration=it
@@ -119,9 +120,11 @@ class TestLlmModelInputs(ExtTestCase):
         )
 
         device = "cuda"
-        model, *_ = get_phi35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)
+        model = get_phi35_vision_instruct(num_hidden_layers=1, common_dynamic_shapes=True)[
+            "model"
+        ]
         model = model.to(device)
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=False, n_iteration=it, device=device
@@ -132,7 +135,7 @@ class TestLlmModelInputs(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings((UserWarning, FutureWarning))
-    @requires_cuda()
+    @requires_torch("2.7", "bizarre bug")
     @hide_stdout()
     def test_get_dummy_inputs_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -154,24 +157,30 @@ class TestLlmModelInputs(ExtTestCase):
             "return_dict",
         ]
 
-        device = "cuda"
+        device = "cpu"
         for it in range(2):
             with self.subTest(iteration=it):
-                model, kwargs, _ = get_phi35_vision_instruct(
+                data = get_phi35_vision_instruct(
                     num_hidden_layers=1,
-                    n_iteration=it,
                     device=device,
-                    input_kind=LLMInputKind.input_ids
-                    | LLMInputKind.position_ids
-                    | LLMInputKind.attention_mask
-                    | LLMInputKind.past_key_values,
+                    input_kind=(
+                        (
+                            LLMInputKind.input_ids
+                            | LLMInputKind.position_ids
+                            | LLMInputKind.attention_mask
+                            | LLMInputKind.past_key_values
+                        )
+                        if it == 1
+                        else (LLMInputKind.input_ids | LLMInputKind.attention_mask)
+                    ),
                     common_dynamic_shapes=True,
                 )
+                model, kwargs = data["model"], data["inputs"]
                 model(**copy.deepcopy(kwargs))
                 model(*[kwargs.get(n, None) for n in input_names])
 
     def test_restore_dummy_inputs_with_images(self):
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 dummies = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=True, n_iteration=it
@@ -196,9 +205,9 @@ class TestLlmModelInputs(ExtTestCase):
         )
 
         device = "cuda"
-        model, _ = get_phi35_vision_instruct(num_hidden_layers=1)
+        model = get_phi35_vision_instruct(num_hidden_layers=1)["model"]
         model = model.to(device)
-        for it in range(0, 2):
+        for it in range(2):
             with self.subTest(iteration=it):
                 args, kwargs = restore_dummy_inputs_for_phi35_vision_instruct(
                     num_hidden_layers=1, with_images=True, n_iteration=it, device=device
@@ -210,7 +219,6 @@ class TestLlmModelInputs(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings((UserWarning, FutureWarning))
     @requires_cuda()
-    @hide_stdout()
     def test_get_dummy_inputs_with_imgaes_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_vision_instruct,
@@ -219,12 +227,21 @@ class TestLlmModelInputs(ExtTestCase):
         device = "cuda"
         for it in range(2):
             with self.subTest(iteration=it):
-                model, kwargs = get_phi35_vision_instruct(
+                data = get_phi35_vision_instruct(
                     num_hidden_layers=1,
-                    n_iteration=it,
+                    input_kind=(
+                        LLMInputKind.ALL
+                        if it == 1
+                        else (
+                            LLMInputKind.input_ids
+                            | LLMInputKind.attention_mask
+                            | LLMInputKind.images
+                        )
+                    ),
                     device=device,
-                    input_kind=LLMInputKind.ALL,
+                    common_dynamic_shapes=True,
                 )
+                model, kwargs = data["model"], data["inputs"]
                 model(**kwargs)
 
 

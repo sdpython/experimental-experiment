@@ -221,7 +221,7 @@ from transformers import AutoProcessor
 from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_models.llm_model_helper import get_phi35_vision_instruct
 
-model, *_ = get_phi35_vision_instruct(num_hidden_layers=1)
+model = get_phi35_vision_instruct(num_hidden_layers=1)["model"]
 model = model.to("cuda")
 
 # for best performance, use num_crops=4 for multi-frame, num_crops=16 for single-frame.

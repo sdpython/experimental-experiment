@@ -14,17 +14,17 @@ from . import BOOLEAN_VALUES
 from ._bash_bench_benchmark_runner_agg_helper import (
     SELECTED_FEATURES,
     _apply_excel_style,
-    _format_excel_cells,
     _compute_correlations,
     _create_aggregation_figures,
     _filter_data,
+    _fix_report_piv,
+    _format_excel_cells,
+    _process_formulas,
     _reorder_columns_level,
     _reorder_index_level,
     _reverse_column_names_order,
     _select_metrics,
     _select_model_metrics,
-    _fix_report_piv,
-    _process_formulas,
 )
 
 
@@ -193,6 +193,7 @@ def merge_benchmark_reports(
         "control_flow",
         "pass_rate",
         "accuracy_rate",
+        "accuracy_dynamic_rate",
         "date",
         "correction",
         "error",
@@ -993,6 +994,8 @@ def _build_aggregated_document(
                 continue
             if "date" in c:
                 continue
+            if k.startswith("op_"):
+                continue
             if any((isinstance(_, str) and _.startswith("model_")) for _ in c):
                 continue
             cc = v[c]
@@ -1259,13 +1262,13 @@ def _build_aggregated_document(
             .sort_index(axis=0)
             .sort_index(axis=1)
         )
-        piv, weighted_speedup = _fix_report_piv(piv)
+        piv, _weighted_speedup = _fix_report_piv(piv)
         piv_total, _ = _fix_report_piv(piv_total, agg=True)
 
         # concatenation with the all suite
         exporters = set(piv.columns)
         flat_piv = piv.reset_index(drop=False)
-        not_exporters = set(c for c in flat_piv.columns if c not in exporters)
+        not_exporters = {c for c in flat_piv.columns if c not in exporters}
         flat_piv_total = piv_total.reset_index(drop=False)
         set_piv = set(flat_piv_total.columns)
         for c in flat_piv.columns:

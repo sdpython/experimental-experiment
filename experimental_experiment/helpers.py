@@ -137,6 +137,9 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if obj.__class__.__name__ == "_DimHint":
         return str(obj)
 
+    if isinstance(obj, torch.nn.Module):
+        return f"{obj.__class__.__name__}(...)"
+
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 
 

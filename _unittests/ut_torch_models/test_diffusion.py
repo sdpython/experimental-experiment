@@ -29,9 +29,8 @@ class TestDiffusion(ExtTestCase):
             down_block_types=("DownBlock2D", "CrossAttnDownBlock2D"),
             up_block_types=("CrossAttnUpBlock2D", "UpBlock2D"),
             cross_attention_dim=32,
-            inputs_as_tuple=True,
         )
-        expected = list(flatten_outputs(model(*model_inputs)))
+        expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
 

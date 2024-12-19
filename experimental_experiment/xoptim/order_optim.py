@@ -118,7 +118,7 @@ class OrderOptimization:
         if self.verbose:
             begin = time.perf_counter()
             print(
-                f"[OrderOptimization.random_order] starts with "
+                f"[OrderOptimization.random_order] -- starts with "
                 f"{len(self.builder.nodes)} nodes, "
                 f"{len(self.builder.initializers_dict)} initializers"
             )

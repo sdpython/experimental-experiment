@@ -119,6 +119,17 @@ def _SELECTED_FEATURES():
         dict(
             cat="status",
             agg="SUM",
+            stat="accuracy_dynamic_rate",
+            new_name="accuracy number for different dynamic shapes",
+            unit="N",
+            help="Number of models successfully converted into ONNX. "
+            "It may be slow but the discrepancies are < 0.1 for a different set "
+            "of inputs with different shapes",
+            simple=True,
+        ),
+        dict(
+            cat="status",
+            agg="SUM",
             stat="pass_rate",
             new_name="pass number",
             unit="N",
@@ -215,6 +226,16 @@ def _SELECTED_FEATURES():
             unit="N",
             help="Number of models for which the maximum discrepancies is "
             "below 0.1 for all outputs.",
+            simple=True,
+        ),
+        dict(
+            cat="status",
+            agg="SUM",
+            stat="dynerr<1e-1",
+            new_name="dynamic discrepancies < 0.1",
+            unit="N",
+            help="Number of models for which the maximum discrepancies "
+            "with other dynamic shapes is below 0.1 for all outputs.",
             simple=True,
         ),
         # e-2
@@ -1748,6 +1769,16 @@ def _process_formulas(
                 report_on.append("status_accuracy_rate")
             continue
 
+        if expr == "accuracy_dynamic_rate":
+            if "discrepancies_dynamic_abs" in set_columns:
+                col = df["discrepancies_dynamic_abs"] <= 0.1
+                df["status_accuracy_dynamic_rate"] = col.astype(int)
+                df.loc[
+                    df["discrepancies_dynamic_abs"].isna(), "status_accuracy_dynamic_rate"
+                ] = np.nan
+                report_on.append("status_accuracy_dynamic_rate")
+            continue
+
         if expr == "date":
             if "date_start" in set_columns:
                 df["status_date"] = (
@@ -1761,12 +1792,28 @@ def _process_formulas(
             if "time_export_unbiased" in set_columns:
                 df["status_convert"] = (~df["time_export_unbiased"].isna()).astype(int)
                 report_on.append("status_convert")
+
             if "discrepancies_dynamic_abs" in set_columns:
                 df["status_dynamic"] = (
                     (~df["discrepancies_dynamic_abs"].isna())
                     & (df["discrepancies_dynamic_abs"] <= 0.1)
                 ).astype(int)
                 report_on.append("status_dynamic")
+
+                df["status_convert_ort_dynamic"] = (
+                    ~df["discrepancies_dynamic_abs"].isna()
+                ).astype(int)
+                mets = []
+                for th, mt in itertools.product(["1e-1", "1e-2"], ["abs"]):
+                    dis = f"discrepancies_dynamic_{mt}"
+                    if dis not in df.columns:
+                        continue
+                    met = f"status_dynerr{mt[3:]}<{th}"
+                    mets.append(met)
+                    df[met] = (~df[dis].isna() & (df[dis] < float(th))).astype(int)
+                set_columns = set(df.columns)
+                report_on.extend(["status_convert_ort_dynamic", *mets])
+
             if "discrepancies_abs" in set_columns:
                 df["status_convert_ort"] = (~df["discrepancies_abs"].isna()).astype(int)
                 mets = []
@@ -1791,6 +1838,7 @@ def _process_formulas(
                         "status_lat<=eager+2%",
                     ]
                 )
+
             continue
 
         if expr == "control_flow":
@@ -2218,6 +2266,10 @@ def build_historical_report(
         "export time": ["total export time"],
         "speedup": ["speedup weighted by latency", "average speedup (geo)"],
         "discrepancies": ["discrepancies < 0.1", "discrepancies < 0.01"],
+        "discrepancies_dynamic": [
+            "discrepancies_dynamic < 0.1",
+            "discrepancies_dynamic < 0.01",
+        ],
         "memory": [
             "average GPU delta peak (export) (torch)",
             "average GPU delta peak (export) (nvidia-smi)",

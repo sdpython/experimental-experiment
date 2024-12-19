@@ -2757,17 +2757,18 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def make_tensor_input(
         self,
-        name: str,
-        elem_type: Any,
-        shape: DYNAMIC_SHAPE,
-        is_dimension: bool,
+        name: Union[str, Tuple[str]],
+        elem_type: Optional[Any] = None,
+        shape: Optional[DYNAMIC_SHAPE] = None,
+        is_dimension: bool = False,
         marker: str = "",
         default_initializer: Optional[Any] = None,
     ) -> str:
         """
         Adds a tensor input to the onnx graph.
 
-        :param name: name
+        :param name: name or tuple of names, in case, all inputs are create
+            with the same element type and shape
         :param elem_type: element type
         :param shape: shape
         :param is_dimension: torch is using torch.SymInt to add a dynamic input
@@ -2776,6 +2777,21 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param default_initializer: add an initializer with the same name of the input
         :return: input name
         """
+        if isinstance(name, (tuple, list)):
+            res = []
+            for n in name:
+                res.append(
+                    self.make_tensor_input(
+                        n,
+                        elem_type,
+                        shape,
+                        is_dimension=is_dimension,
+                        marker=marker,
+                        default_initializer=default_initializer,
+                    )
+                )
+            return res
+
         assert (
             self.as_function or elem_type
         ), f"elem_type is unknown for name={name!r}{self.get_debug_msg()}"
@@ -3115,7 +3131,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             to the graph
         :return: output name
         """
-        assert is_dimension is not None, (
+        assert self.as_function or is_dimension is not None, (
             f"is_dimension must be specified for output name={name!r}, "
             f"elem_type={elem_type}, shape={shape!r}."
         )
@@ -3130,7 +3146,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return res
 
         assert (
-            not indexed or "_" in name
+            self.as_function or not indexed or "_" in name
         ), f"Name {name!r} is not indexed like 'output_0'{self.get_debug_msg()}"
         assert (is_dimension and "_dim_" in name) or (
             not is_dimension and "_dim_" not in name
@@ -5502,7 +5518,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.verbose > 1:
             begin_ = time.perf_counter()
             print(
-                f"[GraphBuilder.constant_folding] starts with "
+                f"[GraphBuilder.constant_folding] -- starts with "
                 f"{len(self.constants_)} constants and "
                 f"{len(self.nodes)} nodes."
             )
@@ -5707,7 +5723,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         # make_initializer
         if self.verbose > 1:
             begin_ = time.perf_counter()
-            print(f"[GraphBuilder.remove_identity_nodes] starts with {len(self.nodes)}")
+            print(f"[GraphBuilder.remove_identity_nodes] -- starts with {len(self.nodes)}")
         # first pass: detect replacements
         new_nodes = []
         input_names = set(i.name for i in self.inputs)
@@ -6224,7 +6240,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.verbose > 1:
             begin_ = time.perf_counter()
             print(
-                f"[GraphBuilder._update_shape_types_with_proto] starts with "
+                f"[GraphBuilder._update_shape_types_with_proto] -- starts with "
                 f"{len(self.nodes)} nodes and {len(getattr(proto.graph, 'value_info', 0))} "
                 f"shapes."
             )
@@ -6530,7 +6546,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return True
             if isinstance(m1, (int, str)) and isinstance(m2, (int, str)):
                 node.doc_string += f"#SV-{node.op_type}2"
-                self.set_value_shape(node.output[0], (fct(m1, m2),))
+                self.set_value_shape(node.output[0], (f"{m1}{symbol}{m2}",))
                 return True
 
             # One of them is a tuple.
@@ -6671,7 +6687,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.verbose > 1:
             begin_ = time.perf_counter()
             print(
-                f"[GraphBuilder._update_structures_with_proto] starts with "
+                f"[GraphBuilder._update_structures_with_proto] -- starts with "
                 f"{len(proto.graph.node)} nodes"
             )
         self.opsets = {d.domain: d.version for d in proto.opset_import}
@@ -7004,7 +7020,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def make_local_function(
         self,
         builder: "GraphBuilder",
-        function_options,
+        function_options: FunctionOptions,
         optimize: bool = False,
     ) -> Tuple[List[str], Tuple[str, str]]:
         """
@@ -7019,7 +7035,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             it can be changed if one is already existing
 
         Method :meth:`GraphBuilder.inline_functions`,
-        meth:`GraphBuilder.move_initializers_to_constant` are called on
+        :meth:`GraphBuilder.move_initializers_to_constant` are called on
         the builder if *move_initializer_to_constant* is True.
         It modifies the builder inplace.
         """
@@ -7054,20 +7070,21 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 self._check_constants("after-inline_functions")
 
-        assert function_options.return_initializer, (
+        assert not builder.initializers_dict or function_options.return_initializer, (
             f"incompatible options, return_initializer must be True "
-            f"but function_options={function_options!r}"
+            f"but function_options={function_options!r} with {len(self.initializers_dict)} "
+            f"initiliazers"
         )
         fct = builder.to_onnx(
             function_options=function_options,
             optimize=optimize,
         )
-        assert isinstance(fct, dict), (
+        assert isinstance(fct, (dict, FunctionProto)), (
             f"Unexpected type {type(fct)}, function_options={function_options}"
             f"{self.get_debug_msg()}"
         )
-        onx = fct["proto"]
-        if self._debug_local_function:
+        onx = fct["proto"] if isinstance(fct, dict) else fct
+        if self._debug_local_function and isinstance(fct, dict):
             print(f"[GraphBuilder.make_local_function] keys={', '.join(fct)}")
             if "initializers_name" in fct:
                 print(
@@ -7118,7 +7135,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 print(f"[GraphBuilder.make_local_function] renamed inputs={onx.input}")
 
         # Let's rename the initializers.
-        if "initializers_dict" in fct:
+        if isinstance(fct, dict) and "initializers_dict" in fct:
             assert len(fct["initializers_dict"]) == len(fct["initializers_name"]), (
                 f"Names mismatch between {fct['initializers_name']} and "
                 f"{list(fct['initializers_dict'])}{builder.get_debug_msg()}"

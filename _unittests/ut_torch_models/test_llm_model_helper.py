@@ -60,6 +60,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_cuda()
+    @long_test()
     def test_get_phi35_mini_instruct_cuda(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -96,6 +97,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_cuda()
+    @long_test()
     def test_get_phi35_mini_instruct_cuda_modules(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -134,6 +136,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_cuda()
+    @long_test()
     def test_get_phi35_mini_instruct_cuda_modules_dynshapes(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -192,37 +195,44 @@ class TestLlmModelHelper(ExtTestCase):
     @requires_torch("2.6", "bug")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi35_mini_instruct_auto(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
-        model = model
-        with torch.autocast(device_type="cpu", dtype=torch.float16):
-            onx = to_onnx(
-                model,
-                None,  # args
-                model_inputs,  # kwargs
-                large_model=True,
-                verbose=0,
-                options=OptimizationOptions(max_iter=10),
-                export_options=ExportOptions(strict=False, decomposition_table="all"),
-            )
-        filename = "test_phi35_mini_instruct_custom_auto.onnx"
-        onx.save(filename, all_tensors_to_one_file=True)
-        m = onnx.load(filename, load_external_data=False)
-        self.assertEqual(
-            set(i.type.tensor_type.elem_type for i in m.graph.output),
-            {onnx.TensorProto.BFLOAT16},
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
         )
+
+        with bypass_export_some_errors():
+            data = get_phi35_mini_instruct(num_hidden_layers=1)
+            model, model_inputs = data["model"], data["inputs"]
+            model = model
+            with torch.autocast(device_type="cpu", dtype=torch.float16):
+                onx = to_onnx(
+                    model,
+                    None,  # args
+                    model_inputs,  # kwargs
+                    large_model=True,
+                    verbose=0,
+                    options=OptimizationOptions(max_iter=10),
+                    export_options=ExportOptions(strict=False, decomposition_table="all"),
+                )
+            filename = "test_phi35_mini_instruct_custom_auto.onnx"
+            onx.save(filename, all_tensors_to_one_file=True)
+            m = onnx.load(filename, load_external_data=False)
+            self.assertEqual(
+                set(i.type.tensor_type.elem_type for i in m.graph.output),
+                {onnx.TensorProto.FLOAT, onnx.TensorProto.FLOAT16},
+            )
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @requires_torch("2.7", "no decompositions leads to inplace functions")
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_phi35_mini_instruct_no_decomposition(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -254,6 +264,7 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_ai21_jamba_15_mini(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -283,13 +294,15 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @long_test()
     def test_get_all_mini_ml_l6_v1(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_all_mini_ml_l6_v1,
         )
 
-        model, model_inputs = get_all_mini_ml_l6_v1(num_hidden_layers=1)
+        data = get_all_mini_ml_l6_v1(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["model_inputs"]
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
@@ -297,13 +310,16 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    @long_test()
     def test_get_smollm_1_7b(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_smollm_1_7b,
         )
 
-        model, model_inputs = get_smollm_1_7b(num_hidden_layers=1)
+        data = get_smollm_1_7b(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
@@ -386,7 +402,8 @@ class TestLlmModelHelper(ExtTestCase):
             bypass_export_some_errors,
         )
 
-        model, model_inputs = get_phi35_vision_instruct(num_hidden_layers=1)
+        data = get_phi35_vision_instruct(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
 
         with bypass_export_some_errors(
             patch_transformers=True, replace_dynamic_cache=True
@@ -407,17 +424,19 @@ class TestLlmModelHelper(ExtTestCase):
             LLMInputKind,
         )
 
-        model, model_inputs, dyn_shapes = get_phi35_vision_instruct(
+        data = get_phi35_vision_instruct(
             num_hidden_layers=1, input_kind=LLMInputKind.input_ids, common_dynamic_shapes=True
         )
+        model, model_inputs, dyn_shapes = data["model"], data["inputs"], data["dynamic_shapes"]
         self.assertEqual(list(model_inputs), ["input_ids"])
         self.assertEqual(list(dyn_shapes), ["input_ids"])
 
-        model, model_inputs, dyn_shapes = get_phi35_vision_instruct(
+        data = get_phi35_vision_instruct(
             num_hidden_layers=1,
             input_kind=LLMInputKind.input_ids | LLMInputKind.position_ids,
             common_dynamic_shapes=True,
         )
+        model, model_inputs, dyn_shapes = data["model"], data["inputs"], data["dynamic_shapes"]
         self.assertEqual(list(model_inputs), ["input_ids", "position_ids"])
         self.assertEqual(list(dyn_shapes), ["input_ids", "position_ids"])
 
@@ -451,6 +470,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
+    @long_test()
     def test_get_phi2(self):
         import torch
         from experimental_experiment.torch_interpreter.onnx_export_errors import (
@@ -460,11 +480,11 @@ class TestLlmModelHelper(ExtTestCase):
 
         for n_iter in [1, 0]:
             for ds in [True, False]:
-                with self.subTest(n_iteration=n_iter, ds=ds):
+                with self.subTest(input_cache=n_iter, ds=ds):
                     if ds:
                         res = get_phi2(
                             num_hidden_layers=1,
-                            n_iteration=n_iter,
+                            input_cache=n_iter == 1,
                             common_dynamic_shapes=ds,
                             intermediate_size=5120,
                             # hidden_size=1280,
@@ -492,7 +512,7 @@ class TestLlmModelHelper(ExtTestCase):
                             num_hidden_layers=1,
                             intermediate_size=5120,
                             # hidden_size=1280,
-                            n_iteration=n_iter,
+                            input_cache=n_iter == 1,
                             common_dynamic_shapes=ds,
                             batch_size=2,
                         )
@@ -504,6 +524,30 @@ class TestLlmModelHelper(ExtTestCase):
                             torch.export.export(
                                 model, (), modificator(model_inputs), strict=False
                             )
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    @long_test()
+    def test_get_smollm_1_7b_cache(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_smollm_1_7b,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        data = get_smollm_1_7b(
+            batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
+        )
+        model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+        with bypass_export_some_errors(replace_dynamic_cache=True):
+            torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
 
 
 if __name__ == "__main__":

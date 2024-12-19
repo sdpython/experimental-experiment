@@ -55,6 +55,9 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
+      python -c "import torchvision.extension"
+    displayName: 'check torchvision'
+  - script: |
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |

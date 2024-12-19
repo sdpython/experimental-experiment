@@ -141,7 +141,7 @@ class WrappedModelBase(torch.nn.Module):
 
 class WrappedModelToTuple(WrappedModelBase):
     """
-    Wrapper around a module, flattens outputs and outputs so that every
+    Wrapper around a module, flattens inputs and outputs so that every
     exporter can use it.
     """
 
@@ -172,6 +172,7 @@ class ModelRunner:
     :param nvtx: enable nvtx events
     :param model_name: model name
     :param export_options: additional options when exporting if the default options never work
+    :param patch_options: patching options, applied before exporting a model
     :param dynamic_shapes: dynamic shapes to use instead of using automated ones
     :param inputs2: second set of inputs to check the model handles differents shapes
         when they are dynamic
@@ -183,14 +184,16 @@ class ModelRunner:
     def allowed_configuration(cls, exporter: str, optimization: Optional[str] = None) -> bool:
         """Defines the allowed configurations."""
         if not optimization or optimization == "none":
-            # always possible
+            # Always allowed if no optimization
             return True
-        if exporter in {"custom", "custom-fallback"}:
-            return True
+        if exporter.startswith("custom"):
+            # custom exporter is not limited by optimization methods
+            return optimization not in {"ir"}
         if exporter in {"torch_script", "dynamo_export"}:
+            # torch_script and dynamo_export only allow default optimization
             return optimization in {"default"}
         if exporter in {"onnx_dynamo", "onnx_dynamo-fallback", "onnx_dynamo-detailed"}:
-            return optimization in {"default", "ir"}
+            return optimization in {"ir"}
         return False
 
     @classmethod
@@ -330,6 +333,7 @@ class ModelRunner:
         nvtx: bool = False,
         model_name: Optional[str] = None,
         export_options: Optional[Dict[str, Any]] = None,
+        patch_options: Optional[Dict[str, Any]] = None,
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]] = None,
         inputs2: Optional[Any] = None,
         kw_inputs2: Optional[Dict[str, Any]] = None,
@@ -411,8 +415,8 @@ class ModelRunner:
 
         self.device = device
         self.dtype = dtype
-        self.inputs = self.get_inputs(inputs)
-        self.inputs2 = self.get_inputs(inputs2) if inputs2 else None
+        self.inputs = self.get_inputs_with_copied_dynamic_cache(inputs)
+        self.inputs2 = self.get_inputs_with_copied_dynamic_cache(inputs2) if inputs2 else None
         self.repeat = repeat
         self.warmup = warmup
         self.suite = suite
@@ -420,6 +424,10 @@ class ModelRunner:
         self.model_name = model_name
         self.nvtx = nvtx
         self.export_options = export_options
+        self.patch_options = dict(patch_transformers=True, replace_dynamic_cache=True)
+        if patch_options:
+            self.patch_options.update(patch_options)
+
         self.dynamic_shapes = dynamic_shapes
         assert self.autocast is not None, "autocast not implemented"
         self.std_to_dump = []
@@ -458,22 +466,54 @@ class ModelRunner:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
 
-    def get_inputs(self, inputs: Optional[Any] = None) -> Any:
-        """
-        LLM modifies the cache. It needs to be copied first.
-        """
+    def _copy_cache(self, i):
+        if isinstance(i, (int, float)):
+            return i
+        if isinstance(i, torch.Tensor):
+            return i.clone()
+        if isinstance(i, list):
+            return [self._copy_cache(_) for _ in i]
+        if isinstance(i, tuple):
+            return tuple(self._copy_cache(_) for _ in i)
+        if isinstance(i, dict):
+            return {k: self._copy_cache(_) for k, _ in i.items()}
+        if i.__class__.__name__ == "DynamicCache":
+            import transformers
+
+            if isinstance(i, transformers.cache_utils.DynamicCache):
+                inst = type(i)()
+                for k in ["key_cache", "value_cache", "_seen_tokens"]:
+                    if hasattr(i, k):
+                        setattr(inst, k, self._copy_cache(getattr(i, k)))
+                return inst
+            else:
+                return copy.deepcopy(i)
+        raise NotImplementedError(f"Unable to copy {string_type(i)}")
+
+    def get_inputs_with_copied_dynamic_cache(self, inputs: Optional[Any] = None) -> Any:
+        """LLM modifies the cache. It needs to be copied first."""
         if inputs is None:
             inputs = self.inputs
-        args = []
-        for i in inputs:
-            if i.__class__.__name__ in {"DynamicCache"}:
-                args.append(copy.deepcopy(i))
-                continue
-            args.append(i)
-        return tuple(args)
+        if isinstance(inputs, dict):
+            args = {}
+            for k, i in inputs.items():
+                if i.__class__.__name__ in {"DynamicCache"}:
+                    args[k] = self._copy_cache(i)
+                    continue
+                args[k] = i
+            return args
+        if isinstance(inputs, (list, tuple)):
+            args = []
+            for i in inputs:
+                if i.__class__.__name__ in {"DynamicCache"}:
+                    args.append(self._copy_cache(i))
+                    continue
+                args.append(i)
+            return tuple(args) if isinstance(inputs, tuple) else args
+        return inputs
 
-    def run(self) -> Any:
-        inputs = self.get_inputs()
+    def run(self, copy: bool = False) -> Any:
+        inputs = self.get_inputs_with_copied_dynamic_cache()
         if self.autocast:
             if self.nvtx:
                 torch.cuda.nvtx.range_push("ModelRunner.Eager.AutoCast")
@@ -487,9 +527,14 @@ class ModelRunner:
         res = self.model(*inputs)
         if self.nvtx:
             torch.cuda.nvtx.range_pop()
+        if copy:
+            # This is then to keep the expected value. The cache must be copied
+            # to avoid any noise when comparing the exported model output.
+            r = self.get_inputs_with_copied_dynamic_cache(res)
+            return r
         return res
 
-    def run_dynamic(self) -> Any:
+    def run_dynamic(self, copy: bool = False) -> Any:
         dynamic_inputs = self.make_dynamic_inputs()
         if self.autocast:
             if self.nvtx:
@@ -504,6 +549,10 @@ class ModelRunner:
         res = self.model(*dynamic_inputs)
         if self.nvtx:
             torch.cuda.nvtx.range_pop()
+        if copy:
+            # This is then to keep the expected value. The cache must be copied
+            # to avoid any noise when comparing the exported model output.
+            return self.get_inputs_with_copied_dynamic_cache(res)
         return res
 
     def compute_weight_size(self) -> int:
@@ -762,6 +811,16 @@ class ModelRunner:
             )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
+    def _patch_patch_options(self, verbose: int = 0, dynamic: int = 0) -> Dict[str, Any]:
+        """Updates the patch options.
+        DynamicCache does not need to be replaced if there is no dynamic shapes involved.
+        """
+        options = self.patch_options.copy()
+        if not dynamic:
+            options["replace_dynamic_cache"] = False
+        options["verbose"] = max(verbose - 2, 0)
+        return options
+
     def _to_onnx_custom(
         self,
         name: str,
@@ -792,6 +851,7 @@ class ModelRunner:
         export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
+
         if verbose:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
@@ -805,7 +865,7 @@ class ModelRunner:
             )
             print(
                 f"[ModelRunner._to_onnx_custom] export_kw_inputs="
-                f"{string_type(export_kw_inputs)!r}"
+                f"{string_type(export_kw_inputs, with_shape=True)!r}"
             )
             print(f"[ModelRunner._to_onnx_custom] self.export_options={self.export_options!r}")
             print(f"[ModelRunner._to_onnx_custom] export_options={export_options!r}")
@@ -814,9 +874,7 @@ class ModelRunner:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 2, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
@@ -835,9 +893,7 @@ class ModelRunner:
                 )
         else:
             with torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 2, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
@@ -1006,7 +1062,7 @@ class ModelRunner:
             # ([{'file_name': ..., 'height': ..., 'image': torch.Tensor(...)}])
             inputs = (self.inputs[0][0]["image"],)
         else:
-            inputs = self.get_inputs()
+            inputs = self.get_inputs_with_copied_dynamic_cache()
 
         dynamic_shapes_for_export = self.get_dynamic_shapes(dynamic)
         inputs, kw_inputs = self.make_export_inputs(dynamic, inputs=inputs)
@@ -1146,9 +1202,7 @@ class ModelRunner:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 5, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ):
                 onnx_program = torch.onnx.export(
                     self.model,
@@ -1164,9 +1218,7 @@ class ModelRunner:
                 )
         else:
             with torch.no_grad(), bypass_export_some_errors(
-                patch_transformers=True,
-                replace_dynamic_cache=True,
-                verbose=max(verbose - 5, 0),
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ):
                 onnx_program = torch.onnx.export(
                     self.model,
@@ -1221,7 +1273,7 @@ class ModelRunner:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.get_inputs(),
+                    *self.get_inputs_with_copied_dynamic_cache(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1231,7 +1283,7 @@ class ModelRunner:
             with torch.no_grad():
                 exported = torch.onnx.dynamo_export(
                     self.model,
-                    *self.get_inputs(),
+                    *self.get_inputs_with_copied_dynamic_cache(),
                     export_options=torch.onnx.ExportOptions(
                         dynamic_shapes=dynamic,
                         # registry=torch.onnx.OnnxRegistry()
@@ -1285,7 +1337,7 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
         with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True, verbose=max(verbose - 5, 0)
+            **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
         ) as modificator:
             exported_mod = export_options.export(
                 self.model,
@@ -1329,7 +1381,9 @@ class ModelRunner:
             not optimization or optimization == "none"
         ), f"optimization {optimization!r} not compatible with export"
         from ..torch_interpreter import ExportOptions
-        from executorch.exir import to_edge, ExecutorchBackendConfig
+
+        # Avoid heavy dependencies of an exporter
+        from executorch.exir import ExecutorchBackendConfig, to_edge
 
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
@@ -1348,7 +1402,7 @@ class ModelRunner:
             print("[ModelRunner._to_executorch] run torch.export.export")
 
         with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True, verbose=max(verbose - 5, 0)
+            **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
         ) as modificator:
             exported_mod = export_options.export(
                 self.model,
@@ -1672,7 +1726,7 @@ class ModelRunner:
                 return self.inputs if inputs is None else inputs, self.kw_inputs
 
             if inputs is None:
-                inputs = self.get_inputs()
+                inputs = self.get_inputs_with_copied_dynamic_cache()
             if kw_inputs is None:
                 kw_inputs = self.kw_inputs
 
@@ -1706,7 +1760,7 @@ class ModelRunner:
             return tuple(new_inputs), new_kw_inputs
 
         if inputs is None:
-            inputs = self.get_inputs()
+            inputs = self.get_inputs_with_copied_dynamic_cache()
         if kw_inputs is None:
             kw_inputs = self.kw_inputs
 
@@ -1986,11 +2040,11 @@ class ModelRunner:
             self.inputs, tuple
         ), f"Not implemented for type(self.inputs)={type(self.inputs)}"
         if self.inputs2:
-            return self.get_inputs(self.inputs2)
+            return self.get_inputs_with_copied_dynamic_cache(self.inputs2)
         dynamic_shapes = self.get_dynamic_shapes(True)
         dyn_inputs = []
         dyn_values = {}
-        inputs = self.get_inputs()  # we need a copy for the cache
+        inputs = self.get_inputs_with_copied_dynamic_cache()  # we need a copy for the cache
         for i in range(len(inputs)):
             inp = inputs[i]
             if i >= len(dynamic_shapes):
@@ -2093,9 +2147,13 @@ class ModelRunner:
             "executorch",
             "flaggems",
         }:
-            return self.get_inputs()
+            return self.get_inputs_with_copied_dynamic_cache()
 
-        use_inputs = self.get_inputs() if not dynamic else self.make_dynamic_inputs()
+        use_inputs = (
+            self.get_inputs_with_copied_dynamic_cache()
+            if not dynamic
+            else self.make_dynamic_inputs()
+        )
         if remove_int:
             ui = use_inputs
             use_inputs = []
@@ -2116,7 +2174,7 @@ class ModelRunner:
             assert set(names) == set(
                 self.inputs
             ), f"Input names mismatch, got {set(use_inputs)}, expecting {set(names)}."
-            return self.get_inputs()
+            return self.get_inputs_with_copied_dynamic_cache()
         assert len(use_inputs) == len(raw_use_defaults), (
             f"Mismatch use_inputs={string_type(use_inputs)}, "
             f"raw_use_defaults={string_type(raw_use_defaults)}"
