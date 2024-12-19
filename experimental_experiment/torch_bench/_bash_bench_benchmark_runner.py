@@ -20,8 +20,6 @@ from .export_model_helper import (
     compute_weight_size,
     obj_size,
     size_type,
-    str_dtype,
-    str_shape,
 )
 from ..bench_run import max_diff
 from ..memory_peak import flatten, start_spying_on
@@ -1223,35 +1221,30 @@ class BenchmarkRunner:
             )
         context["feeds"] = feeds
         context["feeds_dynamic"] = feeds_dynamic
+        stats["onnx_type_feeds"] = string_type(feeds, with_shape=True, with_min_max=True)
 
         #########
         # dynamic
         #########
 
+        stats["onnx_type_expected"] = string_type(expected, with_shape=True, with_min_max=True)
         if dynamic:
+            stats["onnx_type_inputs_dynamic"] = string_type(
+                model_runner.make_dynamic_inputs(), with_shape=True, with_min_max=True
+            )
             expected_dynamic = model_runner.run_dynamic(copy=True)
             expected_dynamic = self.move_to("cpu", expected_dynamic)
+            stats["onnx_type_feeds_dynamic"] = string_type(
+                feeds_dynamic, with_shape=True, with_min_max=True
+            )
+            stats["onnx_type_expected_dynamic"] = string_type(
+                expected_dynamic, with_shape=True, with_min_max=True
+            )
         else:
             expected_dynamic = None
 
         del model_runner
         gc.collect()
-
-        if isinstance(feeds, dict):
-            # This is the type for onnx inputs
-            feeds_values = list(feeds.values())
-            stats["onnx_input_dtypes"] = "/".join(
-                str_dtype(getattr(_, "dtype", "?")) for _ in feeds_values
-            )
-            stats["onnx_input_shapes"] = "/".join(
-                str_shape(getattr(_, "shape", "?")) for _ in feeds_values
-            )
-        if isinstance(feeds_dynamic, dict):
-            # This is the type for onnx inputs
-            feeds_dynamic_values = list(feeds_dynamic.values())
-            stats["onnx_input_dynamic_shapes"] = "/".join(
-                str_shape(getattr(_, "shape", "?")) for _ in feeds_dynamic_values
-            )
 
         if self.device.startswith("cuda"):
             torch.cuda.reset_peak_memory_stats(device_id)

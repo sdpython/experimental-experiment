@@ -626,7 +626,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             for pos, vv in pos_vv:
                 if vv is None:
                     continue
-                if isinstance(vv, list):
+                if isinstance(vv, (list, tuple)):
                     for vvv in vv:
                         if vvv is None:
                             continue

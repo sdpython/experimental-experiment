@@ -51,6 +51,7 @@ def finalize_llm_setup(
     common_dynamic_shapes: bool = True,
     inputs_as_tuple: bool = False,
     num_hidden_layers: int = 2,
+    num_attention_heads: int = 32,
     input_cache: bool = True,
     device: str = "cpu",
     seq_length_multiple: int = 1,
@@ -102,18 +103,28 @@ def finalize_llm_setup(
         cache = transformers.cache_utils.DynamicCache(num_hidden_layers)
         for i in range(num_hidden_layers):
             cache.update(
-                torch.randn(batch_size, 32, sequence_length, cache_last_dim).to(device),
-                torch.randn(batch_size, 32, sequence_length, cache_last_dim).to(device),
+                torch.randn(
+                    batch_size, num_attention_heads, sequence_length, cache_last_dim
+                ).to(device),
+                torch.randn(
+                    batch_size, num_attention_heads, sequence_length, cache_last_dim
+                ).to(device),
                 i,
             )
         cache2 = transformers.cache_utils.DynamicCache(num_hidden_layers)
         for i in range(num_hidden_layers):
             cache2.update(
                 torch.randn(
-                    batch_size + 1, 32, sequence_length + sequence_inc, cache_last_dim
+                    batch_size + 1,
+                    num_attention_heads,
+                    sequence_length + sequence_inc,
+                    cache_last_dim,
                 ).to(device),
                 torch.randn(
-                    batch_size + 1, 32, sequence_length + sequence_inc, cache_last_dim
+                    batch_size + 1,
+                    num_attention_heads,
+                    sequence_length + sequence_inc,
+                    cache_last_dim,
                 ).to(device),
                 i,
             )
@@ -899,6 +910,11 @@ def get_phi3_vision_128k_instruct(
     )
 
 
+##############
+# Jamba, Mamba
+##############
+
+
 def get_ai21_jamba_15_mini(
     inputs_as_tuple: bool = False,
     input_cache: bool = True,
@@ -1064,6 +1080,11 @@ def get_falcon_mamba_7b(
     return model, inputs
 
 
+######
+# Bert
+######
+
+
 def get_all_mini_ml_l6_v1(
     inputs_as_tuple: bool = False,
     input_cache: bool = True,
@@ -1082,6 +1103,28 @@ def get_all_mini_ml_l6_v1(
 
     See `all-MiniLM-L6-v1
     <https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1/blob/main/config.json>`_.
+
+    Model forward signature:
+
+    ::
+
+        def forward(
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            token_type_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            encoder_hidden_states: Optional[torch.Tensor] = None,
+            encoder_attention_mask: Optional[torch.Tensor] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+        ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+
     """
     import transformers
 
@@ -1113,16 +1156,38 @@ def get_all_mini_ml_l6_v1(
     model = transformers.BertModel(conf)
     model.eval()
 
-    return finalize_llm_setup(
+    res = finalize_llm_setup(
         model,
         batch_size,
         max_token_id=30522,
-        cache_last_dim=80,
+        cache_last_dim=32,
+        num_attention_heads=12,
         common_dynamic_shapes=common_dynamic_shapes,
         inputs_as_tuple=inputs_as_tuple,
         num_hidden_layers=config["num_hidden_layers"],
         input_cache=input_cache,
     )
+    if not input_cache:
+        return res
+
+    # We flatten the cache.
+    for k in ["inputs", "inputs2"]:
+        if k not in res:
+            continue
+        kv = res[k]["past_key_values"]
+        kv = [
+            (kv.key_cache[i], kv.value_cache[i], kv.key_cache[i], kv.value_cache[i])
+            for i in range(len(kv.key_cache))
+        ]
+        res[k]["past_key_values"] = kv
+
+    sh = res["dynamic_shapes"]["past_key_values"]
+    if sh:
+        sh1 = sh[0][0]
+        res["dynamic_shapes"]["past_key_values"] = [
+            tuple(sh1 for _ in range(4)) for s in range(config["num_hidden_layers"])
+        ]
+    return res
 
 
 def get_llama32_9b_vision(
