@@ -30,7 +30,7 @@ class UntrainedRunner(BenchmarkRunner):
         cls.MODELS.update(
             {
                 # diffusion
-                "SableDiffusion2Unet": get_stable_diffusion_2_unet,
+                "StableDiffusion2Unet": get_stable_diffusion_2_unet,
                 # LLM simple
                 "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
                 # LLM with Cache

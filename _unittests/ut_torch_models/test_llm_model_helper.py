@@ -271,7 +271,8 @@ class TestLlmModelHelper(ExtTestCase):
             get_ai21_jamba_15_mini,
         )
 
-        model, model_inputs = get_ai21_jamba_15_mini(num_hidden_layers=1)
+        data = get_ai21_jamba_15_mini(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
@@ -286,7 +287,8 @@ class TestLlmModelHelper(ExtTestCase):
             get_falcon_mamba_7b,
         )
 
-        model, model_inputs = get_falcon_mamba_7b(num_hidden_layers=1)
+        data = get_falcon_mamba_7b(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
