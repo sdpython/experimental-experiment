@@ -58,7 +58,7 @@ class TestOnnxExportErrors(ExtTestCase):
 
         with bypass_export_some_errors():
             cache = MambaCache(_config(), batch_size=1)
-            torch.export.export(Model(), (torch.ones(16, 16), cache))
+            torch.export.export(Model(), (torch.ones(8, 32), cache))
 
 
 if __name__ == "__main__":

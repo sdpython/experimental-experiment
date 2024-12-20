@@ -96,16 +96,18 @@ nitpick_ignore = [
     ("py:class", "False"),
     ("py:class", "True"),
     ("py:class", "Argument"),
-    ("py:class", "torch.fx.passes.operator_support.OperatorSupport"),
-    ("py:class", "torch.fx.proxy.TracerBase"),
     ("py:class", "onnxscript.ir.Tuple"),
     ("py:class", "pipeline.Pipeline"),
     ("py:class", "default=sklearn.utils.metadata_routing.UNCHANGED"),
+    ("py:class", "ModelProto"),
     ("py:class", "Module"),
+    ("py:class", "torch.fx.passes.operator_support.OperatorSupport"),
+    ("py:class", "torch.fx.proxy.TracerBase"),
+    ("py:class", "torch.utils._pytree.Context"),
+    ("py:class", "torch.utils._pytree.KeyEntry"),
     ("py:class", "transformers.cache_utils.Cache"),
     ("py:class", "transformers.cache_utils.DynamicCache"),
     ("py:class", "transformers.cache_utils.MambaCache"),
-    ("py:class", "ModelProto"),
 ]
 
 nitpick_ignore_regex = [

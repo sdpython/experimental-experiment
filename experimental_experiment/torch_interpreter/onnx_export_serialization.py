@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Tuple
 #     dtype=dtype,
 # )
 def flatten_mamba_cache(
-    mamba_cache: "MambaCache",  # noqa: F821
+    mamba_cache: "transformers.cache_utils.MambaCache",  # noqa: F821
 ) -> Tuple[List[Any], "torch.utils._pytree.Context"]:  # noqa: F821
     """Serializes a :class:`transformers.cache_utils.MambaCache` with python objects."""
     flat = [
@@ -44,15 +44,16 @@ def unflatten_mamba_cache(
     values: List[Any],
     context: "torch.utils._pytree.Context",  # noqa: F821
     output_type=None,
-) -> "MambaCache":  # noqa: F821
+) -> "transformers.cache_utils.MambaCache":  # noqa: F821
     """Restores a :class:`transformers.cache_utils.MambaCache` from python objects."""
+    conv_states, ssm_states = values
 
     class _config:
         def __init__(self):
-            self.intermediate_size = 16
-            self.state_size = 16
-            self.conv_kernel = 16
-            self.num_hidden_layers = 16
+            self.intermediate_size = conv_states.shape[2]
+            self.state_size = ssm_states.shape[3]
+            self.conv_kernel = conv_states.shape[3]
+            self.num_hidden_layers = conv_states.shape[0]
 
     from transformers.cache_utils import MambaCache
 
@@ -122,7 +123,9 @@ def unflatten_pached_dynamic_cache(
     context: "torch.utils._pytree.Context",  # noqa: F821
     output_type=None,
 ) -> "transformers.cache_utils.DynamicCache":  # noqa: F821
-    """Restores a :class:`patched_DynamicCache` from python objects."""
+    """Restores a :class:`patched_DynamicCache
+    <experimental_experiment.torch_interpreter.patches.patch_transformers.patched_DynamicCache>`
+    from python objects."""
 
     from .patches.patch_transformers import patched_DynamicCache
 
