@@ -454,7 +454,9 @@ class ModelRunner:
                 devices.append(i.key_cache[0].get_device() if i.key_cache else None)
             elif i.__class__.__name__ == "MambaCache" and hasattr(i, "conv_states"):
                 devices.append(i.conv_states.get_device())
-            elif isinstance(i, list) and i and isinstance(i[0], tuple):  # a flattened cache
+            elif (
+                isinstance(i, list) and i and isinstance(i[0], tuple)
+            ):  # a flattened cache (Bert)
                 devices.append(i[0][0].get_device())
             else:
                 raise AssertionError(f"Unable to process type {type(i)}")
@@ -1870,6 +1872,14 @@ class ModelRunner:
                 dyn_inputs.append(new_input)
                 continue
 
+            if inp.__class__.__name__ == "MambaCache":
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.DynamicCache
+                ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
+                raise NotImplementedError("Not yet implemented for MambaCache")
+
             new_shape = self._make_export_new_dynamic_shape(
                 inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
             )
@@ -2040,6 +2050,15 @@ class ModelRunner:
                     ]
                 )
                 continue
+
+            if inp.__class__.__name__ == "MambaCache":
+                # Cache is not dynamic
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.MambaCache
+                ), f"Unexpected type {type(inp)}"
+                raise NotImplementedError("Not yet implemented for MambaCache")
 
             new_shape = self._get_input_shape_tensor(
                 export=export,

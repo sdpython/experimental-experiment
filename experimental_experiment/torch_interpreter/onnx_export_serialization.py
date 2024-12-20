@@ -80,7 +80,7 @@ def flatten_with_keys_mamba_cache(d: Dict[Any, Any]) -> Tuple[
 
 
 def flatten_dynamic_cache(
-    dynamic_cache: "DynamicCache",  # noqa: F821
+    dynamic_cache: "transformers.cache_utils.DynamicCache",  # noqa: F821
 ) -> Tuple[List[Any], "torch.utils._pytree.Context"]:  # noqa: F821
     """Serializes a :class:`transformers.cache_utils.DynamicCache` with python objects."""
     flat = [
@@ -106,7 +106,7 @@ def unflatten_dynamic_cache(
     values: List[Any],
     context: "torch.utils._pytree.Context",  # noqa: F821
     output_type=None,
-) -> "DynamicCache":  # noqa: F821
+) -> "transformers.cache_utils.DynamicCache":  # noqa: F821
     """Restores a :class:`transformers.cache_utils.DynamicCache` from python objects."""
     from transformers.cache_utils import DynamicCache
 
@@ -121,7 +121,7 @@ def unflatten_pached_dynamic_cache(
     values: List[Any],
     context: "torch.utils._pytree.Context",  # noqa: F821
     output_type=None,
-) -> "DynamicCache":  # noqa: F821
+) -> "transformers.cache_utils.DynamicCache":  # noqa: F821
     """Restores a :class:`patched_DynamicCache` from python objects."""
 
     from .patches.patch_transformers import patched_DynamicCache

@@ -857,30 +857,6 @@ def max_diff(
             flatten=flatten,
         )
 
-    if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):
-        if verbose >= 6:
-            print(f"[max_diff] MambaCache: {string_type(expected)} ? {string_type(got)}")
-        if got.__class__.__name__ != expected.__class__.__name__:
-            # This case happens with onnx where the outputs are flattened.
-            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-        atts = []
-        for k in ["conv_states", "ssm_states"]:
-            if hasattr(expected, k) and not hasattr(got, k):
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            atts.append(k)
-
-        return max_diff(
-            [getattr(expected, k) for k in atts],
-            [getattr(got, k) for k in atts],
-            level=level,
-            flatten=flatten,
-            debug_info=debug_info,
-            begin=begin,
-            end=end,
-            _index=_index,
-            verbose=verbose,
-        )
-
     if isinstance(expected, np.ndarray):
         if verbose >= 6:
             print(f"[max_diff] array1: {string_type(expected)} ? {string_type(got)}")
@@ -910,6 +886,30 @@ def max_diff(
             f"DynamicCache not fully implemented with expected="
             f"{string_type(expected)}, got={string_type(got)},\n"
             f"level={level}"
+        )
+
+    if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):
+        if verbose >= 6:
+            print(f"[max_diff] MambaCache: {string_type(expected)} ? {string_type(got)}")
+        if got.__class__.__name__ != expected.__class__.__name__:
+            # This case happens with onnx where the outputs are flattened.
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+        atts = []
+        for k in ["conv_states", "ssm_states"]:
+            if hasattr(expected, k) and not hasattr(got, k):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            atts.append(k)
+
+        return max_diff(
+            [getattr(expected, k) for k in atts],
+            [getattr(got, k) for k in atts],
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
+            verbose=verbose,
         )
 
     raise AssertionError(
