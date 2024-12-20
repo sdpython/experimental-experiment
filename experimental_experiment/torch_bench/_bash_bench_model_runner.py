@@ -208,7 +208,7 @@ class ModelRunner:
             return [cls._to_type_or_device(v, dtype_or_device) for v in o]
         if isinstance(o, tuple):
             return tuple(cls._to_type_or_device(v, dtype_or_device) for v in o)
-        if hasattr(o, "dtype"):
+        if hasattr(o, "dtype") and hasattr(o, "shape"):
             if isinstance(dtype_or_device, str) or o.dtype in {
                 torch.float32,
                 torch.float64,
@@ -275,6 +275,12 @@ class ModelRunner:
                 cp.key_cache[i] = o.key_cache[i].to(dtype_or_device)
             for i in range(len(o.value_cache)):
                 cp.value_cache[i] = o.value_cache[i].to(dtype_or_device)
+            return cp
+
+        if o.__class__.__name__ == "MambaCache":
+            cp = copy.deepcopy(o)
+            cp.conv_states = o.conv_states.to(dtype_or_device)
+            cp.ssm_states = o.ssm_states.to(dtype_or_device)
             return cp
 
         try:
@@ -446,6 +452,8 @@ class ModelRunner:
                 devices.append(i.get_device())
             elif i.__class__.__name__ == "DynamicCache" and hasattr(i, "key_cache"):
                 devices.append(i.key_cache[0].get_device() if i.key_cache else None)
+            elif i.__class__.__name__ == "MambaCache" and hasattr(i, "conv_states"):
+                devices.append(i.conv_states.get_device())
             elif isinstance(i, list) and i and isinstance(i[0], tuple):  # a flattened cache
                 devices.append(i[0][0].get_device())
             else:
@@ -2264,9 +2272,18 @@ class ModelRunner:
 
                 assert isinstance(
                     i, transformers.cache_utils.DynamicCache
-                ), f"Unexpected class {type(i)}"
+                ), f"unexpected type {type(i)}"
                 new_inputs.extend(i.key_cache)
                 new_inputs.extend(i.value_cache)
+                continue
+            if i.__class__.__name__ == "MambaCache":
+                import transformers
+
+                assert isinstance(
+                    i, transformers.cache_utils.MambaCache
+                ), f"unexpected type {type(i)}"
+                new_inputs.append(i.conv_states)
+                new_inputs.append(i.ssm_states)
                 continue
             raise AssertionError(f"Unable to process input type {type(i)}")
 

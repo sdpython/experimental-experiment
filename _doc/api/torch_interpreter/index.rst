@@ -21,6 +21,7 @@ experimental_experiment.torch_interpreter
     interpreter
     onnx_export
     onnx_export_errors
+    onnx_export_serialization
     oxs_dispatcher
     oxs_opset
     patches/index

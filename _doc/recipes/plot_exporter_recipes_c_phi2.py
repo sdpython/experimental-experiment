@@ -133,7 +133,7 @@ model = data["model"]
 inputs = data["inputs"]
 dynamic_shapes = data["dynamic_shapes"]
 
-print("inputs", string_type(inputs))
+print("inputs", string_type(inputs, with_shape=True))
 print("dynamic_shapes", dynamic_shapes)
 
 
@@ -148,14 +148,25 @@ model(**copy.deepcopy(inputs))
 # Export
 # ++++++
 #
-# Let's export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
-
-try:
-    torch.onnx.export(model, (), kwargs=inputs, dynamic_shapes=dynamic_shapes, dynamo=True)
-except Exception as e:
-    print(f"export failed due to {e}")
-
-
+# We try to export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
+#
+# ``to_onnx(model, (), kwargs=copy.deepcopy(inputs), dynamic_shapes=dynamic_shapes)``
+#
+# This fails because of dynamic shapes issues.
+#
+# ::
+#
+#   Constraints violated (batch, seq_length)! For more information,
+#   run with TORCH_LOGS="+dynamic".
+#   Cannot associate shape
+#       [[{0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>},
+#         {0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>}],
+#        [{0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>},
+#         {0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>}]]
+#       specified at `dynamic_shapes['past_key_values']`
+#           to non-tensor type <class 'transformers.cache_utils.DynamicCache'>
+#           at `inputs['past_key_values']` (expected None)
+#
 ##################################
 # The export fails for a couple of reason but it is possible to patch the
 # code to make it work. All those modifications are put in place by
@@ -171,9 +182,9 @@ from experimental_experiment.torch_interpreter.onnx_export_errors import (
 with bypass_export_some_errors(
     patch_transformers=True, replace_dynamic_cache=True, verbose=1
 ) as modificator:
-    print("inputs before", string_type(inputs))
+    print("inputs before", string_type(inputs, with_shape=True))
     inputs = modificator(inputs)
-    print("inputs after", string_type(inputs))
+    print("inputs after", string_type(inputs, with_shape=True))
     # ep = torch.export.export(model, (), inputs, dynamic_shapes=dynamic_shapes, strict=False)
     large_onx = to_onnx(
         model,

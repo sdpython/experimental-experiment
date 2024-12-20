@@ -75,14 +75,14 @@ intersphinx_mapping = {
         "https://sdpython.github.io/doc/experimental-experiment/dev/",
         None,
     ),
-    "matplotlib": ("https://matplotlib.org/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "onnx": ("https://onnx.ai/onnx/", None),
     "onnx_array_api": ("https://sdpython.github.io/doc/onnx-array-api/dev/", None),
     "onnx_extended": ("https://sdpython.github.io/doc/onnx-extended/dev/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     "python": (f"https://docs.python.org/{sys.version_info.major}", None),
-    "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
     "skl2onnx": ("https://onnx.ai/sklearn-onnx/", None),
     "torch": ("https://pytorch.org/docs/main/", None),
@@ -102,7 +102,10 @@ nitpick_ignore = [
     ("py:class", "pipeline.Pipeline"),
     ("py:class", "default=sklearn.utils.metadata_routing.UNCHANGED"),
     ("py:class", "Module"),
+    ("py:class", "transformers.cache_utils.Cache"),
     ("py:class", "transformers.cache_utils.DynamicCache"),
+    ("py:class", "transformers.cache_utils.MambaCache"),
+    ("py:class", "ModelProto"),
 ]
 
 nitpick_ignore_regex = [
@@ -134,7 +137,7 @@ sphinx_gallery_conf = {
 }
 
 if pv.Version(torch.__version__) < pv.Version("2.7"):
-    sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_(modules)|(custom))|(_executorch_)).*"
+    sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_((modules)|(custom)))|(_executorch_)).*"
 
 
 epkg_dictionary = {

@@ -115,7 +115,7 @@ model = data["model"]
 inputs = data["inputs"]
 dynamic_shapes = data["dynamic_shapes"]
 
-print("inputs", string_type(inputs))
+print("inputs", string_type(inputs, with_shape=True))
 print("dynamic_shapes", dynamic_shapes)
 
 
@@ -133,7 +133,13 @@ model(**copy.deepcopy(inputs))
 # Let's export with :func:`torch.onnx.export`.
 
 try:
-    torch.onnx.export(model, (), kwargs=inputs, dynamic_shapes=dynamic_shapes, dynamo=True)
+    torch.onnx.export(
+        copy.deepcopy(model),
+        (),
+        kwargs=copy.deepcopy(inputs),
+        dynamic_shapes=dynamic_shapes,
+        dynamo=True,
+    )
 except Exception as e:
     print(f"export failed due to {e}")
 
@@ -152,12 +158,12 @@ from experimental_experiment.torch_interpreter.onnx_export_errors import (
 with bypass_export_some_errors(
     patch_transformers=True, replace_dynamic_cache=True, verbose=1
 ) as modificator:
-    print("inputs before", string_type(inputs))
+    print("inputs before", string_type(inputs, with_shape=True))
     inputs = modificator(inputs)
-    print("inputs after", string_type(inputs))
+    print("inputs after", string_type(inputs, with_shape=True))
     # ep = torch.export.export(model, (), inputs, dynamic_shapes=dynamic_shapes, strict=False)
     ep = torch.onnx.export(
-        model, (), kwargs=inputs, dynamic_shapes=dynamic_shapes, dynamo=True
+        model, (), kwargs=copy.deepcopy(inputs), dynamic_shapes=dynamic_shapes, dynamo=True
     )
     ep.optimize()
     ep.save("plot_exporter_recipes_oe_phi2.onnx")

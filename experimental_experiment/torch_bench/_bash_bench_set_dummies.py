@@ -251,7 +251,7 @@ class NeuronNoneIntDict(torch.nn.Module):
 
 
 class NeuronDynamicCache(torch.nn.Module):
-    "Dummy module with an optional integer and dictionary as inputs."
+    "Dummy module with a :class:`transformers.cache_utils.DynamicCache`."
 
     def forward(self, x, dc):
         return x @ (
@@ -263,6 +263,33 @@ class NeuronDynamicCache(torch.nn.Module):
 
         cache = transformers.cache_utils.DynamicCache(1)
         cache.update(torch.ones((3, 8)).to(device), (torch.ones((3, 8)) * 2).to(device), 0)
-        return {"x": torch.randn(3, 8), "dc": cache}
+        return {"x": torch.randn(3, 8).to(device), "dc": cache}
+
+    config = MakeConfig(download=False, to_tuple=False)
+
+
+class NeuronMambaCache(torch.nn.Module):
+    "Dummy module with a :class:`transformers.cache_utils.MambaCache`."
+
+    def forward(self, x, dc):
+        return x @ (torch.cat([dc.conv_states, dc.ssm_states], axis=-1))
+
+    def _get_random_inputs(self, device: str):
+        import transformers
+
+        class _config:
+            def __init__(self):
+                self.intermediate_size = 8
+                self.state_size = 16
+                self.conv_kernel = 32
+                self.num_hidden_layers = 64
+                self.dtype = torch.float32
+
+        cache = transformers.cache_utils.MambaCache(_config(), batch_size=1)
+        cache.conv_states += 1
+        cache.ssm_states += 2
+        cache.conv_states = cache.conv_states.to(device).to(torch.float32)
+        cache.ssm_states = cache.ssm_states.to(device).to(torch.float32)
+        return {"x": torch.randn(1, 1, 3, 8).to(device), "dc": cache}
 
     config = MakeConfig(download=False, to_tuple=False)
