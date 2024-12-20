@@ -507,6 +507,8 @@ def flatten_object(x: Any) -> List[Any]:
     if x.__class__.__name__ == "DynamicCache":
         res = flatten_object(x.key_cache) + flatten_object(x.value_cache)
         return tuple(res)
+    if x.__class__.__name__ == "MambaCache":
+        return tuple(x.conv_states, x.ssm_states)
     raise TypeError(f"Unexpected type {type(x)} for x")
 
 

@@ -65,6 +65,38 @@ def get_input_cache(
             )
         return cache
 
+    if input_cache_class is transformers.cache_utils.MambaCache:
+
+        class _config:
+            def __init__(self):
+                self.intermediate_size = 8192
+                self.state_size = 16
+                self.conv_kernel = 4
+                self.num_hidden_layers = num_hidden_layers
+                self.dtype = torch.float32
+
+        # self.conv_states: torch.Tensor = torch.zeros(
+        #     config.num_hidden_layers,     1
+        #     self.max_batch_size,          2
+        #     self.intermediate_size,       8192
+        #     self.conv_kernel_size,        4
+        #     device=device,
+        #     dtype=dtype,
+        # )
+        # self.ssm_states: torch.Tensor = torch.zeros(
+        #     config.num_hidden_layers,     1
+        #     self.max_batch_size,          2
+        #     self.intermediate_size,       8192
+        #     self.ssm_state_size,          16
+        #     device=device,
+        #     dtype=dtype,
+        # )
+
+        cache = transformers.cache_utils.MambaCache(_config(), batch_size=batch_size)
+        cache.conv_states = torch.randn(cache.conv_states.shape).to(torch.float32)
+        cache.ssm_states = torch.randn(cache.ssm_states.shape).to(torch.float32)
+        return cache
+
     raise NotImplementedError(
         f"get_input_cache not implemented for input_cache_class={input_cache_class}"
     )
@@ -153,7 +185,6 @@ def finalize_llm_setup(
             attention_mask=torch.ones((batch_size, sequence_length + sequence_length2))
             .to(torch.int64)
             .to(device),
-            past_key_values=cache,
         )
         inputs2 = dict(
             input_ids=torch.randint(
@@ -165,10 +196,7 @@ def finalize_llm_setup(
                     sequence_length + sequence_inc + sequence_length2 + sequence_inc,
                 )
             ).to(torch.int64),
-            past_key_values=cache2,
         )
-        n = len(cache.key_cache)
-        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
         shapes.update(
             {
                 "input_ids": {0: batch, 1: seq_length},
@@ -176,12 +204,27 @@ def finalize_llm_setup(
                     0: batch,
                     1: torch.export.Dim.DYNAMIC,  # cache_length + seq_length
                 },
-                "past_key_values": [
-                    [{0: batch, 2: cache_length} for _ in range(n)],  # 0: batch,
-                    [{0: batch, 2: cache_length} for _ in range(n)],  # 0: batch,
-                ],
             }
         )
+        if input_cache_class is None or input_cache_class.__name__ == "DynamicCache":
+            n = len(cache.key_cache)
+            cache_length = torch.export.Dim("cache_length", min=1, max=4096)
+            shapes.update(
+                {
+                    "past_key_values": [
+                        [{0: batch, 2: cache_length} for _ in range(n)],
+                        [{0: batch, 2: cache_length} for _ in range(n)],
+                    ],
+                }
+            )
+            inputs["past_key_values"] = cache
+            inputs2["past_key_values"] = cache2
+        elif input_cache_class.__name__ == "MambaCache":
+            shapes.update({"cache_params": [{1: batch}, {1: batch}]})
+            inputs["cache_params"] = cache
+            inputs2["cache_params"] = cache2
+        else:
+            raise AssertionError(f"Unexpected cache class {input_cache_class}")
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())

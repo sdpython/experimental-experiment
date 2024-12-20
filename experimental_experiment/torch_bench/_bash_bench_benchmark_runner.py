@@ -513,6 +513,9 @@ class BenchmarkRunner:
             else:
                 res.extend(value.key_cache)
                 res.extend(value.value_cache)
+        elif value.__class__.__name__ == "MambaCache":
+            res.append(value.conv_states)
+            res.append(value.ssm_states)
         else:
             res.append(value)
         return tuple(res)
