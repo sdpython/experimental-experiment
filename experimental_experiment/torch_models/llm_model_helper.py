@@ -1,178 +1,122 @@
-import enum
 from typing import Any, Dict, Tuple, Optional, Union
 import numpy as np
 from . import assert_found
+from .llm_model_setup import LLMInputKind, finalize_llm_setup, finalize_llm_vision_setup
 
 
-class LLMInputKind(enum.IntEnum):
+######
+# Bert
+######
+
+
+def get_all_mini_ml_l6_v1(
+    inputs_as_tuple: bool = False,
+    input_cache: bool = True,
+    batch_size: int = 1,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Dict[str, Any]:
     """
-    Defines the dummy inputs which can be generated for a LLM vision model.
+    Gets a non initialized model.
 
-    Example::
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param batch_size: batch size
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: dicionary
 
-        K = LLMInputKind.
+    See `all-MiniLM-L6-v1
+    <https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1/blob/main/config.json>`_.
 
-        K.input_ids
-        K.input_ids | K.position_ids | K.attention_mask
-        K.input_ids | K.position_ids | K.attention_mask | K.images | K.past_key_values
+    Model forward signature:
 
-    Remarks, for Phi 3.5:
+    ::
 
-    * images means two new inputs pixel_value Ix5x3x336x336 where I is the number of images
-      and image_size Ix2 which contains the image sizes
-    * min(LLMInputKind.input_ids) = -I where I is still the number of images.
-    * the number of caches is equal to the number of hidden kayers
+        def forward(
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            token_type_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            encoder_hidden_states: Optional[torch.Tensor] = None,
+            encoder_attention_mask: Optional[torch.Tensor] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+        ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
 
-    What does batch size means? Multiple prompts? The image embedding does not seem
-    to support that.
     """
+    import transformers
 
-    # possible scenario for iteration 0
-    input_ids = 4  # input_dis
-    position_ids = 8  # position_ids
-    attention_mask = 16  # attention_mask
-    images = 32  # pixels_values, image_size
-    # possible values for iteration 1
-    past_key_values = 64  # caches
-    # everyyhing checked
-    ALL = 255
+    config = {
+        "_name_or_path": "nreimers/MiniLM-L6-H384-uncased",
+        "architectures": ["BertModel"],
+        "attention_probs_dropout_prob": 0.1,
+        "gradient_checkpointing": False,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "hidden_size": 384,
+        "initializer_range": 0.02,
+        "intermediate_size": 1536,
+        "layer_norm_eps": 1e-12,
+        "max_position_embeddings": 512,
+        "model_type": "bert",
+        "num_attention_heads": 12,
+        "num_hidden_layers": 6,
+        "pad_token_id": 0,
+        "position_embedding_type": "absolute",
+        "transformers_version": "4.8.2",
+        "type_vocab_size": 2,
+        "use_cache": True,
+        "vocab_size": 30522,
+    }
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.BertConfig(**config)
+    model = transformers.BertModel(conf)
+    model.eval()
+
+    res = finalize_llm_setup(
+        model,
+        batch_size,
+        max_token_id=30522,
+        cache_last_dim=32,
+        num_attention_heads=12,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        num_hidden_layers=config["num_hidden_layers"],
+        input_cache=input_cache,
+    )
+    if not input_cache:
+        return res
+
+    # We flatten the cache.
+    for k in ["inputs", "inputs2"]:
+        if k not in res:
+            continue
+        kv = res[k]["past_key_values"]
+        kv = [
+            (kv.key_cache[i], kv.value_cache[i], kv.key_cache[i], kv.value_cache[i])
+            for i in range(len(kv.key_cache))
+        ]
+        res[k]["past_key_values"] = kv
+
+    sh = res["dynamic_shapes"]["past_key_values"]
+    if sh:
+        sh1 = sh[0][0]
+        res["dynamic_shapes"]["past_key_values"] = [
+            tuple(sh1 for _ in range(4)) for s in range(config["num_hidden_layers"])
+        ]
+    return res
 
 
 ############
 # Phi Series
 ############
-
-
-def finalize_llm_setup(
-    model: Any,
-    batch_size: int,
-    max_token_id: int = 50285,
-    cache_last_dim: int = 80,
-    common_dynamic_shapes: bool = True,
-    inputs_as_tuple: bool = False,
-    num_hidden_layers: int = 2,
-    num_attention_heads: int = 32,
-    input_cache: bool = True,
-    device: str = "cpu",
-    seq_length_multiple: int = 1,
-) -> Dict[str, Any]:
-    """
-    Creates dummy inputs for a model ran as if it were the second iteration.
-    Inputs contains cache.
-    """
-    import torch
-    import transformers
-
-    batch = torch.export.Dim("batch", min=1, max=1024)
-    seq_length = torch.export.Dim("seq_length", min=1, max=4096)
-    if seq_length_multiple > 1:
-        seq_length = seq_length * seq_length_multiple
-
-    shapes = {}
-
-    sequence_length = 30
-    sequence_inc = 1
-    sequence_length2 = 3
-    if seq_length_multiple > 1:
-        sequence_length = (
-            (sequence_length + seq_length_multiple)
-            // seq_length_multiple
-            * seq_length_multiple
-        )
-        sequence_inc = seq_length_multiple
-        sequence_length2 = seq_length_multiple
-
-    if not input_cache:
-        dim = (batch_size, sequence_length)
-        inputs = dict(
-            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64).to(device),
-            attention_mask=torch.ones(*dim, dtype=torch.int64).to(device),
-        )
-        dim = (batch_size + 1, sequence_length + sequence_inc)
-        inputs2 = dict(
-            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64).to(device),
-            attention_mask=torch.ones(*dim, dtype=torch.int64).to(device),
-        )
-        shapes.update(
-            {
-                "input_ids": {0: batch, 1: seq_length},
-                "attention_mask": {0: batch, 1: seq_length},
-            }
-        )
-    else:
-        cache = transformers.cache_utils.DynamicCache(num_hidden_layers)
-        for i in range(num_hidden_layers):
-            cache.update(
-                torch.randn(
-                    batch_size, num_attention_heads, sequence_length, cache_last_dim
-                ).to(device),
-                torch.randn(
-                    batch_size, num_attention_heads, sequence_length, cache_last_dim
-                ).to(device),
-                i,
-            )
-        cache2 = transformers.cache_utils.DynamicCache(num_hidden_layers)
-        for i in range(num_hidden_layers):
-            cache2.update(
-                torch.randn(
-                    batch_size + 1,
-                    num_attention_heads,
-                    sequence_length + sequence_inc,
-                    cache_last_dim,
-                ).to(device),
-                torch.randn(
-                    batch_size + 1,
-                    num_attention_heads,
-                    sequence_length + sequence_inc,
-                    cache_last_dim,
-                ).to(device),
-                i,
-            )
-
-        inputs = dict(
-            input_ids=torch.randint(0, max_token_id, (batch_size, sequence_length2))
-            .to(torch.int64)
-            .to(device),
-            attention_mask=torch.ones((batch_size, sequence_length + sequence_length2))
-            .to(torch.int64)
-            .to(device),
-            past_key_values=cache,
-        )
-        inputs2 = dict(
-            input_ids=torch.randint(
-                0, max_token_id, (batch_size + 1, sequence_length2 + sequence_inc)
-            ).to(torch.int64),
-            attention_mask=torch.ones(
-                (
-                    batch_size + 1,
-                    sequence_length + sequence_inc + sequence_length2 + sequence_inc,
-                )
-            ).to(torch.int64),
-            past_key_values=cache2,
-        )
-        n = len(cache.key_cache)
-        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
-        shapes.update(
-            {
-                "input_ids": {0: batch, 1: seq_length},
-                "attention_mask": {
-                    0: batch,
-                    1: torch.export.Dim.DYNAMIC,  # cache_length + seq_length
-                },
-                "past_key_values": [
-                    [{0: batch, 2: cache_length} for _ in range(n)],  # 0: batch,
-                    [{0: batch, 2: cache_length} for _ in range(n)],  # 0: batch,
-                ],
-            }
-        )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-        shapes = tuple(shapes.values())
-
-    if common_dynamic_shapes:
-        return dict(inputs=inputs, model=model, dynamic_shapes=shapes, inputs2=inputs2)
-    return dict(inputs=inputs, model=model)
 
 
 def get_phi2(
@@ -414,91 +358,6 @@ def get_phi35_mini_instruct(
         num_hidden_layers=config["num_hidden_layers"],
         input_cache=input_cache,
     )
-
-
-def finalize_llm_vision_setup(
-    model: Any,
-    input_kind: LLMInputKind,
-    batch_size: int,
-    max_token_id: int = 50285,
-    cache_last_dim: int = 80,
-    common_dynamic_shapes: bool = True,
-    inputs_as_tuple: bool = False,
-    num_hidden_layers: int = 2,
-    device: str = "cpu",
-) -> Dict[str, Any]:
-    """
-    Creates dummy inputs for a model ran as if it were the second iteration.
-    Inputs contains cache.
-    """
-    import torch
-
-    if input_kind == LLMInputKind.input_ids:
-        dim = (1, 30)
-        inputs = dict(input_ids=torch.randint(0, max_token_id, dim).to(torch.int64))
-        shapes = {
-            "input_ids": {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")}
-        }
-    elif input_kind == LLMInputKind.input_ids | LLMInputKind.attention_mask:
-        dim = (1, 30)
-        inputs = dict(
-            input_ids=torch.randint(0, max_token_id, dim).to(torch.int64),
-            attention_mask=torch.ones(*dim, dtype=torch.int64),
-        )
-        batch = torch.export.Dim("batch")
-        seq_length = torch.export.Dim("seq_length")
-        shapes = {
-            "input_ids": {0: batch, 1: seq_length},
-            "attention_mask": {0: batch, 1: seq_length},
-        }
-    else:
-        from .dummy_inputs.llm_dummy_inputs import (
-            restore_dummy_inputs_for_phi35_vision_instruct,
-        )
-
-        input_cache = input_kind & LLMInputKind.past_key_values
-        data = restore_dummy_inputs_for_phi35_vision_instruct(
-            num_hidden_layers=num_hidden_layers,
-            n_iteration=1 if input_cache else 0,
-            with_images=input_kind & LLMInputKind.images,
-            device=device,
-        )
-        args, kwargs = data
-        inputs = {}
-        shapes = {}
-
-        batch = torch.export.Dim("batch", min=1, max=1024)
-        seq_length = torch.export.Dim("seq_length", min=1, max=4096)
-        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
-        if input_kind & LLMInputKind.input_ids:
-            inputs["input_ids"] = kwargs["input_ids"]
-            shapes["input_ids"] = {0: batch, 1: seq_length} if not input_cache else {0: batch}
-        if input_kind & LLMInputKind.position_ids:
-            inputs["position_ids"] = kwargs["position_ids"]
-            shapes["position_ids"] = {0: batch, 1: seq_length}
-        if input_kind & LLMInputKind.attention_mask:
-            inputs["attention_mask"] = kwargs["attention_mask"]
-            shapes["attention_mask"] = {0: batch, 1: cache_length + 1}
-        if input_kind & LLMInputKind.past_key_values:
-            inputs["past_key_values"] = kwargs["past_key_values"]
-            n = len(data[1]["past_key_values"].key_cache)
-            shapes["past_key_values"] = [
-                [{0: batch, 2: cache_length} for _ in range(n)],
-                [{0: batch, 2: cache_length} for _ in range(n)],
-            ]
-        if input_kind & LLMInputKind.images:
-            inputs["pixel_values"] = kwargs["pixel_values"]
-            inputs["image_sizes"] = kwargs["image_sizes"]
-            n_images = torch.export.Dim("n_images", min=0, max=1024)
-            shapes["pixel_values"] = shapes["image_sizes"] = {0: n_images}
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-        shapes = tuple(shapes.values())
-
-    if common_dynamic_shapes:
-        return dict(model=model, inputs=inputs, dynamic_shapes=shapes)
-    return dict(model=model, inputs=inputs)
 
 
 def get_phi35_vision_instruct(
@@ -1003,23 +862,26 @@ def get_ai21_jamba_15_mini(
 
 
 def get_falcon_mamba_7b(
-    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+    batch_size: int = 2,
+    input_cache: bool = True,
+    inputs_as_tuple: bool = False,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
     Gets a non initialized model.
 
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param batch_size: batch size
+    :param input_cache: generate data for this iteration with or without cache
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: model, inputs
+    :return: dictionary
 
     See `flacon-mamba-7b/config.json
     <https://huggingface.co/tiiuae/falcon-mamba-7b/blob/main/config.json>`_.
     """
-    import torch
     import transformers
-
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
 
     config = {
         "_name_or_path": "./",
@@ -1068,169 +930,23 @@ def get_falcon_mamba_7b(
     model = transformers.FalconMambaForCausalLM(conf)
     model.eval()
 
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 65024, dim).to(torch.int64),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
-    )
-
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
-
-    return model, inputs
-
-
-######
-# Bert
-######
-
-
-def get_all_mini_ml_l6_v1(
-    inputs_as_tuple: bool = False,
-    input_cache: bool = True,
-    batch_size: int = 1,
-    common_dynamic_shapes: bool = False,
-    **kwargs,
-) -> Dict[str, Any]:
-    """
-    Gets a non initialized model.
-
-    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :param batch_size: batch size
-    :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: dicionary
-
-    See `all-MiniLM-L6-v1
-    <https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1/blob/main/config.json>`_.
-
-    Model forward signature:
-
-    ::
-
-        def forward(
-            self,
-            input_ids: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            token_type_ids: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.Tensor] = None,
-            head_mask: Optional[torch.Tensor] = None,
-            inputs_embeds: Optional[torch.Tensor] = None,
-            encoder_hidden_states: Optional[torch.Tensor] = None,
-            encoder_attention_mask: Optional[torch.Tensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-        ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-
-    """
-    import transformers
-
-    config = {
-        "_name_or_path": "nreimers/MiniLM-L6-H384-uncased",
-        "architectures": ["BertModel"],
-        "attention_probs_dropout_prob": 0.1,
-        "gradient_checkpointing": False,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.1,
-        "hidden_size": 384,
-        "initializer_range": 0.02,
-        "intermediate_size": 1536,
-        "layer_norm_eps": 1e-12,
-        "max_position_embeddings": 512,
-        "model_type": "bert",
-        "num_attention_heads": 12,
-        "num_hidden_layers": 6,
-        "pad_token_id": 0,
-        "position_embedding_type": "absolute",
-        "transformers_version": "4.8.2",
-        "type_vocab_size": 2,
-        "use_cache": True,
-        "vocab_size": 30522,
-    }
-    assert_found(kwargs, config)
-    config.update(**kwargs)
-    conf = transformers.BertConfig(**config)
-    model = transformers.BertModel(conf)
-    model.eval()
-
-    res = finalize_llm_setup(
+    return finalize_llm_setup(
         model,
         batch_size,
-        max_token_id=30522,
-        cache_last_dim=32,
-        num_attention_heads=12,
+        max_token_id=65024,
+        cache_last_dim=64,
         common_dynamic_shapes=common_dynamic_shapes,
         inputs_as_tuple=inputs_as_tuple,
         num_hidden_layers=config["num_hidden_layers"],
         input_cache=input_cache,
-    )
-    if not input_cache:
-        return res
-
-    # We flatten the cache.
-    for k in ["inputs", "inputs2"]:
-        if k not in res:
-            continue
-        kv = res[k]["past_key_values"]
-        kv = [
-            (kv.key_cache[i], kv.value_cache[i], kv.key_cache[i], kv.value_cache[i])
-            for i in range(len(kv.key_cache))
-        ]
-        res[k]["past_key_values"] = kv
-
-    sh = res["dynamic_shapes"]["past_key_values"]
-    if sh:
-        sh1 = sh[0][0]
-        res["dynamic_shapes"]["past_key_values"] = [
-            tuple(sh1 for _ in range(4)) for s in range(config["num_hidden_layers"])
-        ]
-    return res
-
-
-def get_llama32_9b_vision(
-    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
-) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
-    """
-    Gets a non initialized model.
-
-    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
-    :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: model, inputs
-
-    See `MLlama
-    <https://huggingface.co/docs/transformers/main/en/model_doc/mllama>`_.
-    """
-    import torch
-    import transformers
-
-    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
-
-    config = {}
-    config.update(**kwargs)
-
-    vision_config = transformers.MllamaVisionConfig(**config)
-    text_config = transformers.MllamaTextConfig(**config)
-    configuration = transformers.MllamaConfig(vision_config, text_config)
-    model = transformers.MllamaForConditionalGeneration(configuration)
-    model.eval()
-
-    dim = (1, 30)
-    inputs = dict(
-        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
-        pixel_values=torch.rand((1, 1, 1, 3, 512, 1080)).to(torch.float16),
-        aspect_ratio_mask=None,
-        aspect_ratio_ids=torch.from_numpy(np.array([[2]], dtype=np.int32)),
-        attention_mask=torch.ones(*dim, dtype=torch.int64),
+        seq_length_multiple=8,
+        input_cache_class=transformers.cache_utils.MambaCache,
     )
 
-    if inputs_as_tuple:
-        inputs = tuple(inputs.values())
 
-    return model, inputs
+#######
+# Llama
+#######
 
 
 def get_smollm_1_7b(
@@ -1248,7 +964,7 @@ def get_smollm_1_7b(
     :param input_cache: generate data for this iteration with or without cache
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param common_dynamic_shapes: if True returns dynamic shapes as well
-    :return: model, inputs
+    :return: dictionary
 
     See `SmolLM-1.7B
     <https://huggingface.co/HuggingFaceTB/SmolLM-1.7B/blob/main/config.json>`_.
@@ -1307,3 +1023,46 @@ def get_smollm_1_7b(
         input_cache=input_cache,
         seq_length_multiple=8,
     )
+
+
+def get_llama32_9b_vision(
+    inputs_as_tuple: bool = False, common_dynamic_shapes: bool = False, **kwargs
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :return: model, inputs
+
+    See `MLlama
+    <https://huggingface.co/docs/transformers/main/en/model_doc/mllama>`_.
+    """
+    import torch
+    import transformers
+
+    assert not common_dynamic_shapes, "dynamic shapes are not implemented"
+
+    config = {}
+    config.update(**kwargs)
+
+    vision_config = transformers.MllamaVisionConfig(**config)
+    text_config = transformers.MllamaTextConfig(**config)
+    configuration = transformers.MllamaConfig(vision_config, text_config)
+    model = transformers.MllamaForConditionalGeneration(configuration)
+    model.eval()
+
+    dim = (1, 30)
+    inputs = dict(
+        input_ids=torch.randint(0, 49152, dim).to(torch.int64),
+        pixel_values=torch.rand((1, 1, 1, 3, 512, 1080)).to(torch.float16),
+        aspect_ratio_mask=None,
+        aspect_ratio_ids=torch.from_numpy(np.array([[2]], dtype=np.int32)),
+        attention_mask=torch.ones(*dim, dtype=torch.int64),
+    )
+
+    if inputs_as_tuple:
+        inputs = tuple(inputs.values())
+
+    return model, inputs

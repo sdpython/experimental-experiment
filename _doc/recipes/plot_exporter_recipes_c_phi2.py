@@ -22,6 +22,9 @@ before or after, something like:
 
 Adding ``TORCH_LOGS="+dynamo" TORCHDYNAMO_VERBOSE=1`` prints out more information
 about dynamic shapes.
+
+Model
++++++
 """
 
 import copy
@@ -29,6 +32,7 @@ from typing import Any, Dict
 import onnx
 import torch
 import transformers
+from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.helpers import string_type
 from experimental_experiment.xbuilder import GraphBuilder, InferShapesOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -141,12 +145,28 @@ print("dynamic_shapes", dynamic_shapes)
 model(**copy.deepcopy(inputs))
 
 ###################################
+# Export
+# ++++++
+#
 # Let's export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
+
+try:
+    torch.onnx.export(model, (), kwargs=inputs, dynamic_shapes=dynamic_shapes, dynamo=True)
+except Exception as e:
+    print(f"export failed due to {e}")
+
+
+##################################
+# The export fails for a couple of reason but it is possible to patch the
+# code to make it work. All those modifications are put in place by
+# :func:`onnx_export_errors <experimental_experiment.torch_interpreter.onnx_export_errors>`
+# and reverted after the export is done. Among other things, this function registers
+# serialization functions as shown in example
+# :ref:`l-plot-torch-export-with-dynamic-cache-201`.
 
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
-
 
 with bypass_export_some_errors(
     patch_transformers=True, replace_dynamic_cache=True, verbose=1
@@ -171,3 +191,8 @@ with bypass_export_some_errors(
 onx = onnx.load("plot_exporter_recipes_c_phi2.onnx")
 gr = GraphBuilder(onx, infer_shapes_options=InferShapesOptions.NONE)
 print(gr.pretty_text())
+
+########################################
+# Visually.
+
+plot_dot(onx)

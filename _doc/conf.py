@@ -125,6 +125,12 @@ sphinx_gallery_conf = {
     ],
     # sorting
     "within_subsection_order": "ExampleTitleSortKey",
+    # errors
+    "abort_on_example_error": True,
+    # recommendation
+    "recommender": {"enable": True, "n_examples": 3, "min_df": 3, "max_df": 0.9},
+    # ignore capture for matplotib axes
+    "ignore_repr_types": "matplotlib\\.(text|axes)",
 }
 
 if pv.Version(torch.__version__) < pv.Version("2.7"):
@@ -159,6 +165,8 @@ epkg_dictionary = {
     "onnx-extended": "https://sdpython.github.io/doc/onnx-extended/dev/",
     "onnx-script": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
+    "onnxscript Tutorial": "https://onnxscript.ai/tutorial/index.html",
+    "Pattern-based Rewrite Using Rules With onnxscript": "https://onnxscript.ai/tutorial/rewriter/rewrite_patterns.html",
     "opsets": "https://onnx.ai/onnx/intro/concepts.html#what-is-an-opset-version",
     "pyinstrument": "https://pyinstrument.readthedocs.io/en/latest/",
     "psutil": "https://psutil.readthedocs.io/en/latest/",

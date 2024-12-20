@@ -651,11 +651,12 @@ class CustomTracer(torch.fx.Tracer):
             if hasattr(node.target, "name"):
                 if node.target.name() in {
                     "aten::view",
-                    "aten::detach_",  # outout = input
+                    "aten::detach_",  # output = input
                     "aten::add.Tensor",  # it happens when running
                     "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
                     "aten::mul.Tensor",
                     "aten::sub.Tensor",
+                    "aten::zeros",  # unused as it does not end up with '_'
                 }:
                     # This node cannot be one inplace modifications. The node is just not used.
                     cls.graph_erase_node(graph, node)

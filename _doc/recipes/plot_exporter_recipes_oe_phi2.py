@@ -7,6 +7,8 @@ torch.onnx.export and Phi-2
 Exports model `Phi-2 <https://huggingface.co/microsoft/phi-2>`_.
 We use a dummy model. The main difficulty is to set the dynamic shapes properly.
 
+Model
++++++
 """
 
 import copy
@@ -14,6 +16,7 @@ from typing import Any, Dict
 import onnx
 import torch
 import transformers
+from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.helpers import string_type, pretty_onnx
 
 
@@ -119,17 +122,32 @@ print("dynamic_shapes", dynamic_shapes)
 ###################################
 # Let's check it is working.
 # We need to copy the input before calling the model
-# because it modified the inputs and they are not properly
+# because it modifies the inputs and they are not properly
 # set up when the export starts.
 model(**copy.deepcopy(inputs))
 
 ###################################
-# Let's export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
+# Export
+# ++++++
+#
+# Let's export with :func:`torch.onnx.export`.
+
+try:
+    torch.onnx.export(model, (), kwargs=inputs, dynamic_shapes=dynamic_shapes, dynamo=True)
+except Exception as e:
+    print(f"export failed due to {e}")
+
+##################################
+# The export fails for a couple of reason but it is possible to patch the
+# code to make it work. All those modifications are put in place by
+# :func:`onnx_export_errors <experimental_experiment.torch_interpreter.onnx_export_errors>`
+# and reverted after the export is done. Among other things, this function registers
+# serialization functions as shown in example
+# :ref:`l-plot-torch-export-with-dynamic-cache-201`.
 
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
-
 
 with bypass_export_some_errors(
     patch_transformers=True, replace_dynamic_cache=True, verbose=1
@@ -145,7 +163,15 @@ with bypass_export_some_errors(
     ep.save("plot_exporter_recipes_oe_phi2.onnx")
 
 ########################################
+# Exported Model
+# ++++++++++++++
+#
 # Let's display the model.
 
 onx = onnx.load("plot_exporter_recipes_oe_phi2.onnx")
 print(pretty_onnx(onx))
+
+########################################
+# Visually.
+
+plot_dot(onx)
