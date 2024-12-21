@@ -304,7 +304,7 @@ class TestLlmModelHelper(ExtTestCase):
         )
 
         data = get_all_mini_ml_l6_v1(num_hidden_layers=1)
-        model, model_inputs = data["model"], data["model_inputs"]
+        model, model_inputs = data["model"], data["inputs"]
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 

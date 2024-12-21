@@ -105,12 +105,13 @@ def get_all_mini_ml_l6_v1(
         ]
         res[k]["past_key_values"] = kv
 
-    sh = res["dynamic_shapes"]["past_key_values"]
-    if sh:
-        sh1 = sh[0][0]
-        res["dynamic_shapes"]["past_key_values"] = [
-            tuple(sh1 for _ in range(4)) for s in range(config["num_hidden_layers"])
-        ]
+    if common_dynamic_shapes:
+        sh = res["dynamic_shapes"]["past_key_values"]
+        if sh:
+            sh1 = sh[0][0]
+            res["dynamic_shapes"]["past_key_values"] = [
+                tuple(sh1 for _ in range(4)) for s in range(config["num_hidden_layers"])
+            ]
     return res
 
 
@@ -866,6 +867,7 @@ def get_falcon_mamba_7b(
     input_cache: bool = True,
     inputs_as_tuple: bool = False,
     common_dynamic_shapes: bool = False,
+    device: str = "cpu",
     **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
@@ -874,13 +876,15 @@ def get_falcon_mamba_7b(
     :param inputs_as_tuple: returns dummy inputs as a dictionary or not
     :param batch_size: batch size
     :param input_cache: generate data for this iteration with or without cache
-    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``:
+    :param device: device
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :return: dictionary
 
     See `flacon-mamba-7b/config.json
     <https://huggingface.co/tiiuae/falcon-mamba-7b/blob/main/config.json>`_.
     """
+    import torch
     import transformers
 
     config = {
@@ -930,7 +934,7 @@ def get_falcon_mamba_7b(
     model = transformers.FalconMambaForCausalLM(conf)
     model.eval()
 
-    return finalize_llm_setup(
+    res = finalize_llm_setup(
         model,
         batch_size,
         max_token_id=65024,
@@ -941,7 +945,14 @@ def get_falcon_mamba_7b(
         input_cache=input_cache,
         seq_length_multiple=8,
         input_cache_class=transformers.cache_utils.MambaCache,
+        device=device,
     )
+    res["inputs"]["cache_position"] = torch.arange(0, config["conv_kernel"], device=device)
+    if "inputs2" in res:
+        res["inputs2"]["cache_position"] = torch.arange(
+            0, config["conv_kernel"], device=device
+        )
+    return res
 
 
 #######

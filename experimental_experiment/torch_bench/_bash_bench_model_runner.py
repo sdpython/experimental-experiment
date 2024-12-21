@@ -2058,7 +2058,34 @@ class ModelRunner:
                 assert isinstance(
                     inp, transformers.cache_utils.MambaCache
                 ), f"Unexpected type {type(inp)}"
-                raise NotImplementedError("Not yet implemented for MambaCache")
+
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append([{}, {}])
+                    continue
+                dyn_input_shapes.append(
+                    [
+                        self._get_input_shape_tensor(
+                            export=export,
+                            input_shape=inp.conv_states,
+                            dyn_shape=dyn_shape[0],
+                            dyn_values=dyn_values,
+                            i=i,
+                        ),
+                        self._get_input_shape_tensor(
+                            export=export,
+                            input_shape=inp.ssm_states,
+                            dyn_shape=dyn_shape[1],
+                            dyn_values=dyn_values,
+                            i=i,
+                        ),
+                    ]
+                )
+                continue
 
             new_shape = self._get_input_shape_tensor(
                 export=export,
