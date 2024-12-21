@@ -780,6 +780,7 @@ def get_ai21_jamba_15_mini(
     input_cache: bool = True,
     batch_size: int = 1,
     common_dynamic_shapes: bool = False,
+    device: str = "cpu",
     **kwargs,
 ) -> Dict[str, Any]:
     """
@@ -789,11 +790,13 @@ def get_ai21_jamba_15_mini(
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :param device: device
     :return: dictionary
 
     See `ai21labs/AI21-Jamba-1.5-Mini/config.json
     <https://huggingface.co/ai21labs/AI21-Jamba-1.5-Mini/blob/main/config.json>`_.
     """
+    import torch
     import transformers
 
     config = {
@@ -850,7 +853,7 @@ def get_ai21_jamba_15_mini(
     model = transformers.JambaForCausalLM(conf)
     model.eval()
 
-    return finalize_llm_setup(
+    res = finalize_llm_setup(
         model,
         batch_size,
         max_token_id=63028,
@@ -859,7 +862,16 @@ def get_ai21_jamba_15_mini(
         inputs_as_tuple=inputs_as_tuple,
         num_hidden_layers=config["num_hidden_layers"],
         input_cache=input_cache,
+        device=device,
     )
+    res["inputs"]["attention_mask"] = torch.ones(
+        res["inputs"]["input_ids"].shape, dtype=torch.float32, device=device
+    )
+    if "inputs2" in res:
+        res["inputs2"]["attention_mask"] = torch.ones(
+            res["inputs2"]["input_ids"].shape, dtype=torch.float32, device=device
+        )
+    return res
 
 
 def get_falcon_mamba_7b(
