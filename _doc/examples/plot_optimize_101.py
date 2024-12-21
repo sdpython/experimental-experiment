@@ -1,9 +1,9 @@
 """
 .. _l-plot-optimize-101:
 
-=======================
-101: Graph Optimization
-=======================
+=======================================================
+101: Onnx Model Optimization based on Pattern Rewriting
+=======================================================
 
 This example shows how to optimize a graph using pattern optimization.
 The graph was obtained by running a dummy llama model.

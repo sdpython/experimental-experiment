@@ -19,10 +19,10 @@ class TestOnnxExportErrors(ExtTestCase):
 
         class _config:
             def __init__(self):
-                self.intermediate_size = 16
+                self.intermediate_size = 8
                 self.state_size = 16
-                self.conv_kernel = 16
-                self.num_hidden_layers = 16
+                self.conv_kernel = 32
+                self.num_hidden_layers = 64
                 self.dtype = torch.float16
 
         cache = MambaCache(_config(), batch_size=1)
@@ -46,10 +46,10 @@ class TestOnnxExportErrors(ExtTestCase):
 
         class _config:
             def __init__(self):
-                self.intermediate_size = 16
+                self.intermediate_size = 8
                 self.state_size = 16
-                self.conv_kernel = 16
-                self.num_hidden_layers = 16
+                self.conv_kernel = 32
+                self.num_hidden_layers = 64
                 self.dtype = torch.float16
 
         class Model(torch.nn.Module):
@@ -58,7 +58,7 @@ class TestOnnxExportErrors(ExtTestCase):
 
         with bypass_export_some_errors():
             cache = MambaCache(_config(), batch_size=1)
-            torch.export.export(Model(), (torch.ones(16, 16), cache))
+            torch.export.export(Model(), (torch.ones(8, 32), cache))
 
 
 if __name__ == "__main__":

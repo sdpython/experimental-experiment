@@ -107,8 +107,13 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         return "str"
     if isinstance(obj, slice):
         return "slice"
+
+    # others classes
+
     if type(obj).__name__ == "MambaCache":
-        return "MambaCache(**)"
+        c = string_type(obj.conv_states, with_shape=with_shape, with_min_max=with_min_max)
+        d = string_type(obj.ssm_states, with_shape=with_shape, with_min_max=with_min_max)
+        return f"MambaCache(conv_states={c}, ssm_states={d})"
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):
         # torch.fx.node.Node
         return f"%{obj.target}"

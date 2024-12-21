@@ -308,6 +308,21 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
                         verbose=30,
                     )
 
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.5")
+    def test_mamba_cache_custom_static(self):
+        for exporter in ["custom"]:
+            for dyn in [False]:
+                with self.subTest(exporter=exporter, dynamic=dyn):
+                    self._export_cmd(
+                        exporter,
+                        "101DummyMambaCache",
+                        dynamic=dyn,
+                        check_file=False,
+                        debug=False,
+                        verbose=30,
+                    )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

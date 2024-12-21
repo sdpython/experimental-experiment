@@ -9,6 +9,7 @@ to the original model.
 .. runpython::
     :showcode:
     :rst:
+    :toggle: code
 
     import inspect
     import textwrap

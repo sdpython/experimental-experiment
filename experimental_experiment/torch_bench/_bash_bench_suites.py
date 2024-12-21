@@ -30,8 +30,10 @@ class UntrainedRunner(BenchmarkRunner):
         cls.MODELS.update(
             {
                 # diffusion
-                "SableDiffusion2Unet": get_stable_diffusion_2_unet,
-                # LLM
+                "StableDiffusion2Unet": get_stable_diffusion_2_unet,
+                # LLM simple
+                "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
+                # LLM with Cache
                 "AI21Jamba15MiniLM_1LayerNoCache": (
                     lambda: (
                         get_ai21_jamba_15_mini(
@@ -48,6 +50,18 @@ class UntrainedRunner(BenchmarkRunner):
                     lambda: (
                         get_ai21_jamba_15_mini(
                             num_hidden_layers=1,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(replace_dynamic_cache=True, strict=False),
+                    )
+                ),
+                "AI21Jamba15MiniLM_2Layer": (
+                    lambda: (
+                        get_ai21_jamba_15_mini(
+                            num_hidden_layers=2,
                             input_cache=True,
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
@@ -80,8 +94,78 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False, replace_dynamic_cache=False),
                     )
                 ),
-                "FalconMamba7bLM": get_falcon_mamba_7b,
-                "Llama2Layer": (lambda: get_llama_model_layer(num_hidden_layers=2)),
+                "AllMiniLML6v1_2Layer": (
+                    lambda: (
+                        get_all_mini_ml_l6_v1(
+                            num_hidden_layers=2,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=False),
+                    )
+                ),
+                "AllMiniLML6v1_2LayerNoCache": (
+                    lambda: (
+                        get_all_mini_ml_l6_v1(
+                            num_hidden_layers=2,
+                            input_cache=False,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=False),
+                    )
+                ),
+                "FalconMamba7bLM_1LayerNoCache": (
+                    lambda: (
+                        get_falcon_mamba_7b(
+                            num_hidden_layers=1,
+                            input_cache=False,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        {},
+                    )
+                ),
+                "FalconMamba7bLM_2LayerNoCache": (
+                    lambda: (
+                        get_falcon_mamba_7b(
+                            num_hidden_layers=1,
+                            input_cache=False,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        {},
+                    )
+                ),
+                "FalconMamba7bLM_1Layer": (
+                    lambda: (
+                        get_falcon_mamba_7b(
+                            num_hidden_layers=1,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        {},
+                    )
+                ),
+                "FalconMamba7bLM_2Layer": (
+                    lambda: (
+                        get_falcon_mamba_7b(
+                            num_hidden_layers=1,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        {},
+                    )
+                ),
                 "Llama_9b_vision_8Layer": (lambda: get_llama32_9b_vision(num_hidden_layers=8)),
                 "Phi2LM_1LayerNoCache": (
                     lambda: (

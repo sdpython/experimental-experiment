@@ -1,105 +1,15 @@
 import contextlib
 import inspect
 from typing import Any, Callable, Dict, List, Tuple, Union
-
-
-def flatten_mamba_cache(
-    mamba_cache: "MambaCache",  # noqa: F821
-) -> Tuple[List[Any], "torch.utils._pytree.Context"]:  # noqa: F821
-    flat = [
-        (k, getattr(mamba_cache, k))
-        for k in [
-            "max_batch_size",  # new in transformers==4.47
-            "intermediate_size",
-            "ssm_state_size",
-            "conv_kernel_size",
-            "conv_states",
-            "ssm_states",
-        ]
-        if hasattr(mamba_cache, k)
-    ]
-    return [f[1] for f in flat], [f[0] for f in flat]
-
-
-def unflatten_mamba_cache(
-    values: List[Any],
-    context: "torch.utils._pytree.Context",  # noqa: F821
-    output_type=None,
-) -> "MambaCache":  # noqa: F821
-    class _config:
-        def __init__(self):
-            self.intermediate_size = 16
-            self.state_size = 16
-            self.conv_kernel = 16
-            self.num_hidden_layers = 16
-
-    from transformers.cache_utils import MambaCache
-
-    cache = MambaCache(_config(), batch_size=1, dtype=values[-1].dtype)
-    values = dict(zip(context, values))
-    for k, v in values.items():
-        setattr(cache, k, v)
-    return cache
-
-
-def flatten_with_keys_mamba_cache(d: Dict[Any, Any]) -> Tuple[
-    List[Tuple["torch.utils._pytree.KeyEntry", Any]],  # noqa: F821
-    "torch.utils._pytree.Context",  # noqa: F821
-]:
-    import torch
-
-    values, context = flatten_mamba_cache(d)
-    return [(torch.utils._pytree.MappingKey(k), v) for k, v in zip(context, values)], context
-
-
-def flatten_dynamic_cache(
-    dynamic_cache: "DynamicCache",  # noqa: F821
-) -> Tuple[List[Any], "torch.utils._pytree.Context"]:  # noqa: F821
-    flat = [
-        (k, getattr(dynamic_cache, k))
-        for k in ["key_cache", "value_cache"]
-        if hasattr(dynamic_cache, k)
-    ]
-    return [f[1] for f in flat], [f[0] for f in flat]
-
-
-def unflatten_dynamic_cache(
-    values: List[Any],
-    context: "torch.utils._pytree.Context",  # noqa: F821
-    output_type=None,
-) -> "DynamicCache":  # noqa: F821
-    from transformers.cache_utils import DynamicCache
-
-    cache = DynamicCache()
-    values = dict(zip(context, values))
-    for k, v in values.items():
-        setattr(cache, k, v)
-    return cache
-
-
-def unflatten_pached_dynamic_cache(
-    values: List[Any],
-    context: "torch.utils._pytree.Context",  # noqa: F821
-    output_type=None,
-) -> "DynamicCache":  # noqa: F821
-
-    from .patches.patch_transformers import patched_DynamicCache
-
-    cache = patched_DynamicCache()
-    values = dict(zip(context, values))
-    for k, v in values.items():
-        setattr(cache, k, v)
-    return cache
-
-
-def flatten_with_keys_dynamic_cache(d: Dict[Any, Any]) -> Tuple[
-    List[Tuple["torch.utils._pytree.KeyEntry", Any]],  # noqa: F821
-    "torch.utils._pytree.Context",  # noqa: F821
-]:
-    import torch
-
-    values, context = flatten_dynamic_cache(d)
-    return [(torch.utils._pytree.MappingKey(k), v) for k, v in zip(context, values)], context
+from .onnx_export_serialization import (
+    flatten_with_keys_dynamic_cache,
+    flatten_dynamic_cache,
+    unflatten_dynamic_cache,
+    unflatten_pached_dynamic_cache,
+    flatten_mamba_cache,
+    flatten_with_keys_mamba_cache,
+    unflatten_mamba_cache,
+)
 
 
 def _catch_produce_guards_and_solve_constraints(
@@ -140,10 +50,14 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
     import torch
 
     try:
-        from transformers.cache_utils import DynamicCache, MambaCache
+        from transformers.cache_utils import DynamicCache
+    except ImportError:
+        DynamicCache = None
+
+    try:
+        from transformers.cache_utils import MambaCache
     except ImportError:
         MambaCache = None
-        DynamicCache = None
 
     # MambaCache
     unregistered_mamba_cache = True
@@ -268,8 +182,7 @@ def bypass_export_some_errors(
     * reduce errors due to shape inference
     * replaces :class:`transformers.cache_utils.DynamicCache` with
       :class:`patched_DynamicCache
-      <experimental_experiment.torch_interpreter.
-      patches.patch_transformers.patched_DynamicCache>`
+      <experimental_experiment.torch_interpreter.patches.patch_transformers.patched_DynamicCache>`
 
     Serialization issues happen when a module takes one input or output
     has a type :func:`torch.export.export` cannot serialize.
@@ -487,8 +400,7 @@ def replacement_before_exporting(args: Any) -> Any:
     """
     Does replacements on the given inputs such replacing
     :class:`transformers.cache_utils.DynamicCache` by
-    :class:`experimental_experiment.torch_interpreter.patches.
-    patched_transformers.patched_DynamicCache`.
+    :class:`experimental_experiment.torch_interpreter.patches.patched_transformers.patched_DynamicCache`.
     """
     if args is None:
         return None

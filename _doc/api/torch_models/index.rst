@@ -13,6 +13,7 @@ experimental_experiment.torch_models
     dump_helper
     llama_helper
     llm_model_helper
+    llm_model_setup
     mistral_helper
     phi3_helper
     phi_helper

@@ -1,7 +1,6 @@
 import unittest
 from typing import Optional
 from onnx.reference import ReferenceEvaluator
-import torch
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
@@ -18,6 +17,7 @@ class TestTorchOnnxExport(ExtTestCase):
     @requires_torch("2.5")
     @hide_stdout()
     def test_oxs_linear_regression_dynamic_derived_batch(self):
+        import torch
 
         class TorchLinearRegression(torch.nn.Module):
             def __init__(self, n_dims: int, n_targets: int):
@@ -135,6 +135,31 @@ class TestTorchOnnxExport(ExtTestCase):
         # expected = model(input_ids)
         ep = torch.export.export(model, (input_ids,))
         self.assertIn("target=torch.ops.aten.expand.default", str(ep.graph))
+
+    def test_torch_upsample(self):
+        import torch
+        from experimental_experiment.torch_interpreter import to_onnx
+
+        # https://github.com/pytorch/pytorch/issues/142866
+        torch.use_deterministic_algorithms(True)
+        upsample = torch.nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+        x = torch.randn(1, 3, 64, 64).to("cuda:0")
+        type(x.size()[0])
+        upsample(x)
+        onx = to_onnx(upsample, (x,))
+        self.assertNotEmpty(onx)
+        # torch.onnx.export(
+        #    upsample,
+        #    (x,),
+        #    "test_torch_upsample.onnx",
+        #    input_names=["x"],
+        #    output_names=["y"],
+        #    opset_version=18,
+        #    fallback=False,
+        #    report=True,
+        #    dump_exported_program=True,
+        #    dynamo=True,
+        # )
 
 
 if __name__ == "__main__":

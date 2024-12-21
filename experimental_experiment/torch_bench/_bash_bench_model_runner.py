@@ -208,7 +208,7 @@ class ModelRunner:
             return [cls._to_type_or_device(v, dtype_or_device) for v in o]
         if isinstance(o, tuple):
             return tuple(cls._to_type_or_device(v, dtype_or_device) for v in o)
-        if hasattr(o, "dtype"):
+        if hasattr(o, "dtype") and hasattr(o, "shape"):
             if isinstance(dtype_or_device, str) or o.dtype in {
                 torch.float32,
                 torch.float64,
@@ -275,6 +275,12 @@ class ModelRunner:
                 cp.key_cache[i] = o.key_cache[i].to(dtype_or_device)
             for i in range(len(o.value_cache)):
                 cp.value_cache[i] = o.value_cache[i].to(dtype_or_device)
+            return cp
+
+        if o.__class__.__name__ == "MambaCache":
+            cp = copy.deepcopy(o)
+            cp.conv_states = o.conv_states.to(dtype_or_device)
+            cp.ssm_states = o.ssm_states.to(dtype_or_device)
             return cp
 
         try:
@@ -436,12 +442,22 @@ class ModelRunner:
         """Returns the devices."""
         devices = []
         for i in self.inputs:
-            if i is None or isinstance(i, (int, float)):
+            if (
+                i is None
+                or isinstance(i, (int, float))
+                or (isinstance(i, (list, tuple)) and not i)
+            ):
                 devices.append(None)
             elif hasattr(i, "get_device"):
                 devices.append(i.get_device())
             elif i.__class__.__name__ == "DynamicCache" and hasattr(i, "key_cache"):
                 devices.append(i.key_cache[0].get_device() if i.key_cache else None)
+            elif i.__class__.__name__ == "MambaCache" and hasattr(i, "conv_states"):
+                devices.append(i.conv_states.get_device())
+            elif (
+                isinstance(i, list) and i and isinstance(i[0], tuple)
+            ):  # a flattened cache (Bert)
+                devices.append(i[0][0].get_device())
             else:
                 raise AssertionError(f"Unable to process type {type(i)}")
         return devices
@@ -1802,21 +1818,36 @@ class ModelRunner:
                     f"dynamic_shapes[i]={dynamic_shapes[i]}"
                 )
                 assert all(
-                    x is None or isinstance(x, torch.Tensor) for x in inp
+                    x is None or isinstance(x, (torch.Tensor, tuple)) for x in inp
                 ), f"Unexpected type in input(list) {i}, {[type(x) for x in inp]}"
                 assert len(dynamic_shapes[i]) == len(inp), (
                     f"Length mismatch len(dynamic_shapes[i])={len(dynamic_shapes[i])} "
                     f"len(inp)={len(inp)}"
                 )
+
                 new_inputs = []
                 for x, ds in zip(inp, dynamic_shapes[i]):
                     if x is None:
                         new_inputs.append(x)
                         continue
-                    nds = self._make_export_new_dynamic_shape(
-                        x.shape, ds, dyn_values=dyn_values, i=i
-                    )
-                    new_inputs.append(x if nds == ds else x.expand(nds))
+                    if isinstance(x, tuple):
+                        nds = tuple(
+                            self._make_export_new_dynamic_shape(
+                                x_.shape, ds_, dyn_values=dyn_values, i=i
+                            )
+                            for x_, ds_ in zip(x, ds)
+                        )
+                        new_inputs.append(
+                            tuple(
+                                x_ if nds_ == ds_ else x_.expand(nds_)
+                                for x_, ds_, nds_ in zip(x, ds, nds)
+                            )
+                        )
+                    else:
+                        nds = self._make_export_new_dynamic_shape(
+                            x.shape, ds, dyn_values=dyn_values, i=i
+                        )
+                        new_inputs.append(x if nds == ds else x.expand(nds))
                 dyn_inputs.append(new_inputs)
                 continue
 
@@ -1840,6 +1871,14 @@ class ModelRunner:
                     new_input.value_cache[k] = inp.value_cache[k].expand(new_shape)
                 dyn_inputs.append(new_input)
                 continue
+
+            if inp.__class__.__name__ == "MambaCache":
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.DynamicCache
+                ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
+                raise NotImplementedError("Not yet implemented for MambaCache")
 
             new_shape = self._make_export_new_dynamic_shape(
                 inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
@@ -1926,23 +1965,44 @@ class ModelRunner:
                     dyn_input_shapes.append([{} for t in inp])
                     continue
 
-                assert len(dyn_shape) == len(
-                    inp
-                ), f"Length mismatch len(dyn_shape)={len(dyn_shape)}, len(inp)={len(inp)}"
+                assert len(dyn_shape) == len(inp), (
+                    f"Length mismatch len(dyn_shape)={len(dyn_shape)}, len(inp)={len(inp)}"
+                    f"\ndyn_shape={dyn_shape}\ninp={string_type(inp, with_shape=True)}"
+                )
+                if not inp:
+                    dyn_input_shapes.append([])
+                    continue
+
                 new_shapes = []
+                nested_tuple = isinstance(inp[0], tuple)
+                # Nested...
                 for t, ds in zip(inp, dyn_shape):
                     if t is None:
                         new_shapes.append(None)
                         continue
-                    new_shapes.append(
-                        self._get_input_shape_tensor(
-                            export=export,
-                            input_shape=t.shape,
-                            dyn_shape=ds,
-                            dyn_values=dyn_values,
-                            i=i,
+                    if nested_tuple:
+                        new_shapes.append(
+                            tuple(
+                                self._get_input_shape_tensor(
+                                    export=export,
+                                    input_shape=t_.shape,
+                                    dyn_shape=ds_,
+                                    dyn_values=dyn_values,
+                                    i=i,
+                                )
+                                for t_, ds_ in zip(t, ds)
+                            )
                         )
-                    )
+                    else:
+                        new_shapes.append(
+                            self._get_input_shape_tensor(
+                                export=export,
+                                input_shape=t.shape,
+                                dyn_shape=ds,
+                                dyn_values=dyn_values,
+                                i=i,
+                            )
+                        )
                 dyn_input_shapes.append(new_shapes)
                 continue
 
@@ -1987,6 +2047,42 @@ class ModelRunner:
                             )
                             for t, ds in zip(inp.value_cache, dyn_shape[1])
                         ],
+                    ]
+                )
+                continue
+
+            if inp.__class__.__name__ == "MambaCache":
+                # Cache is not dynamic
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.MambaCache
+                ), f"Unexpected type {type(inp)}"
+
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append([{}, {}])
+                    continue
+                dyn_input_shapes.append(
+                    [
+                        self._get_input_shape_tensor(
+                            export=export,
+                            input_shape=inp.conv_states,
+                            dyn_shape=dyn_shape[0],
+                            dyn_values=dyn_values,
+                            i=i,
+                        ),
+                        self._get_input_shape_tensor(
+                            export=export,
+                            input_shape=inp.ssm_states,
+                            dyn_shape=dyn_shape[1],
+                            dyn_values=dyn_values,
+                            i=i,
+                        ),
                     ]
                 )
                 continue
@@ -2210,6 +2306,9 @@ class ModelRunner:
                     if isinstance(u, torch.Tensor):
                         new_inputs.append(u)
                         continue
+                    if isinstance(u, tuple):
+                        new_inputs.extend(u)
+                        continue
                     raise AssertionError(
                         f"Unable to process input type {type(u)} in input list"
                     )
@@ -2219,9 +2318,18 @@ class ModelRunner:
 
                 assert isinstance(
                     i, transformers.cache_utils.DynamicCache
-                ), f"Unexpected class {type(i)}"
+                ), f"unexpected type {type(i)}"
                 new_inputs.extend(i.key_cache)
                 new_inputs.extend(i.value_cache)
+                continue
+            if i.__class__.__name__ == "MambaCache":
+                import transformers
+
+                assert isinstance(
+                    i, transformers.cache_utils.MambaCache
+                ), f"unexpected type {type(i)}"
+                new_inputs.append(i.conv_states)
+                new_inputs.append(i.ssm_states)
                 continue
             raise AssertionError(f"Unable to process input type {type(i)}")
 

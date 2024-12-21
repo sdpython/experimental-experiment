@@ -812,10 +812,6 @@ def _apply_excel_style(
         if k in ("bucket", "status", "op_onnx", "op_opt", "op_torch") and v.shape[1] > 3:
             has_convert = [("convert" in str(c)) for c in v.columns]
             has_20 = [("-20%" in str(c)) for c in v.columns]
-            assert k != "status" or any(has_convert), (
-                f"has_convert={has_convert} but k={k!r}, "
-                f"v.columns={[str(c) for c in v.columns]}"
-            )
             assert not k.startswith("bucket") or any(
                 has_20
             ), f"has_20={has_20} but k={k!r}, v.columns={[str(c) for c in v.columns]}"
