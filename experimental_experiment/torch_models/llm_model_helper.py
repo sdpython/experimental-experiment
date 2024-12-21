@@ -947,8 +947,14 @@ def get_falcon_mamba_7b(
         input_cache_class=transformers.cache_utils.MambaCache,
         device=device,
     )
+    res["inputs"]["attention_mask"] = torch.ones(
+        res["inputs"]["input_ids"].shape, dtype=torch.float32, device=device
+    )
     res["inputs"]["cache_position"] = torch.arange(0, config["conv_kernel"], device=device)
     if "inputs2" in res:
+        res["inputs2"]["attention_mask"] = torch.ones(
+            res["inputs2"]["input_ids"].shape, dtype=torch.float32, device=device
+        )
         res["inputs2"]["cache_position"] = torch.arange(
             0, config["conv_kernel"], device=device
         )
