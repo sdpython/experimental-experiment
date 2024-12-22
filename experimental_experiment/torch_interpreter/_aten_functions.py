@@ -4152,6 +4152,87 @@ def aten_isnan(
     return res
 
 
+def aten__unsafe_index_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    indices: Sequence[Optional[T]],
+    name: str = "_unsafe_index_Tensor",
+) -> T:
+    """_unsafe_index_Tensor"""
+    assert g.has_rank(x), f"Rank is missing for {x!r}{g.get_debug_msg()}"
+    assert all(
+        g.has_rank(index) for index in indices if index is not None
+    ), f"Not all inputs have a rank{g.get_debug_msg()}"
+
+    index_ranks = [g.get_rank(index) for index in indices if index is not None]
+    x_rank = g.get_rank(x)
+    advanced_indexing_rank = max(index_ranks)
+
+    # reordered_positions is the permutation of the index positions where
+    # positions with None are move to the end of the list
+    # For example, if indices = [None, 1, None, 2], then reordered_positions = [1, 3, 0, 2]
+    reordered_positions = sorted(range(len(indices)), key=lambda i: (indices[i] is None, i))
+
+    # Fill the list with the remaining indices up to the rank of the tensor self.
+    # For example, if indices = [None, 1, None, 2], and the rank of self is 6,
+    # then reordered_positions = [1, 3, 0, 2, 4, 5]
+    reordered_positions = [
+        *reordered_positions,
+        *range(len(reordered_positions), x_rank),
+    ]
+    # Transpose self according to the reordered positions
+    xt = g.op.Transpose(x, perm=reordered_positions, name=name)
+
+    # Broadcast the indices to the same shape then concatenate
+    not_none_indices = [idx for idx in indices if idx is not None]
+
+    broadcasted = g.op.Max(*not_none_indices, name=name)
+    broadcast_shape = g.op.Shape(broadcasted, name=name)
+
+    final_index = g.op.Concat(
+        *(
+            g.op.Unsqueeze(
+                g.op.Expand(idx, broadcast_shape, name=name),
+                np.array([-1], dtype=np.int64),
+                name=name,
+            )
+            for idx in not_none_indices
+        ),
+        axis=-1,
+    )
+
+    xtg = g.op.GatherND(xt, final_index, batch_dims=0, name=name)
+
+    not_none_indices = [i for i, idx in enumerate(indices) if idx is not None]
+    if not not_none_indices:
+        no_middle = True
+    else:
+        no_middle = not_none_indices == list(
+            range(min(not_none_indices), max(not_none_indices) + 1)
+        )
+
+    if no_middle:
+        # If there is None in the middle, Advanced Indexing cannot decide where to put
+        # the new dimensions. So it places them in the front, like GatherND does.
+        return g.op.Identity(xtg, outputs=outputs, name=name)
+
+    first_not_none_position = reordered_positions[0]
+    starting_position_of_none_in_back = advanced_indexing_rank + first_not_none_position
+    result_rank = x_rank - len(not_none_indices) + advanced_indexing_rank
+    perm = [
+        *range(advanced_indexing_rank, starting_position_of_none_in_back),
+        *range(advanced_indexing_rank),
+        *range(
+            starting_position_of_none_in_back,
+            result_rank,
+        ),
+    ]
+
+    return g.op.Transpose(xtg, perm=perm, outputs=outputs, name=name)
+
+
 def aten__unsafe_index_put(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
