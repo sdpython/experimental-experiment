@@ -136,6 +136,7 @@ class TestTorchOnnxExport(ExtTestCase):
         ep = torch.export.export(model, (input_ids,))
         self.assertIn("target=torch.ops.aten.expand.default", str(ep.graph))
 
+    @skipif_ci_windows("not supported yet on Windows")
     def test_torch_upsample(self):
         import torch
         from experimental_experiment.torch_interpreter import to_onnx
