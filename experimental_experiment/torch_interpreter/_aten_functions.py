@@ -8829,7 +8829,7 @@ def aten_upsample_nearest2d(
     """resize"""
     assert output_size is not None, "Not implemented when size is None"
     assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+    assert scales_w is None, f"Not impelmented when scales_w={scales_w}"
 
     return _aten_upsample_output_size(
         g,
@@ -8968,11 +8968,17 @@ def aten_upsample_bicubic2d_vec(
     """resize"""
     assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
     osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
-    # scales = (
-    #     scale_factors if scale_factors else [None] * len(osize)
-    # )
-    scales = [None, None, None]
-    return aten_upsample_bicubic2d(g, sts, outputs, x, osize, *scales, name=name)
+    return aten_upsample_bicubic2d(
+        g,
+        sts,
+        outputs,
+        x,
+        osize,
+        scales_d=None,
+        scales_h=None,
+        align_corners=align_corners,
+        name=name,
+    )
 
 
 def aten_upsample_bilinear2d_vec(
@@ -8988,11 +8994,17 @@ def aten_upsample_bilinear2d_vec(
     """resize"""
     assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
     osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
-    # scales = (
-    #     scale_factors if scale_factors else [None] * len(osize)
-    # )
-    scales = [None, None, None]
-    return aten_upsample_bilinear2d(g, sts, outputs, x, osize, *scales, name=name)
+    return aten_upsample_bilinear2d(
+        g,
+        sts,
+        outputs,
+        x,
+        osize,
+        scales_d=None,
+        scales_h=None,
+        align_corners=align_corners,
+        name=name,
+    )
 
 
 def aten_upsample_nearest2d_vec(
@@ -9007,11 +9019,9 @@ def aten_upsample_nearest2d_vec(
     "resize"
     assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
     osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
-    # scales = (
-    #     scale_factors if scale_factors else [None] * len(osize)
-    # )
-    scales = [None, None]
-    return aten_upsample_nearest2d(g, sts, outputs, x, osize, *scales, name=name)
+    return aten_upsample_nearest2d(
+        g, sts, outputs, x, osize, scales_h=None, scales_w=None, name=name
+    )
 
 
 def aten_upsample_nearest3d_vec(
@@ -9026,11 +9036,9 @@ def aten_upsample_nearest3d_vec(
     "resize"
     assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
     osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
-    # scales = (
-    #     scale_factors if scale_factors else [None] * len(osize)
-    # )
-    scales = [None, None, None]
-    return aten_upsample_nearest3d(g, sts, outputs, x, osize, *scales, name=name)
+    return aten_upsample_nearest3d(
+        g, sts, outputs, x, osize, scale_h=None, scale_d=None, scale_w=None, name=name
+    )
 
 
 def aten_upsample_trilinear3d(
@@ -9047,9 +9055,9 @@ def aten_upsample_trilinear3d(
 ) -> T:
     """resize"""
     assert output_size is not None, "Not implemented when size is None"
-    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
+    assert scales_d is None, f"Not impelmented when scales_d={scales_d}"
     assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+    assert scales_w is None, f"Not impelmented when scales_w={scales_w}"
 
     return _aten_upsample_output_size(
         g,
@@ -9079,11 +9087,18 @@ def aten_upsample_trilinear3d_vec(
     """resize"""
     assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
     osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
-    # scales = (
-    #     scale_factors if scale_factors else [None] * len(osize)
-    # )
-    scales = [None, None, None]
-    return aten_upsample_trilinear3d(g, sts, outputs, x, osize, *scales, name=name)
+    return aten_upsample_trilinear3d(
+        g,
+        sts,
+        outputs,
+        x,
+        osize,
+        scale_h=None,
+        scale_d=None,
+        scale_w=None,
+        align_corners=align_corners,
+        name=name,
+    )
 
 
 def aten_interpolate(

@@ -149,22 +149,18 @@ class TestTorchOnnxExport(ExtTestCase):
         type(x.size()[0])
         y = upsample(x)
 
-        ep = torch.onnx.export(upsample, (x,), dynamo=True)
-        onx = ep.model_proto
-        with open("debug2.onnx", "wb") as f:
-            f.write(onx.SerializeToString())
+        # ep = torch.onnx.export(upsample, (x,), dynamo=True)
+        # onx = ep.model_proto
+        # name = onx.graph.input[0].name
+        # sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        # got = sess.run(None, {name: x.numpy()})
+        # self.assertEqualArray(y, got[0], atol=1e-4)
+
+        onx = to_onnx(upsample, (x,))
         name = onx.graph.input[0].name
         sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess.run(None, {name: x.numpy()})
         self.assertEqualArray(y, got[0], atol=1e-4)
-
-        onx = to_onnx(upsample, (x,))
-        with open("debug.onnx", "wb") as f:
-            f.write(onx.SerializeToString())
-        name = onx.graph.input[0].name
-        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
-        got = sess.run(None, {name: x.numpy()})
-        self.assertEqualArray(y, got[0])
 
 
 if __name__ == "__main__":
