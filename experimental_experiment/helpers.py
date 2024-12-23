@@ -67,7 +67,7 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, np.ndarray):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
-            n_nan = obj.reshape((-1,)).isnan().to(int).sum()
+            n_nan = np.isnan(obj.reshape((-1,))).astype(int).sum()
             if n_nan > 0:
                 return f"{s}[{obj.min()}:{obj.max()}:{n_nan}nans]"
             return f"{s}[{obj.min()}:{obj.max()}]"
