@@ -133,9 +133,9 @@ class patched_DynamicCache:
     @classmethod
     def from_legacy_cache(
         cls,
-        past_key_values: Optional[Tuple[Tuple["torch.FloatTensor"]]] = None,
+        past_key_values: Optional[Tuple[Tuple["torch.Tensor"]]] = None,
         num_hidden_layers: Optional[int] = None,
-    ) -> "DynamicCache":  # noqa: F821
+    ) -> "transformers.cache_utils.DynamicCache":  # noqa: F821
         cache = cls()
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
@@ -159,7 +159,7 @@ class patched_DynamicCache:
 
     def batch_split(
         self, full_batch_size: int, split_size: int, num_hidden_layers: Optional[int] = None
-    ) -> List["DynamicCache"]:  # noqa: F821
+    ) -> List["transformers.cache_utils.DynamicCache"]:  # noqa: F821
         out = []
         for i in range(0, full_batch_size, split_size):
             current_split = patched_DynamicCache()
@@ -174,9 +174,9 @@ class patched_DynamicCache:
     @classmethod
     def from_batch_splits(
         cls,
-        splits: List["DynamicCache"],  # noqa: F821
+        splits: List["transformers.cache_utils.DynamicCache"],  # noqa: F821
         num_hidden_layers: Optional[int] = None,
-    ) -> "DynamicCache":  # noqa: F821
+    ) -> "transformers.cache_utils.DynamicCache":  # noqa: F821
         cache = cls()
         for idx in range(len(splits[0])):
             key_cache = [

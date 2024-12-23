@@ -507,6 +507,8 @@ def flatten_object(x: Any) -> List[Any]:
     if x.__class__.__name__ == "DynamicCache":
         res = flatten_object(x.key_cache) + flatten_object(x.value_cache)
         return tuple(res)
+    if x.__class__.__name__ == "MambaCache":
+        return tuple(x.conv_states, x.ssm_states)
     raise TypeError(f"Unexpected type {type(x)} for x")
 
 
@@ -614,8 +616,11 @@ def max_diff(
                         f"got.shape={got.shape}"
                     )
                 return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            exp_cpu = expected.to(torch.float64).cpu()
-            diff = (got.to(torch.float64).cpu() - exp_cpu).abs()
+            # nan are replace by 1e10, any discrepancies in that order of magnitude
+            # is likely caused by nans
+            exp_cpu = expected.to(torch.float64).cpu().nan_to_num(1e10)
+            got_cpu = got.to(torch.float64).cpu().nan_to_num(1e10)
+            diff = (got_cpu - exp_cpu).abs()
             rdiff = diff / (exp_cpu.abs() + 1e-3)
             abs_diff, rel_diff, sum_diff, n_diff = (
                 float(diff.max()),
@@ -855,30 +860,6 @@ def max_diff(
             flatten=flatten,
         )
 
-    if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):
-        if verbose >= 6:
-            print(f"[max_diff] MambaCache: {string_type(expected)} ? {string_type(got)}")
-        if got.__class__.__name__ != expected.__class__.__name__:
-            # This case happens with onnx where the outputs are flattened.
-            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-        atts = []
-        for k in ["conv_states", "ssm_states"]:
-            if hasattr(expected, k) and not hasattr(got, k):
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            atts.append(k)
-
-        return max_diff(
-            [getattr(expected, k) for k in atts],
-            [getattr(got, k) for k in atts],
-            level=level,
-            flatten=flatten,
-            debug_info=debug_info,
-            begin=begin,
-            end=end,
-            _index=_index,
-            verbose=verbose,
-        )
-
     if isinstance(expected, np.ndarray):
         if verbose >= 6:
             print(f"[max_diff] array1: {string_type(expected)} ? {string_type(got)}")
@@ -908,6 +889,30 @@ def max_diff(
             f"DynamicCache not fully implemented with expected="
             f"{string_type(expected)}, got={string_type(got)},\n"
             f"level={level}"
+        )
+
+    if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):
+        if verbose >= 6:
+            print(f"[max_diff] MambaCache: {string_type(expected)} ? {string_type(got)}")
+        if got.__class__.__name__ != expected.__class__.__name__:
+            # This case happens with onnx where the outputs are flattened.
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+        atts = []
+        for k in ["conv_states", "ssm_states"]:
+            if hasattr(expected, k) and not hasattr(got, k):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            atts.append(k)
+
+        return max_diff(
+            [getattr(expected, k) for k in atts],
+            [getattr(got, k) for k in atts],
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
+            verbose=verbose,
         )
 
     raise AssertionError(

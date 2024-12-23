@@ -75,14 +75,14 @@ intersphinx_mapping = {
         "https://sdpython.github.io/doc/experimental-experiment/dev/",
         None,
     ),
-    "matplotlib": ("https://matplotlib.org/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "onnx": ("https://onnx.ai/onnx/", None),
     "onnx_array_api": ("https://sdpython.github.io/doc/onnx-array-api/dev/", None),
     "onnx_extended": ("https://sdpython.github.io/doc/onnx-extended/dev/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     "python": (f"https://docs.python.org/{sys.version_info.major}", None),
-    "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
     "skl2onnx": ("https://onnx.ai/sklearn-onnx/", None),
     "torch": ("https://pytorch.org/docs/main/", None),
@@ -96,13 +96,18 @@ nitpick_ignore = [
     ("py:class", "False"),
     ("py:class", "True"),
     ("py:class", "Argument"),
-    ("py:class", "torch.fx.passes.operator_support.OperatorSupport"),
-    ("py:class", "torch.fx.proxy.TracerBase"),
     ("py:class", "onnxscript.ir.Tuple"),
     ("py:class", "pipeline.Pipeline"),
     ("py:class", "default=sklearn.utils.metadata_routing.UNCHANGED"),
+    ("py:class", "ModelProto"),
     ("py:class", "Module"),
+    ("py:class", "torch.fx.passes.operator_support.OperatorSupport"),
+    ("py:class", "torch.fx.proxy.TracerBase"),
+    ("py:class", "torch.utils._pytree.Context"),
+    ("py:class", "torch.utils._pytree.KeyEntry"),
+    ("py:class", "transformers.cache_utils.Cache"),
     ("py:class", "transformers.cache_utils.DynamicCache"),
+    ("py:class", "transformers.cache_utils.MambaCache"),
 ]
 
 nitpick_ignore_regex = [
@@ -125,10 +130,16 @@ sphinx_gallery_conf = {
     ],
     # sorting
     "within_subsection_order": "ExampleTitleSortKey",
+    # errors
+    "abort_on_example_error": True,
+    # recommendation
+    "recommender": {"enable": True, "n_examples": 3, "min_df": 3, "max_df": 0.9},
+    # ignore capture for matplotib axes
+    "ignore_repr_types": "matplotlib\\.(text|axes)",
 }
 
 if pv.Version(torch.__version__) < pv.Version("2.7"):
-    sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_(modules)|(custom))|(_executorch_)).*"
+    sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_((modules)|(custom)))|(_executorch_)).*"
 
 
 epkg_dictionary = {
@@ -159,6 +170,8 @@ epkg_dictionary = {
     "onnx-extended": "https://sdpython.github.io/doc/onnx-extended/dev/",
     "onnx-script": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
+    "onnxscript Tutorial": "https://onnxscript.ai/tutorial/index.html",
+    "Pattern-based Rewrite Using Rules With onnxscript": "https://onnxscript.ai/tutorial/rewriter/rewrite_patterns.html",
     "opsets": "https://onnx.ai/onnx/intro/concepts.html#what-is-an-opset-version",
     "pyinstrument": "https://pyinstrument.readthedocs.io/en/latest/",
     "psutil": "https://psutil.readthedocs.io/en/latest/",

@@ -1,7 +1,6 @@
 import unittest
 from typing import Optional
 from onnx.reference import ReferenceEvaluator
-import torch
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
@@ -18,6 +17,7 @@ class TestTorchOnnxExport(ExtTestCase):
     @requires_torch("2.5")
     @hide_stdout()
     def test_oxs_linear_regression_dynamic_derived_batch(self):
+        import torch
 
         class TorchLinearRegression(torch.nn.Module):
             def __init__(self, n_dims: int, n_targets: int):
@@ -135,6 +135,96 @@ class TestTorchOnnxExport(ExtTestCase):
         # expected = model(input_ids)
         ep = torch.export.export(model, (input_ids,))
         self.assertIn("target=torch.ops.aten.expand.default", str(ep.graph))
+
+    @skipif_ci_windows("not supported yet on Windows")
+    def test_torch_upsample(self):
+        import torch
+        from onnxruntime import InferenceSession
+        from experimental_experiment.torch_interpreter import to_onnx
+
+        # https://github.com/pytorch/pytorch/issues/142866
+        torch.use_deterministic_algorithms(True)
+        upsample = torch.nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+        x = torch.randn(1, 3, 64, 64)
+        y = upsample(x)
+
+        # ep = torch.onnx.export(upsample, (x,), dynamo=True)
+        # onx = ep.model_proto
+        # name = onx.graph.input[0].name
+        # sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        # got = sess.run(None, {name: x.numpy()})
+        # self.assertEqualArray(y, got[0], atol=1e-4)
+
+        onx = to_onnx(upsample, (x,))
+        name = onx.graph.input[0].name
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        got = sess.run(None, {name: x.numpy()})
+        self.assertEqualArray(y, got[0], atol=1e-4)
+
+    @skipif_ci_windows("not supported yet on Windows")
+    def test_torch_interpolate_bicubic(self):
+        import torch
+        from onnxruntime import InferenceSession
+        from experimental_experiment.torch_interpreter import to_onnx
+
+        # https://github.com/pytorch/pytorch/issues/142866
+        torch.use_deterministic_algorithms(True)
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.nn.functional.interpolate(x, size=16, mode="bicubic")
+
+        upsample = Model()
+        x = torch.randn(
+            1,
+            2,
+            3,
+            4,
+        )
+        y = upsample(x)
+
+        # ep = torch.onnx.export(upsample, (x,), dynamo=True)
+        # onx = ep.model_proto
+        # name = onx.graph.input[0].name
+        # sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        # got = sess.run(None, {name: x.numpy()})
+        # self.assertEqualArray(y, got[0], atol=1e-4)
+
+        onx = to_onnx(upsample, (x,))
+        name = onx.graph.input[0].name
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        got = sess.run(None, {name: x.numpy()})
+        self.assertEqualArray(y, got[0], atol=1e-4)
+
+    @skipif_ci_windows("not supported yet on Windows")
+    def test_torch_interpolate_nearest(self):
+        import torch
+        from onnxruntime import InferenceSession
+        from experimental_experiment.torch_interpreter import to_onnx
+
+        # https://github.com/pytorch/pytorch/issues/142866
+        torch.use_deterministic_algorithms(True)
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.nn.functional.interpolate(x, size=16, mode="nearest")
+
+        upsample = Model()
+        x = torch.randn(1, 2, 3, 4)
+        y = upsample(x)
+
+        # ep = torch.onnx.export(upsample, (x,), dynamo=True)
+        # onx = ep.model_proto
+        # name = onx.graph.input[0].name
+        # sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        # got = sess.run(None, {name: x.numpy()})
+        # self.assertEqualArray(y, got[0], atol=1e-4)
+
+        onx = to_onnx(upsample, (x,))
+        name = onx.graph.input[0].name
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        got = sess.run(None, {name: x.numpy()})
+        self.assertEqualArray(y, got[0], atol=1e-4)
 
 
 if __name__ == "__main__":

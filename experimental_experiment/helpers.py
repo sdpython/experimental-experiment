@@ -67,6 +67,9 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, np.ndarray):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
+            n_nan = np.isnan(obj.reshape((-1,))).astype(int).sum()
+            if n_nan > 0:
+                return f"{s}[{obj.min()}:{obj.max()}:{n_nan}nans]"
             return f"{s}[{obj.min()}:{obj.max()}]"
         i = np_dtype_to_tensor_dtype(obj.dtype)
         if not with_shape:
@@ -86,6 +89,11 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, torch.Tensor):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
+            n_nan = obj.reshape((-1,)).isnan().to(int).sum()
+            if n_nan > 0:
+                if obj.dtype in {torch.complex64, torch.complex128}:
+                    return f"{s}[{obj.abs().min()}:{obj.abs().max():{n_nan}nans}]"
+                return f"{s}[{obj.min()}:{obj.max()}:{n_nan}nans]"
             if obj.dtype in {torch.complex64, torch.complex128}:
                 return f"{s}[{obj.abs().min()}:{obj.abs().max()}]"
             return f"{s}[{obj.min()}:{obj.max()}]"
@@ -107,8 +115,13 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         return "str"
     if isinstance(obj, slice):
         return "slice"
+
+    # others classes
+
     if type(obj).__name__ == "MambaCache":
-        return "MambaCache(**)"
+        c = string_type(obj.conv_states, with_shape=with_shape, with_min_max=with_min_max)
+        d = string_type(obj.ssm_states, with_shape=with_shape, with_min_max=with_min_max)
+        return f"MambaCache(conv_states={c}, ssm_states={d})"
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):
         # torch.fx.node.Node
         return f"%{obj.target}"

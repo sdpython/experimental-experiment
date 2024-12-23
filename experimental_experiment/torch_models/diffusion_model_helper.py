@@ -15,7 +15,7 @@ def get_stable_diffusion_2_unet(
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :return: model, inputs
 
-    See `SableDiffusion2Unet
+    See `StableDiffusion2Unet
     <https://huggingface.co/stabilityai/stable-diffusion-2/blob/main/unet/config.json>`_.
     """
     import torch

@@ -1,9 +1,9 @@
 """
-.. _l-plot-torch-linreg-101:
+.. _l-plot-torch-linreg-101-oe:
 
-=========================================
-101: Linear Regression and export to ONNX
-=========================================
+====================================
+Linear Regression and export to ONNX
+====================================
 
 :epkg:`scikit-learn` and :epkg:`torch` to train a linear regression.
 
@@ -20,7 +20,6 @@ import torch
 from onnxruntime import InferenceSession
 from experimental_experiment.helpers import pretty_onnx
 from onnx_array_api.plotting.graphviz_helper import plot_dot
-from experimental_experiment.torch_interpreter import to_onnx
 
 
 X, y = make_regression(1000, n_features=5, noise=10.0, n_informative=2)
@@ -145,7 +144,8 @@ for p in model.parameters():
 #
 # Let's convert it to ONNX.
 
-onx = to_onnx(model, (torch.Tensor(X_test[:2]),), input_names=["x"])
+ep = torch.onnx.export(model, (torch.Tensor(X_test[:2]),), dynamo=True)
+onx = ep.model_proto
 
 ################################
 # Let's check it is work.
@@ -160,6 +160,19 @@ print(res)
 plot_dot(onx)
 
 
+#############################
+# Optimization
+# ============
+#
+# By default, the exported model is not optimized and leaves many local functions.
+# They can be inlined and the model optimized with method `optimize`.
+
+ep.optimize()
+onx = ep.model_proto
+
+plot_dot(onx)
+
+
 ###############################
 # With dynamic shapes
 # ===================
@@ -167,11 +180,13 @@ plot_dot(onx)
 # The dynamic shapes are used by :func:`torch.export.export` and must
 # follow the convention described there.
 
-onx = to_onnx(
+ep = torch.onnx.export(
     model,
     (torch.Tensor(X_test[:2]),),
-    input_names=["x"],
     dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
+    dynamo=True,
 )
+ep.optimize()
+onx = ep.model_proto
 
 print(pretty_onnx(onx))

@@ -22,6 +22,9 @@ before or after, something like:
 
 Adding ``TORCH_LOGS="+dynamo" TORCHDYNAMO_VERBOSE=1`` prints out more information
 about dynamic shapes.
+
+Model
++++++
 """
 
 import copy
@@ -29,6 +32,7 @@ from typing import Any, Dict
 import onnx
 import torch
 import transformers
+from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.helpers import string_type
 from experimental_experiment.xbuilder import GraphBuilder, InferShapesOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -129,7 +133,7 @@ model = data["model"]
 inputs = data["inputs"]
 dynamic_shapes = data["dynamic_shapes"]
 
-print("inputs", string_type(inputs))
+print("inputs", string_type(inputs, with_shape=True))
 print("dynamic_shapes", dynamic_shapes)
 
 
@@ -141,19 +145,46 @@ print("dynamic_shapes", dynamic_shapes)
 model(**copy.deepcopy(inputs))
 
 ###################################
-# Let's export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
+# Export
+# ++++++
+#
+# We try to export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
+#
+# ``to_onnx(model, (), kwargs=copy.deepcopy(inputs), dynamic_shapes=dynamic_shapes)``
+#
+# This fails because of dynamic shapes issues.
+#
+# ::
+#
+#   Constraints violated (batch, seq_length)! For more information,
+#   run with TORCH_LOGS="+dynamic".
+#   Cannot associate shape
+#       [[{0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>},
+#         {0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>}],
+#        [{0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>},
+#         {0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>}]]
+#       specified at `dynamic_shapes['past_key_values']`
+#           to non-tensor type <class 'transformers.cache_utils.DynamicCache'>
+#           at `inputs['past_key_values']` (expected None)
+#
+##################################
+# The export fails for a couple of reason but it is possible to patch the
+# code to make it work. All those modifications are put in place by
+# :func:`onnx_export_errors <experimental_experiment.torch_interpreter.onnx_export_errors>`
+# and reverted after the export is done. Among other things, this function registers
+# serialization functions as shown in example
+# :ref:`l-plot-torch-export-with-dynamic-cache-201`.
 
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
 
-
 with bypass_export_some_errors(
     patch_transformers=True, replace_dynamic_cache=True, verbose=1
 ) as modificator:
-    print("inputs before", string_type(inputs))
+    print("inputs before", string_type(inputs, with_shape=True))
     inputs = modificator(inputs)
-    print("inputs after", string_type(inputs))
+    print("inputs after", string_type(inputs, with_shape=True))
     # ep = torch.export.export(model, (), inputs, dynamic_shapes=dynamic_shapes, strict=False)
     large_onx = to_onnx(
         model,
@@ -171,3 +202,8 @@ with bypass_export_some_errors(
 onx = onnx.load("plot_exporter_recipes_c_phi2.onnx")
 gr = GraphBuilder(onx, infer_shapes_options=InferShapesOptions.NONE)
 print(gr.pretty_text())
+
+########################################
+# Visually.
+
+plot_dot(onx)

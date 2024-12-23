@@ -7,7 +7,7 @@ from onnxscript import FLOAT, script
 from onnxscript import opset20 as op
 
 
-class TestLlama(ExtTestCase):
+class TestOnnxScript_script(ExtTestCase):
     @ignore_warnings(FutureWarning)
     def test_global_variable(self):
         # https://github.com/microsoft/onnxscript/issues/1969
