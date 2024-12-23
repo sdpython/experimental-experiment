@@ -395,8 +395,9 @@ class GraphBuilderPatternOptimization:
             value = self._cache_computed_constant[name]
         else:
             value = self.builder.get_constant(name, computed_value=True, exc=False)
-            if value is not None:
-                self._cache_computed_constant[name] = value
+            if value is None:
+                return None if not statistics else [None for _ in statistics]
+            self._cache_computed_constant[name] = value
         if statistics is None:
             return value
         stats = []

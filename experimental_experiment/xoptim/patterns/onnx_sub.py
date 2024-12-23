@@ -36,20 +36,23 @@ class Sub1MulPattern(PatternOptimization):
 
         if op_left == "Sub" and g.is_constant(node_left.input[0]):
             cst_min, cst_max = g.get_computed_constant(node_left.input[0], ["min", "max"])
+            if cst_min is None or cst_max is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+
             if cst_min == cst_max == 1:
                 cst_left = cst_min
 
         if op_right == "Sub" and g.is_constant(node_right.input[0]):
             cst_min, cst_max = g.get_computed_constant(node_right.input[0], ["min", "max"])
+            if cst_min is None or cst_max is None:
+                return self.none(node, inspect.currentframe().f_lineno)
             if cst_min == cst_max == 1:
                 cst_right = cst_min
 
         if cst_left is None and cst_right is None:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        nodes = [node, node_left, node_right]
-
-        return MatchResult(self, nodes, self.apply)
+        return MatchResult(self, [node, node_left, node_right], self.apply)
 
     def apply(
         self,

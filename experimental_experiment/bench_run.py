@@ -616,8 +616,11 @@ def max_diff(
                         f"got.shape={got.shape}"
                     )
                 return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
-            exp_cpu = expected.to(torch.float64).cpu()
-            diff = (got.to(torch.float64).cpu() - exp_cpu).abs()
+            # nan are replace by 1e10, any discrepancies in that order of magnitude
+            # is likely caused by nans
+            exp_cpu = expected.to(torch.float64).cpu().nan_to_num(1e10)
+            got_cpu = got.to(torch.float64).cpu().nan_to_num(1e10)
+            diff = (got_cpu - exp_cpu).abs()
             rdiff = diff / (exp_cpu.abs() + 1e-3)
             abs_diff, rel_diff, sum_diff, n_diff = (
                 float(diff.max()),

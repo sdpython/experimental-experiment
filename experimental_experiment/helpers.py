@@ -67,6 +67,9 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, np.ndarray):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
+            n_nan = obj.reshape((-1,)).isnan().to(int).sum()
+            if n_nan > 0:
+                return f"{s}[{obj.min()}:{obj.max()}:{n_nan}nans]"
             return f"{s}[{obj.min()}:{obj.max()}]"
         i = np_dtype_to_tensor_dtype(obj.dtype)
         if not with_shape:
@@ -86,6 +89,11 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, torch.Tensor):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
+            n_nan = obj.reshape((-1,)).isnan().to(int).sum()
+            if n_nan > 0:
+                if obj.dtype in {torch.complex64, torch.complex128}:
+                    return f"{s}[{obj.abs().min()}:{obj.abs().max():{n_nan}nans}]"
+                return f"{s}[{obj.min()}:{obj.max()}:{n_nan}nans]"
             if obj.dtype in {torch.complex64, torch.complex128}:
                 return f"{s}[{obj.abs().min()}:{obj.abs().max()}]"
             return f"{s}[{obj.min()}:{obj.max()}]"
