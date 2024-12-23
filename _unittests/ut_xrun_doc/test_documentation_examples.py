@@ -165,15 +165,6 @@ class TestDocumentationExamples(ExtTestCase):
             if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.5"):
                 reason = "too long, pytorch < 2.5"
 
-            if not reason and name in {
-                "plot_llama_diff_dort_301.py",
-                "plot_llama_diff_export_301.py",
-            }:
-                from torch import __version__ as tv
-
-                if pv.Version(".".join(tv.split(".")[:2])) < pv.Version("2.4"):
-                    reason = "requires torch 2.4"
-
             if not reason and name in {"plot_torch_export_201.py"}:
                 from torch import __version__ as tv
                 from onnx_array_api import __version__ as toaa
@@ -191,6 +182,10 @@ class TestDocumentationExamples(ExtTestCase):
                     "plot_torch_export_compile_102.py",
                 }
             ):
+                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
+                    reason = "requires torch 2.6"
+
+            if name in {"plot_torch_linreg_101.py"}:
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 

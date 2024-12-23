@@ -190,3 +190,18 @@ ep.optimize()
 onx = ep.model_proto
 
 print(pretty_onnx(onx))
+
+#########################################
+# For simplicity, it is possible to use ``torch.export.Dim.DYNAMIC``
+# or ``torch.export.Dim.AUTO``.
+
+ep = torch.onnx.export(
+    model,
+    (torch.Tensor(X_test[:2]),),
+    dynamic_shapes={"x": {0: torch.export.Dim.AUTO}},
+    dynamo=True,
+)
+ep.optimize()
+onx = ep.model_proto
+
+print(pretty_onnx(onx))

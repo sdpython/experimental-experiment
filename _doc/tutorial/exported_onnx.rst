@@ -3,8 +3,9 @@ Exported ONNX with Static Shapes
 ================================
 
 The following script shows the exported program for many short cases
-and various way to retrieve the :class:`torch.fx.Graph` equivalent
-to the original model.
+and various way to retrieve an ONNX model equivalent
+to the original model. The tested scenarios are described at
+:ref:`l-scenarios-exported-program-export`.
 
 .. runpython::
     :showcode:
