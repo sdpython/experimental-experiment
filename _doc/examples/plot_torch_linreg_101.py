@@ -165,13 +165,30 @@ plot_dot(onx)
 # ===================
 #
 # The dynamic shapes are used by :func:`torch.export.export` and must
-# follow the convention described there.
+# follow the convention described there. The dynamic dimension allows
+# any value. The model is then valid for many different shapes.
+# That's usually what users need.
+
 
 onx = to_onnx(
     model,
     (torch.Tensor(X_test[:2]),),
     input_names=["x"],
     dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
+)
+
+print(pretty_onnx(onx))
+
+
+#########################################
+# For simplicity, it is possible to use ``torch.export.Dim.DYNAMIC``
+# or ``torch.export.Dim.AUTO``.
+
+onx = to_onnx(
+    model,
+    (torch.Tensor(X_test[:2]),),
+    input_names=["x"],
+    dynamic_shapes={"x": {0: torch.export.Dim.DYNAMIC}},
 )
 
 print(pretty_onnx(onx))

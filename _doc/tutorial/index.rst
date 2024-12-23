@@ -29,9 +29,6 @@ already has many examples about it. Here are some corner cases.
 
 **strict = ?**
 
-The parameter *strict* of :func:`torch.export.export` usually has no impact
-except in some rare cases.
-
 The exporter relies on :func:`torch.export.export`. It exposes a parameter called
 `strict: bool = True` (true by default).
 The behaviour is different in some specific configuration.
@@ -44,7 +41,7 @@ Function :func:`torch.export.export` produces an :class:`torch.export.ExportedPr
 This class has a method :meth:`torch.export.ExportedProgram.run_decompositions`
 which converts the graph into another, usually longer but using
 a reduced set of functions or primitive. The converter to ONNX
-has less function to support to convert this second graph.
+has less functions to support to convert this second graph.
 
 torch.onnx.export: export to ONNX
 =================================
@@ -74,7 +71,16 @@ These examples relies on :func:`torch.onnx.export`.
 
 **Optimization**
 
+It is recommended to optimize the obtained model by running
+method :meth:`torch.onnx.ONNXProgram.optimize`. It removes
+many unncessary nodes (Identity, multiplication by 1) and other
+patterns. It tries to find patterns it knows how to optimize.
 See :epkg:`Pattern-based Rewrite Using Rules With onnxscript`.
+
+**Issues**
+
+You can post issues in `pytorch/issues <https://github.com/pytorch/pytorch/issues>`_
+and label it with ``module:onnx`` if you find an issue.
 
 Frequent Exceptions or Errors with the Exporter
 ===============================================
