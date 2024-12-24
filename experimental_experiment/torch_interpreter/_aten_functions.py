@@ -838,6 +838,49 @@ def aten_avg_pool2d(
     return result
 
 
+def aten_avg_pool3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int] = (),
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0, 0),
+    ceil_mode: bool = False,
+    count_include_pad: bool = True,
+    divisor_override: Optional[int] = None,
+    name: str = "aten_avg_pool3d",
+) -> T:
+    "AveragePool"
+    assert divisor_override is None, (
+        f"avg_pool3d not implemented for divisor_override="
+        f"{divisor_override}{g.get_debug_msg()}"
+    )
+
+    expand_size = 3
+
+    kernel_shape, strides, pads = _adjust_attributes_of_avg_pool(
+        expand_size, kernel_size, stride, padding
+    )
+
+    result = g.op.AveragePool(
+        x,
+        ceil_mode=1 if ceil_mode else 0,
+        count_include_pad=1 if count_include_pad else 0,
+        kernel_shape=kernel_shape,
+        pads=pads,
+        strides=strides,
+        outputs=outputs,
+        name=name,
+    )
+
+    if not sts:
+        g.set_type(result, g.get_type(x))
+        g.set_rank(result, g.get_rank(x))
+
+    return result
+
+
 def aten_avg_pool2d_backward(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4426,13 +4469,7 @@ def aten_leaky_relu(
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(a))
     slope = np.array([negative_slope], dtype=dtype)
-    res = g.op.Where(
-        g.op.Greater(a, np.array([0], dtype=dtype), name=name),
-        a,
-        g.op.Mul(a, slope, name=name),
-        outputs=outputs,
-        name=name,
-    )
+    res = g.op.LeakyRelu(a, slope, outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, a)
     return res
@@ -6192,8 +6229,11 @@ def aten_pad(
     assert mode in {
         "constant",
         "reflect",
-    }, f"Not implemented for mode={mode!r}{g.get_debug_msg()}"
-    assert g.has_rank(x), f"Not implemented when rank of {x!r} is missing{g.get_debug_msg()}"
+        "replicate",
+    }, f"aten_pad not implemented for mode={mode!r}{g.get_debug_msg()}"
+    assert g.has_rank(
+        x
+    ), f"aten_pad not implemented when rank of {x!r} is missing{g.get_debug_msg()}"
     value = float(value or 0)
 
     rk = g.get_rank(x)
@@ -6208,6 +6248,8 @@ def aten_pad(
         ), f"not implemented if pad={pad!r} is coming from pytorch{g.get_debug_msg()}"
         new_pad = pad
 
+    if mode == "replicate":
+        mode = "edge"
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     cst = np.array(value, dtype=dtype)
     res = g.op.Pad(x, new_pad, cst, name=name, outputs=outputs, mode=mode)
@@ -6838,10 +6880,19 @@ def aten_repeat(
 ) -> T:
     "repeat"
     assert isinstance(repeats, (tuple, list))
-    if all_int(repeats):
+    if all_int(repeats) and g.has_rank(x):
         if set(repeats) == {1}:
-            # identity
-            return g.op.Identity(x, name=name, outputs=outputs)
+            rk = g.get_rank(x)
+            if rk == len(repeats):
+                # identity
+                return g.op.Identity(x, name=name, outputs=outputs)
+            assert rk < len(repeats), (
+                f"inconsistencies between rank and repeats, "
+                f"rank({x})={rk} and repeats={repeats}{g.get_debug_msg()}"
+            )
+            return g.op.UnsqueezeAnyOpset(
+                x, np.arange(len(repeats) - rk).astype(np.int64), name=name, outputs=outputs
+            )
         irep = np.array(repeats, dtype=np.int64)
     elif g.is_dynamic_shape(repeats):
         # repeats is like a shape
@@ -8013,6 +8064,18 @@ def aten_squeeze_dim(
 ) -> T:
     "squeeze_dim"
     return g.op.SqueezeAnyOpset(x, np.array([dim], dtype=np.int64), name=name)
+
+
+def aten_squeeze_dims(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dims: List[int],
+    name="squeeze",
+) -> T:
+    "squeeze_dims"
+    return g.op.SqueezeAnyOpset(x, np.array(dims, dtype=np.int64), name=name)
 
 
 def aten_stack(
