@@ -1634,7 +1634,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param exc: raises an exception
         """
         if name in (self._debug_stop, self._debug_stop_type):
-            raise AssertionError(f"Requested stop, name={name!r}, dtype={dtype}")
+            raise AssertionError(
+                f"Requested stop, name={name!r}, dtype={dtype}{self.get_debug_msg()}"
+            )
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if isinstance(dtype, int):
             int_type = dtype
