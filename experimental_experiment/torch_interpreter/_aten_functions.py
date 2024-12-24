@@ -8066,6 +8066,18 @@ def aten_squeeze_dim(
     return g.op.SqueezeAnyOpset(x, np.array([dim], dtype=np.int64), name=name)
 
 
+def aten_squeeze_dims(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dims: List[int],
+    name="squeeze",
+) -> T:
+    "squeeze_dims"
+    return g.op.SqueezeAnyOpset(x, np.array(dims, dtype=np.int64), name=name)
+
+
 def aten_stack(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
