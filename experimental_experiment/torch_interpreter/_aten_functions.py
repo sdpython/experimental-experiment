@@ -2815,7 +2815,7 @@ def aten_flatten_using_ints(
         )
     if end_dim == -1:
         return g.make_node("Flatten", [x], outputs, name=name)
-    res = g.make_node("Flatten", [x], outputs, to=end_dim)
+    res = g.make_node("Flatten", [x], outputs, to=end_dim, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x, full=True):
@@ -8822,14 +8822,14 @@ def aten_upsample_nearest2d(
     outputs: List[str],
     x: T,
     output_size: T,
-    scales_h: Optional[float] = None,
-    scales_w: Optional[float] = None,
+    scale_h: Optional[float] = None,
+    scale_w: Optional[float] = None,
     name: str = "upsample_nearest2d",
 ) -> T:
     """resize"""
     assert output_size is not None, "Not implemented when size is None"
-    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_w is None, f"Not impelmented when scales_w={scales_w}"
+    assert scale_h is None, f"Not impelmented when scale_h={scale_h}"
+    assert scale_w is None, f"Not impelmented when scale_w={scale_w}"
 
     return _aten_upsample_output_size(
         g,
@@ -8850,16 +8850,16 @@ def aten_upsample_nearest3d(
     outputs: List[str],
     x: T,
     output_size: T,
-    scales_d: Optional[float] = None,
-    scales_h: Optional[float] = None,
-    scales_w: Optional[float] = None,
+    scale_d: Optional[float] = None,
+    scale_h: Optional[float] = None,
+    scale_w: Optional[float] = None,
     name: str = "upsample_nearest3d",
 ) -> T:
     """resize"""
     assert output_size is not None, "Not implemented when size is None"
-    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_w is None, f"Not impelmented when scales_h={scales_w}"
+    assert scale_d is None, f"Not impelmented when scale_h={scale_h}"
+    assert scale_h is None, f"Not impelmented when scale_h={scale_h}"
+    assert scale_w is None, f"Not impelmented when scale_h={scale_w}"
 
     return _aten_upsample_output_size(
         g,
@@ -8900,14 +8900,14 @@ def aten_upsample_bicubic2d(
     x: T,
     output_size: T,
     align_corners: bool,
-    scales_d: Optional[float] = None,
-    scales_h: Optional[float] = None,
+    scale_d: Optional[float] = None,
+    scale_h: Optional[float] = None,
     name: str = "upsample_bicubic2d",
 ) -> T:
     """resize"""
     assert output_size is not None, "Not implemented when size is None"
-    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+    assert scale_d is None, f"Not impelmented when scale_h={scale_h}"
+    assert scale_h is None, f"Not impelmented when scale_h={scale_h}"
 
     return _aten_upsample_output_size(
         g,
@@ -8931,14 +8931,14 @@ def aten_upsample_bilinear2d(
     x: T,
     output_size: T,
     align_corners: bool,
-    scales_d: Optional[float] = None,
-    scales_h: Optional[float] = None,
+    scale_d: Optional[float] = None,
+    scale_h: Optional[float] = None,
     name: str = "upsample_bilinear2d",
 ) -> T:
     """resize"""
     assert output_size is not None, "Not implemented when size is None"
-    assert scales_d is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
+    assert scale_d is None, f"Not impelmented when scale_h={scale_h}"
+    assert scale_h is None, f"Not impelmented when scale_h={scale_h}"
 
     return _aten_upsample_output_size(
         g,
@@ -8974,8 +8974,8 @@ def aten_upsample_bicubic2d_vec(
         outputs,
         x,
         osize,
-        scales_d=None,
-        scales_h=None,
+        scale_d=None,
+        scale_h=None,
         align_corners=align_corners,
         name=name,
     )
@@ -9000,8 +9000,8 @@ def aten_upsample_bilinear2d_vec(
         outputs,
         x,
         osize,
-        scales_d=None,
-        scales_h=None,
+        scale_d=None,
+        scale_h=None,
         align_corners=align_corners,
         name=name,
     )
@@ -9020,7 +9020,7 @@ def aten_upsample_nearest2d_vec(
     assert g.has_shape(x), f"Not implemented when {x!r} has no shape{g.get_debug_msg()}"
     osize = _upsample_compute_output_size(g.get_shape(x), output_size, scale_factors)
     return aten_upsample_nearest2d(
-        g, sts, outputs, x, osize, scales_h=None, scales_w=None, name=name
+        g, sts, outputs, x, osize, scale_h=None, scale_w=None, name=name
     )
 
 
@@ -9048,16 +9048,16 @@ def aten_upsample_trilinear3d(
     x: T,
     output_size: T,
     align_corners: bool,
-    scales_d: Optional[float] = None,
-    scales_h: Optional[float] = None,
-    scales_w: Optional[float] = None,
+    scale_d: Optional[float] = None,
+    scale_h: Optional[float] = None,
+    scale_w: Optional[float] = None,
     name: str = "upsample_trilinear3d",
 ) -> T:
     """resize"""
     assert output_size is not None, "Not implemented when size is None"
-    assert scales_d is None, f"Not impelmented when scales_d={scales_d}"
-    assert scales_h is None, f"Not impelmented when scales_h={scales_h}"
-    assert scales_w is None, f"Not impelmented when scales_w={scales_w}"
+    assert scale_d is None, f"Not impelmented when scale_d={scale_d}"
+    assert scale_h is None, f"Not impelmented when scale_h={scale_h}"
+    assert scale_w is None, f"Not impelmented when scale_w={scale_w}"
 
     return _aten_upsample_output_size(
         g,
