@@ -893,6 +893,22 @@ class TestOperatorsCort(ExtTestCase):
             rtol=1e-4,
         )
 
+    def test_avg_pool3d(self):
+        x = torch.randn(20, 16, 50, 32, 8)
+        self.assertONNX(
+            nn.AvgPool3d(5, stride=2),
+            x,
+            impl="ref",
+            onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=0,
+            save_onnx=True,
+            optimize=False,
+            atol=1e-3 if sys.platform == "darwin" else 1e-6,
+            # intermediate=True,
+            rtol=1e-4,
+            test_backward=False,
+        )
+
     def test_adaptative_avg_pool2d_global(self):
         x = torch.randn(20, 16, 50, 32)
         self.assertONNX(

@@ -706,6 +706,19 @@ class TestOperatorsOnnxrt(ExtTestCase):
             atol=2e-3,
         )
 
+    @requires_torch("2.4")
+    @hide_stdout()
+    def test_xt_avg_pool3d(self):
+        x = torch.randn(20, 16, 50, 32, 8)
+        self.assertONNX(
+            nn.AvgPool3d(3, stride=2),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+            rtol=2e-3,
+            atol=2e-3,
+        )
+
     @hide_stdout()
     def test_xt_maxpool_indices(self):
         x = torch.randn(20, 16, 50)

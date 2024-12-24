@@ -838,6 +838,49 @@ def aten_avg_pool2d(
     return result
 
 
+def aten_avg_pool3d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int] = (),
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0, 0),
+    ceil_mode: bool = False,
+    count_include_pad: bool = True,
+    divisor_override: Optional[int] = None,
+    name: str = "aten_avg_pool3d",
+) -> T:
+    "AveragePool"
+    assert divisor_override is None, (
+        f"avg_pool3d not implemented for divisor_override="
+        f"{divisor_override}{g.get_debug_msg()}"
+    )
+
+    expand_size = 3
+
+    kernel_shape, strides, pads = _adjust_attributes_of_avg_pool(
+        expand_size, kernel_size, stride, padding
+    )
+
+    result = g.op.AveragePool(
+        x,
+        ceil_mode=1 if ceil_mode else 0,
+        count_include_pad=1 if count_include_pad else 0,
+        kernel_shape=kernel_shape,
+        pads=pads,
+        strides=strides,
+        outputs=outputs,
+        name=name,
+    )
+
+    if not sts:
+        g.set_type(result, g.get_type(x))
+        g.set_rank(result, g.get_rank(x))
+
+    return result
+
+
 def aten_avg_pool2d_backward(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
