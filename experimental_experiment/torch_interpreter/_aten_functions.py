@@ -2815,7 +2815,7 @@ def aten_flatten_using_ints(
         )
     if end_dim == -1:
         return g.make_node("Flatten", [x], outputs, name=name)
-    res = g.make_node("Flatten", [x], outputs, to=end_dim)
+    res = g.make_node("Flatten", [x], outputs, to=end_dim, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x, full=True):
