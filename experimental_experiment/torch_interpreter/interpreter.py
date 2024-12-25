@@ -1673,6 +1673,7 @@ class DynamoInterpreter:
                     if i >= 1 and node.target.name() in {
                         "aten::_native_batch_norm_legit.no_stats",
                         "aten::_native_batch_norm_legit_no_training",
+                        "aten::_scaled_dot_product_efficient_attention",
                     }:
                         # It seems the type is not very consistant
                         # and the output might not be used.
