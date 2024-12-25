@@ -254,8 +254,8 @@ class DynamoInterpreter:
             if self.builder.has_shape(name):
                 shape = self.builder.get_shape(name)
                 self.builder._check_two_shapes_are_compatible(
-                    tuple(exp_shape),
-                    shape,
+                    tuple(exp_shape),  # old_shape
+                    shape,  # new_shape
                     name=name,
                     register_int=False,
                 )
@@ -1673,6 +1673,7 @@ class DynamoInterpreter:
                     if i >= 1 and node.target.name() in {
                         "aten::_native_batch_norm_legit.no_stats",
                         "aten::_native_batch_norm_legit_no_training",
+                        "aten::_scaled_dot_product_efficient_attention",
                     }:
                         # It seems the type is not very consistant
                         # and the output might not be used.

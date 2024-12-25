@@ -238,7 +238,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     - `constraints_: Dict[str, Set[Any]]`:
         if a broadcast implies a constraints on a dynamic shape,
         it is stored here
-    - `_events`: is used ot retrieve any information useful to debug
+    - `_events`: is used to retrieve any information useful to debug
 
     Debugging attributes:
 
@@ -1469,7 +1469,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         assert len(old_shape) == len(shape), (
             f"Rank mismatch between previous shape {old_shape} and "
-            f"new shape {shape} (name={name!r}{self.get_debug_msg()}"
+            f"new shape {shape} (name={name!r}){self.get_debug_msg()}"
         )
         for d1, d2 in zip(old_shape, shape):
             if isinstance(d1, int) and isinstance(d2, int):
@@ -1634,7 +1634,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param exc: raises an exception
         """
         if name in (self._debug_stop, self._debug_stop_type):
-            raise AssertionError(f"Requested stop, name={name!r}, dtype={dtype}")
+            raise AssertionError(
+                f"Requested stop, name={name!r}, dtype={dtype}{self.get_debug_msg()}"
+            )
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if isinstance(dtype, int):
             int_type = dtype
