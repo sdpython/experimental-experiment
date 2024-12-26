@@ -4358,7 +4358,7 @@ def aten_index_select(
     index: T,
     name: str = "index_select",
 ) -> T:
-    "[...,:, ...]"
+    "[..., :, ...]"
     assert g.has_type(index), f"aten_index_select: index type must be knonw{g.get_debug_msg()}"
     if g.get_type(index) == TensorProto.BOOL:
         res = g.op.Compress(x, index, axis=dim, outputs=outputs, name=name)
