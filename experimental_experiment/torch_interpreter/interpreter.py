@@ -101,7 +101,7 @@ class DynamoInterpreter:
             for t in example_inputs
         ), (
             f"Unexpected type for one input in example_inputs "
-            f"{[type(t) for t in example_inputs]}"
+            f"{string_type(example_inputs, with_shape=True)}"
         )
         self.example_inputs_ = example_inputs
         self.flat_example_inputs_ = self.flatten_inputs(example_inputs)
