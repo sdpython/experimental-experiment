@@ -3625,11 +3625,10 @@ def aten_index_Tensor(
     "[..., :, ...]"
     assert isinstance(indices, (list, tuple)), f"Unexpected type {type(indices)} for indices"
     if len(indices) == 1 and isinstance(indices[0], str):
-        return aten_index_select(
-            g, sts, outputs, x, dim=0, index=indices[0], name="index1_Tensor"
-        )
+        return aten_index_select(g, sts, outputs, x, dim=0, index=indices[0], name=f"{name}_a")
 
     n_none = len([i for i in indices if i is None])
+    name = f"{name}_n{n_none}"
     if n_none == 0:
         # No none dimension, example:
         # indices = [A, B]
@@ -3649,7 +3648,7 @@ def aten_index_Tensor(
             g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name) for i in indices
         ]
         concat = g.op.Concat(*reshaped, axis=-1, name=name)
-        res = g.op.GatherND(x, concat, batch_dims=0, outputs=outputs)
+        res = g.op.GatherND(x, concat, batch_dims=0, outputs=outputs, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
         return res
@@ -3658,11 +3657,11 @@ def aten_index_Tensor(
         shapes = [g.get_shape(i) for i in indices if i is not None]
         assert (
             len(set(shapes)) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (1){g.get_debug_msg()}"
+        ), f"aten_index is not implemented for shapes={shapes} (3){g.get_debug_msg()}"
         same_shape = shapes[0]
         assert (
             len(same_shape) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
+        ), f"aten_index is not implemented for shapes={shapes} (4){g.get_debug_msg()}"
         dim = g.op.Shape(x, start=1, end=2, name=name)
         flat_index = g.op.Add(g.op.Mul(indices[1], dim, name=name), indices[2], name=name)
 
@@ -3670,28 +3669,7 @@ def aten_index_Tensor(
         new_shapex = g.op.Concat(dimx1, np.array([-1], dtype=np.int64), name=name, axis=0)
         reshaped_x = g.op.Reshape(x, new_shapex, name=name)
 
-        res = g.op.Gather(reshaped_x, flat_index, axis=1, outputs=outputs)
-        if not sts:
-            g.set_type(res, g.get_type(x))
-        return res
-
-    if n_none == 2 and indices[0] is None and indices[1] is None and len(indices) == 4:
-        shapes = [g.get_shape(i) for i in indices if i is not None]
-        assert (
-            len(set(shapes)) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (1){g.get_debug_msg()}"
-        same_shape = shapes[0]
-        assert (
-            len(same_shape) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
-        dim = g.op.Shape(x, start=2, end=3, name=name)
-        flat_index = g.op.Add(g.op.Mul(indices[2], dim, name=name), indices[3], name=name)
-
-        dimx1 = g.op.Shape(x, start=0, end=2, name=name)
-        new_shapex = g.op.Concat(dimx1, np.array([-1], dtype=np.int64), name=name, axis=0)
-        reshaped_x = g.op.Reshape(x, new_shapex, name=name)
-
-        res = g.op.Gather(reshaped_x, flat_index, axis=2, outputs=outputs)
+        res = g.op.Gather(reshaped_x, flat_index, axis=1, outputs=outputs, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
         return res
@@ -3708,19 +3686,16 @@ def aten_index_Tensor(
                 x,
                 dim=position,
                 index=index,
-                name="index2_Tensor",
+                name=f"{name}_b",
             )
             to_add = [i for i in range(len(indices)) if i != position]
             assert len(to_add) > 0, (
                 f"Unexpected value for to_add={to_add}, "
                 f"position={position}, indices={indices}"
             )
-            return g.op.Identity(res, name="index2_Tensor", outputs=outputs)
+            return g.op.Identity(res, name=f"{name}_b", outputs=outputs)
 
-    raise RuntimeError(
-        f"aten_index_Tensor not implemented yet for indices={indices}, "
-        f"n_none={n_none}{g.get_debug_msg()}"
-    )
+    raise NotImplementedError(f"indices={indices}{g.get_debug_msg()}")
 
 
 def aten_index_put(
@@ -5575,6 +5550,7 @@ def aten_native_group_norm(
     eps: float = 1e-5,
     name: str = "aten_native_group_norm",
 ) -> Tuple[T, T, T]:
+    "aten_native_group_norm"
     # assert N,C,HxW value with the input tensor shape
     assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
     assert g.has_rank(x), f"Missing rank for {x!r}{g.get_debug_msg()}"
@@ -5584,25 +5560,14 @@ def aten_native_group_norm(
     # So we have to use onnx.InstanceNorm() to simulate
     # neg_1 = op.Constant(value_ints=[-1])
     # Create weight_instance_norm and bias_instance_norm, copied from Torch ONNX converter
-    group_tensor = g.op.Reshape(group, np.array([-1], dtype=np.int64), name=name)
     # 0 in the shape list keeps dimension value unchanged, for InstanceNorm need [0,group,-1]
-    shape_input = g.op.Concat(
-        np.array([0], dtype=np.int64),
-        group_tensor,
-        np.array([-1], dtype=np.int64),
-        axis=0,
-        name=name,
-    )
+    shape_input = np.array([0, group, -1], dtype=np.int64)
     input_reshaped = g.op.Reshape(x, shape_input, name=name)
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
 
-    weight_inst_norm = g.op.ConstantOfShape(
-        group_tensor, value=from_array(np.array([1], dtype=dtype)), name=name
-    )
-    bias_inst_norm = g.op.ConstantOfShape(
-        group_tensor, value=from_array(np.array([0], dtype=dtype)), name=name
-    )
+    weight_inst_norm = np.array([1 for g in range(group)], dtype=dtype)
+    bias_inst_norm = np.array([0 for g in range(group)], dtype=dtype)
     norm = g.op.InstanceNormalization(
         input_reshaped, weight_inst_norm, bias_inst_norm, epsilon=float(eps), name=name
     )
@@ -5625,7 +5590,7 @@ def aten_native_group_norm(
     # The returned shape for mean and vstd should be [N, group, -1]
     N = g.op.Shape(x, start=0, end=1)
     shape_N_group_neg1 = g.op.Concat(
-        N, group_tensor, np.array([-1], dtype=np.int64), axis=0, name=name
+        N, np.array([group, -1], dtype=np.int64), axis=0, name=name
     )
     input_N_group_neg1 = g.op.Reshape(x, shape_N_group_neg1, name=name)
     # The output size is [N, group], so dims = [2]
@@ -5638,14 +5603,14 @@ def aten_native_group_norm(
     sqr_input_sub_mean = g.op.Mul(input_sub_mean, input_sub_mean, name=name)
     # In Pytorch, vstd = 1/(sqrt(var + eps))
     var = g.op.ReduceMeanAnyOpset(
-        sqr_input_sub_mean, np.array([2], dtype=np.int64), keepdims=False, name=name
+        sqr_input_sub_mean, np.array([2], dtype=np.int64), keepdims=0, name=name
     )
     rstd = g.op.Reciprocal(
-        g.op.Sqrt(g.op.Add(var, np.array([eps], dtype=dtype, name=name), name=name)), name=name
+        g.op.Sqrt(g.op.Add(var, np.array([eps], dtype=dtype), name=name), name=name), name=name
     )
     # Get the correct shape [N, group] for mean again
     mean = g.op.ReduceMeanAnyOpset(
-        input_N_group_neg1, np.array([2], dtype=np.int64), keepdims=False, name=name
+        input_N_group_neg1, np.array([2], dtype=np.int64), keepdims=0, name=name
     )
     if not sts:
         g.set_type(norm_result, g.get_type(x))
@@ -5655,6 +5620,17 @@ def aten_native_group_norm(
             g.set_shape(x, g.get_shape(x))
         else:
             g.set_rank(x, g.get_rank(x))
+
+    res = []
+    if len(outputs) >= 1:
+        res.append(g.op.Identity(norm_result, name=name, outputs=outputs[:1]))
+        norm_result = outputs[0]
+    if len(outputs) >= 2:
+        res.append(g.op.Identity(mean, name=name, outputs=outputs[1:2]))
+        mean = outputs[1]
+    if len(outputs) >= 3:
+        res.append(g.op.Identity(rstd, name=name, outputs=outputs[2:3]))
+        rstd = outputs[2]
     return norm_result, mean, rstd
 
 
