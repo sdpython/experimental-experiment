@@ -3673,15 +3673,27 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
                 if cst is not None:
                     shape_cst = tuple(int(i) for i in cst)
-                    if -1 in shape_cst:
+                    if 0 in shape_cst:
                         if self.has_shape(node.input[0]):
                             sh = self.get_shape(node.input[0])
-                            if is_static_shape(sh):
-                                self.set_shape(node.output[0], _reshape_shape(sh, shape_cst))
-                                node.doc_string += ":constant-7:"
-                    else:
-                        self.set_shape(node.output[0], shape_cst)
-                        node.doc_string += ":constant-7:"
+                            shape_cst = [
+                                shape_cst[i] if shape_cst[i] != 0 else sh[i]
+                                for i in range(len(shape_cst))
+                            ]
+                        else:
+                            shape_cst = None
+                    if shape_cst is not None:
+                        if -1 in shape_cst:
+                            if self.has_shape(node.input[0]):
+                                sh = self.get_shape(node.input[0])
+                                if is_static_shape(sh):
+                                    self.set_shape(
+                                        node.output[0], _reshape_shape(sh, shape_cst)
+                                    )
+                                    node.doc_string += ":constant-7a:"
+                        else:
+                            self.set_shape(node.output[0], shape_cst)
+                            node.doc_string += ":constant-7b:"
         elif node.op_type == "Shape":
             self.set_type(node.output[0], TensorProto.INT64)
             if self.has_shape(node.input[0]) and len(node.attribute) == 0:
@@ -3694,7 +3706,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.doc_string += ":constant-2:"
         elif node.op_type == "Size":
             self.set_type(node.output[0], TensorProto.INT64)
-            self.set_shape(node.output[0], (1,))
+            self.set_shape(node.output[0], tuple())
             if self.is_constant(node.input[0]):
                 self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-2s:"

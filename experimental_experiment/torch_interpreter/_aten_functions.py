@@ -3654,22 +3654,84 @@ def aten_index_Tensor(
         return res
 
     if n_none == 1 and indices[0] is None and len(indices) == 3:
-        shapes = [g.get_shape(i) for i in indices if i is not None]
+        ranks = [g.get_rank(i) for i in indices if i is not None]
         assert (
-            len(set(shapes)) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (3){g.get_debug_msg()}"
-        same_shape = shapes[0]
+            len(set(ranks)) == 2
+        ), f"aten_index is not implemented for ranks={ranks} (1){g.get_debug_msg()}"
+        name = f"{name}_d"
+        dim2 = g.op.Shape(x, start=2, end=3, name=name)
+        flat_index = g.op.Reshape(
+            g.op.Add(g.op.Mul(indices[1], dim2, name=name), indices[2], name=name),
+            np.array([-1], dtype=np.int64),
+            name=name,
+        )
+        reshaped_x = g.op.Reshape(x, np.array([0, -1], dtype=np.int64), name=name)
+        gathered = g.op.Gather(reshaped_x, flat_index, axis=1, name=name)
+        final_shape = g.op.Concat(
+            np.array([0], dtype=np.int64),
+            g.op.Reshape(g.op.Size(indices[1], name=name), np.array([-1], dtype=np.int64)),
+            g.op.Reshape(g.op.Size(indices[2], name=name), np.array([-1], dtype=np.int64)),
+            name=name,
+            axis=0,
+        )
+        res = g.op.Reshape(gathered, final_shape, name=name)
+        if not sts:
+            g.set_type(res, g.get_type(x))
+        return res
+
+    if n_none == 2 and indices[0] is None and indices[1] is None and len(indices) == 4:
+        ranks = [g.get_rank(i) for i in indices if i is not None]
         assert (
-            len(same_shape) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (4){g.get_debug_msg()}"
-        dim = g.op.Shape(x, start=1, end=2, name=name)
-        flat_index = g.op.Add(g.op.Mul(indices[1], dim, name=name), indices[2], name=name)
+            len(set(ranks)) == 2
+        ), f"aten_index is not implemented for ranks={ranks} (1){g.get_debug_msg()}"
+        name = f"{name}_e"
+        dim3 = g.op.Shape(x, start=3, end=4, name=name)
+        flat_index = g.op.Reshape(
+            g.op.Add(g.op.Mul(indices[2], dim3, name=name), indices[3], name=name),
+            np.array([-1], dtype=np.int64),
+            name=name,
+        )
+        reshaped_x = g.op.Reshape(x, np.array([0, 0, -1], dtype=np.int64), name=name)
+        gathered = g.op.Gather(reshaped_x, flat_index, axis=2, name=name)
+        final_shape = g.op.Concat(
+            np.array([0, 0], dtype=np.int64),
+            g.op.Reshape(g.op.Size(indices[2], name=name), np.array([-1], dtype=np.int64)),
+            g.op.Reshape(g.op.Size(indices[3], name=name), np.array([-1], dtype=np.int64)),
+            name=name,
+            axis=0,
+        )
+        res = g.op.Reshape(gathered, final_shape, name=name)
+        if not sts:
+            g.set_type(res, g.get_type(x))
+        return res
 
-        dimx1 = g.op.Shape(x, start=0, end=1, name=name)
-        new_shapex = g.op.Concat(dimx1, np.array([-1], dtype=np.int64), name=name, axis=0)
-        reshaped_x = g.op.Reshape(x, new_shapex, name=name)
-
-        res = g.op.Gather(reshaped_x, flat_index, axis=1, outputs=outputs, name=name)
+    if n_none == 2 and indices[0] is None and indices[1] is None and len(indices) == 5:
+        ranks = [g.get_rank(i) for i in indices if i is not None]
+        assert (
+            len(set(ranks)) == 3
+        ), f"aten_index is not implemented for ranks={ranks} (3){g.get_debug_msg()}"
+        name = f"{name}_d"
+        dim3 = g.op.Shape(x, start=3, end=4, name=name)
+        dim4 = g.op.Shape(x, start=4, end=5, name=name)
+        flat_index = g.op.Reshape(
+            g.op.Add(
+                g.op.Mul(indices[2], g.op.Mul(dim3, dim4, name=name), name=name),
+                g.op.Add(g.op.Mul(indices[3], dim4, name=name), indices[4], name=name),
+            ),
+            np.array([-1], dtype=np.int64),
+            name=name,
+        )
+        reshaped_x = g.op.Reshape(x, np.array([0, 0, -1], dtype=np.int64), name=name)
+        gathered = g.op.Gather(reshaped_x, flat_index, axis=2, name=name)
+        final_shape = g.op.Concat(
+            np.array([0, 0], dtype=np.int64),
+            g.op.Reshape(g.op.Size(indices[2], name=name), np.array([-1], dtype=np.int64)),
+            g.op.Reshape(g.op.Size(indices[3], name=name), np.array([-1], dtype=np.int64)),
+            g.op.Reshape(g.op.Size(indices[4], name=name), np.array([-1], dtype=np.int64)),
+            name=name,
+            axis=0,
+        )
+        res = g.op.Reshape(gathered, final_shape, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
         return res
