@@ -5561,6 +5561,103 @@ def aten_native_dropout(
     return tuple(outputs)
 
 
+def aten_native_group_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: T,
+    bias: T,
+    N: Optional[int] = None,
+    C: Optional[int] = None,
+    HxW: Optional[int] = None,
+    group: int = 1,
+    eps: float = 1e-5,
+    name: str = "aten_native_group_norm",
+) -> Tuple[T, T, T]:
+    # assert N,C,HxW value with the input tensor shape
+    assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+    assert g.has_rank(x), f"Missing rank for {x!r}{g.get_debug_msg()}"
+
+    # Because onnx.GroupNorm() need size=group for weight and bias
+    # But the torch's aten function's input need size=channel, the size mismatched
+    # So we have to use onnx.InstanceNorm() to simulate
+    # neg_1 = op.Constant(value_ints=[-1])
+    # Create weight_instance_norm and bias_instance_norm, copied from Torch ONNX converter
+    group_tensor = g.op.Reshape(group, np.array([-1], dtype=np.int64), name=name)
+    # 0 in the shape list keeps dimension value unchanged, for InstanceNorm need [0,group,-1]
+    shape_input = g.op.Concat(
+        np.array([0], dtype=np.int64),
+        group_tensor,
+        np.array([-1], dtype=np.int64),
+        axis=0,
+        name=name,
+    )
+    input_reshaped = g.op.Reshape(x, shape_input, name=name)
+
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+
+    weight_inst_norm = g.op.ConstantOfShape(
+        group_tensor, value=from_array(np.array([1], dtype=dtype)), name=name
+    )
+    bias_inst_norm = g.op.ConstantOfShape(
+        group_tensor, value=from_array(np.array([0], dtype=dtype)), name=name
+    )
+    norm = g.op.InstanceNormalization(
+        input_reshaped, weight_inst_norm, bias_inst_norm, epsilon=float(eps), name=name
+    )
+    # Reshape back to input's shape
+    norm = g.op.Reshape(norm, g.op.Shape(x, name=name), name=name)
+    # Using the input weight and bias to do affine
+    # But need to unsqueeze to the target shape for broading cast easy
+    input_rank = g.get_rank(x)
+
+    axes_unsqueeze = np.arange(1, input_rank - 1).astype(np.int64)
+    weight_full_shape = g.op.UnsqueezeAnyOpset(weight, axes_unsqueeze)
+    bias_full_shape = g.op.UnsqueezeAnyOpset(bias, axes_unsqueeze)
+
+    # weight_full_shape = op.CastLike(weight_full_shape, norm)
+
+    norm_mul_weight = g.op.Mul(norm, weight_full_shape, name=name)
+    # bias_full_shape = op.CastLike(bias_full_shape, norm_mul_weight)
+    norm_result = g.op.Add(norm_mul_weight, bias_full_shape, name=name)
+    # Compute mean and rstd, but using Torch algorithm
+    # The returned shape for mean and vstd should be [N, group, -1]
+    N = g.op.Shape(x, start=0, end=1)
+    shape_N_group_neg1 = g.op.Concat(
+        N, group_tensor, np.array([-1], dtype=np.int64), axis=0, name=name
+    )
+    input_N_group_neg1 = g.op.Reshape(x, shape_N_group_neg1, name=name)
+    # The output size is [N, group], so dims = [2]
+    # axes = op.Constant(value_ints=[2])
+    # Get mean which size is [N, group, 1], for broadcasting
+    mean = g.op.ReduceMeanAnyOpset(
+        input_N_group_neg1, np.array([2], dtype=np.int64), name=name
+    )
+    input_sub_mean = g.op.Sub(input_N_group_neg1, mean, name=name)
+    sqr_input_sub_mean = g.op.Mul(input_sub_mean, input_sub_mean, name=name)
+    # In Pytorch, vstd = 1/(sqrt(var + eps))
+    var = g.op.ReduceMeanAnyOpset(
+        sqr_input_sub_mean, np.array([2], dtype=np.int64), keepdims=False, name=name
+    )
+    rstd = g.op.Reciprocal(
+        g.op.Sqrt(g.op.Add(var, np.array([eps], dtype=dtype, name=name), name=name)), name=name
+    )
+    # Get the correct shape [N, group] for mean again
+    mean = g.op.ReduceMeanAnyOpset(
+        input_N_group_neg1, np.array([2], dtype=np.int64), keepdims=False, name=name
+    )
+    if not sts:
+        g.set_type(norm_result, g.get_type(x))
+        g.set_type(mean, g.get_type(x))
+        g.set_type(rstd, g.get_type(x))
+        if g.has_shape(x):
+            g.set_shape(x, g.get_shape(x))
+        else:
+            g.set_rank(x, g.get_rank(x))
+    return norm_result, mean, rstd
+
+
 def aten_native_layer_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
