@@ -1004,6 +1004,18 @@ def aten_adaptive_avg_pool2d(
     return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=2, name=name)
 
 
+def aten__adaptive_avg_pool2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: Tuple[int, ...],
+    name="aten._adaptive_avg_pool2d",
+):
+    """adaptative AvgPool"""
+    return _aten_adaptive_avg_poolnd(g, sts, outputs, x, output_size, d=2, name=name)
+
+
 def aten_adaptive_avg_pool3d(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -2642,6 +2654,24 @@ def aten_exp(
     return res
 
 
+def aten_expm1(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "expm1",
+) -> T:
+    """expm1"""
+    assert g.get_type(x), f"Type of {x!r} is unknown{g.get_debug_msg()}"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    res = g.op.Sub(
+        g.op.Exp(x, name=name), np.array([1], dtype=dtype), name=name, outputs=outputs
+    )
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
 def aten__exit_autocast(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3592,7 +3622,7 @@ def aten_index_Tensor(
     indices: List[int],
     name: str = "index_Tensor",
 ) -> T:
-    "[...,:, ...]"
+    "[..., :, ...]"
     assert isinstance(indices, (list, tuple)), f"Unexpected type {type(indices)} for indices"
     if len(indices) == 1 and isinstance(indices[0], str):
         return aten_index_select(
@@ -3641,6 +3671,27 @@ def aten_index_Tensor(
         reshaped_x = g.op.Reshape(x, new_shapex, name=name)
 
         res = g.op.Gather(reshaped_x, flat_index, axis=1, outputs=outputs)
+        if not sts:
+            g.set_type(res, g.get_type(x))
+        return res
+
+    if n_none == 2 and indices[0] is None and indices[1] is None and len(indices) == 4:
+        shapes = [g.get_shape(i) for i in indices if i is not None]
+        assert (
+            len(set(shapes)) == 1
+        ), f"aten_index is not implemented for shapes={shapes} (1){g.get_debug_msg()}"
+        same_shape = shapes[0]
+        assert (
+            len(same_shape) == 1
+        ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
+        dim = g.op.Shape(x, start=2, end=3, name=name)
+        flat_index = g.op.Add(g.op.Mul(indices[2], dim, name=name), indices[3], name=name)
+
+        dimx1 = g.op.Shape(x, start=0, end=2, name=name)
+        new_shapex = g.op.Concat(dimx1, np.array([-1], dtype=np.int64), name=name, axis=0)
+        reshaped_x = g.op.Reshape(x, new_shapex, name=name)
+
+        res = g.op.Gather(reshaped_x, flat_index, axis=2, outputs=outputs)
         if not sts:
             g.set_type(res, g.get_type(x))
         return res
@@ -4285,7 +4336,7 @@ def aten__unsafe_index_put(
     values: T,
     accumulate: bool = False,
 ) -> T:
-    "[...,:, ...]"
+    "[..., :, ...]"
     return aten_index_put(
         g,
         sts,
@@ -4467,9 +4518,7 @@ def aten_leaky_relu(
     "leaky relu"
     assert not inplace, f"inplace not implemented for leaky_relu{g.get_debug_msg()}"
 
-    dtype = tensor_dtype_to_np_dtype(g.get_type(a))
-    slope = np.array([negative_slope], dtype=dtype)
-    res = g.op.LeakyRelu(a, slope, outputs=outputs, name=name)
+    res = g.op.LeakyRelu(a, alpha=float(negative_slope), outputs=outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, res, a)
     return res
@@ -5215,6 +5264,44 @@ def aten_max_pool2d_with_indices(
     )
 
 
+def aten_max_pool3d_with_indices(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    kernel_size: Sequence[int],
+    stride: Sequence[int] = (),
+    padding: Sequence[int] = (0, 0, 0),
+    dilation: Sequence[int] = (1, 1, 1),
+    ceil_mode: bool = False,
+) -> Tuple[T, T]:
+    "maxpool"
+    assert isinstance(padding, (tuple, list))
+    assert isinstance(ceil_mode, (bool, int))
+    expand_size = 3
+
+    kernel_shape, strides, pads, dilations = _adjust_attributes_of_max_pool(
+        expand_size, kernel_size, stride, padding, dilation
+    )
+
+    return _aten_max_pool_with_indices_onnx(
+        g,
+        sts,
+        outputs,
+        x,
+        kernel_shape,
+        strides,
+        pads,
+        dilations,
+        ceil_mode,
+        4,
+        ([1] * expand_size),
+        ([0] * expand_size),
+        ([2 + i for i in range(expand_size)]),
+        name="max_pool3d_with_indices",
+    )
+
+
 def aten_mean_dim(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5340,6 +5427,23 @@ def aten_mod(
     )
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
+    return res
+
+
+def aten_fmod_Scalar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    scalar: float,
+    name="fmod_Scalar",
+) -> T:
+    """fmod.Scalar"""
+    assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    res = g.op.Mod(x, np.array([scalar], dtype=dtype), fmod=1)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 
@@ -6620,6 +6724,23 @@ def aten_reshape(
     from ._aten_methods import aten_meth_reshape
 
     return aten_meth_reshape(g, sts, outputs, input_name, *shape, name=name)
+
+
+def aten_reshape_as(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    self: T,
+    other: T,
+    name="reshape_as",
+) -> T:
+    """reshape_as"""
+    shape = g.op.Shape(other, name=name)
+    res = g.op.Reshape(self, shape, name=name)
+    if not sts:
+        if g.has_type(self):
+            g.set_type(res, g.get_type(self))
+    return res
 
 
 def aten_scan(
