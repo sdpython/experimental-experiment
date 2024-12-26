@@ -6629,6 +6629,18 @@ def aten_pow_Scalar(
     return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
 
 
+def aten_pow__Scalar(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    exponent: T,
+    name: str = "pow__Scalar",
+) -> T:
+    "pow"
+    return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
+
+
 def aten_pow_Tensor_Scalar(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -6982,6 +6994,20 @@ def aten_scatter_add(
     return res
 
 
+def aten_scatter_add_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    name: str = "scatter_add_",
+) -> T:
+    """scatter_add_"""
+    return aten_scatter_add(g, sts, outputs, x, dim, index, src=src, name=name)
+
+
 def aten_scatter_reduce_two(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -7016,6 +7042,33 @@ def aten_scatter_reduce_two(
             x, index, src, axis=dim, reduction=onnx_reduce, name=name, outputs=outputs
         )
     return result
+
+
+def aten_scatter_reduce__two(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    reduce: str,
+    include_self: bool = True,
+    name: str = "scatter_reduce__two",
+):
+    """scatter_reduce_.two"""
+    return aten_scatter_reduce_two(
+        g,
+        sts,
+        outputs,
+        x,
+        dim,
+        index,
+        src=src,
+        reduce=reduce,
+        include_self=include_self,
+        name=name,
+    )
 
 
 def aten_relu(

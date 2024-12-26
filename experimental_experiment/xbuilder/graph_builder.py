@@ -6347,7 +6347,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 tu = tuple(map(int, cst)) if len(cst.shape) > 0 else (int(cst),)
             self.set_value_shape(i, tu)
 
-        if node.op_type == "Identity":
+        if node.op_type in {"Identity", "Abs"}:
             value = self.value_as_shape(node.input[0])
             if value is not None:
                 node.doc_string += "#SV-Id1"
