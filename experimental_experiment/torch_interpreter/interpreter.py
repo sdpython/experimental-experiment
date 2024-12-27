@@ -1077,7 +1077,9 @@ class DynamoInterpreter:
                 # depending on the result values
                 t_shape = tuple(shape)
                 self._verify_new_shape(shape, node)
-                self.builder.set_shape(node.name, t_shape, allow_zero=t_shape == (0,))
+                self.builder.set_shape(
+                    node.name, t_shape, allow_zero=all_int(t_shape) and t_shape == (0,)
+                )
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
             elif isinstance(val, self.torch.SymInt):
@@ -1695,7 +1697,10 @@ class DynamoInterpreter:
                         # we must not set the existing shape as static,
                         # if it was dynamic before
                         self.builder.set_shape(
-                            r, shape, set_if_more_precise=False, allow_zero=shape == (0,)
+                            r,
+                            shape,
+                            set_if_more_precise=False,
+                            allow_zero=all_int(shape) and shape == (0,),
                         )
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
