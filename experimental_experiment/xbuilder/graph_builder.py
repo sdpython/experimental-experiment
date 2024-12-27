@@ -1564,7 +1564,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self.register_dynamic_objects_from_dim(sdim)
         shape = self.verify_shape(shape, 0, name=name)
-        assert allow_zero or 0 not in shape, (
+        assert allow_zero or 0 not in shape or shape == (0,), (
             f"Unexpected null shape {shape!r} for name={name!r}, "
             f"this case usually happens before a concetenation"
             f"{self.get_debug_msg()}"
@@ -2351,7 +2351,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Type mismatch for {name!r}, existing shape "
                 f"{self.get_shape(name)}, new shape {shape}{self.get_debug_msg()}"
             )
-            self.set_shape(name, shape)
+            self.set_shape(name, shape, allow_zero=allow_empty)
             self.set_type(name, itype)
         else:
             assert allow_empty or len(shape) == 0 or min(shape) > 0, (
@@ -2365,7 +2365,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert existing is None or not self.has_name(
                 name
             ), f"initializer {name!r} already exists{self.get_debug_msg()}"
-            self.set_shape(name, shape)
+            self.set_shape(name, shape, allow_zero=allow_empty)
             self.set_type(name, itype)
             if not self.has_name(name):
                 self.set_name(name, "make_initializer")
