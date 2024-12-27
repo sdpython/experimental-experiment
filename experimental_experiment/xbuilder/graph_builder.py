@@ -6762,12 +6762,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                         dyn_name = f"{i.name}_{index}"
                         new_shape.append(dyn_name)
                     shape = tuple(new_shape)
+                new_shape = []
                 for axis, sh in enumerate(shape):
                     if isinstance(sh, int):
-                        continue
+                        if sh != 0:
+                            new_shape.append(sh)
+                            continue
+                        # We replace it with a letter.
+                        sh = f"dim_{i.name}_{axis}"
+                    new_shape.append(sh)
                     self.make_dynamic_object(
                         sh, self.torch.SymInt(sh), input_name=i.name, axis=axis
                     )
+                shape = tuple(new_shape)
                 self.set_shape(i.name, shape)
             if (
                 self.get_type(i.name) == TensorProto.INT64
