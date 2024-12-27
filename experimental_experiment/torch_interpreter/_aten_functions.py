@@ -3674,6 +3674,8 @@ def aten_index_Tensor(
             name=name,
             axis=0,
         )
+        g.set_type(final_shape, TensorProto.INT64)
+        g.set_shape(final_shape, (3,))
         res = g.op.Reshape(gathered, final_shape, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -3700,6 +3702,8 @@ def aten_index_Tensor(
             name=name,
             axis=0,
         )
+        g.set_type(final_shape, TensorProto.INT64)
+        g.set_shape(final_shape, (4,))
         res = g.op.Reshape(gathered, final_shape, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -3731,6 +3735,8 @@ def aten_index_Tensor(
             name=name,
             axis=0,
         )
+        g.set_type(final_shape, TensorProto.INT64)
+        g.set_shape(final_shape, (5,))
         res = g.op.Reshape(gathered, final_shape, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
