@@ -126,6 +126,12 @@ class Opset:
             outputs = self._implemented[op_type]
         if inputs is None:
             inputs = []
+        assert (
+            op_type != "Reshape"
+            or len(inputs) != 2
+            or not isinstance(inputs[1], np.ndarray)
+            or inputs[1].dtype == np.int64
+        ), f"Suspicious shape {inputs[1]!r} for a Reshape{self.builder.get_debug_msg()}"
         new_inputs = []
         for i in inputs:
             assert not isinstance(

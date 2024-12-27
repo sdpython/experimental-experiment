@@ -635,125 +635,140 @@ class CustomTracer(torch.fx.Tracer):
 
         err_graph = str(graph)
 
-        existing_nodes = list(enumerate(graph.nodes))
-        for pos, node in reversed(inplace):
-            if node.target in {
-                operator.add,
-                operator.floordiv,
-                operator.mul,
-                operator.mod,
-                operator.sub,
-            }:
-                # This node cannot be one inplace modifications. The node is just not used.
-                graph.erase_node(node)
-                continue
-
-            if hasattr(node.target, "name"):
-                if (
-                    node.target.name()
-                    in {
-                        "aten::view",
-                        "aten::detach_",  # output = input
-                        "aten::add.Tensor",  # it happens when running
-                        "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
-                        "aten::mul.Tensor",
-                        "aten::sub.Tensor",
-                        "aten::zeros",  # unused as it does not end up with '_'
-                    }
-                    or node.target.name()[-1] != "_"  # not an inplace modification
-                ):
+        max_iter = 10
+        while inplace and max_iter > 0:
+            existing_nodes = list(enumerate(graph.nodes))
+            for pos, node in reversed(inplace):
+                if node.target in {
+                    operator.add,
+                    operator.floordiv,
+                    operator.mul,
+                    operator.mod,
+                    operator.sub,
+                }:
                     # This node cannot be one inplace modifications. The node is just not used.
-                    cls.graph_erase_node(graph, node)
+                    graph.erase_node(node)
                     continue
 
-                assert node.target.name() in {"aten::copy_"} and len(node.args) == 2, (
-                    f"(inplace) Unsupported target {node.target!r}, target_name="
-                    f"{node.target.name()!r}, name={node.name!r}, node.args={node.args} "
-                    f"at position {pos}/{len(graph.nodes)}"
-                    f"\n--original graph--\n{err_graph}"
-                    f"\n--graph\n{exported_program or graph}"
-                )
+                if hasattr(node.target, "name"):
+                    if (
+                        node.target.name()
+                        in {
+                            "aten::view",
+                            "aten::detach_",  # output = input
+                            "aten::add.Tensor",  # it happens when running
+                            "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
+                            "aten::mul.Tensor",
+                            "aten::sub.Tensor",
+                            "aten::zeros",  # unused as it does not end up with '_'
+                        }
+                        or node.target.name()[-1] != "_"  # not an inplace modification
+                    ):
+                        # This node cannot be one inplace modifications.
+                        # The node is just not used.
+                        cls.graph_erase_node(graph, node)
+                        continue
 
-                # We change the predecessor of the node is a node clone.
-                predecessor = node.args[0]
-                assert (
-                    hasattr(predecessor.target, "name")
-                    and predecessor.target.name() == "aten::clone"
-                ), (
-                    f"(inplace) Unexpected predecessor {predecessor.target!r} "
-                    f"for node {node.name!r} with args={node.args} at position "
-                    f"{pos}/{len(graph.nodes)}"
-                    f"\n--original graph--\n{err_graph}"
-                    f"\n--graph\n{exported_program or graph}"
-                )
+                    assert node.target.name() in {"aten::copy_"} and len(node.args) == 2, (
+                        f"(inplace) Unsupported target {node.target!r}, target_name="
+                        f"{node.target.name()!r}, name={node.name!r}, node.args={node.args} "
+                        f"at position {pos}/{len(graph.nodes)}"
+                        f"\n--original graph--\n{err_graph}"
+                        f"\n--graph\n{exported_program or graph}"
+                    )
 
-                # class Node can be used as a key
-                # We also assume a user is placed after this node.
-                nodes_to_leave = {n[1] for n in existing_nodes[: pos + 1]}
-                node_args = node.args
-                p_users = predecessor.users
+                    # We change the predecessor of the node is a node clone.
+                    predecessor = node.args[0]
+                    assert (
+                        hasattr(predecessor.target, "name")
+                        and predecessor.target.name() == "aten::clone"
+                    ), (
+                        f"(inplace) Unexpected predecessor {predecessor.target!r} "
+                        f"for node {node.name!r} with args={node.args} at position "
+                        f"{pos}/{len(graph.nodes)}"
+                        f"\n--original graph--\n{err_graph}"
+                        f"\n--graph\n{exported_program or graph}"
+                    )
 
-                # We can replace with expand then.
-                with graph.inserting_before(node):
+                    # class Node can be used as a key
+                    # We also assume a user is placed after this node.
+                    nodes_to_leave = {n[1] for n in existing_nodes[: pos + 1]}
+                    node_args = node.args
+                    p_users = predecessor.users
+
+                    # We can replace with expand then.
+                    with graph.inserting_before(node):
+                        # We assume the first argument is the one modified inplace.
+                        new_node = graph.call_method(
+                            "expand_as", args=(node_args[1], predecessor)
+                        )
+                        # let's replace
+                        changed = predecessor.replace_all_uses_with(
+                            new_node,
+                            delete_user_cb=(
+                                lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)
+                            ),
+                        )
+                        graph.erase_node(node)
+                        # new_node is replaced as well so we manually revert the replacement
+                        new_node.update_arg(1, predecessor)
+
+                    assert changed, (
+                        f"No change applied, the inplace node [{node}] "
+                        f"at position {pos} with node.args={node_args}, was not replaced "
+                        f"by [{new_node}] with target {new_node.target!r} and "
+                        f"new_node.args={new_node.args}, predecessor="
+                        f"[{predecessor}] with target={predecessor.target!r}, "
+                        f"p_users={list(p_users)}, "
+                        f"predecessor.users={list(predecessor.users)}, "
+                        f"new_node.users={list(new_node.users)} in "
+                        f"\n{exported_program or graph}"
+                    )
+                else:
+                    assert node.target in {
+                        "add_",
+                        "div_",
+                        "mul_",
+                        "mod_",
+                        "sub_",
+                        operator.setitem,
+                    }, (
+                        f"Unsupported target {node.target!r}, name={node.name!r} "
+                        f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
+                    )
+
                     # We assume the first argument is the one modified inplace.
-                    new_node = graph.call_method("expand_as", args=(node_args[1], predecessor))
+                    new_name = node
+                    old_name = node.args[0]
+
+                    # class Node can be used as a key
+                    # We also assume a user is placed after this node.
+                    nodes_to_leave = {n[1] for n in existing_nodes[: pos + 1]}
+
                     # let's replace
-                    changed = predecessor.replace_all_uses_with(
-                        new_node,
+                    changed = old_name.replace_all_uses_with(
+                        new_name,
                         delete_user_cb=(
                             lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)
                         ),
                     )
-                    graph.erase_node(node)
-                    # new_node is replaced as well so we manually revert the replacement
-                    new_node.update_arg(1, predecessor)
 
-                assert changed, (
-                    f"No change applied, the inplace node [{node}] "
-                    f"at position {pos} with node.args={node_args}, was not replaced "
-                    f"by [{new_node}] with target {new_node.target!r} and "
-                    f"new_node.args={new_node.args}, predecessor="
-                    f"[{predecessor}] with target={predecessor.target!r}, "
-                    f"p_users={list(p_users)}, predecessor.users={list(predecessor.users)}, "
-                    f"new_node.users={list(new_node.users)} in "
-                    f"\n{exported_program or graph}"
-                )
-            else:
-                assert node.target in {
-                    "add_",
-                    "div_",
-                    "mul_",
-                    "mod_",
-                    "sub_",
-                    operator.setitem,
-                }, (
-                    f"Unsupported target {node.target!r}, name={node.name!r} "
-                    f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
-                )
+                    assert changed, (
+                        f"No change applied, the inplace node [{node}] at position {pos} "
+                        f"does not replace [{old_name}] in \n{graph}\n-- node to keep --"
+                        f"\n{nodes_to_leave}"
+                    )
 
-                # We assume the first argument is the one modified inplace.
-                new_name = node
-                old_name = node.args[0]
+            # We need to continue in case one unused node left another one
+            # after it was removed. It could be improved by looking at
+            inplace = cls._inplace_nodes(graph)
+            if len(inplace) == 0:
+                # No inplace left.
+                break
+            max_iter -= 1
 
-                # class Node can be used as a key
-                # We also assume a user is placed after this node.
-                nodes_to_leave = {n[1] for n in existing_nodes[: pos + 1]}
-
-                # let's replace
-                changed = old_name.replace_all_uses_with(
-                    new_name,
-                    delete_user_cb=(lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)),
-                )
-
-                assert changed, (
-                    f"No change applied, the inplace node [{node}] at position {pos} "
-                    f"does not replace [{old_name}] in \n{graph}\n-- node to keep --"
-                    f"\n{nodes_to_leave}"
-                )
-
-        inplace = cls._inplace_nodes(graph)
         assert len(inplace) == 0, (
-            f"Inplace nodes remain at positions {sorted(_[0] for _ in inplace)} "
-            f"in\n{graph}\n--original graph--\n{err_graph}"
+            f"Inplace nodes remain at positions {sorted(inplace)}"
+            f"/{len(graph.nodes)} in\n{graph}\n--original graph--\n{err_graph}"
         )
         return n_inplace
