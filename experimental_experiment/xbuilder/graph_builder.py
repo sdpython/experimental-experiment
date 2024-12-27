@@ -1536,6 +1536,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         set_rank: bool = True,
         set_if_more_precise: bool = False,
         exc: bool = False,
+        allow_zero: bool = False,
     ):
         """
         Sets the shape for a result. It is exists, it checks the new shape
@@ -1546,6 +1547,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param set_rank: set the rank as well
         :param set_if_more_precise: change the shape if it is more precise
         :param exc: raise an exception if inconsistency
+        :param allow_zero: the shape should not have a value equal to zero
         """
         if (self._debug_stop or self._debug_stop_shape) and name in (
             self._debug_stop,
@@ -1562,6 +1564,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self.register_dynamic_objects_from_dim(sdim)
         shape = self.verify_shape(shape, 0, name=name)
+        assert allow_zero or 0 not in shape, (
+            f"Unexpected null shape {shape!r} for name={name!r}, "
+            f"this case usually happens before a concetenation"
+            f"{self.get_debug_msg()}"
+        )
 
         # costly
         # assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
