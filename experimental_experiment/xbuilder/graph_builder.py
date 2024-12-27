@@ -6418,19 +6418,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                     self.set_value_shape(node.output[0], node.output[0])
                 return True
 
-            start = self.get_attribute(node, "start", exc=False) or 0
+            start = self.get_attribute(node, "start", exc=False)
             end = self.get_attribute(node, "end", exc=False)
             if end is None:
                 if self.has_rank(node.input[0]):
                     end = self.get_rank(node.input[0])
             if self.has_shape(node.input[0]):
                 shape = self.get_shape(node.input[0])
-                assert start.i < len(shape), (
-                    f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
+                assert start is None or start.i < len(shape), (
+                    f"Shape mismatch, start={0 if start is None else start.i}, "
+                    f"shape of {node.input[0]!r} "
                     f"is {shape}{self.get_debug_msg()}"
                 )
                 if end is None:
-                    n_shape = shape[start.i :]
+                    n_shape = shape[0 if start is None else start.i :]
                     self.set_value_shape(node.output[0], n_shape)
                     if all_int(shape):
                         self.update_node_constant(node.output[0], node)
@@ -6442,7 +6443,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"shape of {node.input[0]!r} "
                     f"is {shape}{self.get_debug_msg()}"
                 )
-                n_shape = shape[start.i : getattr(end, "i", end)]
+                n_shape = shape[0 if start is None else start.i : getattr(end, "i", end)]
                 if all_int(shape):
                     self.update_node_constant(node.output[0], node)
                 self.set_value_shape(node.output[0], n_shape)

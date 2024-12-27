@@ -389,7 +389,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(2 * 2 * 8 * 8 * 16).reshape((2, 2, 8, 8, 16)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_index_tensor", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_index_tensor_2_5", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -421,7 +421,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(2 * 2 * 8 * 16).reshape((2, 2, 8, 16)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_index_tensor", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_index_tensor_2_4", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -432,6 +432,39 @@ class TestOnnxExportAten(ExtTestCase):
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_index_tensor_2_4_1_1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                self.i2 = torch.nn.Buffer(torch.randint(0, 14, (4, 14, 1, 1)).to(torch.int64))
+                self.i3 = torch.nn.Buffer(torch.randint(0, 12, (4, 14)).to(torch.int64))
+
+            def forward(self, x):
+                return x[:, :, self.i2, self.i3]
+
+        model = Model()
+        x = torch.arange(128 * 24 * 56 * 56).reshape((128, 24, 56, 56)).to(torch.float32)
+        expected = model(x)
+        model_path = self._call_exporter(
+            "test_aten_index_tensor_2_4_1_1", "custom", model, (x,)
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqualArray(expected.reshape((-1,)), got[0].reshape((-1,)), atol=1e-5)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not working on windows")
@@ -453,7 +486,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(2 * 8 * 16).reshape((2, 8, 16)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_index_tensor", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_index_tensor_1_3", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime

@@ -3658,6 +3658,7 @@ def aten_index_Tensor(
         assert (
             len(set(ranks)) == 2
         ), f"aten_index is not implemented for ranks={ranks} (1){g.get_debug_msg()}"
+        i_rank = ranks[-1]
         name = f"{name}_d"
         dim2 = g.op.Shape(x, start=2, end=3, name=name)
         flat_index = g.op.Reshape(
@@ -3669,13 +3670,13 @@ def aten_index_Tensor(
         gathered = g.op.Gather(reshaped_x, flat_index, axis=1, name=name)
         final_shape = g.op.Concat(
             np.array([0], dtype=np.int64),
-            g.op.Reshape(g.op.Size(indices[1], name=name), np.array([-1], dtype=np.int64)),
-            g.op.Reshape(g.op.Size(indices[2], name=name), np.array([-1], dtype=np.int64)),
+            g.op.Shape(indices[1], end=i_rank, name=name),
+            g.op.Shape(indices[2], name=name),
             name=name,
             axis=0,
         )
         g.set_type(final_shape, TensorProto.INT64)
-        g.set_shape(final_shape, (3,))
+        g.set_shape(final_shape, (1 + i_rank * 2,))
         res = g.op.Reshape(gathered, final_shape, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -3686,6 +3687,7 @@ def aten_index_Tensor(
         assert (
             len(set(ranks)) == 2
         ), f"aten_index is not implemented for ranks={ranks} (1){g.get_debug_msg()}"
+        i_rank = ranks[-1]
         name = f"{name}_e"
         dim3 = g.op.Shape(x, start=3, end=4, name=name)
         flat_index = g.op.Reshape(
@@ -3697,13 +3699,13 @@ def aten_index_Tensor(
         gathered = g.op.Gather(reshaped_x, flat_index, axis=2, name=name)
         final_shape = g.op.Concat(
             np.array([0, 0], dtype=np.int64),
-            g.op.Reshape(g.op.Size(indices[2], name=name), np.array([-1], dtype=np.int64)),
-            g.op.Reshape(g.op.Size(indices[3], name=name), np.array([-1], dtype=np.int64)),
+            g.op.Shape(indices[2], end=i_rank, name=name),
+            g.op.Shape(indices[3], name=name),
             name=name,
             axis=0,
         )
         g.set_type(final_shape, TensorProto.INT64)
-        g.set_shape(final_shape, (4,))
+        g.set_shape(final_shape, (2 + i_rank * 2,))
         res = g.op.Reshape(gathered, final_shape, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -3714,6 +3716,7 @@ def aten_index_Tensor(
         assert (
             len(set(ranks)) == 3
         ), f"aten_index is not implemented for ranks={ranks} (3){g.get_debug_msg()}"
+        i_rank = ranks[-1]
         name = f"{name}_d"
         dim3 = g.op.Shape(x, start=3, end=4, name=name)
         dim4 = g.op.Shape(x, start=4, end=5, name=name)
@@ -3729,14 +3732,14 @@ def aten_index_Tensor(
         gathered = g.op.Gather(reshaped_x, flat_index, axis=2, name=name)
         final_shape = g.op.Concat(
             np.array([0, 0], dtype=np.int64),
-            g.op.Reshape(g.op.Size(indices[2], name=name), np.array([-1], dtype=np.int64)),
-            g.op.Reshape(g.op.Size(indices[3], name=name), np.array([-1], dtype=np.int64)),
-            g.op.Reshape(g.op.Size(indices[4], name=name), np.array([-1], dtype=np.int64)),
+            g.op.Shape(indices[2], end=i_rank, name=name),
+            g.op.Shape(indices[3], end=i_rank, name=name),
+            g.op.Shape(indices[4], name=name),
             name=name,
             axis=0,
         )
         g.set_type(final_shape, TensorProto.INT64)
-        g.set_shape(final_shape, (5,))
+        g.set_shape(final_shape, (2 + i_rank * 3,))
         res = g.op.Reshape(gathered, final_shape, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
