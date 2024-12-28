@@ -3276,7 +3276,6 @@ def aten_grid_sampler(
     name: str = "grid_sampler",
 ) -> T:
     """grid_sampler"""
-
     inter_mode_options = ("bilinear", "nearest", "bicubic")
     inter_mode_str = inter_mode_options[interpolation_mode]
 
@@ -3290,6 +3289,34 @@ def aten_grid_sampler(
         mode=inter_mode_str,
         padding_mode=padding_mode_str,
         outputs=outputs,
+        name=name,
+    )
+
+
+def aten_grid_sampler_2d(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    grid: T,
+    interpolation_mode: int,
+    padding_mode: int,
+    align_corners: bool,
+    name: str = "grid_sampler_2d",
+) -> T:
+    """grid_sampler_2d"""
+    inter_mode_options = ("bilinear", "nearest", "bicubic")
+    inter_mode_str = inter_mode_options[interpolation_mode]
+
+    padding_mode_options = ("zeros", "border", "reflection")
+    padding_mode_str = padding_mode_options[padding_mode]
+
+    return g.op.GridSample(
+        x,
+        grid,
+        align_corners=align_corners,
+        mode=inter_mode_str,
+        padding_mode=padding_mode_str,
         name=name,
     )
 
