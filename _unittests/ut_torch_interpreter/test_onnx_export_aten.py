@@ -1,11 +1,12 @@
 import unittest
-from typing import Any, List
+from typing import Any, List, Optional
 import numpy as np
 import onnx.helper as oh
 from onnx.checker import check_model
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows, requires_cuda
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
 
 
@@ -21,6 +22,8 @@ class TestOnnxExportAten(ExtTestCase):
         verbose: int = 0,
         optimize: bool = False,
         strict: bool = False,
+        patterns: Optional[str] = None,
+        processor: str = "CPU",
     ) -> str:
         import torch
 
@@ -33,6 +36,11 @@ class TestOnnxExportAten(ExtTestCase):
             export_options = ExportOptions(
                 decomposition_table="all" if decomposition else None, strict=strict
             )
+            opt_options = (
+                OptimizationOptions(patterns=patterns, processor=processor)
+                if patterns or processor != "CPU"
+                else None
+            )
             to_onnx(
                 model,
                 inputs,
@@ -40,6 +48,7 @@ class TestOnnxExportAten(ExtTestCase):
                 export_options=export_options,
                 verbose=verbose,
                 optimize=optimize,
+                options=opt_options,
             )
         return filename
 
@@ -109,7 +118,7 @@ class TestOnnxExportAten(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [index.numpy(), update.numpy()]))
         got = sess.run(None, feeds)[0]
@@ -143,7 +152,7 @@ class TestOnnxExportAten(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [index.numpy(), update.numpy()]))
         got = sess.run(None, feeds)[0]
@@ -179,7 +188,7 @@ class TestOnnxExportAten(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)[0]
@@ -208,7 +217,7 @@ class TestOnnxExportAten(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)[0]
@@ -237,7 +246,7 @@ class TestOnnxExportAten(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)
@@ -315,14 +324,14 @@ class TestOnnxExportAten(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not working on windows")
-    def test_aten_batch_norm(self):
+    def test_aten_batch_norm_notraining(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -354,18 +363,267 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.randn((2, 2, 8, 8), requires_grad=False)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_batch_norm", "custom", model, (x,))
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_notraining", "custom", model, (x,)
+        )
         check_model(model_path)
 
         import onnxruntime
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_batch_norm_training(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Buffer(torch.tensor([5, 7]).to(torch.float32)) * 2
+                self.bias = torch.nn.Buffer(torch.tensor([4, 5]).to(torch.float32)) * 0.1
+                self.running_mean = (
+                    torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.5
+                )
+                self.running_var = (
+                    torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.6
+                )
+
+            def forward(self, x):
+                return torch.batch_norm(
+                    x,
+                    self.weight,
+                    self.bias,
+                    running_mean=self.running_mean,
+                    running_var=self.running_var,
+                    training=True,
+                    momentum=0.5,
+                    eps=0.6,
+                    cudnn_enabled=False,
+                )
+
+        model = Model()
+        x = torch.randn((2, 2, 8, 8), requires_grad=False)
+        expected = model(x)
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training", "custom", model, (x,)
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_batch_norm_training16(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Buffer(
+                    torch.abs(torch.randn((16,), dtype=torch.float16)) + 1
+                )
+                self.bias = torch.nn.Buffer(torch.randn((16,), dtype=torch.float16))
+                self.running_mean = torch.nn.Buffer(torch.randn((16,), dtype=torch.float16))
+                self.running_var = torch.nn.Buffer(
+                    torch.abs(torch.randn((16,), dtype=torch.float16)) + 1
+                )
+
+            def forward(self, x):
+                return torch.batch_norm(
+                    x,
+                    self.weight,
+                    self.bias,
+                    running_mean=self.running_mean,
+                    running_var=self.running_var,
+                    training=True,
+                    momentum=0,
+                    eps=0.006,
+                    cudnn_enabled=False,
+                )
+
+        model = Model()
+        x = torch.randn((1, 16, 27), requires_grad=False).to(torch.float16)
+        expected = model(x)
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training16", "custom", model, (x,)
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-2)
+
+    @skipif_ci_windows("not working on windows")
+    @requires_cuda()
+    def test_aten_batch_norm_training_cuda(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Buffer(
+                    torch.abs(torch.randn((16,), dtype=torch.float32)) + 1
+                )
+                self.bias = torch.nn.Buffer(torch.randn((16,), dtype=torch.float32))
+                self.running_mean = torch.nn.Buffer(torch.randn((16,), dtype=torch.float32))
+                self.running_var = torch.nn.Buffer(
+                    torch.abs(torch.randn((16,), dtype=torch.float32)) + 1
+                )
+
+            def forward(self, x):
+                return torch.batch_norm(
+                    x,
+                    self.weight,
+                    self.bias,
+                    running_mean=self.running_mean,
+                    running_var=self.running_var,
+                    training=True,
+                    momentum=1,
+                    eps=0.006,
+                    cudnn_enabled=False,
+                )
+
+        model = Model().to("cuda")
+        x = torch.randn((1, 16, 27), requires_grad=False).to(torch.float32).to("cuda")
+        expected = model(x)
+
+        # check on CPU
+
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training_cudano",
+            "custom",
+            model,
+            (x,),
+            optimize=True,
+            patterns="default-BatchNormalizationTraining",
+        )
+        check_model(model_path)
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().cpu().numpy()]))
+        got = sess.run(None, feeds)
+        ref = ExtendedReferenceEvaluator(model_path, verbose=0)
+        gotr = ref.run(None, feeds)
+        self.assertEqualArray(got[0], gotr[0], atol=1e-4)
+        self.assertEqualArray(expected, got[0], atol=1e-4)
+
+        # check on CPU decomposed
+
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training_cuda_dec",
+            "custom",
+            model,
+            (x,),
+            optimize=True,
+            patterns="default",
+        )
+        check_model(model_path)
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().cpu().numpy()]))
+        got = sess.run(None, feeds)
+        ref = ExtendedReferenceEvaluator(model_path, verbose=0)
+        gotr = ref.run(None, feeds)
+        self.assertEqualArray(got[0], gotr[0], atol=1e-4)
+        self.assertEqualArray(expected, got[0], atol=1e-4)
+
+        # check on CUDA
+
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training_cuda",
+            "custom",
+            model,
+            (x,),
+            optimize=True,
+            patterns="onnxruntime",
+            processor="CUDA",
+        )
+        check_model(model_path)
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CUDAExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().cpu().numpy()]))
+        got = sess.run(None, feeds)
+        ref = ExtendedReferenceEvaluator(model_path, verbose=0)
+        gotr = ref.run(None, feeds)
+        self.assertEqualArray(got[0], gotr[0], atol=1e-4)
+        self.assertEqualArray(expected, got[0], atol=1e-4)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_batch_norm_training16_none(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Buffer(
+                    torch.abs(torch.randn((16,), dtype=torch.float16)) + 1
+                )
+                self.bias = torch.nn.Buffer(torch.randn((16,), dtype=torch.float16))
+
+            def forward(self, x):
+                return torch.batch_norm(
+                    x,
+                    self.weight,
+                    self.bias,
+                    running_mean=None,
+                    running_var=None,
+                    training=True,
+                    momentum=0,
+                    eps=1e-5,
+                    cudnn_enabled=False,
+                )
+
+        model = Model()
+        x = torch.randn((1, 16, 27), requires_grad=False).to(torch.float16)
+        expected = model(x)
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training16_none", "custom", model, (x,)
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-2)
 
     @skipif_ci_windows("not working on windows")
     def test_aten_index_tensor_2_5(self):
@@ -389,14 +647,14 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(2 * 2 * 8 * 8 * 16).reshape((2, 2, 8, 8, 16)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_index_tensor", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_index_tensor_2_5", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)
@@ -421,17 +679,50 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(2 * 2 * 8 * 16).reshape((2, 2, 8, 16)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_index_tensor", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_index_tensor_2_4", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_index_tensor_2_4_1_1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+
+            def __init__(self):
+                super().__init__()
+                self.i2 = torch.nn.Buffer(torch.randint(0, 14, (4, 14, 1, 1)).to(torch.int64))
+                self.i3 = torch.nn.Buffer(torch.randint(0, 12, (4, 14)).to(torch.int64))
+
+            def forward(self, x):
+                return x[:, :, self.i2, self.i3]
+
+        model = Model()
+        x = torch.arange(128 * 24 * 56 * 56).reshape((128, 24, 56, 56)).to(torch.float32)
+        expected = model(x)
+        model_path = self._call_exporter(
+            "test_aten_index_tensor_2_4_1_1", "custom", model, (x,)
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqualArray(expected.reshape((-1,)), got[0].reshape((-1,)), atol=1e-5)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not working on windows")
@@ -453,14 +744,14 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(2 * 8 * 16).reshape((2, 8, 16)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_index_tensor", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_index_tensor_1_3", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)
@@ -484,7 +775,7 @@ class TestOnnxExportAten(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
         got = sess.run(None, feeds)

@@ -1536,6 +1536,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         set_rank: bool = True,
         set_if_more_precise: bool = False,
         exc: bool = False,
+        allow_zero: bool = False,
     ):
         """
         Sets the shape for a result. It is exists, it checks the new shape
@@ -1546,6 +1547,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param set_rank: set the rank as well
         :param set_if_more_precise: change the shape if it is more precise
         :param exc: raise an exception if inconsistency
+        :param allow_zero: the shape should not have a value equal to zero
         """
         if (self._debug_stop or self._debug_stop_shape) and name in (
             self._debug_stop,
@@ -1562,6 +1564,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self.register_dynamic_objects_from_dim(sdim)
         shape = self.verify_shape(shape, 0, name=name)
+        assert allow_zero or 0 not in shape or shape == (0,), (
+            f"Unexpected null shape {shape!r} for name={name!r}, "
+            f"this case usually happens before a concetenation"
+            f"{self.get_debug_msg()}"
+        )
 
         # costly
         # assert all(not isinstance(t, self.torch.SymInt) for t in shape), (
@@ -2344,7 +2351,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Type mismatch for {name!r}, existing shape "
                 f"{self.get_shape(name)}, new shape {shape}{self.get_debug_msg()}"
             )
-            self.set_shape(name, shape)
+            self.set_shape(name, shape, allow_zero=allow_empty)
             self.set_type(name, itype)
         else:
             assert allow_empty or len(shape) == 0 or min(shape) > 0, (
@@ -2358,7 +2365,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert existing is None or not self.has_name(
                 name
             ), f"initializer {name!r} already exists{self.get_debug_msg()}"
-            self.set_shape(name, shape)
+            self.set_shape(name, shape, allow_zero=allow_empty)
             self.set_type(name, itype)
             if not self.has_name(name):
                 self.set_name(name, "make_initializer")
@@ -3752,7 +3759,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
         """
-        Returns int or float attributes. If missing, the default value is returned.
+        Returns int or float attributes. If missing, the default value is returned
+        if it is not None.
 
         :param node: node
         :param default_values: default values
@@ -3760,21 +3768,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         res = {}
         for att in node.attribute:
             if att.name in default_values:
-                def_val = default_values[att.name]
-                if isinstance(def_val, int):
+                if att.type == AttributeProto.INT:
                     res[att.name] = att.i
-                elif isinstance(def_val, float):
+                elif att.type == AttributeProto.FLOAT:
                     res[att.name] = att.f
-                elif isinstance(def_val, str):
+                elif att.type == AttributeProto.STRING:
                     res[att.name] = att.s
                 else:
                     raise TypeError(
-                        f"Unexpected type {type(def_val)} for attribute name {att.name!r}, "
-                        f"attribute={att}"
+                        f"Not implemented for attribute name {att.name!r}, attribute={att}"
                     )
         for k, v in default_values.items():
-            if k not in res:
+            if k not in res and v is not None:
                 res[k] = v
+        res = {k: v for k, v in res.items() if v is not None}
         return res
 
     def make_nodes(
@@ -6411,19 +6418,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                     self.set_value_shape(node.output[0], node.output[0])
                 return True
 
-            start = self.get_attribute(node, "start", exc=False) or 0
+            start = self.get_attribute(node, "start", exc=False)
             end = self.get_attribute(node, "end", exc=False)
             if end is None:
                 if self.has_rank(node.input[0]):
                     end = self.get_rank(node.input[0])
             if self.has_shape(node.input[0]):
                 shape = self.get_shape(node.input[0])
-                assert start.i < len(shape), (
-                    f"Shape mismatch, start={start.i}, shape of {node.input[0]!r} "
+                assert start is None or start.i < len(shape), (
+                    f"Shape mismatch, start={0 if start is None else start.i}, "
+                    f"shape of {node.input[0]!r} "
                     f"is {shape}{self.get_debug_msg()}"
                 )
                 if end is None:
-                    n_shape = shape[start.i :]
+                    n_shape = shape[0 if start is None else start.i :]
                     self.set_value_shape(node.output[0], n_shape)
                     if all_int(shape):
                         self.update_node_constant(node.output[0], node)
@@ -6435,7 +6443,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"shape of {node.input[0]!r} "
                     f"is {shape}{self.get_debug_msg()}"
                 )
-                n_shape = shape[start.i : getattr(end, "i", end)]
+                n_shape = shape[0 if start is None else start.i : getattr(end, "i", end)]
                 if all_int(shape):
                     self.update_node_constant(node.output[0], node)
                 self.set_value_shape(node.output[0], n_shape)
@@ -6755,12 +6763,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                         dyn_name = f"{i.name}_{index}"
                         new_shape.append(dyn_name)
                     shape = tuple(new_shape)
+                new_shape = []
                 for axis, sh in enumerate(shape):
                     if isinstance(sh, int):
-                        continue
+                        if sh != 0:
+                            new_shape.append(sh)
+                            continue
+                        # We replace it with a letter.
+                        sh = f"dim_{i.name}_{axis}"
+                    new_shape.append(sh)
                     self.make_dynamic_object(
                         sh, self.torch.SymInt(sh), input_name=i.name, axis=axis
                     )
+                shape = tuple(new_shape)
                 self.set_shape(i.name, shape)
             if (
                 self.get_type(i.name) == TensorProto.INT64

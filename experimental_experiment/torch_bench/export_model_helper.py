@@ -708,6 +708,7 @@ def run_onnx_inference(
     if torch_model:
         d = measure_discrepancies(expected, got)
         stats["discrepancies_abs"] = d["abs"]
+        stats["discrepancies_dnan"] = d["dnan"]
         stats["discrepancies_rel"] = d["rel"]
         stats["discrepancies_avg"] = d["avg"]
 

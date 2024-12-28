@@ -124,6 +124,11 @@ class PatternOptimization:
         """
         Enumerates all the
         """
+        if self.verbose >= 10:
+            print(
+                f"[PatternOptimization.enumerate_matches] start {self.__class__.__name__} "
+                f"with main_opset={g.main_opset} and min_opset={self.min_opset}"
+            )
         if g.main_opset >= self.min_opset:
             matched = []
             # g.iter_nodes() iterates on g.builder.nodes: ->
@@ -138,6 +143,12 @@ class PatternOptimization:
                     if res:
                         matched.append(res)
                         yield res
+                elif self.verbose >= 10:
+                    print(
+                        f"[PatternOptimization.enumerate_matches] result no output "
+                        f"in {','.join(node.output)} is used "
+                        f"{[g.is_used(o) for o in node.output]}"
+                    )
 
     def match(
         self,

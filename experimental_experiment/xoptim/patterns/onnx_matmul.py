@@ -13,7 +13,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 class MatMulAddPattern(PatternOptimization):
     """
-    Replaces the sequence Matmul, Add into Gemm
+    Replaces the sequence MatMul, Add into Gemm
     """
 
     def match(
@@ -27,9 +27,11 @@ class MatMulAddPattern(PatternOptimization):
         if not g.has_rank(node.input[0]) or not g.has_rank(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(node.input[0]) < 2 or g.get_rank(node.input[1]) != 2:
-            # If node.op_type, this condition is useless,
+            # If node.op_type is Gemm, this condition is useless,
             # if node.op_type is MatMul we reshape the matrix if
-            # it the rank is > 2 and the last dimension known.
+            # it the rank is > 2 and the last dimension known,
+            # but then no bias should be allowed a Gemm does not support
+            # broadcast.
             return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(node.input[0]) > 2:
             sh1 = g.get_shape(node.input[0]) if g.has_shape(node.input[0]) else None
@@ -61,6 +63,17 @@ class MatMulAddPattern(PatternOptimization):
         shape_bias = g.get_shape(bias2)
         if last_dim != shape_bias[-1]:
             return self.none(node, inspect.currentframe().f_lineno)
+        if len(shape_bias) > 1:
+            shape_node_out = (
+                g.get_shape(node.output[0]) if g.has_shape(node.output[0]) else None
+            )
+            if shape_node_out is not None:
+                if len(shape_node_out) != len(shape_bias):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                elif shape_node_out != shape_bias:
+                    return self.none(node, inspect.currentframe().f_lineno)
+            elif min(shape_bias[:-1]) <= 1:
+                return self.none(node, inspect.currentframe().f_lineno)
 
         if node.op_type == "MatMul" or len(node.input) == 2:
             return MatchResult(self, [node, add_node], self.apply, insert_at=add_node)

@@ -1882,6 +1882,7 @@ class BenchmarkRunner:
             stats["discrepancies_abs"] = d["abs"]
             stats["discrepancies_rel"] = d["rel"]
             stats["discrepancies_avg"] = d["sum"] / max(d["n"], 1)
+            stats["discrepancies_dnan"] = d["dnan"]
 
         if got_dynamic is not None:
             assert (
@@ -1891,6 +1892,7 @@ class BenchmarkRunner:
                 expected_dynamic, got_dynamic, verbose=self.verbose, flatten=is_onnx
             )
             stats["discrepancies_dynamic_abs"] = d["abs"]
+            stats["discrepancies_dynamic_dnan"] = d["dnan"]
             stats["discrepancies_dynamic_rel"] = d["rel"]
             stats["discrepancies_dynamic_avg"] = d["sum"] / max(d["n"], 1)
 

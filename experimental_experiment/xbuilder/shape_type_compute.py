@@ -509,7 +509,7 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
     if value is not None:
         cst = tuple(value)
         if all_int_or_str(cst):
-            if -1 not in cst:
+            if -1 not in cst and 0 not in cst:
                 self.set_shape(k, cst)
                 shape_set = True
             elif all_int(cst) and self.has_shape(node.input[0]):

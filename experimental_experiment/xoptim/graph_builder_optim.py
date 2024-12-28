@@ -1074,10 +1074,10 @@ class GraphBuilderPatternOptimization:
             not self.recursive
         ), "GraphBuilderPatternOptimization.optimize does not implement recursivity"
         continue_optimization = True
-        if max_iter == -1:
-            max_iter = len(self.builder.nodes)
         priorities = list(sorted(set(p.priority for p in self.patterns)))  # noqa: C413
         assert priorities, "list of priority is null."
+        if max_iter == -1:
+            max_iter = len(self.builder.nodes) * max(len(priorities), 1)
         if self.verbose > 0:
             print(
                 f"[GraphBuilderPatternOptimization.optimize] start with "
@@ -1107,6 +1107,11 @@ class GraphBuilderPatternOptimization:
         current_priority_index = 0
         for it in range(max_iter):
             if not continue_optimization:
+                if self.verbose > 0:
+                    print(
+                        f"[GraphBuilderPatternOptimization.optimize] stops at iteration {it}: "
+                        f"continue_optimization={continue_optimization}"
+                    )
                 break
             if self.verbose > 0:
                 print(
@@ -1116,7 +1121,6 @@ class GraphBuilderPatternOptimization:
                 )
 
             # detects patterns
-
             found = False
             marked = set()
             matches = []
@@ -1126,6 +1130,16 @@ class GraphBuilderPatternOptimization:
                     break
                 if pattern.priority > priorities[current_priority_index]:
                     # skipping that pattern
+                    if self.verbose >= 10:
+                        print(
+                            f"[GraphBuilderPatternOptimization.optimize] skips "
+                            f"{pattern.__class__.__name__}, "
+                            f"pattern.priority={pattern.priority}, "
+                            f"current_priority_index={current_priority_index}, "
+                            f"priorities[current_priority_index]="
+                            f"{priorities[current_priority_index]} "
+                            f"priorities={priorities}"
+                        )
                     continue
                 begin = time.perf_counter()
                 before = len(matches)
@@ -1329,6 +1343,12 @@ class GraphBuilderPatternOptimization:
                 if current_priority_index >= len(priorities):
                     # There is priority left to explore.
                     continue_optimization = len(matches) > 0
+                    if self.verbose > 0:
+                        print(
+                            f"[GraphBuilderPatternOptimization.optimize] stops "
+                            f"current_priority_index={current_priority_index}, "
+                            f"priorities={priorities}"
+                        )
                     break
                 if self.verbose > 0:
                     print(

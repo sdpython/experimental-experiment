@@ -478,6 +478,18 @@ def measure_discrepancies(
             assert (
                 torch_tensor.shape == onnx_tensor.shape
             ), f"Type mismatch {torch_tensor.shape} != {onnx_tensor.shape}"
+            nane = (
+                np.isnan(torch_tensor).astype(int)
+                if isinstance(torch_tensor, np.ndarray)
+                else torch_tensor.isnan().to(int)
+            )
+            nano = (
+                np.isnan(onnx_tensor).astype(int)
+                if isinstance(onnx_tensor, np.ndarray)
+                else onnx_tensor.isnan().to(int)
+            )
+            ddnan = nane - nano
+            dnan = np.abs(ddnan).sum() if isinstance(ddnan, np.ndarray) else ddnan.abs().sum()
             diff = torch_tensor.astype(float) - onnx_tensor.astype(float)
             if hasattr(diff, "abs"):
                 abs_err = float(diff.abs().max())
@@ -487,7 +499,9 @@ def measure_discrepancies(
                 rel_err = float((np.abs(diff) / torch_tensor).max())
             abs_errs.append(abs_err)
             rel_errs.append(rel_err)
-    return dict(abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs))
+    return dict(
+        abs=max(abs_errs), rel=max(rel_errs), sum=sum(rel_errs), n=len(abs_errs), dnan=dnan
+    )
 
 
 def flatten_object(x: Any) -> List[Any]:
@@ -590,7 +604,7 @@ def max_diff(
                 print(f"[max_diff] tensor: {string_type(expected)} ? {string_type(got)}")
             if _index < begin or (end != -1 and _index >= end):
                 # out of boundary
-                return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0)
+                return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
             if expected.dtype in (torch.complex64, torch.complex128):
                 if got.dtype == expected.dtype:
                     got = torch.view_as_real(got)
@@ -603,7 +617,7 @@ def max_diff(
                             f"[max_diff-c] expected.dtype={expected.dtype}, "
                             f"got.dtype={got.dtype}"
                         )
-                    return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+                    return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
                 expected = torch.view_as_real(expected)
 
             if expected.shape != got.shape:
@@ -615,18 +629,20 @@ def max_diff(
                         f"[max_diff-s] expected.shape={expected.shape}, "
                         f"got.shape={got.shape}"
                     )
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
             # nan are replace by 1e10, any discrepancies in that order of magnitude
             # is likely caused by nans
             exp_cpu = expected.to(torch.float64).cpu().nan_to_num(1e10)
             got_cpu = got.to(torch.float64).cpu().nan_to_num(1e10)
             diff = (got_cpu - exp_cpu).abs()
+            ndiff = (expected.isnan().cpu().to(int) - got.isnan().cpu().to(int)).abs()
             rdiff = diff / (exp_cpu.abs() + 1e-3)
-            abs_diff, rel_diff, sum_diff, n_diff = (
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
                 float(diff.max()),
                 float(rdiff.max()),
                 float(diff.sum()),
                 float(diff.numel()),
+                float(ndiff.sum()),
             )
             if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
                 # To understand the value it comes from.
@@ -634,8 +650,8 @@ def max_diff(
                     print("\n".join(debug_info))
                 print(
                     f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
-                    f"dtype={expected.dtype}, shape={expected.shape}, level={level}, "
-                    f"_index={_index}"
+                    f"nan_diff={nan_diff}, dtype={expected.dtype}, "
+                    f"shape={expected.shape}, level={level}, _index={_index}"
                 )
                 if abs_diff >= 10:
                     idiff = torch.argmax(diff.reshape((-1,)))
@@ -658,7 +674,7 @@ def max_diff(
                         f"_index={_index}"
                     )
 
-            return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff)
+            return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff, dnan=nan_diff)
 
         if isinstance(got, (list, tuple)):
             if len(got) != 1:
@@ -683,7 +699,7 @@ def max_diff(
                                 f"    i={i} a is {type(a)}, "
                                 f"b is {type(b)}, _index={_index}"
                             )
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
             if verbose >= 6:
                 print(f"[max_diff] list,tuple,1: {string_type(expected)} ? {string_type(got)}")
             return max_diff(
@@ -723,7 +739,7 @@ def max_diff(
                     f"[max_diff] inf because type(expected)={type(expected)}, "
                     f"type(got)={type(got)}, level={level}, _index={_index}"
                 )
-            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
         if len(got) != len(expected):
             if flatten:
                 if verbose >= 6:
@@ -772,11 +788,11 @@ def max_diff(
                         )
                     else:
                         print(f"    i={i} a is {type(a)}, b is {type(b)}")
-            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
 
         if verbose >= 6:
             print(f"[max_diff] list,tuple,6: {string_type(expected)} ? {string_type(got)}")
-        am, rm, sm, n = 0, 0, 0.0, 0.0
+        am, rm, sm, n, dn = 0, 0, 0.0, 0.0, 0
         for ip, (e, g) in enumerate(zip(expected, got)):
             d = max_diff(
                 e,
@@ -797,10 +813,11 @@ def max_diff(
                 flatten=flatten,
             )
             am = max(am, d["abs"])
+            dn = max(dn, d["dnan"])
             rm = max(rm, d["rel"])
             sm += d["sum"]
             n += d["n"]
-        return dict(abs=am, rel=rm, sum=sm, n=n)
+        return dict(abs=am, rel=rm, sum=sm, n=n, dnan=dn)
 
     if isinstance(expected, dict):
         if verbose >= 6:
@@ -810,9 +827,9 @@ def max_diff(
         ), f"begin={begin}, end={end} not compatible with dictionaries"
         if isinstance(got, dict):
             if len(expected) != len(got):
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
             if set(expected) != set(got):
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
             keys = sorted(expected)
             return max_diff(
                 [expected[k] for k in keys],
@@ -827,9 +844,9 @@ def max_diff(
             )
 
         if not isinstance(got, (tuple, list)):
-            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
         if len(expected) != len(got):
-            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
         return max_diff(
             list(expected.values()),
             got,
@@ -896,11 +913,11 @@ def max_diff(
             print(f"[max_diff] MambaCache: {string_type(expected)} ? {string_type(got)}")
         if got.__class__.__name__ != expected.__class__.__name__:
             # This case happens with onnx where the outputs are flattened.
-            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
         atts = []
         for k in ["conv_states", "ssm_states"]:
             if hasattr(expected, k) and not hasattr(got, k):
-                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf)
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
             atts.append(k)
 
         return max_diff(
