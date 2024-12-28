@@ -105,35 +105,48 @@ class TestBenchRun(ExtTestCase):
 
         self.assertEqual(
             max_diff(torch.Tensor([1, 2]), torch.Tensor([1, 2])),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
         )
         self.assertEqual(
             max_diff(
                 (torch.Tensor([1, 2]),),
                 (torch.Tensor([1, 2])),
             ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
         )
         self.assertEqual(
             max_diff(
                 (torch.Tensor([1, 2]), (torch.Tensor([1, 2]),)),
                 (torch.Tensor([1, 2]), (torch.Tensor([1, 2]),)),
             ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 4.0},
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 4.0, "dnan": 0.0},
         )
         self.assertEqual(
             max_diff(
                 {"a": torch.Tensor([1, 2])},
                 {"a": torch.Tensor([1, 2])},
             ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
         )
         self.assertEqual(
             max_diff(
                 {"a": torch.Tensor([1, 2])},
                 [torch.Tensor([1, 2])],
             ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0},
+            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
+        )
+        self.assertEqual(
+            max_diff(
+                {"a": torch.Tensor([1, float("nan")])},
+                [torch.Tensor([1, 2])],
+            ),
+            {
+                "abs": 9999999998.0,
+                "dnan": 1.0,
+                "n": 2.0,
+                "rel": 0.9999999997999001,
+                "sum": 9999999998.0,
+            },
         )
 
     @hide_stdout()
@@ -150,7 +163,7 @@ class TestBenchRun(ExtTestCase):
             flatten=True,
             verbose=10,
         )
-        self.assertEqual(md, {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 10.0})
+        self.assertEqual(md, {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 10.0, "dnan": 0})
 
 
 if __name__ == "__main__":

@@ -478,9 +478,18 @@ def measure_discrepancies(
             assert (
                 torch_tensor.shape == onnx_tensor.shape
             ), f"Type mismatch {torch_tensor.shape} != {onnx_tensor.shape}"
-            nane = torch_tensor.isnan().to(int)
-            nano = onnx_tensor.isnan().to(int)
-            dnan = (nane - nano).abs().sum()
+            nane = (
+                np.isnan(torch_tensor).astype(int)
+                if isinstance(torch_tensor, np.ndarray)
+                else torch_tensor.isnan().to(int)
+            )
+            nano = (
+                np.isnan(onnx_tensor).astype(int)
+                if isinstance(onnx_tensor, np.ndarray)
+                else onnx_tensor.isnan().to(int)
+            )
+            ddnan = nane - nano
+            dnan = np.abs(ddnan).sum() if isinstance(ddnan, np.ndarray) else ddnan.abs().sum()
             diff = torch_tensor.astype(float) - onnx_tensor.astype(float)
             if hasattr(diff, "abs"):
                 abs_err = float(diff.abs().max())
