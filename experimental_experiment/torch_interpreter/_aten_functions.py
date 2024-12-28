@@ -2160,7 +2160,7 @@ def aten_elu_(
     inplace: bool = False,
     name="elu_",
 ) -> T:
-    "`elu_`, inplace modifications are not allowed, we assume there were removed"
+    "`elu_`, inplace modifications are not allowed, we assume they were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_elu(
         g,
@@ -3462,7 +3462,7 @@ def aten_hardswish_(
     inplace: bool = False,
     name: str = "hardswish_",
 ) -> T:
-    "`hardswish_`, inplace modifications are not allowed, we assume there were removed"
+    "`hardswish_`, inplace modifications are not allowed, we assume they were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_hardswish(g, sts, outputs, x, name=name)
 
@@ -3502,7 +3502,7 @@ def aten_hardtanh_(
     inplace: bool = False,
     name: str = "hardtanh_",
 ) -> T:
-    "`hardtanh_`, inplace modifications are not allowed, we assume there were removed"
+    "`hardtanh_`, inplace modifications are not allowed, we assume they were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_hardtanh(
         g, sts, outputs, x, min_val=min_val, max_val=max_val, inplace=False, name=name
@@ -4606,7 +4606,7 @@ def aten_leaky_relu_(
     inplace: bool = False,
     name: str = "leaky_relu_",
 ) -> T:
-    "`leaky_relu_`, inplace modifications are not allowed, we assume there were removed"
+    "`leaky_relu_`, inplace modifications are not allowed, we assume they were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_leaky_relu(g, sts, outputs, a, negative_slope, inplace=False, name=name)
 
@@ -5794,37 +5794,6 @@ def aten_native_layer_norm(
     return tuple(outputs)
 
 
-def aten__native_batch_norm_legit_no_training(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    weight: Optional[T] = None,
-    bias: Optional[T] = None,
-    running_mean: Optional[T] = None,
-    running_var: Optional[T] = None,
-    momentum: float = 0.9,
-    eps: float = 1e-05,
-    name: str = "_native_batch_norm_legit_no_training",
-) -> Tuple[T, T, T]:
-    """batch normalization = aten__native_batch_norm with training=False"""
-    return aten__native_batch_norm(
-        g,
-        sts,
-        outputs,
-        x,
-        weight=weight,
-        bias=bias,
-        running_mean=running_mean,
-        running_var=running_var,
-        training=False,
-        momentum=momentum,
-        eps=eps,
-        name=name,
-        empty_mean_std=True,
-    )
-
-
 def aten__native_batch_norm_legit_no_stats(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5971,6 +5940,37 @@ def aten__native_batch_norm(
     return norm, m, s
 
 
+def aten__native_batch_norm_legit_no_training(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    weight: Optional[T] = None,
+    bias: Optional[T] = None,
+    running_mean: Optional[T] = None,
+    running_var: Optional[T] = None,
+    momentum: float = 0.9,
+    eps: float = 1e-05,
+    name: str = "_native_batch_norm_legit_no_training",
+) -> Tuple[T, T, T]:
+    """batch normalization = aten__native_batch_norm with training=False"""
+    return aten__native_batch_norm(
+        g,
+        sts,
+        outputs,
+        x,
+        weight=weight,
+        bias=bias,
+        running_mean=running_mean,
+        running_var=running_var,
+        training=False,
+        momentum=momentum,
+        eps=eps,
+        name=name,
+        empty_mean_std=True,
+    )
+
+
 def aten_batch_norm(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -5985,14 +5985,11 @@ def aten_batch_norm(
     eps: float = 1e-05,
     cudnn_enabled: bool = False,
     name: str = "batch_norm",
-) -> Tuple[T, T, T]:
+) -> T:
     """batch normalization"""
     assert isinstance(
         cudnn_enabled, bool
     ), f"unexpected type for cudnn_enabled={cudnn_enabled!r}{g.get_debug_msg()}"
-    assert (
-        not training
-    ), f"aten_batch_norm not implemented for training=True{g.get_debug_msg()}"
     assert (
         len(outputs) == 1
     ), f"aten_batch_norm not implemented for outputs={outputs}{g.get_debug_msg()}"
@@ -6005,15 +6002,33 @@ def aten_batch_norm(
         g.unique_name(f"_unused_{name}_1"),
         g.unique_name(f"_unused_{name}_2"),
     ]
-    res = aten__native_batch_norm_legit_no_training(
+    if not training:
+        res = aten__native_batch_norm_legit_no_training(
+            g,
+            sts,
+            new_outputs,
+            x,
+            weight,
+            bias,
+            running_mean,
+            running_var,
+            momentum=momentum,
+            eps=eps,
+            name=name,
+        )
+        return res[0]
+
+    # training
+    res = aten__native_batch_norm(
         g,
         sts,
         new_outputs,
         x,
         weight,
         bias,
-        running_mean,
-        running_var,
+        running_mean=running_mean,
+        running_var=running_var,
+        training=True,
         momentum=momentum,
         eps=eps,
         name=name,
@@ -7145,7 +7160,7 @@ def aten_relu_(
     inplace: bool = False,
     name: str = "relu_",
 ) -> T:
-    "`relu_`, inplace modifications are not allowed, we assume there were removed"
+    "`relu_`, inplace modifications are not allowed, we assume they were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_relu(g, sts, outputs, x, inplace, name=name)
 
@@ -8018,7 +8033,17 @@ def aten_sigmoid(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "sigmoid"
-    res = g.op.Sigmoid(x, outputs=outputs)
+    res = g.op.Sigmoid(x, outputs=outputs, name="sigmoid")
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_sigmoid_(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "`sigmoid_`, inplace modifications are not allowed, we assume they were removed"
+    res = g.op.Sigmoid(x, outputs=outputs, name="sigmoid_")
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -8092,7 +8117,7 @@ def aten_silu_(
     inplace: bool = False,
     name: str = "silu_",
 ) -> T:
-    "`silu_`, inplace modifications are not allowed, we assume there were removed"
+    "`silu_`, inplace modifications are not allowed, we assume they were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_silu(g, sts, outputs, x, inplace=inplace, name=name)
 
