@@ -3759,7 +3759,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
         """
-        Returns int or float attributes. If missing, the default value is returned.
+        Returns int or float attributes. If missing, the default value is returned
+        if it is not None.
 
         :param node: node
         :param default_values: default values
@@ -3767,21 +3768,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         res = {}
         for att in node.attribute:
             if att.name in default_values:
-                def_val = default_values[att.name]
-                if isinstance(def_val, int):
+                if att.type == AttributeProto.INT:
                     res[att.name] = att.i
-                elif isinstance(def_val, float):
+                elif att.type == AttributeProto.FLOAT:
                     res[att.name] = att.f
-                elif isinstance(def_val, str):
+                elif att.type == AttributeProto.STRING:
                     res[att.name] = att.s
                 else:
                     raise TypeError(
-                        f"Unexpected type {type(def_val)} for attribute name {att.name!r}, "
-                        f"attribute={att}"
+                        f"Not implemented for attribute name {att.name!r}, attribute={att}"
                     )
         for k, v in default_values.items():
-            if k not in res:
+            if k not in res and v is not None:
                 res[k] = v
+        res = {k: v for k, v in res.items() if v is not None}
         return res
 
     def make_nodes(

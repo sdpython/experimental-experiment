@@ -476,7 +476,7 @@ class TestOnnxExportAten(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     @requires_cuda()
-    def test_aten_batch_norm_training16_cuda(self):
+    def test_aten_batch_norm_training_cuda(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -484,12 +484,12 @@ class TestOnnxExportAten(ExtTestCase):
             def __init__(self):
                 super().__init__()
                 self.weight = torch.nn.Buffer(
-                    torch.abs(torch.randn((16,), dtype=torch.float16)) + 1
+                    torch.abs(torch.randn((16,), dtype=torch.float32)) + 1
                 )
-                self.bias = torch.nn.Buffer(torch.randn((16,), dtype=torch.float16))
-                self.running_mean = torch.nn.Buffer(torch.randn((16,), dtype=torch.float16))
+                self.bias = torch.nn.Buffer(torch.randn((16,), dtype=torch.float32))
+                self.running_mean = torch.nn.Buffer(torch.randn((16,), dtype=torch.float32))
                 self.running_var = torch.nn.Buffer(
-                    torch.abs(torch.randn((16,), dtype=torch.float16)) + 1
+                    torch.abs(torch.randn((16,), dtype=torch.float32)) + 1
                 )
 
             def forward(self, x):
@@ -500,16 +500,67 @@ class TestOnnxExportAten(ExtTestCase):
                     running_mean=self.running_mean,
                     running_var=self.running_var,
                     training=True,
-                    momentum=0,
+                    momentum=1,
                     eps=0.006,
                     cudnn_enabled=False,
                 )
 
         model = Model().to("cuda")
-        x = torch.randn((1, 16, 27), requires_grad=False).to(torch.float16).to("cuda")
+        x = torch.randn((1, 16, 27), requires_grad=False).to(torch.float32).to("cuda")
         expected = model(x)
+
+        # check on CPU
+
         model_path = self._call_exporter(
-            "test_aten_batch_norm_training16_cuda",
+            "test_aten_batch_norm_training_cudano",
+            "custom",
+            model,
+            (x,),
+            optimize=True,
+            patterns="default-BatchNormalizationTraining",
+        )
+        check_model(model_path)
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().cpu().numpy()]))
+        got = sess.run(None, feeds)
+        ref = ExtendedReferenceEvaluator(model_path, verbose=0)
+        gotr = ref.run(None, feeds)
+        self.assertEqualArray(got[0], gotr[0], atol=1e-4)
+        self.assertEqualArray(expected, got[0], atol=1e-4)
+
+        # check on CPU decomposed
+
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training_cuda_dec",
+            "custom",
+            model,
+            (x,),
+            optimize=True,
+            patterns="default",
+        )
+        check_model(model_path)
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().cpu().numpy()]))
+        got = sess.run(None, feeds)
+        ref = ExtendedReferenceEvaluator(model_path, verbose=0)
+        gotr = ref.run(None, feeds)
+        self.assertEqualArray(got[0], gotr[0], atol=1e-4)
+        self.assertEqualArray(expected, got[0], atol=1e-4)
+
+        # check on CUDA
+
+        model_path = self._call_exporter(
+            "test_aten_batch_norm_training_cuda",
             "custom",
             model,
             (x,),
@@ -519,15 +570,16 @@ class TestOnnxExportAten(ExtTestCase):
         )
         check_model(model_path)
 
-        import onnxruntime
-
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
             model_path, sess_options=sess_options, providers=["CUDAExecutionProvider"]
         )
         feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().cpu().numpy()]))
         got = sess.run(None, feeds)
-        self.assertEqualArray(expected, got[0], atol=1e-2)
+        ref = ExtendedReferenceEvaluator(model_path, verbose=0)
+        gotr = ref.run(None, feeds)
+        self.assertEqualArray(got[0], gotr[0], atol=1e-4)
+        self.assertEqualArray(expected, got[0], atol=1e-4)
 
     @skipif_ci_windows("not working on windows")
     def test_aten_batch_norm_training16_none(self):

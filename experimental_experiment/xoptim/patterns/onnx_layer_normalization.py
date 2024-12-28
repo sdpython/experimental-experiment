@@ -503,9 +503,6 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
     Checks that a BatchNormalization in training mode can be avoided.
     """
 
-    def __init__(self, verbose: int = 0, priority: int = 0):
-        super().__init__(verbose, priority)
-
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
