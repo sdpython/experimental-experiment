@@ -1700,7 +1700,7 @@ class DynamoInterpreter:
                             r,
                             shape,
                             set_if_more_precise=False,
-                            allow_zero=all_int(shape) and shape == (0,),
+                            allow_zero=all_int(shape) and 0 in shape,
                         )
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (

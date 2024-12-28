@@ -1298,9 +1298,9 @@ def aten_clamp_max(
     outputs: List[str],
     x: T,
     max_: T,
-    name: str = "clamp_min",
+    name: str = "clamp_max",
 ) -> T:
-    """clamp_min"""
+    """clamp_max"""
     if isinstance(max_, (float, int)):
         assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
         dtype = tensor_dtype_to_np_dtype(g.get_type(x))
@@ -1330,7 +1330,7 @@ def aten_clamp_min(
         res = g.op.Clip(x, min_value, name=name, outputs=outputs)
     else:
         assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"
-        res = g.op.Max(x, min_, name=name, outputs=outputs)
+        res = g.op.Min(x, min_, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -4963,7 +4963,7 @@ def aten_masked_fill_Tensor(
 def aten_max(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name: str = "max"
 ) -> T:
-    """min"""
+    """max"""
 
     res = g.op.ReduceMax(x, keepdims=0, name=name, outputs=outputs)
     if not sts:
@@ -4977,11 +4977,18 @@ def aten_maximum(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    y: T,
-    name: str = "max",
+    y: float,
+    name: str = "maximum",
 ) -> T:
     """maximum"""
-
+    if (
+        g.has_type(x)
+        and g.has_type(y)
+        and g.get_type(x) != g.get_type(y)
+        and g.get_rank(y) == 0
+    ):
+        # unexpected case: Max(x, y=a float)
+        y = g.op.Cast(y, to=g.get_type(x), name=name)
     res = g.op.Max(x, y, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
@@ -5417,10 +5424,17 @@ def aten_minimum(
     outputs: List[str],
     x: T,
     y: T,
-    name: str = "min",
+    name: str = "minimum",
 ) -> T:
     """minimum"""
-
+    if (
+        g.has_type(x)
+        and g.has_type(y)
+        and g.get_type(x) != g.get_type(y)
+        and g.get_rank(y) == 0
+    ):
+        # unexpected case: Min(x, y=a float)
+        y = g.op.Cast(y, to=g.get_type(x), name=name)
     res = g.op.Min(x, y, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, x, y)

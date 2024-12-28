@@ -1,51 +1,88 @@
+import sys
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 
-@dataclass
-class patched_AttentionMaskConverter:
-    """
-    Patches
-    ``transformers.modeling_attn_mask_utils.AttentionMaskConverter._make_causal_mask``.
-    """
+def _patch_make_causal_mask(
+    input_ids_shape: torch.Size,
+    dtype: torch.dtype,
+    device: torch.device,
+    past_key_values_length: int = 0,
+    sliding_window: Optional[int] = None,
+):
+    """Patched method."""
+    bsz, tgt_len = input_ids_shape
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
+    mask_cond = torch.arange(mask.size(-1), device=device)
+    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
 
-    @staticmethod
-    def _make_causal_mask(
-        input_ids_shape: torch.Size,
-        dtype: torch.dtype,
-        device: torch.device,
-        past_key_values_length: int = 0,
-        sliding_window: Optional[int] = None,
-    ):
-        """Patched method."""
-        bsz, tgt_len = input_ids_shape
-        mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-        mask_cond = torch.arange(mask.size(-1), device=device)
-        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+    mask = mask.to(dtype)
 
-        mask = mask.to(dtype)
+    if past_key_values_length > 0:
+        mask = torch.cat(
+            [
+                torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device),
+                mask,
+            ],
+            dim=-1,
+        )
 
-        if past_key_values_length > 0:
-            mask = torch.cat(
-                [
-                    torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device),
-                    mask,
-                ],
-                dim=-1,
+    if sliding_window is not None:
+        diagonal = past_key_values_length - sliding_window - 1
+
+        context_mask = torch.tril(torch.ones_like(mask, dtype=torch.bool), diagonal=diagonal)
+        # In this case, the current implementation of torch fails (17/12/2024).
+        # Try model Phi-3.5-Mini-Instruct.
+        mask = mask.masked_fill(context_mask, torch.finfo(dtype).min)
+
+    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
+if sys.version_info[:2] <= (3, 11):
+
+    @dataclass
+    class patched_AttentionMaskConverter:
+        """
+        Patches
+        ``transformers.modeling_attn_mask_utils.AttentionMaskConverter._make_causal_mask``.
+        """
+
+        @staticmethod
+        def _make_causal_mask(
+            input_ids_shape: torch.Size,
+            dtype: torch.dtype,
+            device: torch.device,
+            past_key_values_length: int = 0,
+            sliding_window: Optional[int] = None,
+        ):
+            """Patched method."""
+            return _patch_make_causal_mask(
+                input_ids_shape, dtype, device, past_key_values_length, sliding_window
             )
 
-        if sliding_window is not None:
-            diagonal = past_key_values_length - sliding_window - 1
+else:
 
-            context_mask = torch.tril(
-                torch.ones_like(mask, dtype=torch.bool), diagonal=diagonal
+    @dataclass
+    class patched_AttentionMaskConverter:
+        """
+        Patches
+        ``transformers.modeling_attn_mask_utils.AttentionMaskConverter._make_causal_mask``.
+        """
+
+        @staticmethod
+        def _make_causal_mask(
+            self,
+            input_ids_shape: torch.Size,
+            dtype: torch.dtype,
+            device: torch.device,
+            past_key_values_length: int = 0,
+            sliding_window: Optional[int] = None,
+        ):
+            """Patched method."""
+            return _patch_make_causal_mask(
+                input_ids_shape, dtype, device, past_key_values_length, sliding_window
             )
-            # In this case, the current implementation of torch fails (17/12/2024).
-            # Try model Phi-3.5-Mini-Instruct.
-            mask = mask.masked_fill(context_mask, torch.finfo(dtype).min)
-
-        return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
 class patched_DynamicCache:
