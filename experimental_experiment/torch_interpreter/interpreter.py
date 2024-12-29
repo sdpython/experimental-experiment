@@ -1615,7 +1615,12 @@ class DynamoInterpreter:
         if val is not None:
             if isinstance(val, (tuple, list)):
                 # Type list comes from SplitToSequence.
-                return tuple((None if v is None else v.dtype) for v in val)
+                import torch
+
+                return tuple(
+                    (None if v is None else (torch.int64 if isinstance(v, int) else v.dtype))
+                    for v in val
+                )
             if isinstance(val, (int, self.torch.SymInt)):
                 return self.torch.SymInt
             if isinstance(val, self.torch.SymBool):

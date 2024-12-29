@@ -89,7 +89,35 @@ def aten_scaled_dot_product_attention(
     enable_gqa: bool = False,
     name: str = "aten_scaled_dot_product_attention",
 ):
-    "scaled_dot_product_attention"
+    """
+    scaled_dot_product_attention
+
+    See `torch.nn.functional.scaled_dot_product_attention
+    <https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html>`_.
+
+    Equivalent to the PyTorch code::
+
+        scale_factor = 1 / math.sqrt(Q.size(-1)) if scale is None else scale
+        attn_mask = (
+            torch.ones(L, S, dtype=torch.bool).tril(diagonal=0)
+            if is_causal
+            else attn_mask
+        )
+        attn_mask = (
+            attn_mask.masked_fill(not attn_mask, -float('inf'))
+            if attn_mask.dtype==torch.bool
+            else attn_mask
+        )
+        attn_weight = torch.softmax(
+            (Q @ K.transpose(-2, -1) * scale_factor) + attn_mask, dim=-1
+        )
+        attn_weight = torch.dropout(attn_weight, dropout_p)
+        return attn_weight @ V
+
+    where *Q*, *K*, *V* are the query, key, and value tensors, respectively.
+    *L* is the target sequence length,
+    *S* is the source sequence length, and E is the embedding size.
+    """
     assert not enable_gqa, f"not implemented if enable_gqa={enable_gqa}"
     assert (not is_causal) or (
         is_causal and attn_mask is None
@@ -192,18 +220,79 @@ def _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
         ),
         to=TensorProto.INT64,
         name=name,
-        outputs=[outputs[1]],
+        outputs=None if not outputs[1] else [outputs[1]],
     )
     empty_tensor_float = g.op.ConstantOfShape(
         g.op.Constant(
             value=make_tensor("Empty_FLOATS", TensorProto.INT64, [1], [0]), name=name
         ),
         name=name,
-        outputs=[outputs[2]],
+        outputs=None if not outputs[2] else [outputs[2]],
     )
-    empty_int = g.op.Constant(value_int=0, name=name, outputs=[outputs[3]])
-
+    empty_int = g.op.Constant(
+        value_int=0, name=name, outputs=None if not outputs[3] else [outputs[3]]
+    )
     return logsumexp, empty_tensor_int, empty_int, empty_tensor_float
+
+
+def aten__scaled_dot_product_flash_attention(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    query: T,
+    key: T,
+    value: T,
+    dropout_p: float = 0.0,
+    is_causal: bool = False,
+    return_debug_mask: bool = False,
+    scale: Optional[float] = None,
+    name: str = "_scaled_dot_product_flash_attention",
+) -> Tuple[T, T, T, T, T, T, T, T, T]:
+    """_scaled_dot_product_flash_attention"""
+    assert not return_debug_mask, "Not implemented when return_debug_mask is false."
+    assert len(outputs) == 9, (
+        f"Unexpected number of outputs {len(outputs)}, "
+        f"outputs={outputs}({len(outputs)}){g.get_debug_msg()}"
+    )
+
+    result = aten_scaled_dot_product_attention(
+        g,
+        sts,
+        [outputs[0]],
+        query,
+        key,
+        value,
+        dropout_p=dropout_p,
+        is_causal=is_causal,
+        scale=scale,
+        name=name,
+    )
+
+    # The followings are not comsumed by the graph.
+    (
+        logsumexp,
+        empty_tensor_int,
+        empty_int,
+        empty_tensor_float,
+    ) = _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
+        g, sts, [outputs[1], outputs[3], outputs[4], outputs[8]], query, name=name
+    )
+
+    empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
+    empty_int2 = g.op.Identity(empty_int, name=name)
+    empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
+
+    return (
+        result,  # 0
+        logsumexp,  # 1
+        empty_tensor_int,  # 2
+        empty_tensor_int2,  # 3
+        empty_int,  # 4
+        empty_int2,  # 5
+        empty_tensor_int,  # 6
+        empty_tensor_int2,  # 7
+        empty_tensor_float,  # 8
+    )
 
 
 def aten__scaled_dot_product_flash_attention_for_cpu(
