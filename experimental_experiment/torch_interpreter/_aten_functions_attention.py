@@ -275,12 +275,13 @@ def aten__scaled_dot_product_flash_attention(
         empty_int,
         empty_tensor_float,
     ) = _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
-        g, sts, [outputs[1], outputs[3], outputs[4], outputs[8]], query, name=name
+        g, sts, [outputs[1], outputs[3], outputs[8], outputs[4]], query, name=name
     )
 
     empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
-    empty_int2 = g.op.Identity(empty_int, name=name)
-    empty_tensor_int2 = g.op.Identity(empty_tensor_int, name=name)
+    empty_tensor_int3 = g.op.Identity(empty_tensor_int, name=name, outputs=[outputs[6]])
+    empty_tensor_int4 = g.op.Identity(empty_tensor_int, name=name, outputs=[outputs[7]])
+    empty_int2 = g.op.Identity(empty_int, name=name, outputs=[outputs[5]])
 
     return (
         result,  # 0
@@ -289,8 +290,8 @@ def aten__scaled_dot_product_flash_attention(
         empty_tensor_int2,  # 3
         empty_int,  # 4
         empty_int2,  # 5
-        empty_tensor_int,  # 6
-        empty_tensor_int2,  # 7
+        empty_tensor_int3,  # 6
+        empty_tensor_int4,  # 7
         empty_tensor_float,  # 8
     )
 

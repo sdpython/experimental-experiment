@@ -1790,9 +1790,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             name, str
         ), f"Unexpected type {type(name)} for name={name!r}{self.get_debug_msg()}"
-        assert value not in {
-            tuple()
-        }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
         assert not isinstance(value, tuple) or all(
             not isinstance(d, str) or d[0] != "(" for d in value
         ), f"Unexpected value for shape {name!r}, value={value!r}{self.get_debug_msg()}"
@@ -5449,8 +5446,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             if val is None:
                 return None, None
-            assert len(val.shape) == 0 or min(val.shape) > 0, (
-                f"One input has a empty shape {val.shape}, name={kval!r}"
+            assert (
+                len(val.shape) == 0
+                or min(val.shape) > 0
+                or (val.shape == (0,) and v.op_type in {"Cast", "Identity"})
+            ), (
+                f"One input has a empty shape {val.shape}, name={kval!r} "
                 f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
             )
 
@@ -5516,8 +5517,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if name == n:
                     cst = val
 
-        assert len(cst.shape) == 0 or min(cst.shape) > 0, (
-            f"Output has empty shape {cst.shape}, name={name!r}"
+        assert (
+            len(cst.shape) == 0
+            or min(cst.shape) > 0
+            or (cst.shape == (0,) and v.op_type in {"ConstantOfShape", "Cast", "Identity"})
+        ), (
+            f"Output has empty shape {cst.shape}, name={name!r} "
             f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
         )
         assert cst is not None, f"Constant {name!r} was not found in {v.output}"
