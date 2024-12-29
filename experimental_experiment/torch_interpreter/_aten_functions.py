@@ -3693,9 +3693,21 @@ def aten_index_Tensor(
 
     if n_none == 1 and indices[0] is None and len(indices) == 3:
         ranks = [g.get_rank(i) for i in indices if i is not None]
-        assert (
-            len(set(ranks)) == 2
-        ), f"aten_index is not implemented for ranks={ranks} (1){g.get_debug_msg()}"
+        if set(ranks) == {1}:
+            name = f"{name}_t31"
+            # y[b, i] = x[b, i1[i], i2[i]]
+            dim2 = g.op.Shape(x, start=2, end=3, name=name)
+            flat_index = g.op.Add(g.op.Mul(indices[1], dim2, name=name), indices[2], name=name)
+            reshaped_x = g.op.Reshape(x, np.array([0, -1], dtype=np.int64), name=name)
+            res = g.op.Gather(reshaped_x, flat_index, axis=1, name=name, outputs=outputs)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+            return res
+
+        assert len(set(ranks)) == 2, (
+            f"aten_index is not implemented for ranks={ranks} (1), "
+            f"indices={indices}{g.get_debug_msg()}"
+        )
         i_rank = ranks[-1]
         name = f"{name}_d"
         dim2 = g.op.Shape(x, start=2, end=3, name=name)
