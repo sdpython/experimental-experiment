@@ -6553,12 +6553,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.set_value_shape(node.output[0], (values[0],))
                 return True
 
-        if node.op_type in {"Mul", "Add", "Div", "Sub"}:
+        if node.op_type in {"Mul", "Add", "Div", "Sub", "Mod"}:
             fct, symbol = {
                 "Add": ((lambda x, y: x + y), "+"),
                 "Div": ((lambda x, y: x // y), "/"),
                 "Mul": ((lambda x, y: x * y), "*"),
                 "Sub": ((lambda x, y: x - y), "-"),
+                "Mod": ((lambda x, y: x - y), "%"),
             }[node.op_type]
             m1 = values[0]
             m2 = values[1]

@@ -2886,9 +2886,20 @@ def aten_flatten_using_ints(
             f"x={x!r}, start_dim={start_dim}, end_dim={end_dim} "
             f"not supported{g.get_debug_msg()}"
         )
+    # start_dim == 0
     if end_dim == -1:
-        return g.make_node("Flatten", [x], outputs, name=name)
-    res = g.make_node("Flatten", [x], outputs, to=end_dim, name=name)
+        # Flattens everything
+        res = g.op.Reshape(x, np.array([-1], dtype=np.int64), outputs=outputs, name=name)
+    else:
+        if end_dim < 0:
+            assert g.has_rank(
+                x
+            ), f"Current implementation requires rank of {x!r}{g.get_debug_msg()}"
+            rk = g.get_rank(x)
+            start_dim += rk
+        shape_x = g.op.Shape(x, start=end_dim + 1, name=name)
+        new_shape = g.op.Concat(np.array([-1], dtype=np.int64), shape_x, axis=0, name=name)
+        res = g.op.Reshape(x, new_shape, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x, full=True):
