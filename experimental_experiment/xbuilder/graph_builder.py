@@ -744,7 +744,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{tensor.dtype}:{tuple(tensor.shape)}"
         return f"no pretty: {type(tensor)}"
 
-    def pretty_node(self, node: NodeProto, limit: int = 80, short: bool = False):
+    def pretty_node(self, node: Optional[NodeProto], limit: int = 80, short: bool = False):
+        if node is None:
+            return "None"
         text = (
             (
                 f"{node.op_type}[{node.domain}]: "
