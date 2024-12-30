@@ -744,7 +744,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{tensor.dtype}:{tuple(tensor.shape)}"
         return f"no pretty: {type(tensor)}"
 
-    def pretty_node(self, node: NodeProto, limit: int = 80, short: bool = False):
+    def pretty_node(self, node: Optional[NodeProto], limit: int = 80, short: bool = False):
+        if node is None:
+            return "None"
         text = (
             (
                 f"{node.op_type}[{node.domain}]: "
@@ -1244,9 +1246,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param name: result name
         :param value: rank
         """
-        if name == self._debug_stop or name == self._debug_stop_shape:
-            # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
-            raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
+        # if name == self._debug_stop or name == self._debug_stop_shape:
+        #    # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
+        #    raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
         assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
         assert not isinstance(value, bool), f"Unexpected rank type {type(value)} for {name!r}"
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -1790,9 +1792,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             name, str
         ), f"Unexpected type {type(name)} for name={name!r}{self.get_debug_msg()}"
-        assert value not in {
-            tuple()
-        }, f"Unexpected value for shape {name!r}, value={value}{self.get_debug_msg()}"
         assert not isinstance(value, tuple) or all(
             not isinstance(d, str) or d[0] != "(" for d in value
         ), f"Unexpected value for shape {name!r}, value={value!r}{self.get_debug_msg()}"
@@ -5449,8 +5448,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             if val is None:
                 return None, None
-            assert len(val.shape) == 0 or min(val.shape) > 0, (
-                f"One input has a empty shape {val.shape}, name={kval!r}"
+            assert (
+                len(val.shape) == 0
+                or min(val.shape) > 0
+                or (val.shape == (0,) and v.op_type in {"Cast", "Identity"})
+            ), (
+                f"One input has a empty shape {val.shape}, name={kval!r} "
                 f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
             )
 
@@ -5516,8 +5519,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if name == n:
                     cst = val
 
-        assert len(cst.shape) == 0 or min(cst.shape) > 0, (
-            f"Output has empty shape {cst.shape}, name={name!r}"
+        assert (
+            len(cst.shape) == 0
+            or min(cst.shape) > 0
+            or (cst.shape == (0,) and v.op_type in {"ConstantOfShape", "Cast", "Identity"})
+        ), (
+            f"Output has empty shape {cst.shape}, name={name!r} "
             f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
         )
         assert cst is not None, f"Constant {name!r} was not found in {v.output}"
@@ -6553,12 +6560,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.set_value_shape(node.output[0], (values[0],))
                 return True
 
-        if node.op_type in {"Mul", "Add", "Div", "Sub"}:
+        if node.op_type in {"Mul", "Add", "Div", "Sub", "Mod"}:
             fct, symbol = {
                 "Add": ((lambda x, y: x + y), "+"),
                 "Div": ((lambda x, y: x // y), "/"),
                 "Mul": ((lambda x, y: x * y), "*"),
                 "Sub": ((lambda x, y: x - y), "-"),
+                "Mod": ((lambda x, y: x % y), "%"),
             }[node.op_type]
             m1 = values[0]
             m2 = values[1]

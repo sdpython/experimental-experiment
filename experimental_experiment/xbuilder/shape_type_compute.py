@@ -370,12 +370,26 @@ def prepare_inputs_homogeneous_operator(
     sts: Optional[Any] = None,
     check_shape: bool = True,
     op_type: Optional[str] = None,
+    use_left: bool = False,
+    force_type: Optional[int] = None,
 ) -> Tuple[str, ...]:
     """
     Cast any inputs to ensure all inputs share the same type.
 
     op_type can be specified to bypass some cases with ambiguities such as
     a float multiplied with an integer.
+
+    :param g: GraphBuilder
+    :param args: operator arguments
+    :param f: function calling the operator
+    :param outputs: output names
+    :param sts: known shapes and types
+    :param check_shape: extra verification for shapes
+    :param op_type: operator type (onnx name)
+    :param use_left: if the operator is in one inplaced modification
+        then the type of the left side
+    :param force_type: if not None, choose this type and cast the inputs
+    :return: new inputs
     """
     dtypes_list = [_get_input_type(g, a, python_default=False) for a in args]
     dtypes_list_not_none = [n for n in dtypes_list if n is not None]
@@ -384,8 +398,12 @@ def prepare_inputs_homogeneous_operator(
         # let's include them
         dtypes_list_not_none = [_get_input_type(g, a, python_default=True) for a in args]
     dtypes = set(dtypes_list_not_none)
-    if len(dtypes) == 1:
+    if force_type is not None:
+        only = force_type
+    elif len(dtypes) == 1:
         only = list(dtypes)[0]  # noqa: RUF015
+    elif use_left and dtypes_list[0]:
+        only = dtypes_list[0]
     else:
         only = _get_compute_type(set(dtypes))
     inputs = []
@@ -626,7 +644,10 @@ def _set_shape_type_op_any_gather(
         sh2 = self.get_shape(node.input[1])
         att = self.get_attribute(node, "axis", exc=False)
         axis = 0 if att is None else att.i
-        if len(sh1) == len(sh2) == 2 and axis == 0:
+        if len(sh2) == 0:
+            new_shape = tuple(s for i, s in enumerate(sh1) if i != axis)
+            self.set_shape(node.output[0], new_shape)
+        elif len(sh1) == len(sh2) == 2 and axis == 0:
             new_shape = (*sh2, sh1[-1])
             self.set_shape(node.output[0], new_shape)
         else:

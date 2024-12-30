@@ -3,7 +3,12 @@ from typing import Any, List, Optional
 import numpy as np
 import onnx.helper as oh
 from onnx.checker import check_model
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows, requires_cuda
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_cuda,
+    requires_torch,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -379,6 +384,7 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not working on windows")
+    @requires_torch("2.6", "avoid _native_batch_norm_legit_functional")
     def test_aten_batch_norm_training(self):
         import torch
 
@@ -427,6 +433,7 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not working on windows")
+    @requires_torch("2.6", "avoid _native_batch_norm_legit_functional")
     def test_aten_batch_norm_training16(self):
         import torch
 

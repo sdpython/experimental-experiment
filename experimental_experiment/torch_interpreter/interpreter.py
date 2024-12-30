@@ -1565,10 +1565,14 @@ class DynamoInterpreter:
         if isinstance(node.name, str):
             if len(output_names) != 1:
                 if output_names != list(res):
-                    raise NotImplementedError(
-                        f"Unexpected output_names {output_names}, "
-                        f"res={res!r}, node.name={node.name!r}"
-                    )
+                    for i, (a, b) in enumerate(zip(output_names, res)):
+                        if a != b and a:
+                            raise NotImplementedError(
+                                f"Unexpected output_names at position {i}, a={a!r}, "
+                                f"b={b!r},\noutput_names={output_names}"
+                                f"\n         res={res!r}\n"
+                                f"node.name={node.name!r}"
+                            )
             elif isinstance(res, list) and len(res) != 1:
                 # SplitToSequence rewritten into a Split
                 name = output_names[0]
@@ -1615,7 +1619,12 @@ class DynamoInterpreter:
         if val is not None:
             if isinstance(val, (tuple, list)):
                 # Type list comes from SplitToSequence.
-                return tuple((None if v is None else v.dtype) for v in val)
+                import torch
+
+                return tuple(
+                    (None if v is None else (torch.int64 if isinstance(v, int) else v.dtype))
+                    for v in val
+                )
             if isinstance(val, (int, self.torch.SymInt)):
                 return self.torch.SymInt
             if isinstance(val, self.torch.SymBool):
@@ -1677,6 +1686,7 @@ class DynamoInterpreter:
                         "aten::_native_batch_norm_legit.no_stats",
                         "aten::_native_batch_norm_legit_no_training",
                         "aten::_scaled_dot_product_efficient_attention",
+                        "aten::_scaled_dot_product_flash_attention",
                     }:
                         # It seems the type is not very consistant
                         # and the output might not be used.
@@ -1727,6 +1737,10 @@ class DynamoInterpreter:
                     self.builder.set_shape(r, (1,))
                     self.builder.set_type(r, TensorProto.FLOAT)
                     self.builder.make_dynamic_object(r, v)
+                elif isinstance(v, int):
+                    # this is unknown
+                    self.builder.set_shape(r, (1,))
+                    self.builder.set_type(r, TensorProto.INT64)
                 elif v is None:
                     continue
                 elif isinstance(v, list) and len(v) > 0:

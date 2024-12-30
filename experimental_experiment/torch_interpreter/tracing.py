@@ -669,6 +669,16 @@ class CustomTracer(torch.fx.Tracer):
                         cls.graph_erase_node(graph, node)
                         continue
 
+                    if len(node.args) == 1:
+                        # Simple casen we check the predecessor is only used once and
+                        # in that case, we can remove as well.
+                        predecessor = node.args[0]
+                        if len(predecessor.users):
+                            # We can safely remove as the precessessor
+                            # is only used by this node
+                            cls.graph_erase_node(graph, node)
+                            continue
+
                     assert node.target.name() in {"aten::copy_"} and len(node.args) == 2, (
                         f"(inplace) Unsupported target {node.target!r}, target_name="
                         f"{node.target.name()!r}, name={node.name!r}, node.args={node.args} "

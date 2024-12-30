@@ -442,13 +442,17 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 the_shape_right
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
+
+            if matmul_shape[-1] != next_shape[-1]:
+                # 1x9x64, 1x64x9 -> 1x9x9 -> 1x81
+                # The last dimension changed.
+                return self.none(node, inspect.currentframe().f_lineno)
         else:
             if len(the_shape_left) != len(the_shape_right):
                 return self.none(node, inspect.currentframe().f_lineno)
 
         # The pattern is not handling the reshape after the matmul,
         # ReshapeReshapePattern will do it.
-
         nodes = [node_left, node_right, node, next_node]
 
         return MatchResult(self, nodes, self.apply)

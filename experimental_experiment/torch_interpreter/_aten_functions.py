@@ -155,9 +155,16 @@ def aten_add__Tensor(
     alpha: Optional[Any] = None,
     name: str = "add__Tensor",
 ) -> T:
-    "add"
-    # inplace modifications but it seems to be correct.
-    return aten_add_Tensor(g, sts, outputs, x, y, alpha, name=name)
+    "add_"
+    # inplace modifications but it seems to be correct,
+    # the new name is used instead of the old one
+    assert alpha in (None, 1), f"alpha={alpha}, not implemented"
+    # for inplace modification, we need to take the type of x (left side)
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, use_left=True)
+    res = g.op.Add(x, y, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_addcmul(
@@ -2045,6 +2052,9 @@ def aten_div_Tensor_mode(
     if rounding_mode is None:
         return aten_div(g, sts, outputs, x, y, name=name)
 
+    assert g.has_type(x) or g.has_type(
+        y
+    ), f"Missing type for {x!r} or {y!r} for 'div_Tensor_mode'{g.get_debug_msg()}"
     assert rounding_mode in {"trunc", "floor"}, (
         f"aten_div_Tensor_mode: nexpected value for round_mode={rounding_mode!r}"
         f"{g.get_debug_msg()}"
@@ -2053,6 +2063,18 @@ def aten_div_Tensor_mode(
         f"aten_div_Tensor_mode not yet implemented for "
         f"round_mode={rounding_mode!r}{g.get_debug_msg()}"
     )
+    # Div does not support int64...
+    itype = g.get_type(x) if g.has_type(x) else g.get_type(y)
+    if itype in {TensorProto.INT64, TensorProto.INT32}:
+        name = f"{name}_{rounding_mode}_int"
+        x, y = prepare_inputs_homogeneous_operator(g, x, y, force_type=TensorProto.FLOAT)
+        return g.op.Cast(
+            g.op.Floor(g.op.Div(x, y, name=name), name=name),
+            to=itype,
+            name=name,
+            outputs=outputs,
+        )
+    name = f"{name}_{rounding_mode}_float"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     return g.op.Floor(g.op.Div(x, y, name=name), name=name, outputs=outputs)
 
@@ -2886,9 +2908,20 @@ def aten_flatten_using_ints(
             f"x={x!r}, start_dim={start_dim}, end_dim={end_dim} "
             f"not supported{g.get_debug_msg()}"
         )
+    # start_dim == 0
     if end_dim == -1:
-        return g.make_node("Flatten", [x], outputs, name=name)
-    res = g.make_node("Flatten", [x], outputs, to=end_dim, name=name)
+        # Flattens everything
+        res = g.op.Reshape(x, np.array([-1], dtype=np.int64), outputs=outputs, name=name)
+    else:
+        if end_dim < 0:
+            assert g.has_rank(
+                x
+            ), f"Current implementation requires rank of {x!r}{g.get_debug_msg()}"
+            rk = g.get_rank(x)
+            start_dim += rk
+        shape_x = g.op.Shape(x, start=end_dim + 1, name=name)
+        new_shape = g.op.Concat(np.array([-1], dtype=np.int64), shape_x, axis=0, name=name)
+        res = g.op.Reshape(x, new_shape, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x, full=True):
@@ -3682,9 +3715,21 @@ def aten_index_Tensor(
 
     if n_none == 1 and indices[0] is None and len(indices) == 3:
         ranks = [g.get_rank(i) for i in indices if i is not None]
-        assert (
-            len(set(ranks)) == 2
-        ), f"aten_index is not implemented for ranks={ranks} (1){g.get_debug_msg()}"
+        if set(ranks) == {1}:
+            name = f"{name}_t31"
+            # y[b, i] = x[b, i1[i], i2[i]]
+            dim2 = g.op.Shape(x, start=2, end=3, name=name)
+            flat_index = g.op.Add(g.op.Mul(indices[1], dim2, name=name), indices[2], name=name)
+            reshaped_x = g.op.Reshape(x, np.array([0, -1], dtype=np.int64), name=name)
+            res = g.op.Gather(reshaped_x, flat_index, axis=1, name=name, outputs=outputs)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+            return res
+
+        assert len(set(ranks)) == 2, (
+            f"aten_index is not implemented for ranks={ranks} (1), "
+            f"indices={indices}{g.get_debug_msg()}"
+        )
         i_rank = ranks[-1]
         name = f"{name}_d"
         dim2 = g.op.Shape(x, start=2, end=3, name=name)
@@ -4079,7 +4124,7 @@ def aten_index_put(
                         or (g.has_shape(ind1) and is_static_shape(g.get_shape(ind1)))
                     )
                     and (
-                        isinstance(ind1, np.ndarray)
+                        isinstance(ind2, np.ndarray)
                         or (g.has_shape(ind2) and is_static_shape(g.get_shape(ind2)))
                     )
                 ):
@@ -4152,6 +4197,242 @@ def aten_index_put(
             f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
             f"ind0={_s(ind0)}, ind1={_s(ind1)}, ind2={_s(ind2)}, "
             f"INT64={TensorProto.INT64}, INT32={TensorProto.INT32}"
+            f"{g.get_debug_msg()}"
+        )
+
+    if len(indices) == 4:
+        # copy[index, middle, indices] = update.transpose(1, 0)
+        # index_put.default(args = (%clone, [%kv_index, %arange], %view), kwargs = {})
+        ind0, ind1, ind2, ind3 = indices
+        if (
+            (
+                ind0 is None
+                or (
+                    g.has_rank(ind0)
+                    and g.get_rank(ind0) == 1
+                    and g.get_type(ind0) in {TensorProto.INT64, TensorProto.INT32}
+                )
+            )
+            and (
+                ind1 is None
+                or (
+                    g.has_rank(ind1)
+                    and g.get_rank(ind1) == 1
+                    and g.get_type(ind1) in {TensorProto.INT64, TensorProto.INT32}
+                )
+            )
+            and (
+                ind2 is None
+                or (
+                    g.has_rank(ind2)
+                    and g.get_rank(ind2) == 1
+                    and g.get_type(ind2) in {TensorProto.INT64, TensorProto.INT32}
+                )
+            )
+            and (
+                ind3 is None
+                or (
+                    g.has_rank(ind3)
+                    and g.get_rank(ind3) == 1
+                    and g.get_type(ind3) in {TensorProto.INT64, TensorProto.INT32}
+                )
+            )
+            and g.has_rank(values)
+            and g.has_rank(x)
+        ):
+            name = (
+                f"{name}4i{'o' if ind0 is None else g.get_rank(ind0)}"
+                f"i{'o' if ind1 is None else g.get_rank(ind1)}"
+                f"i{'o' if ind2 is None else g.get_rank(ind2)}"
+                f"i{'o' if ind3 is None else g.get_rank(ind3)}"
+                f"x{g.get_rank(x)}v{g.get_rank(values)}_"
+            )
+            assert g.get_rank(x) == 4 and (
+                g.get_rank(values) == 1
+                or ind0 is None
+                or ind1 is None
+                or ind2 is None
+                or ind3 is None
+            ), (
+                f"No implementation for index_put when indices={indices}, "
+                f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+                f"{g.get_debug_msg()}"
+            )
+
+            if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+                static_shape = True
+                shape_x = np.array(g.get_shape(x), dtype=np.int64)
+                stride_1 = np.prod(shape_x[1:4]).reshape((-1,)).astype(np.int64)
+                stride_2 = np.prod(shape_x[2:4]).reshape((-1,)).astype(np.int64)
+                stride_3 = shape_x[3:4]
+                size = np.prod(shape_x).astype(np.int64)
+                arange_1d = np.arange(0, size).reshape((-1,)).astype(np.int64)
+            else:
+                static_shape = False
+                shape_x = g.op.Shape(x, name=name)
+                stride_1 = g.op.ReduceProd(
+                    g.op.Shape(x, start=1, name=name), name=name, keepdim=1
+                )
+                stride_2 = g.op.ReduceProd(
+                    g.op.Shape(x, start=2, name=name), name=name, keepdim=1
+                )
+                stride_3 = g.op.ReduceProd(
+                    g.op.Shape(x, start=3, name=name), name=name, keepdim=1
+                )
+                size = g.op.Size(x, name=name)
+                arange_1d = g.op.Range(
+                    np.array(0, dtype=np.int64),
+                    size,
+                    np.array(1, dtype=np.int64),
+                    name=name,
+                )
+
+            ind0, expanded0 = _make_range_or_cast(ind0, shape_x, static_shape, 0, name)
+            ind1, expanded1 = _make_range_or_cast(ind1, shape_x, static_shape, 1, name)
+            ind2, expanded2 = _make_range_or_cast(ind2, shape_x, static_shape, 2, name)
+            ind3, expanded3 = _make_range_or_cast(ind3, shape_x, static_shape, 3, name)
+
+            if expanded0 or expanded1 or expanded2 or expanded3:
+                ind0_ = g.op.Reshape(ind0, np.array([-1, 1, 1, 1], dtype=np.int64), name=name)
+                ind1_ = g.op.Reshape(ind1, np.array([1, -1, 1, 1], dtype=np.int64), name=name)
+                ind2_ = g.op.Reshape(ind2, np.array([1, 1, -1, 1], dtype=np.int64), name=name)
+                ind3_ = g.op.Reshape(ind3, np.array([1, 1, 1, -1], dtype=np.int64), name=name)
+
+                if (
+                    (
+                        isinstance(ind0, np.ndarray)
+                        or (g.has_shape(ind0) and is_static_shape(g.get_shape(ind0)))
+                    )
+                    and (
+                        isinstance(ind1, np.ndarray)
+                        or (g.has_shape(ind1) and is_static_shape(g.get_shape(ind1)))
+                    )
+                    and (
+                        isinstance(ind2, np.ndarray)
+                        or (g.has_shape(ind2) and is_static_shape(g.get_shape(ind2)))
+                    )
+                    and (
+                        isinstance(ind3, np.ndarray)
+                        or (g.has_shape(ind3) and is_static_shape(g.get_shape(ind3)))
+                    )
+                ):
+                    sh0 = ind0.shape if isinstance(ind0, np.ndarray) else g.get_shape(ind0)
+                    sh1 = ind1.shape if isinstance(ind1, np.ndarray) else g.get_shape(ind1)
+                    sh2 = ind2.shape if isinstance(ind2, np.ndarray) else g.get_shape(ind2)
+                    sh3 = ind3.shape if isinstance(ind3, np.ndarray) else g.get_shape(ind3)
+                    new_shape = np.hstack([sh0, sh1, sh2, sh3]).astype(np.int64)
+                else:
+                    new_shape = g.op.Concat(
+                        g.op.Shape(ind0, name=name),
+                        g.op.Shape(ind1, name=name),
+                        g.op.Shape(ind2, name=name),
+                        g.op.Shape(ind3, name=name),
+                        axis=0,
+                        name=name,
+                    )
+                expanded = g.op.Expand(values, new_shape, name=name)
+                indices_4d = g.op.Add(
+                    g.op.Mul(ind0_, stride_1, name=name),
+                    g.op.Add(
+                        g.op.Add(
+                            g.op.Mul(ind1_, stride_2, name=name),
+                            g.op.Mul(ind2_, stride_3, name=name),
+                            name=name,
+                        ),
+                        ind3_,
+                        name=name,
+                    ),
+                    name=name,
+                )
+            else:
+                expanded = values
+                indices_4d = g.op.Add(
+                    g.op.Mul(ind0, stride_1, name=name),
+                    g.op.Add(
+                        g.op.Add(
+                            g.op.Mul(ind1, stride_2, name=name),
+                            g.op.Mul(ind2, stride_3, name=name),
+                            name=name,
+                        ),
+                        ind2,
+                        name=name,
+                    ),
+                    name=name,
+                )
+
+            indices_1d = g.op.GatherElements(
+                arange_1d,
+                g.op.Reshape(indices_4d, np.array([-1], dtype=np.int64), name=name),
+                name=name,
+            )
+
+            expanded = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
+
+            flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+            if accumulate:
+                flat_up_x = g.op.ScatterElements(
+                    flat_x, indices_1d, expanded, name=name, reduction="add"
+                )
+            else:
+                flat_up_x = g.op.ScatterElements(flat_x, indices_1d, expanded, name=name)
+
+            g.set_type(flat_up_x, g.get_type(x))
+            res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
+            if not sts:
+                set_type_shape_unary_op(g, res, x)
+            return res
+
+        if (
+            indices[0] is None
+            and indices[1] is None
+            and indices[2] is not None
+            and indices[3] is not None
+        ):
+            # rank is not one
+            # Let's reshape before and after.
+            # shape of indices[2] is (a, b, 1, 1)
+            # shape of indices[3] is (a, b)
+            name = f"{name}_4_2"
+            new_indices = [
+                i if i is None else g.op.Reshape(i, np.array([-1], dtype=np.int64), name=name)
+                for i in indices
+            ]
+            new_shape = g.op.Concat(
+                g.op.Shape(values, start=0, end=2, name=name),
+                np.array([-1], dtype=np.int64),
+                g.op.Shape(new_indices[-1], name=name),
+                name=name,
+                axis=0,
+            )
+            new_values = g.op.Reshape(values, new_shape, name=name)
+            # index_put
+            res = aten_index_put(
+                g,
+                sts,
+                outputs,
+                x,
+                new_indices,
+                new_values,
+                accumulate=accumulate,
+                name=f"{name}_in",
+            )
+            if not sts:
+                set_type_shape_unary_op(g, res, x)
+            return res
+
+        def _s(ind):
+            if ind is None:
+                return "-"
+            if g.has_shape(ind):
+                s = str(g.get_shape(ind)).replace(" ", "")
+                return f"{s}:{g.get_type(ind)}"
+            return str(ind)
+
+        raise AssertionError(
+            f"No implementation for index_put when indices={indices}, "
+            f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+            f"ind0={_s(ind0)}, ind1={_s(ind1)}, ind2={_s(ind2)}, ind3={_s(ind3)}, "
+            f"values={_s(values)}, INT64={TensorProto.INT64}, INT32={TensorProto.INT32}"
             f"{g.get_debug_msg()}"
         )
 
@@ -8476,7 +8757,10 @@ def aten_stack(
     for t in tensors:
         r = g.op.UnsqueezeAnyOpset(t, adim, name=name)
         new_tensors.append(r)
-    res = g.op.Concat(*new_tensors, axis=dim, outputs=outputs, name=name)
+    if len(new_tensors) == 1:
+        res = g.op.Identity(new_tensors[0], outputs=outputs, name=name)
+    else:
+        res = g.op.Concat(*new_tensors, axis=dim, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(tensors[0]))
     return res
@@ -8932,8 +9216,10 @@ def aten_to_device(
     name: str = "to_device",
     **kwargs: Dict[str, Any],
 ) -> T:
-    "to_device -> Identity"
-    return g.op.Identity(input_name, name=name, outputs=outputs)
+    "to_device -> Identity, Cast"
+    from ._aten_methods import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
 
 
 def aten_to_dtype(
@@ -9195,11 +9481,42 @@ def aten_unfold(
 
 
 def aten_unsqueeze(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, dim: int
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    name: str = "unsqueeze",
 ) -> T:
     "unsqueeze"
     assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
-    res = g.op.UnsqueezeAnyOpset(x, np.array([dim], dtype=np.int64), outputs=outputs)
+    res = g.op.UnsqueezeAnyOpset(
+        x, np.array([dim], dtype=np.int64), outputs=outputs, name=name
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = list(g.get_shape(x))
+            shape.insert(dim, 1)
+            g.set_shape(res, tuple(shape))
+        else:
+            g.set_rank(res, g.get_rank(x) + 1)
+    return res
+
+
+def aten_unsqueeze_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    name: str = "unsqueeze_",
+) -> T:
+    "`unsqueeze_`, inplace modifications are not allowed, we assume they were removed"
+    assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
+    res = g.op.UnsqueezeAnyOpset(
+        x, np.array([dim], dtype=np.int64), outputs=outputs, name=name
+    )
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):
