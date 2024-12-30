@@ -155,9 +155,16 @@ def aten_add__Tensor(
     alpha: Optional[Any] = None,
     name: str = "add__Tensor",
 ) -> T:
-    "add"
-    # inplace modifications but it seems to be correct.
-    return aten_add_Tensor(g, sts, outputs, x, y, alpha, name=name)
+    "add_"
+    # inplace modifications but it seems to be correct,
+    # the new name is used instead of the old one
+    assert alpha in (None, 1), f"alpha={alpha}, not implemented"
+    # for inplace modification, we need to take the type of x (left side)
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, use_left=True)
+    res = g.op.Add(x, y, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y)
+    return res
 
 
 def aten_addcmul(
@@ -2045,6 +2052,9 @@ def aten_div_Tensor_mode(
     if rounding_mode is None:
         return aten_div(g, sts, outputs, x, y, name=name)
 
+    assert g.has_type(x) or g.has_type(
+        y
+    ), f"Missing type for {x!r} or {y!r} for 'div_Tensor_mode'{g.get_debug_msg()}"
     assert rounding_mode in {"trunc", "floor"}, (
         f"aten_div_Tensor_mode: nexpected value for round_mode={rounding_mode!r}"
         f"{g.get_debug_msg()}"
@@ -2053,6 +2063,18 @@ def aten_div_Tensor_mode(
         f"aten_div_Tensor_mode not yet implemented for "
         f"round_mode={rounding_mode!r}{g.get_debug_msg()}"
     )
+    # Div does not support int64...
+    itype = g.get_type(x) if g.has_type(x) else g.get_type(y)
+    if itype in {TensorProto.INT64, TensorProto.INT32}:
+        name = f"{name}_{rounding_mode}_int"
+        x, y = prepare_inputs_homogeneous_operator(g, x, y, force_type=TensorProto.FLOAT)
+        return g.op.Cast(
+            g.op.Floor(g.op.Div(x, y, name=name), name=name),
+            to=itype,
+            name=name,
+            outputs=outputs,
+        )
+    name = f"{name}_{rounding_mode}_float"
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
     return g.op.Floor(g.op.Div(x, y, name=name), name=name, outputs=outputs)
 
