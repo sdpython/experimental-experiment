@@ -8735,7 +8735,10 @@ def aten_stack(
     for t in tensors:
         r = g.op.UnsqueezeAnyOpset(t, adim, name=name)
         new_tensors.append(r)
-    res = g.op.Concat(*new_tensors, axis=dim, outputs=outputs, name=name)
+    if len(new_tensors) == 1:
+        res = g.op.Identity(new_tensors[0], outputs=outputs, name=name)
+    else:
+        res = g.op.Concat(*new_tensors, axis=dim, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(tensors[0]))
     return res
@@ -9191,8 +9194,10 @@ def aten_to_device(
     name: str = "to_device",
     **kwargs: Dict[str, Any],
 ) -> T:
-    "to_device -> Identity"
-    return g.op.Identity(input_name, name=name, outputs=outputs)
+    "to_device -> Identity, Cast"
+    from ._aten_methods import aten_meth_to
+
+    return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
 
 
 def aten_to_dtype(
@@ -9454,11 +9459,42 @@ def aten_unfold(
 
 
 def aten_unsqueeze(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, dim: int
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    name: str = "unsqueeze",
 ) -> T:
     "unsqueeze"
     assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
-    res = g.op.UnsqueezeAnyOpset(x, np.array([dim], dtype=np.int64), outputs=outputs)
+    res = g.op.UnsqueezeAnyOpset(
+        x, np.array([dim], dtype=np.int64), outputs=outputs, name=name
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = list(g.get_shape(x))
+            shape.insert(dim, 1)
+            g.set_shape(res, tuple(shape))
+        else:
+            g.set_rank(res, g.get_rank(x) + 1)
+    return res
+
+
+def aten_unsqueeze_(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    name: str = "unsqueeze_",
+) -> T:
+    "`unsqueeze_`, inplace modifications are not allowed, we assume they were removed"
+    assert isinstance(dim, int), f"Not implemented for dim={dim!r}"
+    res = g.op.UnsqueezeAnyOpset(
+        x, np.array([dim], dtype=np.int64), outputs=outputs, name=name
+    )
     if not sts:
         g.set_type(res, g.get_type(x))
         if g.has_shape(x):

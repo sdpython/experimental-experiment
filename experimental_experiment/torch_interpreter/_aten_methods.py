@@ -395,7 +395,12 @@ def aten_meth_to(
             assert device is None, f"device is specified in args and kwargs {args}, {kwargs}"
             device = a
             continue
-        raise NotImplementedError(f"Unexpected type for argument {type(a)}")
+        if isinstance(a, bool):  # copy, non_blocking
+            continue
+        raise NotImplementedError(
+            f"Unexpected type for argument {type(a)}, iunput_name={input_name!r} "
+            f"args={args}{g.get_debug_msg()}"
+        )
     assert (
         dtype is not None or device is not None
     ), "dtype or device cannot be None for method to"
