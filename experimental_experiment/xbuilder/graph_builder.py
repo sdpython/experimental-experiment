@@ -6566,7 +6566,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 "Div": ((lambda x, y: x // y), "/"),
                 "Mul": ((lambda x, y: x * y), "*"),
                 "Sub": ((lambda x, y: x - y), "-"),
-                "Mod": ((lambda x, y: x - y), "%"),
+                "Mod": ((lambda x, y: x % y), "%"),
             }[node.op_type]
             m1 = values[0]
             m2 = values[1]
