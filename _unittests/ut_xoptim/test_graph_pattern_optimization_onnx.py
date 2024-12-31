@@ -4395,6 +4395,44 @@ class TestGraphPatternOptimization(ExtTestCase):
         ), f"Missing value for 'new_shape'{gr.get_debug_msg()}"
         self.assertEqual(shapes["Areshaped"], ("batch/2", "seq/2", 64, 16))
 
+    def test_split_concat(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X"], ["s1", "s2"], num_outputs=2, axis=-1),
+                    oh.make_node("Concat", ["s1", "s2"], ["Y"], axis=-1),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["a", "b"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        from onnxruntime import InferenceSession
+
+        feeds = {"X": self._range(2, 3).astype(np.float32)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["SplitConcat"]),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(["Identity"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 0)
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
