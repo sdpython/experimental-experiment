@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_matmul
-===================================================
+.xoptim.patterns.onnx_matmul
+============================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_matmul
     :members:

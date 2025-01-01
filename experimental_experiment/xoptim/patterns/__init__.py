@@ -98,10 +98,12 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
 
     .. runpython::
         :showcode:
+        :rst:
 
-        import pprint
+        from experimental_experiment.xoptim.patterns_api import pattern_table_doc
         from experimental_experiment.xoptim.patterns import get_default_patterns
-        pprint.pprint(get_default_patterns())
+
+        print(pattern_table_doc(get_default_patterns(), as_rst=True))
     """
     return [
         # AlmostDoNothingPattern(verbose=verbose),

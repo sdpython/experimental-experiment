@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns_ort.fused_conv
-======================================================
+.xoptim.patterns_ort.fused_conv
+===============================
 
 .. automodule:: experimental_experiment.xoptim.patterns_ort.fused_conv
     :members:

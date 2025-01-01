@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_reduce
-===================================================
+.xoptim.patterns.onnx_reduce
+============================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_reduce
     :members:

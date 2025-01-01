@@ -1,6 +1,6 @@
 
-experimental_experiment.args
-============================
+.args
+=====
 
 .. automodule:: experimental_experiment.args
     :members:

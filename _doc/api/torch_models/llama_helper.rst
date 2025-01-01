@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_models.llama_helper
-=================================================
+.torch_models.llama_helper
+==========================
 
 .. automodule:: experimental_experiment.torch_models.llama_helper
     :members:

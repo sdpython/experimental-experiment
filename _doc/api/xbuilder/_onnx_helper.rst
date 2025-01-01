@@ -1,6 +1,6 @@
 
-experimental_experiment.xbuilder._onnx_helper
-=============================================
+.xbuilder._onnx_helper
+======================
 
 .. automodule:: experimental_experiment.xbuilder._onnx_helper
     :members:

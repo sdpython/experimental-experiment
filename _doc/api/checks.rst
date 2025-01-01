@@ -1,6 +1,6 @@
 
-experimental_experiment.checks
-==============================
+.checks
+=======
 
 .. automodule:: experimental_experiment.checks
     :members:

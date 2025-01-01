@@ -10,10 +10,12 @@ def get_onnxruntime_patterns(
 
     .. runpython::
         :showcode:
+        :rst:
 
-        import pprint
+        from experimental_experiment.xoptim.patterns_api import pattern_table_doc
         from experimental_experiment.xoptim.patterns_ort import get_onnxruntime_patterns
-        pprint.pprint(get_onnxruntime_patterns())
+
+        print(pattern_table_doc(get_onnxruntime_patterns(), as_rst=True))
     """
     from .activation import (
         BiasGeluPattern,

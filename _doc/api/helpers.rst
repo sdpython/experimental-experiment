@@ -1,6 +1,6 @@
 
-experimental_experiment.helpers
-===============================
+.helpers
+========
 
 .. automodule:: experimental_experiment.helpers
     :members:

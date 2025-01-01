@@ -11,12 +11,14 @@ def get_investigation_patterns(verbose: int = 0) -> List["PatternOptimization"]:
 
     .. runpython::
         :showcode:
+        :rst:
 
-        import pprint
+        from experimental_experiment.xoptim.patterns_api import pattern_table_doc
         from experimental_experiment.xoptim.patterns_investigation import (
             get_investigation_patterns
         )
-        pprint.pprint(get_investigation_patterns())
+
+        print(pattern_table_doc(get_investigation_patterns(), as_rst=True))
     """
     from .element_wise import BinaryInvestigation
     from .llm_patterns import (

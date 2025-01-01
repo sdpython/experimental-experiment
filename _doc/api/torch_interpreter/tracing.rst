@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_interpreter.tracing
-=================================================
+.torch_interpreter.tracing
+==========================
 
 .. automodule:: experimental_experiment.torch_interpreter.tracing
     :members:

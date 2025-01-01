@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_interpreter.export_options
-========================================================
+.torch_interpreter.export_options
+=================================
 
 .. automodule:: experimental_experiment.torch_interpreter.export_options
     :members:

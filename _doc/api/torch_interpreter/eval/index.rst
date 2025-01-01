@@ -1,5 +1,5 @@
-experimental_experiment.torch_interpreter.eval
-==============================================
+.torch_interpreter.eval
+=======================
 
 .. toctree::
     :maxdepth: 1

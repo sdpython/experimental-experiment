@@ -1,6 +1,6 @@
 
-experimental_experiment.reference.evaluator
-===========================================
+.reference.evaluator
+====================
 
 .. automodule:: experimental_experiment.reference.evaluator
     :members:

@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_cast
-=================================================
+.xoptim.patterns.onnx_cast
+==========================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_cast
     :members:

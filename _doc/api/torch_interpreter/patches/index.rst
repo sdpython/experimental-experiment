@@ -1,5 +1,5 @@
-experimental_experiment.torch_interpreter.patches
-=================================================
+.torch_interpreter.patches
+==========================
 
 .. toctree::
     :maxdepth: 1

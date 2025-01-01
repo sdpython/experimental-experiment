@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_any
-================================================
+.xoptim.patterns.onnx_any
+=========================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_any
     :members:

@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns_exp.constants
-=====================================================
+.xoptim.patterns_exp.constants
+==============================
 
 .. automodule:: experimental_experiment.xoptim.patterns_exp.constants
     :members:

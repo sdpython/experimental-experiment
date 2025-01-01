@@ -1302,3 +1302,29 @@ def make_pattern_from_onnx(
     """
     new_type = type(name, (OnnxEasyPatternOptimization,), {})
     return new_type(match_model, apply_model, verbose=verbose)
+
+
+def pattern_table_doc(
+    pattern_list: List[PatternOptimization], as_rst: bool = False
+) -> Union[str, List[Dict[str, Any]]]:
+    """
+    Builds a table for with some information about patterns.
+    See :func:`experimental_experiment.xoptim.get_pattern_list`
+    for an example.
+    """
+    data = []
+    for pat in pattern_list:
+        data.append(
+            dict(
+                name=pat.__class__.__name__,
+                short_name=pat.__class__.__name__.replace("Pattern", ""),
+                priority=pat.priority,
+                doc=pat.__class__.__doc__,
+            )
+        )
+    if as_rst:
+        import pandas
+
+        df = pandas.DataFrame(data)
+        return df.to_markdown(tablefmt="rst")
+    return data

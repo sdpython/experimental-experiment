@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_models.diffusion_model_helper
-===========================================================
+.torch_models.diffusion_model_helper
+====================================
 
 .. automodule:: experimental_experiment.torch_models.diffusion_model_helper
     :members:

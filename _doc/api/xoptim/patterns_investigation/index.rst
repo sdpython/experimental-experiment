@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns_investigation
-=====================================================
+.xoptim.patterns_investigation
+==============================
 
 .. toctree::
     :maxdepth: 1

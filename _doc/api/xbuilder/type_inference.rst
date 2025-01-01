@@ -1,6 +1,6 @@
 
-experimental_experiment.xbuilder.type_inference
-===============================================
+.xbuilder.type_inference
+========================
 
 .. automodule:: experimental_experiment.xbuilder.type_inference
     :members:

@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_expand
-===================================================
+.xoptim.patterns.onnx_expand
+============================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_expand
     :members:

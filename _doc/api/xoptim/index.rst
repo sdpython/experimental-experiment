@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim
-==============================
+.xoptim
+=======
 
 
 .. toctree::
