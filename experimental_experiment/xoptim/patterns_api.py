@@ -1319,7 +1319,7 @@ def pattern_table_doc(
                 name=pat.__class__.__name__,
                 short_name=pat.__class__.__name__.replace("Pattern", ""),
                 priority=pat.priority,
-                doc=pat.__class__.__doc__,
+                doc=pat.__class__.__doc__.split("::", maxsplit=1)[0].replace("\n", " "),
             )
         )
     if as_rst:

@@ -158,6 +158,10 @@ class SplitConcatPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         axis_split = g.get_attribute(node, "axis").i
         axis_concat = g.get_attribute(only_node, "axis").i
+        if axis_split < 0 and axis_concat >= 0:
+            axis_split += g.get_rank(node.input[0])
+        if axis_concat < 0 and axis_split >= 0:
+            axis_concat += g.get_rank(node.input[0])
         if axis_split != axis_concat:
             return self.none(node, inspect.currentframe().f_lineno)
         if node.output != only_node.input:

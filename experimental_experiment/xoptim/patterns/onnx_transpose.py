@@ -1,7 +1,8 @@
 import inspect
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import NodeProto
+import onnx.helper as oh
 from ...xbuilder._shape_helper import is_static_shape
 from ..patterns_api import MatchResult, PatternOptimization
 
@@ -100,7 +101,7 @@ class TransposeTransposePattern(PatternOptimization):
 
 class TransposeReshapeTransposePattern(PatternOptimization):
     """
-    Swaps Reshapes and Transpose in a sequence such as this one:
+    Swaps Reshape and Transpose in a sequence such as this one:
 
     ::
 
@@ -302,3 +303,94 @@ class TransposeReshapeTransposePattern(PatternOptimization):
             ),
             t2_node,
         ]
+
+
+class TransposeLayerNormalizationTransposePattern(PatternOptimization):
+    """
+    Swaps Transpose and LayerNormalization in a sequence such as this one:
+
+    ::
+
+        input is a,b,c
+
+        Transpose(., perm=[0, 2, 1])
+        LayerNormalization(..., axis=-1)
+        Transpose(., perm=[0, 2, 1])
+
+    By:
+
+    ::
+
+        LayerNormalization(..., axis=1)
+        Transpose(., perm=[0, 2, 1])
+        Transpose(., perm=[0, 2, 1])
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "LayerNormalization" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        transpose = next_nodes[0]
+        if transpose.op_type != "Transpose" or transpose.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        before = g.node_before(node.input[0])
+        if before.op_type != "Transpose" or before.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [before, node], self.apply, insert_at=before)
+
+    @classmethod
+    def _new_axis(cls, axis: int, perm: Sequence[int]) -> int:
+        """Returns the axis before the permutation happens."""
+        rev = {p: i for i, p in enumerate(perm)}
+        return rev[axis]
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        transpose_node: NodeProto,
+        layer_norm_node: NodeProto,
+    ) -> List[NodeProto]:
+        new_name = g.unique_name(f"{self.__class__.__name__}_{layer_norm_node.input[0]}")
+        atts = []
+        att_axis = None
+        for att in layer_norm_node.attribute:
+            if att.name != "axis":
+                atts.append(att)
+        perm = tuple(g.get_attribute(transpose_node, "perm").ints)
+
+        axis = -1 if att_axis is None else att_axis.i
+        if axis < 0:
+            axis = g.get_rank(transpose_node.input[0]) + axis
+        new_axis = self._new_axis(axis, perm)
+        atts.append(oh.make_attribute("perm", new_axis))
+        new_norm = g.make_node(
+            "LayerNormalization",
+            [transpose_node.input[0], *layer_norm_node.input[1:]],
+            [new_name],
+            name=f"{self.__class__.__name__}--{layer_norm_node.name}",
+            doc_string=layer_norm_node.doc_string,
+        )
+        new_norm.attribute.extend(atts)
+
+        new_tr = g.make_node(
+            "Transpose",
+            [new_name],
+            [layer_norm_node.output],
+            name=f"{self.__class__.__name__}--{transpose_node.name}",
+            doc_string=transpose_node.doc_string,
+        )
+        new_tr.attribute.extend(transpose_node.attribute)
+        return [new_norm, new_tr]
