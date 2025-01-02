@@ -4515,6 +4515,52 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
+    def test_matmul_transpose_relu(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("MatMul", ["X", "Y"], ["mm"]),
+                    oh.make_node("Transpose", ["mm"], ["tmm"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Relu", ["tmm"], ["Z"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, [3, 2, 6, 5]), _mkv_("Y", TFLOAT, [3, 2, 5, 6])],
+                [_mkv_("Z", TFLOAT, ["a", "b", "c", "d"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        from onnxruntime import InferenceSession
+
+        feeds = {
+            "X": self._range(3, 2, 6, 5).astype(np.float32),
+            "Y": self._range(3, 2, 5, 6).astype(np.float32),
+        }
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SwitchReshapeActivation"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(
+            ["MatMul", "Relu", "Transpose"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(len(opt_onx.graph.initializer), 0)
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

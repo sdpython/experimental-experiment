@@ -1113,3 +1113,96 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             ]
 
         return res
+
+
+class SwitchReshapeActivationPattern(PatternOptimization):
+    """
+    Swiches Gelu and Reshape after a Gemm or a MatMul.
+    Gelu can also be Gelu, Exp, Elu, Relu, Tan,
+    Tanh, Cos, Cosh, Sin, Sinh, Erf, LeakyRelu, PRelu,
+    Selu, Softmax, Softplus.
+    Reshape can also be Transpose.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+        left_first: bool = True,
+    ) -> Optional[MatchResult]:
+        if (
+            node.op_type
+            not in {
+                "Cos",
+                "Cosh",
+                "Elu",
+                "Erf",
+                "Exp",
+                "Gelu",
+                "LeakyRelu",
+                "PRelu",
+                "Relu",
+                "Selu",
+                "Sin",
+                "Sinh",
+                "Softmax",
+                "Softplus",
+                "Tan",
+                "Tanh",
+            }
+            or node.domain != ""
+        ):
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        before = g.node_before(node.input[0])
+        if g.is_used_more_than_once(before.input[0]):
+            return self.none(before, inspect.currentframe().f_lineno)
+        if before.op_type not in {"Reshape", "Transpose"} or node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        before_before = g.node_before(before.input[0])
+        if before_before.op_type not in {"Gemm", "MatMul"} or before_before.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(
+            self,
+            [before_before, before, node],
+            self.apply,
+            insert_at=before if before.op_type == "Reshape" else before_before,
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        mm_node: NodeProto,
+        tr_node: NodeProto,
+        f_node: NodeProto,
+    ) -> List[NodeProto]:
+        name1 = g.unique_name(f"{self.__class__.__name__}L_{mm_node.output[0]}")
+        name2 = g.unique_name(f"{self.__class__.__name__}L_{tr_node.output[0]}")
+        nodes = [
+            g.make_node(
+                mm_node.op_type,
+                mm_node.input,
+                [name1],
+                domain=mm_node.domain,
+                name=f"{self.__class__.__name__}--{mm_node.name}",
+            ),
+            g.make_node(
+                f_node.op_type,
+                [name1],
+                [name2],
+                domain=f_node.domain,
+                name=f"{self.__class__.__name__}--{f_node.name}",
+            ),
+            g.make_node(
+                tr_node.op_type,
+                [name2, *tr_node.input[1:]],
+                f_node.output,
+                domain=tr_node.domain,
+                name=f"{self.__class__.__name__}--{tr_node.name}",
+            ),
+        ]
+        nodes[1].attribute.extend(f_node.attribute)
+        nodes[2].attribute.extend(tr_node.attribute)
+        return nodes
