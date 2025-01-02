@@ -50,7 +50,11 @@ from .onnx_sequence import SequenceConstructAtPattern
 from .onnx_slice import SliceSlicePattern
 from .onnx_split import SlicesSplitPattern, SplitConcatPattern
 from .onnx_sub import Sub1MulPattern
-from .onnx_transpose import TransposeTransposePattern, TransposeReshapeTransposePattern
+from .onnx_transpose import (
+    TransposeTransposePattern,
+    TransposeReshapeTransposePattern,
+    TransposeEqualReshapePattern,
+)
 from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 
@@ -146,6 +150,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SplitConcatPattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
+        TransposeEqualReshapePattern(verbose=verbose),
         TransposeMatMulPattern(verbose=verbose),
         TransposeReshapeMatMulPattern(verbose=verbose),
         TransposeReshapeTransposePattern(verbose=verbose),

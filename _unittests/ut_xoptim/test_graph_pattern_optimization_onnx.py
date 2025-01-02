@@ -4476,21 +4476,15 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
-    def test_transpose_layer_normalization_transpose(self):
+    def test_transpose_equal_reshape(self):
         model = oh.make_model(
             oh.make_graph(
                 [
-                    oh.make_node("Transpose", ["X"], ["t"], perm=[0, 2, 1, 3]),
-                    oh.make_node("LayerNormalization", ["t", "scale", "b"], ["n"], axis=-2),
-                    oh.make_node("Transpose", ["n"], ["Y"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["X"], ["Y"], perm=[0, 2, 1, 3]),
                 ],
                 "dummy",
-                [_mkv_("X", TFLOAT, ["a", 2, "c", "d"])],
-                [_mkv_("Y", TFLOAT, ["a", 2, "c", "d"])],
-                [
-                    onh.from_array(np.array([0.5, 0.6], dtype=np.float32), name="scale"),
-                    onh.from_array(np.array([6, 5], dtype=np.float32), name="b"),
-                ],
+                [_mkv_("X", TFLOAT, [3, 2, 1, 5])],
+                [_mkv_("Y", TFLOAT, ["a", "b", "c", "d"])],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
             ir_version=10,
@@ -4498,21 +4492,19 @@ class TestGraphPatternOptimization(ExtTestCase):
         check_model(model)
         from onnxruntime import InferenceSession
 
-        feeds = {"X": self._range(3, 2, 5, 7).astype(np.float32)}
+        feeds = {"X": self._range(3, 2, 1, 5).astype(np.float32)}
         ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)
 
         gr = GraphBuilder(
             model,
             infer_shapes_options=True,
-            optimization_options=OptimizationOptions(
-                patterns=["TransposeLayerNormalizationTranspose"]
-            ),
+            optimization_options=OptimizationOptions(patterns=["TransposeEqualReshape"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
 
         self.assertEqual(
-            ["LayerNormalization", "Transpose", "Transpose"],
+            ["Reshape"],
             [n.op_type for n in opt_onx.graph.node],
         )
         self.assertEqual(len(opt_onx.graph.initializer), 1)
