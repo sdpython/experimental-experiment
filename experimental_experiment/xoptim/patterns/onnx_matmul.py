@@ -1157,12 +1157,16 @@ class SwitchReshapeActivationPattern(PatternOptimization):
         if g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         before = g.node_before(node.input[0])
-        if g.is_used_more_than_once(before.input[0]):
+        if before is None or g.is_used_more_than_once(before.input[0]):
             return self.none(before, inspect.currentframe().f_lineno)
         if before.op_type not in {"Reshape", "Transpose"} or node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         before_before = g.node_before(before.input[0])
-        if before_before.op_type not in {"Gemm", "MatMul"} or before_before.domain != "":
+        if (
+            before_before is None
+            or before_before.op_type not in {"Gemm", "MatMul"}
+            or before_before.domain != ""
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(
             self,
