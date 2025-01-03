@@ -7,7 +7,7 @@ from onnx.helper import np_dtype_to_tensor_dtype
 
 def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:
     """
-    Convert a TensorProto's data_type to corresponding numpy dtype.
+    Converts a TensorProto's data_type to corresponding numpy dtype.
     It can be used while making tensor.
 
     :param tensor_dtype: TensorProto's data_type

@@ -396,6 +396,11 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         if next_node is not None and next_node.op_type != "Reshape":
             next_node = None
 
+        if node_left is not None and not g.has_shape(node_left.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if node_right is not None and not g.has_shape(node_right.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
         shape_left_left = None if node_left is None else g.get_shape(node_left.input[0])
         shape_right_right = None if node_right is None else g.get_shape(node_right.input[0])
 
