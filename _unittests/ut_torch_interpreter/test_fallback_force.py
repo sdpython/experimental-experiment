@@ -250,10 +250,15 @@ class TestFallbackForce(ExtTestCase):
         onx = to_onnx(model, (x,), input_names=["x"], dispatcher=ForceDispatcher())
         self.assertIn(
             [n.op_type for n in onx.graph.node],
-            (["Gemm", "celu_default"], ["Gemm", "Add", "celu_default"]),
+            (
+                ["Gemm", "celu_default"],
+                ["Gemm", "Add", "celu_default"],
+                ["Reshape", "Reshape", "Gemm", "celu_default"],
+            ),
         )
         self.assertIn(
-            [n.domain for n in onx.graph.node], (["", "aten.lib"], ["", "", "aten.lib"])
+            [n.domain for n in onx.graph.node],
+            (["", "aten.lib"], ["", "", "aten.lib"], ["", "", "", "aten.lib"]),
         )
         ext = ExtendedReferenceEvaluator(onx, new_ops=[celu_default])
         got = ext.run(None, {"x": x.numpy()})[0]

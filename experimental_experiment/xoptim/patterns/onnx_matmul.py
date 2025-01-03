@@ -1207,6 +1207,7 @@ class SwitchReshapeActivationPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{tr_node.name}",
             ),
         ]
+        nodes[0].attribute.extend(mm_node.attribute)
         nodes[1].attribute.extend(f_node.attribute)
         nodes[2].attribute.extend(tr_node.attribute)
         return nodes

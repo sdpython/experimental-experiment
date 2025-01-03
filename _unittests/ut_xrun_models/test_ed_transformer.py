@@ -50,8 +50,9 @@ class TestEdTransformer(ExtTestCase):
             torch_script=False,
             verbose=0,
         )
-
         onx = ret["proto"]
+        with open("test_transformer_export_new_all.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
         names = [i.name for i in onx.graph.input]
         xp = [x.numpy() for x in [src, tgt]]
         feeds = dict(zip(names, xp))
