@@ -182,10 +182,6 @@ def finalize_llm_setup(
             input_ids=torch.randint(0, max_token_id, (batch_size, sequence_length2))
             .to(torch.int64)
             .to(device),
-            position_ids=torch.arange(batch_size * sequence_length)
-            .reshape((batch_size, sequence_length))
-            .to(torch.int64)
-            .to(device),
             attention_mask=torch.ones((batch_size, sequence_length + sequence_length2))
             .to(torch.int64)
             .to(device),
@@ -194,10 +190,6 @@ def finalize_llm_setup(
             input_ids=torch.randint(
                 0, max_token_id, (batch_size + 1, sequence_length2 + sequence_inc)
             ).to(torch.int64),
-            position_ids=torch.arange((batch_size + 1) * (sequence_length2 + sequence_inc))
-            .reshape((batch_size + 1, sequence_length2 + sequence_inc))
-            .to(torch.int64)
-            .to(device),
             attention_mask=torch.ones(
                 (
                     batch_size + 1,
@@ -208,7 +200,6 @@ def finalize_llm_setup(
         shapes.update(
             {
                 "input_ids": {0: batch, 1: seq_length},
-                "position_ids": {0: batch, 1: seq_length},
                 "attention_mask": {
                     0: batch,
                     1: torch.export.Dim.DYNAMIC,  # cache_length + seq_length

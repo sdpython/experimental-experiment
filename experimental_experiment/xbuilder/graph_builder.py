@@ -2197,10 +2197,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
         elif isinstance(value, TensorProto):
-            assert "FakeTensor" not in str(type(value)), (
-                f"FakeTensor {name!r} cannot be an initializer {type(value)}"
-                f"{self.get_debug_msg()}"
-            )
+            pass
         elif isinstance(value, np.ndarray):
             pass
         else:

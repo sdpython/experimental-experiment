@@ -1,5 +1,6 @@
 import inspect
 from typing import List, Optional
+import numpy as np
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
 
@@ -108,11 +109,33 @@ class RotaryEmbeddingPattern(PatternOptimization):
         mul_node_sin: NodeProto,
         add_node: NodeProto,
     ) -> List[NodeProto]:
+        zero = g.make_initializer(
+            "", np.array(0, dtype=np.int64), source="RotaryEmbeddingPattern.zero"
+        )
+        zero1 = g.make_initializer(
+            "", np.array([0], dtype=np.int64), source="RotaryEmbeddingPattern.zero1"
+        )
+        mone = g.make_initializer(
+            "", np.array([-1], dtype=np.int64), source="RotaryEmbeddingPattern.mone"
+        )
+        one = g.make_initializer(
+            "", np.array(1, dtype=np.int64), source="RotaryEmbeddingPattern.one"
+        )
+
         shape_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        squeezed_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        batch_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
         pids_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
         known = {tr_node.output[0], concat_node.output[0]}
         cos = mul_node_cos.input[0 if mul_node_cos.input[1] in known else 1]
         sin = mul_node_sin.input[0 if mul_node_sin.input[1] in known else 1]
+        expand_shape = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        expand_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        cos_shape = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        new_cos_shape = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        cos_reshaped = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        sin_reshaped = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+
         return [
             g.make_node(
                 "Shape",
@@ -120,20 +143,73 @@ class RotaryEmbeddingPattern(PatternOptimization):
                 [shape_name],
                 start=2,
                 end=3,
-                name=f"{self.__class__.__name__}--{split_node.name}",
+                name=f"{self.__class__.__name__}--Sh--{split_node.name}",
+            ),
+            g.make_node(
+                "Shape",
+                [tr_node.input[0]],
+                [batch_name],
+                start=0,
+                end=1,
+                name=f"{self.__class__.__name__}--Sh--{split_node.name}",
+            ),
+            g.make_node(
+                "Squeeze",
+                [shape_name, zero1],
+                [squeezed_name],
+                name=f"{self.__class__.__name__}--Ra--{split_node.name}",
             ),
             g.make_node(
                 "Range",
-                [shape_name],
+                [zero, squeezed_name, one],
                 [pids_name],
-                name=f"{self.__class__.__name__}--{split_node.name}",
+                name=f"{self.__class__.__name__}--Ra--{split_node.name}",
+            ),
+            g.make_node(
+                "Concat",
+                [batch_name, shape_name],
+                [expand_shape],
+                axis=0,
+                name=f"{self.__class__.__name__}--Co--{split_node.name}",
+            ),
+            g.make_node(
+                "Expand",
+                [pids_name, expand_shape],
+                [expand_name],
+                name=f"{self.__class__.__name__}--Ex--{split_node.name}",
+            ),
+            g.make_node(
+                "Shape",
+                [cos],
+                [cos_shape],
+                start=-1,
+                name=f"{self.__class__.__name__}--ShCos--{split_node.name}",
+            ),
+            g.make_node(
+                "Concat",
+                [mone, cos_shape],
+                [new_cos_shape],
+                axis=0,
+                name=f"{self.__class__.__name__}--CoCos--{split_node.name}",
+            ),
+            g.make_node(
+                "Reshape",
+                [cos, new_cos_shape],
+                [cos_reshaped],
+                name=f"{self.__class__.__name__}--ReshCos--{split_node.name}",
+            ),
+            g.make_node(
+                "Reshape",
+                [sin, new_cos_shape],
+                [sin_reshaped],
+                name=f"{self.__class__.__name__}--ReshSin--{split_node.name}",
             ),
             g.make_node(
                 "RotaryEmbedding",
-                [*tr_node.input, pids_name, cos, sin],
+                [*tr_node.input, expand_name, cos_reshaped, sin_reshaped],
                 add_node.output,
                 domain="com.microsoft",
                 interleaved=0,
-                name=f"{self.__class__.__name__}--{split_node.name}",
+                name=f"{self.__class__.__name__}--Rot--{split_node.name}",
             ),
         ]
