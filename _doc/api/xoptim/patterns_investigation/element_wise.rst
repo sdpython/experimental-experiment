@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns_investigation.element_wise
-==================================================================
+.xoptim.patterns_investigation.element_wise
+===========================================
 
 .. automodule:: experimental_experiment.xoptim.patterns_investigation.element_wise
     :members:

@@ -1,7 +1,7 @@
 .. _l-pattern-optimization-onnx:
 
-experimental_experiment.xoptim.patterns
-=======================================
+.xoptim.patterns
+================
 
 
 

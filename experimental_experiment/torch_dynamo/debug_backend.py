@@ -340,7 +340,7 @@ def onnx_debug_backend(
                 ), f"Unexpected shape {y.shape} ({y}) for a dimension {name!r} (rk={rk})"
                 assert y.shape in (tuple(), (1,)), (
                     f"Unxpected shape {y.shape} for dim={dim!r}, "
-                    f"name={name!r}, dt={dt}, rk={rk}, y={y}"
+                    f"name={name!r}, dt={dt}, rk={rk}, y={y!r}"
                 )
                 if dt in {
                     TensorProto.INT64,

@@ -100,7 +100,7 @@ class TransposeTransposePattern(PatternOptimization):
 
 class TransposeReshapeTransposePattern(PatternOptimization):
     """
-    Swaps Reshapes and Transpose in a sequence such as this one:
+    Swaps Reshape and Transpose in a sequence such as this one:
 
     ::
 
@@ -301,4 +301,74 @@ class TransposeReshapeTransposePattern(PatternOptimization):
                 doc_string=t1_node.doc_string,
             ),
             t2_node,
+        ]
+
+
+class TransposeEqualReshapePattern(PatternOptimization):
+    """
+    Replaces a Transpose by a Reshape when switched dimensions are
+    all equal to 1 but one.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Transpose" or node.domain != "":
+            return self.none()
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        perms = list(enumerate(g.get_attribute(node, "perm").ints))
+        first = None
+        for i, p in perms:
+            if i != p:
+                break
+            first = i
+        last = None
+        for i, p in reversed(perms):
+            if i != p:
+                break
+            last = i
+        begin = first + 1 if first is not None else 0
+        end = last if last is not None else len(perms)
+        shape = g.get_shape(node.input[0])
+        not_one = 0
+        for i in range(begin, end):
+            if shape[i] != 1:
+                not_one += 1
+        if not_one > 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        transpose_node: NodeProto,
+    ) -> List[NodeProto]:
+        perms = list(enumerate(g.get_attribute(transpose_node, "perm").ints))
+        shape = g.get_shape(transpose_node.input[0])
+        new_shape = []
+        for i, p in perms:
+            if i == p:
+                new_shape.append(0)
+            elif shape[p] == 1:
+                new_shape.append(1)
+            else:
+                new_shape.append(-1)
+        return [
+            g.make_node(
+                "Reshape",
+                [
+                    transpose_node.input[0],
+                    g.make_initializer(
+                        "",
+                        np.array(new_shape, dtype=np.int64),
+                        source="TransposeEqualReshapePattern.apply.new_shape",
+                    ),
+                ],
+                transpose_node.output,
+                name=f"{self.__class__.__name__}--B--{transpose_node.name}",
+            )
         ]

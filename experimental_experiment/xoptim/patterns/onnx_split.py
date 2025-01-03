@@ -125,3 +125,61 @@ class SlicesSplitPattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{nodes[0].name}",
         )
         return [node]
+
+
+class SplitConcatPattern(PatternOptimization):
+    """
+    Replaces Split + Concat into identity if this is equivalent.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Split" or node.domain != "":
+            return self.none()
+
+        only_id = None
+        only_node = None
+        for o in node.output:
+            n = g.next_nodes(o)
+            if len(n) != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            i = id(n[0])
+            if only_id is None:
+                only_id = i
+                only_node = n[0]
+            elif i != only_id:
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        if only_node.op_type != "Concat" or only_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis_split = g.get_attribute(node, "axis").i
+        axis_concat = g.get_attribute(only_node, "axis").i
+        if axis_split < 0 and axis_concat >= 0:
+            axis_split += g.get_rank(node.input[0])
+        if axis_concat < 0 and axis_split >= 0:
+            axis_concat += g.get_rank(node.input[0])
+        if axis_split != axis_concat:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if node.output != only_node.input:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, only_node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        split_node: NodeProto,
+        concat_node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "Identity",
+                split_node.input,
+                concat_node.output,
+                name=f"{self.__class__.__name__}--{split_node.name}",
+            )
+        ]

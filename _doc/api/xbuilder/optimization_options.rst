@@ -1,6 +1,6 @@
 
-experimental_experiment.xbuilder.optimization_options
-=====================================================
+.xbuilder.optimization_options
+==============================
 
 .. automodule:: experimental_experiment.xbuilder.optimization_options
     :members:

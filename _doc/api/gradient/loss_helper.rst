@@ -1,6 +1,6 @@
 
-experimental_experiment.gradient.loss_helper
-============================================
+.gradient.loss_helper
+=====================
 
 .. automodule:: experimental_experiment.gradient.loss_helper
     :members:

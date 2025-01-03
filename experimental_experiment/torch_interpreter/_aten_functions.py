@@ -155,7 +155,7 @@ def aten_add__Tensor(
     alpha: Optional[Any] = None,
     name: str = "add__Tensor",
 ) -> T:
-    "add_"
+    "``add_``"
     # inplace modifications but it seems to be correct,
     # the new name is used instead of the old one
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
@@ -7350,7 +7350,7 @@ def aten_scatter_add_(
     src: T,
     name: str = "scatter_add_",
 ) -> T:
-    """scatter_add_"""
+    """``scatter_add_``"""
     return aten_scatter_add(g, sts, outputs, x, dim, index, src=src, name=name)
 
 
@@ -7402,7 +7402,7 @@ def aten_scatter_reduce__two(
     include_self: bool = True,
     name: str = "scatter_reduce__two",
 ):
-    """scatter_reduce_.two"""
+    """``scatter_reduce_.two``"""
     return aten_scatter_reduce_two(
         g,
         sts,

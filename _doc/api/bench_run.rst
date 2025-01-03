@@ -1,6 +1,6 @@
 
-experimental_experiment.bench_run
-=================================
+.bench_run
+==========
 
 .. automodule:: experimental_experiment.bench_run
     :members:

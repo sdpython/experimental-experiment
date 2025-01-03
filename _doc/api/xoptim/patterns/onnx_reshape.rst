@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_reshape
-====================================================
+.xoptim.patterns.onnx_reshape
+=============================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_reshape
     :members:

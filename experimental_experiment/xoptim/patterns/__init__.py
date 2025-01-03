@@ -34,6 +34,7 @@ from .onnx_matmul import (
     MatMulReshape2Of3Pattern,
     MulMulMatMulPattern,
     ReshapeMatMulReshapePattern,
+    SwitchReshapeActivationPattern,
     TransposeMatMulPattern,
     TransposeReshapeMatMulPattern,
 )
@@ -48,9 +49,13 @@ from .onnx_reshape import (
 from .onnx_rotary import RotaryConcatPartPattern
 from .onnx_sequence import SequenceConstructAtPattern
 from .onnx_slice import SliceSlicePattern
-from .onnx_split import SlicesSplitPattern
+from .onnx_split import SlicesSplitPattern, SplitConcatPattern
 from .onnx_sub import Sub1MulPattern
-from .onnx_transpose import TransposeTransposePattern, TransposeReshapeTransposePattern
+from .onnx_transpose import (
+    TransposeTransposePattern,
+    TransposeReshapeTransposePattern,
+    TransposeEqualReshapePattern,
+)
 from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
 
 
@@ -98,10 +103,12 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
 
     .. runpython::
         :showcode:
+        :rst:
 
-        import pprint
+        from experimental_experiment.xoptim.patterns_api import pattern_table_doc
         from experimental_experiment.xoptim.patterns import get_default_patterns
-        pprint.pprint(get_default_patterns())
+
+        print(pattern_table_doc(get_default_patterns(), as_rst=True))
     """
     return [
         # AlmostDoNothingPattern(verbose=verbose),
@@ -141,8 +148,11 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SliceSlicePattern(verbose=verbose),
         SlicesSplitPattern(verbose=verbose),
         SoftmaxCrossEntropyLossCastPattern(verbose=verbose),
+        SplitConcatPattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
+        SwitchReshapeActivationPattern(verbose=verbose),
+        TransposeEqualReshapePattern(verbose=verbose),
         TransposeMatMulPattern(verbose=verbose),
         TransposeReshapeMatMulPattern(verbose=verbose),
         TransposeReshapeTransposePattern(verbose=verbose),

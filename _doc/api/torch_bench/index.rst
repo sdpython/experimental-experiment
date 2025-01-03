@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_bench
-===================================
+.torch_bench
+============
 
 .. toctree::
     :maxdepth: 1

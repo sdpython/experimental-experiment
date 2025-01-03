@@ -33,10 +33,10 @@ class ExpandPattern(PatternOptimization):
         value = g.get_computed_constant(node.input[1])
         if value is None:
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(int(i) for i in value)
+        with g.builder.maybe_disable_fake_tensor_mode():
+            new_shape = tuple(int(i) for i in value)
         if shape != new_shape:
             return self.none(node, inspect.currentframe().f_lineno)
-
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(
@@ -82,7 +82,8 @@ class ExpandBroadcastPattern(PatternOptimization):
         value = g.get_computed_constant(node.input[1])
         if value is None:
             return self.none(node, inspect.currentframe().f_lineno)
-        new_shape = tuple(int(i) for i in value)
+        with g.builder.maybe_disable_fake_tensor_mode():
+            new_shape = tuple(int(i) for i in value)
 
         if g.is_used_more_than_once(node.output[0]):
             # More than one output, not handled right now.

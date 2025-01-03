@@ -1,6 +1,6 @@
 
-experimental_experiment.gradient.ops.op_broadcast_gradient_args
-===============================================================
+.gradient.ops.op_broadcast_gradient_args
+========================================
 
 .. automodule:: experimental_experiment.gradient.ops.op_broadcast_gradient_args
     :members:

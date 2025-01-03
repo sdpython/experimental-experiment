@@ -1,6 +1,6 @@
 
-experimental_experiment.xbuilder._shape_helper
-==============================================
+.xbuilder._shape_helper
+=======================
 
 .. automodule:: experimental_experiment.xbuilder._shape_helper
     :members:

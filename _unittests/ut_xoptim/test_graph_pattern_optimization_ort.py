@@ -32,6 +32,7 @@ from experimental_experiment.xbuilder._onnx_helper import (
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 TFLOAT = TensorProto.FLOAT
+TINT64 = TensorProto.INT64
 
 
 class TestGraphPatternOptimizationOrt(ExtTestCase):
@@ -1076,6 +1077,92 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_quick_gelu(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Sigmoid", ["X"], ["S"]),
+                    oh.make_node("Mul", ["X", "S"], ["Y"]),
+                ],
+                "dummy",
+                [oh.make_tensor_value_info("X", TFLOAT, [1, 8, 6, 6])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [1, 8, 6, 6])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        feeds = {"X": self._range(1, 8, 6, 6)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["QuickGelu"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["QuickGelu"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+    @unittest.skip("optimizer not ready")
+    def test_rotary_embedding(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xt"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Split", ["xt"], ["s1", "s2"], num_outputs=2, axis=-1),
+                    oh.make_node("Neg", ["s2"], ["ns2"]),
+                    oh.make_node("Concat", ["ns2", "s1"], ["conc"], axis=-1),
+                    oh.make_node("Mul", ["xt", "cos"], ["xcos"], name="mx"),
+                    oh.make_node("Mul", ["conc", "sin"], ["ysin"], name="my"),
+                    oh.make_node("Add", ["xcos", "ysin"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [2, 8, 3, 32]),
+                    oh.make_tensor_value_info("cos", TFLOAT, [1, 3, 1, 32]),
+                    oh.make_tensor_value_info("sin", TFLOAT, [1, 3, 1, 32]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, [2, 3, 8, 32])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        feeds = {
+            "X": self._range(2, 8, 3, 32),
+            "cos": self._range(1, 3, 1, 32),
+            "sin": self._range(1, 3, 1, 32),
+        }
+        # cap = ExtendedReferenceEvaluator(model, verbose=10)
+        # cap.run(None, feeds)
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["RotaryEmbedding"], verbose=10),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0].ravel(), got[0].ravel())
         self.assertEqualArray(expected[0], got[0])
 
 

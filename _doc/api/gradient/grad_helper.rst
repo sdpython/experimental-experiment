@@ -1,6 +1,6 @@
 
-experimental_experiment.gradient.grad_helper
-============================================
+.gradient.grad_helper
+=====================
 
 .. automodule:: experimental_experiment.gradient.grad_helper
     :members:

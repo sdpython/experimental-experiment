@@ -399,6 +399,9 @@ class GraphBuilderPatternOptimization:
                 return None if not statistics else [None for _ in statistics]
             self._cache_computed_constant[name] = value
         if statistics is None:
+            assert "FakeTensor" not in str(
+                type(value)
+            ), f"Issue with get_computed_constant {name!r}, value={value!r}"
             return value
         stats = []
         for st in statistics:

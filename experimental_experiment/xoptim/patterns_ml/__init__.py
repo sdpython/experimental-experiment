@@ -10,12 +10,14 @@ def get_ml_patterns(
 
     .. runpython::
         :showcode:
+        :rst:
 
-        import pprint
+        from experimental_experiment.xoptim.patterns_api import pattern_table_doc
         from experimental_experiment.xoptim.patterns_ml import (
             get_ml_patterns,
         )
-        pprint.pprint(get_ml_patterns())
+
+        print(pattern_table_doc(get_ml_patterns(), as_rst=True))
     """
     from .tree_ensemble import (
         TreeEnsembleRegressorConcatPattern,

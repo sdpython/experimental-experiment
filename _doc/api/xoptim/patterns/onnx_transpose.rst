@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_transpose
-======================================================
+.xoptim.patterns.onnx_transpose
+===============================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_transpose
     :members:

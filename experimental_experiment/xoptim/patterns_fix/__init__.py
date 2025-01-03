@@ -10,10 +10,12 @@ def get_fix_patterns(
 
     .. runpython::
         :showcode:
+        :rst:
 
-        import pprint
+        from experimental_experiment.xoptim.patterns_api import pattern_table_doc
         from experimental_experiment.xoptim.patterns_fix import get_fix_patterns
-        pprint.pprint(get_fix_patterns())
+
+        print(pattern_table_doc(get_fix_patterns(), as_rst=True))
     """
     from .add_reduction_scatter_nd import AddReductionScatterND
 

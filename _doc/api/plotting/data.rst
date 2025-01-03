@@ -1,6 +1,6 @@
 
-experimental_experiment.plotting.data
-=====================================
+.plotting.data
+==============
 
 .. automodule:: experimental_experiment.plotting.data
     :members:

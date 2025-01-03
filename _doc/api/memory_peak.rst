@@ -1,6 +1,6 @@
 
-experimental_experiment.memory_peak
-===================================
+.memory_peak
+============
 
 .. automodule:: experimental_experiment.memory_peak
     :members:

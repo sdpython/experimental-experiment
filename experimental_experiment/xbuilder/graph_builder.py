@@ -1014,8 +1014,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 res, tuple
             ), f"Multiple output is not allowed but type is {type(res)} for name={name!r}"
             new_res = []
-            for i in res:
-                new_res.append(i if isinstance(i, str) else int(i))
+            with self.maybe_disable_fake_tensor_mode():
+                for i in res:
+                    new_res.append(i if isinstance(i, str) else int(i))
             if self._debug_get_constant:
                 print(f"[GraphBuilder.get_constant]   SHAPE: {tuple(new_res)}")
             return tuple(new_res)
@@ -2197,10 +2198,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
         elif isinstance(value, TensorProto):
-            assert "FakeTensor" not in str(type(value)), (
-                f"FakeTensor {name!r} cannot be an initializer {type(value)}"
-                f"{self.get_debug_msg()}"
-            )
+            pass
         elif isinstance(value, np.ndarray):
             pass
         else:
@@ -3658,13 +3656,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"Unexpected rank {self.get_rank(node.input[1])} for {node.input[1]!r}"
                         f"{self.get_debug_msg()}"
                     )
-                    assert len(cst.shape) == 1 and cst.min() > 0, (
-                        f"Unexpected shape {cst.shape} "
-                        f"for computed constant {node.input[1]!r}, "
-                        f"cst={cst}{self.get_debug_msg()}"
-                    )
-                    shape = self.get_shape(node.input[0])
-                    new_shape = tuple(int(i) for i in cst)
+                    with self.maybe_disable_fake_tensor_mode():
+                        assert len(cst.shape) == 1 and cst.min() > 0, (
+                            f"Unexpected shape {cst.shape} "
+                            f"for computed constant {node.input[1]!r}, "
+                            f"cst={cst}{self.get_debug_msg()}"
+                        )
+                        shape = self.get_shape(node.input[0])
+                        new_shape = tuple(int(i) for i in cst)
                     if len(shape) < len(new_shape):
                         shape = (1,) * (len(new_shape) - len(shape)) + shape
                     self.set_shape(
@@ -3682,10 +3681,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if 0 in shape_cst:
                         if self.has_shape(node.input[0]):
                             sh = self.get_shape(node.input[0])
-                            shape_cst = [
-                                shape_cst[i] if shape_cst[i] != 0 else sh[i]
-                                for i in range(len(shape_cst))
-                            ]
+                            shape_cst = tuple(
+                                [
+                                    shape_cst[i] if shape_cst[i] != 0 else sh[i]
+                                    for i in range(len(shape_cst))
+                                ]
+                            )
                         else:
                             shape_cst = None
                     if shape_cst is not None:

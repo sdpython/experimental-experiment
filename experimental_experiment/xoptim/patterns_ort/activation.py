@@ -238,3 +238,45 @@ class BiasSoftmaxPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{softmax_node.name}",
             )
         ]
+
+
+class QuickGeluPattern(PatternOptimization):
+    """
+    Replaces Mul(x, Sigmoid(x)) by QuickGelu(x, alpha=1)
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Sigmoid" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        after = g.next_nodes(node.output[0])
+        if not after or after[0].op_type != "Mul":
+            return self.none(node, inspect.currentframe().f_lineno)
+        mul_node = after[0]
+        if node.input[0] not in mul_node.input:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node, mul_node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        sigmoid: NodeProto,
+        mul_node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "QuickGelu",
+                sigmoid.input,
+                mul_node.output,
+                alpha=1.0,
+                domain="com.microsoft",
+                doc_string=sigmoid.doc_string,
+                name=f"{self.__class__.__name__}--{sigmoid.name}",
+            )
+        ]

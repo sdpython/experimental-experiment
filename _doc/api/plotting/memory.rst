@@ -1,6 +1,6 @@
 
-experimental_experiment.plotting.memory
-=======================================
+.plotting.memory
+================
 
 .. automodule:: experimental_experiment.plotting.memory
     :members:

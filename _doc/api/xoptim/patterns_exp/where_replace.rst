@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns_exp.where_replace
-=========================================================
+.xoptim.patterns_exp.where_replace
+==================================
 
 .. automodule:: experimental_experiment.xoptim.patterns_exp.where_replace
     :members:

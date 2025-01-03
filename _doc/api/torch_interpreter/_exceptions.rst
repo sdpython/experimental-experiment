@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_interpreter._exceptions
-=====================================================
+.torch_interpreter._exceptions
+==============================
 
 .. automodule:: experimental_experiment.torch_interpreter._exceptions
     :members:

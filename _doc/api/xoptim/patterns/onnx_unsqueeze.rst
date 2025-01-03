@@ -1,6 +1,6 @@
 
-experimental_experiment.xoptim.patterns.onnx_unsqueeze
-======================================================
+.xoptim.patterns.onnx_unsqueeze
+===============================
 
 .. automodule:: experimental_experiment.xoptim.patterns.onnx_unsqueeze
     :members:

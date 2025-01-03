@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_models.dump_helper
-================================================
+.torch_models.dump_helper
+=========================
 
 .. automodule:: experimental_experiment.torch_models.dump_helper
     :members:

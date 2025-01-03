@@ -1,6 +1,6 @@
 
-experimental_experiment.torch_models.mistral_helper
-===================================================
+.torch_models.mistral_helper
+============================
 
 .. automodule:: experimental_experiment.torch_models.mistral_helper
     :members:
