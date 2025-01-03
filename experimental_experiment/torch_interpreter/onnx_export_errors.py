@@ -400,7 +400,7 @@ def replacement_before_exporting(args: Any) -> Any:
     """
     Does replacements on the given inputs such replacing
     :class:`transformers.cache_utils.DynamicCache` by
-    :class:`experimental_experiment.torch_interpreter.patches.patched_transformers.patched_DynamicCache`.
+    :class:`experimental_experiment.torch_interpreter.patches.patch_transformers.patched_DynamicCache`.
     """
     if args is None:
         return None

@@ -54,6 +54,13 @@ html_sourcelink_suffix = ""
 
 issues_github_path = "sdpython/experimental-experiment"
 
+# suppress_warnings = [
+#     "tutorial.exported_onnx",
+#     "tutorial.exported_onnx_dynamic",
+#     "tutorial.exported_program",
+#     "tutorial.exported_program_dynamic",
+# ]
+
 # The following is used by sphinx.ext.linkcode to provide links to github
 linkcode_resolve = make_linkcode_resolve(
     "experimental-experiment",
