@@ -1530,27 +1530,10 @@ def aten_convolution(
         stride = (stride, stride)
     strides = list(stride)
 
-    if bias is None:
-        if g.main_opset >= 13:
-            weight_dim_0 = g.op.Shape(weight, start=0, end=1, name=name)
-        else:
-            shape = g.op.Shape(weight, name=name)
-            first_dim = g.op.Gather(shape, np.array([0], dtype=np.int64), name=name)
-            weight_dim_0 = g.op.Reshape(first_dim, np.array([1], dtype=np.int64), name=name)
-        dtype = tensor_dtype_to_np_dtype(g.get_type(input))
-        if g.main_opset >= 9:
-            bias = g.op.ConstantOfShape(
-                weight_dim_0, value=from_array(np.array([0], dtype=dtype)), name=name
-            )
-        else:
-            bias = g.op.Expand(np.array([0], dtype=dtype), weight_dim_0, name=name)
-
-    # if Rank(input) != Rank(weight):
-    #    input = op.UnsqueezeAnyOpset(input, op.Constant(value_ints=[0]))
     if transposed:
         res = g.make_node(
             "ConvTranspose",
-            [input, weight, bias],
+            [input, weight, bias] if bias is not None else [input, weight],
             outputs,
             strides=strides,
             pads=pads,
@@ -1562,7 +1545,7 @@ def aten_convolution(
     else:
         res = g.make_node(
             "Conv",
-            [input, weight, bias],
+            [input, weight, bias] if bias is not None else [input, weight],
             outputs,
             strides=strides,
             pads=pads,
