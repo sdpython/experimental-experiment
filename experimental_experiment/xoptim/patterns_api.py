@@ -405,6 +405,11 @@ class EasyPatternOptimization(PatternOptimization):
         :param ns: node coming from the pattern
         :return: number of matched nodes, None or False to indicate a failed match
         """
+        if self.verbose >= 10:
+            print(
+                f"[EasyPatternOptimization._match_backward] starts with "
+                f"pair_results_names={pair_results_names}"
+            )
         res = 0
 
         # predecessors
@@ -475,6 +480,23 @@ class EasyPatternOptimization(PatternOptimization):
             # matching backward
             key = id(ppred)
             if key not in marked:
+                # check for ambiguities
+                amb = self._has_ambiguities(pair_results_names, pred, ppred)
+                if amb:
+                    self._hint(
+                        "BACKWARD: ambiguities with names",
+                        "-- ambiguities",
+                        pred,
+                        ppred,
+                        "-- pairs",
+                        pair_results_names,
+                        "-- pattern",
+                        self._pattern_to_string(g),
+                    )
+                    return self.none(node, inspect.currentframe().f_lineno)
+
+                self._update_ambiguities(pair_results_names, pred, ppred)
+
                 marked[key] = pred, ppred
                 stacked.append(key)
                 res += 1
@@ -509,6 +531,11 @@ class EasyPatternOptimization(PatternOptimization):
         :return: number of matched nodes to continue,
             None or False to indicate a failed match
         """
+        if self.verbose >= 10:
+            print(
+                f"[EasyPatternOptimization._match_forward] starts with "
+                f"pair_results_names={pair_results_names}"
+            )
         res = 0
 
         # successors
@@ -921,6 +948,15 @@ class EasyPatternOptimization(PatternOptimization):
     def _pattern_to_string(self, g: "GraphBuilder"):  # noqa: F821
         return textwrap.indent(self.display_pattern(g, self.match_pattern), "    ")
 
+    def pretty_matched_pairs(self, pairs: List[Tuple[NodeProto, NodeProto]]) -> str:
+        "Pretty display for paired nodes."
+        rows = []
+        for a, b in pairs:
+            sa = f"- {a.op_type}({', '.join(a.input)}) -> {', '.join(a.output)}"
+            sb = f"+ {b.op_type}({', '.join(b.input)}) -> {', '.join(b.output)}"
+            rows.extend([sa, sb])
+        return "\n".join(rows)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -1151,8 +1187,10 @@ class EasyPatternOptimization(PatternOptimization):
                     continue
                 if b in matched_pattern_to_graph_name:
                     assert matched_pattern_to_graph_name[b] == a, (
-                        f"Ambiguities, pattern name {b!r} means "
-                        f"{a!r} or {matched_pattern_to_graph_name[b]!r}"
+                        f"Ambiguities, pattern {self.__class__.__name__} "
+                        f"name {b!r} means {a!r} or "
+                        f"{matched_pattern_to_graph_name[b]!r}\n"
+                        f"{self.pretty_matched_pairs(matched_pairs)}"
                     )
                 else:
                     matched_pattern_to_graph_name[b] = a

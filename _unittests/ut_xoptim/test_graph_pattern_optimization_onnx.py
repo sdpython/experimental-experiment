@@ -3267,6 +3267,55 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-2)
         # self._check_with_ort(opt_onx)
 
+    def test_leaky_relu_not(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Identity", ["X"], ["_to_copy"]),
+                    oh.make_node("Mul", ["_to_copy", "c1"], ["expm1"]),
+                    oh.make_node("Mul", ["_to_copy", "c2"], ["_onx_mul0"]),
+                    oh.make_node("Greater", ["_to_copy", "c3"], ["gt"]),
+                    oh.make_node("Mul", ["expm1", "c4"], ["_onx_mul03"]),
+                    oh.make_node("Where", ["gt", "_onx_mul0", "_onx_mul03"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, [3, 3])],
+                [_mkv_("Y", TFLOAT, [3, 3])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="c3"),
+                    onh.from_array(np.array([0.76], dtype=np.float32), name="c4"),
+                    onh.from_array(np.array([0.36], dtype=np.float32), name="c1"),
+                    onh.from_array(np.array([0.26], dtype=np.float32), name="c2"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["LeakyRelu"],
+                verbose=0,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertNotEqual(
+            ["LeakyRelu"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+        # self._check_with_ort(opt_onx)
+
     @requires_torch("2.6")
     def test_conv_null_bias(self):
         model = oh.make_model(

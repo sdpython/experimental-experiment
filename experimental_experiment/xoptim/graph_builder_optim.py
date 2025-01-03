@@ -84,6 +84,10 @@ class GraphBuilderPatternOptimization:
         """
         return processor in self.processor
 
+    def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
+        "Pretty rendering of the graph."
+        return self.builder.pretty_text(add_fx_graph=add_fx_graph, recursive=recursive)
+
     @property
     def nodes(self) -> List[NodeProto]:
         "property"
