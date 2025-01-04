@@ -774,15 +774,112 @@ class CustomTracer(torch.fx.Tracer):
             return f"-- {pos} {node.args} -> {node.name} -- with {node.target}\n"
 
         # Let's reorder according to existing nodes
+        def delete_user_cb(n, nodes_to_leave):
+            return n not in nodes_to_leave
+
         node_pos = {b: a for a, b in existing_nodes}
         pos_users = [(node_pos[n], n) for n in users]
         pos_users.sort()
-        # for pos, n in pos_users:
-        raise NotImplementedError(
-            f"Not implemented yet----\n"
+
+        to_remove = []
+        seen_nodes = {clone}
+        set_item_args = {}
+        for pos, n in pos_users:
+            if hasattr(n.target, "name"):
+                assert len(n.args) and n.args[0] in seen_nodes, (
+                    f"Unexpected node {n} at position {pos} "
+                    f"in {''.join(map(_str, pos_users))}"
+                )
+                aten_name = n.target.name()
+                if aten_name == "aten::slice.Tensor":
+                    assert all(
+                        isinstance(_i, int) for _i in n.args[1:]
+                    ), f"Unexpected arguments for slice.Tensor {string_type(n.args)}"
+                    axis = n.args[1]
+                    assert (
+                        axis not in set_item_args
+                    ), f"duplicated axis {n.args[1]} in \n{''.join(map(_str, pos_users))}"
+                    set_item_args[axis] = slice(*n.args[2:])
+                    seen_nodes.add(n)
+                    to_remove.append(n)
+                elif aten_name == "aten::select.int":
+                    assert len(n.args) == 3 and all(
+                        isinstance(_i, int) for _i in n.args[1:]
+                    ), f"Unexpected arguments for select.int {string_type(n.args)}"
+                    axis = n.args[1]
+                    assert (
+                        axis not in set_item_args
+                    ), f"duplicated axis {n.args[1]} in \n{''.join(map(_str, pos_users))}"
+                    set_item_args[axis] = n.args[2]
+                    seen_nodes.add(n)
+                    to_remove.append(n)
+                elif aten_name in {"aten::copy_", "aten::fill_.Tensor"}:
+                    # We need to replace all the nodes in seen_nodes
+                    # a set_item and make clone is now replace by this new one
+                    seen_nodes.add(n)
+                    to_remove.append(n)
+                    max_axis = max(set_item_args)
+                    args_slices = [None for i in range(max_axis + 1)]
+                    for k, v in set_item_args.items():
+                        args_slices[k] = v
+                    new_args = [clone, tuple(args_slices), *n.args[1:]]
+
+                    nodes_to_leave = {_n[1] for _n in existing_nodes[: pos + 1]}
+
+                    # We use operator.setitem in both cases.
+                    # torch.ops.aten.fill.Tensor cannot work in this case.
+                    function_op = operator.setitem
+
+                    # We can replace with expand then.
+                    with graph.inserting_after(n):
+                        # We assume the first argument is the one modified inplace.
+                        new_node = graph.call_function(function_op, args=tuple(new_args))
+                        nodes_to_leave.add(new_node)
+                        # let's replace
+                        changed = clone.replace_all_uses_with(
+                            new_node,
+                            delete_user_cb=(
+                                lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)
+                            ),
+                        )
+                        assert changed, (
+                            f"No change applied, for new_node={new_node} and "
+                            f"args={new_node.args} in {''.join(map(_str, pos_users))}"
+                            f"\n-- new graph\n{graph}"
+                            f"\n-- old graph\n{err_graph}"
+                        )
+
+                        # next use
+                        clone = new_node
+                        seen_nodes = {new_node}
+                        set_item_args = {}
+                else:
+                    raise NotImplementedError(
+                        f"Unable to handle target {aten_name!r} with args={n.args} "
+                        f"in {''.join(map(_str, pos_users))}"
+                    )
+            else:
+                # Here this node should already been handle.
+                # We skip it.
+                assert pos == pos_users[-1][0], (
+                    f"Unexpected node at pos={pos}, node={n}, target={n.target} "
+                    f"in {''.join(map(_str, pos_users))}"
+                )
+
+        # Let's replace the replace nodes.
+        for n in reversed(to_remove):
+            graph.erase_node(n)
+
+        # The last
+        assert len(to_remove) == len(pos_users) - 1, (
+            "Some nodes were not properly handled "
+            f"len(to_remove)={len(to_remove)} and "
+            f"len(pos_users)={len(pos_users)},\n-- nodes\n"
             f"{''.join(map(_str, pos_users))}\n"
-            f"-----\n{err_graph}"
+            f"-- new graph\n{graph}"
+            f"\n-- old graph\n{err_graph}"
         )
+        return True
 
     @classmethod
     def remove_inplace(

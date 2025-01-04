@@ -1,3 +1,5 @@
+import copy
+import operator
 import unittest
 import torch
 from experimental_experiment.ext_test_case import ExtTestCase
@@ -274,6 +276,70 @@ class TestTracing(ExtTestCase):
         expected = model(*inputs)
         self.assertNotEmpty(expected)
         graph = CustomTracer().trace(model)
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
+    def test_index_Tensor_copy_0(self):
+        class Model(torch.nn.Module):
+            def forward(self, x, sumx):
+                K_33 = x.clone()
+                K_33[2:-2, 2:-2, :-1] = sumx[None, :, None]
+                K_33[2:-2, 2:-2, -1] = 0.0
+                return K_33
+
+        inputs = (
+            (torch.arange(7 * 9 * 11) + 10).reshape((7, 9, 11)).to(torch.float32),
+            torch.arange(5).to(torch.float32),
+        )
+        model = Model()
+        expected = model(*copy.deepcopy(inputs))
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        self.assertIn(operator.setitem, {n.target for n in graph.nodes})
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
+    def test_index_Tensor_copy_1(self):
+        class Model(torch.nn.Module):
+            def forward(self, x, sumx):
+                K_33 = x.clone()
+                K_33[2:-2, 2:-2, :] = sumx[None, :, None]
+                return K_33
+
+        inputs = (
+            (torch.arange(7 * 9 * 11) + 10).reshape((7, 9, 11)).to(torch.float32),
+            torch.arange(5).to(torch.float32),
+        )
+        model = Model()
+        expected = model(*copy.deepcopy(inputs))
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        self.assertIn(operator.setitem, {n.target for n in graph.nodes})
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
+    def test_index_Tensor_copy_2(self):
+        class Model(torch.nn.Module):
+            def forward(self, x, sumx):
+                K_33 = x.clone()
+                K_33[2:-2, 2:-2, :-1] = sumx[None, :, None]
+                return torch.abs(K_33)
+
+        inputs = (
+            (torch.arange(7 * 9 * 11) + 10).reshape((7, 9, 11)).to(torch.float32),
+            torch.arange(5).to(torch.float32),
+        )
+        model = Model()
+        expected = model(*copy.deepcopy(inputs))
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        self.assertIn(operator.setitem, {n.target for n in graph.nodes})
         mod = torch.fx.GraphModule(model, graph)
         got = mod(*inputs)
         self.assertNotEmpty(got)

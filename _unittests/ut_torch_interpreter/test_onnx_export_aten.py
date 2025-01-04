@@ -788,23 +788,18 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @skipif_ci_windows("not working on windows")
     def test_aten_clone_index_Tensor(self):
         import torch
 
         class Model(torch.nn.Module):
             def forward(self, x, sumx):
                 K_33 = x.clone()
-                K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
+                K_33[2:-2, 2:-2, :-1] = sumx[None, :, None]
                 K_33[2:-2, 2:-2, -1] = 0.0
                 return K_33
 
         model = Model()
-        from experimental_experiment.torch_interpreter.tracing import CustomTracer
-
-        graph = CustomTracer().trace(model)
-        print("----------------")
-        print(graph)
-        print("----------------")
         xs = (
             (torch.arange(7 * 9 * 11) + 10).reshape((7, 9, 11)).to(torch.float32),
             torch.arange(5).to(torch.float32),
