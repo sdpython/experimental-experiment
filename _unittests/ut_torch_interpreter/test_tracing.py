@@ -8,6 +8,7 @@ from experimental_experiment.torch_interpreter.tracing import (
     CustomProxy,
     _len,
     _isinstance,
+    setitem_with_transformation,
 )
 
 
@@ -363,6 +364,27 @@ class TestTracing(ExtTestCase):
         self.assertNotEmpty(expected)
         graph = CustomTracer().trace(model)
         self.assertIn(operator.setitem, {n.target for n in graph.nodes})
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
+    def test_index_Tensor_copy_exp(self):
+        class Model(torch.nn.Module):
+            def forward(self, x, sumx):
+                K_33 = x.clone()
+                torch.exp_(K_33[2:-2, 2:-2, :-1])
+                return K_33
+
+        inputs = (
+            (torch.arange(7 * 9 * 11) + 10).reshape((7, 9, 11)).to(torch.float32),
+            torch.arange(5).to(torch.float32),
+        )
+        model = Model()
+        expected = model(*copy.deepcopy(inputs))
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        self.assertIn(setitem_with_transformation, {n.target for n in graph.nodes})
         mod = torch.fx.GraphModule(model, graph)
         got = mod(*inputs)
         self.assertNotEmpty(got)
