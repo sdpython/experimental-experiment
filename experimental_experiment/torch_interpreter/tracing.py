@@ -16,7 +16,7 @@ def setitem_with_transformation(a, b, transformations):
     """
     Extended version of setitem to deal with inplace modification.
     """
-    function_table = {"exp": torch.exp_}
+    function_table = {"exp": torch.exp_, "sigmoid": torch.sigmoid_}
     assert transformations, "transformations is empty, it means identity?"
     for name, args in transformations:
         assert not args, f"Not implemented for name={name!r} and args={args!r}"
@@ -781,13 +781,16 @@ class CustomTracer(torch.fx.Tracer):
 
         # Let's find all the users until we find a node copy_
         # assuming this node has no users
+        known = set()
         users = []
         unprocessed = [clone]
         while unprocessed:
             current = unprocessed.pop()
             if current.users:
-                users.extend(current.users)
-                unprocessed.extend(current.users)
+                new_users = [u for u in current.users if u not in known]
+                users.extend(new_users)
+                unprocessed.extend(new_users)
+                known |= set(new_users)
 
         def _str(pos_node):
             pos, node = pos_node
@@ -920,7 +923,7 @@ class CustomTracer(torch.fx.Tracer):
                         f"Unable to handle target {aten_name!r} with args={n.args} "
                         f"in\n{''.join(map(_str, pos_users))}\n----\n{err_graph}"
                     )
-            elif n.target in {torch.exp_} or (
+            elif n.target in {torch.exp_, torch.sigmoid_} or (
                 isinstance(n.target, str) and n.target.endswith("_")
             ):
                 # One inplace modification.
@@ -933,7 +936,7 @@ class CustomTracer(torch.fx.Tracer):
                     f"Unexpected type in argument of node {n} at position "
                     f"{pos}(args={string_type(n.args)})"
                 )
-                function_name = {torch.exp_: "exp"}[n.target]
+                function_name = {torch.exp_: "exp", torch.sigmoid_: "sigmoid"}[n.target]
                 inplace_functions.append((function_name, n.args[1:]))
                 # do the same as before
                 new_node = _macro_new_node_(
@@ -1020,22 +1023,38 @@ class CustomTracer(torch.fx.Tracer):
         n_inplace = len(inplace)
         if verbose:
             print(f"[CustomTracer.remove_inplace] S1: {len(inplace)} inplace nodes")
-        cls._replace_getattr(graph)
-        cls._replace_meth_setitem(graph)
+        changed = cls._replace_getattr(graph)
+        changed |= cls._replace_meth_setitem(graph)
 
         err_graph = str(graph)
+        if changed:
+            cls._inplace_nodes(graph)
+        if len(inplace) == 0:
+            # No inplace anymore.
+            return False
 
         max_iter = 10
         if verbose:
-            print(f"[CustomTracer.remove_inplace] S2: start {max_iter} iterations")
+            print(
+                f"[CustomTracer.remove_inplace] S2: {len(inplace)} inplace nodes "
+                f"and {max_iter} iterations"
+            )
         while inplace and max_iter > 0:
             if verbose > 1:
                 print(
                     f"[CustomTracer.remove_inplace] loop {max_iter} "
-                    f"iterations left with {len(graph.nodes)} nodes"
+                    f"iterations left with {len(graph.nodes)} nodes and "
+                    f"{len(inplace)} inplace nodes"
                 )
             existing_nodes = list(enumerate(graph.nodes))
             for pos, node in reversed(inplace):
+
+                if verbose > 5:
+                    print(
+                        f"[CustomTracer.remove_inplace] handle inplace node "
+                        f"{pos}/{len(graph.nodes)}: {node} with args={node.args} "
+                        f"and target={node.target}"
+                    )
 
                 # easy cases
                 if node.target in {
@@ -1109,7 +1128,7 @@ class CustomTracer(torch.fx.Tracer):
                     assert (
                         node.target.name() in {"aten::copy_", "aten::fill_.Tensor"}
                         and len(node.args) == 2
-                    ), (
+                    ) or node.target.name() in {"aten::sigmoid_"}, (
                         f"(inplace) Unsupported target {node.target!r}, target_name="
                         f"{node.target.name()!r}, name={node.name!r}, node.args={node.args} "
                         f"at position {pos}/{len(graph.nodes)}"
@@ -1159,6 +1178,7 @@ class CustomTracer(torch.fx.Tracer):
                         "mod_",
                         "sub_",
                         torch.exp_,
+                        torch.sigmoid_,
                         operator.setitem,
                         # other function may be needed, let's be strict
                     }, (
