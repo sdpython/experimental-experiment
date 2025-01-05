@@ -345,6 +345,29 @@ class TestTracing(ExtTestCase):
         self.assertNotEmpty(got)
         self.assertEqualArray(expected, got)
 
+    def test_index_Tensor_copy_3(self):
+        class Model(torch.nn.Module):
+            def forward(self, x, sumx):
+                K_33 = x.clone()
+                K_33[2:-2, 2:-2, :-1] = sumx[None, :, None]
+                e = torch.abs(K_33)
+                K_33[2:-2, 2:-2, -1] = 0.0
+                return K_33 + e
+
+        inputs = (
+            (torch.arange(7 * 9 * 11) + 10).reshape((7, 9, 11)).to(torch.float32),
+            torch.arange(5).to(torch.float32),
+        )
+        model = Model()
+        expected = model(*copy.deepcopy(inputs))
+        self.assertNotEmpty(expected)
+        graph = CustomTracer().trace(model)
+        self.assertIn(operator.setitem, {n.target for n in graph.nodes})
+        mod = torch.fx.GraphModule(model, graph)
+        got = mod(*inputs)
+        self.assertNotEmpty(got)
+        self.assertEqualArray(expected, got)
+
     @unittest.skip("TODO: fix it")
     def test_tracing_fixed_list_with_none(self):
         class Model(torch.nn.Module):

@@ -394,7 +394,7 @@ class ExportOptions:
                     )
                 exported_program.graph.lint()
             modified = CustomTracer.remove_inplace(
-                exported_program.graph, exported_program=exported_program
+                exported_program.graph, exported_program=exported_program, verbose=verbose
             )
             if modified:
                 if verbose:
