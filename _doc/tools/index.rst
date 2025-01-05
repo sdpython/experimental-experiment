@@ -13,4 +13,5 @@ Tools from the command line
 
     lighten
     optimize
+    print
     run
