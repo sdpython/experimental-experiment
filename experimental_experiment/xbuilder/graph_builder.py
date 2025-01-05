@@ -770,6 +770,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return f"{text}|{' '.join(info)}"
 
     def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
+        "Pretty rendering of the graph."
 
         def _d(d1):
             if isinstance(d1, self.torch.SymInt):

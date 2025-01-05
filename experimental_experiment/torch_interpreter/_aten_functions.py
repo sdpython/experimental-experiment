@@ -1530,27 +1530,10 @@ def aten_convolution(
         stride = (stride, stride)
     strides = list(stride)
 
-    if bias is None:
-        if g.main_opset >= 13:
-            weight_dim_0 = g.op.Shape(weight, start=0, end=1, name=name)
-        else:
-            shape = g.op.Shape(weight, name=name)
-            first_dim = g.op.Gather(shape, np.array([0], dtype=np.int64), name=name)
-            weight_dim_0 = g.op.Reshape(first_dim, np.array([1], dtype=np.int64), name=name)
-        dtype = tensor_dtype_to_np_dtype(g.get_type(input))
-        if g.main_opset >= 9:
-            bias = g.op.ConstantOfShape(
-                weight_dim_0, value=from_array(np.array([0], dtype=dtype)), name=name
-            )
-        else:
-            bias = g.op.Expand(np.array([0], dtype=dtype), weight_dim_0, name=name)
-
-    # if Rank(input) != Rank(weight):
-    #    input = op.UnsqueezeAnyOpset(input, op.Constant(value_ints=[0]))
     if transposed:
         res = g.make_node(
             "ConvTranspose",
-            [input, weight, bias],
+            [input, weight, bias] if bias is not None else [input, weight],
             outputs,
             strides=strides,
             pads=pads,
@@ -1562,7 +1545,7 @@ def aten_convolution(
     else:
         res = g.make_node(
             "Conv",
-            [input, weight, bias],
+            [input, weight, bias] if bias is not None else [input, weight],
             outputs,
             strides=strides,
             pads=pads,
@@ -7886,6 +7869,7 @@ def aten_setitem(
     x: T,
     indices: Tuple[Any, ...],
     values: T,
+    name: str = "setitem",
 ) -> T:
     "scatter"
     if (
@@ -7905,17 +7889,97 @@ def aten_setitem(
             start=s.start,
             end=s.stop,
             step=s.step,
-            name="setitem",
+            name=f"{name}_E_1d",
         )
 
-    # if not sts:
-    #    g.set_type(res, g.get_type(x))
-    #    if g.has_shape(x):
-    #        g.set_shape(res, g.get_shape(x))
-    #    else:
-    #        g.set_rank(res, g.get_rank(x))
-    # return res
-    raise RuntimeError(f"setitem not implemented for indices={indices}{g.get_debug_msg()}")
+    # We use padding to implement this.
+    name = f"{name}_pad"
+    assert g.has_shape(values), (
+        f"setitem is not implemented when shape is unknown for the values {values!r}"
+        f"{g.get_debug_msg()}"
+    )
+    assert g.has_rank(x) and isinstance(indices, tuple) and len(indices) == g.get_rank(x), (
+        f"setitem is not implemented when indices={indices} and rank is unknown or not "
+        f"equal to the number of indices{g.get_debug_msg()}"
+    )
+
+    # padding and broadcasting...
+    padding_x_start = []
+    padding_x_stop = []
+    for axis, index in enumerate(indices):
+        if isinstance(index, int):
+            assert g.has_shape(x), (
+                f"Not implemented when shape for {x!r} is missing, "
+                f"indices={indices}{g.get_debug_msg()}"
+            )
+            shape = g.get_shape(x)
+            assert isinstance(shape[axis], int), (
+                f"Not implemented for dynamic shape for {x!r}, shape={shape}, "
+                f"axis={axis}, indices={indices}{g.get_debug_msg()}"
+            )
+            if index < 0:
+                start = shape[axis] + index
+                stop = index + 1
+            else:
+                start = index
+                stop = -index - shape[axis] + 1
+        else:
+            assert isinstance(index, slice), (
+                f"setitem is not implemented when index is not a slice "
+                f"({type(index)}), indices={indices}{g.get_debug_msg()}"
+            )
+            assert index.step in {
+                None,
+                0,
+            }, f"setitem is not implemented when index={index}{g.get_debug_msg()}"
+            start = index.start or 0
+            stop = index.stop or 0
+        assert isinstance(start, int) and isinstance(stop, int) and stop <= 0 and start >= 0, (
+            f"setitem is not implemented when index={index}, start={start}, "
+            f"stop={stop}{g.get_debug_msg()}"
+        )
+        padding_x_start.append(start)
+        padding_x_stop.append(-stop)
+
+    rk_x = g.get_rank(x)
+    rk_values = g.get_rank(values)
+    if rk_values != rk_x or 1 in g.get_shape(values):
+        # We need to expand the values first.
+        assert rk_values < rk_x, (
+            f"setitem is not implemented when rank(x)={rk_x} < rank(values)={rk_values}"
+            f"{g.get_debug_msg()}"
+        )
+        shape_values = g.op.Sub(
+            g.op.Shape(x, name=name),
+            (np.array(padding_x_start) + np.array(padding_x_stop)).astype(np.int64),
+            name=name,
+        )
+        values = g.op.Expand(values, shape_values, name=name)
+
+    # padding values
+    padding_x_cst = np.array(padding_x_start + padding_x_stop, dtype=np.int64)
+
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    padded_values = g.op.Pad(values, padding_x_cst, name=name)
+    set_type_shape_unary_op(g, padded_values, x)
+
+    # the mask
+    mask = g.op.Pad(
+        g.op.ConstantOfShape(
+            g.op.Shape(values, name=name),
+            value=from_array(np.array([0], dtype=dtype)),
+            name=name,
+        ),
+        padding_x_cst,
+        np.array(1, dtype=dtype),
+        name=name,
+    )
+    g.set_type(mask, g.get_type(x))
+    g.set_rank(mask, g.get_rank(x))
+    res = g.op.Add(g.op.Mul(x, mask, name=name), padded_values, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_slice_Tensor(

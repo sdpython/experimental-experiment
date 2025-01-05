@@ -788,6 +788,39 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @skipif_ci_windows("not working on windows")
+    def test_aten_clone_index_Tensor(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, sumx):
+                K_33 = x.clone()
+                K_33[2:-2, 2:-2, :-1] = sumx[None, :, None]
+                K_33[2:-2, 2:-2, -1] = 0.0
+                return K_33
+
+        model = Model()
+        xs = (
+            (torch.arange(7 * 9 * 11) + 10).reshape((7, 9, 11)).to(torch.float32),
+            torch.arange(5).to(torch.float32),
+        )
+        expected = model(*xs)
+        model_path = self._call_exporter("test_aten_clone_index_Tensor", "custom", model, xs)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

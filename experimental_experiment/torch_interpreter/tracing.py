@@ -12,6 +12,20 @@ from ..helpers import string_type
 _torch_cat = torch.cat
 
 
+def setitem_with_transformation(a, b, transformations):
+    """
+    Extended version of setitem to deal with inplace modification.
+    """
+    function_table = {"exp": torch.exp_, "sigmoid": torch.sigmoid_}
+    assert transformations, "transformations is empty, it means identity?"
+    for name, args in transformations:
+        assert not args, f"Not implemented for name={name!r} and args={args!r}"
+        f = function_table[name]
+        f(a[b])
+    # operator.setitem(a, b, c)
+    return a
+
+
 class CustomProxy(torch.fx.proxy.Proxy):
     """
     Defines a custom proxy to trace the execution of a model
@@ -579,7 +593,7 @@ class CustomTracer(torch.fx.Tracer):
     @classmethod
     def graph_erase_node(cls, graph: torch.fx.Graph, node: torch.fx.Node):
         """
-        Removes a node all predecessors with are only consumed by this one.
+        Removes a node and all predecessors with are only consumed by this one.
         """
         nodes = [node]
         while (
@@ -595,10 +609,383 @@ class CustomTracer(torch.fx.Tracer):
             graph.erase_node(node)
 
     @classmethod
+    def _modify_graph_clone_copy_(
+        cls,
+        graph: torch.fx.Graph,
+        node: torch.fx.Node,
+        existing_nodes: List[torch.fx.Node],
+        pos: int,
+        exported_program: torch.export.ExportedProgram,
+        err_graph: str,
+        verbose: int = 0,
+    ) -> int:
+        """
+        Removes inplace node ``clone`` + ``copy_`` (inplace copy).
+        Then we tell the nodes using ``%clone`` to use ``%copy_``.
+
+        :param graph: graph to modify
+        :param node: node after clone
+        :param existing_nodes: list of the nodes in the graph
+        :param pos: position of the node in existing nodes
+        :param exported_program: for debugging purpose
+        :param err_graph: original graph as a string, for debugging purpose
+        :param verbose: verbosity
+        :return: number of removed nodes
+        """
+        predecessor = node.args[0]
+        predecessor_name = (
+            predecessor.target.name() if hasattr(predecessor.target, "name") else None
+        )
+
+        assert predecessor_name == "aten::clone", (
+            f"(inplace) Unexpected predecessor {predecessor.target!r} "
+            f"(predecessor.target.name()={predecessor_name!r}) "
+            f"for node {node.name!r} with args={node.args} at position "
+            f"{pos}/{len(graph.nodes)}"
+            f"\n--original graph--\n{err_graph}"
+            f"\n--graph\n{exported_program or graph}"
+        )
+
+        def delete_user_cb(n, nodes_to_leave):
+            return n not in nodes_to_leave
+
+        # class Node can be used as a key
+        # We also assume a user is placed after this node.
+        nodes_to_leave = {n[1] for n in existing_nodes[: pos + 1]}
+        node_args = node.args
+        p_users = predecessor.users
+
+        # We can replace with expand then.
+        with graph.inserting_before(node):
+            # We assume the first argument is the one modified inplace.
+            new_node = graph.call_method("expand_as", args=(node_args[1], predecessor))
+            # let's replace
+            changed = predecessor.replace_all_uses_with(
+                new_node,
+                delete_user_cb=(lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)),
+            )
+            graph.erase_node(node)
+            # new_node is replaced as well so we manually revert the replacement
+            new_node.update_arg(1, predecessor)
+
+        assert changed, (
+            f"No change applied, the inplace node [{node}] "
+            f"at position {pos} with node.args={node_args}, was not replaced "
+            f"by [{new_node}] with target {new_node.target!r} and "
+            f"new_node.args={new_node.args}, predecessor="
+            f"[{predecessor}] with target={predecessor.target!r}, "
+            f"p_users={list(p_users)}, "
+            f"predecessor.users={list(predecessor.users)}, "
+            f"new_node.users={list(new_node.users)} in "
+            f"\n{exported_program or graph}"
+        )
+        return 1
+
+    @classmethod
+    def _modify_graph_clone_index_copy_(
+        cls,
+        graph: torch.fx.Graph,
+        node: torch.fx.Node,
+        existing_nodes: List[torch.fx.Node],
+        pos: int,
+        exported_program: torch.export.ExportedProgram,
+        err_graph: str,
+        verbose: int = 0,
+    ) -> int:
+        """
+        Removes inplace node ``clone`` + ``index.Tensor`` + ``copy_`` (inplace copy).
+        Then we tell the nodes using ``%clone`` to use ``%copy_``.
+
+        :param graph: graph to modify
+        :param node: node after clone
+        :param existing_nodes: list of the nodes in the graph
+        :param pos: position of the node in existing nodes
+        :param exported_program: for debugging purpose
+        :param err_graph: original graph as a string, for debugging purpose
+        :param verbose: verbosity
+        :return: number of removed nodes
+
+        Example of nodes it may face:
+
+        ::
+
+            --  7 aten::slice.Tensor :: (clone, 0, 2, -2) -> slice_2
+            --  8 aten::slice.Tensor :: (slice_2, 1, 2, -2) -> slice_3
+            --  9 aten::slice.Tensor :: (slice_3, 2, 0, -1) -> slice_4
+            --  12 aten::copy_ :: (slice_4, expand) -> copy_
+            --  14 aten::slice.Tensor :: (clone, 0, 2, -2) -> slice_5
+            --  15 aten::slice.Tensor :: (slice_5, 1, 2, -2) -> slice_6
+            --  16 aten::select.int :: (slice_6, 2, -1) -> select
+            --  17 aten::fill_.Tensor :: (select, lift_fresh_copy) -> fill_
+            --  18 output :: ((clone,),) -> output
+
+        It should be summarized into:
+
+        ::
+
+            %setitem : [num_users=1] = call_function[target=operator.setitem](
+                args = (
+                    %clone,
+                    (slice(2, -2, None), slice(2, -2, None), slice(None, -1, None)),
+                    %getitem
+                ),
+                kwargs = {}
+            )
+            %setitem_1 : [num_users=1] = call_function[target=operator.setitem](
+                args = (
+                    %setitem,
+                    (slice(2, -2, None), slice(2, -2, None), -1),
+                    0.0
+                ),
+                kwargs = {}
+            )
+
+        Example:
+
+        .. runpython::
+            :showcode:
+
+            import torch
+            from experimental_experiment.torch_interpreter.tracing import CustomTracer
+
+            class Model(torch.nn.Module):
+                def forward(self, x, sumx):
+                    K_33 = x.clone()
+                    K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
+                    K_33[2:-2, 2:-2, -1] = 0.0
+                    return K_33
+
+            model = Model()
+
+            graph = CustomTracer().trace(model)
+            print(graph)
+        """
+        # Let's find the first clone node.
+        given_node = node
+        while (
+            node.target not in {"clone"}
+            and (not hasattr(node.target, "name") or node.target.name() != "aten::clone")
+            and node.args
+        ):
+            node = node.args[0]
+        clone = node
+        target_name = node.target.name() if hasattr(node.target, "name") else node.target
+        assert target_name in {"aten::clone", "clone"}, (
+            f"(inplace) Unexpected predecessor {node.target!r} "
+            f"(target_name={target_name!r}) "
+            f"for node {given_node.name!r} with args={given_node.args} at position "
+            f"{pos}/{len(graph.nodes)}"
+            f"\n--original graph--\n{err_graph}"
+            f"\n--graph\n{exported_program or graph}"
+        )
+
+        # Let's find all the users until we find a node copy_
+        # assuming this node has no users
+        known = set()
+        users = []
+        unprocessed = [clone]
+        while unprocessed:
+            current = unprocessed.pop()
+            if current.users:
+                new_users = [u for u in current.users if u not in known]
+                users.extend(new_users)
+                unprocessed.extend(new_users)
+                known |= set(new_users)
+
+        def _str(pos_node):
+            pos, node = pos_node
+            return f"-- {pos} {node.args} -> {node.name} -- with {node.target}\n"
+
+        # Let's reorder according to existing nodes
+        def delete_user_cb(n, nodes_to_leave):
+            return n not in nodes_to_leave
+
+        def _macro_assert_index_(is_getitem=False):
+            assert (
+                not inplace_functions
+            ), f"Unexpected inplace_functions={inplace_functions} before {n.target}"
+            assert len(n.args) and n.args[0] in seen_nodes, (
+                f"Unexpected node {n} at position {pos} "
+                f"in {''.join(map(_str, pos_users))}\n"
+                f"-----\nseen_nodes={seen_nodes}"
+            )
+            assert all(isinstance(_i, (tuple, int)) for _i in n.args[1:]), (
+                f"Unexpected arguments for target {n.target} "
+                f"args={string_type(n.args)} - {n.args}"
+            )
+            assert not is_getitem or not set_item_args, (
+                f"set_item_args should be empty for getitem at position {pos} "
+                f"in {''.join(map(_str, pos_users))}\n"
+                f"-----\nseen_nodes={seen_nodes}"
+            )
+
+        def _macro_get_axis_(n, set_item_args):
+            axis = n.args[1]
+            assert (
+                axis not in set_item_args
+            ), f"duplicated axis {n.args[1]} in \n{''.join(map(_str, pos_users))}"
+            return axis
+
+        def _macro_new_node_(n, current_remove, set_item_args, inplace_functions):
+            # We need to replace all the nodes in seen_nodes
+            # a set_item and make clone is now replace by this new one
+            assert len(n.args) and n.args[0] in seen_nodes, (
+                f"Unexpected node {n} at position {pos} "
+                f"in {''.join(map(_str, pos_users))}\n"
+                f"-----\nseen_nodes={seen_nodes}\n----{err_graph}"
+            )
+            seen_nodes.add(n)
+            current_remove.append(n)
+            max_axis = max(set_item_args)
+            args_slices = [None for i in range(max_axis + 1)]
+            for k, v in set_item_args.items():
+                args_slices[k] = v
+            new_args = [clone, tuple(args_slices), *n.args[1:]]
+
+            nodes_to_leave = {_n[1] for _n in existing_nodes[: pos + 1]}
+
+            # We use operator.setitem in both cases.
+            # torch.ops.aten.fill.Tensor cannot work in this case.
+            if not inplace_functions:
+                function_op = operator.setitem
+            else:
+                function_op = setitem_with_transformation
+                new_args.append(tuple(inplace_functions))
+
+            # We can replace with expand then.
+            with graph.inserting_after(n):
+                # We assume the first argument is the one modified inplace.
+                new_node = graph.call_function(function_op, args=tuple(new_args))
+                nodes_to_leave.add(new_node)
+                # let's replace
+                changed = clone.replace_all_uses_with(
+                    new_node,
+                    delete_user_cb=(lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)),
+                )
+                assert changed, (
+                    f"No change applied, for new_node={new_node} and "
+                    f"args={new_node.args} in {''.join(map(_str, pos_users))}"
+                    f"\n-- new graph\n{graph}"
+                    f"\n-- old graph\n{err_graph}"
+                )
+                return new_node
+
+        node_pos = {b: a for a, b in existing_nodes}
+        pos_users = [(node_pos[n], n) for n in users]
+        pos_users.sort()
+
+        to_remove = []
+        seen_nodes = {clone}
+        set_item_args = {}
+        current_remove = []
+        inplace_functions = []
+        for pos, n in pos_users:
+            if n.target == operator.getitem:
+                _macro_assert_index_(True)
+                set_item_args = dict(enumerate(n.args[1]))
+                seen_nodes.add(n)
+                current_remove.append(n)
+            elif hasattr(n.target, "name"):
+                aten_name = n.target.name()
+                if aten_name == "aten::slice.Tensor":
+                    _macro_assert_index_()
+                    axis = _macro_get_axis_(n, set_item_args)
+                    set_item_args[axis] = slice(*n.args[2:])
+                    seen_nodes.add(n)
+                    current_remove.append(n)
+                elif aten_name == "aten::select.int":
+                    _macro_assert_index_()
+                    axis = _macro_get_axis_(n, set_item_args)
+                    set_item_args[axis] = n.args[2]
+                    seen_nodes.add(n)
+                    current_remove.append(n)
+                elif aten_name[-1] != "_" and "_." not in aten_name:
+                    # This is not inplace modification so all stored
+                    # slice operator are cleaned.
+                    set_item_args = {}
+                    current_remove = []
+                    seen_nodes = {clone}
+                    inplace_functions = []
+                elif aten_name in {"aten::copy_", "aten::fill_.Tensor"}:
+                    new_node = _macro_new_node_(
+                        n, current_remove, set_item_args, inplace_functions
+                    )
+                    # next root to use
+                    clone = new_node
+                    # reset
+                    to_remove.extend(current_remove)
+                    seen_nodes = {new_node}
+                    set_item_args = {}
+                    current_remove = []
+                    inplace_functions = []
+                else:
+                    raise NotImplementedError(
+                        f"Unable to handle target {aten_name!r} with args={n.args} "
+                        f"in\n{''.join(map(_str, pos_users))}\n----\n{err_graph}"
+                    )
+            elif n.target in {torch.exp_, torch.sigmoid_} or (
+                isinstance(n.target, str) and n.target.endswith("_")
+            ):
+                # One inplace modification.
+                # We assume the inplace modification takes place instead of a copy.
+                assert (
+                    n.args
+                    and isinstance(n.args[0], torch.fx.Node)
+                    and all(not isinstance(_, torch.fx.Node) for _ in n.args[1:])
+                ), (
+                    f"Unexpected type in argument of node {n} at position "
+                    f"{pos}(args={string_type(n.args)})"
+                )
+                function_name = {torch.exp_: "exp", torch.sigmoid_: "sigmoid"}[n.target]
+                inplace_functions.append((function_name, n.args[1:]))
+                # do the same as before
+                new_node = _macro_new_node_(
+                    n, current_remove, set_item_args, inplace_functions
+                )
+                # next root to use
+                clone = new_node
+                # reset
+                to_remove.extend(current_remove)
+                seen_nodes = {new_node}
+                set_item_args = {}
+                current_remove = []
+                inplace_functions = []
+            else:
+                # Here this node should already been handle.
+                # We skip it.
+                assert pos == pos_users[-1][0], (
+                    f"Unexpected node (1) at pos={pos}, node={n}, target={n.target!r} "
+                    f"in {''.join(map(_str, pos_users))}"
+                )
+        else:
+            # Here again this node should already been handle.
+            # We skip it.
+            assert pos == pos_users[-1][0], (
+                f"Unexpected node (2) at pos={pos}, node={n}, target={n.target} "
+                f"in {''.join(map(_str, pos_users))}"
+            )
+
+        # Let's replace the replace nodes.
+        for n in reversed(to_remove):
+            graph.erase_node(n)
+
+        # The last
+        assert len(to_remove) == len(pos_users) - 1, (
+            "Some nodes were not properly handled "
+            f"len(to_remove)={len(to_remove)} and "
+            f"len(pos_users)={len(pos_users)},\n-- nodes\n"
+            f"{''.join(map(_str, pos_users))}\n"
+            f"-- new graph\n{graph}"
+            f"\n-- old graph\n{err_graph}"
+        )
+        return len(to_remove)
+
+    @classmethod
     def remove_inplace(
         cls,
         graph: torch.fx.Graph,
         exported_program: Optional[torch.export.ExportedProgram] = None,
+        verbose: int = 0,
     ) -> int:
         """
         Removes inplace operations.
@@ -606,6 +993,7 @@ class CustomTracer(torch.fx.Tracer):
         :param graph: graph to modify
         :param exported_program: if available, it is used in the error message
             to make it easier to trace the code source
+        :param verbose: verbosity
         :return: number of inplace nodes removed
 
         The most difficult pattern is the following:
@@ -626,19 +1014,49 @@ class CustomTracer(torch.fx.Tracer):
             # No inplace.
             return False
 
-        n_inplace = len(inplace)
-        cls._replace_getattr(graph)
-        cls._replace_meth_setitem(graph)
-
         def delete_user_cb(n, nodes_to_leave):
             return n not in nodes_to_leave
 
+        if verbose:
+            print(f"[CustomTracer.remove_inplace] starts with {len(graph.nodes)} nodes")
+
+        n_inplace = len(inplace)
+        if verbose:
+            print(f"[CustomTracer.remove_inplace] S1: {len(inplace)} inplace nodes")
+        changed = cls._replace_getattr(graph)
+        changed |= cls._replace_meth_setitem(graph)
+
         err_graph = str(graph)
+        if changed:
+            cls._inplace_nodes(graph)
+        if len(inplace) == 0:
+            # No inplace anymore.
+            return False
 
         max_iter = 10
+        if verbose:
+            print(
+                f"[CustomTracer.remove_inplace] S2: {len(inplace)} inplace nodes "
+                f"and {max_iter} iterations"
+            )
         while inplace and max_iter > 0:
+            if verbose > 1:
+                print(
+                    f"[CustomTracer.remove_inplace] loop {max_iter} "
+                    f"iterations left with {len(graph.nodes)} nodes and "
+                    f"{len(inplace)} inplace nodes"
+                )
             existing_nodes = list(enumerate(graph.nodes))
             for pos, node in reversed(inplace):
+
+                if verbose > 5:
+                    print(
+                        f"[CustomTracer.remove_inplace] handle inplace node "
+                        f"{pos}/{len(graph.nodes)}: {node} with args={node.args} "
+                        f"and target={node.target}"
+                    )
+
+                # easy cases
                 if node.target in {
                     operator.add,
                     operator.floordiv,
@@ -648,38 +1066,69 @@ class CustomTracer(torch.fx.Tracer):
                 }:
                     # This node cannot be one inplace modifications. The node is just not used.
                     graph.erase_node(node)
+                    del existing_nodes[pos]
+                    if verbose > 2:
+                        print(
+                            f"[CustomTracer.remove_inplace] A.remove "
+                            f"{pos}: {node.target}({node.args}) -> {node}"
+                        )
                     continue
 
+                # if the target has a name
                 if hasattr(node.target, "name"):
-                    if (
-                        node.target.name()
-                        in {
-                            "aten::view",
-                            "aten::detach_",  # output = input
-                            "aten::add.Tensor",  # it happens when running
-                            "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
-                            "aten::mul.Tensor",
-                            "aten::sub.Tensor",
-                            "aten::zeros",  # unused as it does not end up with '_'
-                        }
-                        or node.target.name()[-1] != "_"  # not an inplace modification
+                    if node.target.name() in {
+                        "aten::view",
+                        "aten::detach_",  # output = input
+                        "aten::add.Tensor",  # it happens when running
+                        "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
+                        "aten::mul.Tensor",
+                        "aten::sub.Tensor",
+                        "aten::zeros",  # unused as it does not end up with '_'
+                    } or not (  # not an inplace modification
+                        node.target.name().endswith(("_", "_.Tensor"))
                     ):
-                        # This node cannot be one inplace modifications.
+                        # This node cannot be one inplace modification.
                         # The node is just not used.
                         cls.graph_erase_node(graph, node)
+                        del existing_nodes[pos]
+                        if verbose > 2:
+                            print(
+                                f"[CustomTracer.remove_inplace] B.remove "
+                                f"{pos}: {node.target}({node.args}) -> {node}"
+                            )
                         continue
 
                     if len(node.args) == 1:
-                        # Simple casen we check the predecessor is only used once and
-                        # in that case, we can remove as well.
+                        # We should be able to remove this inplace modification
+                        # unless the predecessor is a Tensor.
+                        # %slice_21 : [num_users=1] = call_function[
+                        #           target=torch.ops.aten.slice.Tensor
+                        # ](
+                        #   args = (%clone_2, 4, 4, 9223372036854775807),
+                        #   kwargs = {}
+                        # )
+                        # %sigmoid__2 : [num_users=0] = call_function[
+                        #           target=torch.ops.aten.sigmoid_.default
+                        # ](
+                        #   args = (%slice_21,), kwargs = {}
+                        # )
                         predecessor = node.args[0]
-                        if len(predecessor.users):
+                        if len(predecessor.users) == 0:
                             # We can safely remove as the precessessor
                             # is only used by this node
                             cls.graph_erase_node(graph, node)
+                            del existing_nodes[pos]
+                            if verbose > 2:
+                                print(
+                                    f"[CustomTracer.remove_inplace] C.remove "
+                                    f"{pos}: {node.target}({node.args}) -> {node}"
+                                )
                             continue
 
-                    assert node.target.name() in {"aten::copy_"} and len(node.args) == 2, (
+                    assert (
+                        node.target.name() in {"aten::copy_", "aten::fill_.Tensor"}
+                        and len(node.args) == 2
+                    ) or node.target.name() in {"aten::sigmoid_"}, (
                         f"(inplace) Unsupported target {node.target!r}, target_name="
                         f"{node.target.name()!r}, name={node.name!r}, node.args={node.args} "
                         f"at position {pos}/{len(graph.nodes)}"
@@ -687,53 +1136,40 @@ class CustomTracer(torch.fx.Tracer):
                         f"\n--graph\n{exported_program or graph}"
                     )
 
-                    # We change the predecessor of the node is a node clone.
+                    # We check the predecessor if the node is a node copy_.
                     predecessor = node.args[0]
-                    assert (
-                        hasattr(predecessor.target, "name")
-                        and predecessor.target.name() == "aten::clone"
-                    ), (
-                        f"(inplace) Unexpected predecessor {predecessor.target!r} "
-                        f"for node {node.name!r} with args={node.args} at position "
-                        f"{pos}/{len(graph.nodes)}"
-                        f"\n--original graph--\n{err_graph}"
-                        f"\n--graph\n{exported_program or graph}"
+                    predecessor_name = (
+                        predecessor.target.name()
+                        if hasattr(predecessor.target, "name")
+                        else predecessor.target
                     )
-
-                    # class Node can be used as a key
-                    # We also assume a user is placed after this node.
-                    nodes_to_leave = {n[1] for n in existing_nodes[: pos + 1]}
-                    node_args = node.args
-                    p_users = predecessor.users
-
-                    # We can replace with expand then.
-                    with graph.inserting_before(node):
-                        # We assume the first argument is the one modified inplace.
-                        new_node = graph.call_method(
-                            "expand_as", args=(node_args[1], predecessor)
+                    if predecessor_name in {"aten::slice.Tensor", "aten::select.int"}:
+                        # We face a schema such as
+                        # K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
+                        do_break = cls._modify_graph_clone_index_copy_(
+                            graph,
+                            node,
+                            existing_nodes,
+                            pos,
+                            exported_program,
+                            err_graph,
+                            verbose=verbose,
                         )
-                        # let's replace
-                        changed = predecessor.replace_all_uses_with(
-                            new_node,
-                            delete_user_cb=(
-                                lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)
-                            ),
-                        )
-                        graph.erase_node(node)
-                        # new_node is replaced as well so we manually revert the replacement
-                        new_node.update_arg(1, predecessor)
+                        if do_break:
+                            break
+                        continue
 
-                    assert changed, (
-                        f"No change applied, the inplace node [{node}] "
-                        f"at position {pos} with node.args={node_args}, was not replaced "
-                        f"by [{new_node}] with target {new_node.target!r} and "
-                        f"new_node.args={new_node.args}, predecessor="
-                        f"[{predecessor}] with target={predecessor.target!r}, "
-                        f"p_users={list(p_users)}, "
-                        f"predecessor.users={list(predecessor.users)}, "
-                        f"new_node.users={list(new_node.users)} in "
-                        f"\n{exported_program or graph}"
+                    do_break = cls._modify_graph_clone_copy_(
+                        graph,
+                        node,
+                        existing_nodes,
+                        pos,
+                        exported_program,
+                        err_graph,
+                        verbose=verbose,
                     )
+                    if do_break:
+                        break
                 else:
                     assert node.target in {
                         "add_",
@@ -741,15 +1177,51 @@ class CustomTracer(torch.fx.Tracer):
                         "mul_",
                         "mod_",
                         "sub_",
+                        torch.exp_,
+                        torch.sigmoid_,
                         operator.setitem,
+                        # other function may be needed, let's be strict
                     }, (
                         f"Unsupported target {node.target!r}, name={node.name!r} "
                         f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
                     )
 
+                    # We still need to check the predecessor.
+                    # We check the predecessor if the node is a node copy_.
+                    predecessor_name = (
+                        node.args[0].target.name()
+                        if hasattr(node.args[0].target, "name")
+                        else node.args[0].target
+                    )
+                    if predecessor_name in {
+                        "aten::slice.Tensor",
+                        "aten::select.int",
+                        operator.getitem,
+                    }:
+                        # We face a schema such as
+                        # K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
+                        do_break = cls._modify_graph_clone_index_copy_(
+                            graph,
+                            node,
+                            existing_nodes,
+                            pos,
+                            exported_program,
+                            err_graph,
+                            verbose=verbose,
+                        )
+                        if do_break:
+                            break
+                        continue
+
                     # We assume the first argument is the one modified inplace.
                     new_name = node
                     old_name = node.args[0]
+
+                    if verbose > 2:
+                        print(
+                            f"[CustomTracer.remove_inplace] D.process {pos}: "
+                            f"{node.target}({node.args}) -> {node}"
+                        )
 
                     # class Node can be used as a key
                     # We also assume a user is placed after this node.
@@ -777,6 +1249,11 @@ class CustomTracer(torch.fx.Tracer):
                 break
             max_iter -= 1
 
+        if verbose:
+            print(
+                f"[CustomTracer.remove_inplace] end with {max_iter} "
+                f"iterations and {len(graph.nodes)} nodes"
+            )
         assert len(inplace) == 0, (
             f"Inplace nodes remain at positions {sorted(inplace)}"
             f"/{len(graph.nodes)} in\n{graph}\n--original graph--\n{err_graph}"
