@@ -135,7 +135,7 @@ class TestLlmModelInputs(ExtTestCase):
     @skipif_ci_windows("not supported")
     @ignore_warnings("TracerWarning")
     @ignore_warnings((UserWarning, FutureWarning))
-    @requires_torch("2.7", "bizarre bug")
+    @requires_torch("2.8", "bizarre bug")
     @hide_stdout()
     def test_get_dummy_inputs_and_check(self):
         from experimental_experiment.torch_models.llm_model_helper import (

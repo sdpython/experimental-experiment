@@ -318,7 +318,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         self._updated_parameter("custom", False, decomposition=False)
 
     @ignore_warnings(UserWarning)
-    @requires_torch("2.7")
+    @requires_torch("2.8")
     def test_index_put_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
 
@@ -896,7 +896,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             )
         else:
             if decomposition:
-                if not has_torch("2.7"):
+                if not has_torch("2.8"):
                     # see issue https://github.com/pytorch/pytorch/issues/141336
                     raise unittest.SkipTest("run_decompositions fails on this example")
 

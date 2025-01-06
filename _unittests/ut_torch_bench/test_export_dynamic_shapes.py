@@ -51,7 +51,7 @@ class TestExportDynamicShapes(ExtTestCase):
         got = mod(*args)
         self.assertEqualArray(expected=expected, value=got)
 
-    @requires_torch("2.7")
+    @requires_torch("2.8")
     def test_dynamic_batch_1b(self):
         import torch
 
