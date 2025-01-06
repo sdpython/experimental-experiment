@@ -5373,7 +5373,7 @@ def _aten_max_pool_onnx(
     # if self_rank_is_unbatched_rank:  # C,H,W -> N,C,H,W and N=1
     #     self = op.UnsqueezeAnyOpset(self, op.Constant(value_ints=[0]))
 
-    pool_result, _ = g.op.MaxPool(
+    g.op.MaxPool(
         x,
         ceil_mode=ceil_mode,
         dilations=dilations,
@@ -5381,12 +5381,13 @@ def _aten_max_pool_onnx(
         pads=pads,
         strides=strides,
         name=name,
+        outputs=outputs,
     )
 
     # if self_rank_is_unbatched_rank:
     #    pool_result = op.SqueezeAnyOpset(pool_result, op.Constant(value_ints=[0]))
 
-    return pool_result
+    return outputs[0]
 
 
 def aten_max_pool1d(

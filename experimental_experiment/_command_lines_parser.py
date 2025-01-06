@@ -20,12 +20,15 @@ def get_main_parser() -> ArgumentParser:
         lighten    - makes an onnx model lighter by removing the weights,
         unlighten  - restores an onnx model produces by the previous experiment
         optimize   - optimizes an onnx model by fusing nodes
-        run        - run a model and measure the inference time
+        run        - runs a model and measure the inference time
+        print      - prints the model on standard output
         """
         ),
     )
     parser.add_argument(
-        "cmd", choices=["lighten", "unlighten", "optimize", "run"], help="Selects a command."
+        "cmd",
+        choices=["lighten", "unlighten", "optimize", "run", "print"],
+        help="Selects a command.",
     )
     return parser
 
@@ -402,9 +405,49 @@ def _cmd_run(argv: List[Any]):
         print(f":{k},{v};")
 
 
+def get_parser_print() -> ArgumentParser:
+    parser = ArgumentParser(
+        prog="print",
+        description=dedent(
+            """
+        Prints the model on the standard output.
+        """
+        ),
+        epilog="To show a model.",
+    )
+    parser.add_argument(
+        "fmt", choices=["pretty", "builder", "raw"], help="Format to use.", default="pretty"
+    )
+    parser.add_argument("input", type=str, help="onnx model to load")
+    return parser
+
+
+def _cmd_print(argv: List[Any]):
+    parser = get_parser_print()
+    args = parser.parse_args(argv[1:])
+    onx = onnx.load(args.input)
+    if args.fmt == "raw":
+        print(onx)
+    elif args.fmt == "pretty":
+        from .helpers import pretty_onnx
+
+        print(pretty_onnx(onx))
+    elif args.fmt == "builder":
+        from .xbuilder import GraphBuilder
+
+        gr = GraphBuilder(onx)
+        print(gr.pretty_text())
+    else:
+        raise ValueError(f"Unexpected value fmt={args.fmt!r}")
+
+
 def main(argv: Optional[List[Any]] = None):
     fcts = dict(
-        lighten=_cmd_lighten, unlighten=_cmd_unlighten, optimize=_cmd_optimize, run=_cmd_run
+        lighten=_cmd_lighten,
+        unlighten=_cmd_unlighten,
+        optimize=_cmd_optimize,
+        run=_cmd_run,
+        print=_cmd_print,
     )
 
     if argv is None:
@@ -419,6 +462,7 @@ def main(argv: Optional[List[Any]] = None):
                 unlighten=get_parser_unlighten,
                 optimize=get_parser_optimize,
                 run=get_parser_run,
+                print=get_parser_print,
             )
             cmd = argv[0]
             if cmd not in parsers:

@@ -689,6 +689,11 @@ class DynamoInterpreter:
 
         val = node.meta.get("val", None)
 
+        if val is None:
+            example_value = node.meta.get("example_value", None)
+            if example_value is not None:
+                val = example_value
+
         if isinstance(val, tuple):
             assert len(val) == 1, (
                 f"output not yet implemented for multiple outputs, node={node}"
@@ -718,16 +723,23 @@ class DynamoInterpreter:
                     elif self.builder.as_function:
                         shape = None
                     else:
-                        raise RuntimeError(
-                            f"val is None for node={node}, "
-                            f"output={output}, a={a!r}, o={o!r}, "
-                            f"has_type={self.builder.has_type(a)}, "
-                            f"has_rank={self.builder.has_rank(a)}, "
-                            f"has_shape={self.builder.has_shape(a)}, "
-                            f"\nmeta={node.meta}"
-                            f"\nnode.__dict__={node.__dict__}"
-                            f"{self.builder.get_debug_msg()}"
-                        )
+                        shape = None
+                        if a in self.builder._known_torch_value:
+                            stored = self.builder._known_torch_value[a]
+                            example = stored[1][0]
+                            if example and len(example) > 2:
+                                shape = example[2]
+                        if shape is None:
+                            raise RuntimeError(
+                                f"val is None for node={node}, "
+                                f"output={output}, a={a!r}, o={o!r}, "
+                                f"has_type={self.builder.has_type(a)}, "
+                                f"has_rank={self.builder.has_rank(a)}, "
+                                f"has_shape={self.builder.has_shape(a)}, "
+                                f"\nmeta={node.meta}"
+                                f"\nnode.__dict__={node.__dict__}"
+                                f"{self.builder.get_debug_msg()}"
+                            )
 
                 # let's avoid none
                 ns = []

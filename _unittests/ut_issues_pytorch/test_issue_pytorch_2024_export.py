@@ -11,7 +11,7 @@ from experimental_experiment.ext_test_case import (
 class TestIssuesPytorch2024Export(ExtTestCase):
 
     @skipif_ci_windows("not working")
-    @requires_torch("2.7")
+    @requires_torch("2.8")
     def test_export_index_put_none_decompositions(self):
         # see issue https://github.com/pytorch/pytorch/issues/141336
         import torch
