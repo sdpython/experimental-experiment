@@ -8993,21 +8993,18 @@ def aten_sym_size_int(
     name: str = "sym_size_int",
 ) -> T:
     """
-    Shape + Gather
+    Shape + Squeeze
     """
     assert (
         g.main_opset >= 15
     ), f"aten_sym_size_int is not implemented for opset < 15{g.get_debug_msg()}"
     assert isinstance(dim, int), f"type(dim)={type(int)} must be an int{g.get_debug_msg()}"
-    res = g.op.Shape(x, name=name, start=dim, end=dim + 1)
+    res = g.op.Squeeze(
+        g.op.Shape(x, name=name, start=dim, end=dim + 1), name=name, outputs=outputs
+    )
     if not sts:
         g.set_type(res, TensorProto.INT64)
-        g.set_shape(
-            res,
-            tuple(
-                1,
-            ),
-        )
+        g.set_shape(res, tuple())
     return res
 
 
