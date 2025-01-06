@@ -24,6 +24,8 @@ from .ops.op_gather_grad import GatherGrad
 from .ops.op_memcpy_host import MemcpyFromHost, MemcpyToHost
 from .ops.op_mul_sigmoid import MulSigmoid
 from .ops.op_negxplus1 import NegXplus1
+from .ops.op_qlinear_average_pool import QLinearAveragePool
+from .ops.op_qlinear_conv import QLinearConv
 from .ops.op_quick_gelu import QuickGelu
 from .ops.op_replace_zero import ReplaceZero
 from .ops.op_rotary import Rotary
@@ -83,6 +85,8 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         MulSigmoid,
         MulSub,
         NegXplus1,
+        QLinearConv,
+        QLinearAveragePool,
         QuickGelu,
         ReplaceZero,
         Rotary,

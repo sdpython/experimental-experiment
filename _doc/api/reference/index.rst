@@ -18,6 +18,7 @@
 
     evaluator
     ort_evaluator
+    quantized_tensor
 
 
 ExtendedReferenceEvaluator
