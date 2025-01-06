@@ -1925,9 +1925,9 @@ def _process_formulas(
                         f"duplicates. You should use keep_more_recent=True"
                     )
                     df = joined.copy()
-                    df["speedup_increase_script"] = (
-                        df["speedup"] / df["speedup_script"] - 1
-                    ).fillna(-np.inf)
+                    # We cannot replace NaN by -inf here,
+                    # that gives figure figures in the first bucket.
+                    df["speedup_increase_script"] = df["speedup"] / df["speedup_script"] - 1
                     report_on.extend(["speedup_script", "speedup_increase_script"])
                     for c in column_keys:
                         cc = f"{c}_x"
