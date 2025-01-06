@@ -5666,10 +5666,11 @@ def aten_mean_dim(
             xc, keepdims=keepdim, outputs=outputs, name="mean_dim"
         )
     else:
-        if isinstance(dim, int):
-            adim = np.array([dim], dtype=np.int64)
-        else:
-            adim = np.array(dim, dtype=np.int64)
+        adim = (
+            np.array([dim], dtype=np.int64)
+            if isinstance(dim, int)
+            else np.array(dim, dtype=np.int64)
+        )
         result = g.op.ReduceMeanAnyOpset(
             xc, adim, keepdims=keepdim, outputs=outputs, name="mean_dim"
         )
