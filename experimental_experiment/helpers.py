@@ -153,6 +153,9 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, torch.nn.Module):
         return f"{obj.__class__.__name__}(...)"
 
+    if isinstance(obj, torch.dtype):
+        return f"{obj.__class__.__name__}({obj})"
+
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 
 

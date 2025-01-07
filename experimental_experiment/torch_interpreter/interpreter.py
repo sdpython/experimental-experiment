@@ -254,8 +254,8 @@ class DynamoInterpreter:
             if self.builder.has_shape(name):
                 shape = self.builder.get_shape(name)
                 self.builder._check_two_shapes_are_compatible(
+                    shape,  # new_shape (or shape infered with onnx node)
                     tuple(exp_shape),  # old_shape
-                    shape,  # new_shape
                     name=name,
                     register_int=False,
                 )
