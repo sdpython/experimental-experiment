@@ -1204,17 +1204,19 @@ def _build_aggregated_document(
         v.dropna(axis=1, how="all", inplace=True)
 
     if export_simple and "SIMPLE" in final_res:
+        if verbose:
+            print(f"[merge_benchmark_reports-agg] start {export_simple!r}")
         for c in ("rtopt",):
             if (
                 c in final_res["SIMPLE"].columns
                 and len(set(final_res["SIMPLE"][c].dropna())) <= 1
             ):
                 if verbose:
-                    print(f"[merge_benchmark_reports] drops {c!r} in SIMPLE")
+                    print(f"[merge_benchmark_reports-agg] drops {c!r} in SIMPLE")
                 final_res["SIMPLE"] = final_res["SIMPLE"].drop(c, axis=1)
             elif verbose and c in final_res["SIMPLE"].columns:
                 print(
-                    f"[merge_benchmark_reports] keeps {c!r} in SIMPLE: "
+                    f"[merge_benchmark_reports-agg] keeps {c!r} in SIMPLE: "
                     f"{set(final_res['SIMPLE'].dropna())}"
                 )
 
@@ -1303,15 +1305,38 @@ def _build_aggregated_document(
         reindexed.to_csv(export_simple, index=False)
 
         export_simple_x = f"{export_simple}.xlsx"
+
+        # We finally create a last page with the buckets only.
+        mask_eager = [
+            any(isinstance(_, str) and "speedup in" in _ for _ in row)
+            for row in piv_total.index
+        ]
+        select_eager = piv_total.loc[mask_eager, :]
+        mask_script = [
+            any(isinstance(_, str) and "script in" in _ for _ in row)
+            for row in piv_total.index
+        ]
+        select_script = piv_total.loc[mask_script, :]
+
         if verbose:
             print(
-                f"[merge_benchmark_reports] writes {export_simple_x!r} "
+                f"[merge_benchmark_reports-agg] writes {export_simple_x!r} "
                 f"shapes: {piv.shape}, {piv_total.shape}"
             )
         with pandas.ExcelWriter(export_simple_x, engine="openpyxl") as writer:
             piv.to_excel(writer, sheet_name="by_suite")
             piv_total.to_excel(writer, sheet_name="all_suites")
-            _format_excel_cells(["by_suite", "all_suites"], writer, verbose=verbose)
+            select_eager.to_excel(writer, sheet_name="speedup_eager")
+            _format_excel_cells(
+                ["by_suite", "all_suites", "speedup_eager"], writer, verbose=verbose
+            )
+            if select_script.shape[0] > 0:
+                select_script.to_excel(writer, sheet_name="speedup_script")
+                _format_excel_cells(
+                    ["by_suite", "all_suites", "speedup_eager", "speedup_script"],
+                    writer,
+                    verbose=verbose,
+                )
 
     if export_correlations:
         models = [c for c in model if c in df.columns]
@@ -1327,9 +1352,9 @@ def _build_aggregated_document(
             if c in df.columns
         ]
         if verbose:
-            print(f"[merge_benchmark_reports] compute correlations models={models}")
-            print(f"[merge_benchmark_reports] compute correlations exporter={exporter}")
-            print(f"[merge_benchmark_reports] compute correlations subset={subset}")
+            print(f"[merge_benchmark_reports-agg] compute correlations models={models}")
+            print(f"[merge_benchmark_reports-agg] compute correlations exporter={exporter}")
+            print(f"[merge_benchmark_reports-agg] compute correlations subset={subset}")
         corrs = _compute_correlations(
             df,
             model_column=models,
