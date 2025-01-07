@@ -2014,7 +2014,7 @@ def _process_formulas(
 
                     assert df.shape[0] == joined.shape[0], (
                         f"Shape mismatch after join {df.shape} -> {joined.shape}, "
-                        f"gr.shape={gr.shape}, on={on}"
+                        f"gr.shape={gr.shape}, on={on}\n---\n{gr}"
                     )
                     df = joined.copy()
                     df["speedup_increase_inductor"] = (

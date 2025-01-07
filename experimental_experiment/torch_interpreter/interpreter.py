@@ -1736,22 +1736,22 @@ class DynamoInterpreter:
                         description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
                 elif isinstance(v, self.torch.SymInt):
                     # this is a shape
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.INT64)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, self.torch.SymBool):
                     # this is a shape
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.BOOL)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, self.torch.SymFloat):
                     # this is a shape
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.FLOAT)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, int):
                     # this is unknown
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.INT64)
                 elif v is None:
                     continue
