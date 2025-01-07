@@ -1330,10 +1330,13 @@ def _build_aggregated_document(
             _format_excel_cells(
                 ["by_suite", "all_suites", "speedup_eager"], writer, verbose=verbose
             )
-            select_script.to_excel(writer, sheet_name="speedup_script")
-            _format_excel_cells(
-                ["by_suite", "all_suites", "speedup_script"], writer, verbose=verbose
-            )
+            if select_script.shape[0] > 0:
+                select_script.to_excel(writer, sheet_name="speedup_script")
+                _format_excel_cells(
+                    ["by_suite", "all_suites", "speedup_eager", "speedup_script"],
+                    writer,
+                    verbose=verbose,
+                )
 
     if export_correlations:
         models = [c for c in model if c in df.columns]
