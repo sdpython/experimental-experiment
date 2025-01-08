@@ -1,4 +1,3 @@
-from onnx.helper import np_dtype_to_tensor_dtype
 from onnx.onnx_pb import TensorProto
 from onnx.reference.op_run import OpRun
 from onnx.reference.ops.op_cast import (
@@ -9,6 +8,7 @@ from onnx.reference.ops.op_cast import (
     float8e5m2,
     float8e5m2fnuz,
 )
+from ...helpers import np_dtype_to_tensor_dtype
 
 
 def _cast_like(x, y, saturate):

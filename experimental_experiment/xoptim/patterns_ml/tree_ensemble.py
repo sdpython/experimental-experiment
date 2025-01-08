@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import onnx.numpy_helper as onh
 from onnx import AttributeProto, NodeProto
+from ...helpers import from_array_extended
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -49,7 +50,7 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
             kwargs = {att.name: [float(f * cst) for f in att.floats]}
         else:
             value = onh.to_array(att.t)
-            kwargs = {att.name: onh.from_array(value * cst, name=att.name)}
+            kwargs = {att.name: from_array_extended(value * cst, name=att.name)}
 
         new_tree = g.make_node(
             tree_node.op_type,
@@ -247,7 +248,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         if any(c is None for c in collected):
             return None
         merged = np.hstack(collected)
-        return onh.from_array(merged, name=as_tensor)
+        return from_array_extended(merged, name=as_tensor)
 
     def _opset_process(
         cls, g: "GraphBuilder", atts: Dict[str, Any]  # noqa: F821

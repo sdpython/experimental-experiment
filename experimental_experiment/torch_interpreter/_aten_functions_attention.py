@@ -7,8 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import make_tensor
-from onnx.numpy_helper import from_array
-from ..helpers import tensor_dtype_to_np_dtype
+from ..helpers import tensor_dtype_to_np_dtype, from_array_extended
 from ..xbuilder.graph_builder import GraphBuilder
 from ..xbuilder.shape_type_compute import set_type_shape_unary_op, set_type_shape_binary_op
 
@@ -43,7 +42,7 @@ def _causal_attention_mask(
             shape = (shape_query[-2], shape_key[-2])
             attn_mask = g.op.ConstantOfShape(
                 np.array(shape, dtype=np.int64),
-                value=from_array(np.array([1], dtype=dtype)),
+                value=from_array_extended(np.array([1], dtype=dtype)),
                 name=name,
             )
 
@@ -58,7 +57,7 @@ def _causal_attention_mask(
         size = g.op.Concat(dquery, dkey, axis=0, name=name)
         g.set_type(size, g.get_type(dkey))
         attn_mask = g.op.ConstantOfShape(
-            size, value=from_array(np.array([1], dtype=dtype)), name=name
+            size, value=from_array_extended(np.array([1], dtype=dtype)), name=name
         )
         g.set_type(attn_mask, itype)
 

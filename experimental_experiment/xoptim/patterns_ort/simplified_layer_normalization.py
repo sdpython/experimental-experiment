@@ -2,8 +2,7 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-import onnx.numpy_helper as onh
-from ...helpers import tensor_dtype_to_np_dtype
+from ...helpers import tensor_dtype_to_np_dtype, from_array_extended
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -135,7 +134,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             cc = g.make_node(
                 "ConstantOfShape",
                 [ga.output[0]],
-                value=onh.from_array(np.array([1], dtype=dtype)),
+                value=from_array_extended(np.array([1], dtype=dtype)),
                 name=f"{self.__class__.__name__}--{nname}",
             )
             scale = cc.output[0]

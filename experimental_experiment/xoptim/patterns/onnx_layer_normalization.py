@@ -2,8 +2,7 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-from onnx.numpy_helper import from_array
-from ...helpers import tensor_dtype_to_np_dtype
+from ...helpers import tensor_dtype_to_np_dtype, from_array_extended
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -156,7 +155,7 @@ class LayerNormalizationPattern(PatternOptimization):
                     [shape],
                     [scale],
                     name=f"{self.__class__.__name__}--{red.name}",
-                    value=from_array(np.array([1], dtype=dtype)),
+                    value=from_array_extended(np.array([1], dtype=dtype)),
                 )
             )
             bias = g.unique_name(f"{self.__class__.__name__}_Bi_{red.input[0]}")
@@ -166,7 +165,7 @@ class LayerNormalizationPattern(PatternOptimization):
                     [shape],
                     [bias],
                     name=f"{self.__class__.__name__}--{red.name}",
-                    value=from_array(np.array([0], dtype=dtype)),
+                    value=from_array_extended(np.array([0], dtype=dtype)),
                 )
             )
 

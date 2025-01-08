@@ -4,17 +4,16 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, TensorProto, load
-from onnx.numpy_helper import from_array, to_array
+from onnx.numpy_helper import to_array
 import torch
 from torch._C import _from_dlpack
 from onnxruntime.capi import _pybind_state as ORTC
-from ..helpers import tensor_dtype_to_np_dtype
 from ..convert.ort_helper import append_custom_libraries
+from ..helpers import tensor_dtype_to_np_dtype, from_array_extended, onnx_dtype_to_torch_dtype
 from ..xbuilder import OptimizationOptions
-from ..xbuilder._dtype_helper import onnx_dtype_to_torch_dtype
+from ..xoptim import get_pattern_list
 from ..torch_interpreter import to_onnx, ExportOptions
 from ..torch_interpreter._torch_helper import create_input_names
-from ..xoptim import get_pattern_list
 from .backend_helper import get_dimensions
 
 
@@ -329,9 +328,9 @@ class OrtBackend:
 
     def to_tensor_proto(self, value: Any) -> TensorProto:
         if isinstance(value, np.ndarray):
-            proto = from_array(value)
+            proto = from_array_extended(value)
         elif isinstance(value, int):
-            proto = from_array(np.array([value], dtype=np.int64))
+            proto = from_array_extended(np.array([value], dtype=np.int64))
         elif isinstance(value, torch.Tensor):
             return self.to_tensor_proto(value.detach().cpu().numpy())
         else:

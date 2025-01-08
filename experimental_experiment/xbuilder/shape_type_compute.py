@@ -1,10 +1,13 @@
 from typing import Any, Callable, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from onnx import NodeProto, TensorProto
-from onnx.helper import np_dtype_to_tensor_dtype
-from ..helpers import tensor_dtype_to_np_dtype
+from ..helpers import (
+    tensor_dtype_to_np_dtype,
+    np_dtype_to_tensor_dtype,
+    dtype_to_tensor_dtype,
+    torch_dtype_to_onnx_dtype,
+)
 from ..xbuilder._shape_helper import STATIC_SHAPE, is_static_shape, all_int, all_int_or_str
-from ..xbuilder._dtype_helper import dtype_to_tensor_dtype, torch_dtype_to_onnx_dtype
 
 
 def broadcast_shape(
@@ -349,9 +352,11 @@ def _cast_inputs(
         else:
             a = np.array(a)
     if isinstance(a, np.ndarray):
+        new_dtype = tensor_dtype_to_np_dtype(itype)
+        na = a.astype(new_dtype)
         return g.make_initializer(
             "",
-            a.astype(tensor_dtype_to_np_dtype(itype)),
+            na,
             source=(
                 f"shape_type_compute._cast_inputs.1({name})"
                 if name

@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import ModelProto, NodeProto, TensorProto, TypeProto, helper as oh, load
 from onnx.numpy_helper import to_array
-from ..helpers import pretty_onnx
+from ..helpers import pretty_onnx, np_dtype_to_tensor_dtype
 
 
 class OrtEval:
@@ -136,7 +136,7 @@ class OrtEval:
             return TensorProto.FLOAT16
         if dt == np.int64:
             return TensorProto.INT64
-        return oh.np_dtype_to_tensor_dtype(dt)
+        return np_dtype_to_tensor_dtype(dt)
 
     def _log(self, level: int, pattern: str, *args: List[Any]) -> None:
         if level < self.verbose:

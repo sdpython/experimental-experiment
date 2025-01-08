@@ -2,10 +2,9 @@ import json
 import os
 from typing import Dict, Optional, Tuple, Union
 import numpy as np
-import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx import ModelProto, load, TensorProto
-from .helpers import tensor_dtype_to_np_dtype
+from .helpers import tensor_dtype_to_np_dtype, from_array_extended, np_dtype_to_tensor_dtype
 
 
 def _make_stat(init: TensorProto) -> Dict[str, float]:
@@ -20,7 +19,7 @@ def _make_stat(init: TensorProto) -> Dict[str, float]:
         mean=float(ar.mean()),
         std=float(ar.std()),
         shape=ar.shape,
-        itype=oh.np_dtype_to_tensor_dtype(ar.dtype),
+        itype=np_dtype_to_tensor_dtype(ar.dtype),
         min=float(ar.min()),
         max=float(ar.max()),
     )
@@ -119,7 +118,7 @@ def onnx_unlighten(
     keep = []
     for name, stat in stats.items():
         t = _get_tensor(**stat)
-        init = onh.from_array(t, name=name)
+        init = from_array_extended(t, name=name)
         keep.append(init)
 
     model.graph.initializer.extend(keep)
