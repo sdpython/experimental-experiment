@@ -212,18 +212,20 @@ class Opset:
             return self.ReduceSum(*args, **kwargs)
         return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)
 
-    def SqueezeAnyOpset(self, *args, **kwargs):
+    def SqueezeAnyOpset(self, *args, name: str = "SqueezeAnyOpset", **kwargs):
         if len(args) == 1 and len(kwargs) == 0:
-            return self.Squeeze(*args)
+            return self.Squeeze(*args, name=name)
         assert len(args) == 2, f"SqueezeAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
-            return self.Squeeze(*args, **kwargs)
-        return self.Squeeze(args[0], axes=self._iaxes("Squeeze", args[1]), **kwargs)
+            return self.Squeeze(*args, name=name**kwargs)
+        return self.Squeeze(args[0], axes=self._iaxes("Squeeze", args[1]), name=name, **kwargs)
 
-    def UnsqueezeAnyOpset(self, *args, **kwargs):
+    def UnsqueezeAnyOpset(self, *args, name: str = "UnsqueezeAnyOpset", **kwargs):
         if len(args) == 1 and len(kwargs) == 0:
-            return self.Unsqueeze(*args)
+            return self.Unsqueeze(*args, name=name)
         assert len(args) == 2, f"UnsqueezeAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
-            return self.Unsqueeze(*args, **kwargs)
-        return self.Unsqueeze(args[0], axes=self._iaxes("Unsqueeze", args[1]), **kwargs)
+            return self.Unsqueeze(*args, name=name, **kwargs)
+        return self.Unsqueeze(
+            args[0], axes=self._iaxes("Unsqueeze", args[1]), name=name, **kwargs
+        )

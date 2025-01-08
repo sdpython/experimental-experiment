@@ -345,7 +345,6 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 },
                 export_options=ExportOptions(decomposition_table="default"),
             )
-
             for i in range(0, len(input_tensors)):
                 expected = model(*input_tensors[i])
                 sess = onnxruntime.InferenceSession(

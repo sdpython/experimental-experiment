@@ -2508,6 +2508,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         return True
 
     def get_dynamic_dimension(self, dim: Any, keep_const: bool = True) -> Any:
+        """
+        Returns a dynamic dimension as a 1D tensor of one element.
+        """
         if isinstance(dim, int):
             if keep_const:
                 return np.array([dim], dtype=np.int64)
@@ -2521,6 +2524,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         ), f"Unexpected type {type(dim)} for dim={dim}{self.get_debug_msg()}"
         if isinstance(dim, str):
             if self.has_name(dim):
+                assert self.has_rank(dim), f"dim={dim!r} has no rank{self.get_debug_msg()}"
+                if self.get_rank(dim) == 0:
+                    return self.op.UnsqueezeAnyOpset(
+                        dim,
+                        np.array([0], dtype=np.int64),
+                        name=f"get_dynamic_dimension_a_{dim}",
+                    )
                 return dim
             assert dim in self.dynamic_objects, (
                 f"Unable to find a dynamic object for {dim:r}, "
@@ -2539,7 +2549,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         name = self._torch_sym_int_to_str(dim)
         assert name, f"Unable to expression a dynamic dimension{self.get_debug_msg()}"
         if self.has_name(name):
-            return name
+            assert self.has_rank(name), f"name={name!r} has no rank{self.get_debug_msg()}"
+            if self.get_rank(name) == 0:
+                return self.op.UnsqueezeAnyOpset(
+                    dim, np.array([0], dtype=np.int64), name=f"get_dynamic_dimension_b_{name}"
+                )
+            return dim
         assert name in self.dynamic_objects, (
             f"Unable to find a dynamic object for {name:r}, "
             f"list={list(self.dynamic_objects)}"

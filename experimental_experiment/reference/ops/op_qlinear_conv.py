@@ -79,7 +79,6 @@ class QLinearConv(OpRun):
         dqx = DequantizeLinear.eval(x, x_scale, x_zero_point)
         dqw = DequantizeLinear.eval(w, w_scale, w_zero_point)
         if channels_last:
-            print(dqx.shape, x.shape, _switch_dims_nchw_nhwc(x.shape, False))
             dqx = dqx.reshape(_switch_dims_nchw_nhwc(x.shape, False))
         dqb = (
             DequantizeLinear.eval(B, x_scale * w_scale, 0).astype(dqx.dtype)
