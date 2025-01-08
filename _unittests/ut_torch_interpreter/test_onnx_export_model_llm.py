@@ -279,7 +279,7 @@ class TestOnnxExportLlama(ExtTestCase):
             dtype="bfloat16",
         )
         xp = [x.numpy() for x in input_tensors]
-        feeds = {f"input{i}": x for i, x in enumerate(xp)}
+        # feeds = {f"input{i}": x for i, x in enumerate(xp)}
         feeds0 = dict(zip(["input", "attention_mask"], xp))
 
         from onnxruntime import InferenceSession
