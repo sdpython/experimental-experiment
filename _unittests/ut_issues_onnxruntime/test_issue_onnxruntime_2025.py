@@ -64,9 +64,7 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
             # for r in res2:
             #    r.name = clean_name(r.name)
             text = dc.to_str(res1, res2, align, column_size=90)
-            print("-----------------------------")
-            print(text)
-            print("-----------------------------")
+            self.assertNotEmpty(text)
 
             # fails here
             self.assertEqual(len(onnx_results), len(original_result))
@@ -75,6 +73,39 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
                 with self.subTest(i=i, name=output_names[i]):
                     np.testing.assert_allclose(onnx_results[i], original_result[i])
                     np.testing.assert_allclose(onnx_results[i], original_result2[i])
+
+    def test_ort_scalar_input(self):
+        import numpy as np
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        import onnxruntime as ort
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+        TINT64 = onnx.TensorProto.INT64
+        _mkv_ = oh.make_tensor_value_info
+
+        model = oh.make_model(
+            oh.make_graph(
+                [oh.make_node("Unsqueeze", ["x", "axis"], ["y"])],
+                "test",
+                [_mkv_("x", TINT64, [])],
+                [_mkv_("y", TINT64, [1])],
+                [onh.from_array(np.array([0], dtype=np.int64), name="axis")],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        ref = ExtendedReferenceEvaluator(model)
+        feeds = dict(x=np.array(5, dtype=np.int64))
+        got = ref.run(None, feeds)
+        self.assertEqualArray(got[0], np.array([5], dtype=np.int64))
+
+        sess = ort.InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)
+        self.assertEqualArray(got[0], np.array([5], dtype=np.int64))
 
 
 if __name__ == "__main__":

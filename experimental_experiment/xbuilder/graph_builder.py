@@ -1421,7 +1421,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     TensorProto.FLOAT,
                 }
             )
-            and (shape is None or (isinstance(shape, tuple) and len(shape) == 1))
+            and (shape is None or (isinstance(shape, tuple) and len(shape) == 0))
         ), (
             f"Inconsistent result type for name={name!r}, is_dimension={res}, "
             f"elem_type={elem_type}, shape={shape}{self.get_debug_msg()}"
@@ -1797,7 +1797,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         if self._debug_value_shape and name == self._debug_value_shape:
             raise AssertionError(
-                f"Requested stop, name={name!r}, value={value}, equal_to={equal_to}"
+                f"Requested stop, name={name!r}, value={value!r}, equal_to={equal_to!r}"
             )
 
         assert isinstance(
@@ -2010,7 +2010,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if isinstance(value, self.torch.SymInt)
                     else TensorProto.FLOAT
                 ),
-                (1,),
+                tuple(),
                 is_dimension=True,
                 marker="make_dynamic_object",
             )
@@ -2827,7 +2827,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             with the same element type and shape
         :param elem_type: element type
         :param shape: shape
-        :param is_dimension: torch is using torch.SymInt to add a dynamic input
+        :param is_dimension: torch is using ``torch.SymInt`` to add a dynamic input
             to the graph
         :param marker: to known from this input was created
         :param default_initializer: add an initializer with the same name of the input
@@ -2951,11 +2951,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             self.as_function or elem_type
         ), f"elem_type={elem_type!r} must be specified for input {name!r}"
-        if shape:
+        if shape is not None:
             self.set_shape(name, dyn_shape)
             if input_name != name:
                 self.set_shape(input_name, dyn_shape)
-        if elem_type:
+        if elem_type is not None:
             self.set_type(name, elem_type)
             if input_name != name:
                 self.set_type(input_name, elem_type)
@@ -6435,51 +6435,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             node.doc_string += "#SV-Id/2"
             return False
 
-        if node.op_type == "Squeeze":
-            if self.is_constant_or_attribute(node, 1, "axes"):
-                y = self.value_as_shape(node.input[0])
-                if y is None:
-                    node.doc_string += "#SV-Sq/3"
-                    return False
-                i = self.get_constant_or_attribute(node, 1, "axes")
-                if isinstance(i, int):
-                    ii = i
-                elif (
-                    isinstance(i, np.ndarray)
-                    and i.dtype == np.int64
-                    and i.shape in ((1,), tuple())
-                ):
-                    ii = int(i[0]) if i.shape == (1,) else int(i)
-                elif i is None and isinstance(y, tuple) and len(y) == 1:
-                    # A dimension a tensor of 1 element turned into a scalar
-                    node.doc_string += "#SV-SqDim"
-                    self.set_value_shape(node.output[0], y[0])
-                    return True
-                else:
-                    raise RuntimeError(
-                        f"Not implemented when node Squeeze with inputs={node.input}, "
-                        f"y={y!r}, i={i!r}{self.get_debug_msg()}"
-                    )
-                assert (
-                    ii == 0
-                ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
-                if isinstance(y, str):
-                    node.doc_string += "#SV-Sq1"
-                    self.set_value_shape(node.output[0], f"squeeze({y})")
-                    return True
-                if isinstance(y, int):
-                    node.doc_string += "#SV-Sq2"
-                    self.set_value_shape(node.output[0], y)
-                    return True
-                assert isinstance(
-                    y, tuple
-                ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
-                node.doc_string += "#SV-Sq3"
-                self.set_value_shape(node.output[0], y[0])
-                return True
-            node.doc_string += "#SV-Sq/2"
-            return False
-
         if node.op_type == "Shape":
             if len(node.attribute) == 0:
                 node.doc_string += "#SV-Sh1"
@@ -6596,6 +6551,68 @@ class GraphBuilder(_GraphBuilderRuntime):
             node.doc_string += "#SV-Ga/7"
             return False
 
+        if node.op_type == "Squeeze":
+            if self.is_constant_or_attribute(node, 1, "axes"):
+                y = self.value_as_shape(node.input[0])
+                if y is None:
+                    node.doc_string += "#SV-Sq/3"
+                    return False
+                i = self.get_constant_or_attribute(node, 1, "axes")
+                if isinstance(i, int):
+                    ii = i
+                elif (
+                    isinstance(i, np.ndarray)
+                    and i.dtype == np.int64
+                    and i.shape in ((1,), tuple())
+                ):
+                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                elif i is None and isinstance(y, tuple) and len(y) == 1:
+                    # A dimension a tensor of 1 element turned into a scalar
+                    node.doc_string += "#SV-SqDim"
+                    self.set_value_shape(node.output[0], y[0])
+                    return True
+                else:
+                    raise RuntimeError(
+                        f"Not implemented when node Squeeze with inputs={node.input}, "
+                        f"y={y!r}, i={i!r}{self.get_debug_msg()}"
+                    )
+                assert (
+                    ii == 0
+                ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
+                if isinstance(y, str):
+                    node.doc_string += "#SV-Sq1"
+                    self.set_value_shape(node.output[0], f"squeeze({y})")
+                    return True
+                if isinstance(y, int):
+                    node.doc_string += "#SV-Sq2"
+                    self.set_value_shape(node.output[0], y)
+                    return True
+                assert isinstance(
+                    y, tuple
+                ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
+                node.doc_string += "#SV-Sq3"
+                self.set_value_shape(node.output[0], y[0])
+                return True
+            node.doc_string += "#SV-Sq/2"
+            return False
+
+        if node.op_type == "Unsqueeze":
+            values_0 = self.value_as_shape(node.input[0])
+            if isinstance(values_0, tuple) and len(values_0) > 1:
+                # This cannot be a shape anymore after this operation
+                node.doc_string += "#SV-Unsq/1"
+                return False
+            if self.has_rank(node.input[0]) and self.get_rank(node.input[0]) > 0:
+                # This cannot be a shape anymore.
+                node.doc_string += "#SV-Unsq/2"
+                return False
+            cst = self.get_constant(node.input[1], exc=False, computed_value=True)
+            if cst is not None and tuple(cst) == (0,) and isinstance(values_0, (int, str)):
+                node.doc_string += "#SV-Unsq3"
+                self.set_value_shape(node.output[0], (values_0,))
+                return True
+
+        # after this point, it is all about operator between shapes.
         values = [self.value_as_shape(x) for x in node.input]
         if any(x is None for x in values):
             # it is not a shape
@@ -6626,20 +6643,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_value_shape(node.output[0], tuple(range(*args)))
             return True
 
-        if node.op_type == "Unsqueeze":
-            if isinstance(values[0], tuple) and len(values[0]) > 1:
-                # This cannot be a shape anymore.
-                node.doc_string += "#SV-Unsq/1"
-                return False
-            if self.has_rank(node.input[0]) and self.get_rank(node.input[0]) > 0:
-                # This cannot be a shape anymore.
-                node.doc_string += "#SV-Unsq/2"
-                return False
-            if isinstance(values[0], (int, str)) and values[1] == (0,):
-                node.doc_string += "#SV-Unsq3"
-                self.set_value_shape(node.output[0], (values[0],))
-                return True
-
         if node.op_type in {"Mul", "Add", "Div", "Sub", "Mod"}:
             fct, symbol = {
                 "Add": ((lambda x, y: x + y), "+"),
@@ -6652,11 +6655,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             m2 = values[1]
             if isinstance(m1, int) and isinstance(m2, int):
                 node.doc_string += f"#SV-{node.op_type}1"
-                self.set_value_shape(node.output[0], (fct(m1, m2),))
+                self.set_value_shape(node.output[0], fct(m1, m2))
                 return True
             if isinstance(m1, (int, str)) and isinstance(m2, (int, str)):
                 node.doc_string += f"#SV-{node.op_type}2"
-                self.set_value_shape(node.output[0], (f"{m1}{symbol}{m2}",))
+                self.set_value_shape(node.output[0], f"{m1}{symbol}{m2}")
                 return True
 
             # One of them is a tuple.
