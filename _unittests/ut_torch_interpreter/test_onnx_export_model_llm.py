@@ -40,8 +40,18 @@ def export_utils(
     verbose=0,
     return_builder=False,
     export_options=None,
+    dtype: str = "",
 ):
     export_script(f"{prefix}.onnx", model, *args)
+    if dtype:
+        import torch
+
+        dt = getattr(torch, dtype)
+        model = model.to(dt)
+        args = tuple(
+            (i.to(dt) if i.dtype in {torch.float32, torch.float16} else i) for i in args
+        )
+
     onx = to_onnx(
         model,
         tuple(args),
@@ -227,6 +237,46 @@ class TestOnnxExportLlama(ExtTestCase):
             remove_unused=False,
             return_builder=True,
             export_options=ExportOptions(decomposition_table="default"),
+        )
+        xp = [x.numpy() for x in input_tensors]
+        feeds = {f"input{i}": x for i, x in enumerate(xp)}
+        feeds0 = dict(zip(["input", "attention_mask"], xp))
+
+        from onnxruntime import InferenceSession
+
+        sess = InferenceSession("test_mistral_model.onnx", providers=["CPUExecutionProvider"])
+        results = sess.run(None, feeds0)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+
+        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        results = sess.run(None, feeds)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+
+        ref = ExtendedReferenceEvaluator(onx)
+        results = ref.run(None, feeds)
+        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
+        if has_cuda():
+            self.check_model_ort(
+                onx, providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+            )
+
+    @skipif_ci_windows("not supported yet on Windows")
+    @requires_torch("2.3", "bug")
+    @ignore_warnings(DeprecationWarning)
+    @requires_transformers("4.38")
+    def test_mistral_model_bfloat16(self):
+        model, input_tensors = get_mistral_model()
+        input_tensors = input_tensors[0]
+        expected = model(*input_tensors)
+        # fails with transformers==4.37.2 and torch-nightly==2.4.0.dev20240425+cu118
+        onx, _builder = export_utils(
+            "test_mistral_model",
+            model,
+            *input_tensors,
+            remove_unused=False,
+            return_builder=True,
+            export_options=ExportOptions(decomposition_table="default"),
+            dtype="bfloat16",
         )
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}

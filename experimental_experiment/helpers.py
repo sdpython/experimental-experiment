@@ -1,7 +1,7 @@
 import inspect
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 import numpy as np
-from onnx import FunctionProto, GraphProto, ModelProto, load as onnx_load
+from onnx import FunctionProto, GraphProto, ModelProto, TensorProto, load as onnx_load
 from onnx.helper import np_dtype_to_tensor_dtype
 
 
@@ -22,6 +22,19 @@ def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:
                 f"numpy does not support onnx type {tensor_dtype}. "
                 f"ml_dtypes can be used."
             ) from e
+
+        mapping = {
+            TensorProto.BFLOAT16: ml_dtypes.bfloat16,
+            TensorProto.FLOAT8E4M3FN: ml_dtypes.float8_e4m3fn,
+            TensorProto.FLOAT8E4M3FNUZ: ml_dtypes.float8_e4m3fnuz,
+            TensorProto.FLOAT8E5M2: ml_dtypes.float8_e5m2,
+            TensorProto.FLOAT8E5M2FNUZ: ml_dtypes.float8_e5m2fnuz,
+        }
+        assert (
+            tensor_dtype in mapping
+        ), f"Unable to find tensor_dtype={tensor_dtype!r} in mapping={mapping}"
+        return mapping[tensor_dtype]
+
     from onnx.helper import tensor_dtype_to_np_dtype as cvt
 
     return cvt(tensor_dtype)
