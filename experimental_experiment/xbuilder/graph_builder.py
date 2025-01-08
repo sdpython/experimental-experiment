@@ -6606,7 +6606,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 # This cannot be a shape anymore.
                 node.doc_string += "#SV-Unsq/2"
                 return False
-            cst = self.get_constant(node.input[1], exc=False, computed_value=True)
+            cst = (
+                self.get_constant(node.input[1], exc=False, computed_value=True)
+                if len(node.input) > 1
+                else tuple(self.get_attribute(node, "axes").ints)
+            )
             if cst is not None and tuple(cst) == (0,) and isinstance(values_0, (int, str)):
                 node.doc_string += "#SV-Unsq3"
                 self.set_value_shape(node.output[0], (values_0,))
