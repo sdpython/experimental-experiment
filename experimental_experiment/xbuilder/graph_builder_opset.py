@@ -188,36 +188,42 @@ class Opset:
             raise RuntimeError(f"Unable to call {op_type} on a dynamic input axis={axes}")
         return iaxes
 
-    def ReduceMaxAnyOpset(self, *args, **kwargs):
+    def ReduceMaxAnyOpset(self, *args, name: str = "ReduceMaxAnyOpset", **kwargs):
         if len(args) == 1:
-            return self.ReduceMax(*args, **kwargs)
+            return self.ReduceMax(*args, name=name, **kwargs)
         assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 18:
-            return self.ReduceMax(*args, **kwargs)
-        return self.ReduceMax(args[0], axes=self._iaxes("ReduceMax", args[1]), **kwargs)
+            return self.ReduceMax(*args, name=name, **kwargs)
+        return self.ReduceMax(
+            args[0], axes=self._iaxes("ReduceMax", args[1]), name=name, **kwargs
+        )
 
-    def ReduceMeanAnyOpset(self, *args, **kwargs):
+    def ReduceMeanAnyOpset(self, *args, name: str = "ReduceMeanAnyOpset", **kwargs):
         if len(args) == 1:
-            return self.ReduceMean(*args, **kwargs)
+            return self.ReduceMean(*args, name=name, **kwargs)
         assert len(args) == 2, f"ReduceMeanAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 18:
-            return self.ReduceMean(*args, **kwargs)
-        return self.ReduceMean(args[0], axes=self._iaxes("ReduceMean", args[1]), **kwargs)
+            return self.ReduceMean(*args, name=name, **kwargs)
+        return self.ReduceMean(
+            args[0], axes=self._iaxes("ReduceMean", args[1]), name=name, **kwargs
+        )
 
-    def ReduceSumAnyOpset(self, *args, **kwargs):
+    def ReduceSumAnyOpset(self, *args, name: str = "ReduceSumAnyOpset", **kwargs):
         if len(args) == 1:
-            return self.ReduceSum(*args, **kwargs)
+            return self.ReduceSum(*args, name=name, **kwargs)
         assert len(args) == 2, f"ReduceSumAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
-            return self.ReduceSum(*args, **kwargs)
-        return self.ReduceSum(args[0], axes=self._iaxes("ReduceSum", args[1]), **kwargs)
+            return self.ReduceSum(*args, name=name, **kwargs)
+        return self.ReduceSum(
+            args[0], axes=self._iaxes("ReduceSum", args[1]), name=name, **kwargs
+        )
 
     def SqueezeAnyOpset(self, *args, name: str = "SqueezeAnyOpset", **kwargs):
         if len(args) == 1 and len(kwargs) == 0:
             return self.Squeeze(*args, name=name)
         assert len(args) == 2, f"SqueezeAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
-            return self.Squeeze(*args, name=name**kwargs)
+            return self.Squeeze(*args, name=name, **kwargs)
         return self.Squeeze(args[0], axes=self._iaxes("Squeeze", args[1]), name=name, **kwargs)
 
     def UnsqueezeAnyOpset(self, *args, name: str = "UnsqueezeAnyOpset", **kwargs):
