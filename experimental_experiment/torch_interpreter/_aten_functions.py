@@ -306,8 +306,20 @@ def aten___and___Tensor(
     y: T,
     name: str = "__and___Tensor",
 ) -> T:
-    "and"
+    "inplace and, we assume inplace modifications were removed"
     return aten_and(g, sts, outputs, x, y, name=name)
+
+
+def aten___or___Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "__or___Tensor",
+) -> T:
+    "inplace or, we assume inplace modifications were removed"
+    return aten_or(g, sts, outputs, x, y, name=name)
 
 
 def aten_or(
@@ -5667,10 +5679,11 @@ def aten_mean_dim(
             xc, keepdims=keepdim, outputs=outputs, name="mean_dim"
         )
     else:
-        if isinstance(dim, int):
-            adim = np.array([dim], dtype=np.int64)
-        else:
-            adim = np.array(dim, dtype=np.int64)
+        adim = (
+            np.array([dim], dtype=np.int64)
+            if isinstance(dim, int)
+            else np.array(dim, dtype=np.int64)
+        )
         result = g.op.ReduceMeanAnyOpset(
             xc, adim, keepdims=keepdim, outputs=outputs, name="mean_dim"
         )
@@ -8994,21 +9007,17 @@ def aten_sym_size_int(
     name: str = "sym_size_int",
 ) -> T:
     """
-    Shape + Gather
+    Shape + Squeeze
     """
     assert (
         g.main_opset >= 15
     ), f"aten_sym_size_int is not implemented for opset < 15{g.get_debug_msg()}"
     assert isinstance(dim, int), f"type(dim)={type(int)} must be an int{g.get_debug_msg()}"
-    res = g.op.Shape(x, name=name, start=dim, end=dim + 1)
+    shape_x = g.op.Shape(x, name=name, start=dim, end=dim + 1)
+    res = g.op.Squeeze(shape_x, name=name, outputs=outputs)
     if not sts:
         g.set_type(res, TensorProto.INT64)
-        g.set_shape(
-            res,
-            tuple(
-                1,
-            ),
-        )
+        g.set_shape(res, tuple())
     return res
 
 

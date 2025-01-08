@@ -22,6 +22,8 @@
     op_quick_gelu
     op_replace_zero
     op_rotary
+    op_qlinear_average_pool
+    op_qlinear_conv
     op_scatter_elements
     op_scatternd_of_shape
     op_simplified_layer_normalization

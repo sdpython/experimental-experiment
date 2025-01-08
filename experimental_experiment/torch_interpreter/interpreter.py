@@ -254,8 +254,8 @@ class DynamoInterpreter:
             if self.builder.has_shape(name):
                 shape = self.builder.get_shape(name)
                 self.builder._check_two_shapes_are_compatible(
+                    shape,  # new_shape (or shape infered with onnx node)
                     tuple(exp_shape),  # old_shape
-                    shape,  # new_shape
                     name=name,
                     register_int=False,
                 )
@@ -1736,22 +1736,22 @@ class DynamoInterpreter:
                         description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
                 elif isinstance(v, self.torch.SymInt):
                     # this is a shape
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.INT64)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, self.torch.SymBool):
                     # this is a shape
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.BOOL)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, self.torch.SymFloat):
                     # this is a shape
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.FLOAT)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, int):
                     # this is unknown
-                    self.builder.set_shape(r, (1,))
+                    self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.INT64)
                 elif v is None:
                     continue

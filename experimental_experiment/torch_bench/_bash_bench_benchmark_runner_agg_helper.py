@@ -1841,10 +1841,14 @@ def _process_formulas(
             if (
                 "exporter" in set_columns
                 and "time_export_unbiased" in set_columns
-                and ({"export", "compile"} & set(df.exporter))
+                and ({"export", "export-nostrict", "compile"} & set(df.exporter))
                 and len(set(df.exporter)) > 1
             ):
-                expo = "export" if "export" in set(df.exporter) else "compile"
+                expo = (
+                    "export"
+                    if ({"export", "export-nostrict"} & set(df.exporter))
+                    else "compile"
+                )
                 keep = [*model, *new_keys, "time_export_unbiased"]
                 gr = df[df.exporter == expo][keep].copy()
                 gr["status_control_flow"] = gr["time_export_unbiased"].isna().astype(int)
@@ -2010,7 +2014,7 @@ def _process_formulas(
 
                     assert df.shape[0] == joined.shape[0], (
                         f"Shape mismatch after join {df.shape} -> {joined.shape}, "
-                        f"gr.shape={gr.shape}, on={on}"
+                        f"gr.shape={gr.shape}, on={on}\n---\n{gr}"
                     )
                     df = joined.copy()
                     df["speedup_increase_inductor"] = (
@@ -2154,6 +2158,7 @@ def _process_formulas(
                     "inductor",
                     "eager",
                     "export",
+                    "export-nostrict",
                     "compile",
                     "dort",
                     "cort",
