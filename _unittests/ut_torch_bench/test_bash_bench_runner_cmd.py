@@ -46,6 +46,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         check_file=True,
         output_data=False,
         check_slice_input=False,
+        use_bfloat16=False,
     ):
         if is_windows():
             raise unittest.SkipTest("export does not work on Windows")
@@ -73,6 +74,8 @@ class TestBashBenchRunnerCmd(ExtTestCase):
             "--timeout",
             str(timeout),
         ]
+        if use_bfloat16:
+            args.extend(["--dtype", "bfloat16"])
         if not output_data:
             args.extend(["--output_data", ""])
         if dynamic:

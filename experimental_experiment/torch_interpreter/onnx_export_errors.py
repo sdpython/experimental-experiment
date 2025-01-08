@@ -266,7 +266,7 @@ def bypass_export_some_errors(
     ###############
 
     if patch_torch:
-        from .patches.patch_torch import patched_infer_size
+        from .patches.patch_torch import patched_infer_size, patched__broadcast_shapes
 
         if verbose:
             print("[bypass_export_some_errors] patch pytorch")
@@ -292,6 +292,11 @@ def bypass_export_some_errors(
         # torch._subclasses.fake_impls.infer_size
         f_infer_size = torch._subclasses.fake_impls.infer_size
         torch._subclasses.fake_impls.infer_size = patched_infer_size
+
+        # torch._refs._broadcast_shapes
+        f__broadcast_shapes = torch._refs._broadcast_shapes
+        torch._refs._broadcast_shapes = patched__broadcast_shapes
+        torch._meta_registrations._broadcast_shapes = patched__broadcast_shapes
 
     ####################
     # patch transformers
@@ -366,6 +371,8 @@ def bypass_export_some_errors(
             )
             # tracked by https://github.com/pytorch/pytorch/issues/143495
             torch._subclasses.fake_impls.infer_size = f_infer_size
+            torch._refs._broadcast_shapes = f__broadcast_shapes
+            torch._meta_registrations._broadcast_shapes = f__broadcast_shapes
 
             if verbose:
                 print("[bypass_export_some_errors] restored pytorch functions")

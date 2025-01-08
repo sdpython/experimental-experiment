@@ -14,10 +14,14 @@ def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:
     :return: numpy's data_type
     """
     if tensor_dtype >= 16:
-        raise ValueError(
-            f"Unsupported value for tensor_dtype, "
-            f"numpy does not support onnx type {tensor_dtype}."
-        )
+        try:
+            import ml_dtypes  # noqa: F401
+        except ImportError as e:
+            raise ValueError(
+                f"Unsupported value for tensor_dtype, "
+                f"numpy does not support onnx type {tensor_dtype}. "
+                f"ml_dtypes can be used."
+            ) from e
     from onnx.helper import tensor_dtype_to_np_dtype as cvt
 
     return cvt(tensor_dtype)
@@ -89,6 +93,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, torch.Tensor):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
+            if obj.numel() == 0:
+                return f"{s}[empty]"
             n_nan = obj.reshape((-1,)).isnan().to(int).sum()
             if n_nan > 0:
                 if obj.dtype in {torch.complex64, torch.complex128}:
