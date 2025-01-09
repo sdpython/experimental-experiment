@@ -1546,14 +1546,6 @@ class DynamoInterpreter:
         self.builder.make_node(
             fname, [*input_names, *new_inits], output_names, domain=fdomain, name=name_fct
         )
-        if not can_set:
-            for o in output_names:
-                if new_builder.has_type(o):
-                    self.builder.set_type(o)
-                if new_builder.has_shape(o):
-                    self.builder.set_shape(o)
-                elif new_builder.has_rank(o):
-                    self.builder.set_rank(o)
         return output_names[0] if len(output_names) == 1 else output_names
 
     def _get_output_names(self, node: "torch.fx.Node") -> List[str]:  # noqa: F821

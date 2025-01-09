@@ -1,6 +1,6 @@
 import inspect
 import sys
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import FunctionProto, GraphProto, ModelProto, TensorProto, load as onnx_load
 from onnx.helper import (
@@ -517,3 +517,36 @@ def np_dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
             if dt == ml_dtypes.float8_e5m2fnuz:
                 return TensorProto.FLOAT8E5M2FNUZ
     raise ValueError(f"Unable to convert type {dt}")
+
+
+def rename_dynamic_dimensions(
+    constraints: Dict[str, Set[str]], original: Set[str]
+) -> Dict[str, str]:
+    """
+    Renames dynamic shapes as requested by the user. :func:`torch.export.export` uses
+    many names for dynamic dimensions. When building the onnx model,
+    some of them are redundant and can be replaced by the name provided by the user.
+
+    :param constraints: exhaustive list of used name and all the values equal to it
+    :param original: the names to use if possible
+    :return: replacement dictionary
+    """
+    replacements = {s: s for s in original}
+    all_values = set(constraints) | original
+
+    not_done = set(constraints)
+    max_iter = len(replacements)
+    while not_done and max_iter > 0:
+        max_iter -= 1
+        for k, v in constraints.items():
+            common = v & original
+            if not common:
+                continue
+            common = sorted(common)
+            by = common[0]
+            replacements[k] = by
+            for vv in v:
+                if vv not in replacements:
+                    replacements[vv] = by
+        not_done = all_values - set(replacements)
+    return replacements

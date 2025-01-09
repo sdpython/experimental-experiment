@@ -156,13 +156,14 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
             with redirect_stdout(st), warnings.catch_warnings():
                 warnings.simplefilter("ignore", (UserWarning, DeprecationWarning))
                 try:
-                    return fct(self)
+                    fct(self)
                 except AssertionError as e:
                     if "torch is not recent enough, file" in str(e):
                         raise unittest.SkipTest(str(e))  # noqa: B904
                     raise
             if f is not None:
                 f(st.getvalue())
+            return None
 
         return call_f
 

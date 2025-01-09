@@ -39,6 +39,7 @@ from ..helpers import (
     make_hash,
     string_sig,
     pretty_onnx,
+    rename_dynamic_dimensions,
     string_signature,
     string_type,
     tensor_dtype_to_np_dtype,
@@ -1331,7 +1332,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         self.torch.bool,
                     ):
                         return False
-                    if shape is not None and len(shape) >= 2:
+                    if not self.has_type(name) or (shape is not None and len(shape) >= 2):
                         return False
                     dtype = self.get_type(name)
                     if dtype in {
@@ -4850,7 +4851,23 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         return (model, stats) if return_optimize_report else model
 
-    def _add_shape_information(self, model: ModelProto):
+    def _add_shape_information(self, model: ModelProto, update_dim_names: bool = True):
+        """
+        Adds shape information to the model.
+
+        :param model: final onnx model
+        :param update_dim_names: the conversion usually detects many dimension equivalent
+            among each others, if True, the function renames as much as possible by using
+            the names the user provides
+        """
+        if update_dim_names:
+            replacements = rename_dynamic_dimensions(
+                self.constraints_, set(self.dynamic_dimensions_source)
+            )
+        else:
+            replacements = {}
+        assert replacements is not None
+
         if len(model.graph.node) == 0:
             raise RuntimeError(
                 f"The onnx model is empty after export to onnx (no node)."

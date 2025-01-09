@@ -60,13 +60,18 @@ class TestTools(ExtTestCase):
         self.assertEqual(len(onx.functions), 1)
 
         self.assertRaise(
-            lambda: gr.to_onnx(as_function=True, function_name="lr"), AssertionError
+            lambda: gr.to_onnx(
+                function_options=FunctionOptions(export_as_function=True, name="lr")
+            ),
+            AssertionError,
         )
         gr.inline_functions(verbose=1)
         function_proto = gr.to_onnx(
-            as_function=True,
-            function_name="lr",
-            function_domain="custom_domain",
+            function_options=FunctionOptions(
+                export_as_function=True,
+                name="lr",
+                domain="custom_domain",
+            )
         )
         self.assertNotEmpty(function_proto)
 
@@ -306,15 +311,15 @@ class TestTools(ExtTestCase):
                     "custom",
                     "Regression",
                     ["X", "weights", "bias"],
-                    ["_onx_regression0"],
+                    ["_onx_regression_X0"],
                 ),
-                ("", "Add", ["_onx_regression0", "bias2"], ["Y"]),
+                ("", "Add", ["_onx_regression_X0", "bias2"], ["Y"]),
             ],
         )
 
         # finally, the conversion to onnx
         text = g.pretty_text()
-        self.assertIn("_onx_regression0, bias2", text)
+        self.assertIn("_onx_regression_X0, bias2", text)
         fct = g.to_onnx(
             function_options=FunctionOptions(
                 name="linear", domain="mine", return_initializer=True

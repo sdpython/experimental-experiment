@@ -5,8 +5,16 @@ import textwrap
 from collections import Counter
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import numpy as np
-from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto
-from ..xbuilder._dtype_helper import string_to_elem_type
+from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
+
+
+def string_to_elem_type(name: str) -> int:
+    """
+    Converts a string into an element type.
+    INT64 -> TensorProto.INT64
+    """
+    assert hasattr(TensorProto, name), f"Unable to interpret type {name!r}"
+    return getattr(TensorProto, name)
 
 
 class MatchResult:
