@@ -1,3 +1,4 @@
+from typing import List, Sequence, Union
 import torch
 
 
@@ -46,3 +47,40 @@ def patched_infer_size(a, b):
             # Try model SmolLM.
             expandedSizes[i] = torch.sym_max(sizeA, sizeB)
     return tuple(expandedSizes)
+
+
+def patched__broadcast_shapes(*_shapes):
+    """Patches ``torch._refs._broadcast_shapes``."""
+    from functools import reduce
+    from torch._prims_common import IntLike
+    from torch.fx.experimental.symbolic_shapes import guard_size_oblivious
+
+    shapes = tuple(
+        (x,) if isinstance(x, IntLike) else x for x in filter(lambda x: x is not None, _shapes)
+    )
+
+    # Short-circuits on no input
+    if len(shapes) == 0:
+        return None
+
+    # Type checking
+    # TODO: make common validations available as utils
+    for shape in shapes:
+        assert isinstance(shape, Sequence)
+
+    # Computes common shape
+    common_shape: List[Union[int, torch.SymInt]] = [
+        1,
+    ] * reduce(max, (len(shape) for shape in shapes))
+    for _arg_idx, shape in enumerate(shapes):
+        for idx in range(-1, -1 - len(shape), -1):
+            if guard_size_oblivious(common_shape[idx] == 1):
+                if shape[idx] < 0:
+                    raise ValueError(
+                        "Attempting to broadcast a dimension with negative length!"
+                    )
+                common_shape[idx] = shape[idx]
+            elif guard_size_oblivious(shape[idx] != 1):
+                common_shape[idx] = torch.sym_max(common_shape[idx], shape[idx])
+
+    return common_shape

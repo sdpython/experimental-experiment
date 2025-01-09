@@ -14,8 +14,12 @@ from onnx.helper import (
     make_node,
     make_tensor_value_info,
 )
-from onnx.numpy_helper import from_array
-from ..helpers import tensor_dtype_to_np_dtype
+from ..helpers import (
+    tensor_dtype_to_np_dtype,
+    from_array_extended,
+    onnx_dtype_to_torch_dtype,
+    torch_dtype_to_onnx_dtype,
+)
 from ..xbuilder._shape_helper import (
     all_float,
     all_int,
@@ -23,10 +27,6 @@ from ..xbuilder._shape_helper import (
     is_static_dimension,
     is_static_shape,
     DYNAMIC_SHAPE,
-)
-from ..xbuilder._dtype_helper import (
-    onnx_dtype_to_torch_dtype,
-    torch_dtype_to_onnx_dtype,
 )
 from ..xbuilder.graph_builder import GraphBuilder
 from ..xbuilder.shape_type_compute import (
@@ -2445,8 +2445,8 @@ def aten_embedding_bag_padding_idx(
             make_tensor_value_info("reduced_embedings", itype, None),
         ],
         [
-            from_array(np.array([0], dtype=np.int64), name="zero"),
-            from_array(np.array([1], dtype=np.int64), name="one"),
+            from_array_extended(np.array([0], dtype=np.int64), name="zero"),
+            from_array_extended(np.array([1], dtype=np.int64), name="one"),
         ],
     )
 
@@ -2484,7 +2484,7 @@ def aten_embedding_bag_padding_idx(
 
     offset2bag = g.op.ConstantOfShape(
         offset2bag_shape,
-        value=from_array(np.array([0], dtype=np.int64)),
+        value=from_array_extended(np.array([0], dtype=np.int64)),
         name=name,
         outputs=[outputs[1]],
     )
@@ -2492,7 +2492,7 @@ def aten_embedding_bag_padding_idx(
     if len(outputs) > 2:
         bag_size = g.op.ConstantOfShape(
             bag_size_shape,
-            value=from_array(np.array([0], dtype=np.int64)),
+            value=from_array_extended(np.array([0], dtype=np.int64)),
             name=name,
             outputs=[outputs[2]],
         )
@@ -2500,7 +2500,7 @@ def aten_embedding_bag_padding_idx(
     if len(outputs) > 3:
         max_indices = g.op.ConstantOfShape(
             max_indices_shape,
-            value=from_array(np.array([0], dtype=np.int64)),
+            value=from_array_extended(np.array([0], dtype=np.int64)),
             name=name,
             outputs=[outputs[3]],
         )
@@ -3072,7 +3072,7 @@ def aten_full(
 
     if tsize is None:
         # A scalar
-        v = from_array(value.squeeze())
+        v = from_array_extended(value.squeeze())
         res = g.op.Constant(value=v, outputs=outputs, name=f"{name}{suffx}1")
         if not sts:
             g.set_type(res, itype)
@@ -3080,7 +3080,7 @@ def aten_full(
         return res
 
     res = g.op.ConstantOfShape(
-        tsize, value=from_array(value), outputs=outputs, name=f"{name}{suffx}2"
+        tsize, value=from_array_extended(value), outputs=outputs, name=f"{name}{suffx}2"
     )
     if not sts:
         g.set_type(res, itype)
@@ -6046,7 +6046,7 @@ def aten_native_layer_norm(
         dtype = tensor_dtype_to_np_dtype(g.get_type(x))
         weight = g.op.ConstantOfShape(
             g.op.Shape(x, start=start_axis, name=name),
-            value=from_array([1], dtype=dtype),
+            value=from_array_extended([1], dtype=dtype),
             name=name,
         )
 
@@ -6346,7 +6346,9 @@ def aten_cudnn_batch_norm(
 
     d = g.op.ConstantOfShape(
         np.array([0], dtype=np.int64),
-        value=from_array(np.array([0], dtype=tensor_dtype_to_np_dtype(TensorProto.UINT8))),
+        value=from_array_extended(
+            np.array([0], dtype=tensor_dtype_to_np_dtype(TensorProto.UINT8))
+        ),
         outputs=outputs[3:],
         name=name,
     )
@@ -6732,7 +6734,7 @@ def aten_ones(
         dtype = torch.float32
     res = g.op.ConstantOfShape(
         isize,
-        value=from_array(
+        value=from_array_extended(
             np.array([1], dtype=tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype)))
         ),
         outputs=outputs,
@@ -7981,7 +7983,7 @@ def aten_setitem(
     mask = g.op.Pad(
         g.op.ConstantOfShape(
             g.op.Shape(values, name=name),
-            value=from_array(np.array([0], dtype=dtype)),
+            value=from_array_extended(np.array([0], dtype=dtype)),
             name=name,
         ),
         padding_x_cst,
@@ -8058,7 +8060,7 @@ def aten_slice_backward(
     assert step == 1, f"slice_backward not implemented for step={step}{g.get_debug_msg()}"
 
     itype = g.get_type(grad_output)
-    value = from_array(np.array([0], dtype=tensor_dtype_to_np_dtype(itype)))
+    value = from_array_extended(np.array([0], dtype=tensor_dtype_to_np_dtype(itype)))
 
     inputs = []
 

@@ -2,9 +2,12 @@ import contextlib
 from typing import Dict, Generator, List, Tuple
 import numpy as np
 from onnx import NodeProto
-from ..helpers import tensor_dtype_to_np_dtype
+from ..helpers import (
+    tensor_dtype_to_np_dtype,
+    dtype_to_tensor_dtype,
+    onnx_dtype_to_torch_dtype,
+)
 from ._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
-from ._dtype_helper import dtype_to_tensor_dtype, onnx_dtype_to_torch_dtype
 
 
 @contextlib.contextmanager
@@ -260,7 +263,7 @@ class _GraphBuilderRuntime:
             # Type conversion between numpy and torch is not robust.
             itype = dtype_to_tensor_dtype(x.dtype)
             ttype = onnx_dtype_to_torch_dtype(itype)
-            x = self.torch.Tensor(x).to(ttype)
+            x = self.make_torch_tensor_from_np_array(x).to(ttype)
             assert "FakeTensor" not in str(type(x)), (
                 f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
                 f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"
@@ -369,7 +372,7 @@ class _GraphBuilderRuntime:
                 # Type conversion between numpy and torch is not robust.
                 itype = dtype_to_tensor_dtype(v.dtype)
                 ttype = onnx_dtype_to_torch_dtype(itype)
-                x = self.torch.Tensor(v.copy()).to(ttype)
+                x = self.make_torch_tensor_from_np_array(v.copy()).to(ttype)
                 assert "FakeTensor" not in str(type(x)), (
                     f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
                     f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"

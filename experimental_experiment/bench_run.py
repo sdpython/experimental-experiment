@@ -523,7 +523,9 @@ def flatten_object(x: Any) -> List[Any]:
         return tuple(res)
     if x.__class__.__name__ == "MambaCache":
         return tuple(x.conv_states, x.ssm_states)
-    raise TypeError(f"Unexpected type {type(x)} for x")
+    if hasattr(x, "to_tuple"):
+        return flatten_object(x.to_tuple())
+    raise TypeError(f"Unexpected type {type(x)} for x, methods are {dir(x.__class__)}")
 
 
 def max_diff(

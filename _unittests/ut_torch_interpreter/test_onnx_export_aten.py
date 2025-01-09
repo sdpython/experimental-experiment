@@ -12,7 +12,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from experimental_experiment.helpers import torch_dtype_to_onnx_dtype
 
 
 class TestOnnxExportAten(ExtTestCase):

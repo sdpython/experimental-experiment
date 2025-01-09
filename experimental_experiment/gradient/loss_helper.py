@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy
 from onnx import ModelProto
 from onnx.mapping import TENSOR_TYPE_TO_NP_TYPE
-from onnx.numpy_helper import to_array, from_array
+from onnx.numpy_helper import to_array
 from onnx.helper import (
     make_node,
     make_graph,
@@ -12,6 +12,7 @@ from onnx.helper import (
     set_model_props,
 )
 from onnx import TensorProto
+from ..helpers import from_array_extended
 
 
 def _unique_name(existing_names: Set[str], name: str) -> str:
@@ -113,8 +114,8 @@ def _loss_elastic(
     l1_name = _unique_name(existing_names, "l1_name")
     l2_name = _unique_name(existing_names, "l2_name")
     dtype = TENSOR_TYPE_TO_NP_TYPE[elem]
-    onx_l1_weight = from_array(numpy.array([l1_weight], dtype=dtype), name=l1_name)
-    onx_l2_weight = from_array(numpy.array([l2_weight], dtype=dtype), name=l2_name)
+    onx_l1_weight = from_array_extended(numpy.array([l1_weight], dtype=dtype), name=l1_name)
+    onx_l2_weight = from_array_extended(numpy.array([l2_weight], dtype=dtype), name=l2_name)
     inits = [onx_l1_weight, onx_l2_weight]
 
     diff_name = _unique_name(existing_names, "loss_diff")
@@ -173,10 +174,10 @@ def _loss_log(
     eps1_name = _unique_name(existing_names, "eps1_name")
     axes_name = _unique_name(existing_names, "axes_name")
 
-    eps_init = from_array(numpy.array([eps], dtype=dtype), name=eps_name)
-    one_init = from_array(numpy.array([1], dtype=dtype), name=one_name)
-    eps1_init = from_array(numpy.array([1 - eps], dtype=dtype), name=eps1_name)
-    axes_init = from_array(numpy.array([1], dtype=numpy.int64), name=axes_name)
+    eps_init = from_array_extended(numpy.array([eps], dtype=dtype), name=eps_name)
+    one_init = from_array_extended(numpy.array([1], dtype=dtype), name=one_name)
+    eps1_init = from_array_extended(numpy.array([1 - eps], dtype=dtype), name=eps1_name)
+    axes_init = from_array_extended(numpy.array([1], dtype=numpy.int64), name=axes_name)
 
     clip_name = _unique_name(existing_names, "clip_name")
     clip_red_name = _unique_name(existing_names, "clip_red_name")
@@ -209,7 +210,7 @@ def _loss_log(
         like_name = likew_name
 
     shape_name = _unique_name(existing_names, "shape_name")
-    onx_shape = from_array(numpy.array([1, 1], dtype=numpy.int64), name=shape_name)
+    onx_shape = from_array_extended(numpy.array([1, 1], dtype=numpy.int64), name=shape_name)
     reduced_loss = _unique_name(existing_names, "reduced_loss")
     neg_reduced_loss = _unique_name(existing_names, "neg_reduced_loss")
     nodes.extend(
@@ -250,7 +251,7 @@ def penalty_loss_onnx(
     suffix = name
     cst_shape = _unique_name(existing_names, f"shape_{suffix}")
     new_name = _unique_name(existing_names, f"reshaped_{suffix}")
-    inits = [from_array(numpy.array([-1], dtype=numpy.int64), name=cst_shape)]
+    inits = [from_array_extended(numpy.array([-1], dtype=numpy.int64), name=cst_shape)]
     nodes = [make_node("Reshape", [name, cst_shape], [new_name])]
     name = new_name
 
@@ -260,7 +261,7 @@ def penalty_loss_onnx(
                 f"l1 and l2 cannot be null or None at the same time, name={name!r}."
             )
         l2_name = _unique_name(existing_names, f"l2_weight_{suffix}")
-        inits.extend([from_array(numpy.array([l2], dtype=dtype), name=l2_name)])
+        inits.extend([from_array_extended(numpy.array([l2], dtype=dtype), name=l2_name)])
         mul_name = _unique_name(existing_names, f"reduced0_{suffix}")
         red_name = _unique_name(existing_names, f"reduced_{suffix}")
         pen_name = _unique_name(existing_names, f"penalty_{suffix}")
@@ -275,7 +276,7 @@ def penalty_loss_onnx(
 
     if l2 is None or l2 == 0:
         l1_name = _unique_name(existing_names, f"l1_weight_{suffix}")
-        inits.extend([from_array(numpy.array([l1], dtype=dtype), name=l1_name)])
+        inits.extend([from_array_extended(numpy.array([l1], dtype=dtype), name=l1_name)])
         red_name = _unique_name(existing_names, f"reduced_{suffix}")
         abs_name = _unique_name(existing_names, f"absolute_{suffix}")
         pen_name = _unique_name(existing_names, f"penalty_{suffix}")
@@ -292,8 +293,8 @@ def penalty_loss_onnx(
     l2_name = _unique_name(existing_names, f"l2_weight_{suffix}")
     inits.extend(
         [
-            from_array(numpy.array([l1], dtype=dtype), name=l1_name),
-            from_array(numpy.array([l2], dtype=dtype), name=l2_name),
+            from_array_extended(numpy.array([l1], dtype=dtype), name=l1_name),
+            from_array_extended(numpy.array([l2], dtype=dtype), name=l2_name),
         ]
     )
 
@@ -575,7 +576,9 @@ def add_loss_output(
             pen_name = current
 
         cst_shape = _unique_name(existing_names, "shapevect")
-        inits.append(from_array(numpy.array([-1, 1], dtype=numpy.int64), name=cst_shape))
+        inits.append(
+            from_array_extended(numpy.array([-1, 1], dtype=numpy.int64), name=cst_shape)
+        )
         loss_reshape = _unique_name(existing_names, "loss_reshape")
         pen_reshape = _unique_name(existing_names, "penalty_reshape")
         nodes.extend(

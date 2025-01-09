@@ -66,7 +66,7 @@ Full Example
     from transformers import AutoConfig, AutoModelForCausalLM
 
     location = "meta-llama/Llama-2-7b-hf"
-    cahce_dir = "_cache"
+    cache_dir = "_cache"
     l_config = AutoConfig.from_pretrained(
         location, use_auth_token=use_auth_token, cache_dir=cache_dir
     )

@@ -6,7 +6,7 @@ import numpy as np
 from onnx import AttributeProto, NodeProto, TensorProto
 from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
-import onnx.numpy_helper as onh
+from ..helpers import from_array_extended
 from ..xbuilder._onnx_helper import enumerate_subgraphs
 from ..xbuilder.type_inference import infer_types
 from .patterns_api import MatchResult, PatternOptimization
@@ -808,7 +808,7 @@ class GraphBuilderPatternOptimization:
             ), f"Name mismatch {name!r} != {init.name!r}"
             return oh.make_node("Constant", [], [init.name], value=init)
         if isinstance(init, np.ndarray):
-            return self._to_cstop(onh.from_array(init, name=name))
+            return self._to_cstop(from_array_extended(init, name=name))
         import torch
 
         if isinstance(init, torch.Tensor):

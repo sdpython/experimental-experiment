@@ -35,12 +35,16 @@ from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from ..helpers import (
+    from_array_extended,
     make_hash,
     string_sig,
     pretty_onnx,
     string_signature,
     string_type,
     tensor_dtype_to_np_dtype,
+    dtype_to_tensor_dtype,
+    onnx_dtype_to_torch_dtype,
+    torch_dtype_to_onnx_dtype,
 )
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
@@ -64,11 +68,6 @@ from ._onnx_helper import (
     unary_like_op_types,
 )
 from .model_container import TorchModelContainer, proto_from_array, _get_type
-from ._dtype_helper import (
-    dtype_to_tensor_dtype,
-    onnx_dtype_to_torch_dtype,
-    torch_dtype_to_onnx_dtype,
-)
 from .optimization_options import OptimizationOptions
 from .expression_dimension import Expression, parse_expression, parse_expression_tokens
 from .graph_builder_opset import Opset
@@ -2226,16 +2225,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             value = np.array(value, dtype=np.int64)
         elif isinstance(value, float):
             value = np.array(value, dtype=np.float32)
+        elif isinstance(value, TensorProto):
+            pass
+        elif isinstance(value, np.ndarray):
+            pass
         elif hasattr(value, "data"):
             # torch.nn.parameter.Parameter -> np.ndarray
             assert "FakeTensor" not in str(type(value)), (
                 f"FakeTensor {name!r} cannot be an initializer {type(value)}"
                 f"{self.get_debug_msg()}"
             )
-        elif isinstance(value, TensorProto):
-            pass
-        elif isinstance(value, np.ndarray):
-            pass
         else:
             raise RuntimeError(
                 f"Initializer name={name!r}, "
@@ -4111,7 +4110,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         getattr(TensorProto, "UINT4", 0),
                         getattr(TensorProto, "INT4", 0),
                     }:
-                        t = onh.from_array(v, name=k)
+                        t = from_array_extended(v, name=k)
                         t.doc_string += doc_string
                         initializer.append(t)
                         continue
@@ -4119,13 +4118,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                     from_np = True
                 elif isinstance(v, np.float32):
                     # This should not happen.
-                    t = onh.from_array(np.array([v], dtype=np.float32), name=k)
+                    t = from_array_extended(np.array([v], dtype=np.float32), name=k)
                     t.doc_string += doc_string
                     initializer.append(t)
                     continue
                 elif isinstance(v, np.float16):
                     # This should not happen.
-                    t = onh.from_array(np.array([v], dtype=np.float16), name=k)
+                    t = from_array_extended(np.array([v], dtype=np.float16), name=k)
                     t.doc_string += doc_string
                     initializer.append(t)
                     continue
@@ -4194,9 +4193,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if self.verbose > 2 and np.prod(v.shape) > 100:
                     print(
                         f"[GraphBuilder-{self._hash()}._build_initializers]"
-                        f"onh.from_array:{k}:{v.dtype}[{v.shape}]"
+                        f"from_array_extended:{k}:{v.dtype}[{v.shape}]"
                     )
-                t = onh.from_array(v, name=k)
+                t = from_array_extended(v, name=k)
                 t.doc_string += doc_string
                 res.append(t)
                 continue
@@ -7511,7 +7510,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 tt = self.torch.from_numpy(a.reshape((1,)).copy())
                 tt = tt[0]
             else:
-                tt = self.torch.Tensor(a)
+                tt = self.make_torch_tensor_from_np_array(a)
             ttype = onnx_dtype_to_torch_dtype(dtype_to_tensor_dtype(a.dtype))
             res = tt.to(ttype)
             assert a.shape == tuple(res.shape), (
@@ -8081,3 +8080,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             return n
 
         return tuple(self.torch.SymInt(_new_name(f"{prefix}_d{i}")) for i in range(rank))
+
+    def make_torch_tensor_from_np_array(
+        self, np_array: np.ndarray
+    ) -> "torch.Tensor":  # noqa: F821
+        """
+        Converts a numpy array into a :class:`torch.Tensor`.
+        """
+        try:
+            import ml_dtypes
+        except ImportError:
+            ml_dtypes = None
+        if ml_dtypes is not None:
+            dt = np_array.dtype
+            if dt == ml_dtypes.bfloat16:
+                return self.torch.tensor(np_array.astype(np.float32)).to(self.torch.bfloat16)
+        return self.torch.tensor(np_array)

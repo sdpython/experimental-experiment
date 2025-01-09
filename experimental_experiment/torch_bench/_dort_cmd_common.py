@@ -36,8 +36,6 @@ def get_fused_aten_ops_dispatcher():
             f"Unexpected kwargs {kwargs} in "
             f"onnx_scaled_dot_product_efficient_attention{g.get_debug_msg()}"
         )
-        # itype = g.get_type(value)
-        # dtype = tensor_dtype_to_np_dtype(itype)
         t_compute_log_sumexp = g.make_initializer(
             "",
             np.array(compute_log_sumexp, dtype=np.bool_),

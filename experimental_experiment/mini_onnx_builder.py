@@ -4,8 +4,12 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 from onnx import GraphProto, ModelProto, TensorProto
 import onnx.helper as oh
-import onnx.numpy_helper as onh
-from .helpers import string_type, tensor_dtype_to_np_dtype
+from .helpers import (
+    string_type,
+    tensor_dtype_to_np_dtype,
+    from_array_extended,
+    np_dtype_to_tensor_dtype,
+)
 
 STORAGE_TYPE = {
     TensorProto.FLOAT16: np.int16,
@@ -95,7 +99,7 @@ def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
     :return: onnx type
     """
     try:
-        return oh.np_dtype_to_tensor_dtype(dt)
+        return np_dtype_to_tensor_dtype(dt)
     except (KeyError, TypeError):
         pass
     return torch_dtype_to_onnx_dtype(dt)
@@ -319,21 +323,21 @@ class MiniOnnxBuilder:
                         getattr(TensorProto, "UINT4", 0),
                         getattr(TensorProto, "INT4", 0),
                     }:
-                        t = onh.from_array(v, name=k)
+                        t = from_array_extended(v, name=k)
                         initializer.append(t)
                         continue
 
                     from_np = True
                 elif isinstance(v, np.float32):
-                    t = onh.from_array(np.array([v], dtype=np.float32), name=k)
+                    t = from_array_extended(np.array([v], dtype=np.float32), name=k)
                     initializer.append(t)
                     continue
                 elif isinstance(v, np.float64):
-                    t = onh.from_array(np.array([v], dtype=np.float64), name=k)
+                    t = from_array_extended(np.array([v], dtype=np.float64), name=k)
                     initializer.append(t)
                     continue
                 elif isinstance(v, np.float16):
-                    t = onh.from_array(np.array([v], dtype=np.float16), name=k)
+                    t = from_array_extended(np.array([v], dtype=np.float16), name=k)
                     initializer.append(t)
                     continue
                 else:
@@ -371,7 +375,7 @@ class MiniOnnxBuilder:
                 res.append(t)
                 continue
             if isinstance(v, np.ndarray):
-                t = onh.from_array(v, name=k)
+                t = from_array_extended(v, name=k)
                 res.append(t)
                 continue
             raise TypeError(
