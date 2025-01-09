@@ -102,7 +102,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             verbose=0,
             optimization_options=OptimizationOptions(
                 remove_identity=False,
-                verbose=0 if __name__ == "__main__" else 0,
+                verbose=0,
                 patterns="default",
             ),
         )
