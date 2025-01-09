@@ -50,14 +50,60 @@ Source are `sdpython/experimental-experiment
     CHANGELOGS
     license
 
-Older versions
-++++++++++++++
-
-* `0.1.0 <../v0.1.0/index.html>`_
-
 The documentation was updated on:
 
 .. runpython::
     
     import datetime
     print(datetime.datetime.now())
+
+With the following versions:
+
+.. runpython::
+
+    import numpy    
+    import ml_dtypes
+    import sklearn
+    import onnx
+    import onnxruntime
+    import onnxscript
+    import torch
+    import transformers
+    import monai
+    import timm
+
+    for m in [
+        numpy,
+        ml_dtypes,
+        sklearn,
+        onnx,
+        onnxruntime,
+        onnxscript,
+        torch,
+        transformers,
+        monai,
+        timm,
+    ]:
+        print(f"{m.__name__}: {m.__version__}")
+
+    from experimental_experiment.ext_test_case import has_onnxruntime_training
+    print(f"has_onnxruntime_training: {has_onnxruntime_training()}")
+
+Size of the package:
+
+.. runpython::
+
+    import os
+    import pprint
+    import pandas
+    from experimental_experiment import __file__
+    from experimental_experiment.ext_test_case import statistics_on_folder
+
+    df = pandas.DataFrame(statistics_on_folder(os.path.dirname(__file__), aggregation=1))
+    gr = df[["dir", "ext", "lines", "chars"]].groupby(["ext", "dir"]).sum()
+    print(gr)
+
+Older versions
+++++++++++++++
+
+* `0.1.0 <../v0.1.0/index.html>`_

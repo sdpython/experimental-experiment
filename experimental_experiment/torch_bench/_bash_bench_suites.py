@@ -16,6 +16,7 @@ from ..torch_models.llm_model_helper import (
     get_phi2,
     get_phi35_mini_instruct,
     get_phi35_vision_instruct,
+    get_phi4,
     get_smollm_1_7b,
 )
 
@@ -247,6 +248,30 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                         ),
                         dict(strict=False, replace_dynamic_cache=True),
+                    )
+                ),
+                "Phi4LM_2LayerNoCache": (
+                    lambda: (
+                        get_phi4(
+                            num_hidden_layers=2,
+                            input_cache=False,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=False),
+                    )
+                ),
+                "Phi4LM_2Layer": (
+                    lambda: (
+                        get_phi4(
+                            num_hidden_layers=2,
+                            input_cache=True,
+                            _attn_implementation="eager",
+                            common_dynamic_shapes=True,
+                            batch_size=2,
+                        ),
+                        dict(strict=False, replace_dynamic_cache=False),
                     )
                 ),
                 "SmolLM17b_2LayerNoCache": (

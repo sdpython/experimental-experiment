@@ -982,12 +982,25 @@ def statistics_on_folder(
 
     .. runpython::
         :showcode:
+        :toggle:
 
         import os
         import pprint
         from experimental_experiment.ext_test_case import statistics_on_folder, __file__
 
         pprint.pprint(statistics_on_folder(os.path.dirname(__file__)))
+
+    Aggregated:
+
+    .. runpython::
+        :showcode:
+        :toggle:
+
+        import os
+        import pprint
+        from experimental_experiment.ext_test_case import statistics_on_folder, __file__
+
+        pprint.pprint(statistics_on_folder(os.path.dirname(__file__), aggregation=1))
     """
     if isinstance(folder, list):
         rows = []

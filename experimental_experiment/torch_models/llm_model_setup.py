@@ -39,7 +39,7 @@ class LLMInputKind(enum.IntEnum):
 def get_input_cache(
     num_hidden_layers: int,
     batch_size: int,
-    num_attention_heads: int,
+    num_key_value_heads: int,
     sequence_length: int,
     cache_last_dim: int,
     device: str,
@@ -56,10 +56,10 @@ def get_input_cache(
         for i in range(num_hidden_layers):
             cache.update(
                 torch.randn(
-                    batch_size, num_attention_heads, sequence_length, cache_last_dim
+                    batch_size, num_key_value_heads, sequence_length, cache_last_dim
                 ).to(device),
                 torch.randn(
-                    batch_size, num_attention_heads, sequence_length, cache_last_dim
+                    batch_size, num_key_value_heads, sequence_length, cache_last_dim
                 ).to(device),
                 i,
             )
@@ -110,7 +110,7 @@ def finalize_llm_setup(
     common_dynamic_shapes: bool = True,
     inputs_as_tuple: bool = False,
     num_hidden_layers: int = 2,
-    num_attention_heads: int = 32,
+    num_key_value_heads: int = 32,
     input_cache: bool = True,
     device: str = "cpu",
     seq_length_multiple: int = 1,
@@ -162,7 +162,7 @@ def finalize_llm_setup(
         cache = get_input_cache(
             num_hidden_layers,
             batch_size,
-            num_attention_heads,
+            num_key_value_heads,
             sequence_length,
             cache_last_dim,
             device=device,
@@ -171,7 +171,7 @@ def finalize_llm_setup(
         cache2 = get_input_cache(
             num_hidden_layers,
             batch_size + 1,
-            num_attention_heads,
+            num_key_value_heads,
             sequence_length + sequence_inc,
             cache_last_dim,
             device=device,

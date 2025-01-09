@@ -551,6 +551,67 @@ class TestLlmModelHelper(ExtTestCase):
         with bypass_export_some_errors(replace_dynamic_cache=True):
             torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
 
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    # @long_test(): let's keep this test to avoid any regression.
+    def test_get_phi4_export(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi4,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        data = get_phi4(
+            batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
+        )
+        model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+        with bypass_export_some_errors(
+            replace_dynamic_cache=True, catch_constraints=False
+        ) as modificator:
+            model_inputs = modificator(model_inputs)
+            torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
+
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @skipif_ci_windows("not supported")
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    @long_test()
+    def test_get_phi4_onnx(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_phi4,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        data = get_phi4(
+            batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
+        )
+        model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+        with bypass_export_some_errors(
+            replace_dynamic_cache=True, catch_constraints=False
+        ) as modificator:
+            model_inputs = modificator(model_inputs)
+            to_onnx(
+                model,
+                (),
+                model_inputs,
+                dynamic_shapes=ds,
+                filename="test_get_phi4_onnx.onnx",
+                export_options=ExportOptions(strict=False),
+            )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
