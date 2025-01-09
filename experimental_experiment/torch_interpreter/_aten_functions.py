@@ -62,6 +62,22 @@ def aten__assert_scalar(
     return g.op.Identity(x, name=name, outputs=outputs)
 
 
+def aten__assert_tensor_metadata(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    size: Optional[List[int]] = None,
+    stride: Optional[List[int]] = None,
+    scalar_type: Optional["torch.dtype"] = None,  # noqa: F821
+    device: Optional["torch.device"] = None,  # noqa: F821
+    layout: Optional[str] = None,
+    name: str = "_assert_tensor_metadata",
+):
+    "_assert_tensor_metadata"
+    return g.op.Identity(x, name=name, outputs=outputs)
+
+
 def aten__log_api_usage_once(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], module_name: str
 ) -> T:

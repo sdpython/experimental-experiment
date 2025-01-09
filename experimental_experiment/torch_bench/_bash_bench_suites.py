@@ -259,7 +259,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=False),
+                        dict(strict=False, replace_dynamic_cache=True),
                     )
                 ),
                 "Phi4LM_2Layer": (
@@ -271,7 +271,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=False),
+                        dict(strict=False, replace_dynamic_cache=True),
                     )
                 ),
                 "SmolLM17b_2LayerNoCache": (

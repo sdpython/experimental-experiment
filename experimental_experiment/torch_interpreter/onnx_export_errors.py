@@ -1,5 +1,6 @@
 import contextlib
 import inspect
+import os
 from typing import Any, Callable, Dict, List, Tuple, Union
 from .onnx_export_serialization import (
     flatten_with_keys_dynamic_cache,
@@ -32,10 +33,13 @@ def _catch_produce_guards_and_solve_constraints(
             _is_torch_jit_trace=_is_torch_jit_trace,
         )
     except Exception as e:
+        if not int(os.environ.get("SKIP_SOLVE_CONSTRAINTS", "1")):
+            raise
         if verbose:
             print(
                 f"[_catch_produce_guards_and_solve_constraints] ERROR"
-                f"produce_guards_and_solve_constraints failed\n"
+                f"produce_guards_and_solve_constraints failed, "
+                f"use SKIP_SOLVE_CONSTRAINTS=0 to avoid skipping\n"
                 f"fake_mode={fake_mode}\n"
                 f"dynamic_shapes={dynamic_shapes}\n"
                 f"equalities_inputs={equalities_inputs}\n"
@@ -158,7 +162,7 @@ def bypass_export_some_errors(
     patch_torch: bool = True,
     patch_transformers: bool = False,
     replace_dynamic_cache: bool = False,
-    catch_constraints: bool = False,
+    catch_constraints: bool = True,
     verbose: int = 0,
 ) -> Callable:
     """
@@ -171,7 +175,9 @@ def bypass_export_some_errors(
         avoiding issues with the dynamic shapes inferences,
         it should be True with LLM using that class and only during the export
     :param catch_constraints: catch constraints related to dynamic shapes,
-        as a result, some dynamic dimension may turn into static ones
+        as a result, some dynamic dimension may turn into static ones,
+        the environment variable ``SKIP_SOLVE_CONSTRAINTS=0``
+        can be put to stop at that stage.
 
     The list of available patches.
 

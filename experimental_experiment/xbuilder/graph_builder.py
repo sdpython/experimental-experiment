@@ -3434,6 +3434,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 raise ValueError(f"outputs={outputs} must be > 0.")
             assert isinstance(op_type, str), f"Unexpected type {type(op_type)}: {op_type}"
             lower = op_type.lower()
+            if inputs and isinstance(inputs[0], str) and inputs[0]:
+                # The new name tries to keep track of the first input,
+                # usually the most meaningful.
+                lower = f"{lower}_{inputs[0]}"
             output_names = [self.unique_name(f"_onx_{lower}{i}") for i in range(outputs)]
         elif isinstance(outputs, str):
             output_names = [outputs]

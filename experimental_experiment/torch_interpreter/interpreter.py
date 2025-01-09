@@ -1373,6 +1373,7 @@ class DynamoInterpreter:
                 self.torch.amp.autocast_mode._enter_autocast,
                 self.torch.amp.autocast_mode._exit_autocast,
                 self.torch.ops.aten._assert_scalar.default,
+                self.torch.ops.aten._assert_tensor_metadata.default,
                 self.torch.torch.sym_constrain_range_for_size,
                 "aten__exit_autocast",
                 "aten__enter_autocast",
