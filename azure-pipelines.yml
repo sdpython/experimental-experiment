@@ -98,7 +98,7 @@ jobs:
       pip install -r requirements-dev.txt
   - script: |
       pip uninstall -y onnxruntime onnxruntime-training
-      pip install onnxruntime-training
+      pip install onnxruntime-training-cpu
     displayName: 'Install onnxruntime-training'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
