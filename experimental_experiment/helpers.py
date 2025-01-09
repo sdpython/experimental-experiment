@@ -119,8 +119,6 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
             if obj.dtype in {torch.complex64, torch.complex128}:
                 return f"{s}[{obj.abs().min()}:{obj.abs().max()}]"
             return f"{s}[{obj.min()}:{obj.max()}]"
-        from .xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
-
         i = torch_dtype_to_onnx_dtype(obj.dtype)
         if not with_shape:
             return f"T{i}r{len(obj.shape)}"

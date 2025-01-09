@@ -24,8 +24,7 @@ from .export_model_helper import (
 from ..bench_run import max_diff
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
-from ..helpers import string_type, tensor_dtype_to_np_dtype
-from ..xbuilder._dtype_helper import torch_dtype_to_onnx_dtype
+from ..helpers import string_type, tensor_dtype_to_np_dtype, torch_dtype_to_onnx_dtype
 from ..torch_interpreter.onnx_export_errors import register_additional_serialization_functions
 
 

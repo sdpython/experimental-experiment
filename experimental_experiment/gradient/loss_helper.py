@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy
 from onnx import ModelProto
 from onnx.mapping import TENSOR_TYPE_TO_NP_TYPE
-from onnx.numpy_helper import to_array, from_array_extended
+from onnx.numpy_helper import to_array
 from onnx.helper import (
     make_node,
     make_graph,
@@ -12,6 +12,7 @@ from onnx.helper import (
     set_model_props,
 )
 from onnx import TensorProto
+from ..helpers import from_array_extended
 
 
 def _unique_name(existing_names: Set[str], name: str) -> str:
