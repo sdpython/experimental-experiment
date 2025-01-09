@@ -585,7 +585,6 @@ class TestLlmModelHelper(ExtTestCase):
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
     @long_test()
     def test_get_phi4_onnx(self):
-        import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi4,
         )
@@ -610,6 +609,7 @@ class TestLlmModelHelper(ExtTestCase):
                 dynamic_shapes=ds,
                 filename="test_get_phi4_onnx.onnx",
                 export_options=ExportOptions(strict=False),
+                large_model=True,
             )
 
 
