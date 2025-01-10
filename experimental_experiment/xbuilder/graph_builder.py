@@ -1555,9 +1555,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             if not isinstance(sdim, str):
                 continue
             self.register_dynamic_objects_from_dim(sdim)
+        shape0 = shape
         shape = self.verify_shape(shape, 0, name=name)
         assert allow_zero or 0 not in shape or shape == (0,), (
-            f"Unexpected null shape {shape!r} for name={name!r}, "
+            f"Unexpected null shape {shape!r} (or {shape0!r}) for name={name!r}, "
             f"this case usually happens before a concetenation"
             f"{self.get_debug_msg()}"
         )
@@ -4898,8 +4899,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                                 else:
                                     self.constraints_[sh] = {dim_name}
 
+            # Before calling rename_dynamic_dimension, we expand the list.
+            expanded_constraints = {}
+            for k, v in self.constraints_.items():
+                expanded_constraints[k] = v.copy()
+                for i in v:
+                    expanded_constraints[k].add(i)
+                    if i not in expanded_constraints:
+                        expanded_constraints[i] = set()
+                    expanded_constraints[i] |= v
+                    expanded_constraints[i] |= {k}
+
             replacements = rename_dynamic_dimensions(
-                self.constraints_, set(self.dynamic_dimensions_source)
+                expanded_constraints, set(self.dynamic_dimensions_source)
             )
             if self.verbose:
                 print(

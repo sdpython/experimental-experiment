@@ -5890,7 +5890,7 @@ def aten_mul__Tensor(
     outputs: List[str],
     x: T,
     y: T,
-    name: str = "mulà_Tensor",
+    name: str = "mul__Tensor",
 ) -> T:
     "mul"
     # The inline modification seems to be using the right output.

@@ -1383,10 +1383,16 @@ class DynamoInterpreter:
                 hasattr(aten_name, "_opname")
                 and aten_name._opname in {"sym_constrain_range_for_size"}
             )
+            # the node is only used by this one
+            or (
+                aten_name == self.torch.ops.aten.native_dropout.default
+                and len(node.args[0].users) == 1
+            )
         ), (
             f"This is probably one inplace function node={node!r}, "
             f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
             f"aten_name._opname={getattr(aten_name, '_opname', '?')}, "
+            f"len(node.args[0].users)={len(node.args[0].users) if node.args else 0}"
             f"output_names={output_names!r}{self.builder.get_debug_msg()}"
         )
 

@@ -323,7 +323,11 @@ class TestOnnxExportSignatures(ExtTestCase):
             "lx": [{0: torch.export.Dim("batch")}, {0: torch.export.Dim("batch")}],
         }
         sname = inspect.currentframe().f_code.co_name
-        sig_custom = (("x", 1, ("batch", 3)), ("lx_0", 1, ("s1", 1)), ("lx_1", 1, ("s2", 2)))
+        sig_custom = (
+            ("x", 1, ("batch", 3)),
+            ("lx_0", 1, ("batch", 1)),
+            ("lx_1", 1, ("batch", 2)),
+        )
         self._check_exporter(
             sname,
             Neuron(),
