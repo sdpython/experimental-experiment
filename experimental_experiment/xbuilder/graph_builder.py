@@ -46,6 +46,7 @@ from ..helpers import (
     dtype_to_tensor_dtype,
     onnx_dtype_to_torch_dtype,
     torch_dtype_to_onnx_dtype,
+    rename_dynamic_expression,
 )
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
@@ -4845,12 +4846,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         tensor_type = obj.type.tensor_type
         for d in tensor_type.shape.dim:
-            if (
-                d.dim_param
-                and d.dim_param in replacements
-                and replacements[d.dim_param] != d.dim_param
-            ):
+            if not d.dim_param:
+                continue
+            if d.dim_param in replacements and replacements[d.dim_param] != d.dim_param:
                 d.dim_param = replacements[d.dim_param]
+            elif "+" in d.dim_param or "*" in d.dim_param or "-" in d.dim_param:
+                # Maybe we should handle more expression?
+                d.dim_param = rename_dynamic_expression(d.dim_param, replacements).replace(
+                    " ", ""
+                )
         return obj
 
     def _add_shape_information(self, model: ModelProto, update_dim_names: bool = True):
@@ -4863,9 +4867,45 @@ class GraphBuilder(_GraphBuilderRuntime):
             the names the user provides
         """
         if update_dim_names:
+            if self.dynamic_dimensions_source_flat:
+                # Let's update the constraints.
+                for dyn_name, iname in zip(
+                    self.dynamic_dimensions_source_flat, self.input_names
+                ):
+                    # something like
+                    if isinstance(dyn_name, str):
+                        assert dyn_name == iname, (
+                            f"Issue with one input name and its associated dynamic shape "
+                            f"dyn_name={dyn_name!r}, input_name={iname}"
+                            f"{self.get_debug_msg()}"
+                        )
+                        continue
+                    if not self.has_shape(iname):
+                        continue
+
+                    for axis, sh in enumerate(self.get_shape(iname)):
+                        for dim_name, where in self.dynamic_dimensions_source.items():
+                            for d in where:
+                                if d["axis"] != axis or d["input_name"] != dyn_name:
+                                    continue
+                                # We add a constraint.
+                                if dim_name in self.constraints_:
+                                    self.constraints_[dim_name].add(sh)
+                                else:
+                                    self.constraints_[dim_name] = {sh}
+                                if sh in self.constraints_:
+                                    self.constraints_[sh].add(dim_name)
+                                else:
+                                    self.constraints_[sh] = {dim_name}
+
             replacements = rename_dynamic_dimensions(
                 self.constraints_, set(self.dynamic_dimensions_source)
             )
+            if self.verbose:
+                print(
+                    f"[GraphBuilder._add_shape_information] dynamic shapes "
+                    f"replacements={replacements}"
+                )
         else:
             replacements = {}
 

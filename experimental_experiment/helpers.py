@@ -1,3 +1,4 @@
+import ast
 import inspect
 import sys
 from typing import Any, Callable, Dict, Optional, Set, Tuple, Union
@@ -550,3 +551,24 @@ def rename_dynamic_dimensions(
                     replacements[vv] = by
         not_done = all_values - set(replacements)
     return replacements
+
+
+def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
+    """
+    Renames variables of an expression.
+
+    :param expression: something like ``s15 + seq_length``
+    :param replacements: replacements to make
+    :return: new string
+    """
+
+    class RenameVariable(ast.NodeTransformer):
+        def visit_Name(self, node):
+            if node.id in replacements:
+                node.id = replacements[node.id]
+            return node
+
+    tree = ast.parse(expression)
+    transformer = RenameVariable()
+    new_tree = transformer.visit(tree)
+    return ast.unparse(new_tree)
