@@ -379,6 +379,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.ir_version = ir_version
         self._debug_msg = {}
         self.dynamic_dimensions_source = {}
+        self.dynamic_dimensions_source_flat = None
         self.dynamic_shapes = self._pre_process_dynamic_shape(dynamic_shapes)
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
@@ -561,25 +562,26 @@ class GraphBuilder(_GraphBuilderRuntime):
             return torch.export.Dim(name)
         raise AssertionError(f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes")
 
-    def _register_dynamic_object_from_dynamic_shapes_dict(self, pos, pos_vv, vv):
+    def _register_dynamic_object_from_dynamic_shapes_dict(self, input_name, shape_dict):
         # example:
         # args_0 {0: <class '._bash_bench_model_runner.batch'>}
-        for _k, _v in vv.items():
+        for _k, _v in shape_dict.items():
             if isinstance(_v, self.torch.SymInt):
                 self.make_dynamic_object(
                     _v.__name__,
                     _v,
                     axis=_k,
-                    input_name=pos,
+                    input_name=input_name,
                 )
             elif isinstance(_v, self.torch.export.dynamic_shapes._DerivedDim):
                 self.make_dynamic_object(
                     _v.__name__,
                     self.torch.SymInt(_v.__name__),
                     axis=_k,
-                    input_name=pos,
+                    input_name=input_name,
                 )
                 # It should be recursive.
+                # maybe add a constraint here
                 self.make_dynamic_object(
                     _v.root.__name__,
                     self.torch.SymInt(_v.root.__name__),
@@ -591,12 +593,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                     _v.__name__,
                     self.torch.SymInt(_v.__name__),
                     axis=_k,
-                    input_name=pos,
+                    input_name=input_name,
                 )
             elif _v is not None:
                 raise AssertionError(
-                    f"Unexpected type {type(_v)} in {vv} for dynamic "
-                    f"dimension {pos!r}, pos_vv={pos_vv!r}, "
+                    f"Unexpected type {type(_v)} for dynamic "
+                    f"dimension for axis {_k}, input_name={input_name!r}, "
+                    f"pos_vv={shape_dict!r}, "
                     f"self.dynamic_shapes={self.dynamic_shapes}"
                 )
 
@@ -607,75 +610,54 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.update_dynamic_shape_when_input_name_is_defined = not isinstance(
             self.dynamic_shapes, dict
         )
-        seq_dynamic_shapes = (
-            list(self.dynamic_shapes.items())
-            if isinstance(self.dynamic_shapes, dict)
-            else list(enumerate(self.dynamic_shapes))
-        )
+        _prefixes = []
 
-        for input_name_or_position, v in seq_dynamic_shapes:
-            if isinstance(v, dict):
-                pos_vv = list(v.items())
-            elif isinstance(v, (list, tuple)):
-                if isinstance(input_name_or_position, str):
-                    pos_vv = [(f"{input_name_or_position}_{i}", v[i]) for i in range(len(v))]
-                else:
-                    pos_vv = [((input_name_or_position, i), v[i]) for i in range(len(v))]
-            elif v is None:
-                continue
-            else:
-                raise AssertionError(
-                    f"Unexpected value for input_name={input_name_or_position!r} and "
-                    f"v={v}, dynamic_shapes={self.dynamic_shapes}"
-                )
-            for pos, vv in pos_vv:
-                if vv is None:
-                    continue
-                if isinstance(vv, (list, tuple)):
-                    for vvv in vv:
-                        if vvv is None:
-                            continue
-                        assert isinstance(
-                            vvv, dict
-                        ), f"Unexpected type {type(vvv)} at pos={pos} and {vv}"
-                        self._register_dynamic_object_from_dynamic_shapes_dict(
-                            pos, pos_vv, vvv
-                        )
-                elif isinstance(vv, dict):
-                    self._register_dynamic_object_from_dynamic_shapes_dict(pos, pos_vv, vv)
-                elif isinstance(vv, self.torch.SymInt):
-                    self.make_dynamic_object(
-                        vv.__name__, vv, axis=pos, input_name=input_name_or_position
+        def _unfold(obj, prefix=None):
+            assert prefix is None or isinstance(
+                prefix, (str, tuple, int)
+            ), f"Unexpected type prefix={prefix!r}, obj={obj!r}"
+            if isinstance(obj, dict) and all_int(obj):
+                assert prefix is not None
+                _prefixes.append(prefix)
+                return [(prefix, obj)]
+            if isinstance(obj, dict):
+                res = []
+                for k, v in obj.items():
+                    if v is None:
+                        continue
+                    p = (
+                        k
+                        if prefix is None
+                        else ((prefix, k) if isinstance(prefix, (str, int)) else (*prefix, k))
                     )
-                elif isinstance(vv, self.torch.export.dynamic_shapes._DerivedDim):
-                    # Used to specify a dimension as a multiple of something
-                    # We register the root.
-                    self.make_dynamic_object(
-                        vv.__name__,
-                        self.torch.SymInt(vv.__name__),
-                        axis=pos,
-                        input_name=input_name_or_position,
+                    u = _unfold(v, p)
+                    res.extend(u)
+                return res
+            if isinstance(obj, (list, tuple)):
+                res = []
+                for k, v in enumerate(obj):
+                    if v is None:
+                        continue
+                    p = (
+                        k
+                        if prefix is None
+                        else ((prefix, k) if isinstance(prefix, (str, int)) else (*prefix, k))
                     )
-                    # It should be recursive.
-                    self.make_dynamic_object(
-                        vv.root.__name__,
-                        self.torch.SymInt(vv.root.__name__),
-                        axis=None,
-                        input_name=None,
-                    )
-                elif isinstance(vv, self.torch.export.dynamic_shapes._Dim):
-                    self.make_dynamic_object(
-                        vv.__name__,
-                        self.torch.SymInt(vv.__name__),
-                        axis=pos,
-                        input_name=input_name_or_position,
-                    )
-                else:
-                    raise AssertionError(
-                        f"Unexpected type {type(vv)}, vv={vv} for dynamic "
-                        f"dimension {pos!r}, pos_vv={pos_vv!r}, "
-                        f"self.dynamic_shapes={self.dynamic_shapes}"
-                    )
+                    u = _unfold(v, p)
+                    res.extend(u)
+                return res
+            raise TypeError(f"Unexpected type {type(obj)} and prefix={prefix!r}")
+
+        seq_dynamic_shapes = _unfold(self.dynamic_shapes)
+
+        for input_name_or_position, pos_vv in seq_dynamic_shapes:
+            assert isinstance(
+                pos_vv, dict
+            ), f"Unexpected pos_vv={pos_vv}, input_name_or_position={input_name_or_position}"
+            self._register_dynamic_object_from_dynamic_shapes_dict(
+                input_name_or_position, pos_vv
+            )
+        self.dynamic_dimensions_source_flat = _prefixes
 
     def add_stat(self, kind: str, name: str):
         """
@@ -4362,8 +4344,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 break
 
         rows.append(
-            f"dynamic_dimensions_source="
-            f"{pprint.pformat(self.dynamic_dimensions_source)[:10000]}"
+            f"dynamic_dimensions_source={pprint.pformat(self.dynamic_dimensions_source)}"
+        )
+        rows.append(
+            f"dynamic_dimensions_source_flat="
+            f"{pprint.pformat(self.dynamic_dimensions_source_flat)}"
         )
         rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
