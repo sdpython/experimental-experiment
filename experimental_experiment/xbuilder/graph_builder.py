@@ -612,6 +612,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(self.dynamic_shapes, dict)
             else list(enumerate(self.dynamic_shapes))
         )
+
         for input_name_or_position, v in seq_dynamic_shapes:
             if isinstance(v, dict):
                 pos_vv = list(v.items())
@@ -4300,11 +4301,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.functions:
             rows.append("--LOCAL FUNCTIONS--")
             for k, v in self.functions.items():
-                rows.append(f"{k[0]},{k[1]}({v.input}) -> {v.output}")
+                rows.append(f"    {k[0]},{k[1]}({v.input}) -> {v.output}")
         if self.constraints_:
             rows.append("--CONSTRAINTS--")
             for a, b in assert_sorted(self.constraints_.items()):
-                rows.append(f"{a} = {b}")
+                rows.append(f"    {a} = {b}")
         rows.append("--PARAMETERS--")
         rows.append("dynamic_examples=")
         for i, (k, v) in enumerate(assert_sorted(self._parameter_renaming.items())):
@@ -4379,12 +4380,12 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         rows.append("--TORCH-USERS--")
         for k, v in assert_sorted(self._registered_users.items()):
-            rows.append(f"{k} -> {v}")
+            rows.append(f"    {k} -> {v}")
 
         rows.append("--TORCH-SHAPES--")
         for kk, vv in self._known_torch_value.items():
             rows.append(
-                f"{kk}: {vv} --- "
+                f"    {kk}: {vv} --- "
                 f"{self.get_type(kk) if self.has_type(kk) else ''}:"
                 f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
                 f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
@@ -4851,6 +4852,22 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         return (model, stats) if return_optimize_report else model
 
+    def _rename_dynamic_dimension_inplace(
+        self, obj: ValueInfoProto, replacements: Dict[str, str]
+    ) -> ValueInfoProto:
+        """
+        Renames dynamic shapes into a proto.
+        """
+        tensor_type = obj.type.tensor_type
+        for d in tensor_type.shape.dim:
+            if (
+                d.dim_param
+                and d.dim_param in replacements
+                and replacements[d.dim_param] != d.dim_param
+            ):
+                d.dim_param = replacements[d.dim_param]
+        return obj
+
     def _add_shape_information(self, model: ModelProto, update_dim_names: bool = True):
         """
         Adds shape information to the model.
@@ -4866,7 +4883,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
         else:
             replacements = {}
-        assert replacements is not None
 
         if len(model.graph.node) == 0:
             raise RuntimeError(
@@ -4880,9 +4896,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             | set(i.name for i in model.graph.input)
             | set(i.name for i in model.graph.output)
         )
+        if replacements:
+            for i in model.graph.input:
+                self._rename_dynamic_dimension_inplace(i, replacements)
+            for i in model.graph.output:
+                self._rename_dynamic_dimension_inplace(i, replacements)
         for val in self.value_info:
             if self.has_name(val.name):
-                model.graph.value_info.append(val)
+                model.graph.value_info.append(
+                    self._rename_dynamic_dimension_inplace(val, replacements)
+                )
                 done.add(val.name)
 
         # adding shape information
@@ -4892,14 +4915,20 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             if self.has_shape(name):
                 addition.append(
-                    oh.make_tensor_value_info(
-                        name, self.get_type(name), list(self.get_shape(name))
+                    self._rename_dynamic_dimension_inplace(
+                        oh.make_tensor_value_info(
+                            name, self.get_type(name), list(self.get_shape(name))
+                        ),
+                        replacements,
                     )
                 )
             elif self.has_rank(name):
                 addition.append(
-                    oh.make_tensor_value_info(
-                        name, self.get_type(name), [None] * self.get_rank(name)
+                    self._rename_dynamic_dimension_inplace(
+                        oh.make_tensor_value_info(
+                            name, self.get_type(name), [None] * self.get_rank(name)
+                        ),
+                        replacements,
                     )
                 )
         if addition:

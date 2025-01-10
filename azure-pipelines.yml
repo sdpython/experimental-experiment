@@ -135,7 +135,7 @@ jobs:
     displayName: 'Partial Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
-      artifactName: 'wheel-linux-wheel-$(python.version)'
+      artifactName: 'wheel-linux-wheel-$(python.version)-training'
       targetPath: 'dist'
 
 - job: 'LinuxWheelPip'
