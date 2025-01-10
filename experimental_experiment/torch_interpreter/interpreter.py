@@ -1276,7 +1276,7 @@ class DynamoInterpreter:
         )
 
     def _verify_new_shape(self, shape, node):
-        for dim in shape:
+        for axis, dim in enumerate(shape):
             if isinstance(dim, self.torch.SymInt):
                 sdim = self.builder._torch_sym_int_to_str(dim)
                 tokens = parse_expression_tokens(sdim)
@@ -1285,10 +1285,11 @@ class DynamoInterpreter:
                     t = tokens.pop()
                     if t not in self.builder.dynamic_objects:
                         self.builder.add_dynamic_object(t, t)
+                        source = dict(axis=axis, input_name=dim)
                         if t in self.builder.dynamic_dimensions_source:
-                            self.builder.dynamic_dimensions_source[t].append(dim)
+                            self.builder.dynamic_dimensions_source[t].append(source)
                         else:
-                            self.builder.dynamic_dimensions_source[t] = [dim]
+                            self.builder.dynamic_dimensions_source[t] = [source]
 
     def _process_arg(self, node, aten_name, i):
         if i is None:
