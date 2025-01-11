@@ -66,11 +66,7 @@ from experimental_experiment.convert.convert_helper import (
     optimize_model_proto_oxs,
     ort_optimize,
 )
-from experimental_experiment.torch_models.llama_helper import (
-    get_llama_model,
-    get_llama_attention,
-    get_llama_decoder,
-)
+from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.dump_helper import reorder_functions_in_proto
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -160,11 +156,7 @@ else:
         num_attention_heads=8,
     )
 
-if script_args.part == "attention":
-    model, inputs = get_llama_attention(**kwargs)
-elif script_args.part == "decoder":
-    model, inputs = get_llama_decoder(**kwargs)
-elif script_args.part == "model":
+if script_args.part == "model":
     model, inputs = get_llama_model(**kwargs)
 else:
     raise RuntimeError(f"Unexpected value for part={script_args.part!r}")

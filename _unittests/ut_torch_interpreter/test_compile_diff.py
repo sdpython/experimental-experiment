@@ -50,8 +50,6 @@ class TestDynamoCompileDiff(ExtTestCase):
         )
         from experimental_experiment.torch_models.llama_helper import (
             get_llama_model,  # noqa: F401
-            get_llama_attention,
-            get_llama_decoder,  # noqa: F401
         )
         from experimental_experiment.torch_models.dump_helper import (
             assert_all_close,
@@ -67,11 +65,7 @@ class TestDynamoCompileDiff(ExtTestCase):
 
         kwargs = dict(input_dims=[(2, 1024)] * 2)
 
-        # if script_args.part == "attention":
-        model, inputs = get_llama_attention(**kwargs)
-        # model, inputs = get_llama_decoder(**kwargs)
-        # model, inputs = get_llama_model(**kwargs)
-
+        model, inputs = get_llama_model(**kwargs)
         expected = model(*inputs[0])
 
         folder = "temp_dump_models"
