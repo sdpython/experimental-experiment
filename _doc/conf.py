@@ -145,7 +145,11 @@ sphinx_gallery_conf = {
     "ignore_repr_types": "matplotlib\\.(text|axes)",
 }
 
-if pv.Version(torch.__version__) < pv.Version("2.7"):
+if int(os.environ.get("UNITTEST_GOING", "0")):
+    sphinx_gallery_conf["ignore_pattern"] = (
+        ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)).*"
+    )
+elif pv.Version(torch.__version__) < pv.Version("2.8"):
     sphinx_gallery_conf["ignore_pattern"] = ".*((_oe_((modules)|(custom)))|(_executorch_)).*"
 
 

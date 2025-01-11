@@ -38,8 +38,9 @@ def get_investigation_patterns(verbose: int = 0) -> List["PatternOptimization"]:
 class SimplifyingEasyPatternFunction(EasyPatternOptimization):
     """
     Base class to build investigation patterns.
-    See :class:`experimental_experiment.xoptim.patterns_investigation.
-    llm_patterns.FunctionPowTanhPattern` to see how to use it.
+    See :class:`FunctionPowTanhPattern
+    <experimental_experiment.xoptim.patterns_investigation.llm_patterns.FunctionPowTanhPattern>`
+    to see how to use it.
     """
 
     @classmethod

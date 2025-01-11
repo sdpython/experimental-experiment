@@ -13,6 +13,7 @@ Phi
     from transformers.models.phi.modeling_phi import PhiModel
     from experimental_experiment.helpers import pretty_onnx
     from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+    from experimental_experiment.torch_interpreter.onnx_export_errors import bypass_export_some_errors
 
 
     def ids_tensor(shape, vocab_size):
@@ -38,7 +39,9 @@ Phi
     )
     config._attn_implementation = "eager"
 
-    with torch.no_grad():
+    with torch.no_grad(), bypass_export_some_errors(
+        patch_transformers=True, replace_dynamic_cache=True,
+    ) as modificator: 
 
         model = PhiModel(config)
 
@@ -51,7 +54,7 @@ Phi
 
         onx = to_onnx(
             model,
-            (input_ids, input_mask),
+            modificator((input_ids, input_mask)),
             export_options=ExportOptions(decomposition_table="default"),
         )
         print(pretty_onnx(onx))
