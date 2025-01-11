@@ -508,6 +508,10 @@ if "dynopt" in supported_exporters:
 def benchmark(shape):
     from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
 
+    providers = [["CPUExecutionProvider"]]
+    if has_cuda:
+        providers.append(["CUDAExecutionProvider", "CPUExecutionProvider"])
+
     data = []
     data1 = []
     data_mem_load = []
@@ -516,10 +520,7 @@ def benchmark(shape):
     confs = list(
         itertools.product(
             [_ for _ in os.listdir(".") if ".onnx" in _ and _.startswith("plot_torch")],
-            [
-                ["CPUExecutionProvider"],
-                ["CUDAExecutionProvider", "CPUExecutionProvider"],
-            ],
+            providers,
             ["0", "1"],
         )
     )
