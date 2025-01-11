@@ -34,7 +34,7 @@ from experimental_experiment.args import get_parsed_args
 script_args = get_parsed_args(
     "plot_llama_diff_export",
     description=__doc__,
-    part=("attention", "one value among attention, decoder, model"),
+    part=("model", "one value among model, ..."),
     ortopt=(1, "run onnxruntime optimization"),
     backward=(0, "does one operator for backward"),
     cuda=(0, "use cuda or not"),
@@ -67,8 +67,8 @@ import torch
 from torch._dynamo.backends.common import aot_autograd
 from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto_oxs,
     ort_optimize,
+    optimize_model_proto_oxs,
 )
 from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.dump_helper import (

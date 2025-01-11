@@ -30,7 +30,7 @@ from experimental_experiment.args import get_parsed_args
 script_args = get_parsed_args(
     "plot_llama_diff_export",
     description=__doc__,
-    part=("attention", "one value among attention, decoder, model"),
+    part=("model", "one value among model, ..."),
     exporter=("dynamo", "one value among dynamo, custom"),
     ortopt=(1, "run onnxruntime optimization"),
     opset=(18, "onnx opset"),
@@ -62,10 +62,7 @@ import torch
 from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto_oxs,
-    ort_optimize,
-)
+from experimental_experiment.convert.convert_helper import ort_optimize
 from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.dump_helper import reorder_functions_in_proto
 
@@ -109,16 +106,12 @@ def export_dynamo(filename, model, *args):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             export_output = torch.onnx.export(model, args, dynamo=True)
+            export_output.optimize()
             model = export_output.model_proto
-    try:
-        new_model = optimize_model_proto_oxs(model)
-    except ImportError as e:
-        print("skipping optimization, missing package or failure:", e)
-        new_model = model
     with open(filename, "wb") as f:
-        f.write(new_model.SerializeToString())
+        f.write(model.SerializeToString())
     if ortopt:
-        ort_optimize(new_model, opt_filename(filename), providers=provider)
+        ort_optimize(model, opt_filename(filename), providers=provider)
 
 
 def export_custom(filename, model, *args):

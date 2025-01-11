@@ -163,9 +163,9 @@ class TestOnnxExportLlama(ExtTestCase):
             self.check_model_ort(onx)
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.3", "bug")
-    @ignore_warnings(DeprecationWarning)
+    @requires_torch("2.6")
     @requires_transformers("4.38")
+    @ignore_warnings(DeprecationWarning)
     def test_mistral_model(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -204,9 +204,9 @@ class TestOnnxExportLlama(ExtTestCase):
             )
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.3", "bug")
-    @ignore_warnings(DeprecationWarning)
+    @requires_torch("2.6")
     @requires_transformers("4.38")
+    @ignore_warnings(DeprecationWarning)
     def test_mistral_model_bfloat16(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
