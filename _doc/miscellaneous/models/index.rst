@@ -8,7 +8,4 @@ This projects was started with LLaMa.
     :caption: Llama, Phi, Mistral
     :maxdepth: 1
 
-    llama
-    mistral
     phi
-    phi3

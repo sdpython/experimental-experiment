@@ -84,7 +84,7 @@ With the following versions:
         monai,
         timm,
     ]:
-        print(f"{m.__name__}: {m.__version__}")
+        print(f"{m.__name__}: {getattr(m, '__version__', 'dev')}")
 
     from experimental_experiment.ext_test_case import has_onnxruntime_training
     print(f"has_onnxruntime_training: {has_onnxruntime_training()}")

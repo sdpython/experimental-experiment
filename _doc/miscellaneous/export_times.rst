@@ -26,11 +26,11 @@ symbolic
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_model
 
     begin = time.perf_counter()
     print("creating model")
-    model, example_args_collection = get_llama_decoder(
+    model, example_args_collection = get_llama_model(
         input_dims=[(2, 1024)],
         hidden_size=4096,
         num_hidden_layers=2,
@@ -67,11 +67,11 @@ fake
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_model
 
     begin = time.perf_counter()
     print("creating model")
-    model, example_args_collection = get_llama_decoder(
+    model, example_args_collection = get_llama_model(
         input_dims=[(2, 1024)],
         hidden_size=4096,
         num_hidden_layers=2,
@@ -146,9 +146,9 @@ With a bigger model:
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_model
 
-    model, example_args_collection = get_llama_decoder(
+    model, example_args_collection = get_llama_model(
         input_dims=[(2, 1024)],
         hidden_size=4096,
         num_hidden_layers=1,
@@ -229,9 +229,9 @@ With a bigger model:
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_models.llama_helper import get_llama_decoder
+    from experimental_experiment.torch_models.llama_helper import get_llama_model
 
-    model, example_args_collection = get_llama_decoder(
+    model, example_args_collection = get_llama_model(
         input_dims=[(2, 1024)],
         hidden_size=4096,
         num_hidden_layers=1,
