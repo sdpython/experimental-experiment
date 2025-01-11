@@ -44,6 +44,6 @@ And for ONNX:
   then to convert into ONNX with the custom exporter
 * **custom-tracing**: traces the model and then converts
   into ONNX with the custom exporter
-* **dynamo-ir**: calls :func:`torch.onnx.export` `` ``(..., dynamo=True)`` and then
+* **dynamo-ir**: calls :func:`torch.onnx.export` ``(..., dynamo=True)`` and then
   optimizes the model
-* **script**: calls :func:`torch.onnx.export` `` ``(..., dynamo=False)``
+* **script**: calls :func:`torch.onnx.export` ``(..., dynamo=False)``
