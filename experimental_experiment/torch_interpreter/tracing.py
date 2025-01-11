@@ -1065,6 +1065,7 @@ class CustomTracer(torch.fx.Tracer):
                     operator.sub,
                     torch._C._set_grad_enabled,
                     torch._C._log_api_usage_once,
+                    torch.autograd.function.FunctionCtx,
                     torch.amp.autocast_mode._enter_autocast,
                     torch.amp.autocast_mode._exit_autocast,
                     torch.ops.aten._assert_scalar.default,

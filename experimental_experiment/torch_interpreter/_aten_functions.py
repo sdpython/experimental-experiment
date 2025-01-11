@@ -7965,10 +7965,22 @@ def aten_setitem(
                 0,
             }, f"setitem is not implemented when index={index}{g.get_debug_msg()}"
             start = index.start or 0
+            assert index != 0, (
+                f"setitem is not implemented when index={index}, indices={indices}, shape(x)="
+                f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
+            )
             stop = index.stop or 0
+
+        if isinstance(stop, int) and stop > 0 and g.has_shape(x):
+            # static shape
+            shape_x = g.get_shape(x)
+            if isinstance(shape_x[axis], int):
+                stop -= shape_x[axis]
+
         assert isinstance(start, int) and isinstance(stop, int) and stop <= 0 and start >= 0, (
             f"setitem is not implemented when index={index}, start={start}, "
-            f"stop={stop}{g.get_debug_msg()}"
+            f"stop={stop}, indices={indices}, shape(x)="
+            f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
         )
         padding_x_start.append(start)
         padding_x_stop.append(-stop)
@@ -7977,7 +7989,7 @@ def aten_setitem(
     rk_values = g.get_rank(values)
     if rk_values != rk_x or 1 in g.get_shape(values):
         # We need to expand the values first.
-        assert rk_values < rk_x, (
+        assert rk_values <= rk_x, (
             f"setitem is not implemented when rank(x)={rk_x} < rank(values)={rk_values}"
             f"{g.get_debug_msg()}"
         )

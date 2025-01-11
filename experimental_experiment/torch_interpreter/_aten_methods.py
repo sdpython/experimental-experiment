@@ -481,6 +481,9 @@ def aten_meth_view(
     *args: Sequence[int],
 ) -> T:
     "view"
+    if isinstance(args, tuple) and len(args) == 1 and len(outputs) == 1:
+        # Maybe the traced model is call this with a wrong signature.
+        args = args[0]
     if all_int(args):
         # static shape
         new_shape_name = g.unique_name(f"{input_name}_view_shape")
@@ -492,6 +495,7 @@ def aten_meth_view(
             set_type_shape_reshape(g, res, input_name, args)
         return res
 
+    print("***********", input_name, args, outputs)
     new_shape_name = g.make_shape_from_results(args, name=".view")
     res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
     if not sts:
