@@ -815,7 +815,7 @@ def requires_transformers(
     return lambda x: x
 
 
-def require_diffusers(
+def requires_diffusers(
     version: str, msg: str = "", or_older_than: Optional[str] = None
 ) -> Callable:
     """Skips a unit test if :epkg:`transformers` is not recent enough."""
@@ -926,6 +926,17 @@ def requires_onnx(version: str, msg: str = "") -> Callable:
 
     if pv.Version(".".join(onnx.__version__.split(".")[:2])) < pv.Version(version):
         msg = f"onnx version {onnx.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
+def requires_onnx_array_api(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`onnx-array-api` is not recent enough."""
+    import packaging.version as pv
+    import onnx_array_api
+
+    if pv.Version(".".join(onnx_array_api.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"onnx version {onnx_array_api.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 
