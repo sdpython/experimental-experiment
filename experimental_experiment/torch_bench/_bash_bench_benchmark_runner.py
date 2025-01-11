@@ -1,3 +1,4 @@
+import copy
 import gc
 import os
 import pickle
@@ -292,6 +293,14 @@ class BenchmarkRunner:
                 # )
                 return new_cache
             return obj
+        if hasattr(obj, "key_cache") and obj.__class__.__name__ in (
+            "DynamicCache",
+            "patched_DynamicCache",
+        ):
+            cache = copy.deepcopy(obj)
+            cache.key_value = [self.move_to(device, _) for _ in obj.key_cache]
+            cache.value_value = [self.move_to(device, _) for _ in obj.value_cache]
+            return cache
         raise AssertionError(f"move_to not implemented for type {type(obj)}, dir={dir(obj)}")
 
     @classmethod

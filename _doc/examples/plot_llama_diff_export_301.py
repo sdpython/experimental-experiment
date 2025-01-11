@@ -57,10 +57,12 @@ except ImportError:
 
 import numpy as np
 import onnx
-from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
+from onnx_array_api.reference import compare_onnx_execution
 import torch
 from experimental_experiment.ext_test_case import unit_test_going
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.helpers import string_type
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.convert.convert_helper import ort_optimize
 from experimental_experiment.torch_models.llama_helper import get_llama_model
@@ -156,14 +158,7 @@ else:
 
 print(f"simple run with {len(inputs)} inputs")
 expected = model(*inputs[0])
-if isinstance(expected, tuple):
-    for t in expected:
-        if not isinstance(t, tuple):
-            print(f"eager worked {t.shape}, {t.dtype}")
-        else:
-            print(f"eager worked {type(t)}")
-else:
-    print(f"eager mode worked {expected.shape}, {expected.dtype}")
+print(f"eager worked: {string_type(expected, with_shape=True)}")
 
 
 ###################################
@@ -218,6 +213,8 @@ if ortopt:
     got1 = sess1.run(None, feeds1)
     got2 = sess2.run(None, feeds2)
 
+    if isinstance(expected, tuple) and len(expected) == 1:
+        expected = expected[0]
     diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
     diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
 
@@ -264,7 +261,12 @@ if sess2 is not None:
     try:
         np_inputs = [i.detach().numpy() for i in inputs[0]]
         res1, res2, align, dc = compare_onnx_execution(
-            model1, model2, inputs=np_inputs, verbose=1, raise_exc=False
+            model1,
+            model2,
+            inputs=np_inputs,
+            verbose=1,
+            raise_exc=False,
+            cls=ExtendedReferenceEvaluator,
         )
         for r in res2:
             r.name = clean_name(r.name)
