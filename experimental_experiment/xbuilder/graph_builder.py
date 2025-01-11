@@ -188,6 +188,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param signature: the signature is unused but helps for debugging purposes
     :param check_empty_source: checks source are not empty
     :param graph_module: only used for debugging purpose
+    :param exe_path: gives information on how the :class:`torch.fx.Graph` was obtained
 
     Important attributes:
 
@@ -364,6 +365,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         signature: Optional[Any] = None,
         check_empty_source: bool = False,
         graph_module: Optional["torch.fx.GraphModule"] = None,  # noqa: F821
+        exe_path: str = "",
     ):
         import torch
 
@@ -378,7 +380,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.input_kwargs = kwargs
         self.verbose = verbose
         self.ir_version = ir_version
-        self._debug_msg = {}
+        self._debug_msg = {"EXEPATH": exe_path}
         self.dynamic_dimensions_source = {}
         self.dynamic_dimensions_source_flat = None
         self.dynamic_shapes = self._pre_process_dynamic_shape(dynamic_shapes)
@@ -4354,9 +4356,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
-        rows.append(f"_known_value_shape={pprint.pformat(self._known_value_shape)[:10000]}")
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
+        short_sh = {
+            k: (
+                v
+                if (isinstance(v, tuple) and len(v) < 10)
+                else string_type(v, with_shape=True)
+            )
+            for k, v in self._known_value_shape.items()
+        }
+        rows.append(f"_known_value_shape={pprint.pformat(short_sh)[:10000]}")
         rows.append(
             f"_known_constants={pprint.pformat(list(assert_sorted(self.constants_))[:10000])}"
         )

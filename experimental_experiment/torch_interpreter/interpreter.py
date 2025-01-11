@@ -39,6 +39,7 @@ class DynamoInterpreter:
     :param submodule_naming: a function which returns a submodule name in the onnx graph
     :param parameter_naming: a function which returns a parameter name in the onnx graph
     :param module_name: module name (makes it easier to retrieve the parameter names)
+    :param exe_path: gives information on how the :class:`torch.fx.Graph` was obtained
     """
 
     def _hash(self) -> str:
@@ -57,6 +58,7 @@ class DynamoInterpreter:
         parameter_naming: Optional[Callable] = None,
         module_name: Optional[str] = None,
         default_values: Optional[Dict[str, Any]] = None,
+        exe_path: str = "",
     ):
         import torch
         from ..xbuilder import FunctionOptions
@@ -78,6 +80,7 @@ class DynamoInterpreter:
             rename_allowed=True,
         )
         self.example_values_ = {}
+        self.exe_path = exe_path
         assert example_inputs is None or isinstance(
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
@@ -1394,7 +1397,8 @@ class DynamoInterpreter:
             f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
             f"aten_name._opname={getattr(aten_name, '_opname', '?')}, "
             f"len(node.args[0].users)={len(node.args[0].users) if node.args else 0}"
-            f"output_names={output_names!r}{self.builder.get_debug_msg()}"
+            f"output_names={output_names!r}, exe_path={self.exe_path!r}"
+            f"{self.builder.get_debug_msg()}"
         )
 
         if self.export_options.aten_as_function:

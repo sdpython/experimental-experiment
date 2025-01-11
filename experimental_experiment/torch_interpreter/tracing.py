@@ -1063,6 +1063,12 @@ class CustomTracer(torch.fx.Tracer):
                     operator.mul,
                     operator.mod,
                     operator.sub,
+                    torch._C._set_grad_enabled,
+                    torch._C._log_api_usage_once,
+                    torch.amp.autocast_mode._enter_autocast,
+                    torch.amp.autocast_mode._exit_autocast,
+                    torch.ops.aten._assert_scalar.default,
+                    torch.ops.aten._assert_tensor_metadata.default,
                 }:
                     # This node cannot be one inplace modifications. The node is just not used.
                     graph.erase_node(node)

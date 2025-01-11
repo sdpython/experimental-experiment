@@ -65,20 +65,35 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         if len(obj) == 1:
             s = string_type(obj[0], with_shape=with_shape, with_min_max=with_min_max)
             return f"({s},)"
-        js = ",".join(
-            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
-        )
-        return f"({js})"
+        if len(obj) < 10:
+            js = ",".join(
+                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+            )
+            return f"({js})"
+        if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
+            mini, maxi = min(obj), max(obj)
+            return f"(...)#{len(obj)}[{mini},{maxi}]"
+        return f"(...)#{len(obj)}" if with_shape else "(...)"
     if isinstance(obj, list):
-        js = ",".join(
-            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
-        )
-        return f"#{len(obj)}[{js}]"
+        if len(obj) < 10:
+            js = ",".join(
+                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+            )
+            return f"#{len(obj)}[{js}]"
+        if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
+            mini, maxi = min(obj), max(obj)
+            return f"[...]#{len(obj)}[{mini},{maxi}]"
+        return f"[...]#{len(obj)}" if with_shape else "[...]"
     if isinstance(obj, set):
-        js = ",".join(
-            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
-        )
-        return f"{{{js}}}"
+        if len(obj) < 10:
+            js = ",".join(
+                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+            )
+            return f"{{{js}}}"
+        if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
+            mini, maxi = min(obj), max(obj)
+            return f"{{...}}#{len(obj)}[{mini},{maxi}]"
+        return f"{{...}}#{len(obj)}" if with_shape else "{...}"
     if isinstance(obj, dict):
         s = ",".join(
             f"{kv[0]}:{string_type(kv[1],with_shape=with_shape,with_min_max=with_min_max)}"

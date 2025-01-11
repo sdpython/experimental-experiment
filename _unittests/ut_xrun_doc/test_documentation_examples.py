@@ -180,6 +180,7 @@ class TestDocumentationExamples(ExtTestCase):
                 in {
                     "plot_torch_export_101.py",
                     "plot_torch_export_compile_102.py",
+                    "plot_llama_diff_export_301.py",
                 }
             ):
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):

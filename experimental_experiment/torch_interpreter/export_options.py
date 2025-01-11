@@ -275,19 +275,6 @@ class ExportOptions:
             )
             begin = time.perf_counter()
 
-        if self.tracing:
-            from .tracing import CustomTracer
-
-            concrete_args = kwargs.copy() if kwargs else {}
-            if args:
-                sig = inspect.signature(mod.forward)
-                for p, a in zip(sig.parameters, args):
-                    if a is not None and p not in concrete_args:
-                        concrete_args[p] = a
-            graph = CustomTracer().trace(mod, concrete_args=concrete_args)
-            gm = torch.fx.GraphModule(mod, graph)
-            return gm
-
         if self.dynamo:
             # import torch.utils._pytree as pytree
             # flat_args, orig_in_spec = pytree.tree_flatten((args, ))
@@ -371,6 +358,21 @@ class ExportOptions:
                     f"\n---exported-program---\n{exported_program}"
                 ) from e
 
+        if self.tracing:
+            from .tracing import CustomTracer
+
+            concrete_args = kwargs.copy() if kwargs else {}
+            if args:
+                sig = inspect.signature(mod.forward)
+                for p, a in zip(sig.parameters, args):
+                    if a is not None and p not in concrete_args:
+                        concrete_args[p] = a
+            graph = CustomTracer().trace(mod, concrete_args=concrete_args)
+            if self.remove_inplace:
+                self.remove_inplace_nodes(graph, verbose=verbose)
+            gm = torch.fx.GraphModule(mod, graph)
+            return gm
+
         if exported_program is None:
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
@@ -386,23 +388,9 @@ class ExportOptions:
             return dec
 
         if self.remove_inplace:
-            removed = CustomTracer.remove_unnecessary_slices(exported_program.graph)
-            if removed:
-                if verbose:
-                    print(
-                        f"[ExportOptions.export] slices: {removed} slices nodes were removed"
-                    )
-                exported_program.graph.lint()
-            modified = CustomTracer.remove_inplace(
+            self.remove_inplace_nodes(
                 exported_program.graph, exported_program=exported_program, verbose=verbose
             )
-            if modified:
-                if verbose:
-                    print(
-                        f"[ExportOptions.export] inplaces: "
-                        f"{modified} inplaced nodes were removed"
-                    )
-                exported_program.graph.lint()
 
         if verbose:
             print(
@@ -410,6 +398,40 @@ class ExportOptions:
                 f"in {time.perf_counter() - begin}"
             )
         return exported_program
+
+    def remove_inplace_nodes(
+        self,
+        graph: "torch.fx.Graph",  # noqa: F821
+        exported_program: Optional["torch.export.ExportedProgram"] = None,  # noqa: F821
+        verbose: int = 0,
+    ) -> int:
+        """
+        Post-processing to remove inplace nodes.
+
+        :param graph: graph to modify
+        :param exported_program: if available, it is used in the error message
+            to make it easier to trace the code source
+        :param verbose: verbosity
+        :return: number of inplace nodes removed
+        """
+        from .tracing import CustomTracer
+
+        removed = CustomTracer.remove_unnecessary_slices(graph)
+        if removed:
+            if verbose:
+                print(f"[ExportOptions.export] slices: {removed} slices nodes were removed")
+            graph.lint()
+        modified = CustomTracer.remove_inplace(
+            graph, exported_program=exported_program, verbose=verbose
+        )
+        if modified:
+            if verbose:
+                print(
+                    f"[ExportOptions.export] inplaces: "
+                    f"{modified} inplaced nodes were removed"
+                )
+            graph.lint()
+        return modified
 
 
 def apply_decompositions(

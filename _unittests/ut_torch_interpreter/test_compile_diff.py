@@ -35,7 +35,7 @@ class TestDynamoCompileDiff(ExtTestCase):
 
     @skipif_ci_windows("dynamo does not work on windows")
     @requires_torch("2.4", "onnxrt not fully implemented")
-    @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
+    @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning, FutureWarning))
     def test_standalone(self):
         import logging
         import onnx
@@ -48,9 +48,7 @@ class TestDynamoCompileDiff(ExtTestCase):
             optimize_model_proto_oxs,
             ort_optimize,
         )
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_model,  # noqa: F401
-        )
+        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_models.dump_helper import (
             assert_all_close,
             dump_onnx,
