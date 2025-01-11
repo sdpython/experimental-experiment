@@ -35,18 +35,18 @@ from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from ..helpers import (
+    dtype_to_tensor_dtype,
     from_array_extended,
     make_hash,
     string_sig,
+    onnx_dtype_to_torch_dtype,
     pretty_onnx,
     rename_dynamic_dimensions,
+    rename_dynamic_expression,
     string_signature,
     string_type,
     tensor_dtype_to_np_dtype,
-    dtype_to_tensor_dtype,
-    onnx_dtype_to_torch_dtype,
     torch_dtype_to_onnx_dtype,
-    rename_dynamic_expression,
 )
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
