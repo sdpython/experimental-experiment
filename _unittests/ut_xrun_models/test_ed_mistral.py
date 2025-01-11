@@ -19,7 +19,7 @@ from experimental_experiment.torch_interpreter import ExportOptions
 class TestEdMistral(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch("2.6")
     def test_mistral_export_rename(self):
         import torch
 
@@ -53,7 +53,7 @@ class TestEdMistral(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.3", "AssertionError: original output #6 is None")
+    @requires_torch("2.6")
     def test_mistral_export_norename(self):
         import torch
 

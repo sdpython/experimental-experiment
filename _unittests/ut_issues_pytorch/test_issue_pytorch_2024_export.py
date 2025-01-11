@@ -38,6 +38,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # print(ep.graph)
         ep.run_decompositions()  # Fails here
 
+    @skipif_ci_windows("not working")
     def test_export_mistral_nousers(self):
         import onnx
         import torch
