@@ -30,7 +30,7 @@ from experimental_experiment.args import get_parsed_args
 script_args = get_parsed_args(
     "plot_llama_diff_export",
     description=__doc__,
-    part=("attention", "one value among attention, decoder, model"),
+    part=("model", "one value among model, ..."),
     exporter=("dynamo", "one value among dynamo, custom"),
     ortopt=(1, "run onnxruntime optimization"),
     opset=(18, "onnx opset"),
@@ -57,20 +57,15 @@ except ImportError:
 
 import numpy as np
 import onnx
-from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
+from onnx_array_api.reference import compare_onnx_execution
 import torch
 from experimental_experiment.ext_test_case import unit_test_going
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.helpers import string_type
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.convert.convert_helper import (
-    optimize_model_proto_oxs,
-    ort_optimize,
-)
-from experimental_experiment.torch_models.llama_helper import (
-    get_llama_model,
-    get_llama_attention,
-    get_llama_decoder,
-)
+from experimental_experiment.convert.convert_helper import ort_optimize
+from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.dump_helper import reorder_functions_in_proto
 
 has_cuda = has_cuda and torch.cuda.is_available()
@@ -113,16 +108,12 @@ def export_dynamo(filename, model, *args):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             export_output = torch.onnx.export(model, args, dynamo=True)
+            export_output.optimize()
             model = export_output.model_proto
-    try:
-        new_model = optimize_model_proto_oxs(model)
-    except ImportError as e:
-        print("skipping optimization, missing package or failure:", e)
-        new_model = model
     with open(filename, "wb") as f:
-        f.write(new_model.SerializeToString())
+        f.write(model.SerializeToString())
     if ortopt:
-        ort_optimize(new_model, opt_filename(filename), providers=provider)
+        ort_optimize(model, opt_filename(filename), providers=provider)
 
 
 def export_custom(filename, model, *args):
@@ -160,25 +151,14 @@ else:
         num_attention_heads=8,
     )
 
-if script_args.part == "attention":
-    model, inputs = get_llama_attention(**kwargs)
-elif script_args.part == "decoder":
-    model, inputs = get_llama_decoder(**kwargs)
-elif script_args.part == "model":
+if script_args.part == "model":
     model, inputs = get_llama_model(**kwargs)
 else:
     raise RuntimeError(f"Unexpected value for part={script_args.part!r}")
 
 print(f"simple run with {len(inputs)} inputs")
 expected = model(*inputs[0])
-if isinstance(expected, tuple):
-    for t in expected:
-        if not isinstance(t, tuple):
-            print(f"eager worked {t.shape}, {t.dtype}")
-        else:
-            print(f"eager worked {type(t)}")
-else:
-    print(f"eager mode worked {expected.shape}, {expected.dtype}")
+print(f"eager worked: {string_type(expected, with_shape=True)}")
 
 
 ###################################
@@ -233,6 +213,8 @@ if ortopt:
     got1 = sess1.run(None, feeds1)
     got2 = sess2.run(None, feeds2)
 
+    if isinstance(expected, tuple) and len(expected) == 1:
+        expected = expected[0]
     diff1 = np.abs(expected.detach().numpy() - got1[0]).max()
     diff2 = np.abs(expected.detach().numpy() - got2[0]).max()
 
@@ -279,7 +261,12 @@ if sess2 is not None:
     try:
         np_inputs = [i.detach().numpy() for i in inputs[0]]
         res1, res2, align, dc = compare_onnx_execution(
-            model1, model2, inputs=np_inputs, verbose=1, raise_exc=False
+            model1,
+            model2,
+            inputs=np_inputs,
+            verbose=1,
+            raise_exc=False,
+            cls=ExtendedReferenceEvaluator,
         )
         for r in res2:
             r.name = clean_name(r.name)

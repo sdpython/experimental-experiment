@@ -33,7 +33,6 @@ except ImportError:
 import torch._dynamo
 import contextlib
 import itertools
-import os
 import gc
 import platform
 
@@ -41,21 +40,15 @@ import platform
 import pprint
 import multiprocessing
 import time
-import cProfile
-import pstats
 import io
 import logging
-from pstats import SortKey
 
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas
-import onnx
-from onnx_array_api.profiling import profile2graph
 import torch
 from torch import nn
 import torch.nn.functional as F
-import experimental_experiment
 from experimental_experiment.plotting.memory import memory_peak_plot
 from experimental_experiment.ext_test_case import measure_time, get_figure
 from experimental_experiment.args import get_parsed_args
@@ -441,74 +434,6 @@ dfi["time"].plot.bar(ax=ax, title="Compilation time", yerr=dfi["std"], rot=30)
 fig.tight_layout()
 fig.savefig("plot_torch_dort_1_time.png")
 
-####################################
-# Compilation Profiling
-# +++++++++++++++++++++
-
-
-def clean_text(text):
-    pathes = [
-        os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(torch.__file__), ".."))),
-        os.path.abspath(os.path.normpath(os.path.join(os.path.dirname(onnx.__file__), ".."))),
-        os.path.abspath(
-            os.path.normpath(
-                os.path.join(os.path.dirname(experimental_experiment.__file__), "..")
-            )
-        ),
-    ]
-    for p in pathes:
-        text = text.replace(p, "")
-    text = text.replace("experimental_experiment", "experimental_experiment".upper())
-    return text
-
-
-def profile_function(name, export_function, with_args=True, verbose=False, suffix="export"):
-    if verbose:
-        print(f"profile {name}: {export_function}")
-    if with_args:
-        model, input_tensor = create_model_and_input()
-        pr = cProfile.Profile()
-        pr.enable()
-        for _ in range(int(script_args.repeat1)):
-            export_function(model, input_tensor)
-        pr.disable()
-    else:
-        pr = cProfile.Profile()
-        pr.enable()
-        for _ in range(int(script_args.repeat1)):
-            export_function()
-        pr.disable()
-    s = io.StringIO()
-    sortby = SortKey.CUMULATIVE
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    # with open(f"plot_torch_dort_profile_{name}_{suffix}.pickle", "wb") as f:
-    #     pickle.dump(ps, f)
-
-    raw = s.getvalue()
-    text = "\n".join(raw.split("\n")[:200])
-    if verbose:
-        print(text)
-    with open(f"plot_torch_dort_profile_{name}_{suffix}.txt", "w") as f:
-        f.write(raw)
-
-    root, nodes = profile2graph(ps, clean_text=clean_text)
-    text = root.to_text()
-    with open(f"plot_torch_dort_profile_{name}_{suffix}_h.txt", "w") as f:
-        f.write(text)
-    if verbose:
-        print("done.")
-
-
-model, input_tensor = create_model_and_input()
-
-
-def function_to_profile(model=model, input_tensor=input_tensor):
-    return get_torch_dort(model, input_tensor)
-
-
-profile_function("dort", function_to_profile, verbose=True, suffix="1")
-
 
 ######################################
 # Benchmark exported models with ORT
@@ -586,8 +511,6 @@ def benchmark(shape):
                 number=1,
             )
         )
-
-        profile_function(name, call_model, with_args=False, suffix=f"run_{p}")
 
         loop.set_description(f"{obs['average']} {name} {p}")
         data.append(obs)

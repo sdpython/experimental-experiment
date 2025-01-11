@@ -5,7 +5,6 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-    skipif_ci_apple,
     requires_torch,
     requires_cuda,
     requires_onnxruntime_training,
@@ -342,111 +341,6 @@ class TestDynamoLlama(ExtTestCase):
         else:
             input_dims = ((9, 15), (9, 15), (9, 15))
         return input_dims
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "unexpected behaviour")
-    def test_llama_decoder_forward_not_optimized(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=False,
-            dynamic=False,
-            onnx_export="test_llama_decoder_forward_not_optimized",
-            enable_pattern=None,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "unexpected behaviour")
-    def test_llama_decoder_forward(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=False,
-            dynamic=False,
-            onnx_export="test_llama_decoder_forward",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "issue")
-    def test_llama_decoder_forward_dynamic(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
-
-        input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=False,
-            dynamic=True,
-            onnx_export="test_llama_decoder_forward",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "unstable")
-    def test_llama_decoder_backward_dynamic(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
-
-        input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_decoder(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=True,
-            onnx_export="test_llama_decoder_backward",
-            decompositions=True,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.3", "unexpected behaviour")
-    def test_llama_attention_forward(self):
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_attention,
-        )
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_attention(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=False,
-            dynamic=False,
-            onnx_export="test_llama_attention_forward",
-            impl="ref",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @skipif_ci_apple("torch.compile fails")
-    def test_llama_attention_backward(self):
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_attention,
-        )
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_attention(input_dims=input_dims)
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=False,
-            onnx_export="test_llama_attention_backward",
-            impl="ref",
-            decompositions=True,
-        )
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")

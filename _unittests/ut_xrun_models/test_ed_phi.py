@@ -21,7 +21,7 @@ from experimental_experiment.torch_interpreter import ExportOptions
 class TestEdPhi(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.5", "AssertionError: original output #6 is None")
+    @requires_torch("2.6")
     def test_phi_export_no_rename(self):
         model, input_tensors = get_phi_model()
         input_tensors = input_tensors[0]

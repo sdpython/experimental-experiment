@@ -1,5 +1,6 @@
 import contextlib
 import inspect
+import os
 from typing import Any, Callable, Dict, List, Tuple, Union
 from .onnx_export_serialization import (
     flatten_with_keys_dynamic_cache,
@@ -32,10 +33,13 @@ def _catch_produce_guards_and_solve_constraints(
             _is_torch_jit_trace=_is_torch_jit_trace,
         )
     except Exception as e:
+        if not int(os.environ.get("SKIP_SOLVE_CONSTRAINTS", "1")):
+            raise
         if verbose:
             print(
                 f"[_catch_produce_guards_and_solve_constraints] ERROR"
-                f"produce_guards_and_solve_constraints failed\n"
+                f"produce_guards_and_solve_constraints failed, "
+                f"use SKIP_SOLVE_CONSTRAINTS=0 to avoid skipping\n"
                 f"fake_mode={fake_mode}\n"
                 f"dynamic_shapes={dynamic_shapes}\n"
                 f"equalities_inputs={equalities_inputs}\n"
@@ -158,6 +162,7 @@ def bypass_export_some_errors(
     patch_torch: bool = True,
     patch_transformers: bool = False,
     replace_dynamic_cache: bool = False,
+    catch_constraints: bool = True,
     verbose: int = 0,
 ) -> Callable:
     """
@@ -169,6 +174,10 @@ def bypass_export_some_errors(
     :param replace_dynamic_cache: replaces DynamicCache by a patched class
         avoiding issues with the dynamic shapes inferences,
         it should be True with LLM using that class and only during the export
+    :param catch_constraints: catch constraints related to dynamic shapes,
+        as a result, some dynamic dimension may turn into static ones,
+        the environment variable ``SKIP_SOLVE_CONSTRAINTS=0``
+        can be put to stop at that stage.
 
     The list of available patches.
 
@@ -279,16 +288,6 @@ def bypass_export_some_errors(
         f_mark_static_address = torch._dynamo.mark_static_address
         torch._dynamo.mark_static_address = lambda *_, **y_: None
 
-        # torch._export.non_strict_utils.produce_guards_and_solve_constraints
-        f_produce_guards_and_solve_constraints = (
-            torch._export.non_strict_utils.produce_guards_and_solve_constraints
-        )
-        torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
-            lambda *args, **kwargs: _catch_produce_guards_and_solve_constraints(
-                f_produce_guards_and_solve_constraints, *args, verbose=verbose, **kwargs
-            )
-        )
-
         # torch._subclasses.fake_impls.infer_size
         f_infer_size = torch._subclasses.fake_impls.infer_size
         torch._subclasses.fake_impls.infer_size = patched_infer_size
@@ -297,6 +296,19 @@ def bypass_export_some_errors(
         f__broadcast_shapes = torch._refs._broadcast_shapes
         torch._refs._broadcast_shapes = patched__broadcast_shapes
         torch._meta_registrations._broadcast_shapes = patched__broadcast_shapes
+
+    # torch._export.non_strict_utils.produce_guards_and_solve_constraints
+    if catch_constraints:
+        if verbose:
+            print("[bypass_export_some_errors] catch produce_guards_and_solve_constraints")
+        f_produce_guards_and_solve_constraints = (
+            torch._export.non_strict_utils.produce_guards_and_solve_constraints
+        )
+        torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
+            lambda *args, **kwargs: _catch_produce_guards_and_solve_constraints(
+                f_produce_guards_and_solve_constraints, *args, verbose=verbose, **kwargs
+            )
+        )
 
     ####################
     # patch transformers
@@ -365,10 +377,6 @@ def bypass_export_some_errors(
             # this should disappear when torch.jit is removed
             torch.jit.isinstance = f_jit_isinstance
             torch._dynamo.mark_static_address = f_mark_static_address
-            # to catch or skip dynamic_shapes issues
-            torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
-                f_produce_guards_and_solve_constraints
-            )
             # tracked by https://github.com/pytorch/pytorch/issues/143495
             torch._subclasses.fake_impls.infer_size = f_infer_size
             torch._refs._broadcast_shapes = f__broadcast_shapes
@@ -376,6 +384,16 @@ def bypass_export_some_errors(
 
             if verbose:
                 print("[bypass_export_some_errors] restored pytorch functions")
+
+        if catch_constraints:
+            # to catch or skip dynamic_shapes issues
+            torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
+                f_produce_guards_and_solve_constraints
+            )
+            if verbose:
+                print(
+                    "[bypass_export_some_errors] restored produce_guards_and_solve_constraints"
+                )
 
         ##############
         # transformers

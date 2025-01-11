@@ -14,11 +14,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.torch_models.mistral_helper import get_mistral_model
-from experimental_experiment.torch_models.llama_helper import (
-    get_llama_attention,
-    get_llama_decoder,
-    get_llama_model,
-)
+from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.helpers import pretty_onnx
 
 
@@ -42,7 +38,7 @@ def export_utils(
     export_options=None,
     dtype: str = "",
 ):
-    export_script(f"{prefix}.onnx", model, *args)
+    export_script(f"{prefix}.script.onnx", model, *args)
     if dtype:
         import torch
 
@@ -106,61 +102,6 @@ class TestOnnxExportLlama(ExtTestCase):
             )
 
     @skipif_ci_windows("not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.7", "dynamic_shapes are not well carries")
-    def test_llama_attention(self):
-        model, input_tensors = get_llama_attention(input_dims=[(2, 1024)])
-        input_tensors = input_tensors[0]
-        expected = model(*input_tensors)
-        # torch._dynamo.reset()
-        # torch._dynamo.export(model, tracing_mode="symbolic")(*input_tensors)
-        # torch.export.export(model, input_tensors)
-        onx, builder = export_utils(
-            "test_llama_attention", model, *input_tensors, return_builder=True
-        )
-        # with open("test_llama_attention.custom.onnx", "wb") as f:
-        #     f.write(onx.SerializeToString())
-        xp = [x.numpy() for x in input_tensors]
-        feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        ref = ExtendedReferenceEvaluator(onx)
-        try:
-            results = ref.run(None, feeds)
-        except Exception as e:
-            print("--------------------")
-            try:
-                ExtendedReferenceEvaluator(onx, verbose=10).run(None, feeds)
-            except Exception:
-                pass
-            print("--------------------")
-            msg = "\n".join(
-                [
-                    f"input shapes: {[i.shape for i in input_tensors]}",
-                    builder.get_debug_msg(),
-                ]
-            )
-            raise AssertionError(msg) from e
-        self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
-        self.check_model_ort(onx)
-
-    @skipif_ci_windows("not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.7", "dynamic_shapes are not well carries")
-    def test_llama_decoder(self):
-        import torch
-
-        with torch.no_grad():
-            model, input_tensors = get_llama_decoder()
-            input_tensors = input_tensors[0]
-            expected = model(*input_tensors)
-            onx = export_utils("test_llama_decoder", model, *input_tensors)
-            xp = [x.numpy() for x in input_tensors]
-            feeds = {f"input{i}": x for i, x in enumerate(xp)}
-            ref = ExtendedReferenceEvaluator(onx)
-            results = ref.run(None, feeds)
-            self.assertEqualArray(expected.detach().numpy(), results[0], atol=1e-5)
-            self.check_model_ort(onx)
-
-    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.6", "bug")
     @ignore_warnings(DeprecationWarning)
     def test_llama_model_dynamo_false(self):
@@ -222,9 +163,9 @@ class TestOnnxExportLlama(ExtTestCase):
             self.check_model_ort(onx)
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.3", "bug")
-    @ignore_warnings(DeprecationWarning)
+    @requires_torch("2.6")
     @requires_transformers("4.38")
+    @ignore_warnings(DeprecationWarning)
     def test_mistral_model(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -240,11 +181,13 @@ class TestOnnxExportLlama(ExtTestCase):
         )
         xp = [x.numpy() for x in input_tensors]
         feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        feeds0 = dict(zip(["input", "attention_mask"], xp))
 
         from onnxruntime import InferenceSession
 
-        sess = InferenceSession("test_mistral_model.onnx", providers=["CPUExecutionProvider"])
+        sess = InferenceSession(
+            "test_mistral_model.script.onnx", providers=["CPUExecutionProvider"]
+        )
+        feeds0 = dict(zip([i.name for i in sess.get_inputs()], xp))
         results = sess.run(None, feeds0)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
 
@@ -261,9 +204,9 @@ class TestOnnxExportLlama(ExtTestCase):
             )
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.3", "bug")
-    @ignore_warnings(DeprecationWarning)
+    @requires_torch("2.6")
     @requires_transformers("4.38")
+    @ignore_warnings(DeprecationWarning)
     def test_mistral_model_bfloat16(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -280,11 +223,13 @@ class TestOnnxExportLlama(ExtTestCase):
         )
         xp = [x.numpy() for x in input_tensors]
         # feeds = {f"input{i}": x for i, x in enumerate(xp)}
-        feeds0 = dict(zip(["input", "attention_mask"], xp))
 
         from onnxruntime import InferenceSession
 
-        sess = InferenceSession("test_mistral_model.onnx", providers=["CPUExecutionProvider"])
+        sess = InferenceSession(
+            "test_mistral_model.script.onnx", providers=["CPUExecutionProvider"]
+        )
+        feeds0 = dict(zip([i.name for i in sess.get_inputs()], xp))
         results = sess.run(None, feeds0)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
 

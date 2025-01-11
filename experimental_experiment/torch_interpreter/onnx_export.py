@@ -496,8 +496,11 @@ def _make_builder_interpreter(
 
     mask_outputs = None
     if isinstance(mod, torch.fx.GraphModule):
+        exe_path = "exising-torch.fx.GraphModule"
         if verbose > 0:
             print(f"[_make_builder_interpreter] use existing {type(mod)}")
+        if export_options.remove_inplace:
+            export_options.remove_inplace_nodes(mod.graph, verbose=verbose)
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
@@ -509,8 +512,11 @@ def _make_builder_interpreter(
         exported_program = None
     elif isinstance(mod, torch.nn.Module) and mod.__class__.__name__ == "InterpreterModule":
         # comes from unflatten function
+        exe_path = "exising-InterpreterModule"
         if verbose > 0:
             print(f"[_make_builder_interpreter] use existing submodule {type(mod)}")
+        if export_options.remove_inplace:
+            export_options.remove_inplace_nodes(mod.graph, verbose=verbose)
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
@@ -521,6 +527,7 @@ def _make_builder_interpreter(
             print(graph_module.graph)
         exported_program = None
     else:
+        exe_path = "export"
         if verbose > 0:
             print(f"[_make_builder_interpreter] export_options={export_options!r}")
             print(f"[_make_builder_interpreter] input args={string_type(args)}")
@@ -626,6 +633,7 @@ def _make_builder_interpreter(
         signature=inspect.signature(mod.forward),
         check_empty_source=True,
         graph_module=graph_module,
+        exe_path=f"{exe_path}-export_options={export_options}",
     )
 
     def retrieve(
@@ -661,6 +669,7 @@ def _make_builder_interpreter(
         parameter_naming=parameter_naming,
         module_name=module_name,
         default_values=_default_values_from_sig(mod),
+        exe_path=f"{exe_path}-export_options={export_options}",
     )
     attr = getattr(export_options, "_last_working", None)
     if attr:

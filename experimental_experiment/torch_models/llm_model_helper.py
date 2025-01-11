@@ -85,7 +85,7 @@ def get_all_mini_ml_l6_v1(
         batch_size,
         max_token_id=30522,
         cache_last_dim=32,
-        num_attention_heads=12,
+        num_key_value_heads=12,
         common_dynamic_shapes=common_dynamic_shapes,
         inputs_as_tuple=inputs_as_tuple,
         num_hidden_layers=config["num_hidden_layers"],
@@ -767,6 +767,77 @@ def get_phi3_vision_128k_instruct(
         inputs_as_tuple=inputs_as_tuple,
         num_hidden_layers=config["num_hidden_layers"],
         device=device,
+    )
+
+
+def get_phi4(
+    inputs_as_tuple: bool = False,
+    input_cache: bool = True,
+    batch_size: int = 1,
+    common_dynamic_shapes: bool = False,
+    **kwargs,
+) -> Dict[str, Any]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param batch_size: batch size
+    :param input_cache: generate data for this iteration with or without cache
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :return: dictionary
+
+    See `Phi-4/config.json
+    <https://huggingface.co/microsoft/phi-4/blob/main/config.json>`_.
+    """
+    import transformers
+
+    config = {
+        "_name_or_path": "microsoft/phi-4",
+        "architectures": ["Phi3ForCausalLM"],
+        "attention_bias": False,
+        "attention_dropout": 0.0,
+        "auto_map": {},
+        "bos_token_id": 100257,
+        "embd_pdrop": 0.0,
+        "eos_token_id": 100257,
+        "hidden_act": "silu",
+        "hidden_size": 5120,
+        "initializer_range": 0.02,
+        "intermediate_size": 17920,
+        "max_position_embeddings": 16384,
+        "model_type": "phi3",
+        "num_attention_heads": 40,
+        "num_hidden_layers": 40,
+        "num_key_value_heads": 10,
+        "original_max_position_embeddings": 16384,
+        "pad_token_id": 100257,
+        "resid_pdrop": 0.0,
+        "rms_norm_eps": 1e-05,
+        "rope_scaling": None,
+        "rope_theta": 250000,
+        "sliding_window": None,
+        "tie_word_embeddings": False,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.47.0",
+        "use_cache": True,
+        "vocab_size": 100352,
+    }
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.Phi3Config(**config)
+    model = transformers.Phi3ForCausalLM(conf)
+    model.eval()
+    return finalize_llm_setup(
+        model,
+        batch_size,
+        max_token_id=32064,
+        num_key_value_heads=config["num_key_value_heads"],
+        cache_last_dim=128,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        num_hidden_layers=config["num_hidden_layers"],
+        input_cache=input_cache,
     )
 
 

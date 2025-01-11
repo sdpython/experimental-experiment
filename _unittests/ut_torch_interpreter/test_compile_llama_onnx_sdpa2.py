@@ -158,26 +158,6 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
 
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
-    def test_llama_decoder_backward_dynamic(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_decoder
-
-        input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_decoder(
-            input_dims=input_dims, _attn_implementation="sdpa", with_mask=False
-        )
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=True,
-            onnx_export="test_llama_decoder_backward_sdpa",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(
         True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"

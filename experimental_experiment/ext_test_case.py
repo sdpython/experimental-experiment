@@ -156,13 +156,14 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
             with redirect_stdout(st), warnings.catch_warnings():
                 warnings.simplefilter("ignore", (UserWarning, DeprecationWarning))
                 try:
-                    return fct(self)
+                    fct(self)
                 except AssertionError as e:
                     if "torch is not recent enough, file" in str(e):
                         raise unittest.SkipTest(str(e))  # noqa: B904
                     raise
             if f is not None:
                 f(st.getvalue())
+            return None
 
         return call_f
 
@@ -814,7 +815,7 @@ def requires_transformers(
     return lambda x: x
 
 
-def require_diffusers(
+def requires_diffusers(
     version: str, msg: str = "", or_older_than: Optional[str] = None
 ) -> Callable:
     """Skips a unit test if :epkg:`transformers` is not recent enough."""
@@ -929,6 +930,17 @@ def requires_onnx(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def requires_onnx_array_api(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`onnx-array-api` is not recent enough."""
+    import packaging.version as pv
+    import onnx_array_api
+
+    if pv.Version(".".join(onnx_array_api.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"onnx version {onnx_array_api.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def statistics_on_file(filename: str) -> Dict[str, Union[int, float, str]]:
     """
     Computes statistics on a file.
@@ -982,12 +994,25 @@ def statistics_on_folder(
 
     .. runpython::
         :showcode:
+        :toggle:
 
         import os
         import pprint
         from experimental_experiment.ext_test_case import statistics_on_folder, __file__
 
         pprint.pprint(statistics_on_folder(os.path.dirname(__file__)))
+
+    Aggregated:
+
+    .. runpython::
+        :showcode:
+        :toggle:
+
+        import os
+        import pprint
+        from experimental_experiment.ext_test_case import statistics_on_folder, __file__
+
+        pprint.pprint(statistics_on_folder(os.path.dirname(__file__), aggregation=1))
     """
     if isinstance(folder, list):
         rows = []

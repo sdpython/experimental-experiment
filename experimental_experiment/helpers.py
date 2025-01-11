@@ -1,6 +1,7 @@
+import ast
 import inspect
 import sys
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import FunctionProto, GraphProto, ModelProto, TensorProto, load as onnx_load
 from onnx.helper import (
@@ -64,20 +65,35 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         if len(obj) == 1:
             s = string_type(obj[0], with_shape=with_shape, with_min_max=with_min_max)
             return f"({s},)"
-        js = ",".join(
-            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
-        )
-        return f"({js})"
+        if len(obj) < 10:
+            js = ",".join(
+                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+            )
+            return f"({js})"
+        if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
+            mini, maxi = min(obj), max(obj)
+            return f"(...)#{len(obj)}[{mini},{maxi}]"
+        return f"(...)#{len(obj)}" if with_shape else "(...)"
     if isinstance(obj, list):
-        js = ",".join(
-            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
-        )
-        return f"#{len(obj)}[{js}]"
+        if len(obj) < 10:
+            js = ",".join(
+                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+            )
+            return f"#{len(obj)}[{js}]"
+        if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
+            mini, maxi = min(obj), max(obj)
+            return f"[...]#{len(obj)}[{mini},{maxi}]"
+        return f"[...]#{len(obj)}" if with_shape else "[...]"
     if isinstance(obj, set):
-        js = ",".join(
-            string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
-        )
-        return f"{{{js}}}"
+        if len(obj) < 10:
+            js = ",".join(
+                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+            )
+            return f"{{{js}}}"
+        if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
+            mini, maxi = min(obj), max(obj)
+            return f"{{...}}#{len(obj)}[{mini},{maxi}]"
+        return f"{{...}}#{len(obj)}" if with_shape else "{...}"
     if isinstance(obj, dict):
         s = ",".join(
             f"{kv[0]}:{string_type(kv[1],with_shape=with_shape,with_min_max=with_min_max)}"
@@ -517,3 +533,57 @@ def np_dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
             if dt == ml_dtypes.float8_e5m2fnuz:
                 return TensorProto.FLOAT8E5M2FNUZ
     raise ValueError(f"Unable to convert type {dt}")
+
+
+def rename_dynamic_dimensions(
+    constraints: Dict[str, Set[str]], original: Set[str]
+) -> Dict[str, str]:
+    """
+    Renames dynamic shapes as requested by the user. :func:`torch.export.export` uses
+    many names for dynamic dimensions. When building the onnx model,
+    some of them are redundant and can be replaced by the name provided by the user.
+
+    :param constraints: exhaustive list of used name and all the values equal to it
+    :param original: the names to use if possible
+    :return: replacement dictionary
+    """
+    replacements = {s: s for s in original}
+    all_values = set(constraints) | original
+
+    not_done = set(constraints)
+    max_iter = len(replacements)
+    while not_done and max_iter > 0:
+        max_iter -= 1
+        for k, v in constraints.items():
+            common = v & original
+            if not common:
+                continue
+            common = sorted(common)
+            by = common[0]
+            replacements[k] = by
+            for vv in v:
+                if vv not in replacements:
+                    replacements[vv] = by
+        not_done = all_values - set(replacements)
+    return replacements
+
+
+def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
+    """
+    Renames variables of an expression.
+
+    :param expression: something like ``s15 + seq_length``
+    :param replacements: replacements to make
+    :return: new string
+    """
+
+    class RenameVariable(ast.NodeTransformer):
+        def visit_Name(self, node):
+            if node.id in replacements:
+                node.id = replacements[node.id]
+            return node
+
+    tree = ast.parse(expression)
+    transformer = RenameVariable()
+    new_tree = transformer.visit(tree)
+    return ast.unparse(new_tree)

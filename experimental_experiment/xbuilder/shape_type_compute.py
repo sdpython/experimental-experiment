@@ -314,6 +314,7 @@ def _get_compute_type(dtypes: Set[int]) -> int:
         TensorProto.COMPLEX64,
         TensorProto.FLOAT,
         TensorProto.FLOAT16,
+        TensorProto.BFLOAT16,
         TensorProto.INT64,
         TensorProto.UINT64,
         TensorProto.INT32,

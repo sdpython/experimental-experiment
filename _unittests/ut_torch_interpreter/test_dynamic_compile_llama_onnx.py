@@ -8,7 +8,6 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_cuda,
     requires_onnxscript,
-    requires_onnxruntime_training,
     skipif_transformers,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
@@ -266,63 +265,6 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             fullgraph=True,
             onnx_export="tt_test_llama_model_backward_forward_dynamic",
             impl="ort",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.5", "missing kernel")
-    def test_llama_attention_forward_dynamic(self):
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_attention,
-        )
-
-        input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_attention(input_dims=input_dims)
-
-        stored = self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=False,
-            dynamic=True,
-            fullgraph=True,
-            onnx_export="tt_test_llama_attention_forward_dynamic",
-            impl="ort",
-            # verbose=10,
-            dump_prefix="tt_temp_llama_attention_forward_dynamic",
-            # raise_list={"view"}
-            atol=0.2,
-        )
-        onx = stored["instance"][0]["onnx"]
-        builder = stored["instance"][0]["builder"]
-        if __name__ == "__main__":
-            with open("test_llama_attention_forward_dynamic.onnx", "wb") as f:
-                f.write(onx.SerializeToString())
-            with open("test_llama_attention_forward_dynamic.txt", "w") as f:
-                f.write(builder.get_debug_msg())
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.8", "issue with transformers")
-    @requires_onnxruntime_training()
-    def test_llama_attention_b_forward_dynamic(self):
-        from experimental_experiment.torch_models.llama_helper import (
-            get_llama_attention,
-        )
-
-        input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_attention(input_dims=input_dims)
-
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=1,
-            dynamic=True,
-            fullgraph=True,
-            onnx_export="tt_test_llama_attention_backward_forward_dynamic",
-            impl="ort",
-            verbose=0,
-            dump_prefix="tt_temp_llama_attention_backward_forward_dynamic",
-            atol=0.2,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

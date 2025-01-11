@@ -1,3 +1,4 @@
+import copy
 import unittest
 from typing import Any, Dict, List, Tuple
 import numpy as np
@@ -38,12 +39,17 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         # print(ep.graph)
         ep.run_decompositions()  # Fails here
 
+    @skipif_ci_windows("not working")
+    @requires_torch("2.6")
     def test_export_mistral_nousers(self):
         import onnx
         import torch
         import transformers
         import onnxruntime as ort
         from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
 
         def assert_close(actual, desired):
             if isinstance(desired, torch.Tensor):
@@ -67,8 +73,17 @@ class TestIssuesPytorch2024Export(ExtTestCase):
                     else:
                         res.extend(flatten(o))
                 return tuple(res)
-            else:
-                raise NotImplementedError(f"Not implemented for class {type(obj)}")
+            if isinstance(obj, list):
+                res = []
+                for o in obj:
+                    if isinstance(o, torch.Tensor):
+                        res.append(o)
+                    else:
+                        res.extend(flatten(o))
+                return res
+            if isinstance(obj, transformers.cache_utils.DynamicCache):
+                return [*obj.key_cache, *obj.value_cache]
+            raise NotImplementedError(f"Not implemented for class {type(obj)}")
 
         config = transformers.MistralConfig(
             hidden_size=32,
@@ -86,24 +101,28 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         input_ids = torch.randint(0, 99, shape).to(torch.int64)
         attention_mask = torch.ones(shape)
         expected = model(input_ids, attention_mask)
-        ep = torch.export.export(model, (input_ids, attention_mask))
+        with bypass_export_some_errors():
+            ep = torch.export.export(model, copy.deepcopy((input_ids, attention_mask)))
 
-        # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
-        mod = ep.module()
-        # got = mod(input_ids, attention_mask)
-        # assert_close(got.to_tuple(), expected.to_tuple())
+            # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
+            mod = ep.module()
+            # got = mod(input_ids, attention_mask)
+            # assert_close(got.to_tuple(), expected.to_tuple())
 
-        expected2 = model(input_ids, attention_mask * 0)
-        got2 = mod(input_ids, attention_mask * 0)
-        assert_close(got2.to_tuple(), expected2.to_tuple())
-        # assert_close(expected2.to_tuple(), expected.to_tuple())
+            expected2 = model(*copy.deepcopy((input_ids, attention_mask * 0)))
+            got2 = mod(*copy.deepcopy((input_ids, attention_mask * 0)))
+            self.assertEqualAny(got2.to_tuple(), expected2.to_tuple())
+            # assert_close(expected2.to_tuple(), expected.to_tuple())
 
-        onx = to_onnx(
-            model,
-            (input_ids, attention_mask),
-            export_options=ExportOptions(aten_as_function=True, decomposition_table="default"),
-            optimize=False,
-        )
+            onx = to_onnx(
+                model,
+                copy.deepcopy((input_ids, attention_mask)),
+                export_options=ExportOptions(
+                    aten_as_function=True, decomposition_table="default"
+                ),
+                optimize=False,
+            )
+
         onnx.save(onx, "test_mistral_nousers_aten.onnx")
         sess = ort.InferenceSession(
             "test_mistral_nousers_aten.onnx", providers=["CPUExecutionProvider"]

@@ -39,6 +39,7 @@ class DynamoInterpreter:
     :param submodule_naming: a function which returns a submodule name in the onnx graph
     :param parameter_naming: a function which returns a parameter name in the onnx graph
     :param module_name: module name (makes it easier to retrieve the parameter names)
+    :param exe_path: gives information on how the :class:`torch.fx.Graph` was obtained
     """
 
     def _hash(self) -> str:
@@ -57,6 +58,7 @@ class DynamoInterpreter:
         parameter_naming: Optional[Callable] = None,
         module_name: Optional[str] = None,
         default_values: Optional[Dict[str, Any]] = None,
+        exe_path: str = "",
     ):
         import torch
         from ..xbuilder import FunctionOptions
@@ -78,6 +80,7 @@ class DynamoInterpreter:
             rename_allowed=True,
         )
         self.example_values_ = {}
+        self.exe_path = exe_path
         assert example_inputs is None or isinstance(
             example_inputs, tuple
         ), f"Unexpected type for example_inputs {type(example_inputs)}"
@@ -1276,7 +1279,7 @@ class DynamoInterpreter:
         )
 
     def _verify_new_shape(self, shape, node):
-        for dim in shape:
+        for axis, dim in enumerate(shape):
             if isinstance(dim, self.torch.SymInt):
                 sdim = self.builder._torch_sym_int_to_str(dim)
                 tokens = parse_expression_tokens(sdim)
@@ -1285,10 +1288,11 @@ class DynamoInterpreter:
                     t = tokens.pop()
                     if t not in self.builder.dynamic_objects:
                         self.builder.add_dynamic_object(t, t)
+                        source = dict(axis=axis, input_name=dim)
                         if t in self.builder.dynamic_dimensions_source:
-                            self.builder.dynamic_dimensions_source[t].append(dim)
+                            self.builder.dynamic_dimensions_source[t].append(source)
                         else:
-                            self.builder.dynamic_dimensions_source[t] = [dim]
+                            self.builder.dynamic_dimensions_source[t] = [source]
 
     def _process_arg(self, node, aten_name, i):
         if i is None:
@@ -1373,6 +1377,7 @@ class DynamoInterpreter:
                 self.torch.amp.autocast_mode._enter_autocast,
                 self.torch.amp.autocast_mode._exit_autocast,
                 self.torch.ops.aten._assert_scalar.default,
+                self.torch.ops.aten._assert_tensor_metadata.default,
                 self.torch.torch.sym_constrain_range_for_size,
                 "aten__exit_autocast",
                 "aten__enter_autocast",
@@ -1382,11 +1387,18 @@ class DynamoInterpreter:
                 hasattr(aten_name, "_opname")
                 and aten_name._opname in {"sym_constrain_range_for_size"}
             )
+            # the node is only used by this one
+            or (
+                aten_name == self.torch.ops.aten.native_dropout.default
+                and len(node.args[0].users) == 1
+            )
         ), (
             f"This is probably one inplace function node={node!r}, "
             f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
             f"aten_name._opname={getattr(aten_name, '_opname', '?')}, "
-            f"output_names={output_names!r}{self.builder.get_debug_msg()}"
+            f"len(node.args[0].users)={len(node.args[0].users) if node.args else 0}"
+            f"output_names={output_names!r}, exe_path={self.exe_path!r}"
+            f"{self.builder.get_debug_msg()}"
         )
 
         if self.export_options.aten_as_function:
@@ -1545,14 +1557,6 @@ class DynamoInterpreter:
         self.builder.make_node(
             fname, [*input_names, *new_inits], output_names, domain=fdomain, name=name_fct
         )
-        if not can_set:
-            for o in output_names:
-                if new_builder.has_type(o):
-                    self.builder.set_type(o)
-                if new_builder.has_shape(o):
-                    self.builder.set_shape(o)
-                elif new_builder.has_rank(o):
-                    self.builder.set_rank(o)
         return output_names[0] if len(output_names) == 1 else output_names
 
     def _get_output_names(self, node: "torch.fx.Node") -> List[str]:  # noqa: F821

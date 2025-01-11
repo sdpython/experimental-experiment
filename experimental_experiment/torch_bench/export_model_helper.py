@@ -253,7 +253,6 @@ def common_export(
             optimize=bool(enable_pattern),
             large_model=large_model,
         )
-        print([i.name for i in onx.graph.input])
         with open(filename, "wb") as f:
             f.write(onx.SerializeToString())
     else:

@@ -889,8 +889,8 @@ def max_diff(
             print(f"[max_diff] array2: {string_type(expected)} ? {string_type(got)}")
         return max_diff(expected, torch.from_numpy(got), verbose=verbose)
 
-    if expected.__class__.__name__ == "DynamicCache":
-        if got.__class__.__name__ == "DynamicCache":
+    if expected.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
+        if got.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
             if verbose >= 6:
                 print(f"[max_diff] DynamicCache: {string_type(expected)} ? {string_type(got)}")
             return max_diff(

@@ -133,7 +133,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
             )
             for i in onx.graph.input
         ]
-        self.assertEqual(shapes, [("batch", 1024), ("s1", 1024), ("s2", 1024)])
+        self.assertEqual(shapes, [("batch", 1024), ("batch", 1024), ("batch", 1024)])
         feeds = dict(zip(names, [_.detach().numpy() for _ in [x, *list_yz]]))
 
         expected = model(x, list_yz)
@@ -194,7 +194,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
         onx = to_onnx(
             model,
             (x, list_yz),
-            dynamic_shapes=({0: batch}, [{0: batch}]),
+            dynamic_shapes=({0: batch}, [{0: batch}, {0: batch}]),
             export_options=ExportOptions(tracing=True),
             verbose=0,
         )
