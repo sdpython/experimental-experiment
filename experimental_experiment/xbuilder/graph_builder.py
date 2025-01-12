@@ -6600,7 +6600,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             return True
 
         if node.op_type == "Gather":
-            self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.has_type(node.input[0]):
+                self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[1]):
                 y = self.value_as_shape(node.input[0])
                 if y is None:

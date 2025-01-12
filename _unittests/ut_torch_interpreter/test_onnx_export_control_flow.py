@@ -740,12 +740,13 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     r = torch.where(torch.zeros((1, 1), dtype=torch.bool))
                     return (input_ids, r[0], r[1])
 
-                return torch.cond(
+                cc = torch.cond(
                     image_features.numel() > 0,
                     then_branch,
                     else_branch,
                     [input_ids, image_features, vocab_size],
                 )
+                return cc
 
         model2 = Model2()
         new_out = [model2(*inp) for inp in inputs]
@@ -759,8 +760,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
         #   ).graph
         # )
 
-        # from experimental_experiment.torch_interpreter.tracing import CustomTracer
-        # graph = CustomTracer().trace(model2)
+        from experimental_experiment.torch_interpreter.tracing import CustomTracer
+
+        graph = CustomTracer().trace(model2)
+        print(graph)
         onx = to_onnx(
             model2,
             inputs[0],
@@ -771,15 +774,23 @@ class TestOnnxExportControlFlow(ExtTestCase):
             f.write(onx.SerializeToString())
 
         # still does not work
-        onx = to_onnx(
-            model2,
-            inputs[0],
-            dynamic_shapes=dynamic_shapes,
-            export_options=ExportOptions(strict=False),
-        )
-        with open("test_cond_llm_image_embedding.onnx", "wb") as f:
-            f.write(onx.SerializeToString())
+        # onx = to_onnx(
+        #     model2,
+        #     inputs[0],
+        #     dynamic_shapes=dynamic_shapes,
+        #     export_options=ExportOptions(strict=False),
+        # )
+        # with open("test_cond_llm_image_embedding.onnx", "wb") as f:
+        #     f.write(onx.SerializeToString())
         self.assertIn("If", {n.op_type for n in onx.graph.node})
+
+        sess = ExtendedReferenceEvaluator(onx)
+        for exp, inp in zip(expected, inputs):
+            feeds = dict(
+                zip([_.name for _ in onx.graph.input], [_.detach().cpu().numpy() for _ in inp])
+            )
+            got = sess.run(None, feeds)
+            self.assertEqualAny(exp, tuple(got))
 
 
 if __name__ == "__main__":

@@ -1200,12 +1200,13 @@ class DynamoInterpreter:
                     outputs=[node.name],
                 )
                 if not sts:
-                    self.builder.set_type(node.name, self.builder.get_type(result_name))
+                    if self.builder.has_type(result_name):
+                        self.builder.set_type(node.name, self.builder.get_type(result_name))
                     if self.builder.has_shape(result_name):
                         self.builder.set_shape(
                             node.name, self.builder.get_shape(result_name)[1:]
                         )
-                    else:
+                    elif self.builder.has_rank(result_name):
                         self.builder.set_rank(
                             node.name, self.builder.get_rank(result_name) - 1
                         )
