@@ -740,13 +740,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     r = torch.where(torch.zeros((1, 1), dtype=torch.bool))
                     return (input_ids, r[0], r[1])
 
-                cc = torch.cond(
+                return torch.cond(
                     image_features.numel() > 0,
                     then_branch,
                     else_branch,
                     [input_ids, image_features, vocab_size],
                 )
-                return cc
 
         model2 = Model2()
         new_out = [model2(*inp) for inp in inputs]

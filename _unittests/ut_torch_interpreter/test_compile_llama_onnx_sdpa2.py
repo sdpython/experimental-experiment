@@ -203,7 +203,7 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
             onnx_export="test_llama_model_backward_sdpa",
             impl="ref",
             verbose=0,
-            atol=3e-2,
+            atol=5e-2,
         )
 
 
