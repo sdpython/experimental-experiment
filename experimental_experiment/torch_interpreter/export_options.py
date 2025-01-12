@@ -25,6 +25,7 @@ class ExportOptions:
     :param remove_inplace: remove inplace nodes
     :param aten_as_function: keeps aten function as local function to keep a faithful
         translation of the fx graph.
+    :param allow_untyped_output: allows output with no shape and/or no type
 
     The fallback strategy tries the following in order:
 
@@ -85,6 +86,7 @@ class ExportOptions:
         dynamo: bool = False,
         aten_as_function: bool = False,
         remove_inplace: bool = True,
+        allow_untyped_output: bool = False,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -97,6 +99,7 @@ class ExportOptions:
         self.jit = jit
         self.aten_as_function = aten_as_function
         self.remove_inplace = remove_inplace
+        self.allow_untyped_output = allow_untyped_output
 
         if strategy is not None:
             assert strategy in self._allowed, (

@@ -12,6 +12,7 @@ from ..xbuilder.shape_type_compute import (
     set_type_shape_reshape,
 )
 from ._aten_functions import (
+    aten_clamp_max,
     aten_clamp_min,
     aten_cos,
     aten_expand,
@@ -31,6 +32,18 @@ def aten_meth_bool(
     import torch
 
     return aten_meth_to(g, sts, outputs, x, dtype=torch.bool)
+
+
+def aten_meth_clamp_max(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    max_: T,
+    name: str = "meth_clamp_max",
+) -> T:
+    """meth_clamp_max"""
+    return aten_clamp_max(g, sts, outputs, x, max_, name=name)
 
 
 def aten_meth_clamp_min(
@@ -74,6 +87,13 @@ def aten_meth_cpu(
 ) -> T:
     "identity"
     return g.make_node("Identity", [x], outputs, name="cpu")
+
+
+def aten_meth_detach(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
+) -> T:
+    "identity"
+    return g.make_node("Identity", [x], outputs, name="detach")
 
 
 def aten_meth_eq(

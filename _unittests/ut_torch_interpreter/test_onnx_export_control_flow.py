@@ -683,9 +683,9 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class Model(torch.nn.Module):
             def forward(
                 self,
-                input_ids: torch.LongTensor,
-                image_features: torch.FloatTensor,
-                vocab_size: int,
+                input_ids,
+                image_features,
+                vocab_size,
             ):
                 if image_features.numel():
                     input_shape = input_ids.size()
@@ -703,14 +703,14 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         inputs = [
             (
-                (torch.arange(24) - 8).reshape((2, -1)),
+                (torch.arange(24) - 8).reshape((2, -1)).to(torch.int64),
                 torch.arange(32).reshape((2, -1)).to(torch.float32),
-                1025,
+                torch.tensor(1025, dtype=torch.int64),
             ),
             (
-                (torch.arange(24) - 8).reshape((2, -1)),
+                (torch.arange(24) - 8).reshape((2, -1)).to(torch.int64),
                 torch.tensor([[], []], dtype=torch.float32),
-                1025,
+                torch.tensor(1025, dtype=torch.int64),
             ),
         ]
         model = Model()
@@ -722,13 +722,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
         )
 
         class Model2(torch.nn.Module):
-            def forward(
-                self,
-                input_ids: torch.LongTensor,
-                image_features: torch.FloatTensor,
-                vocab_size: int,
-            ):
-                def then_branch(input_ids, image_features):
+            def forward(self, input_ids, image_features, vocab_size):
+                def then_branch(input_ids, image_features, vocab_size):
                     input_shape = input_ids.size()
                     input_ids = input_ids.view(-1, input_shape[-1])
 
@@ -741,7 +736,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
                     return (input_ids, positions[0], positions[1])
 
-                def else_branch(input_ids, image_features):
+                def else_branch(input_ids, image_features, vocab_size):
                     r = torch.where(torch.zeros((1, 1), dtype=torch.bool))
                     return (input_ids, r[0], r[1])
 
@@ -749,7 +744,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     image_features.numel() > 0,
                     then_branch,
                     else_branch,
-                    [input_ids, image_features],
+                    [input_ids, image_features, vocab_size],
                 )
 
         model2 = Model2()
@@ -770,12 +765,18 @@ class TestOnnxExportControlFlow(ExtTestCase):
             model2,
             inputs[0],
             dynamic_shapes=dynamic_shapes,
-            export_options=ExportOptions(tracing=True),
+            export_options=ExportOptions(tracing=True, allow_untyped_output=True),
         )
         with open("test_cond_llm_image_embedding_tracing.onnx", "wb") as f:
             f.write(onx.SerializeToString())
 
-        onx = to_onnx(model2, inputs[0], dynamic_shapes=dynamic_shapes)
+        # still does not work
+        onx = to_onnx(
+            model2,
+            inputs[0],
+            dynamic_shapes=dynamic_shapes,
+            export_options=ExportOptions(strict=False),
+        )
         with open("test_cond_llm_image_embedding.onnx", "wb") as f:
             f.write(onx.SerializeToString())
         self.assertIn("If", {n.op_type for n in onx.graph.node})

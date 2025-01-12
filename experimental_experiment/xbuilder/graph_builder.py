@@ -1632,12 +1632,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         is equal to the existing one.
 
         :param name: name
-        :param dtype: element type (an integer, ONNX)
+        :param dtype: element type (an integer, ONNX), 0 (unknonw is a possible value)
         :param exc: raises an exception
         """
-        assert (
-            isinstance(dtype, int) and dtype != 0
-        ), f"dtype={dtype} must be a positive int for name={name!r}{self.get_debug_msg()}"
         if name in (self._debug_stop, self._debug_stop_type):
             raise AssertionError(
                 f"Requested stop, name={name!r}, dtype={dtype}{self.get_debug_msg()}"
@@ -1705,7 +1702,10 @@ class GraphBuilder(_GraphBuilderRuntime):
     def has_type(self, name: str) -> bool:
         """Tells if a result has a type. This should be always true."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        return name in self._known_types
+        if name not in self._known_types:
+            return False
+        # If the type is undefined, then it has no type.
+        return self._known_types[name]
 
     def get_rank(self, name: str) -> int:
         """Returns the rank of a result."""
@@ -2191,6 +2191,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         msg: str = "",
         parameter_name: Optional[str] = None,
         source: str = "",
+        allow_empty: bool = False,
     ) -> str:
         """
         Adds an initializer to the graph.
@@ -2208,6 +2209,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             until then, the mapping is kept in attribute ``_parameter_renaming``
         :param source: any additional information, this field is usually used to
             let the number know where the initializer was created.
+        :param allow_empty: allow_empty value
         :return: name of the initializer
         """
         if external:
@@ -2277,6 +2279,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             key=key,
             parameter_name=parameter_name,
             source=source,
+            allow_empty=allow_empty,
         )
         return name
 
@@ -3165,6 +3168,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape: Optional[STATIC_SHAPE] = None,
         indexed: bool = True,
         is_dimension: Optional[bool] = None,
+        allow_untyped_output: bool = False,
     ) -> Union[str, List[str]]:
         """
         Adds a tensor output to the onnx graph.
@@ -3175,6 +3179,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param indexed: the name must be indexed?
         :param is_dimension: torch is using torch.SymInt to add a dynamic input
             to the graph
+        :param allow_untyped_output: allow untyped output even if it is not a function
         :return: output name
         """
         assert self.as_function or is_dimension is not None, (
@@ -3203,7 +3208,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         elem_type = _get_type(elem_type, False)
-        if not self.as_function and elem_type == 0:
+        if not self.as_function and not allow_untyped_output and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
         node = oh.make_tensor_value_info(name, elem_type, dyn_shape)
@@ -6013,14 +6018,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                     or not self.initializers_dict_sources[k].source
                     else f"##{self.initializers_dict_sources[k].source}"
                 )
+                k_shape = self.get_shape(k)
                 self.add_initializer(
                     v,
                     self.initializers_dict[k],
                     itype=self.get_type(k),
-                    shape=self.get_shape(k),
+                    shape=k_shape,
                     cst=self.constants_[k],
                     existing=None,
                     source=f"GraphBuilder.remove_identity_nodes/from({k}){source}",
+                    allow_empty=len(k_shape) > 0 and 0 in k_shape,
                 )
                 del self.initializers_dict[k]
                 del self.constants_[k]

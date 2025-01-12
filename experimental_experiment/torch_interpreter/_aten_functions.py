@@ -1356,9 +1356,11 @@ def aten_clamp_min(
 ) -> T:
     """clamp_min"""
     if isinstance(min_, (float, int)):
-        assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
-        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-        min_value = np.array([min_], dtype=dtype)
+        if g.has_type(x):
+            dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+            min_value = np.array([min_], dtype=dtype)
+        else:
+            min_value = g.op.CastLike(np.array([min_]), x, name=name)
         res = g.op.Clip(x, min_value, name=name, outputs=outputs)
     else:
         assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"

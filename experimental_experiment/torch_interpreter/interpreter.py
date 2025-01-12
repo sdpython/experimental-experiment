@@ -299,12 +299,8 @@ class DynamoInterpreter:
                 root, n = self.builder.local_domain, 0
 
             if not isinstance(init, self.torch.fx.GraphModule):
-
-                class LocalFunction(self.torch.nn.Module):
-                    def forward(self, x, y):
-                        return init(x, y)
-
-                trace_init = LocalFunction()
+                trace_init_cls = self.make_nn_module_with_callable(init)
+                trace_init = trace_init_cls()
             else:
                 trace_init = init
 
@@ -332,6 +328,7 @@ class DynamoInterpreter:
             if isinstance(init, self.builder.torch.nn.Parameter)
             else None
         )
+
         self.builder.make_initializer(
             node.name,
             init,
@@ -341,8 +338,26 @@ class DynamoInterpreter:
                 if parameter_name
                 else "DynamoInterpret.get_attr.0"
             ),
+            allow_empty=0 in init.shape,
         )
         return node.name
+
+    def make_nn_module_with_callable(self, f: Callable) -> "torch.nn.Module":  # noqa: F821
+        """
+        Wraps a function into a nn Module to export it.
+        """
+        sig = inspect.signature(f)
+        if len(sig.parameters) == 3:
+
+            class LocalFunction3(self.torch.nn.Module):
+                def forward(self, x, y, z):
+                    return f(x, y, z)
+
+            return LocalFunction3
+        raise NotImplementedError(
+            f"make_nn_module_with_callable not implemented for "
+            f"{len(sig.parameters)} parameters{self.builder.get_debug_msg()}"
+        )
 
     def _make_tensor_check(self, name: str, fake_tensor: bool, users: Any):
         if (
@@ -729,7 +744,7 @@ class DynamoInterpreter:
                         f"Output sequences are not implemented but {a!r} is one"
                         f"{self.builder.get_debug_msg()}"
                     )
-                    elem_type = self.builder.get_type(a)
+                    elem_type = self.builder.get_type(a) if self.builder.has_type(a) else 0
                     if self.builder.has_shape(a):
                         shape = self.builder.get_shape(a)
                     elif self.builder.has_rank(a):
@@ -743,7 +758,7 @@ class DynamoInterpreter:
                             example = stored[1][0]
                             if example and len(example) > 2:
                                 shape = example[2]
-                        if shape is None:
+                        if shape is None and not self.export_options.allow_untyped_output:
                             raise RuntimeError(
                                 f"val is None for node={node}, "
                                 f"output={output}, a={a!r}, o={o!r}, "
@@ -756,16 +771,19 @@ class DynamoInterpreter:
                             )
 
                 # let's avoid none
-                ns = []
-                for i, d in enumerate(shape):
-                    if d is None:
-                        d = f"d_{o}_{i}"
-                        self.builder.make_dynamic_object(d, self.torch.SymInt(d))
-                    ns.append(d)
-                shape = tuple(ns)
-                is_dimension = self.builder.get_is_dimension(
-                    a or o, elem_type=elem_type, shape=shape, n_outputs=len(outputs)
-                )
+                if shape is not None:
+                    ns = []
+                    for i, d in enumerate(shape):
+                        if d is None:
+                            d = f"d_{o}_{i}"
+                            self.builder.make_dynamic_object(d, self.torch.SymInt(d))
+                        ns.append(d)
+                    shape = tuple(ns)
+                    is_dimension = self.builder.get_is_dimension(
+                        a or o, elem_type=elem_type, shape=shape, n_outputs=len(outputs)
+                    )
+                else:
+                    is_dimension = False
 
                 self.builder.make_tensor_output(
                     o,
@@ -773,6 +791,7 @@ class DynamoInterpreter:
                     shape=shape,
                     indexed=False,
                     is_dimension=is_dimension,
+                    allow_untyped_output=self.export_options.allow_untyped_output,
                 )
             return [_[1] for _ in outputs]
 

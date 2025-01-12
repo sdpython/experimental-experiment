@@ -140,7 +140,9 @@ def proto_from_array(
         np_arr = arr_cpu
     elif arr_cpu.data_ptr() == arr.data_ptr():
         copy = arr_cpu.clone().detach().requires_grad_(False)
-        assert arr_cpu.data_ptr() != copy.data_ptr()
+        assert (
+            arr_cpu.data_ptr() == 0 or arr_cpu.data_ptr() != copy.data_ptr()
+        ), f"Pointers are not null and different {arr_cpu.data_ptr()} != {copy.data_ptr()}"
         np_arr = np.from_dlpack(copy)
     else:
         np_arr = np.from_dlpack(arr_cpu.detach())

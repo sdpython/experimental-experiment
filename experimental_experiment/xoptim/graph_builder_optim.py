@@ -569,11 +569,19 @@ class GraphBuilderPatternOptimization:
         assert (
             name not in self.builder.initializers_dict
         ), f"name {name!r} has no type but it is an initializer"
-        assert name not in self.builder.input_names, (
+        assert self.builder.as_function or name not in self.builder.input_names, (
             f"name {name!r} has no type but it is an input, "
             f"known_types={pprint.pformat(self.builder._known_types)}"
         )
         node = self.node_before(name)
+        if node is None:
+            if exc:
+                raise RuntimeError(
+                    f"Unable to guess type for {name!r}, "
+                    f"knowns types are {pprint.pformat(self.builder._known_types)}"
+                )
+            return 0
+
         input_types = [(self.get_type(i) if self.has_type(i) else 0) for i in node.input]
         output_type = infer_types(node, input_types, name, exc=exc)
         if output_type > 0:
