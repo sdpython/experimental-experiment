@@ -12,6 +12,7 @@ from ..xbuilder.shape_type_compute import (
     set_type_shape_reshape,
 )
 from ._aten_functions import (
+    aten_clamp_min,
     aten_cos,
     aten_expand,
     aten_eq,
@@ -30,6 +31,18 @@ def aten_meth_bool(
     import torch
 
     return aten_meth_to(g, sts, outputs, x, dtype=torch.bool)
+
+
+def aten_meth_clamp_min(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    min_: T,
+    name: str = "meth_clamp_min",
+) -> T:
+    """meth_clamp_min"""
+    return aten_clamp_min(g, sts, outputs, x, min_, name=name)
 
 
 def aten_meth_clone(
@@ -336,7 +349,8 @@ def aten_meth_size(
         res = g.op.Shape(x, name=f"{name}A", outputs=outputs)
         if not sts:
             g.set_type(res, TensorProto.INT64)
-            g.set_shape(res, (g.get_rank(x),))
+            if g.has_rank(x):
+                g.set_shape(res, (g.get_rank(x),))
         return res
 
     s = g.op.Shape(x, name=name)
@@ -510,7 +524,6 @@ def aten_meth_view(
             set_type_shape_reshape(g, res, input_name, args)
         return res
 
-    print("***********", input_name, args, outputs)
     new_shape_name = g.make_shape_from_results(args, name=".view")
     res = g.make_node("Reshape", [input_name, new_shape_name], outputs, name=".view")
     if not sts:

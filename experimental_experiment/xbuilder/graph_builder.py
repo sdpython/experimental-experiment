@@ -1635,6 +1635,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param dtype: element type (an integer, ONNX)
         :param exc: raises an exception
         """
+        assert (
+            isinstance(dtype, int) and dtype != 0
+        ), f"dtype={dtype} must be a positive int for name={name!r}{self.get_debug_msg()}"
         if name in (self._debug_stop, self._debug_stop_type):
             raise AssertionError(
                 f"Requested stop, name={name!r}, dtype={dtype}{self.get_debug_msg()}"
@@ -2050,7 +2053,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 value = self._torch_sym_int(d)
                 key.append(value)
             elif isinstance(d, (str, self.torch.SymInt)):
-                assert self.has_shape(d), (
+                assert self.has_shape(d) or (self.has_rank(d) and self.get_rank(d) == 0), (
                     f"Missing shape for {d!r} in {shape!r}, has_rank={self.has_rank(d)}, "
                     f"has_type={self.has_type(d)}{self.get_debug_msg()}"
                 )
@@ -8051,7 +8054,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return [self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))]
 
         if example_shape is None and example_shape is None:
-            if input_index < len(self.input_args):
+            if self.input_args is not None and input_index < len(self.input_args):
                 v = self.input_args[input_index]
                 if isinstance(v, VirtualTensor):
                     example_shape = v.shape
@@ -8071,10 +8074,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"self.input_args={self.input_args}, "
                     f"as_function={self.as_function}{self.get_debug_msg()}"
                 )
+            elif self.as_function:
+                # We don't need the shape for function.
+                return None
             else:
                 raise NotImplementedError(
                     f"example_shape is None, example_value as well, there is no input_args, "
-                    f"type input_arg={type(self.input_args[input_index])}, "
+                    f"input_index={input_index}, "
+                    f"input_args={string_type(self.input_args, with_shape=True)}, "
                     f"dynamic_shapes={dynamic_shapes}, input_index={input_index}, "
                     f"self.input_args={self.input_args}, "
                     f"as_function={self.as_function}{self.get_debug_msg()}"

@@ -290,7 +290,7 @@ class DynamoInterpreter:
                     f"\nnode.__dict__={node.__dict__}{self.builder.get_debug_msg()}"
                 ) from e
 
-        if isinstance(init, self.torch.fx.GraphModule):
+        if isinstance(init, self.torch.fx.GraphModule) or callable(init):
             # This function is meant to be used later.
             if "." in self.builder.local_domain:
                 root, n = self.builder.local_domain.split(".")
@@ -298,8 +298,18 @@ class DynamoInterpreter:
             else:
                 root, n = self.builder.local_domain, 0
 
+            if not isinstance(init, self.torch.fx.GraphModule):
+
+                class LocalFunction(self.torch.nn.Module):
+                    def forward(self, x, y):
+                        return init(x, y)
+
+                trace_init = LocalFunction()
+            else:
+                trace_init = init
+
             builder, _args, _kwargs, _output_names = self._interpret_sub_module(
-                init, None, None, source_node=node, local_domain=f"{root}.{n}"
+                trace_init, None, None, source_node=node, local_domain=f"{root}.{n}"
             )
             self.builder.make_local_function(
                 builder,

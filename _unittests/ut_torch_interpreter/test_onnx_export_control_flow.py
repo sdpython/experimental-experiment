@@ -697,9 +697,9 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     # has_image = len(positions[0].tolist()) > 0
                     input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
 
-                    return input_ids, positions
+                    return (input_ids, *positions)
 
-                return input_ids, torch.where(torch.zeros((1, 1), dtype=torch.bool))
+                return (input_ids, *torch.where(torch.zeros((1, 1), dtype=torch.bool)))
 
         inputs = [
             (
@@ -718,7 +718,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         self.assertEqual(
             string_type(expected, with_shape=True),
-            "#2[(T7s2x12,(T7s8,T7s8)),(T7s2x12,(T7s0,T7s0))]",
+            "#2[(T7s2x12,T7s8,T7s8),(T7s2x12,T7s0,T7s0)]",
         )
 
         class Model2(torch.nn.Module):
@@ -739,16 +739,17 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     )  # = torch.where(condition)
                     # has_image = len(positions[0].tolist()) > 0
                     input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
-                    return input_ids, positions
+                    return (input_ids, positions[0], positions[1])
 
                 def else_branch(input_ids, image_features):
-                    return input_ids, torch.where(torch.zeros((1, 1), dtype=torch.bool))
+                    r = torch.where(torch.zeros((1, 1), dtype=torch.bool))
+                    return (input_ids, r[0], r[1])
 
                 return torch.cond(
                     image_features.numel() > 0,
                     then_branch,
                     else_branch,
-                    (input_ids, image_features),
+                    [input_ids, image_features],
                 )
 
         model2 = Model2()
@@ -757,6 +758,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         batch = torch.export.Dim("batch")
         dynamic_shapes = ({0: batch}, {0: batch}, None)
+        # print(
+        #   torch.export.export(
+        #       model2, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
+        #   ).graph
+        # )
+
         # from experimental_experiment.torch_interpreter.tracing import CustomTracer
         # graph = CustomTracer().trace(model2)
         onx = to_onnx(
@@ -767,8 +774,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
         )
         with open("test_cond_llm_image_embedding_tracing.onnx", "wb") as f:
             f.write(onx.SerializeToString())
-
-        # print(torch.export.export(model2, inputs[0], dynamic_shapes=dynamic_shapes).graph)
 
         onx = to_onnx(model2, inputs[0], dynamic_shapes=dynamic_shapes)
         with open("test_cond_llm_image_embedding.onnx", "wb") as f:

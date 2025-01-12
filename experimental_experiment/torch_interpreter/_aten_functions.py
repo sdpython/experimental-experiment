@@ -334,7 +334,7 @@ def aten___or___Tensor(
     y: T,
     name: str = "__or___Tensor",
 ) -> T:
-    "inplace or, we assume inplace modifications were removed"
+    "inplace `or`, we assume inplace modifications were removed"
     return aten_or(g, sts, outputs, x, y, name=name)
 
 
@@ -361,13 +361,10 @@ def aten_and_(
     outputs: List[str],
     x: T,
     y: T,
-    name="and",
+    name="and_",
 ) -> T:
-    "and"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_and_)."
-    )
+    "inplace `and`, we assume inplace modifications were removed"
+    return aten_and(g, sts, outputs, x, y, name=name)
 
 
 def aten_logical_and(
@@ -5186,7 +5183,7 @@ def aten_lt(
     name="lt",
 ) -> T:
     "less"
-    x, y = prepare_inputs_homogeneous_operator(g, x, y)
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name, op_type="Less")
     res = g.op.Less(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)

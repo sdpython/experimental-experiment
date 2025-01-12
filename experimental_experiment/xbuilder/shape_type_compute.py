@@ -398,7 +398,7 @@ def prepare_inputs_homogeneous_operator(
     :return: new inputs
     """
     dtypes_list = [_get_input_type(g, a, python_default=False) for a in args]
-    dtypes_list_not_none = [n for n in dtypes_list if n is not None]
+    dtypes_list_not_none = [n for n in dtypes_list if n not in (0, None)]
     if not dtypes_list_not_none:
         # the type cannot be guessed from the input as it is only python types,
         # let's include them
@@ -412,6 +412,11 @@ def prepare_inputs_homogeneous_operator(
         only = dtypes_list[0]
     else:
         only = _get_compute_type(set(dtypes))
+    assert only > 0, (
+        f"Unexpected element type={only}, op_type={op_type!r}, "
+        f"dtypes_list={dtypes_list}, dtypes_list_not_none={dtypes_list_not_none}, "
+        f"name={name!r}, args={args}{g.get_debug_msg()}"
+    )
     inputs = []
     for dt, a in zip(dtypes_list, args):
         if dt == only and isinstance(a, str):
