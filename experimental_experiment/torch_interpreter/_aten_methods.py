@@ -230,6 +230,21 @@ def aten_meth_mean(
     return res
 
 
+def aten_meth_numel(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "meth_numel",
+) -> T:
+    "meth_numel"
+    res = g.op.Size(x, outputs=outputs, name=name)
+    if not sts:
+        g.set_type(res, TensorProto.INT64)
+        g.set_shape(res, tuple())
+    return res
+
+
 def aten_meth_pow(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

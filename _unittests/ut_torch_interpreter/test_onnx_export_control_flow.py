@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     hide_stdout,
 )
+from experimental_experiment.helpers import string_type
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
@@ -675,6 +676,104 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
                     return
+
+    def test_cond_llm_image_embedding(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(
+                self,
+                input_ids: torch.LongTensor,
+                image_features: torch.FloatTensor,
+                vocab_size: int,
+            ):
+                if image_features.numel():
+                    input_shape = input_ids.size()
+                    input_ids = input_ids.view(-1, input_shape[-1])
+
+                    # positions for image tokens
+                    condition = (input_ids < 0) & (input_ids > -int(1e9))
+                    positions = torch.where(condition)
+                    # has_image = len(positions[0].tolist()) > 0
+                    input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
+
+                    return input_ids, positions
+
+                return input_ids, torch.where(torch.zeros((1, 1), dtype=torch.bool))
+
+        inputs = [
+            (
+                (torch.arange(24) - 8).reshape((2, -1)),
+                torch.arange(32).reshape((2, -1)).to(torch.float32),
+                1025,
+            ),
+            (
+                (torch.arange(24) - 8).reshape((2, -1)),
+                torch.tensor([[], []], dtype=torch.float32),
+                1025,
+            ),
+        ]
+        model = Model()
+        expected = [model(*inp) for inp in inputs]
+
+        self.assertEqual(
+            string_type(expected, with_shape=True),
+            "#2[(T7s2x12,(T7s8,T7s8)),(T7s2x12,(T7s0,T7s0))]",
+        )
+
+        class Model2(torch.nn.Module):
+            def forward(
+                self,
+                input_ids: torch.LongTensor,
+                image_features: torch.FloatTensor,
+                vocab_size: int,
+            ):
+                def then_branch(input_ids, image_features):
+                    input_shape = input_ids.size()
+                    input_ids = input_ids.view(-1, input_shape[-1])
+
+                    # positions for image tokens
+                    condition = (input_ids < 0) & (input_ids > -int(1e9))
+                    positions = torch.nonzero(
+                        condition, as_tuple=True
+                    )  # = torch.where(condition)
+                    # has_image = len(positions[0].tolist()) > 0
+                    input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
+                    return input_ids, positions
+
+                def else_branch(input_ids, image_features):
+                    return input_ids, torch.where(torch.zeros((1, 1), dtype=torch.bool))
+
+                return torch.cond(
+                    image_features.numel() > 0,
+                    then_branch,
+                    else_branch,
+                    (input_ids, image_features),
+                )
+
+        model2 = Model2()
+        new_out = [model2(*inp) for inp in inputs]
+        self.assertEqualAny(expected, new_out)
+
+        batch = torch.export.Dim("batch")
+        dynamic_shapes = ({0: batch}, {0: batch}, None)
+        # from experimental_experiment.torch_interpreter.tracing import CustomTracer
+        # graph = CustomTracer().trace(model2)
+        onx = to_onnx(
+            model2,
+            inputs[0],
+            dynamic_shapes=dynamic_shapes,
+            export_options=ExportOptions(tracing=True),
+        )
+        with open("test_cond_llm_image_embedding_tracing.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
+
+        # print(torch.export.export(model2, inputs[0], dynamic_shapes=dynamic_shapes).graph)
+
+        onx = to_onnx(model2, inputs[0], dynamic_shapes=dynamic_shapes)
+        with open("test_cond_llm_image_embedding.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
+        self.assertIn("If", {n.op_type for n in onx.graph.node})
 
 
 if __name__ == "__main__":

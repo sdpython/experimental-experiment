@@ -309,6 +309,21 @@ class ExportOptions:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
 
+        if self.tracing:
+            from .tracing import CustomTracer
+
+            concrete_args = kwargs.copy() if kwargs else {}
+            if args:
+                sig = inspect.signature(mod.forward)
+                for p, a in zip(sig.parameters, args):
+                    if a is not None and p not in concrete_args:
+                        concrete_args[p] = a
+            graph = CustomTracer().trace(mod, concrete_args=concrete_args)
+            if self.remove_inplace:
+                self.remove_inplace_nodes(graph, verbose=verbose)
+            gm = torch.fx.GraphModule(mod, graph)
+            return gm
+
         if verbose:
             print(
                 f"[ExportOptions.export] torch.export.export "
@@ -357,21 +372,6 @@ class ExportOptions:
                     f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
                     f"\n---exported-program---\n{exported_program}"
                 ) from e
-
-        if self.tracing:
-            from .tracing import CustomTracer
-
-            concrete_args = kwargs.copy() if kwargs else {}
-            if args:
-                sig = inspect.signature(mod.forward)
-                for p, a in zip(sig.parameters, args):
-                    if a is not None and p not in concrete_args:
-                        concrete_args[p] = a
-            graph = CustomTracer().trace(mod, concrete_args=concrete_args)
-            if self.remove_inplace:
-                self.remove_inplace_nodes(graph, verbose=verbose)
-            gm = torch.fx.GraphModule(mod, graph)
-            return gm
 
         if exported_program is None:
             if verbose:
