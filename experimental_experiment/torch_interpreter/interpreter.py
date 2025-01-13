@@ -290,7 +290,7 @@ class DynamoInterpreter:
                     f"\nnode.__dict__={node.__dict__}{self.builder.get_debug_msg()}"
                 ) from e
 
-        if isinstance(init, self.torch.fx.GraphModule):
+        if isinstance(init, self.torch.fx.GraphModule) or callable(init):
             # This function is meant to be used later.
             if "." in self.builder.local_domain:
                 root, n = self.builder.local_domain.split(".")
@@ -298,8 +298,14 @@ class DynamoInterpreter:
             else:
                 root, n = self.builder.local_domain, 0
 
+            if not isinstance(init, self.torch.fx.GraphModule):
+                trace_init_cls = self.make_nn_module_with_callable(init)
+                trace_init = trace_init_cls()
+            else:
+                trace_init = init
+
             builder, _args, _kwargs, _output_names = self._interpret_sub_module(
-                init, None, None, source_node=node, local_domain=f"{root}.{n}"
+                trace_init, None, None, source_node=node, local_domain=f"{root}.{n}"
             )
             self.builder.make_local_function(
                 builder,
@@ -322,6 +328,7 @@ class DynamoInterpreter:
             if isinstance(init, self.builder.torch.nn.Parameter)
             else None
         )
+
         self.builder.make_initializer(
             node.name,
             init,
@@ -331,8 +338,26 @@ class DynamoInterpreter:
                 if parameter_name
                 else "DynamoInterpret.get_attr.0"
             ),
+            allow_empty=0 in init.shape,
         )
         return node.name
+
+    def make_nn_module_with_callable(self, f: Callable) -> "torch.nn.Module":  # noqa: F821
+        """
+        Wraps a function into a nn Module to export it.
+        """
+        sig = inspect.signature(f)
+        if len(sig.parameters) == 3:
+
+            class LocalFunction3(self.torch.nn.Module):
+                def forward(self, x, y, z):
+                    return f(x, y, z)
+
+            return LocalFunction3
+        raise NotImplementedError(
+            f"make_nn_module_with_callable not implemented for "
+            f"{len(sig.parameters)} parameters{self.builder.get_debug_msg()}"
+        )
 
     def _make_tensor_check(self, name: str, fake_tensor: bool, users: Any):
         if (
@@ -719,7 +744,7 @@ class DynamoInterpreter:
                         f"Output sequences are not implemented but {a!r} is one"
                         f"{self.builder.get_debug_msg()}"
                     )
-                    elem_type = self.builder.get_type(a)
+                    elem_type = self.builder.get_type(a) if self.builder.has_type(a) else 0
                     if self.builder.has_shape(a):
                         shape = self.builder.get_shape(a)
                     elif self.builder.has_rank(a):
@@ -733,7 +758,7 @@ class DynamoInterpreter:
                             example = stored[1][0]
                             if example and len(example) > 2:
                                 shape = example[2]
-                        if shape is None:
+                        if shape is None and not self.export_options.allow_untyped_output:
                             raise RuntimeError(
                                 f"val is None for node={node}, "
                                 f"output={output}, a={a!r}, o={o!r}, "
@@ -746,16 +771,19 @@ class DynamoInterpreter:
                             )
 
                 # let's avoid none
-                ns = []
-                for i, d in enumerate(shape):
-                    if d is None:
-                        d = f"d_{o}_{i}"
-                        self.builder.make_dynamic_object(d, self.torch.SymInt(d))
-                    ns.append(d)
-                shape = tuple(ns)
-                is_dimension = self.builder.get_is_dimension(
-                    a or o, elem_type=elem_type, shape=shape, n_outputs=len(outputs)
-                )
+                if shape is not None:
+                    ns = []
+                    for i, d in enumerate(shape):
+                        if d is None:
+                            d = f"d_{o}_{i}"
+                            self.builder.make_dynamic_object(d, self.torch.SymInt(d))
+                        ns.append(d)
+                    shape = tuple(ns)
+                    is_dimension = self.builder.get_is_dimension(
+                        a or o, elem_type=elem_type, shape=shape, n_outputs=len(outputs)
+                    )
+                else:
+                    is_dimension = False
 
                 self.builder.make_tensor_output(
                     o,
@@ -763,6 +791,8 @@ class DynamoInterpreter:
                     shape=shape,
                     indexed=False,
                     is_dimension=is_dimension,
+                    allow_untyped_output=self.export_options.allow_untyped_output,
+                    doc_string=f"#A:{a}-{o}",
                 )
             return [_[1] for _ in outputs]
 
@@ -771,7 +801,9 @@ class DynamoInterpreter:
             output_name = f"{node.name}_{n_outputs}"
             shape = val.shape
             dtype = _get_type(val.dtype)
-            self.builder.make_tensor_output(output_name, dtype, shape)
+            self.builder.make_tensor_output(
+                output_name, dtype, shape, doc_string=f"#B:{node.name}#{n_outputs}"
+            )
             return output_name
 
         raise TypeError(f"Unexpected output type {type(val)}.")
@@ -1171,12 +1203,13 @@ class DynamoInterpreter:
                     outputs=[node.name],
                 )
                 if not sts:
-                    self.builder.set_type(node.name, self.builder.get_type(result_name))
+                    if self.builder.has_type(result_name):
+                        self.builder.set_type(node.name, self.builder.get_type(result_name))
                     if self.builder.has_shape(result_name):
                         self.builder.set_shape(
                             node.name, self.builder.get_shape(result_name)[1:]
                         )
-                    else:
+                    elif self.builder.has_rank(result_name):
                         self.builder.set_rank(
                             node.name, self.builder.get_rank(result_name) - 1
                         )
@@ -1531,7 +1564,10 @@ class DynamoInterpreter:
         )
         for o in output_names:
             new_builder.make_tensor_output(
-                o, indexed=False, is_dimension=self.builder.get_is_dimension(o, exc=False)
+                o,
+                indexed=False,
+                is_dimension=self.builder.get_is_dimension(o, exc=False),
+                doc_string=f"#C:{o}",
             )
         inits, (fdomain, fname) = self.builder.make_local_function(
             new_builder,

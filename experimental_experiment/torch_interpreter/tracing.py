@@ -64,7 +64,7 @@ class CustomProxy(torch.fx.proxy.Proxy):
                     len(args) == 4
                 ), f"Unexpected kwargs={kwargs}, args={args}, orig_method={orig_method}"
                 assert isinstance(
-                    args[3], list
+                    args[3], (list, tuple)
                 ), f"Unexpected type {type(args[3])} for the last argument"
                 root = args[0]
                 cond_true = root.tracer.register_callable("cond", args[1])

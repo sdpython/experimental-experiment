@@ -263,6 +263,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
+        self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
     """
 
     class ShapeConstant:
@@ -432,6 +433,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
+        self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -1561,7 +1563,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape = self.verify_shape(shape, 0, name=name)
         assert allow_zero or 0 not in shape or shape == (0,), (
             f"Unexpected null shape {shape!r} (or {shape0!r}) for name={name!r}, "
-            f"this case usually happens before a concetenation"
+            f"this case usually happens before a concatenation"
             f"{self.get_debug_msg()}"
         )
 
@@ -1632,7 +1634,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         is equal to the existing one.
 
         :param name: name
-        :param dtype: element type (an integer, ONNX)
+        :param dtype: element type (an integer, ONNX), 0 (unknonw is a possible value)
         :param exc: raises an exception
         """
         if name in (self._debug_stop, self._debug_stop_type):
@@ -1702,7 +1704,10 @@ class GraphBuilder(_GraphBuilderRuntime):
     def has_type(self, name: str) -> bool:
         """Tells if a result has a type. This should be always true."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        return name in self._known_types
+        if name not in self._known_types:
+            return False
+        # If the type is undefined, then it has no type.
+        return self._known_types[name]
 
     def get_rank(self, name: str) -> int:
         """Returns the rank of a result."""
@@ -2050,7 +2055,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 value = self._torch_sym_int(d)
                 key.append(value)
             elif isinstance(d, (str, self.torch.SymInt)):
-                assert self.has_shape(d), (
+                assert self.has_shape(d) or (self.has_rank(d) and self.get_rank(d) == 0), (
                     f"Missing shape for {d!r} in {shape!r}, has_rank={self.has_rank(d)}, "
                     f"has_type={self.has_type(d)}{self.get_debug_msg()}"
                 )
@@ -2188,6 +2193,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         msg: str = "",
         parameter_name: Optional[str] = None,
         source: str = "",
+        allow_empty: bool = False,
     ) -> str:
         """
         Adds an initializer to the graph.
@@ -2205,6 +2211,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             until then, the mapping is kept in attribute ``_parameter_renaming``
         :param source: any additional information, this field is usually used to
             let the number know where the initializer was created.
+        :param allow_empty: allow_empty value
         :return: name of the initializer
         """
         if external:
@@ -2274,6 +2281,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             key=key,
             parameter_name=parameter_name,
             source=source,
+            allow_empty=allow_empty,
         )
         return name
 
@@ -3162,6 +3170,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape: Optional[STATIC_SHAPE] = None,
         indexed: bool = True,
         is_dimension: Optional[bool] = None,
+        allow_untyped_output: bool = False,
+        doc_string: str = "",
     ) -> Union[str, List[str]]:
         """
         Adds a tensor output to the onnx graph.
@@ -3172,6 +3182,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param indexed: the name must be indexed?
         :param is_dimension: torch is using torch.SymInt to add a dynamic input
             to the graph
+        :param allow_untyped_output: allow untyped output even if it is not a function
+        :param doc_string: doc string
         :return: output name
         """
         assert self.as_function or is_dimension is not None, (
@@ -3200,10 +3212,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         elem_type = _get_type(elem_type, False)
-        if not self.as_function and elem_type == 0:
+        if not self.as_function and not allow_untyped_output and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
-        node = oh.make_tensor_value_info(name, elem_type, dyn_shape)
+        if elem_type != 0:
+            node = oh.make_tensor_value_info(name, elem_type, dyn_shape, doc_string=doc_string)
+        else:
+            # We skip the shape as well.
+            node = ValueInfoProto()
+            node.name = name
+            if doc_string:
+                node.doc_string = doc_string
         node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         self.outputs.append(node)
         assert self.has_name(name), f"Output {name!r} not found{self.get_debug_msg()}"
@@ -3362,6 +3381,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             op_type not in {"NegXplus1", "ReplaceZero"} or domain != ""
         ), f"Type={op_type!r} and domain {domain!r} mismatch{self.get_debug_msg()}"
+        assert (
+            op_type != "If"
+            or domain != ""
+            or (
+                len(kwargs["then_branch"].output)
+                == len(outputs)
+                == len(kwargs["else_branch"].output)
+                and len(kwargs["then_branch"].input) == 0 == len(kwargs["else_branch"].input)
+            )
+        ), (
+            f"Node 'If' has an unexpected number of inputs or outputs."
+            f"\nIf({', '.join(inputs)}) -> {outputs}"
+            f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
+        )
 
     def do_not_remove(self, node: NodeProto) -> bool:
         """Tells if a node should be removed or not."""
@@ -3498,6 +3531,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise AssertionError(
                 f"Stop requested as {self._debug_node_output!r} appears in "
                 f"{op_type}({', '.join(inputs)}) -> {', '.join(output_names)}"
+                f"{self.get_debug_msg()}"
+            )
+
+        if self._debug_node_type and op_type == self._debug_node_type:
+            raise AssertionError(
+                f"Stop requested as {self._debug_node_type!r} appears in "
+                f"{op_type}({', '.join(inputs)}) -> {', '.join(output_names)}"
+                f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
             )
 
         # next
@@ -6010,14 +6051,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                     or not self.initializers_dict_sources[k].source
                     else f"##{self.initializers_dict_sources[k].source}"
                 )
+                k_shape = self.get_shape(k)
                 self.add_initializer(
                     v,
                     self.initializers_dict[k],
                     itype=self.get_type(k),
-                    shape=self.get_shape(k),
+                    shape=k_shape,
                     cst=self.constants_[k],
                     existing=None,
                     source=f"GraphBuilder.remove_identity_nodes/from({k}){source}",
+                    allow_empty=len(k_shape) > 0 and 0 in k_shape,
                 )
                 del self.initializers_dict[k]
                 del self.constants_[k]
@@ -6409,6 +6452,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(sh, int):
                 continue
             self.make_dynamic_object(sh, self.torch.SymInt(sh), input_name=val.name, axis=i)
+        if 0 in shape and len(shape) > 1 and min(shape) == max(shape) == 0:
+            # something like (0, 0, 0), we skip.
+            return
         self.set_shape(val.name, shape, exc=False)
 
     def _update_shape_types_with_proto(
@@ -6590,7 +6636,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             return True
 
         if node.op_type == "Gather":
-            self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.has_type(node.input[0]):
+                self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.is_constant(node.input[1]):
                 y = self.value_as_shape(node.input[0])
                 if y is None:
@@ -8051,7 +8098,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return [self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))]
 
         if example_shape is None and example_shape is None:
-            if input_index < len(self.input_args):
+            if self.input_args is not None and input_index < len(self.input_args):
                 v = self.input_args[input_index]
                 if isinstance(v, VirtualTensor):
                     example_shape = v.shape
@@ -8071,10 +8118,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"self.input_args={self.input_args}, "
                     f"as_function={self.as_function}{self.get_debug_msg()}"
                 )
+            elif self.as_function:
+                # We don't need the shape for function.
+                return None
             else:
                 raise NotImplementedError(
                     f"example_shape is None, example_value as well, there is no input_args, "
-                    f"type input_arg={type(self.input_args[input_index])}, "
+                    f"input_index={input_index}, "
+                    f"input_args={string_type(self.input_args, with_shape=True)}, "
                     f"dynamic_shapes={dynamic_shapes}, input_index={input_index}, "
                     f"self.input_args={self.input_args}, "
                     f"as_function={self.as_function}{self.get_debug_msg()}"

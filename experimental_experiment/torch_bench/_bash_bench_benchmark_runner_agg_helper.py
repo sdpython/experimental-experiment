@@ -1387,6 +1387,7 @@ def _filter_data(
     df: pandas.DataFrame,
     filter_in: Optional[str] = None,
     filter_out: Optional[str] = None,
+    verbose: int = 0,
 ) -> pandas.DataFrame:
     """
     Argument `filter` follows the syntax
@@ -1417,7 +1418,12 @@ def _filter_data(
         for k, v in cond.items():
             if k not in df.columns:
                 continue
-            df = df[df[k].isin(v)]
+            if verbose:
+                print(
+                    f"[_filter_data] filter in column {k!r}, "
+                    f"values {v!r} among {set(df[k].astype(str))}"
+                )
+            df = df[df[k].astype(str).isin(v)]
 
     if filter_out:
         cond = _f(filter_out)
@@ -1425,7 +1431,12 @@ def _filter_data(
         for k, v in cond.items():
             if k not in df.columns:
                 continue
-            df = df[~df[k].isin(v)]
+            if verbose:
+                print(
+                    f"[_filter_data] filter out column {k!r}, "
+                    f"values {v!r} among {set(df[k].astype(str))}"
+                )
+            df = df[~df[k].astype(str).isin(v)]
     return df
 
 
@@ -2229,7 +2240,7 @@ def build_historical_report(
         if verbose:
             print("[merge_benchmark_reports] filtering data")
 
-        df = _filter_data(df, filter_in=filter_in, filter_out=filter_out)
+        df = _filter_data(df, filter_in=filter_in, filter_out=filter_out, verbose=verbose)
 
         if verbose:
             print(f"[merge_benchmark_reports] done, new shape={df.shape}")

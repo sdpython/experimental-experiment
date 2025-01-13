@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     hide_stdout,
 )
+from experimental_experiment.helpers import string_type
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
@@ -675,6 +676,154 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
                     return
+
+    def test_cond_llm_image_embedding(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(
+                self,
+                input_ids,
+                image_features,
+                vocab_size,
+            ):
+                if image_features.numel():
+                    input_shape = input_ids.size()
+                    input_ids = input_ids.view(-1, input_shape[-1])
+
+                    # positions for image tokens
+                    condition = (input_ids < 0) & (input_ids > -int(1e9))
+                    positions = torch.where(condition)
+                    # has_image = len(positions[0].tolist()) > 0
+                    input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
+
+                    return (input_ids, *positions)
+
+                return (input_ids, *torch.where(torch.zeros((1, 1), dtype=torch.bool)))
+
+        inputs = [
+            (
+                (torch.arange(24) - 8).reshape((2, -1)).to(torch.int64),
+                torch.arange(32).reshape((2, -1)).to(torch.float32),
+                torch.tensor(1025, dtype=torch.int64),
+            ),
+            (
+                (torch.arange(24) - 8).reshape((2, -1)).to(torch.int64),
+                torch.tensor([[], []], dtype=torch.float32),
+                torch.tensor(1025, dtype=torch.int64),
+            ),
+        ]
+        model = Model()
+        expected = [model(*inp) for inp in inputs]
+
+        self.assertEqual(
+            string_type(expected, with_shape=True),
+            "#2[(T7s2x12,T7s8,T7s8),(T7s2x12,T7s0,T7s0)]",
+        )
+
+        class Model2(torch.nn.Module):
+            def forward(self, input_ids, image_features, vocab_size):
+                def then_branch(input_ids, image_features, vocab_size):
+                    input_shape = input_ids.size()
+                    input_ids = input_ids.view(-1, input_shape[-1])
+
+                    # positions for image tokens
+                    condition = (input_ids < 0) & (input_ids > -int(1e9))
+                    positions = torch.nonzero(condition, as_tuple=True)
+                    input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
+                    return (input_ids, positions[0], positions[1])
+
+                def else_branch(input_ids, image_features, vocab_size):
+                    r = torch.where(torch.zeros((1, 1), dtype=torch.bool))
+                    return (input_ids, r[0], r[1])
+
+                a, b, c = torch.cond(
+                    image_features.numel() > 0,
+                    then_branch,
+                    else_branch,
+                    [input_ids, image_features, vocab_size],
+                )
+                return a, b, c
+
+        model2 = Model2()
+        new_out = [model2(*inp) for inp in inputs]
+        self.assertEqualAny(expected, new_out)
+
+        batch = torch.export.Dim("batch")
+        seq_length = torch.export.Dim("seq_length")
+        dynamic_shapes = ({0: batch}, {0: batch, 1: seq_length}, None)
+
+        # print(
+        #     torch.export.export(model2, inputs[0],
+        #       dynamic_shapes=dynamic_shapes, strict=False)
+        # )
+        # torch.onnx.export(model2, (*inputs[0][:2], 1025),
+        #   "test_cond_llm_image_embedding_dynamo.onnx",
+        #   dynamic_shapes=dynamic_shapes, dynamo=True)
+        # torch.onnx.export(model2, inputs[0], "test_cond_llm_image_embedding_dynamo.onnx",
+        #   dynamic_shapes=dynamic_shapes, dynamo=True)
+
+        from experimental_experiment.torch_interpreter.tracing import CustomTracer
+
+        graph = CustomTracer().trace(model2)
+        self.assertNotEmpty(graph)
+
+        onx = to_onnx(
+            model2,
+            inputs[0],
+            dynamic_shapes=dynamic_shapes,
+            export_options=ExportOptions(tracing=True, allow_untyped_output=True),
+        )
+        with open("test_cond_llm_image_embedding_tracing.onnx", "wb") as f:
+            f.write(onx.SerializeToString())
+
+        # still does not work
+        # onx = to_onnx(
+        #     model2,
+        #     inputs[0],
+        #     dynamic_shapes=dynamic_shapes,
+        #     export_options=ExportOptions(strict=False),
+        # )
+        # with open("test_cond_llm_image_embedding.onnx", "wb") as f:
+        #     f.write(onx.SerializeToString())
+        self.assertIn("If", {n.op_type for n in onx.graph.node})
+
+        sess = ExtendedReferenceEvaluator(onx)
+        for exp, inp in zip(expected, inputs):
+            with self.subTest(input2_shape=inp[1].shape):
+                feeds = dict(
+                    zip(
+                        [_.name for _ in onx.graph.input],
+                        [_.detach().cpu().numpy() for _ in inp],
+                    )
+                )
+                got = sess.run(None, feeds)
+                self.assertEqual(len(got), 3)
+                self.assertEqual(len(exp), 3)
+                self.assertEqualArray(exp[2], got[2])
+                self.assertEqualArray(exp[1], got[1])
+                self.assertEqualArray(exp[0], got[0])
+
+        # same with onnxruntime
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        for exp, inp in zip(expected, inputs):
+            with self.subTest(input2_shape=inp[1].shape):
+                feeds = dict(
+                    zip(
+                        [_.name for _ in onx.graph.input],
+                        [_.detach().cpu().numpy() for _ in inp],
+                    )
+                )
+                got = sess.run(None, feeds)
+                self.assertEqual(len(got), 3)
+                self.assertEqual(len(exp), 3)
+                self.assertEqualArray(exp[2], got[2])
+                self.assertEqualArray(exp[1], got[1])
+                self.assertEqualArray(exp[0], got[0])
 
 
 if __name__ == "__main__":

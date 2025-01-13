@@ -1366,8 +1366,9 @@ class ModelRunner:
             )
 
             if os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1"):
-                print("-- EXPORTED PROGRAM")
+                print("-- EXPORTED PROGRAM FINAL -- ")
                 print(exported_mod)
+                print("-- DONE -- ")
 
         root_name = os.path.splitext(name)[0]
         if verbose:
