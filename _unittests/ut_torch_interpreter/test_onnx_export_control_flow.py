@@ -729,10 +729,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
                     # positions for image tokens
                     condition = (input_ids < 0) & (input_ids > -int(1e9))
-                    positions = torch.nonzero(
-                        condition, as_tuple=True
-                    )  # = torch.where(condition)
-                    # has_image = len(positions[0].tolist()) > 0
+                    positions = torch.nonzero(condition, as_tuple=True)
                     input_ids = input_ids.clamp_min(0).clamp_max(vocab_size).detach()
                     return (input_ids, positions[0], positions[1])
 
@@ -757,9 +754,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
         dynamic_shapes = ({0: batch}, {0: batch, 1: seq_length}, None)
 
         # print(
-        #   torch.export.export(
-        #       model2, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
-        #   ).graph
+        #     torch.export.export(model2, inputs[0],
+        #       dynamic_shapes=dynamic_shapes, strict=False)
         # )
         # torch.onnx.export(model2, (*inputs[0][:2], 1025),
         #   "test_cond_llm_image_embedding_dynamo.onnx",

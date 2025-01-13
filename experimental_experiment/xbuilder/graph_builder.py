@@ -1563,7 +1563,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape = self.verify_shape(shape, 0, name=name)
         assert allow_zero or 0 not in shape or shape == (0,), (
             f"Unexpected null shape {shape!r} (or {shape0!r}) for name={name!r}, "
-            f"this case usually happens before a concetenation"
+            f"this case usually happens before a concatenation"
             f"{self.get_debug_msg()}"
         )
 
@@ -6448,6 +6448,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(sh, int):
                 continue
             self.make_dynamic_object(sh, self.torch.SymInt(sh), input_name=val.name, axis=i)
+        if 0 in shape and len(shape) > 1 and min(shape) == max(shape) == 0:
+            # something like (0, 0, 0), we skip.
+            return
         self.set_shape(val.name, shape, exc=False)
 
     def _update_shape_types_with_proto(

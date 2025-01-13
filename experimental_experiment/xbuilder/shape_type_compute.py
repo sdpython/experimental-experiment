@@ -861,7 +861,15 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
         return
     dtype = self.get_type(node.input[0])
     self.set_type(node.output[0], dtype)
-    if self.has_shape(node.input[0]):
+    if len(node.input) == 1 and not node.attribute:
+        # No axes specified.
+        if self.has_shape(node.input[0]):
+            shape_x = self.get_shape(node.input[0])
+            if all_int(shape_x):
+                new_shape = tuple(s for s in shape_x if s != 1)
+                self.set_shape(node.output[0], new_shape)
+        # In other cases, we cannot really determine the new shape for sure.
+    elif self.has_shape(node.input[0]):
         if len(node.input) == 1:
             c = self.get_attribute(node, "axes")
             cst = np.array(c.ints, dtype=np.int64)
