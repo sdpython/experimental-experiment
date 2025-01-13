@@ -792,6 +792,7 @@ class DynamoInterpreter:
                     indexed=False,
                     is_dimension=is_dimension,
                     allow_untyped_output=self.export_options.allow_untyped_output,
+                    doc_string=f"#A:{a}-{o}",
                 )
             return [_[1] for _ in outputs]
 
@@ -800,7 +801,9 @@ class DynamoInterpreter:
             output_name = f"{node.name}_{n_outputs}"
             shape = val.shape
             dtype = _get_type(val.dtype)
-            self.builder.make_tensor_output(output_name, dtype, shape)
+            self.builder.make_tensor_output(
+                output_name, dtype, shape, doc_string=f"#B:{node.name}#{n_outputs}"
+            )
             return output_name
 
         raise TypeError(f"Unexpected output type {type(val)}.")
@@ -1561,7 +1564,10 @@ class DynamoInterpreter:
         )
         for o in output_names:
             new_builder.make_tensor_output(
-                o, indexed=False, is_dimension=self.builder.get_is_dimension(o, exc=False)
+                o,
+                indexed=False,
+                is_dimension=self.builder.get_is_dimension(o, exc=False),
+                doc_string=f"#C:{o}",
             )
         inits, (fdomain, fname) = self.builder.make_local_function(
             new_builder,

@@ -3171,6 +3171,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         indexed: bool = True,
         is_dimension: Optional[bool] = None,
         allow_untyped_output: bool = False,
+        doc_string: str = "",
     ) -> Union[str, List[str]]:
         """
         Adds a tensor output to the onnx graph.
@@ -3182,6 +3183,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param is_dimension: torch is using torch.SymInt to add a dynamic input
             to the graph
         :param allow_untyped_output: allow untyped output even if it is not a function
+        :param doc_string: doc string
         :return: output name
         """
         assert self.as_function or is_dimension is not None, (
@@ -3214,11 +3216,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
         if elem_type != 0:
-            node = oh.make_tensor_value_info(name, elem_type, dyn_shape)
+            node = oh.make_tensor_value_info(name, elem_type, dyn_shape, doc_string=doc_string)
         else:
             # We skip the shape as well.
             node = ValueInfoProto()
             node.name = name
+            if doc_string:
+                node.doc_string = doc_string
         node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         self.outputs.append(node)
         assert self.has_name(name), f"Output {name!r} not found{self.get_debug_msg()}"

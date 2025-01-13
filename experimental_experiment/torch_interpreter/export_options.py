@@ -1,4 +1,5 @@
 import inspect
+import os
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -181,6 +182,8 @@ class ExportOptions:
         """Exports the model into an exported program."""
         import torch
         from .tracing import CustomTracer
+
+        print_exported_program = os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1")
 
         if self.fallback or self.strategy in {
             "fallback",
@@ -381,6 +384,11 @@ class ExportOptions:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return exported_program
 
+        if print_exported_program:
+            print("-- EXPORTED PROGRAM AFTER EXPORT -- ")
+            print(exported_program)
+            print("-- DONE -- ")
+
         if self.decomposition_table:
             dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
@@ -388,12 +396,20 @@ class ExportOptions:
                     f"[ExportOptions.export] done after decomposition "
                     f"in {time.perf_counter() - begin}"
                 )
+            if print_exported_program:
+                print("-- EXPORTED PROGRAM AFTER DECOMPOSITION -- ")
+                print(dec)
+                print("-- DONE -- ")
             return dec
 
         if self.remove_inplace:
             self.remove_inplace_nodes(
                 exported_program.graph, exported_program=exported_program, verbose=verbose
             )
+            if print_exported_program:
+                print("-- EXPORTED PROGRAM AFTER REMOVING INLINE -- ")
+                print(exported_program)
+                print("-- DONE -- ")
 
         if verbose:
             print(
