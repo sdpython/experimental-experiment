@@ -263,6 +263,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
+        self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
     """
 
     class ShapeConstant:
@@ -432,6 +433,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
+        self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -3211,7 +3213,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         if not self.as_function and not allow_untyped_output and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
-        node = oh.make_tensor_value_info(name, elem_type, dyn_shape)
+        if elem_type != 0:
+            node = oh.make_tensor_value_info(name, elem_type, dyn_shape)
+        else:
+            # We skip the shape as well.
+            node = ValueInfoProto()
+            node.name = name
         node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         self.outputs.append(node)
         assert self.has_name(name), f"Output {name!r} not found{self.get_debug_msg()}"
@@ -3370,6 +3377,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             op_type not in {"NegXplus1", "ReplaceZero"} or domain != ""
         ), f"Type={op_type!r} and domain {domain!r} mismatch{self.get_debug_msg()}"
+        assert (
+            op_type != "If"
+            or domain != ""
+            or (
+                len(kwargs["then_branch"].output)
+                == len(outputs)
+                == len(kwargs["else_branch"].output)
+                and len(kwargs["then_branch"].input) == 0 == len(kwargs["else_branch"].input)
+            )
+        ), (
+            f"Node 'If' has an unexpected number of inputs or outputs."
+            f"\nIf({', '.join(inputs)}) -> {outputs}"
+            f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
+        )
 
     def do_not_remove(self, node: NodeProto) -> bool:
         """Tells if a node should be removed or not."""
@@ -3506,6 +3527,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise AssertionError(
                 f"Stop requested as {self._debug_node_output!r} appears in "
                 f"{op_type}({', '.join(inputs)}) -> {', '.join(output_names)}"
+                f"{self.get_debug_msg()}"
+            )
+
+        if self._debug_node_type and op_type == self._debug_node_type:
+            raise AssertionError(
+                f"Stop requested as {self._debug_node_type!r} appears in "
+                f"{op_type}({', '.join(inputs)}) -> {', '.join(output_names)}"
+                f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
             )
 
         # next

@@ -1340,7 +1340,7 @@ def aten_clamp_max(
         res = g.op.Clip(x, None, max_value, name=name, outputs=outputs)
     else:
         assert isinstance(max_, str), f"Unexpected type {type(max_)}{g.get_debug_msg()}"
-        res = g.op.Max(x, max_, name=name, outputs=outputs)
+        res = g.op.Min(x, max_, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -1364,7 +1364,7 @@ def aten_clamp_min(
         res = g.op.Clip(x, min_value, name=name, outputs=outputs)
     else:
         assert isinstance(min_, str), f"Unexpected type {type(min_)}{g.get_debug_msg()}"
-        res = g.op.Min(x, min_, name=name, outputs=outputs)
+        res = g.op.Max(x, min_, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
@@ -1457,6 +1457,32 @@ def aten_cond(
         value_info_proto = ValueInfoProto()
         value_info_proto.name = name
         return value_info_proto
+
+    if g._debug_node_type and g._debug_node_type == true_graph:
+        raise AssertionError(
+            f"Stop requested as {g._debug_node_type!r} appears in "
+            f"{true_graph}({', '.join(inputs)}) -> {', '.join(outputs)}"
+            f"{g.get_debug_msg()}"
+        )
+    if g._debug_node_type and g._debug_node_type == false_graph:
+        raise AssertionError(
+            f"Stop requested as {g._debug_node_type!r} appears in "
+            f"{false_graph}({', '.join(inputs)}) -> {', '.join(outputs)}"
+            f"{g.get_debug_msg()}"
+        )
+
+    then_f = g.get_local_function(true_graph, g.local_domain)
+    else_f = g.get_local_function(false_graph, g.local_domain)
+    assert len(then_f.output) == len(else_f.output), (
+        f"Function {then_f.name!r} and {else_f.name} must have the same number of "
+        f"outputs but instead, {then_f.output} != {else_f.output}"
+        f"{g.get_debug_msg()}"
+    )
+    if len(then_f.output) != 1 and len(outputs) == 1:
+        # We cannot use a sequence here since it is not guaranteed
+        # that all outputs have the same type.
+        # We change the outputs to match the number of outputs in both branches.
+        outputs = [f"{outputs[0]}#{i}" for i in range(len(then_f.output))]
 
     res = g.make_node(
         "If",
@@ -7299,6 +7325,13 @@ def aten_scan(
         full_inputs_graph.append(f"init_{i}_{s}")
     for i, s in enumerate(scan_inputs):
         full_inputs_graph.append(f"scan_{i}_{s}")
+
+    if g._debug_node_type and g._debug_node_type == scan_graph:
+        raise AssertionError(
+            f"Stop requested as {g._debug_node_type!r} appears in "
+            f"{scan_graph}({', '.join([*full_inputs_graph, *additional_inputs])}) "
+            f"-> {', '.join(loc.output)}{g.get_debug_msg()}"
+        )
 
     body = make_graph(
         [

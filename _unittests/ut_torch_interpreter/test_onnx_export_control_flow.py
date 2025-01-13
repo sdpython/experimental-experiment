@@ -740,29 +740,38 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     r = torch.where(torch.zeros((1, 1), dtype=torch.bool))
                     return (input_ids, r[0], r[1])
 
-                return torch.cond(
+                a, b, c = torch.cond(
                     image_features.numel() > 0,
                     then_branch,
                     else_branch,
                     [input_ids, image_features, vocab_size],
                 )
+                return a, b, c
 
         model2 = Model2()
         new_out = [model2(*inp) for inp in inputs]
         self.assertEqualAny(expected, new_out)
 
         batch = torch.export.Dim("batch")
-        dynamic_shapes = ({0: batch}, {0: batch}, None)
+        seq_length = torch.export.Dim("seq_length")
+        dynamic_shapes = ({0: batch}, {0: batch, 1: seq_length}, None)
+
         # print(
         #   torch.export.export(
         #       model2, inputs[0], dynamic_shapes=dynamic_shapes, strict=False
         #   ).graph
         # )
+        # torch.onnx.export(model2, (*inputs[0][:2], 1025),
+        #   "test_cond_llm_image_embedding_dynamo.onnx",
+        #   dynamic_shapes=dynamic_shapes, dynamo=True)
+        # torch.onnx.export(model2, inputs[0], "test_cond_llm_image_embedding_dynamo.onnx",
+        #   dynamic_shapes=dynamic_shapes, dynamo=True)
 
         from experimental_experiment.torch_interpreter.tracing import CustomTracer
 
         graph = CustomTracer().trace(model2)
-        print(graph)
+        self.assertNotEmpty(graph)
+
         onx = to_onnx(
             model2,
             inputs[0],
@@ -785,11 +794,40 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         sess = ExtendedReferenceEvaluator(onx)
         for exp, inp in zip(expected, inputs):
-            feeds = dict(
-                zip([_.name for _ in onx.graph.input], [_.detach().cpu().numpy() for _ in inp])
-            )
-            got = sess.run(None, feeds)
-            self.assertEqualAny(exp, tuple(got))
+            with self.subTest(input2_shape=inp[1].shape):
+                feeds = dict(
+                    zip(
+                        [_.name for _ in onx.graph.input],
+                        [_.detach().cpu().numpy() for _ in inp],
+                    )
+                )
+                got = sess.run(None, feeds)
+                self.assertEqual(len(got), 3)
+                self.assertEqual(len(exp), 3)
+                self.assertEqualArray(exp[2], got[2])
+                self.assertEqualArray(exp[1], got[1])
+                self.assertEqualArray(exp[0], got[0])
+
+        # same with onnxruntime
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        for exp, inp in zip(expected, inputs):
+            with self.subTest(input2_shape=inp[1].shape):
+                feeds = dict(
+                    zip(
+                        [_.name for _ in onx.graph.input],
+                        [_.detach().cpu().numpy() for _ in inp],
+                    )
+                )
+                got = sess.run(None, feeds)
+                self.assertEqual(len(got), 3)
+                self.assertEqual(len(exp), 3)
+                self.assertEqualArray(exp[2], got[2])
+                self.assertEqualArray(exp[1], got[1])
+                self.assertEqualArray(exp[0], got[0])
 
 
 if __name__ == "__main__":
