@@ -615,7 +615,7 @@ def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:
                 res.extend(flatten_object(i, drop_keys=drop_keys))
         return tuple(res) if isinstance(x, tuple) else res
     if isinstance(x, dict):
-        # We flatten the values.
+        # We flatten the keys.
         if drop_keys:
             return flatten_object(list(x.values()), drop_keys=drop_keys)
         return flatten_object(list(x.items()), drop_keys=drop_keys)
@@ -643,6 +643,7 @@ def max_diff(
     begin: int = 0,
     end: int = -1,
     _index: int = 0,
+    allow_unique_tensor_with_list_of_one_element: bool = True,
 ) -> Dict[str, float]:
     """
     Returns the maximum discrepancy.
@@ -656,6 +657,8 @@ def max_diff(
     :param begin: first output to considered
     :param end: last output to considered (-1 for the last one)
     :param _index: used with begin and end
+    :param allow_unique_tensor_with_list_of_one_element:
+        allow a comparison between a single tensor and a list of one tensor
     :return: dictionary with many values
 
     * abs: max abolute error
@@ -666,6 +669,29 @@ def max_diff(
         of this output
     * dnan: difference in the number of nan
     """
+    if allow_unique_tensor_with_list_of_one_element:
+        if hasattr(expected, "shape") and isinstance(got, list) and len(got) == 1:
+            return max_diff(
+                expected,
+                got[0],
+                verbose=verbose,
+                level=level,
+                flatten=False,
+                debug_info=debug_info,
+                allow_unique_tensor_with_list_of_one_element=False,
+            )
+        return max_diff(
+            expected,
+            got,
+            verbose=verbose,
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
+            allow_unique_tensor_with_list_of_one_element=False,
+        )
     if hasattr(expected, "to_tuple"):
         if verbose >= 6:
             print(f"[max_diff] to_tuple1: {string_type(expected)} ? {string_type(got)}")
@@ -892,95 +918,161 @@ def max_diff(
             verbose=verbose,
         )
 
-    if isinstance(expected, np.ndarray):
-        if verbose >= 6:
-            print(f"[max_diff] array1: {string_type(expected)} ? {string_type(got)}")
-        return max_diff(expected.detach().cpu().numpy(), got, verbose=verbose)
-
-    if isinstance(got, np.ndarray):
-        if verbose >= 6:
-            print(f"[max_diff] array2: {string_type(expected)} ? {string_type(got)}")
-        return max_diff(expected, got.detach().cpu().numpy(), verbose=verbose)
-
     import torch
 
-    if isinstance(expected, torch.Tensor):
+    if isinstance(expected, np.ndarray) or isinstance(got, np.ndarray):
+        if isinstance(expected, torch.Tensor):
+            expected = expected.detach().cpu().numpy()
         if isinstance(got, torch.Tensor):
-            if verbose >= 6:
-                print(f"[max_diff] tensor: {string_type(expected)} ? {string_type(got)}")
-            if _index < begin or (end != -1 and _index >= end):
-                # out of boundary
-                return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
-            if expected.dtype in (torch.complex64, torch.complex128):
-                if got.dtype == expected.dtype:
-                    got = torch.view_as_real(got)
-                elif got.dtype not in (torch.float32, torch.float64):
-                    if verbose >= 10:
-                        # To understand the value it comes from.
-                        if debug_info:
-                            print("\n".join(debug_info))
-                        print(
-                            f"[max_diff-c] expected.dtype={expected.dtype}, "
-                            f"got.dtype={got.dtype}"
-                        )
-                    return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
-                expected = torch.view_as_real(expected)
+            got = got.detach().cpu().numpy()
 
-            if expected.shape != got.shape:
+        if verbose >= 6:
+            print(f"[max_diff] tensor: {string_type(expected)} ? {string_type(got)}")
+
+        if _index < begin or (end != -1 and _index >= end):
+            # out of boundary
+            return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
+        if expected.dtype in (np.complex64, np.complex128):
+            if got.dtype == expected.dtype:
+                got = np.real(got)
+            elif got.dtype not in (np.float32, np.float64):
                 if verbose >= 10:
                     # To understand the value it comes from.
                     if debug_info:
                         print("\n".join(debug_info))
                     print(
-                        f"[max_diff-s] expected.shape={expected.shape}, "
-                        f"got.shape={got.shape}"
+                        f"[max_diff-c] expected.dtype={expected.dtype}, "
+                        f"got.dtype={got.dtype}"
                     )
                 return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
-            # nan are replace by 1e10, any discrepancies in that order of magnitude
-            # is likely caused by nans
-            exp_cpu = expected.to(torch.float64).cpu().nan_to_num(1e10)
-            got_cpu = got.to(torch.float64).cpu().nan_to_num(1e10)
-            diff = (got_cpu - exp_cpu).abs()
-            ndiff = (expected.isnan().cpu().to(int) - got.isnan().cpu().to(int)).abs()
-            rdiff = diff / (exp_cpu.abs() + 1e-3)
-            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
-                float(diff.max()),
-                float(rdiff.max()),
-                float(diff.sum()),
-                float(diff.numel()),
-                float(ndiff.sum()),
-            )
-            if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
+            expected = np.real(expected)
+
+        if expected.shape != got.shape:
+            if verbose >= 10:
                 # To understand the value it comes from.
                 if debug_info:
                     print("\n".join(debug_info))
+                print(f"[max_diff-s] expected.shape={expected.shape}, got.shape={got.shape}")
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+        # nan are replace by 1e10, any discrepancies in that order of magnitude
+        # is likely caused by nans
+        exp_cpu = np.nan_to_num(expected.astype(np.float64), nan=1e10)
+        got_cpu = np.nan_to_num(got.astype(np.float64), nan=1e10)
+        diff = np.abs(got_cpu - exp_cpu)
+        ndiff = np.abs(np.isnan(expected).astype(int) - np.isnan(got).astype(int))
+        rdiff = diff / (np.abs(exp_cpu) + 1e-3)
+        abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+            float(diff.max()),
+            float(rdiff.max()),
+            float(diff.sum()),
+            float(diff.size),
+            float(ndiff.sum()),
+        )
+        if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
+            # To understand the value it comes from.
+            if debug_info:
+                print("\n".join(debug_info))
+            print(
+                f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
+                f"nan_diff={nan_diff}, dtype={expected.dtype}, "
+                f"shape={expected.shape}, level={level}, _index={_index}"
+            )
+            if abs_diff >= 10:
+                idiff = np.argmax(diff.reshape((-1,)))
+                x = expected.reshape((-1,))[idiff]
+                y = got.reshape((-1,))[idiff]
                 print(
-                    f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
-                    f"nan_diff={nan_diff}, dtype={expected.dtype}, "
-                    f"shape={expected.shape}, level={level}, _index={_index}"
+                    f"   [max_diff-2] abs diff={abs_diff}, "
+                    f"x={x}, y={y}, level={level}, "
+                    f"_index={_index}"
                 )
-                if abs_diff >= 10:
-                    idiff = torch.argmax(diff.reshape((-1,)))
-                    x = expected.reshape((-1,))[idiff]
-                    y = got.reshape((-1,))[idiff]
-                    print(
-                        f"   [max_diff-2] abs diff={abs_diff}, "
-                        f"x={x}, y={y}, level={level}, "
-                        f"_index={_index}"
-                    )
-                    print(y)
+                print(y)
 
-                if rel_diff >= 10:
-                    idiff = torch.argmax(rdiff.reshape((-1,)))
-                    x = expected.reshape((-1,))[idiff]
-                    y = got.reshape((-1,))[idiff]
-                    print(
-                        f"   [max_diff-3] rel diff={rel_diff}, "
-                        f"x={x}, y={y}, level={level}, "
-                        f"_index={_index}"
-                    )
+            if rel_diff >= 10:
+                idiff = np.argmax(rdiff.reshape((-1,)))
+                x = expected.reshape((-1,))[idiff]
+                y = got.reshape((-1,))[idiff]
+                print(
+                    f"   [max_diff-3] rel diff={rel_diff}, "
+                    f"x={x}, y={y}, level={level}, "
+                    f"_index={_index}"
+                )
 
-            return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff, dnan=nan_diff)
+        return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff, dnan=nan_diff)
+
+    if isinstance(expected, torch.Tensor) and isinstance(got, torch.Tensor):
+        if verbose >= 6:
+            print(f"[max_diff] tensor: {string_type(expected)} ? {string_type(got)}")
+        if _index < begin or (end != -1 and _index >= end):
+            # out of boundary
+            return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
+        if expected.dtype in (torch.complex64, torch.complex128):
+            if got.dtype == expected.dtype:
+                got = torch.view_as_real(got)
+            elif got.dtype not in (torch.float32, torch.float64):
+                if verbose >= 10:
+                    # To understand the value it comes from.
+                    if debug_info:
+                        print("\n".join(debug_info))
+                    print(
+                        f"[max_diff-c] expected.dtype={expected.dtype}, "
+                        f"got.dtype={got.dtype}"
+                    )
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+            expected = torch.view_as_real(expected)
+
+        if expected.shape != got.shape:
+            if verbose >= 10:
+                # To understand the value it comes from.
+                if debug_info:
+                    print("\n".join(debug_info))
+                print(f"[max_diff-s] expected.shape={expected.shape}, got.shape={got.shape}")
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+        # nan are replace by 1e10, any discrepancies in that order of magnitude
+        # is likely caused by nans
+        exp_cpu = expected.to(torch.float64).cpu().nan_to_num(1e10)
+        got_cpu = got.to(torch.float64).cpu().nan_to_num(1e10)
+        diff = (got_cpu - exp_cpu).abs()
+        ndiff = (expected.isnan().cpu().to(int) - got.isnan().cpu().to(int)).abs()
+        rdiff = diff / (exp_cpu.abs() + 1e-3)
+        abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+            float(diff.max()),
+            float(rdiff.max()),
+            float(diff.sum()),
+            float(diff.numel()),
+            float(ndiff.sum()),
+        )
+        if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
+            # To understand the value it comes from.
+            if debug_info:
+                print("\n".join(debug_info))
+            print(
+                f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
+                f"nan_diff={nan_diff}, dtype={expected.dtype}, "
+                f"shape={expected.shape}, level={level}, _index={_index}"
+            )
+            if abs_diff >= 10:
+                idiff = torch.argmax(diff.reshape((-1,)))
+                x = expected.reshape((-1,))[idiff]
+                y = got.reshape((-1,))[idiff]
+                print(
+                    f"   [max_diff-2] abs diff={abs_diff}, "
+                    f"x={x}, y={y}, level={level}, "
+                    f"_index={_index}"
+                )
+                print(y)
+
+            if rel_diff >= 10:
+                idiff = torch.argmax(rdiff.reshape((-1,)))
+                x = expected.reshape((-1,))[idiff]
+                y = got.reshape((-1,))[idiff]
+                print(
+                    f"   [max_diff-3] rel diff={rel_diff}, "
+                    f"x={x}, y={y}, level={level}, "
+                    f"_index={_index}"
+                )
+
+        return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff, dnan=nan_diff)
 
     if "SquashedNormal" in expected.__class__.__name__:
         if verbose >= 6:
