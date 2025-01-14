@@ -627,6 +627,9 @@ def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:
         return tuple(x.conv_states, x.ssm_states)
     if hasattr(x, "to_tuple"):
         return flatten_object(x.to_tuple(), drop_keys=drop_keys)
+    if hasattr(x, "shape"):
+        # A tensor. Nothing to do.
+        return x
     raise TypeError(
         f"Unexpected type {type(x)} for x, drop_keys={drop_keys}, "
         f"content is {string_type(x, with_shape=True)}"
@@ -670,7 +673,7 @@ def max_diff(
     * dnan: difference in the number of nan
     """
     if allow_unique_tensor_with_list_of_one_element:
-        if hasattr(expected, "shape") and isinstance(got, list) and len(got) == 1:
+        if hasattr(expected, "shape") and isinstance(got, (list, tuple)) and len(got) == 1:
             return max_diff(
                 expected,
                 got[0],

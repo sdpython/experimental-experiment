@@ -765,7 +765,10 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         from experimental_experiment.torch_interpreter.tracing import CustomTracer
 
-        graph = CustomTracer().trace(model2)
+        graph = CustomTracer().trace(
+            model2,
+            concrete_args=dict(zip(["input_ids", "image_features", "vocab_size"], inputs[0])),
+        )
         self.assertNotEmpty(graph)
 
         onx = to_onnx(
