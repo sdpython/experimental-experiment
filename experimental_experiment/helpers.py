@@ -44,13 +44,16 @@ def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:
     return onnx_tensor_dtype_to_np_dtype(tensor_dtype)
 
 
-def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) -> str:
+def string_type(
+    obj: Any, with_shape: bool = False, with_min_max: bool = False, with_device: bool = False
+) -> str:
     """
     Displays the types of an object as a string.
 
     :param obj: any
     :param with_shape: displays shapes as well
     :param with_min_max: displays information about the values
+    :param with_device: display the device
     :return: str
 
     .. runpython::
@@ -63,11 +66,22 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         return "None"
     if isinstance(obj, tuple):
         if len(obj) == 1:
-            s = string_type(obj[0], with_shape=with_shape, with_min_max=with_min_max)
+            s = string_type(
+                obj[0],
+                with_shape=with_shape,
+                with_min_max=with_min_max,
+                with_device=with_device,
+            )
             return f"({s},)"
         if len(obj) < 10:
             js = ",".join(
-                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+                string_type(
+                    o,
+                    with_shape=with_shape,
+                    with_min_max=with_min_max,
+                    with_device=with_device,
+                )
+                for o in obj
             )
             return f"({js})"
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
@@ -77,7 +91,13 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, list):
         if len(obj) < 10:
             js = ",".join(
-                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+                string_type(
+                    o,
+                    with_shape=with_shape,
+                    with_min_max=with_min_max,
+                    with_device=with_device,
+                )
+                for o in obj
             )
             return f"#{len(obj)}[{js}]"
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
@@ -87,7 +107,13 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     if isinstance(obj, set):
         if len(obj) < 10:
             js = ",".join(
-                string_type(o, with_shape=with_shape, with_min_max=with_min_max) for o in obj
+                string_type(
+                    o,
+                    with_shape=with_shape,
+                    with_min_max=with_min_max,
+                    with_device=with_device,
+                )
+                for o in obj
             )
             return f"{{{js}}}"
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
@@ -95,10 +121,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
             return f"{{...}}#{len(obj)}[{mini},{maxi}:A{avg}]"
         return f"{{...}}#{len(obj)}" if with_shape else "{...}"
     if isinstance(obj, dict):
-        s = ",".join(
-            f"{kv[0]}:{string_type(kv[1],with_shape=with_shape,with_min_max=with_min_max)}"
-            for kv in obj.items()
-        )
+        kws = dict(with_shape=with_shape, with_min_max=with_min_max, with_device=with_device)
+        s = ",".join(f"{kv[0]}:{string_type(kv[1],**kws)}" for kv in obj.items())
         return f"dict({s})"
     if isinstance(obj, np.ndarray):
         if with_min_max:
@@ -124,7 +148,7 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         return "SymFloat"
     if isinstance(obj, torch.Tensor):
         if with_min_max:
-            s = string_type(obj, with_shape=with_shape)
+            s = string_type(obj, with_shape=with_shape, with_device=with_device)
             if obj.numel() == 0:
                 return f"{s}[empty]"
             n_nan = obj.reshape((-1,)).isnan().to(int).sum()
@@ -138,9 +162,10 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
                 return f"{s}[{obj.abs().min()},{obj.abs().max()}:A{obj.abs().mean()}]"
             return f"{s}[{obj.min()},{obj.max()}:A{obj.to(float).mean()}]"
         i = torch_dtype_to_onnx_dtype(obj.dtype)
+        prefix = ("G" if obj.get_device() >= 0 else "C") if with_device else ""
         if not with_shape:
-            return f"T{i}r{len(obj.shape)}"
-        return f"T{i}s{'x'.join(map(str, obj.shape))}"
+            return f"{prefix}T{i}r{len(obj.shape)}"
+        return f"{prefix}T{i}s{'x'.join(map(str, obj.shape))}"
     if isinstance(obj, int):
         if with_min_max:
             return f"int[{obj}]"
@@ -157,8 +182,18 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
     # others classes
 
     if type(obj).__name__ == "MambaCache":
-        c = string_type(obj.conv_states, with_shape=with_shape, with_min_max=with_min_max)
-        d = string_type(obj.ssm_states, with_shape=with_shape, with_min_max=with_min_max)
+        c = string_type(
+            obj.conv_states,
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+        )
+        d = string_type(
+            obj.ssm_states,
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+        )
         return f"MambaCache(conv_states={c}, ssm_states={d})"
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):
         # torch.fx.node.Node
@@ -167,16 +202,30 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
         return f"OT{obj.type.tensor_type.elem_type}"
 
     if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
-        kc = string_type(obj.key_cache, with_shape=with_shape, with_min_max=with_min_max)
-        vc = string_type(obj.value_cache, with_shape=with_shape, with_min_max=with_min_max)
+        kc = string_type(
+            obj.key_cache,
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+        )
+        vc = string_type(
+            obj.value_cache,
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+        )
         return f"{obj.__class__.__name__}(key_cache={kc}, value_cache={vc})"
 
     if obj.__class__.__name__ == "BatchFeature":
-        s = string_type(obj.data, with_shape=with_shape, with_min_max=with_min_max)
+        s = string_type(
+            obj.data, with_shape=with_shape, with_min_max=with_min_max, with_device=with_device
+        )
         return f"BatchFeature(data={s})"
 
     if obj.__class__.__name__ == "BatchEncoding":
-        s = string_type(obj.data, with_shape=with_shape, with_min_max=with_min_max)
+        s = string_type(
+            obj.data, with_shape=with_shape, with_min_max=with_min_max, with_device=with_device
+        )
         return f"BatchEncoding(data={s})"
 
     if obj.__class__.__name__ == "VirtualTensor":
