@@ -71,8 +71,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
             )
             return f"({js})"
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
-            mini, maxi = min(obj), max(obj)
-            return f"(...)#{len(obj)}[{mini},{maxi}]"
+            mini, maxi, avg = min(obj), max(obj), sum(float(_) for _ in obj) / len(obj)
+            return f"(...)#{len(obj)}[{mini},{maxi}:A[{avg}]]"
         return f"(...)#{len(obj)}" if with_shape else "(...)"
     if isinstance(obj, list):
         if len(obj) < 10:
@@ -81,8 +81,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
             )
             return f"#{len(obj)}[{js}]"
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
-            mini, maxi = min(obj), max(obj)
-            return f"[...]#{len(obj)}[{mini},{maxi}]"
+            mini, maxi, avg = min(obj), max(obj), sum(float(_) for _ in obj) / len(obj)
+            return f"[...]#{len(obj)}[{mini},{maxi}:{avg}]"
         return f"[...]#{len(obj)}" if with_shape else "[...]"
     if isinstance(obj, set):
         if len(obj) < 10:
@@ -91,8 +91,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
             )
             return f"{{{js}}}"
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
-            mini, maxi = min(obj), max(obj)
-            return f"{{...}}#{len(obj)}[{mini},{maxi}]"
+            mini, maxi, avg = min(obj), max(obj), sum(float(_) for _ in obj) / len(obj)
+            return f"{{...}}#{len(obj)}[{mini},{maxi}:A{avg}]"
         return f"{{...}}#{len(obj)}" if with_shape else "{...}"
     if isinstance(obj, dict):
         s = ",".join(
@@ -105,8 +105,8 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
             s = string_type(obj, with_shape=with_shape)
             n_nan = np.isnan(obj.reshape((-1,))).astype(int).sum()
             if n_nan > 0:
-                return f"{s}[{obj.min()}:{obj.max()}:{n_nan}nans]"
-            return f"{s}[{obj.min()}:{obj.max()}]"
+                return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}N{n_nan}nans]"
+            return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}]"
         i = np_dtype_to_tensor_dtype(obj.dtype)
         if not with_shape:
             return f"A{i}r{len(obj.shape)}"
@@ -130,11 +130,13 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
             n_nan = obj.reshape((-1,)).isnan().to(int).sum()
             if n_nan > 0:
                 if obj.dtype in {torch.complex64, torch.complex128}:
-                    return f"{s}[{obj.abs().min()}:{obj.abs().max():{n_nan}nans}]"
-                return f"{s}[{obj.min()}:{obj.max()}:{n_nan}nans]"
+                    return (
+                        f"{s}[{obj.abs().min()},{obj.abs().max():A{obj.mean()}N{n_nan}nans}]"
+                    )
+                return f"{s}[{obj.min()},{obj.max()}:A{obj.to(float).mean()}N{n_nan}nans]"
             if obj.dtype in {torch.complex64, torch.complex128}:
-                return f"{s}[{obj.abs().min()}:{obj.abs().max()}]"
-            return f"{s}[{obj.min()}:{obj.max()}]"
+                return f"{s}[{obj.abs().min()},{obj.abs().max()}:A{obj.abs().mean()}]"
+            return f"{s}[{obj.min()},{obj.max()}:A{obj.to(float).mean()}]"
         i = torch_dtype_to_onnx_dtype(obj.dtype)
         if not with_shape:
             return f"T{i}r{len(obj.shape)}"
@@ -191,6 +193,9 @@ def string_type(obj: Any, with_shape: bool = False, with_min_max: bool = False) 
 
     if isinstance(obj, torch.dtype):
         return f"{obj.__class__.__name__}({obj})"
+
+    if isinstance(obj, torch.utils._pytree.TreeSpec):
+        return repr(obj).replace(" ", "").replace("\n", " ")
 
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 
