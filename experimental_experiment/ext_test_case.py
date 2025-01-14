@@ -471,28 +471,32 @@ class ExtTestCase(unittest.TestCase):
                     f"expected is {expected!r}, value is {value!r}\n{e}"
                 )
 
-    def assertEqualAny(self, expected: Any, value: Any, msg: str = ""):
+    def assertEqualAny(
+        self, expected: Any, value: Any, atol: float = 0, rtol: float = 0, msg: str = ""
+    ):
         if isinstance(expected, (tuple, list, dict)):
             self.assertIsInstance(value, type(expected), msg=msg)
             self.assertEqual(len(expected), len(value), msg=msg)
             if isinstance(expected, dict):
                 for k in expected:
                     self.assertIn(k, value, msg=msg)
-                    self.assertEqualAny(expected[k], value[k], msg=msg)
+                    self.assertEqualAny(expected[k], value[k], msg=msg, atol=atol, rtol=rtol)
             else:
                 for e, g in zip(expected, value):
-                    self.assertEqualAny(e, g, msg=msg)
+                    self.assertEqualAny(e, g, msg=msg, atol=atol, rtol=rtol)
         elif expected.__class__.__name__ == "DynamicCache":
             atts = {"key_cache", "value_cache"}
             self.assertEqualAny(
                 {k: expected.__dict__.get(k, None) for k in atts},
                 {k: value.__dict__.get(k, None) for k in atts},
+                atol=atol,
+                rtol=rtol,
             )
         elif isinstance(expected, (int, float, str)):
             self.assertEqual(expected, value, msg=msg)
         elif hasattr(expected, "shape"):
             self.assertEqual(type(expected), type(value), msg=msg)
-            self.assertEqualArray(expected, value, msg=msg)
+            self.assertEqualArray(expected, value, msg=msg, atol=atol, rtol=rtol)
         else:
             raise AssertionError(
                 f"Comparison not implemented for types {type(expected)} and {type(value)}"

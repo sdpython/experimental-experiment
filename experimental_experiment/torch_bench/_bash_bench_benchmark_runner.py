@@ -22,10 +22,15 @@ from .export_model_helper import (
     obj_size,
     size_type,
 )
-from ..bench_run import max_diff
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
-from ..helpers import string_type, tensor_dtype_to_np_dtype, torch_dtype_to_onnx_dtype
+from ..helpers import (
+    string_type,
+    tensor_dtype_to_np_dtype,
+    torch_dtype_to_onnx_dtype,
+    max_diff,
+    flatten_object,
+)
 from ..torch_interpreter.onnx_export_errors import register_additional_serialization_functions
 
 
@@ -500,35 +505,6 @@ class BenchmarkRunner:
         return stats
 
     @classmethod
-    def _flatten(cls, value, transpose_cache: bool = True):
-        """
-        Flattens the output to be able to compare to what
-        onnx produces. The cache usually appears like
-        key1, value1, key2, value2, ...
-        """
-        res = []
-        if isinstance(value, dict):
-            # We assume the dictionary is ordered.
-            return cls._flatten(list(value.values()))
-        if isinstance(value, (list, tuple)):
-            for v in value:
-                res.extend(cls._flatten(v))
-        elif value.__class__.__name__ == "DynamicCache":
-            if transpose_cache:
-                for i in range(len(value.key_cache)):
-                    res.append(value.key_cache[i])
-                    res.append(value.value_cache[i])
-            else:
-                res.extend(value.key_cache)
-                res.extend(value.value_cache)
-        elif value.__class__.__name__ == "MambaCache":
-            res.append(value.conv_states)
-            res.append(value.ssm_states)
-        else:
-            res.append(value)
-        return tuple(res)
-
-    @classmethod
     def max_diff(
         cls,
         expected: Any,
@@ -568,8 +544,8 @@ class BenchmarkRunner:
                     f"[BenchmarkRunner.max_diff] compare before flattened "
                     f"{string_type(expected)} and {string_type(got)}"
                 )
-            flatten_expected = cls._flatten(expected)
-            flatten_got = cls._flatten(got)
+            flatten_expected = flatten_object(expected, drop_keys=True)
+            flatten_got = flatten_object(got, drop_keys=True)
             if verbose >= 4:
                 print(
                     f"[BenchmarkRunner.max_diff] compare after flattened "

@@ -45,7 +45,7 @@ class TestOnnxExportSignatures(ExtTestCase):
                     feeds[name] = xi.detach().numpy()
                 elif tracing:
                     if isinstance(xi, int):
-                        feeds[name] = np.array([xi], dtype=np.int64)
+                        feeds[name] = np.array(xi, dtype=np.int64)
                     elif isinstance(xi, list):
                         feeds[name] = [xii.detach().numpy() for xii in xi]
                     else:
@@ -242,7 +242,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         inputs2 = ((torch.arange(8 * 3) + 10).reshape((-1, 3)).to(torch.float32), 2)
         sig = (
             ("x", onnx.TensorProto.FLOAT, ("batch", 3)),
-            ("i", onnx.TensorProto.INT64, (1,)),
+            ("i", onnx.TensorProto.INT64, tuple()),
         )
         dyn = {
             "x": {0: torch.export.Dim("batch", min=1, max=1024)},

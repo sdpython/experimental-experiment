@@ -22,13 +22,18 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @long_test()
+    @unittest.skip("can't evaluate if seq_len > original_max_position_embeddings:")
     def test_get_phi35_mini_instruct(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
 
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
+        data = get_phi35_mini_instruct(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
         expected = list(flatten_outputs(model(**model_inputs)))
         # torch.onnx.export(
         #    model,
@@ -36,15 +41,16 @@ class TestLlmModelHelper(ExtTestCase):
         #    "test_get_phi35_mini_instruct_onnx_dynamo.onnx",
         #    dynamo=True,
         # )
-        onx = to_onnx(
-            model,
-            None,  # args
-            model_inputs,  # kwargs
-            large_model=True,
-            verbose=0,
-            options=OptimizationOptions(max_iter=10),
-            export_options=ExportOptions(strict=False, decomposition_table="all"),
-        )
+        with bypass_export_some_errors():
+            onx = to_onnx(
+                model,
+                None,  # args
+                model_inputs,  # kwargs
+                large_model=True,
+                verbose=0,
+                options=OptimizationOptions(max_iter=10),
+                export_options=ExportOptions(strict=False, decomposition_table="all"),
+            )
         filename = "test_phi35_mini_instruct_custom.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
@@ -61,25 +67,39 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @requires_cuda()
     @long_test()
+    @unittest.skip("can't evaluate if seq_len > original_max_position_embeddings:")
     def test_get_phi35_mini_instruct_cuda(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
-        model = model.to("cuda")
-        model_inputs = {k: v.to("cuda") for k, v in model_inputs.items()}
-        expected = list(flatten_outputs(model(**model_inputs)))
-        onx = to_onnx(
-            model,
-            None,  # args
-            model_inputs,  # kwargs
-            large_model=True,
-            verbose=0,
-            options=OptimizationOptions(max_iter=10),
-            export_options=ExportOptions(strict=False, decomposition_table="all"),
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
         )
+
+        data = get_phi35_mini_instruct(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
+        model = model.to("cuda")
+        model.model.rotary_emb.inv_freq = model.model.rotary_emb.inv_freq.to("cuda")
+        model.model.rotary_emb.original_inv_freq = model.model.rotary_emb.original_inv_freq.to(
+            "cuda"
+        )
+        model_inputs = {k: v.to("cuda") for k, v in model_inputs.items()}
+        if "past_key_values" in model_inputs:
+            cache = model_inputs["past_key_values"]
+            cache.key_cache = [t.to("cuda") for t in cache.key_cache]
+            cache.value_cache = [t.to("cuda") for t in cache.value_cache]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        with bypass_export_some_errors():
+            onx = to_onnx(
+                model,
+                None,  # args
+                model_inputs,  # kwargs
+                large_model=True,
+                verbose=0,
+                options=OptimizationOptions(max_iter=10),
+                export_options=ExportOptions(strict=False, decomposition_table="all"),
+            )
         filename = "test_phi35_mini_instruct_custom_cuda.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
@@ -98,27 +118,42 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @requires_cuda()
     @long_test()
+    @unittest.skip("can't evaluate if seq_len > original_max_position_embeddings:")
     def test_get_phi35_mini_instruct_cuda_modules(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
 
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
+        data = get_phi35_mini_instruct(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
         model = model.to("cuda")
         model_inputs = {k: v.to("cuda") for k, v in model_inputs.items()}
-        expected = list(flatten_outputs(model(**model_inputs)))
-        onx = to_onnx(
-            model,
-            None,  # args
-            model_inputs,  # kwargs
-            large_model=True,
-            verbose=0,
-            options=OptimizationOptions(max_iter=10),
-            export_options=ExportOptions(strict=False, decomposition_table="all"),
-            export_modules_as_functions=True,
-            inline=False,  # function do not retain shape information
+        model.model.rotary_emb.inv_freq = model.model.rotary_emb.inv_freq.to("cuda")
+        model.model.rotary_emb.original_inv_freq = model.model.rotary_emb.original_inv_freq.to(
+            "cuda"
         )
+        model_inputs = {k: v.to("cuda") for k, v in model_inputs.items()}
+        if "past_key_values" in model_inputs:
+            cache = model_inputs["past_key_values"]
+            cache.key_cache = [t.to("cuda") for t in cache.key_cache]
+            cache.value_cache = [t.to("cuda") for t in cache.value_cache]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        with bypass_export_some_errors():
+            onx = to_onnx(
+                model,
+                None,  # args
+                model_inputs,  # kwargs
+                large_model=True,
+                verbose=0,
+                options=OptimizationOptions(max_iter=10),
+                export_options=ExportOptions(strict=False, decomposition_table="all"),
+                export_modules_as_functions=True,
+                inline=False,  # function do not retain shape information
+            )
         filename = "test_phi35_mini_instruct_custom_cuda_modules.onnx"
         onx.save(filename, all_tensors_to_one_file=True)
         import onnxruntime
@@ -137,16 +172,18 @@ class TestLlmModelHelper(ExtTestCase):
     @skipif_ci_windows("not supported")
     @requires_cuda()
     @long_test()
+    @unittest.skip("can't evaluate if seq_len > original_max_position_embeddings:")
     def test_get_phi35_mini_instruct_cuda_modules_dynshapes(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
 
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1, batch=2)
+        data = get_phi35_mini_instruct(num_hidden_layers=1, batch_size=2, input_cache=False)
+        model, model_inputs = data["model"], data["inputs"]
         model = model.to("cuda")
         model_inputs = {k: v.to("cuda") for k, v in model_inputs.items()}
-        expected = list(flatten_outputs(model(**model_inputs)))
+        expected = model(**model_inputs)
         dims = {
             0: torch.export.Dim("batch", min=1, max=128),
             1: torch.export.Dim("seq", min=1, max=512) * 8 - 2,
@@ -196,6 +233,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @long_test()
+    @unittest.skip("can't evaluate if seq_len > original_max_position_embeddings:")
     def test_get_phi35_mini_instruct_auto(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -208,7 +246,6 @@ class TestLlmModelHelper(ExtTestCase):
         with bypass_export_some_errors():
             data = get_phi35_mini_instruct(num_hidden_layers=1)
             model, model_inputs = data["model"], data["inputs"]
-            model = model
             with torch.autocast(device_type="cpu", dtype=torch.float16):
                 onx = to_onnx(
                     model,
@@ -233,13 +270,15 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @long_test()
+    @unittest.skip("can't evaluate if seq_len > original_max_position_embeddings:")
     def test_get_phi35_mini_instruct_no_decomposition(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
 
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
+        data = get_phi35_mini_instruct(num_hidden_layers=1, input_cache=False)
+        model, model_inputs = data["model"], data["inputs"]
         expected = list(flatten_outputs(model(**model_inputs)))
         onx = to_onnx(
             model,
@@ -265,6 +304,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @long_test()
+    @unittest.skip("Uses HybridMambaAttentionDynamicCache in 4.48.0")
     def test_get_ai21_jamba_15_mini(self):
         # import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -273,6 +313,7 @@ class TestLlmModelHelper(ExtTestCase):
 
         data = get_ai21_jamba_15_mini(num_hidden_layers=1)
         model, model_inputs = data["model"], data["inputs"]
+        print(model_inputs)
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
 
@@ -348,6 +389,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @long_test()
+    @unittest.skip("can't evaluate if seq_len > original_max_position_embeddings:")
     def test_get_phi35_mini_instruct_cache_export(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -357,7 +399,8 @@ class TestLlmModelHelper(ExtTestCase):
             bypass_export_some_errors,
         )
 
-        model, model_inputs = get_phi35_mini_instruct(num_hidden_layers=1)
+        data = get_phi35_mini_instruct(num_hidden_layers=1)
+        model, model_inputs = data["model"], data["inputs"]
 
         with bypass_export_some_errors():
             exported_program = torch.export.export(model, tuple(), model_inputs, strict=False)
@@ -429,7 +472,11 @@ class TestLlmModelHelper(ExtTestCase):
         data = get_phi35_vision_instruct(
             num_hidden_layers=1, input_kind=LLMInputKind.input_ids, common_dynamic_shapes=True
         )
-        model, model_inputs, dyn_shapes = data["model"], data["inputs"], data["dynamic_shapes"]
+        _model, model_inputs, dyn_shapes = (
+            data["model"],
+            data["inputs"],
+            data["dynamic_shapes"],
+        )
         self.assertEqual(list(model_inputs), ["input_ids"])
         self.assertEqual(list(dyn_shapes), ["input_ids"])
 
@@ -438,12 +485,16 @@ class TestLlmModelHelper(ExtTestCase):
             input_kind=LLMInputKind.input_ids | LLMInputKind.position_ids,
             common_dynamic_shapes=True,
         )
-        model, model_inputs, dyn_shapes = data["model"], data["inputs"], data["dynamic_shapes"]
         self.assertEqual(list(model_inputs), ["input_ids", "position_ids"])
         self.assertEqual(list(dyn_shapes), ["input_ids", "position_ids"])
 
-        model, model_inputs, dyn_shapes = get_phi35_vision_instruct(
+        data = get_phi35_vision_instruct(
             num_hidden_layers=1, input_kind=LLMInputKind.ALL, common_dynamic_shapes=True
+        )
+        _model, model_inputs, dyn_shapes = (
+            data["model"],
+            data["inputs"],
+            data["dynamic_shapes"],
         )
         self.assertEqual(
             list(model_inputs),

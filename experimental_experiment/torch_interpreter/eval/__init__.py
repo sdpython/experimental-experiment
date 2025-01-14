@@ -506,8 +506,7 @@ def run_exporter(
     :param verbose: verbosity
     :return: results
     """
-    from ...bench_run import max_diff
-    from ...helpers import string_type, pretty_onnx
+    from ...helpers import string_type, pretty_onnx, max_diff
 
     assert hasattr(
         cls_model, "_inputs"

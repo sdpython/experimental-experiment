@@ -708,8 +708,6 @@ class CropLastDimensionWithTensorContent(torch.nn.Module):
 class SignatureListFixedWithNone(torch.nn.Module):
 
     def forward(self, lx):
-        print(lx)
-        print(lx[1])
         x = lx[0]
         if lx[1] is not None:
             x += lx[1]
