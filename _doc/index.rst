@@ -69,7 +69,6 @@ With the following versions:
     import onnxscript
     import torch
     import transformers
-    import monai
     import timm
 
     for m in [
@@ -81,7 +80,6 @@ With the following versions:
         onnxscript,
         torch,
         transformers,
-        monai,
         timm,
     ]:
         print(f"{m.__name__}: {getattr(m, '__version__', 'dev')}")
