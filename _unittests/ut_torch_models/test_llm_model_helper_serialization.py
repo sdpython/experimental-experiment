@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     requires_torch,
+    long_test,
 )
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.helpers import max_diff
@@ -60,6 +61,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("not supported")
     @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
+    @long_test()
     def test_phi2_output_order_onnx_dynamo(self):
         import torch
         from experimental_experiment.torch_interpreter.onnx_export_errors import (
@@ -113,6 +115,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
+    @long_test()
     def test_phi2_output_order_custom(self):
         import torch
         from experimental_experiment.torch_interpreter.onnx_export_errors import (

@@ -323,7 +323,22 @@ class ExportOptions:
                 sig = inspect.signature(mod.forward)
                 for p, a in zip(sig.parameters, args):
                     if a is not None and p not in concrete_args:
-                        concrete_args[p] = a
+                        if isinstance(a, int):
+                            # not traceable otherise
+                            concrete_args[p] = torch.tensor(a, dtype=torch.int64)
+                        elif isinstance(a, float):
+                            # not traceable otherise
+                            concrete_args[p] = torch.tensor(a, dtype=torch.float32)
+                        else:
+                            concrete_args[p] = a
+
+            if verbose:
+                print(f"[ExportOptions.export] CustomTracer().trace, verbose={verbose}")
+                print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
+                print(f"[ExportOptions.export] args={string_type(args)}")
+                print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
+                print(f"[ExportOptions.export] concrete_args={string_type(concrete_args)}")
+
             graph = CustomTracer().trace(mod, concrete_args=concrete_args)
             if self.remove_inplace:
                 self.remove_inplace_nodes(graph, verbose=verbose)
