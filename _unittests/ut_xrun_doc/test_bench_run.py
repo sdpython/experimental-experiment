@@ -1,4 +1,5 @@
 import unittest
+from experimental_experiment.helpers import max_diff
 from experimental_experiment.bench_run import (
     BenchmarkError,
     _cmd_line,
@@ -6,7 +7,6 @@ from experimental_experiment.bench_run import (
     get_machine,
     make_configs,
     run_benchmark,
-    max_diff,
 )
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 

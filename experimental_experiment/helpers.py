@@ -1,7 +1,7 @@
 import ast
 import inspect
 import sys
-from typing import Any, Callable, Dict, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import FunctionProto, GraphProto, ModelProto, TensorProto, load as onnx_load
 from onnx.helper import (
@@ -592,3 +592,461 @@ def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
     transformer = RenameVariable()
     new_tree = transformer.visit(tree)
     return ast.unparse(new_tree)
+
+
+def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:
+    """
+    Flattens the object.
+    It accepts some common classes used in deep learning.
+
+    :param x: any object
+    :param drop_keys: drop the keys if a dictionary is flattened.
+        Keeps the order defined by the dictionary if False, sort them if True.
+    :return: flattened object
+    """
+    if x is None:
+        return x
+    if isinstance(x, (list, tuple)):
+        res = []
+        for i in x:
+            if i is None or hasattr(i, "shape") or isinstance(i, (int, float, str)):
+                res.append(i)
+            else:
+                res.extend(flatten_object(i, drop_keys=drop_keys))
+        return tuple(res) if isinstance(x, tuple) else res
+    if isinstance(x, dict):
+        # We flatten the values.
+        if drop_keys:
+            return flatten_object(list(x.values()), drop_keys=drop_keys)
+        return flatten_object(list(x.items()), drop_keys=drop_keys)
+
+    if x.__class__.__name__ == "DynamicCache":
+        res = flatten_object(x.key_cache) + flatten_object(x.value_cache)
+        return tuple(res)
+    if x.__class__.__name__ == "MambaCache":
+        return tuple(x.conv_states, x.ssm_states)
+    if hasattr(x, "to_tuple"):
+        return flatten_object(x.to_tuple(), drop_keys=drop_keys)
+    raise TypeError(
+        f"Unexpected type {type(x)} for x, drop_keys={drop_keys}, "
+        f"content is {string_type(x, with_shape=True)}"
+    )
+
+
+def max_diff(
+    expected: Any,
+    got: Any,
+    verbose: int = 0,
+    level: int = 0,
+    flatten: bool = False,
+    debug_info: Optional[List[str]] = None,
+    begin: int = 0,
+    end: int = -1,
+    _index: int = 0,
+) -> Dict[str, float]:
+    """
+    Returns the maximum discrepancy.
+
+    :param expected: expected values
+    :param got: values
+    :param verbose: verbosity level
+    :param level: for embedded outputs, used for debug purpposes
+    :param flatten: flatten outputs
+    :param debug_info: debug information
+    :param begin: first output to considered
+    :param end: last output to considered (-1 for the last one)
+    :param _index: used with begin and end
+    :return: dictionary with many values
+
+    * abs: max abolute error
+    * rel: max relative error
+    * sum: sum of the errors
+    * n: number of outputs values, if there is one
+        output, this number will be the number of elements
+        of this output
+    * dnan: difference in the number of nan
+    """
+    if hasattr(expected, "to_tuple"):
+        if verbose >= 6:
+            print(f"[max_diff] to_tuple1: {string_type(expected)} ? {string_type(got)}")
+        return max_diff(
+            expected.to_tuple(),
+            got,
+            verbose=verbose,
+            level=level + 1,
+            debug_info=(
+                [*(debug_info if debug_info else []), f"{' ' * level}to_tupleA"]
+                if verbose > 5
+                else None
+            ),
+            begin=begin,
+            end=end,
+            _index=_index,
+            flatten=flatten,
+        )
+
+    if hasattr(got, "to_tuple"):
+        if verbose >= 6:
+            print(f"[max_diff] to_tuple2: {string_type(expected)} ? {string_type(got)}")
+        return max_diff(
+            expected,
+            got.to_tuple(),
+            verbose=verbose,
+            level=level + 1,
+            debug_info=(
+                [*(debug_info if debug_info else []), f"{' ' * level}to_tupleB"]
+                if verbose > 5
+                else None
+            ),
+            begin=begin,
+            end=end,
+            _index=_index,
+            flatten=flatten,
+        )
+
+        if isinstance(got, (list, tuple)):
+            if len(got) != 1:
+                if verbose >= 6:
+                    print(
+                        f"[max_diff] list,tuple,2: {string_type(expected)} "
+                        f"? {string_type(got)}"
+                    )
+                if verbose > 2:
+                    import torch
+
+                    print(
+                        f"[max_diff] (a) inf because len(expected)={len(expected)}!=1, "
+                        f"len(got)={len(got)}, level={level}, _index={_index}"
+                    )
+                    for i, (a, b) in enumerate(zip(expected, got)):
+                        if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
+                            print(
+                                f"    i={i} expected {a.dtype}:{a.shape}, "
+                                f"has {b.dtype}:{b.shape}, _index={_index}"
+                            )
+                        else:
+                            print(
+                                f"    i={i} a is {type(a)}, "
+                                f"b is {type(b)}, _index={_index}"
+                            )
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+            if verbose >= 6:
+                print(f"[max_diff] list,tuple,1: {string_type(expected)} ? {string_type(got)}")
+            return max_diff(
+                expected,
+                got[0],
+                verbose=verbose,
+                level=level + 1,
+                begin=begin,
+                end=end,
+                _index=_index,
+                debug_info=debug_info,
+                flatten=flatten,
+            )
+
+    if isinstance(expected, (tuple, list)):
+        if verbose >= 6:
+            print(f"[max_diff] list,tuple,0: {string_type(expected)} ? {string_type(got)}")
+        if len(expected) == 1 and not isinstance(got, type(expected)):
+            if verbose >= 6:
+                print(f"[max_diff] list,tuple,3: {string_type(expected)} ? {string_type(got)}")
+            return max_diff(
+                expected[0],
+                got,
+                verbose=verbose,
+                level=level + 1,
+                begin=begin,
+                end=end,
+                _index=_index,
+                debug_info=debug_info,
+                flatten=flatten,
+            )
+        if not isinstance(got, (tuple, list)):
+            if verbose >= 6:
+                print(f"[max_diff] list,tuple,4: {string_type(expected)} ? {string_type(got)}")
+            if verbose > 2:
+                print(
+                    f"[max_diff] inf because type(expected)={type(expected)}, "
+                    f"type(got)={type(got)}, level={level}, _index={_index}"
+                )
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+
+        if len(got) != len(expected):
+            if flatten:
+                if verbose >= 6:
+                    print(
+                        f"[max_diff] list,tuple,5: {string_type(expected)} "
+                        f"? {string_type(got)}"
+                    )
+                # Let's flatten.
+                if verbose > 2:
+                    print(
+                        f"[max_diff] flattening because of length mismatch, "
+                        f"expected is {string_type(expected)} and got is {string_type(got)}"
+                    )
+                return max_diff(
+                    flatten_object(expected, drop_keys=True),
+                    flatten_object(got, drop_keys=True),
+                    verbose=verbose,
+                    level=level,
+                    begin=begin,
+                    end=end,
+                    _index=_index,
+                    debug_info=(
+                        [
+                            *(debug_info if debug_info else []),
+                            (
+                                f"{' ' * level}flatten["
+                                f"{string_type(expected)},{string_type(got)}]"
+                            ),
+                        ]
+                        if verbose > 5
+                        else None
+                    ),
+                    flatten=flatten,
+                )
+
+            if verbose > 2:
+                import torch
+
+                print(
+                    f"[max_diff] (b) inf because len(expected)={len(expected)}, "
+                    f"len(got)={len(got)}, level={level}, _index={_index}"
+                )
+                for i, (a, b) in enumerate(zip(expected, got)):
+                    if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
+                        print(
+                            f"    i={i} expected {a.dtype}:{a.shape}, "
+                            f"has {b.dtype}:{b.shape}, _index={_index}"
+                        )
+                    else:
+                        print(f"    i={i} a is {type(a)}, b is {type(b)}")
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+
+        if verbose >= 6:
+            print(f"[max_diff] list,tuple,6: {string_type(expected)} ? {string_type(got)}")
+        am, rm, sm, n, dn = 0, 0, 0.0, 0.0, 0
+        for ip, (e, g) in enumerate(zip(expected, got)):
+            d = max_diff(
+                e,
+                g,
+                verbose=verbose,
+                level=level + 1,
+                debug_info=(
+                    [
+                        *(debug_info if debug_info else []),
+                        f"{' ' * level}[{ip}] so far abs {am} - rel {rm}",
+                    ]
+                    if verbose > 5
+                    else None
+                ),
+                begin=begin,
+                end=end,
+                _index=_index + ip,
+                flatten=flatten,
+            )
+            am = max(am, d["abs"])
+            dn = max(dn, d["dnan"])
+            rm = max(rm, d["rel"])
+            sm += d["sum"]
+            n += d["n"]
+        return dict(abs=am, rel=rm, sum=sm, n=n, dnan=dn)
+
+    if isinstance(expected, dict):
+        if verbose >= 6:
+            print(f"[max_diff] dict: {string_type(expected)} ? {string_type(got)}")
+        assert (
+            begin == 0 and end == -1
+        ), f"begin={begin}, end={end} not compatible with dictionaries"
+        if isinstance(got, dict):
+            if len(expected) != len(got):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+            if set(expected) != set(got):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+            keys = sorted(expected)
+            return max_diff(
+                [expected[k] for k in keys],
+                [got[k] for k in keys],
+                level=level,
+                flatten=flatten,
+                debug_info=debug_info,
+                begin=begin,
+                end=end,
+                _index=_index,
+                verbose=verbose,
+            )
+
+        if not isinstance(got, (tuple, list)):
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+        if len(expected) != len(got):
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+        return max_diff(
+            list(expected.values()),
+            got,
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
+            verbose=verbose,
+        )
+
+    if isinstance(expected, np.ndarray):
+        if verbose >= 6:
+            print(f"[max_diff] array1: {string_type(expected)} ? {string_type(got)}")
+        return max_diff(expected.detach().cpu().numpy(), got, verbose=verbose)
+
+    if isinstance(got, np.ndarray):
+        if verbose >= 6:
+            print(f"[max_diff] array2: {string_type(expected)} ? {string_type(got)}")
+        return max_diff(expected, got.detach().cpu().numpy(), verbose=verbose)
+
+    import torch
+
+    if isinstance(expected, torch.Tensor):
+        if isinstance(got, torch.Tensor):
+            if verbose >= 6:
+                print(f"[max_diff] tensor: {string_type(expected)} ? {string_type(got)}")
+            if _index < begin or (end != -1 and _index >= end):
+                # out of boundary
+                return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
+            if expected.dtype in (torch.complex64, torch.complex128):
+                if got.dtype == expected.dtype:
+                    got = torch.view_as_real(got)
+                elif got.dtype not in (torch.float32, torch.float64):
+                    if verbose >= 10:
+                        # To understand the value it comes from.
+                        if debug_info:
+                            print("\n".join(debug_info))
+                        print(
+                            f"[max_diff-c] expected.dtype={expected.dtype}, "
+                            f"got.dtype={got.dtype}"
+                        )
+                    return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+                expected = torch.view_as_real(expected)
+
+            if expected.shape != got.shape:
+                if verbose >= 10:
+                    # To understand the value it comes from.
+                    if debug_info:
+                        print("\n".join(debug_info))
+                    print(
+                        f"[max_diff-s] expected.shape={expected.shape}, "
+                        f"got.shape={got.shape}"
+                    )
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+            # nan are replace by 1e10, any discrepancies in that order of magnitude
+            # is likely caused by nans
+            exp_cpu = expected.to(torch.float64).cpu().nan_to_num(1e10)
+            got_cpu = got.to(torch.float64).cpu().nan_to_num(1e10)
+            diff = (got_cpu - exp_cpu).abs()
+            ndiff = (expected.isnan().cpu().to(int) - got.isnan().cpu().to(int)).abs()
+            rdiff = diff / (exp_cpu.abs() + 1e-3)
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+                float(diff.max()),
+                float(rdiff.max()),
+                float(diff.sum()),
+                float(diff.numel()),
+                float(ndiff.sum()),
+            )
+            if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
+                # To understand the value it comes from.
+                if debug_info:
+                    print("\n".join(debug_info))
+                print(
+                    f"[max_diff-1] abs_diff={abs_diff}, rel_diff={rel_diff}, "
+                    f"nan_diff={nan_diff}, dtype={expected.dtype}, "
+                    f"shape={expected.shape}, level={level}, _index={_index}"
+                )
+                if abs_diff >= 10:
+                    idiff = torch.argmax(diff.reshape((-1,)))
+                    x = expected.reshape((-1,))[idiff]
+                    y = got.reshape((-1,))[idiff]
+                    print(
+                        f"   [max_diff-2] abs diff={abs_diff}, "
+                        f"x={x}, y={y}, level={level}, "
+                        f"_index={_index}"
+                    )
+                    print(y)
+
+                if rel_diff >= 10:
+                    idiff = torch.argmax(rdiff.reshape((-1,)))
+                    x = expected.reshape((-1,))[idiff]
+                    y = got.reshape((-1,))[idiff]
+                    print(
+                        f"   [max_diff-3] rel diff={rel_diff}, "
+                        f"x={x}, y={y}, level={level}, "
+                        f"_index={_index}"
+                    )
+
+            return dict(abs=abs_diff, rel=rel_diff, sum=sum_diff, n=n_diff, dnan=nan_diff)
+
+    if "SquashedNormal" in expected.__class__.__name__:
+        if verbose >= 6:
+            print(f"[max_diff] SquashedNormal: {string_type(expected)} ? {string_type(got)}")
+        values = (
+            expected.mean.detach().to("cpu"),
+            expected.scale.detach().to("cpu"),
+        )
+        return max_diff(
+            values,
+            got,
+            verbose=verbose,
+            level=level + 1,
+            begin=begin,
+            end=end,
+            _index=_index,
+            flatten=flatten,
+        )
+
+    if expected.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
+        if got.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
+            if verbose >= 6:
+                print(f"[max_diff] DynamicCache: {string_type(expected)} ? {string_type(got)}")
+            return max_diff(
+                [expected.key_cache, expected.value_cache],
+                [got.key_cache, got.value_cache],
+                verbose=verbose,
+            )
+        if isinstance(got, tuple) and len(got) == 2:
+            return max_diff(
+                [expected.key_cache, expected.value_cache],
+                [got[0], got[1]],
+                verbose=verbose,
+            )
+        raise AssertionError(
+            f"DynamicCache not fully implemented with expected="
+            f"{string_type(expected)}, got={string_type(got)},\n"
+            f"level={level}"
+        )
+
+    if expected.__class__.__name__ in ("transformers.cache_utils.MambaCache", "MambaCache"):
+        if verbose >= 6:
+            print(f"[max_diff] MambaCache: {string_type(expected)} ? {string_type(got)}")
+        if got.__class__.__name__ != expected.__class__.__name__:
+            # This case happens with onnx where the outputs are flattened.
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+        atts = []
+        for k in ["conv_states", "ssm_states"]:
+            if hasattr(expected, k) and not hasattr(got, k):
+                return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
+            atts.append(k)
+
+        return max_diff(
+            [getattr(expected, k) for k in atts],
+            [getattr(got, k) for k in atts],
+            level=level,
+            flatten=flatten,
+            debug_info=debug_info,
+            begin=begin,
+            end=end,
+            _index=_index,
+            verbose=verbose,
+        )
+
+    raise AssertionError(
+        f"Not implemented with implemented with expected="
+        f"{string_type(expected)}, got={string_type(got)},\n"
+        f"level={level}"
+    )

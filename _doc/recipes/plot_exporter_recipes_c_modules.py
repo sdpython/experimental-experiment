@@ -24,8 +24,7 @@ from onnx_array_api.reference import compare_onnx_execution
 import torch
 from onnxruntime import InferenceSession
 from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.helpers import pretty_onnx
-from experimental_experiment.bench_run import max_diff
+from experimental_experiment.helpers import pretty_onnx, max_diff
 from experimental_experiment.xbuilder import OptimizationOptions
 
 

@@ -14,7 +14,7 @@ from onnx import (
     TensorProto,
 )
 from ..convert.convert_helper import optimize_model_proto_oxs
-from ..bench_run import measure_discrepancies
+from ..helpers import max_diff
 
 
 def size_type(dtype: Any) -> int:
@@ -705,7 +705,7 @@ def run_onnx_inference(
     stats["warmup_time"] = end / warmup
     stats["warmup_iter"] = iterations
     if torch_model:
-        d = measure_discrepancies(expected, got)
+        d = max_diff(expected, got)
         stats["discrepancies_abs"] = d["abs"]
         stats["discrepancies_dnan"] = d["dnan"]
         stats["discrepancies_rel"] = d["rel"]

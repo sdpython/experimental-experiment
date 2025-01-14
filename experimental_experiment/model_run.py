@@ -102,7 +102,7 @@ def model_run(
     feeds = None
 
     if validate is not None and validate != "":
-        from .bench_run import measure_discrepancies
+        from .helpers import max_diff
 
         if verbose:
             smodel = validate if isinstance(validate, str) else str(type(validate))
@@ -164,7 +164,7 @@ def model_run(
     if validate is not None and validate != "":
         if verbose:
             print("[model_run] compare outputs")
-        disc = measure_discrepancies(expected, last)
+        disc = max_diff(expected, last)
         for k, v in disc.items():
             stats[f"discrepancies_{k}"] = v
             if verbose:
