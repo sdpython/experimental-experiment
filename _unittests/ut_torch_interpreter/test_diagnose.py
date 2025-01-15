@@ -1,9 +1,10 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.torch_interpreter.diagnose import infer_shape_type_from_execution
 
 
 class TestDiagnose(ExtTestCase):
+    @requires_torch("2.6")
     @hide_stdout()
     def test_infer_shape_type_from_execution_args(self):
         import torch
@@ -48,6 +49,7 @@ class TestDiagnose(ExtTestCase):
         pretty = diag.pretty_text(with_dynamic_shape=True)
         self.assertIn("DS=", pretty)
 
+    @requires_torch("2.6")
     @hide_stdout()
     def test_infer_shape_type_from_execution_kwargs(self):
         import torch
@@ -91,6 +93,49 @@ class TestDiagnose(ExtTestCase):
         diag = infer_shape_type_from_execution(big, inputs, verbose=1)
         pretty = diag.pretty_text(with_dynamic_shape=True)
         self.assertIn("DS=", pretty)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_infer_shape_type_from_execution_phi2(self):
+        from experimental_experiment.torch_models.llm_model_helper import get_phi2
+
+        res = get_phi2(
+            num_hidden_layers=2,
+            input_cache=True,
+            common_dynamic_shapes=True,
+            intermediate_size=5120,
+            batch_size=2,
+        )
+        model, _inputs, _inputs2, ds = (
+            res["model"],
+            res["inputs"],
+            res["inputs2"],
+            res["dynamic_shapes"],
+        )
+        inputs = [_inputs, _inputs2]
+
+        diag = infer_shape_type_from_execution(model, inputs, verbose=2)
+        pretty = diag.pretty_text(with_dynamic_shape=True)
+        self.assertIn("DS=", pretty)
+        args, ds_found = diag.guess_dynamic_shapes()
+        self.assertEqual(args, tuple())
+        self.assertEqual(set(ds), set(ds_found))
+
+        def _check(v1, v2):
+            if isinstance(v1, dict):
+                self.assertIsInstance(v2, dict)
+                self.assertEqual(set(v1), set(v2))
+                return
+            if isinstance(v1, list):
+                self.assertIsInstance(v2, list)
+                self.assertEqual(len(v1), len(v2))
+                for a, b in zip(v1, v2):
+                    _check(a, b)
+                return
+            raise AssertionError(f"unexpected type {type(v1)}")
+
+        for k in ds:
+            _check(ds[k], ds_found[k])
 
 
 if __name__ == "__main__":
