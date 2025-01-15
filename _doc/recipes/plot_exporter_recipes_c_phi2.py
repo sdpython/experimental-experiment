@@ -137,14 +137,14 @@ print("inputs", string_type(inputs, with_shape=True))
 print("dynamic_shapes", dynamic_shapes)
 
 
-###################################
+# %%
 # Let's check it is working.
 # We need to copy the input before calling the model
 # because it modified the inputs and they are not properly
 # set up when the export starts.
 model(**copy.deepcopy(inputs))
 
-###################################
+# %%
 # Export
 # ++++++
 #
@@ -167,7 +167,8 @@ model(**copy.deepcopy(inputs))
 #           to non-tensor type <class 'transformers.cache_utils.DynamicCache'>
 #           at `inputs['past_key_values']` (expected None)
 #
-##################################
+
+# %%
 # The export fails for a couple of reason but it is possible to patch the
 # code to make it work. All those modifications are put in place by
 # :func:`onnx_export_errors <experimental_experiment.torch_interpreter.onnx_export_errors>`
@@ -196,14 +197,14 @@ with bypass_export_some_errors(
     )
     large_onx.save("plot_exporter_recipes_c_phi2.onnx", all_tensors_to_one_file=True)
 
-########################################
+# %%
 # Let's display the model.
 
 onx = onnx.load("plot_exporter_recipes_c_phi2.onnx")
 gr = GraphBuilder(onx, infer_shapes_options=InferShapesOptions.NONE)
 print(gr.pretty_text())
 
-########################################
+# %%
 # Visually.
 
 plot_dot(onx)

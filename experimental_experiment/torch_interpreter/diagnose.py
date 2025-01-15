@@ -57,7 +57,12 @@ class ModelDiagnoseOutput:
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
 
     def pretty_text(
-        self, with_dynamic_shape=False, with_shape=True, with_min_max=True, with_device=True
+        self,
+        with_dynamic_shape: bool = False,
+        with_shape: bool = True,
+        with_min_max: bool = True,
+        with_device: bool = True,
+        with_inputs: bool = True,
     ) -> str:
         """
         Renders the outputs.
@@ -66,6 +71,7 @@ class ModelDiagnoseOutput:
         :param with_shape: see :func:`experimental_experiment.helpers.string_type`.
         :param with_min_max: see :func:`experimental_experiment.helpers.string_type`.
         :param with_device: see :func:`experimental_experiment.helpers.string_type`.
+        :param with_inputs: show inputs and outputs shapes
         :return: text
         """
         assert len(self.inputs) == len(self.outputs), (
@@ -74,17 +80,30 @@ class ModelDiagnoseOutput:
         )
         kws = dict(with_shape=with_shape, with_min_max=with_min_max, with_device=with_device)
         indent = "    " * self.level
+        if not self.children and not with_inputs and not any(kws.values()):
+            return (
+                (
+                    f"{indent}>>> {self.name}: {self.model.__class__.__name__}: "
+                    f"DS={self.guess_dynamic_shapes()} <<<"
+                )
+                if with_dynamic_shape
+                else f"{indent}>>> {self.name}: {self.model.__class__.__name__} <<<"
+            )
         rows = [f"{indent}>>> {self.name}: {self.model.__class__.__name__}"]
         if with_dynamic_shape:
             ds = self.guess_dynamic_shapes()
             rows.append(f"{indent}  DS={ds}")
-        for i in self.inputs:
-            rows.append(f"{indent}  > {string_type(i, **kws)}")
+        if with_inputs:
+            for i in self.inputs:
+                rows.append(f"{indent}  > {string_type(i, **kws)}")
         for child in self.children:
-            t = child.pretty_text(with_dynamic_shape=with_dynamic_shape, **kws)
+            t = child.pretty_text(
+                with_dynamic_shape=with_dynamic_shape, with_inputs=with_inputs, **kws
+            )
             rows.extend((indent + s) for s in t.split("\n"))
-        for i in self.outputs:
-            rows.append(f"{indent}  < {string_type(i, **kws)}")
+        if with_inputs:
+            for i in self.outputs:
+                rows.append(f"{indent}  < {string_type(i, **kws)}")
         rows.append(f"{indent}<<<")
         return "\n".join(rows)
 
@@ -232,41 +251,46 @@ class ModelDiagnoseOutput:
         return tuple(args), kwargs
 
 
-def _rewrite_forward(diag: ModelDiagnoseOutput, *args, verbose: int = 0, **kwargs):
+def _rewrite_forward(
+    *args, _diag: Optional[ModelDiagnoseOutput] = None, verbose: int = 0, **kwargs
+):
+    assert _diag is not None, "_diag cannot be None"
     if verbose:
-        indent = "  " * diag.level
+        indent = "  " * _diag.level
         if not args:
             print(
-                f"[{diag.name}:{diag.model.__class__.__name__}] "
+                f"[{_diag.name}:{_diag.model.__class__.__name__}] "
                 f"{indent}> **{string_type(kwargs)}"
             )
         elif kwargs:
             print(
-                f"[{diag.name}:{diag.model.__class__.__name__}] "
+                f"[{_diag.name}:{_diag.model.__class__.__name__}] "
                 f"{indent}> *{string_type(args)}, **{string_type(kwargs)}"
             )
         else:
             if len(args) == 1 and isinstance(args[0], torch.Tensor):
                 print(
-                    f"[{diag.name}:{diag.model.__class__.__name__}] "
+                    f"[{_diag.name}:{_diag.model.__class__.__name__}] "
                     f"{indent}> {string_type(args[0])}"
                 )
             else:
                 print(
-                    f"[{diag.name}:{diag.model.__class__.__name__}] "
+                    f"[{_diag.name}:{_diag.model.__class__.__name__}] "
                     f"{indent}> *{string_type(args)}"
                 )
-    diag.add_inputs(args, kwargs)
-    res = diag.forward(*args, **kwargs)
-    diag.add_outputs(res)
+    _diag.add_inputs(args, kwargs)
+    res = _diag.forward(*args, **kwargs)
+    _diag.add_outputs(res)
     if verbose:
         if isinstance(res, torch.Tensor):
             print(
-                f"[{diag.name}:{diag.model.__class__.__name__}] {indent}< {string_type(res)}"
+                f"[{_diag.name}:{_diag.model.__class__.__name__}] "
+                f"{indent}< {string_type(res)}"
             )
         else:
             print(
-                f"[{diag.name}:{diag.model.__class__.__name__}] {indent}< *{string_type(res)}"
+                f"[{_diag.name}:{_diag.model.__class__.__name__}] "
+                f"{indent}< *{string_type(res)}"
             )
     return res
 
@@ -281,7 +305,7 @@ def _trace_forward_execution(
     if verbose:
         print(f"[_trace_forward_execution] {diag.dot_name}")
     model.forward = lambda *args, _diag=diag, verbose=verbose, **kwargs: _rewrite_forward(
-        _diag, *args, verbose=verbose, **kwargs
+        *args, _diag=_diag, verbose=verbose, **kwargs
     )
     for name, mod in model.named_children():
         if isinstance(mod, torch.nn.ModuleList):

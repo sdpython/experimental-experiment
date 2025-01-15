@@ -211,7 +211,7 @@ It is used to investigate export issues raised by :func:`torch.export.export`.
 Dynamic shapes must be used to produce a model able to deal with
 inputs having different shapes even though they have the same rank.
 
-* :ref:`Infer dynamic shapes <l-plot-exporter-recipes-custom-ds>`
+* :ref:`l-plot-exporter-recipes-custom-ds`
 
 **Control Flow**
 
@@ -227,9 +227,10 @@ inputs having different shapes even though they have the same rank.
 
 * :ref:`l-plot-exporter-recipes-custom-modules`
 
-**Model**
+**LLM Models**
 
 * :ref:`l-plot-exporter-recipes-custom-phi2`
+* :ref:`l-plot-exporter-recipes-custom-phi35`
 
 **Optimization**
 
