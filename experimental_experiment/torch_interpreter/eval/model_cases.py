@@ -343,7 +343,7 @@ class ControlFlowCondNonZero(torch.nn.Module):
         )
         return a, b, c
 
-    inputs = [
+    _inputs = [
         (
             (torch.arange(24) - 8).reshape((2, -1)).to(torch.int64),
             torch.arange(32).reshape((2, -1)).to(torch.float32),
@@ -355,7 +355,7 @@ class ControlFlowCondNonZero(torch.nn.Module):
             1025,
         ),
     ]
-    _dynamic_shapes = (
+    _dynamic = (
         {0: torch.export.Dim("batch")},
         {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")},
         None,
