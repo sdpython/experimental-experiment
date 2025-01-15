@@ -206,6 +206,13 @@ It is used to investigate export issues raised by :func:`torch.export.export`.
 
 * :ref:`Export a linear regression <l-plot-torch-linreg-101>`
 
+**Dynamic Shapes**
+
+Dynamic shapes must be used to produce a model able to deal with
+inputs having different shapes even though they have the same rank.
+
+* :ref:`Infer dynamic shapes <l-plot-exporter-recipes-custom-ds>`
+
 **Control Flow**
 
 * :ref:`l-plot-exporter-recipes-custom-cond`
