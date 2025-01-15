@@ -1,6 +1,6 @@
-================================
-Exported ONNX with Static Shapes
-================================
+=====================================
+Exported into ONNX with Static Shapes
+=====================================
 
 The following script shows the exported program for many short cases
 and various way to retrieve an ONNX model equivalent

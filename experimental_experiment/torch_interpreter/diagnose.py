@@ -1,15 +1,14 @@
 import contextlib
 import copy
+import inspect
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import torch
-from ..helpers import string_type
+from ..helpers import string_type, max_diff
 
 
 def make_copy(obj: Any) -> Any:
-    """
-    Makes a copy of the objects.
-    """
+    """Makes a copy of the objects."""
     if isinstance(obj, np.ndarray):
         return obj.copy()
     if isinstance(obj, tuple):
@@ -20,14 +19,10 @@ def make_copy(obj: Any) -> Any:
         return {k: make_copy(v) for k, v in obj.items()}
     if hasattr(obj, "clone"):
         return obj.clone()
-    if obj.__class__.__name__ == "DynamicCache":
-        import transformers
-
-        assert isinstance(
-            obj, transformers.cache_utils.DynamicCache
-        ), f"Unexpected type {string_type(obj)}"
+    if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
         cache = obj.__class__()
-        cache._seen_tokens = obj.seen_tokens
+        if hasattr(obj, "_seen_tokens"):
+            cache._seen_tokens = obj._seen_tokens
         cache.key_cache = make_copy(obj.key_cache)
         cache.value_cache = make_copy(obj.value_cache)
         return cache
@@ -44,6 +39,8 @@ class ModelDiagnoseOutput:
     Contains inputs and outputs, diagnose results when tracing
     intermediate results. An instance of this class is produced
     by :func:`infer_shape_type_from_execution`.
+    Example :ref:`l-plot-exporter-recipes-custom-phi35` tells you
+    more about how to use this class.
     """
 
     def __init__(self, name: str, model: torch.nn.Module, level: int = 0):
@@ -100,12 +97,17 @@ class ModelDiagnoseOutput:
             t = child.pretty_text(
                 with_dynamic_shape=with_dynamic_shape, with_inputs=with_inputs, **kws
             )
-            rows.extend((indent + s) for s in t.split("\n"))
+            rows.extend(t.split("\n"))
         if with_inputs:
             for i in self.outputs:
                 rows.append(f"{indent}  < {string_type(i, **kws)}")
         rows.append(f"{indent}<<<")
         return "\n".join(rows)
+
+    @property
+    def full_name(self):
+        "Returns a name and class name."
+        return f"{self.name}:{self.model.__class__.__name__}"
 
     @property
     def dot_name(self):
@@ -189,12 +191,7 @@ class ModelDiagnoseOutput:
                 shapes.append(self.guess_dynamic_shape_object(*[o[i] for o in objs]))
             return shapes
 
-        if obj.__class__.__name__ == "DynamicCache":
-            import transformers
-
-            assert isinstance(
-                obj, transformers.cache_utils.DynamicCache
-            ), f"Unexpected type {string_type(obj)} in {self.module_name_type}"
+        if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
             kc = set(len(o.key_cache) for o in objs)
             assert (
                 len(kc) == 1
@@ -249,6 +246,246 @@ class ModelDiagnoseOutput:
                 *objs, msg=lambda name=name: f" failing input {name!r}"
             )
         return tuple(args), kwargs
+
+    def _move_to_kwargs(self, args, kwargs, dynamic_shapes):
+        """
+        Uses the signatures to move unnamed arguments (args) to named arguments (kwargs)
+        with the corresponding dynamic shapes.
+        *kwargs*, *dynamic_shapes* are modified inplace.
+        """
+        sig = inspect.signature(self.forward)
+        arg_dyn, kw_dyn = dynamic_shapes
+        for i, p in enumerate(sig.parameters):
+            if i >= len(arg_dyn):
+                break
+            kwargs[p] = arg_dyn[i]
+            kw_dyn[p] = args[i]
+        return tuple(), kwargs, (tuple(), kw_dyn)
+
+    def _try_export_no_bypass(
+        self,
+        modificator: Optional[Callable] = None,
+        exporter: str = "fx",
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        quiet: bool = True,
+        discrepancies: bool = True,
+        use_dynamic_shapes: Optional[bool] = None,
+        atol: float = 1e-2,
+        rtol: float = 1e-1,
+    ) -> Any:
+        """
+        Tries to export this class.
+        """
+        export_inputs = modificator(self.inputs[0]) if modificator else self.inputs[0]
+        export_inputs = make_copy(export_inputs)
+        if use_dynamic_shapes is None:
+            use_dynamic_shapes = len(self.inputs) > 1
+        assert (
+            not use_dynamic_shapes or len(self.inputs) > 1
+        ), "Unable to use dynamic_shapes, only one set of inputs is available."
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+
+        self.status = "START"
+        if exporter == "fx":
+            args, kwargs = export_inputs
+            if dynamic_shapes and args and kwargs:
+                # The export should change dynamic shapes to have only named arguments.
+                if verbose > 1:
+                    print(
+                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
+                        f"change dynamic_shapes={dynamic_shapes}"
+                    )
+                args, kwargs, dynamic_shapes = self._move_to_kwargs(
+                    args, kwargs, dynamic_shapes
+                )
+            if verbose > 1:
+                print(
+                    f"[try_export] {self.dot_name}: exporter={exporter!r} "
+                    f"with dynamic_shapes={dynamic_shapes}"
+                )
+                if verbose > 2:
+                    print(
+                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
+                        f"with export_inputs={string_type(export_inputs,with_shape=True)}"
+                    )
+            if quiet:
+                try:
+                    ep = torch.export.export(
+                        self.model,
+                        args,
+                        kwargs=kwargs,
+                        dynamic_shapes=dynamic_shapes[0] or dynamic_shapes[1],
+                        **(exporter_kwargs or {}),
+                    )
+                    self.exporter_status = "OK"
+                except Exception as e:
+                    self.last_error = e
+                    se = str(e).split("\n")[0].replace("<_DimHint.DYNAMIC: 3>", "DYN")
+                    self.exporter_status = f"FAIL-EXPORT: {se}"
+                    if verbose:
+                        print(f"[try_export] {self.dot_name} --- {self.exporter_status}")
+                    return None
+            else:
+                ep = torch.export.export(
+                    self.model,
+                    args,
+                    kwargs=kwargs,
+                    dynamic_shapes=dynamic_shapes[0] or dynamic_shapes[1],
+                    **(exporter_kwargs or {}),
+                )
+                self.exporter_status = "OK"
+            if verbose > 1:
+                print(f"[try_export] {self.dot_name}: {exporter} done")
+
+            setattr(self, exporter, ep)
+            if discrepancies:
+                has_disc = False
+                mod = ep.module()
+                self.exporter_outputs = []
+                self.exporter_discs = []
+                for i, (inp, out) in enumerate(zip(self.inputs, self.outputs)):
+                    copy_inp = make_copy(inp)
+                    args, kwargs = copy_inp
+                    if quiet:
+                        try:
+                            got = mod(*args, **kwargs)
+                        except Exception as e:
+                            self.last_error = e
+                            se = str(e).split("\n")[0]
+                            self.exporter_status = f"FAIL-EVAL: {se}"
+                            break
+                    else:
+                        got = mod(*args, **kwargs)
+                    self.exporter_outputs.append(got)
+                    diff = max_diff(out, got)
+                    if verbose > 1:
+                        print(f"[try_export] {self.dot_name}: diff[{i}]={diff}")
+                    self.exporter_discs.append(diff)
+                    if diff["abs"] > atol or diff["rel"] > rtol:
+                        self.exporter_status = "DISC: abs"
+                        has_disc = True
+                        break
+                if not has_disc:
+                    self.exporter_status = "OK"
+            if verbose:
+                print(f"[try_export] {self.dot_name} --- {self.exporter_status}")
+            return ep if self.exporter_status == "OK" else None
+
+        raise NotImplementedError(f"Export not implemented yet for exporter={exporter!r}")
+
+    def _try_export(
+        self,
+        exporter: str = "fx",
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        bypass_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        quiet: bool = True,
+        discrepancies: bool = True,
+        use_dynamic_shapes: Optional[bool] = None,
+        atol: float = 1e-2,
+        rtol: float = 1e-1,
+    ) -> Any:
+        """
+        Tries to export this class.
+        """
+        if bypass_kwargs:
+            from .onnx_export_errors import bypass_export_some_errors
+
+            with bypass_export_some_errors(
+                verbose=max(verbose - 1, 0), **bypass_kwargs
+            ) as modificator:
+                return self._try_export_no_bypass(
+                    modificator,
+                    exporter,
+                    exporter_kwargs=exporter_kwargs,
+                    quiet=quiet,
+                    verbose=verbose,
+                    use_dynamic_shapes=use_dynamic_shapes,
+                    discrepancies=discrepancies,
+                    atol=atol,
+                    rtol=rtol,
+                )
+        return self._try_export_no_bypass(
+            None,
+            exporter,
+            exporter_kwargs=exporter_kwargs,
+            quiet=quiet,
+            verbose=verbose,
+            use_dynamic_shapes=use_dynamic_shapes,
+            discrepancies=discrepancies,
+            atol=atol,
+            rtol=rtol,
+        )
+
+    def try_export(
+        self,
+        exporter: str = "fx",
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        bypass_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        quiet: bool = True,
+        discrepancies: bool = True,
+        use_dynamic_shapes: Optional[bool] = None,
+        atol: float = 1e-2,
+        rtol: float = 1e-1,
+    ) -> Any:
+        """
+        Tries to export a model. If not possible,
+        tries every child until it is possible.
+        The fucntion stores the export and other results in the class itself.
+
+        :param exporter: export way, 'fx' for :func:`torch.export.export`,
+            `'onnx_dynamo`' to call :func:`torch.onnx.export` ``(..., dynamo=True)``,
+            `'torch_script'` to call :func:`torch.onnx.export` ``(..., dynamo=False)``,
+            `'to_onnx'` to call :func:`experimental_experiment.torch_interpreter.to_onnx`.
+        :param exporter_kwargs: argument for the export function
+        :param bypass_kwargs: argument for function :func:`bypass_export_some_errors
+            <experimental_experiment.torch_interpreter.onnx_export_errors.bypass_export_some_errors>`
+        :param verbose: verbosity, to see what the function is doing
+        :param discrepancies: run the exported model to measure the discrepancies
+        :param quiet: do not catch the first exception
+        :param use_dynamic_shapes: use dynamic shapes
+        :param atol: absolute tolerance
+        :param rtol: relative tolerance
+        :return: result of the export function
+
+        See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
+        """
+        allowed = {"fx", "onnx_dynamo", "torch_script", "to_onnx"}
+        assert (
+            exporter in allowed
+        ), f"Unexpected value for exporter={exporter!r} not in {allowed}"
+        exported = self._try_export(
+            exporter=exporter,
+            exporter_kwargs=exporter_kwargs,
+            bypass_kwargs=bypass_kwargs,
+            verbose=verbose,
+            quiet=quiet,
+            discrepancies=discrepancies,
+            use_dynamic_shapes=use_dynamic_shapes,
+            atol=atol,
+            rtol=rtol,
+        )
+        if exported is not None:
+            return exported
+
+        # Then the export failed, we look into the children.
+        for child in self.children:
+            child.try_export(
+                exporter=exporter,
+                exporter_kwargs=exporter_kwargs,
+                bypass_kwargs=bypass_kwargs,
+                verbose=verbose,
+                quiet=quiet,
+                discrepancies=discrepancies,
+                use_dynamic_shapes=use_dynamic_shapes,
+                atol=atol,
+                rtol=rtol,
+            )
+
+        # It fails...
+        return None
 
 
 def _rewrite_forward(
@@ -311,11 +548,13 @@ def _trace_forward_execution(
         if isinstance(mod, torch.nn.ModuleList):
             for i, m in enumerate(mod):
                 d = _trace_forward_execution(
-                    m, f"{name}[{i}]", verbose=verbose + 1, level=level + 1
+                    m, f"{name}[{i}]", verbose=max(verbose - 1, 0), level=level + 1
                 )
                 diag.add_child(d)
         else:
-            d = _trace_forward_execution(mod, name, verbose=verbose + 1, level=level + 1)
+            d = _trace_forward_execution(
+                mod, name, verbose=max(verbose - 1, 0), level=level + 1
+            )
             diag.add_child(d)
     return diag
 
@@ -333,6 +572,7 @@ def trace_forward_execution(model: torch.nn.Module, verbose: int = 0) -> ModelDi
     """
     Replaces all forward to store the inputs and outputs of the module
     and every submodules.
+    See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
     """
     diag = _trace_forward_execution(model, verbose=verbose)
     try:
@@ -355,6 +595,8 @@ def infer_shape_type_from_execution(
         with different shapes (at least for the dynamic dimensions)
     :param verbose: verbosity
     :return: see :class:`ModelDiagnoseOutput`
+
+    See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
     """
     with trace_forward_execution(model, verbose=verbose) as tracer:
         for i in inputs:

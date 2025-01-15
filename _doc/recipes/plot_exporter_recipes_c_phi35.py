@@ -203,7 +203,7 @@ print(string_type(inputs, with_shape=True))
 
 # %%
 # Dynamic Shapes
-# ==============
+# ++++++++++++++
 #
 # We want to infer the dynamic shapes from the two sets of inputs we gave.
 # For that, we use a function to trace the execution of the model
@@ -229,5 +229,37 @@ print(
         with_min_max=False,
         with_device=False,
         with_inputs=False,
+    ).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+)
+
+# %%
+# Evaluate the export
+# +++++++++++++++++++
+#
+# In many cases, the export (to :class:`torch.fx.Graph`, to ONNX)
+# does not work on the first try. We need a way to understand
+# how much the model can be exported. It can be used to evaluate
+# the how much code needs to be rewritten or patched to be exportable.
+# The verbosity can be increase to show dynamic shapes, results
+# of the discrepancies.
+# Let's display the module and its submodule first.
+
+print(
+    diag.pretty_text(
+        with_dynamic_shape=False,
+        with_shape=False,
+        with_min_max=False,
+        with_device=False,
+        with_inputs=False,
     )
+)
+
+# %%
+# The we try to export.
+ep = diag.try_export(
+    exporter="fx",
+    use_dynamic_shapes=True,
+    exporter_kwargs=dict(strict=False),
+    bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+    verbose=1,
 )

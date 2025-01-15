@@ -137,6 +137,59 @@ class TestDiagnose(ExtTestCase):
         for k in ds:
             _check(ds[k], ds_found[k])
 
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_infer_shape_type_from_execution_export(self):
+        import torch
+
+        class MA(torch.nn.Module):
+            def forward(self, x, y):
+                return x + y
+
+        class MM(torch.nn.Module):
+            def forward(self, x, y):
+                return x * y
+
+        class MASMM(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.ma = MA()
+                self.mm = MM()
+
+            def forward(self, x, y, z):
+                return self.ma(x, y) - self.mm(y, z)
+
+        class Big(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.ma = MA()
+                self.masmm = MASMM()
+
+            def forward(self, x):
+                return self.ma(x, self.masmm(x, x, x))
+
+        big = Big()
+        x = torch.randn((5, 6))
+        y = big(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = infer_shape_type_from_execution(big, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

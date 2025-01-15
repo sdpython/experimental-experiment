@@ -1,6 +1,6 @@
-=================================
-Exported ONNX with Dynamic Shapes
-=================================
+======================================
+Exported into ONNX with Dynamic Shapes
+======================================
 
 The following script shows the exported program for many short cases
 and various way to retrieve the :class:`torch.fx.Graph` equivalent
