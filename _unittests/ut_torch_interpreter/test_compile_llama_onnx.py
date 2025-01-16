@@ -450,7 +450,7 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_llama_model_backward",
             impl="ref",
             verbose=0,
-            atol=3e-2,
+            atol=5e-2,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

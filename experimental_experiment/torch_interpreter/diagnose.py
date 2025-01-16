@@ -1,6 +1,7 @@
 import contextlib
 import copy
 import inspect
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import numpy as np
 import torch
@@ -51,7 +52,18 @@ class ModelDiagnoseOutput:
         self.inputs = []
         self.outputs = []
         self.children: List[ModelDiagnoseOutput] = []
+        sig = inspect.signature(self.forward)
+        self.forward_parameter_names = set(
+            p.name
+            for p in sig.parameters.values()
+            if p.kind not in {p.VAR_POSITIONAL, p.VAR_KEYWORD}
+        )
+        names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_POSITIONAL]
+        self.forward_args = names[0] if names else None
+        names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
+        self.forward_kwargs = names[0] if names else None
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
+        self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
 
     def pretty_text(
         self,
@@ -121,6 +133,12 @@ class ModelDiagnoseOutput:
 
     def add_inputs(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]):
         """Stores used inputs. Makes a copy."""
+        for k in kwargs:
+            assert self.forward_kwargs or k in self.forward_parameter_names, (
+                f"Unexpected parameter {k!r} (not found in {self.forward_parameter_names}), "
+                f"name={self.name!r}, model={self.model.__class__.__name__}, "
+                f"module={self.model.__class__.__module__}, model={self.model}"
+            )
         self.inputs.append(make_copy((args, kwargs)))
 
     def add_outputs(self, args: Tuple[Any, ...]):
@@ -258,8 +276,17 @@ class ModelDiagnoseOutput:
         for i, p in enumerate(sig.parameters):
             if i >= len(arg_dyn):
                 break
-            kwargs[p] = arg_dyn[i]
-            kw_dyn[p] = args[i]
+            kwargs[p] = args[i]
+            kw_dyn[p] = arg_dyn[i]
+        if self.forward_kwargs:
+            kdw = {}
+            for k, v in kw_dyn.items():
+                if k not in self.forward_parameter_names:
+                    kdw[k] = v
+            if kdw:
+                for k in kdw:
+                    del kw_dyn[k]
+                kw_dyn[self.forward_kwargs] = kdw
         return tuple(), kwargs, (tuple(), kw_dyn)
 
     def _try_export_no_bypass(
@@ -277,6 +304,11 @@ class ModelDiagnoseOutput:
         """
         Tries to export this class.
         """
+        if quiet:
+            quiet = self._debug_noquiet_name != self.name
+            debug = not quiet
+        else:
+            debug = False
         export_inputs = modificator(self.inputs[0]) if modificator else self.inputs[0]
         export_inputs = make_copy(export_inputs)
         if use_dynamic_shapes is None:
@@ -289,25 +321,45 @@ class ModelDiagnoseOutput:
         self.status = "START"
         if exporter == "fx":
             args, kwargs = export_inputs
-            if dynamic_shapes and args and kwargs:
+            if dynamic_shapes and (self.forward_kwargs or self.forward_args):
                 # The export should change dynamic shapes to have only named arguments.
-                if verbose > 1:
+                if debug or verbose > 1:
+                    sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
                     print(
                         f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                        f"change dynamic_shapes={dynamic_shapes}"
+                        f"change dynamic_shapes={sds}"
                     )
+                    if debug or verbose > 2:
+                        print(
+                            f"[try_export] {self.dot_name}: exporter={exporter!r} "
+                            f"args={string_type(args, with_shape=True)}"
+                        )
+                        print(
+                            f"[try_export] {self.dot_name}: exporter={exporter!r} "
+                            f"kwargs={string_type(kwargs, with_shape=True)}"
+                        )
                 args, kwargs, dynamic_shapes = self._move_to_kwargs(
                     args, kwargs, dynamic_shapes
                 )
-            if verbose > 1:
+            ds = dynamic_shapes[0] or dynamic_shapes[1]
+            if debug or verbose > 1:
+                sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
                 print(
                     f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                    f"with dynamic_shapes={dynamic_shapes}"
+                    f"with dynamic_shapes={sds}"
                 )
-                if verbose > 2:
+                if debug or verbose > 2:
                     print(
                         f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                        f"with export_inputs={string_type(export_inputs,with_shape=True)}"
+                        f"ds={str(ds).replace('<_DimHint.DYNAMIC: 3>', 'DYN')}"
+                    )
+                    print(
+                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
+                        f"with args={string_type(args, with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
+                        f"with kwargs={string_type(kwargs, with_shape=True)}"
                     )
             if quiet:
                 try:
@@ -315,7 +367,7 @@ class ModelDiagnoseOutput:
                         self.model,
                         args,
                         kwargs=kwargs,
-                        dynamic_shapes=dynamic_shapes[0] or dynamic_shapes[1],
+                        dynamic_shapes=ds,
                         **(exporter_kwargs or {}),
                     )
                     self.exporter_status = "OK"
@@ -331,7 +383,7 @@ class ModelDiagnoseOutput:
                     self.model,
                     args,
                     kwargs=kwargs,
-                    dynamic_shapes=dynamic_shapes[0] or dynamic_shapes[1],
+                    dynamic_shapes=ds,
                     **(exporter_kwargs or {}),
                 )
                 self.exporter_status = "OK"

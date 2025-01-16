@@ -256,6 +256,7 @@ print(
 
 # %%
 # The we try to export.
+print("------------------------------------------------------")
 ep = diag.try_export(
     exporter="fx",
     use_dynamic_shapes=True,

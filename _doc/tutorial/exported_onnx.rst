@@ -47,6 +47,7 @@ to the original model. The tested scenarios are described at
         print()
         for exporter in (
             "custom-fallback",
+            "custom-dec",
             "custom-tracing",
             "dynamo-ir",
             "script",
