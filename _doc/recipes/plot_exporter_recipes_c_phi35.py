@@ -1,8 +1,8 @@
 """
 .. _l-plot-exporter-recipes-custom-phi35:
 
-to_onnx, failures Phi-3.5-mini-instruct
-=======================================
+to_onnx, export Phi-3.5-mini-instruct piece by piece
+====================================================
 
 Example :ref:`l-plot-exporter-recipes-custom-phi2` shows how to export
 a simple LLM model with dynamic shapes. What if it does not work?
@@ -255,8 +255,9 @@ print(
 )
 
 # %%
-# The we try to export.
-print("------------------------------------------------------")
+# The we try to export to see the submodule failing the whole model.
+# We can pickle the failing model and restore it to speedup
+# the refactoring to make it work.
 ep = diag.try_export(
     exporter="fx",
     use_dynamic_shapes=True,
@@ -264,3 +265,25 @@ ep = diag.try_export(
     bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
     verbose=1,
 )
+print(diag.get_export_status())
+
+# %%
+# Export piece by piece
+# +++++++++++++++++++++
+#
+# The main module is not exportable because one piece cannot be exported.
+# But maybe if we assume it works, maybe everything else is working.
+# That way, we could export most of the model except the failing piece
+# we need to rewrite.
+ep = diag.try_export(
+    exporter="fx",
+    use_dynamic_shapes=True,
+    exporter_kwargs=dict(strict=False),
+    bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+    verbose=1,
+    replace_by_custom_op=True,
+)
+
+# %%
+# Let's print a readable report.
+print(diag.get_export_status())
