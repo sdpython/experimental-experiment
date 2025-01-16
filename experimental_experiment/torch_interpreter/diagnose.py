@@ -2,11 +2,7 @@ import contextlib
 import copy
 import inspect
 import os
-<<<<<<< HEAD
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
-=======
-from typing import Any, Callable, Dict, List, Optional, Tuple
->>>>>>> e296191a41ea9790c997565cc14a0c21254b2a8d
 import numpy as np
 import torch
 from ..helpers import string_type, max_diff
