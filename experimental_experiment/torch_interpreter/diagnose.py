@@ -87,6 +87,28 @@ class ModelDiagnoseOutput:
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self.device = "cpu"
 
+    def get_debug_msg(self) -> str:
+        """Returns information about this instances to help debugging."""
+        rows = [
+            f"name={self.name!r}",
+            f"cls={self.model.__class__.__name__}",
+            f"level={self.level}",
+            f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}",
+            f"forward_args={self.forward_args}",
+            f"forward_kwargs={self.forward_kwargs}",
+            f"device={self.device}",
+            f"n_children={len(self.children)}",
+        ]
+        for i, inp in enumerate(self.inputs):
+            rows.append(f"inputs[{i}]={string_type(inp, with_shape=True)}")
+        for i, inp in enumerate(self.outputs):
+            rows.append(f"outputs[{i}]={string_type(inp, with_shape=True)}")
+        for att in ["exporter_status", "forward_custom_op_schema"]:
+            if not hasattr(self, att):
+                continue
+            rows.append(f"{att}={getattr(self, att)}")
+        return "\n".join(rows)
+
     def pretty_text(
         self,
         with_dynamic_shape: bool = False,
@@ -461,11 +483,12 @@ class ModelDiagnoseOutput:
                 return replace_by_custom_op[self.name.__class__.__name__]
         return False
 
-    @classmethod
-    def _annotation_from_type(cls, obj) -> str:
+    def _annotation_from_type(self, obj) -> str:
         if isinstance(obj, torch.Tensor):
             return "Tensor"
-        raise NotImplementedError(f"Annotation for {string_type(obj)} is not implemented.")
+        raise NotImplementedError(
+            f"Annotation for {string_type(obj)} is not implemented{self.get_debug_msg()}"
+        )
 
     def _annotated_input(self, name):
         args, kwargs = self.inputs[0]
