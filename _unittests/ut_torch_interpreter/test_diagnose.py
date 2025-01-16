@@ -1,4 +1,5 @@
 import unittest
+from typing import Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.torch_interpreter.diagnose import (
     infer_shape_type_from_execution,
@@ -465,8 +466,8 @@ class TestDiagnose(ExtTestCase):
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
 
     @requires_torch("2.6")
-    # @hide_stdout()
-    def test_infer_shape_type_from_execution_piece_auto(self):
+    @hide_stdout()
+    def test_export_piece_auto(self):
         import torch
 
         class SubModelFail(torch.nn.Module):
@@ -514,6 +515,62 @@ class TestDiagnose(ExtTestCase):
         self.assertIn("torch.ops.diag_lib.CC__main___subfail.default", str(ep))
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
         self.assertNotEmpty(diag.children[1].forward_custom_op_schema)
+        report = diag.get_export_status()
+        self.assertIn("OK with children as custom ops", report)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_export_piece_none(self):
+        import torch
+
+        def memo(x: torch.Tensor, y: Optional[torch.Tensor], z: torch.Tensor) -> torch.Tensor:
+            pass
+
+        sch = torch.library.infer_schema(memo, mutates_args=())
+        self.assertEqual(sch, "(Tensor x, Tensor? y, Tensor z) -> Tensor")
+
+        class SubModelFail(torch.nn.Module):
+            def forward(self, x, y, z):
+                if y is None:
+                    if x.sum() > 0:
+                        return x
+                    return -x
+                return y + z
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+                self.subfail = SubModelFail()
+
+            def forward(self, x):
+                z = x * x
+                return self.sub(x, z) + self.subfail(x, None, z)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = infer_shape_type_from_execution(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=1,
+            replace_by_custom_op=CustomOpStrategy.ONLY_IF_FAILING,
+            quiet=1,
+        )
+        self.assertNotEmpty(ep)
         report = diag.get_export_status()
         self.assertIn("OK with children as custom ops", report)
 

@@ -486,8 +486,12 @@ class ModelDiagnoseOutput:
     def _annotation_from_type(self, obj) -> str:
         if isinstance(obj, torch.Tensor):
             return "Tensor"
+        if obj is None:
+            # Let's assume it is a tensor. It should not matter anyway.
+            # Unless it becomes None in another call.
+            return "Tensor?"
         raise NotImplementedError(
-            f"Annotation for {string_type(obj)} is not implemented{self.get_debug_msg()}"
+            f"Annotation for type {string_type(obj)} is not implemented{self.get_debug_msg()}"
         )
 
     def _annotated_input(self, name):
