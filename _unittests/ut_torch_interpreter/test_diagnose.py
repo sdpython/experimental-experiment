@@ -1,6 +1,9 @@
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
-from experimental_experiment.torch_interpreter.diagnose import infer_shape_type_from_execution
+from experimental_experiment.torch_interpreter.diagnose import (
+    infer_shape_type_from_execution,
+    CustomOpStrategy,
+)
 
 
 class TestDiagnose(ExtTestCase):
@@ -196,9 +199,6 @@ class TestDiagnose(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-
             def forward(self, **kwargs):
                 return kwargs["x"].abs()
 
@@ -229,39 +229,217 @@ class TestDiagnose(ExtTestCase):
         self.assertEqual(ds, (tuple(), {"kwargs": {"x": {0: torch.export.Dim.DYNAMIC}}}))
 
     @requires_torch("2.6")
-    # @hide_stdout()
-    def test_infer_shape_type_from_execution_piece(self):
+    def test_infer_shape_type_from_execution_piece_try_no_weight(self):
         import torch
 
-        class MA(torch.nn.Module):
+        class SubModel(torch.nn.Module):
             def forward(self, x, y):
-                return x + y
+                return x - y
 
-        class MM(torch.nn.Module):
-            def forward(self, x, y):
-                return x * y
-
-        class MASMM(torch.nn.Module):
+        class Model(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.ma = MA()
-                self.mm = MM()
-
-            def forward(self, x, y, z):
-                return self.ma(x, y) - self.mm(y, z)
-
-        class Big(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.ma = MA()
-                self.masmm = MASMM()
+                self.sub = SubModel()
 
             def forward(self, x):
-                return self.ma(x, self.masmm(x, x, x))
+                return self.sub(x, x * x)
 
-        big = Big()
+        model = Model()
         x = torch.randn((5, 6))
-        y = big(x)
+        ds = {"x": {0: torch.export.Dim.DYNAMIC}}
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        self.assertNotEmpty(ep)
+
+        _forward = model.sub.forward
+
+        def _sub_forward_(x, y):
+            return _forward(x, y)
+
+        def _symbolic_forward(x, y):
+            return torch.empty_like(x)
+
+        schema_str = "(Tensor x, Tensor y) -> Tensor"
+        custom_def = torch.library.CustomOpDef(
+            "test_diag_lib", "SubModel_forward", schema_str, _sub_forward_
+        )
+        custom_def.register_kernel("cpu")(_sub_forward_)
+        custom_def._abstract_fn = _symbolic_forward
+
+        def _new_forward(x, y):
+            return torch.ops.test_diag_lib.SubModel_forward(x, y)
+
+        model.sub.forward = _new_forward
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        model.sub.forward = _forward
+        self.assertIn("torch.ops.test_diag_lib.SubModel_forward", str(ep))
+
+    @requires_torch("2.6")
+    def test_infer_shape_type_from_execution_piece_try_no_weight_args(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        ds = {"x": {0: torch.export.Dim.DYNAMIC}}
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        self.assertNotEmpty(ep)
+
+        _forward = model.sub.forward
+
+        def _sub_forward_(*args, _call_=_forward, **kwargs):
+            return _call_(*args, **kwargs)
+
+        def _symbolic_forward(*args, **kwargs):
+            return torch.empty_like(args[0])
+
+        schema_str = "(Tensor x, Tensor y) -> Tensor"
+        custom_def = torch.library.CustomOpDef(
+            "test_diag_lib", "SubModelK_forward", schema_str, _sub_forward_
+        )
+        custom_def.register_kernel("cpu")(_sub_forward_)
+        custom_def._abstract_fn = _symbolic_forward
+
+        def _new_forward(*args, _name="SubModelK_forward", **kwargs):
+            f = getattr(torch.ops.test_diag_lib, _name)
+            return f(*args, **kwargs)
+
+        model.sub.forward = _new_forward
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        model.sub.forward = _forward
+        self.assertIn("torch.ops.test_diag_lib.SubModelK_forward", str(ep))
+
+    @requires_torch("2.6")
+    def test_infer_shape_type_from_execution_piece_try_weight(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Parameter(torch.randn((1, 6)))
+
+            def forward(self, x, y):
+                return x * self.weight - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        ds = {"x": {0: torch.export.Dim.DYNAMIC}}
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        self.assertNotEmpty(ep)
+
+        _forward = model.sub.forward
+
+        def _sub_forward_(x, y, _call=_forward):
+            return _call(x, y)
+
+        def _symbolic_forward(x, y):
+            return torch.empty_like(x)
+
+        schema_str = "(Tensor x, Tensor y) -> Tensor"
+        custom_def = torch.library.CustomOpDef(
+            "test_diag_lib", "SubModelWK_forward", schema_str, _sub_forward_
+        )
+        custom_def.register_kernel("cpu")(_sub_forward_)
+        custom_def._abstract_fn = _symbolic_forward
+
+        def _new_forward(x, y, _name="SubModelWK_forward"):
+            f = getattr(torch.ops.test_diag_lib, _name)
+            return f(x, y)
+
+        model.sub.forward = _new_forward
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        model.sub.forward = _forward
+        self.assertIn("torch.ops.test_diag_lib.SubModelWK_forward", str(ep))
+
+    @requires_torch("2.6")
+    def test_infer_shape_type_from_execution_piece_try_weight_args(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Parameter(torch.randn((1, 6)))
+
+            def forward(self, x, y):
+                return x * self.weight - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        ds = {"x": {0: torch.export.Dim.DYNAMIC}}
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        self.assertNotEmpty(ep)
+
+        _forward = model.sub.forward
+
+        def _sub_forward_(*args, _call_=_forward, **kwargs):
+            return _call_(*args, **kwargs)
+
+        def _symbolic_forward(*args):
+            return torch.empty_like(args[0])
+
+        schema_str = "(Tensor x, Tensor y) -> Tensor"
+        custom_def = torch.library.CustomOpDef(
+            "test_diag_lib", "SubModelKAW_forward", schema_str, _sub_forward_
+        )
+        custom_def.register_kernel("cpu")(_sub_forward_)
+        custom_def._abstract_fn = _symbolic_forward
+
+        def _new_forward(*args, _name="SubModelKAW_forward", **kwargs):
+            f = getattr(torch.ops.test_diag_lib, _name)
+            return f(*args, **kwargs)
+
+        model.sub.forward = _new_forward
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        model.sub.forward = _forward
+        self.assertIn("torch.ops.test_diag_lib.SubModelKAW_forward", str(ep))
+        self.assertIn('sub_model_kaw_forward: "f32[s0, 6]"', str(ep))
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_infer_shape_type_from_execution_piece_all(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
         self.assertNotEmpty(y)
 
         inputs = [
@@ -269,18 +447,75 @@ class TestDiagnose(ExtTestCase):
             ((torch.randn((6, 6)),), {}),
         ]
 
-        diag = infer_shape_type_from_execution(big, inputs)
+        diag = infer_shape_type_from_execution(model, inputs)
         ep = diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=10,
-            replace_sub_module_by_custom_ops=True,
+            verbose=1,
+            replace_by_custom_op=CustomOpStrategy.ALWAYS,
+            quiet=10,
         )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        self.assertIn("torch.ops.diag_lib.C__main__.default", str(ep))
+        self.assertNotEmpty(diag.forward_custom_op_schema)
+        self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
+
+    @requires_torch("2.6")
+    # @hide_stdout()
+    def test_infer_shape_type_from_execution_piece_auto(self):
+        import torch
+
+        class SubModelFail(torch.nn.Module):
+            def forward(self, x):
+                if x.sum() > 0:
+                    return x
+                return -x
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+                self.subfail = SubModelFail()
+
+            def forward(self, x):
+                return self.sub(x, x * x) + self.subfail(x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = infer_shape_type_from_execution(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=1,
+            replace_by_custom_op=CustomOpStrategy.ONLY_IF_FAILING,
+            quiet=1,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        self.assertIn("torch.ops.diag_lib.CC__main___subfail.default", str(ep))
+        self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
+        self.assertNotEmpty(diag.children[1].forward_custom_op_schema)
+        report = diag.get_export_status()
+        self.assertIn("OK with children as custom ops", report)
 
 
 if __name__ == "__main__":

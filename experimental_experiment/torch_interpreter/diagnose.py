@@ -1,11 +1,23 @@
 import contextlib
 import copy
+import enum
 import inspect
 import os
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, max_diff
+
+
+class CustomOpStrategy(enum.IntEnum):
+    """
+    Defines when to switch to CustomOp to see if the module successfully
+    exports with none of its children.
+    """
+
+    NONE = 0
+    ONLY_IF_FAILING = 1
+    ALWAYS = 2
 
 
 def make_copy(obj: Any) -> Any:
@@ -44,7 +56,14 @@ class ModelDiagnoseOutput:
     more about how to use this class.
     """
 
-    def __init__(self, name: str, model: torch.nn.Module, level: int = 0):
+    def __init__(
+        self,
+        parent: Optional["ModelDiagnoseOutput"],
+        name: str,
+        model: torch.nn.Module,
+        level: int = 0,
+    ):
+        self.parent = parent
         self.name = name
         self.model = model
         self.level = level
@@ -63,8 +82,10 @@ class ModelDiagnoseOutput:
         self.forward_args = names[0] if names else None
         names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
         self.forward_kwargs = names[0] if names else None
+        self.forward_custom_op_schema = None
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
+        self.device = "cpu"
 
     def pretty_text(
         self,
@@ -121,6 +142,13 @@ class ModelDiagnoseOutput:
     def full_name(self):
         "Returns a name and class name."
         return f"{self.name}:{self.model.__class__.__name__}"
+
+    @property
+    def custom_op_name(self):
+        "Returns a name and class name."
+        if self.parent is None:
+            return f"C{self.name}"
+        return f"C{self.parent.custom_op_name}_{self.name}"
 
     @property
     def dot_name(self):
@@ -356,7 +384,7 @@ class ModelDiagnoseOutput:
                     f"{str(ds).replace('<_DimHint.DYNAMIC: 3>', 'DYN')}"
                 )
                 print(
-                    f"[try_export-F] {self.dot_name}: "
+                    f"[try_export-FX] {self.dot_name}: "
                     f"args={string_type(args, with_shape=True)}"
                 )
                 print(
@@ -412,18 +440,120 @@ class ModelDiagnoseOutput:
         mod = ep.module()
         return ep, (lambda args, kwargs, _mod=mod: mod(*args, **kwargs))
 
-    def _do_replace_sub_module_by_custom_ops(self, replace_sub_module_by_custom_ops):
+    def _do_replace_by_custom_op(
+        self, replace_by_custom_op: Union[bool, CustomOpStrategy, Dict[str, CustomOpStrategy]]
+    ) -> CustomOpStrategy:
         """
         Tells if a module must be replaced by a custom op.
         """
-        if isinstance(replace_sub_module_by_custom_ops, bool):
-            return replace_sub_module_by_custom_ops
-        if isinstance(replace_sub_module_by_custom_ops, set):
-            if self.model.__class__.__name__ in replace_sub_module_by_custom_ops:
-                return True
-            if self.name.__class__.__name__ in replace_sub_module_by_custom_ops:
-                return True
+        if isinstance(replace_by_custom_op, bool):
+            return (
+                CustomOpStrategy.ONLY_IF_FAILING
+                if replace_by_custom_op
+                else CustomOpStrategy.NONE
+            )
+        if isinstance(replace_by_custom_op, CustomOpStrategy):
+            return replace_by_custom_op
+        if isinstance(replace_by_custom_op, set):
+            if self.model.__class__.__name__ in replace_by_custom_op:
+                return replace_by_custom_op[self.model.__class__.__name__]
+            if self.name.__class__.__name__ in replace_by_custom_op:
+                return replace_by_custom_op[self.name.__class__.__name__]
         return False
+
+    @classmethod
+    def _annotation_from_type(cls, obj) -> str:
+        if isinstance(obj, torch.Tensor):
+            return "Tensor"
+        raise NotImplementedError(f"Annotation for {string_type(obj)} is not implemented.")
+
+    def _annotated_input(self, name):
+        args, kwargs = self.inputs[0]
+        if name in kwargs:
+            o = kwargs[name]
+            return f"{self._annotation_from_type(o)} {name}"
+        index = self.forward_ordered_parameter_names.index(name)
+        o = args[index]
+        return f"{self._annotation_from_type(o)} {name}"
+
+    def _register(
+        self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
+    ):
+        # schema_str = return f"({', '.join(params)}) -> {ret}"
+        args = []
+        for p in self.forward_ordered_parameter_names:
+            if p == self.forward_args:
+                args.append(f"*{p}")
+            elif p == self.forward_kwargs:
+                args.append(f"**{p}")
+            else:
+                args.append(self._annotated_input(p))
+        outputs = [self._annotation_from_type(o) for o in self.outputs[0]]
+        schema_str = f"({', '.join(args)}) -> {', '.join(outputs)}"
+        if verbose > 1:
+            print(f"[try_export] {self.dot_name} schema_str={schema_str!r}")
+
+        # registration
+        custom_def = torch.library.CustomOpDef(namespace, fname, schema_str, fct)
+        custom_def.register_kernel(self.device)(fct)
+        custom_def._abstract_fn = fct_shape
+        return custom_def
+
+    def put_custom_op_inplace(self, verbose: int = 0):
+        """
+        Replaces the submodule by a custom operator.
+        It rewrites the forward method to call a function
+        """
+        if self.forward_custom_op_schema is not None:
+            # Registration was already done.
+            self.model.forward = self.forward_calling_custom_op
+            return self.forward_custom_op_schema
+
+        def _rewrite_forward_(*args, _diag=self, **kwargs):
+            return _diag.forward(*args, **kwargs)
+
+        def _symbolic_forward(*args, **kwargs):
+            return torch.empty_like(args[0])
+
+        name_fct = self.custom_op_name
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace] {self.dot_name} "
+                f"registers 'diag_lib.{name_fct}"
+            )
+
+        cusdef = self._register(
+            _rewrite_forward_,
+            _symbolic_forward,
+            "diag_lib",
+            name_fct,
+            verbose=verbose,
+        )
+        assert cusdef is not None, f"{self.full_name}: registration of a custom op has failed."
+        # We stored to avoid the registration twice.
+        self.forward_custom_op_schema = cusdef
+
+        # Apparently, we need a function with the exact same signature.
+        def _replaced_forward_(*args, **kwargs):
+            fct = getattr(torch.ops.diag_lib, name_fct)
+            return fct(*args, **kwargs)
+
+        _replaced_forward_.__signature__ = inspect.Signature.from_callable(self.forward)
+        self.forward_calling_custom_op = _replaced_forward_
+        self.model.forward = _replaced_forward_
+        return cusdef
+
+    def remove_custom_op_inplace(self, verbose: int = 0):
+        """
+        Just replaces the forward, hoping the registration does not have to
+        be removed.
+        """
+        self.model.forward = self.forward
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace] {self.dot_name}: unregisters "
+                f"'diag_lib.{self.custom_op_name}"
+            )
 
     def _try_export_no_bypass(
         self,
@@ -434,7 +564,7 @@ class ModelDiagnoseOutput:
         quiet: bool = True,
         discrepancies: bool = True,
         use_dynamic_shapes: Optional[bool] = None,
-        replace_sub_module_by_custom_ops: Union[bool, Set[Union[str, type]]] = False,
+        replace_by_custom_op: bool = False,
         atol: float = 1e-2,
         rtol: float = 1e-1,
     ) -> Any:
@@ -449,11 +579,7 @@ class ModelDiagnoseOutput:
         assert (
             not use_dynamic_shapes or len(self.inputs) > 1
         ), "Unable to use dynamic_shapes, only one set of inputs is available."
-        custom_ops = self._do_replace_sub_module_by_custom_ops(
-            replace_sub_module_by_custom_ops
-        )
-        if custom_ops:
-            self.put_custom_op_inplace()
+        cusdef = self.put_custom_op_inplace(verbose=verbose) if replace_by_custom_op else None
 
         self.status = "START"
         if exporter == "fx":
@@ -468,8 +594,8 @@ class ModelDiagnoseOutput:
         else:
             raise NotImplementedError(f"Export not implemented yet for exporter={exporter!r}")
 
-        if custom_ops:
-            self.remove_custom_op_inplace()
+        if cusdef is not None:
+            self.remove_custom_op_inplace(verbose=verbose)
 
         if not exported:
             return None
@@ -516,7 +642,7 @@ class ModelDiagnoseOutput:
         quiet: bool = True,
         discrepancies: bool = True,
         use_dynamic_shapes: Optional[bool] = None,
-        replace_sub_module_by_custom_ops: Union[bool, Set[Union[str, type]]] = False,
+        replace_by_custom_op: bool = False,
         atol: float = 1e-2,
         rtol: float = 1e-1,
     ) -> Any:
@@ -538,7 +664,7 @@ class ModelDiagnoseOutput:
                     verbose=verbose,
                     use_dynamic_shapes=use_dynamic_shapes,
                     discrepancies=discrepancies,
-                    replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
+                    replace_by_custom_op=replace_by_custom_op,
                     atol=atol,
                     rtol=rtol,
                 )
@@ -550,7 +676,7 @@ class ModelDiagnoseOutput:
             verbose=verbose,
             use_dynamic_shapes=use_dynamic_shapes,
             discrepancies=discrepancies,
-            replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
+            replace_by_custom_op=replace_by_custom_op,
             atol=atol,
             rtol=rtol,
         )
@@ -564,7 +690,9 @@ class ModelDiagnoseOutput:
         quiet: bool = True,
         discrepancies: bool = True,
         use_dynamic_shapes: Optional[bool] = None,
-        replace_sub_module_by_custom_ops: Union[bool, Set[Union[str, type]]] = False,
+        replace_by_custom_op: Union[
+            bool, CustomOpStrategy, Dict[str, CustomOpStrategy]
+        ] = CustomOpStrategy.NONE,
         atol: float = 1e-2,
         rtol: float = 1e-1,
     ) -> Any:
@@ -585,7 +713,7 @@ class ModelDiagnoseOutput:
         :param discrepancies: run the exported model to measure the discrepancies
         :param quiet: do not catch the first exception
         :param use_dynamic_shapes: use dynamic shapes
-        :param replace_sub_module_by_custom_ops: before exporting,
+        :param replace_by_custom_op: before exporting,
             it replaces submodules by custom ops,
             it can be a boolean to replace all or a selected classes (name or type), or names
         :param atol: absolute tolerance
@@ -601,10 +729,8 @@ class ModelDiagnoseOutput:
             f"{self.full_name}: unexpected value for exporter={exporter!r} "
             f"not in {allowed}"
         )
-        assert isinstance(replace_sub_module_by_custom_ops, bool), (
-            f"{self.full_name} replace_sub_module_by_custom_ops="
-            f"{replace_sub_module_by_custom_ops} not implemented yet."
-        )
+        custom_op_strat = self._do_replace_by_custom_op(replace_by_custom_op)
+
         exported = self._try_export(
             exporter=exporter,
             exporter_kwargs=exporter_kwargs,
@@ -613,14 +739,57 @@ class ModelDiagnoseOutput:
             quiet=quiet,
             discrepancies=discrepancies,
             use_dynamic_shapes=use_dynamic_shapes,
-            replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
+            replace_by_custom_op=custom_op_strat == CustomOpStrategy.ALWAYS,
             atol=atol,
             rtol=rtol,
         )
-        if exported is not None:
+
+        if exported is None and replace_by_custom_op == CustomOpStrategy.ONLY_IF_FAILING:
+            # The conversion of the model with its submodule failed.
+            # We try to export the module without its children.
+            if verbose:
+                print(
+                    f"[try_export-{exporter.upper()}] {self.dot_name} "
+                    f"children replace by custom ops"
+                )
+
+            for child in self.children:
+                child.put_custom_op_inplace(verbose=verbose)
+
+            # We export again.
+            exported = self._try_export(
+                exporter=exporter,
+                exporter_kwargs=exporter_kwargs,
+                bypass_kwargs=bypass_kwargs,
+                verbose=verbose,
+                quiet=quiet,
+                discrepancies=discrepancies,
+                use_dynamic_shapes=use_dynamic_shapes,
+                replace_by_custom_op=False,
+                atol=atol,
+                rtol=rtol,
+            )
+
+            # We restore the initial state.
+            for child in self.children:
+                child.remove_custom_op_inplace(verbose=verbose)
+
+            if exported is not None:
+                self.exporter_status = "OK with children as custom ops"
+
+            if verbose:
+                print(
+                    f"[try_export-{exporter.upper()}] {self.dot_name} "
+                    f"--- {self.exporter_status}"
+                )
+
+        if exported is not None and custom_op_strat == CustomOpStrategy.NONE:
+            # We don't want to return if custom ops were applied,
+            # we need to look into every of them.
             return exported
 
-        # Then the export failed, we look into the children.
+        # If a custom op was used to bypass the export or
+        # if the export failed, we look into the children.
         for child in self.children:
             child.try_export(
                 exporter=exporter,
@@ -630,13 +799,42 @@ class ModelDiagnoseOutput:
                 quiet=quiet,
                 discrepancies=discrepancies,
                 use_dynamic_shapes=use_dynamic_shapes,
-                replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
+                replace_by_custom_op=replace_by_custom_op,
                 atol=atol,
                 rtol=rtol,
             )
+        return exported
 
-        # It fails...
-        return None
+    def get_export_status(self) -> str:
+        """
+        Returns a report status on the conversion.
+        """
+
+        def iter_status(here):
+            rows = [here]
+            for child in here.children:
+                rows.extend(iter_status(child))
+            return rows
+
+        rows = iter_status(self)
+        to_display = [
+            (
+                f"{'..' * r.level}{r.name}",
+                r.model.__class__.__name__,
+                getattr(r, "exporter_status", "OK as part of its owner"),
+            )
+            for r in rows
+        ]
+        mc1 = max(len(c[0]) for c in to_display) + 3
+        mc2 = max(len(c[1]) for c in to_display) + 3
+        srows = []
+        for t in to_display:
+            c = t[0]
+            s = " " * (mc1 - len(t[0]))
+            c2 = t[1]
+            s2 = " " * (mc2 - len(t[1]))
+            srows.append(f"{c}{s}{c2}{s2}{t[2]}")
+        return "\n".join(srows)
 
 
 def _rewrite_forward(
@@ -684,12 +882,13 @@ def _rewrite_forward(
 
 
 def _trace_forward_execution(
+    parent: ModelDiagnoseOutput,
     model: torch.nn.Module,
     name: str = "__main__",
     level: int = 0,
     verbose: int = 0,
 ):
-    diag = ModelDiagnoseOutput(name, model, level=level)
+    diag = ModelDiagnoseOutput(parent, name, model, level=level)
     if verbose:
         print(f"[_trace_forward_execution] {diag.dot_name}")
     model.forward = lambda *args, _diag=diag, verbose=verbose, **kwargs: _rewrite_forward(
@@ -699,12 +898,12 @@ def _trace_forward_execution(
         if isinstance(mod, torch.nn.ModuleList):
             for i, m in enumerate(mod):
                 d = _trace_forward_execution(
-                    m, f"{name}[{i}]", verbose=max(verbose - 1, 0), level=level + 1
+                    diag, m, f"{name}[{i}]", verbose=max(verbose - 1, 0), level=level + 1
                 )
                 diag.add_child(d)
         else:
             d = _trace_forward_execution(
-                mod, name, verbose=max(verbose - 1, 0), level=level + 1
+                diag, mod, name, verbose=max(verbose - 1, 0), level=level + 1
             )
             diag.add_child(d)
     return diag
@@ -725,7 +924,7 @@ def trace_forward_execution(model: torch.nn.Module, verbose: int = 0) -> ModelDi
     and every submodules.
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
     """
-    diag = _trace_forward_execution(model, verbose=verbose)
+    diag = _trace_forward_execution(None, model, verbose=verbose)
     try:
         yield diag
     finally:
