@@ -58,6 +58,7 @@ class ModelDiagnoseOutput:
             for p in sig.parameters.values()
             if p.kind not in {p.VAR_POSITIONAL, p.VAR_KEYWORD}
         )
+        self.forward_order_parameter_names = list(sig.parameters)
         names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_POSITIONAL]
         self.forward_args = names[0] if names else None
         names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
@@ -287,7 +288,113 @@ class ModelDiagnoseOutput:
                 for k in kdw:
                     del kw_dyn[k]
                 kw_dyn[self.forward_kwargs] = kdw
+            # Let's reorder as it seems to matter later
+            # in the shape inference algorithm.
+            _kwargs = kwargs
+            kwargs = {}
+            _kw_dyn = kw_dyn
+            kw_dyn = {}
+            for name in self.forward_order_parameter_names:
+                if name in _kwargs:
+                    kwargs[name] = _kwargs[name]
+                if name in _kw_dyn:
+                    kw_dyn[name] = _kw_dyn[name]
+            assert len(kwargs) == len(
+                _kwargs
+            ), f"unexpected mismatch between _kwargs={set(_kwargs)} and kwargs={set(kwargs)}"
+            assert len(kw_dyn) == len(
+                _kw_dyn
+            ), f"unexpected mismatch between _kw_dyn={set(_kw_dyn)} and kw_dyn={set(kw_dyn)}"
         return tuple(), kwargs, (tuple(), kw_dyn)
+
+    def _try_export_no_bypass_export(
+        self,
+        export_inputs,
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        quiet: bool = True,
+        use_dynamic_shapes: Optional[bool] = None,
+    ):
+        if quiet:
+            quiet = self._debug_noquiet_name != self.name
+            debug = not quiet
+        else:
+            debug = False
+
+        args, kwargs = export_inputs
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        if dynamic_shapes and (self.forward_kwargs or self.forward_args):
+            # The export should change dynamic shapes to have only named arguments.
+            if debug or verbose > 1:
+                sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+                print(f"[try_export-FX] {self.dot_name}: change dynamic_shapes={sds}")
+                if debug or verbose > 2:
+                    print(
+                        f"[try_export-FX] {self.dot_name}: "
+                        f"args={string_type(args, with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export-FX] {self.dot_name}: "
+                        f"kwargs={string_type(kwargs, with_shape=True)}"
+                    )
+            args, kwargs, dynamic_shapes = self._move_to_kwargs(args, kwargs, dynamic_shapes)
+        ds = dynamic_shapes[0] or dynamic_shapes[1]
+        if debug or verbose > 1:
+            sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+            print(f"[try_export-FX] {self.dot_name}: dynamic_shapes={sds}")
+            if debug or verbose > 2:
+                print(
+                    f"[try_export-FX] {self.dot_name}: ds="
+                    f"{str(ds).replace('<_DimHint.DYNAMIC: 3>', 'DYN')}"
+                )
+                print(
+                    f"[try_export-F] {self.dot_name}: "
+                    f"args={string_type(args, with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX] {self.dot_name}: "
+                    f"kwargs={string_type(kwargs, with_shape=True)}"
+                )
+            if debug and len(self.inputs) > 1:
+                print(
+                    f"[try_export-FX-DEBUG] {self.dot_name}: inputs[0]="
+                    f"{string_type(self.inputs[0], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX-DEBUG] {self.dot_name}: inputs[1]="
+                    f"{string_type(self.inputs[1], with_shape=True)}"
+                )
+
+        if quiet:
+            try:
+                ep = torch.export.export(
+                    self.model,
+                    args,
+                    kwargs=kwargs,
+                    dynamic_shapes=ds,
+                    **(exporter_kwargs or {}),
+                )
+                self.exporter_status = "OK"
+            except Exception as e:
+                self.last_error = e
+                se = str(e).split("\n")[0].replace("<_DimHint.DYNAMIC: 3>", "DYN")
+                self.exporter_status = f"FAIL-EXPORT: {se}"
+                if verbose:
+                    print(f"[try_export-FX] {self.dot_name} --- {self.exporter_status}")
+                return None, None
+        else:
+            ep = torch.export.export(
+                self.model,
+                args,
+                kwargs=kwargs,
+                dynamic_shapes=ds,
+                **(exporter_kwargs or {}),
+            )
+            self.exporter_status = "OK"
+        if verbose > 1:
+            print(f"[try_export-FX] {self.dot_name}: done")
+        mod = ep.module()
+        return ep, (lambda args, kwargs, _mod=mod: mod(*args, **kwargs))
 
     def _try_export_no_bypass(
         self,
@@ -304,11 +411,6 @@ class ModelDiagnoseOutput:
         """
         Tries to export this class.
         """
-        if quiet:
-            quiet = self._debug_noquiet_name != self.name
-            debug = not quiet
-        else:
-            debug = False
         export_inputs = modificator(self.inputs[0]) if modificator else self.inputs[0]
         export_inputs = make_copy(export_inputs)
         if use_dynamic_shapes is None:
@@ -316,115 +418,54 @@ class ModelDiagnoseOutput:
         assert (
             not use_dynamic_shapes or len(self.inputs) > 1
         ), "Unable to use dynamic_shapes, only one set of inputs is available."
-        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
 
         self.status = "START"
         if exporter == "fx":
-            args, kwargs = export_inputs
-            if dynamic_shapes and (self.forward_kwargs or self.forward_args):
-                # The export should change dynamic shapes to have only named arguments.
-                if debug or verbose > 1:
-                    sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
-                    print(
-                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                        f"change dynamic_shapes={sds}"
-                    )
-                    if debug or verbose > 2:
-                        print(
-                            f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                            f"args={string_type(args, with_shape=True)}"
-                        )
-                        print(
-                            f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                            f"kwargs={string_type(kwargs, with_shape=True)}"
-                        )
-                args, kwargs, dynamic_shapes = self._move_to_kwargs(
-                    args, kwargs, dynamic_shapes
-                )
-            ds = dynamic_shapes[0] or dynamic_shapes[1]
-            if debug or verbose > 1:
-                sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
-                print(
-                    f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                    f"with dynamic_shapes={sds}"
-                )
-                if debug or verbose > 2:
-                    print(
-                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                        f"ds={str(ds).replace('<_DimHint.DYNAMIC: 3>', 'DYN')}"
-                    )
-                    print(
-                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                        f"with args={string_type(args, with_shape=True)}"
-                    )
-                    print(
-                        f"[try_export] {self.dot_name}: exporter={exporter!r} "
-                        f"with kwargs={string_type(kwargs, with_shape=True)}"
-                    )
-            if quiet:
-                try:
-                    ep = torch.export.export(
-                        self.model,
-                        args,
-                        kwargs=kwargs,
-                        dynamic_shapes=ds,
-                        **(exporter_kwargs or {}),
-                    )
-                    self.exporter_status = "OK"
-                except Exception as e:
-                    self.last_error = e
-                    se = str(e).split("\n")[0].replace("<_DimHint.DYNAMIC: 3>", "DYN")
-                    self.exporter_status = f"FAIL-EXPORT: {se}"
-                    if verbose:
-                        print(f"[try_export] {self.dot_name} --- {self.exporter_status}")
-                    return None
-            else:
-                ep = torch.export.export(
-                    self.model,
-                    args,
-                    kwargs=kwargs,
-                    dynamic_shapes=ds,
-                    **(exporter_kwargs or {}),
-                )
-                self.exporter_status = "OK"
-            if verbose > 1:
-                print(f"[try_export] {self.dot_name}: {exporter} done")
-
-            setattr(self, exporter, ep)
-            if discrepancies:
-                has_disc = False
-                mod = ep.module()
-                self.exporter_outputs = []
-                self.exporter_discs = []
-                for i, (inp, out) in enumerate(zip(self.inputs, self.outputs)):
-                    copy_inp = make_copy(inp)
-                    args, kwargs = copy_inp
-                    if quiet:
-                        try:
-                            got = mod(*args, **kwargs)
-                        except Exception as e:
-                            self.last_error = e
-                            se = str(e).split("\n")[0]
-                            self.exporter_status = f"FAIL-EVAL: {se}"
-                            break
-                    else:
-                        got = mod(*args, **kwargs)
-                    self.exporter_outputs.append(got)
-                    diff = max_diff(out, got)
-                    if verbose > 1:
-                        print(f"[try_export] {self.dot_name}: diff[{i}]={diff}")
-                    self.exporter_discs.append(diff)
-                    if diff["abs"] > atol or diff["rel"] > rtol:
-                        self.exporter_status = "DISC: abs"
-                        has_disc = True
+            exported, fct = self._try_export_no_bypass_export(
+                export_inputs,
+                exporter_kwargs=exporter_kwargs,
+                verbose=verbose,
+                quiet=quiet,
+                use_dynamic_shapes=use_dynamic_shapes,
+            )
+            setattr(self, exporter, exported)
+        else:
+            raise NotImplementedError(f"Export not implemented yet for exporter={exporter!r}")
+        if not exported:
+            return None
+        if discrepancies:
+            has_disc = False
+            self.exporter_outputs = []
+            self.exporter_discs = []
+            for i, (inp, out) in enumerate(zip(self.inputs, self.outputs)):
+                copy_inp = make_copy(modificator(inp) if modificator else inp)
+                args, kwargs = copy_inp
+                if quiet:
+                    try:
+                        got = fct(args, kwargs)
+                    except Exception as e:
+                        self.last_error = e
+                        se = str(e).split("\n")[0]
+                        self.exporter_status = f"FAIL-EVAL: {se}"
                         break
-                if not has_disc:
-                    self.exporter_status = "OK"
-            if verbose:
-                print(f"[try_export] {self.dot_name} --- {self.exporter_status}")
-            return ep if self.exporter_status == "OK" else None
-
-        raise NotImplementedError(f"Export not implemented yet for exporter={exporter!r}")
+                else:
+                    got = fct(args, kwargs)
+                self.exporter_outputs.append(got)
+                diff = max_diff(out, got)
+                if verbose > 1:
+                    print(f"[try_export-{exporter.upper()}] {self.dot_name}: diff[{i}]={diff}")
+                self.exporter_discs.append(diff)
+                if diff["abs"] > atol or diff["rel"] > rtol:
+                    self.exporter_status = "DISC: abs"
+                    has_disc = True
+                    break
+            if not has_disc:
+                self.exporter_status = "OK"
+        if verbose:
+            print(
+                f"[try_export-{exporter.upper()}] {self.dot_name} --- {self.exporter_status}"
+            )
+        return exported if self.exporter_status == "OK" else None
 
     def _try_export(
         self,
