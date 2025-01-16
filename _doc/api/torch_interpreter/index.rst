@@ -15,6 +15,7 @@
     _torch_helper
     aten_functions
     aten_methods
+    diagnose
     dispatcher
     eval/index
     export_options

@@ -32,7 +32,7 @@ class InplaceAdd(torch.nn.Module):
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
 
-class InplaceAdd_(torch.nn.Module):
+class InplaceAdd2(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
@@ -318,6 +318,48 @@ class ControlFlowCondNestedModule(torch.nn.Module):
 
     _inputs = (torch.tensor([-1, 2]),)
     _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+
+class ControlFlowCondNonZero(torch.nn.Module):
+    def forward(self, input_ids, image_features, vocab_size):
+        def then_branch(input_ids, image_features, vocab_size):
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+
+            condition = (input_ids < 0) & (input_ids > -int(1e9))
+            positions = torch.nonzero(condition, as_tuple=True)
+            input_ids = input_ids.clamp_min(0).clamp_max(vocab_size)
+            return (input_ids, positions[0], positions[1])
+
+        def else_branch(input_ids, image_features, vocab_size):
+            r = torch.where(torch.zeros((1, 1), dtype=torch.bool))
+            return (input_ids, r[0], r[1])
+
+        a, b, c = torch.cond(
+            image_features.numel() > 0,
+            then_branch,
+            else_branch,
+            [input_ids, image_features, vocab_size],
+        )
+        return a, b, c
+
+    _inputs = [
+        (
+            (torch.arange(24) - 8).reshape((2, -1)).to(torch.int64),
+            torch.arange(32).reshape((2, -1)).to(torch.float32),
+            1025,
+        ),
+        (
+            (torch.arange(24) - 8).reshape((2, -1)).to(torch.int64),
+            torch.tensor([[], []], dtype=torch.float32),
+            1025,
+        ),
+    ]
+    _dynamic = (
+        {0: torch.export.Dim("batch")},
+        {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")},
+        None,
+    )
 
 
 class ControlFlowScan(torch.nn.Module):
