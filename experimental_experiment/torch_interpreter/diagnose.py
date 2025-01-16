@@ -58,7 +58,7 @@ class ModelDiagnoseOutput:
             for p in sig.parameters.values()
             if p.kind not in {p.VAR_POSITIONAL, p.VAR_KEYWORD}
         )
-        self.forward_order_parameter_names = list(sig.parameters)
+        self.forward_ordered_parameter_names = list(sig.parameters)
         names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_POSITIONAL]
         self.forward_args = names[0] if names else None
         names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
@@ -294,17 +294,25 @@ class ModelDiagnoseOutput:
             kwargs = {}
             _kw_dyn = kw_dyn
             kw_dyn = {}
-            for name in self.forward_order_parameter_names:
+            for name in self.forward_ordered_parameter_names:
                 if name in _kwargs:
                     kwargs[name] = _kwargs[name]
                 if name in _kw_dyn:
                     kw_dyn[name] = _kw_dyn[name]
-            assert len(kwargs) == len(
-                _kwargs
-            ), f"unexpected mismatch between _kwargs={set(_kwargs)} and kwargs={set(kwargs)}"
-            assert len(kw_dyn) == len(
-                _kw_dyn
-            ), f"unexpected mismatch between _kw_dyn={set(_kw_dyn)} and kw_dyn={set(kw_dyn)}"
+            for k in _kwargs:
+                if k not in kwargs:
+                    # Then it is part of **kwargs.
+                    kwargs[k] = _kwargs[k]
+            assert len(kw_dyn) == len(_kw_dyn), (
+                f"{self.full_name}: unexpected mismatch between _kw_dyn={set(_kw_dyn)} "
+                f"and kw_dyn={set(kw_dyn)}, "
+                f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
+            )
+            assert len(kwargs) == len(_kwargs), (
+                f"{self.full_name}: unexpected mismatch between _kwargs={set(_kwargs)} "
+                f"and kwargs={set(kwargs)}, "
+                f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
+            )
         return tuple(), kwargs, (tuple(), kw_dyn)
 
     def _try_export_no_bypass_export(
