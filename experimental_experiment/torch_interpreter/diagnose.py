@@ -2,7 +2,7 @@ import contextlib
 import copy
 import inspect
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, max_diff
@@ -372,6 +372,14 @@ class ModelDiagnoseOutput:
                     f"[try_export-FX-DEBUG] {self.dot_name}: inputs[1]="
                     f"{string_type(self.inputs[1], with_shape=True)}"
                 )
+                print(
+                    f"[try_export-FX-DEBUG] {self.dot_name}: outputs[0]="
+                    f"{string_type(self.outputs[0], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX-DEBUG] {self.dot_name}: outputs[1]="
+                    f"{string_type(self.outputs[1], with_shape=True)}"
+                )
 
         if quiet:
             try:
@@ -404,6 +412,19 @@ class ModelDiagnoseOutput:
         mod = ep.module()
         return ep, (lambda args, kwargs, _mod=mod: mod(*args, **kwargs))
 
+    def _do_replace_sub_module_by_custom_ops(self, replace_sub_module_by_custom_ops):
+        """
+        Tells if a module must be replaced by a custom op.
+        """
+        if isinstance(replace_sub_module_by_custom_ops, bool):
+            return replace_sub_module_by_custom_ops
+        if isinstance(replace_sub_module_by_custom_ops, set):
+            if self.model.__class__.__name__ in replace_sub_module_by_custom_ops:
+                return True
+            if self.name.__class__.__name__ in replace_sub_module_by_custom_ops:
+                return True
+        return False
+
     def _try_export_no_bypass(
         self,
         modificator: Optional[Callable] = None,
@@ -413,11 +434,13 @@ class ModelDiagnoseOutput:
         quiet: bool = True,
         discrepancies: bool = True,
         use_dynamic_shapes: Optional[bool] = None,
+        replace_sub_module_by_custom_ops: Union[bool, Set[Union[str, type]]] = False,
         atol: float = 1e-2,
         rtol: float = 1e-1,
     ) -> Any:
         """
-        Tries to export this class.
+        Tries to export the module of submodule held by this class.
+        Stores intermediate results of the export in attributes prefixed by ``forward_``.
         """
         export_inputs = modificator(self.inputs[0]) if modificator else self.inputs[0]
         export_inputs = make_copy(export_inputs)
@@ -426,6 +449,11 @@ class ModelDiagnoseOutput:
         assert (
             not use_dynamic_shapes or len(self.inputs) > 1
         ), "Unable to use dynamic_shapes, only one set of inputs is available."
+        custom_ops = self._do_replace_sub_module_by_custom_ops(
+            replace_sub_module_by_custom_ops
+        )
+        if custom_ops:
+            self.put_custom_op_inplace()
 
         self.status = "START"
         if exporter == "fx":
@@ -439,6 +467,10 @@ class ModelDiagnoseOutput:
             setattr(self, exporter, exported)
         else:
             raise NotImplementedError(f"Export not implemented yet for exporter={exporter!r}")
+
+        if custom_ops:
+            self.remove_custom_op_inplace()
+
         if not exported:
             return None
         if discrepancies:
@@ -484,11 +516,13 @@ class ModelDiagnoseOutput:
         quiet: bool = True,
         discrepancies: bool = True,
         use_dynamic_shapes: Optional[bool] = None,
+        replace_sub_module_by_custom_ops: Union[bool, Set[Union[str, type]]] = False,
         atol: float = 1e-2,
         rtol: float = 1e-1,
     ) -> Any:
         """
-        Tries to export this class.
+        Tries to export the module of submodule held by this class.
+        Stores intermediate results of the export in attributes prefixed by ``forward_``.
         """
         if bypass_kwargs:
             from .onnx_export_errors import bypass_export_some_errors
@@ -504,6 +538,7 @@ class ModelDiagnoseOutput:
                     verbose=verbose,
                     use_dynamic_shapes=use_dynamic_shapes,
                     discrepancies=discrepancies,
+                    replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
                     atol=atol,
                     rtol=rtol,
                 )
@@ -515,6 +550,7 @@ class ModelDiagnoseOutput:
             verbose=verbose,
             use_dynamic_shapes=use_dynamic_shapes,
             discrepancies=discrepancies,
+            replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
             atol=atol,
             rtol=rtol,
         )
@@ -528,13 +564,15 @@ class ModelDiagnoseOutput:
         quiet: bool = True,
         discrepancies: bool = True,
         use_dynamic_shapes: Optional[bool] = None,
+        replace_sub_module_by_custom_ops: Union[bool, Set[Union[str, type]]] = False,
         atol: float = 1e-2,
         rtol: float = 1e-1,
     ) -> Any:
         """
         Tries to export a model. If not possible,
         tries every child until it is possible.
-        The fucntion stores the export and other results in the class itself.
+        The function stores the export and other results in the class itself,
+        in attributes prefixed by ``forward_``.
 
         :param exporter: export way, 'fx' for :func:`torch.export.export`,
             `'onnx_dynamo`' to call :func:`torch.onnx.export` ``(..., dynamo=True)``,
@@ -547,16 +585,26 @@ class ModelDiagnoseOutput:
         :param discrepancies: run the exported model to measure the discrepancies
         :param quiet: do not catch the first exception
         :param use_dynamic_shapes: use dynamic shapes
+        :param replace_sub_module_by_custom_ops: before exporting,
+            it replaces submodules by custom ops,
+            it can be a boolean to replace all or a selected classes (name or type), or names
         :param atol: absolute tolerance
         :param rtol: relative tolerance
         :return: result of the export function
 
         See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
+        Environment variable ``DIAGNAME=<name>`` can be set to increase the verbosity
+        on a particular op and avoid catching the exception if any.
         """
         allowed = {"fx", "onnx_dynamo", "torch_script", "to_onnx"}
-        assert (
-            exporter in allowed
-        ), f"Unexpected value for exporter={exporter!r} not in {allowed}"
+        assert exporter in allowed, (
+            f"{self.full_name}: unexpected value for exporter={exporter!r} "
+            f"not in {allowed}"
+        )
+        assert isinstance(replace_sub_module_by_custom_ops, bool), (
+            f"{self.full_name} replace_sub_module_by_custom_ops="
+            f"{replace_sub_module_by_custom_ops} not implemented yet."
+        )
         exported = self._try_export(
             exporter=exporter,
             exporter_kwargs=exporter_kwargs,
@@ -565,6 +613,7 @@ class ModelDiagnoseOutput:
             quiet=quiet,
             discrepancies=discrepancies,
             use_dynamic_shapes=use_dynamic_shapes,
+            replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
             atol=atol,
             rtol=rtol,
         )
@@ -581,6 +630,7 @@ class ModelDiagnoseOutput:
                 quiet=quiet,
                 discrepancies=discrepancies,
                 use_dynamic_shapes=use_dynamic_shapes,
+                replace_sub_module_by_custom_ops=replace_sub_module_by_custom_ops,
                 atol=atol,
                 rtol=rtol,
             )

@@ -255,8 +255,9 @@ print(
 )
 
 # %%
-# The we try to export.
-print("------------------------------------------------------")
+# The we try to export to see the submodule failing the whole model.
+# We can pickle the failing model and restore it to speedup
+# the refactoring to make it work.
 ep = diag.try_export(
     exporter="fx",
     use_dynamic_shapes=True,
