@@ -108,7 +108,9 @@ class Opset:
             else:
                 # We assume there is only one outputs.
                 outputs = 1
-        return self.make_node(op_type, *args, outputs=outputs, **kwargs)
+        return self.make_node(
+            op_type, *args, outputs=outputs, allow_empty_shape=True, **kwargs
+        )
 
     def make_node(
         self,
@@ -117,6 +119,7 @@ class Opset:
         outputs: Optional[Union[int, List[str], str]] = None,
         domain: str = "",
         name: Optional[str] = None,
+        allow_empty_shape: bool = False,
         **kwargs,
     ):
         assert (
@@ -147,7 +150,7 @@ class Opset:
                 # Optional input
                 new_inputs.append("")
             elif isinstance(i, np.ndarray):
-                assert 0 not in i.shape, (
+                assert allow_empty_shape or 0 not in i.shape, (
                     f"Not implemented for type(i)={type(i)}, i={i}, "
                     f"inputs={inputs!r}, op_type={op_type!r}, i.shape={i.shape}"
                     f"{self.builder.get_debug_msg()}"
@@ -159,7 +162,11 @@ class Opset:
                 else:
                     source = "Opset.make_node.0"
                 cst_name = self.builder.make_initializer(
-                    "", i, msg=f"input {i} of op_type={op_type!r}", source=source
+                    "",
+                    i,
+                    msg=f"input {i} of op_type={op_type!r}",
+                    source=source,
+                    allow_empty=allow_empty_shape,
                 )
                 new_inputs.append(cst_name)
             else:
@@ -169,6 +176,8 @@ class Opset:
                 )
 
         assert None not in new_inputs
+        if self.allow_unknown and not self.builder.get_opset(domain):
+            self.builder.add_domain(domain)
         return self.builder.make_node(
             op_type,
             new_inputs,
