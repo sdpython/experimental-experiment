@@ -1,8 +1,8 @@
 import unittest
 import onnx
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings, has_onnxscript
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.torch_interpreter import to_onnx
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestOnnxScriptIssue2025(ExtTestCase):
@@ -36,15 +36,12 @@ class TestOnnxScriptIssue2025(ExtTestCase):
             return mask_left & mask_right
 
         class MyModule(torch.nn.Module):
-            def __init__(self):
-                super(MyModule, self).__init__()
-
             def forward(self, X):
                 x_len = 10  # 368
                 chunk_start_idx = [4]
                 left_window = 18
                 result = adaptive_enc_mask(x_len, chunk_start_idx, left_window, right_window=0)
-                return result
+                return X + torch.unsqueeze(result, -1)
 
         torch_model = MyModule()
         torch_model.eval()
@@ -52,18 +49,33 @@ class TestOnnxScriptIssue2025(ExtTestCase):
         expected = torch_model(*inputs)
 
         onx = to_onnx(torch_model, inputs)
-        onnx.save(onx, "test_adaptive_enc_mask_not_custom.onnx")
+        input_name = onx.graph.input[0].name
+        onnx.save(onx, "test_adaptive_enc_mask_custom.onnx")
         ref = ExtendedReferenceEvaluator(onx)
-        got = ref.run(None, {"X": inputs[0].numpy()})
+        got = ref.run(None, {input_name: inputs[0].numpy()})
         self.assertEqualArray(expected, got[0])
+
+        onx = to_onnx(
+            torch_model,
+            inputs,
+            export_options=ExportOptions(strict=False, decomposition_table="default"),
+        )
+        onnx.save(onx, "test_adaptive_enc_mask_custom_dec.onnx")
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, {input_name: inputs[0].numpy()})
+        self.assertEqualArray(expected, got[0])
+
+        if not has_onnxscript("0.2"):
+            # This still fails.
+            return
 
         program = torch.onnx.export(torch_model, inputs, dynamo=True)
         program.save(r"test_adaptive_enc_mask_not_optimized.onnx")
         program.optimize()
         program.save(r"test_adaptive_enc_mask.onnx")
         ref = ExtendedReferenceEvaluator(program.model_proto)
-        got = ref.run(None, {"X": inputs[0].numpy()})
-        self.assertEqualArray(expected, got)
+        got = ref.run(None, {"x": inputs[0].numpy()})
+        self.assertEqualArray(expected, got[0])
 
 
 if __name__ == "__main__":

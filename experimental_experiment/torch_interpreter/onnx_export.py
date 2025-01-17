@@ -549,7 +549,8 @@ def _make_builder_interpreter(
             verbose=verbose,
         )
         if os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1"):
-            print("-- EXPORTED PROGRAM")
+            print("-- EXPORTED PROGRAM --")
+            print(f"-- export_options={export_options}")
             print(exported_program)
 
         graph_module = (
@@ -558,7 +559,8 @@ def _make_builder_interpreter(
             else exported_program.graph_module
         )
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
-            print("-- EXPORTED GRAPH MODULE")
+            print("-- EXPORTED GRAPH MODULE --")
+            print(f"-- export_options={export_options}")
             print(graph_module.graph)
         try:
             weights = dict(exported_program.named_parameters())

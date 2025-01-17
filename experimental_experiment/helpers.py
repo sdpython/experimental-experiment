@@ -45,7 +45,11 @@ def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:
 
 
 def string_type(
-    obj: Any, with_shape: bool = False, with_min_max: bool = False, with_device: bool = False
+    obj: Any,
+    with_shape: bool = False,
+    with_min_max: bool = False,
+    with_device: bool = False,
+    ignore: bool = False,
 ) -> str:
     """
     Displays the types of an object as a string.
@@ -54,6 +58,7 @@ def string_type(
     :param with_shape: displays shapes as well
     :param with_min_max: displays information about the values
     :param with_device: display the device
+    :param ignore: if True, just prints the type for unknown types
     :return: str
 
     .. runpython::
@@ -71,6 +76,7 @@ def string_type(
                 with_shape=with_shape,
                 with_min_max=with_min_max,
                 with_device=with_device,
+                ignore=ignore,
             )
             return f"({s},)"
         if len(obj) < 10:
@@ -80,6 +86,7 @@ def string_type(
                     with_shape=with_shape,
                     with_min_max=with_min_max,
                     with_device=with_device,
+                    ignore=ignore,
                 )
                 for o in obj
             )
@@ -96,6 +103,7 @@ def string_type(
                     with_shape=with_shape,
                     with_min_max=with_min_max,
                     with_device=with_device,
+                    ignore=ignore,
                 )
                 for o in obj
             )
@@ -112,6 +120,7 @@ def string_type(
                     with_shape=with_shape,
                     with_min_max=with_min_max,
                     with_device=with_device,
+                    ignore=ignore,
                 )
                 for o in obj
             )
@@ -121,12 +130,21 @@ def string_type(
             return f"{{...}}#{len(obj)}[{mini},{maxi}:A{avg}]"
         return f"{{...}}#{len(obj)}" if with_shape else "{...}"
     if isinstance(obj, dict):
-        kws = dict(with_shape=with_shape, with_min_max=with_min_max, with_device=with_device)
+        kws = dict(
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+            ignore=ignore,
+        )
         s = ",".join(f"{kv[0]}:{string_type(kv[1],**kws)}" for kv in obj.items())
         return f"dict({s})"
     if isinstance(obj, np.ndarray):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape)
+            if len(obj.shape) == 0:
+                return f"{s}={obj}"
+            if obj.size == 0:
+                return f"{s}[empty]"
             n_nan = np.isnan(obj.reshape((-1,))).astype(int).sum()
             if n_nan > 0:
                 return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}N{n_nan}nans]"
@@ -149,6 +167,8 @@ def string_type(
     if isinstance(obj, torch.Tensor):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape, with_device=with_device)
+            if len(obj.shape) == 0:
+                return f"{s}={obj}"
             if obj.numel() == 0:
                 return f"{s}[empty]"
             n_nan = obj.reshape((-1,)).isnan().to(int).sum()
@@ -166,13 +186,17 @@ def string_type(
         if not with_shape:
             return f"{prefix}T{i}r{len(obj.shape)}"
         return f"{prefix}T{i}s{'x'.join(map(str, obj.shape))}"
+    if isinstance(obj, bool):
+        if with_min_max:
+            return f"bool={obj}"
+        return "bool"
     if isinstance(obj, int):
         if with_min_max:
-            return f"int[{obj}]"
+            return f"int={obj}"
         return "int"
     if isinstance(obj, float):
         if with_min_max:
-            return f"float[{obj}]"
+            return f"float={obj}"
         return "float"
     if isinstance(obj, str):
         return "str"
@@ -246,6 +270,8 @@ def string_type(
     if isinstance(obj, torch.utils._pytree.TreeSpec):
         return repr(obj).replace(" ", "").replace("\n", " ")
 
+    if ignore:
+        return f"{obj.__class__.__name__}(...)"
     raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
 
 
