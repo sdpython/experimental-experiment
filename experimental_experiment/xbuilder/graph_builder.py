@@ -4870,9 +4870,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
             }
             if filtered:
-                doc_string += (
-                    f"\n-- known-value-shape: {pprint.pformat(self._known_value_shape)}"
-                )
+                doc_string += f"\n-- known-value-shape: {pprint.pformat(filtered)}"
         model.doc_string += doc_string + (
             f"\n-- optimized:{self.optimization_options!r}" if optimize else "not-optimized"
         )
@@ -7399,9 +7397,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
             }
             if filtered:
-                doc_string += (
-                    f"\n-- known-value-shape: {pprint.pformat(self._known_value_shape)}"
-                )
+                doc_string += f"\n-- known-value-shape: {pprint.pformat(filtered)}"
         onx.doc_string += doc_string + (
             f"\n-- optimized:{builder.optimization_options!r}" if optimize else "not-optimized"
         )
