@@ -289,7 +289,7 @@ def aten_amax(
     dim: Optional[int] = None,
     keepdim: bool = False,
     output_dtype: Optional["torch.dtype"] = None,  # noqa: F821
-    name: str = "aten_amax",
+    name: str = "amax",
 ) -> T:
     "reducemax"
     from ._prims_functions import prims_amax
@@ -780,9 +780,9 @@ def aten_auto_functionalized(
             fname,
             args,
             outputs,
-            name="aten_auto_functionalized",
+            name="auto_functionalized",
             domain=fdomain,
-            doc_string="aten_auto_functionalized-E",
+            doc_string="auto_functionalized-E",
         )
     assert len(outputs) == 1, (
         f"Unexpected outputs={outputs} but local_outputs={local_outputs} "
@@ -793,7 +793,7 @@ def aten_auto_functionalized(
         fname,
         args,
         new_outputs,
-        name="aten_auto_functionalized-N",
+        name="auto_functionalized-N",
         domain=fdomain,
     )
 
@@ -838,7 +838,7 @@ def aten_avg_pool2d(
     ceil_mode: bool = False,
     count_include_pad: bool = True,
     divisor_override: Optional[int] = None,
-    name: str = "aten_avg_pool2d",
+    name: str = "avg_pool2d",
 ) -> T:
     "AveragePool"
     assert divisor_override is None, (
@@ -881,7 +881,7 @@ def aten_avg_pool3d(
     ceil_mode: bool = False,
     count_include_pad: bool = True,
     divisor_override: Optional[int] = None,
-    name: str = "aten_avg_pool3d",
+    name: str = "avg_pool3d",
 ) -> T:
     "AveragePool"
     assert divisor_override is None, (
@@ -1443,7 +1443,7 @@ def aten_cond(
     true_graph: str,
     false_graph: str,
     inputs: List[T],
-    name="aten_cond",
+    name="cond",
 ) -> T:
     "cond"
     assert g.has_local_function(
@@ -3721,10 +3721,12 @@ def aten_index_Tensor(
     "[..., :, ...]"
     assert isinstance(indices, (list, tuple)), f"Unexpected type {type(indices)} for indices"
     if len(indices) == 1 and isinstance(indices[0], str):
+        # index_Tensor_a
         return aten_index_select(g, sts, outputs, x, dim=0, index=indices[0], name=f"{name}_a")
 
     n_none = len([i for i in indices if i is None])
     name = f"{name}_n{n_none}"
+    # index_Tensor_n...
     if n_none == 0:
         # No none dimension, example:
         # indices = [A, B]
@@ -3752,6 +3754,7 @@ def aten_index_Tensor(
     if n_none == 1 and indices[0] is None and len(indices) == 3:
         ranks = [g.get_rank(i) for i in indices if i is not None]
         if set(ranks) == {1}:
+            # index_Tensor_n...t31
             name = f"{name}_t31"
             # y[b, i] = x[b, i1[i], i2[i]]
             dim2 = g.op.Shape(x, start=2, end=3, name=name)
@@ -3791,6 +3794,7 @@ def aten_index_Tensor(
         return res
 
     if n_none == 2 and indices[0] is None and indices[1] is None and len(indices) == 4:
+        # index_Tensor_n...e
         ranks = [g.get_rank(i) for i in indices if i is not None]
         assert (
             len(set(ranks)) == 2
@@ -3820,6 +3824,7 @@ def aten_index_Tensor(
         return res
 
     if n_none == 2 and indices[0] is None and indices[1] is None and len(indices) == 5:
+        # index_Tensor_n...d
         ranks = [g.get_rank(i) for i in indices if i is not None]
         assert (
             len(set(ranks)) == 3
@@ -3858,6 +3863,7 @@ def aten_index_Tensor(
         position = min(i for i, v in enumerate(indices) if v is not None)
         index = indices[position]
         if isinstance(index, str):
+            # index_Tensor_n...b
             res = aten_index_select(
                 g,
                 sts,
@@ -3885,7 +3891,7 @@ def aten_index_put(
     indices: List[T],
     values: T,
     accumulate: bool = False,
-    name="aten_index_put",
+    name="index_put",
 ) -> T:
     "M[..., :, ...] = ..."
     assert isinstance(indices, list), f"Unexpected type {type(indices)}{g.get_debug_msg()}"
@@ -3896,12 +3902,13 @@ def aten_index_put(
         index = indices[0]  # tensor
         index_dtype = g.get_type(index)
         if index_dtype == TensorProto.BOOL:
+            # index_put1b_
             name += "b_"
             assert not accumulate, (
                 f"accumulate is True but it does not make sense in that case"
                 f"{g.get_debug_msg()}"
             )
-            res = g.op.Where(index, values, x, outputs=outputs)
+            res = g.op.Where(index, values, x, outputs=outputs, name=name)
             if not sts:
                 g.set_type(res, g.get_type(x))
                 g.set_shape(res, g.get_shape(x))
@@ -3910,9 +3917,11 @@ def aten_index_put(
         new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
         g.set_type(new_index, index_dtype)
         if g.has_shape(index):
+            # index_put1s_
             name += "s_"
             g.set_shape(new_index, (*g.get_shape(index), 1))
         else:
+            # index_put1r_
             name += "r_"
             g.set_rank(new_index, g.get_rank(index) + 1)
 
@@ -3975,6 +3984,7 @@ def aten_index_put(
             and g.has_rank(values)
             and g.has_rank(x)
         ):
+            # index_put2i...
             name = (
                 f"{name}2i{'o' if ind0 is None else g.get_rank(ind0)}"
                 f"i{'o' if ind1 is None else g.get_rank(ind1)}"
@@ -4099,6 +4109,7 @@ def aten_index_put(
             and g.has_rank(values)
             and g.has_rank(x)
         ):
+            # index_put3i...
             name = (
                 f"{name}3i{'o' if ind0 is None else g.get_rank(ind0)}"
                 f"i{'o' if ind1 is None else g.get_rank(ind1)}"
@@ -4276,6 +4287,7 @@ def aten_index_put(
             and g.has_rank(values)
             and g.has_rank(x)
         ):
+            # index_put4i...
             name = (
                 f"{name}4i{'o' if ind0 is None else g.get_rank(ind0)}"
                 f"i{'o' if ind1 is None else g.get_rank(ind1)}"
@@ -4485,7 +4497,7 @@ def aten_index_put_(
     indices: List[T],
     values: T,
     accumulate: bool = False,
-    name="aten_index_put_",
+    name="index_put_",
 ) -> T:
     "M[..., :, ...] = ..."
     # index_put_ is expected to be an inplace modification but the fx graph does
@@ -4725,6 +4737,7 @@ def aten__unsafe_index_put(
     indices: List[T],
     values: T,
     accumulate: bool = False,
+    name: str = "_unsafe_index_put",
 ) -> T:
     "[..., :, ...]"
     return aten_index_put(
@@ -4735,7 +4748,7 @@ def aten__unsafe_index_put(
         indices,
         values,
         accumulate,
-        name="aten__unsafe_index_put",
+        name=name,
     )
 
 
@@ -5979,7 +5992,7 @@ def aten_native_group_norm(
     HxW: Optional[int] = None,
     group: int = 1,
     eps: float = 1e-5,
-    name: str = "aten_native_group_norm",
+    name: str = "native_group_norm",
 ) -> Tuple[T, T, T]:
     "aten_native_group_norm"
     # assert N,C,HxW value with the input tensor shape
@@ -6074,7 +6087,7 @@ def aten_native_layer_norm(
     weight: Optional[T] = None,
     bias: Optional[T] = None,
     eps: float = 1e-05,
-    name: str = "aten_native_layer_norm",
+    name: str = "native_layer_norm",
 ) -> Tuple[T, T, T]:
     "native_layer_norm"
     assert isinstance(normalized_shape, list) and all_int(normalized_shape), (
@@ -7159,14 +7172,15 @@ def aten__prelu_kernel_backward(
     grad_output: T,
     x: T,
     weight: T,
+    name: str = "_prelu_kernel_backward",
 ) -> Tuple[T, T]:
     "prelu backward"
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     zero = g.make_initializer(
         "zero", np.array([0], dtype=dtype), source="aten__prelu_kernel_backward.zero"
     )
-    xg0 = g.op.Greater(x, zero, name="_prelu_kernel_backward")
-    mu1 = g.op.Mul(weight, grad_output, name="_prelu_kernel_backward")
+    xg0 = g.op.Greater(x, zero, name=name)
+    mu1 = g.op.Mul(weight, grad_output, name=name)
     input_grad = g.op.Where(
         xg0,
         grad_output,
@@ -7174,10 +7188,8 @@ def aten__prelu_kernel_backward(
         name="_prelu_kernel_backward",
         outputs=outputs[:1],
     )
-    mu2 = g.op.Mul(x, grad_output, name="_prelu_kernel_backward")
-    weight_grad = g.op.Where(
-        xg0, zero, mu2, name="_prelu_kernel_backward", outputs=outputs[1:]
-    )
+    mu2 = g.op.Mul(x, grad_output, name=name)
+    weight_grad = g.op.Where(xg0, zero, mu2, name=name, outputs=outputs[1:])
     set_type_shape_unary_op(g, xg0, x, TensorProto.BOOL)
     set_type_shape_unary_op(g, mu1, weight)
     set_type_shape_unary_op(g, mu2, x)
@@ -7286,7 +7298,7 @@ def aten_scan(
     dim: int,
     reverse: bool,
     additional_inputs: List[str],
-    name="aten_scan",
+    name="scan",
 ) -> T:
     "cond"
     assert g.has_local_function(

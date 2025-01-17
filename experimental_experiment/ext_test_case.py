@@ -859,6 +859,21 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
     return lambda x: x
 
 
+def has_onnxscript(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`onnxscript` is not recent enough."""
+    import packaging.version as pv
+    import onnxscript
+
+    if not hasattr(onnxscript, "__version__"):
+        # development version
+        return True
+
+    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(version):
+        msg = f"onnxscript version {onnxscript.__version__} < {version}: {msg}"
+        return False
+    return True
+
+
 def requires_onnxruntime(version: str, msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`onnxruntime` is not recent enough."""
     import packaging.version as pv

@@ -169,7 +169,7 @@ got = sess.run(None, feeds)[0]
 
 diff = torch.abs(y - torch.from_numpy(got)).max()
 print(f"output: shape={got.shape}, min={got.min()}, max={got.max()}")
-print(f"max discrepancy={diff['abs']}")
+print(f"max discrepancy={diff}")
 
 ###########################################
 # Let's save the ONNX model.

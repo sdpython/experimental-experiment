@@ -527,6 +527,7 @@ def prims_where(
     condition: T,
     x: T,
     other: T,
+    name: str = "prims_where",
 ) -> T:
     "where"
     assert not (isinstance(x, (int, float)) and isinstance(other, (int, float))), (
@@ -540,7 +541,7 @@ def prims_where(
     dtype = tensor_dtype_to_np_dtype(g.get_type(other if isinstance(other, str) else x))
     ax = x if isinstance(x, str) else np.array([x], dtype=dtype)
     aother = other if isinstance(other, str) else np.array([other], dtype=dtype)
-    res = g.op.Where(condition, ax, aother, outputs=outputs, name="prims_where")
+    res = g.op.Where(condition, ax, aother, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(other))
         if g.has_shape(condition) and g.has_shape(other):

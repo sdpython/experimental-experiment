@@ -264,6 +264,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
         self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
+        self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
     """
 
     class ShapeConstant:
@@ -434,6 +435,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
         self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
+        self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -893,17 +895,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         "Returns the opset for the main domain (assuming it is used)."
         return self.opsets[""]
 
-    def get_opset(self, domain: str) -> int:
+    def get_opset(self, domain: str, exc: bool = True) -> int:
         """
         Returns the opset version for a specific domain.
 
         :param domain: domain name
+        :param exc: raise an exception if missing
         :return: version
         """
         assert (
-            domain in self.opset
+            exc or domain in self.opsets
         ), f"Domain {domain!r} is not registered{self.get_debug_msg()}."
-        return self.opset[domain]
+        return self.opsets.get(domain, None)
 
     def add_domain(self, domain: str, version: int = 1):
         """
@@ -1795,9 +1798,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert isinstance(
             name, str
         ), f"Unexpected type {type(name)} for name={name!r}{self.get_debug_msg()}"
-        assert not isinstance(value, tuple) or all(
-            not isinstance(d, str) or d[0] != "(" for d in value
-        ), f"Unexpected value for shape {name!r}, value={value!r}{self.get_debug_msg()}"
+        assert not isinstance(value, tuple) or all(isinstance(d, (str, int)) for d in value), (
+            f"Unexpected value for shape {name!r}, value={value!r}, "
+            f"types={string_type(value)}{self.get_debug_msg()}"
+        )
         if equal_to is None:
             if name in self._known_value_shape:
                 existing = self._known_value_shape[name]
@@ -2055,7 +2059,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 value = self._torch_sym_int(d)
                 key.append(value)
             elif isinstance(d, (str, self.torch.SymInt)):
-                assert self.has_shape(d) or (self.has_rank(d) and self.get_rank(d) == 0), (
+                assert self._debug_quiet or (
+                    self.has_shape(d) or (self.has_rank(d) and self.get_rank(d) == 0)
+                ), (
                     f"Missing shape for {d!r} in {shape!r}, has_rank={self.has_rank(d)}, "
                     f"has_type={self.has_type(d)}{self.get_debug_msg()}"
                 )
@@ -4853,10 +4859,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         doc_string = (
             f"large_model={large_model}, inline={inline}, "
             f"external_threshold={external_threshold}"
-            f"\nfunction_options={function_options!r}"
+            f"\n-- function_options={function_options!r}"
         )
+        if self.constraints_:
+            doc_string += (
+                f"\n-- discovered-shape-constraints: {pprint.pformat(self.constraints_)}"
+            )
+        if self._known_value_shape:
+            filtered = {
+                k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
+            }
+            if filtered:
+                doc_string += f"\n-- known-value-shape: {pprint.pformat(filtered)}"
         model.doc_string += doc_string + (
-            f"\noptimized:{self.optimization_options!r}" if optimize else "not-optimized"
+            f"\n-- optimized:{self.optimization_options!r}" if optimize else "not-optimized"
         )
         assert (
             not optimize
@@ -6677,6 +6693,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     and i.shape in ((1,), tuple())
                 ):
                     ii = int(i[0]) if i.shape == (1,) else int(i)
+                    if self._debug_quiet and ii >= len(y):
+                        node.doc_string += "#SV-Ga/77"
+                        return False
                     assert ii < len(y), (
                         f"Unexpected value for y={y!r}, i={i!r} in node Gather "
                         f"with inputs={node.input}{self.get_debug_msg()}"
@@ -7370,9 +7389,17 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder.make_local_function] fct {onx.name}[{onx.domain}]"
                 f"({', '.join(onx.input)}) -> {', '.join(onx.output)})"
             )
-        doc_string = f"function_options={function_options!r}"
+        doc_string = f"-- function_options={function_options!r}"
+        if self.constraints_:
+            doc_string += f"\n-- shape-constraints: {pprint.pformat(self.constraints_)}"
+        if self._known_value_shape:
+            filtered = {
+                k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
+            }
+            if filtered:
+                doc_string += f"\n-- known-value-shape: {pprint.pformat(filtered)}"
         onx.doc_string += doc_string + (
-            f"\noptimized:{builder.optimization_options!r}" if optimize else "not-optimized"
+            f"\n-- optimized:{builder.optimization_options!r}" if optimize else "not-optimized"
         )
 
         to_rename = {}
