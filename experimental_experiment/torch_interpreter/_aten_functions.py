@@ -2757,6 +2757,7 @@ def aten_expand(
 
     if not isinstance(sizes, str) and all_int(sizes) and min(sizes) >= 0:
         # static sizes
+        name = f"{name}_A"
         res = g.op.Expand(x, np.array(sizes, dtype=np.int64), outputs=outputs, name=name)
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -2764,15 +2765,17 @@ def aten_expand(
         return res
 
     if not isinstance(sizes, str) and g.has_shape(x):
-        shape = g.get_shape(x)
+        name = f"{name}_B"
+        true_shape = shape = g.get_shape(x)
         while len(shape) < len(sizes):
             shape = (1, *shape)
-        assert len(shape) == len(
-            sizes
-        ), f"Unable to expand x with shape={shape} because sizes={sizes}{g.get_debug_msg()}"
+        assert len(shape) == len(sizes), (
+            f"Unable to expand x with shape={true_shape} (expanded shape={shape}"
+            f"because sizes={sizes}{g.get_debug_msg()}"
+        )
+        expanded_n = len(shape) - len(true_shape)
         new_shape = []
         is_static = True
-        shape_x = None
         for di, (a, b) in enumerate(zip(shape, sizes)):
             if b == -1:
                 assert isinstance(b, int), (
@@ -2789,9 +2792,11 @@ def aten_expand(
                     ):
                         new_shape.append(g.dynamic_objects[a])
                     else:
-                        if shape_x is None:
-                            shape_x = g.op.Shape(x, name=name)
-                        ds = g.op.Gather(shape_x, np.array([di], dtype=np.int64), name=name)
+                        # Here the shape is a string, it must be a dynamic shape, not a result.
+                        # example: a = "dyn", b = -1
+                        ds = g.op.Shape(
+                            x, start=di - expanded_n, end=di + 1 - expanded_n, name=name
+                        )
                         new_shape.append(ds)
                         g.add_dynamic_object(a, ds)
                     is_static = False
