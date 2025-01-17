@@ -4859,10 +4859,22 @@ class GraphBuilder(_GraphBuilderRuntime):
         doc_string = (
             f"large_model={large_model}, inline={inline}, "
             f"external_threshold={external_threshold}"
-            f"\nfunction_options={function_options!r}"
+            f"\n-- function_options={function_options!r}"
         )
+        if self.constraints_:
+            doc_string += (
+                f"\n-- discovered-shape-constraints: {pprint.pformat(self.constraints_)}"
+            )
+        if self._known_value_shape:
+            filtered = {
+                k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
+            }
+            if filtered:
+                doc_string += (
+                    f"\n-- known-value-shape: {pprint.pformat(self._known_value_shape)}"
+                )
         model.doc_string += doc_string + (
-            f"\noptimized:{self.optimization_options!r}" if optimize else "not-optimized"
+            f"\n-- optimized:{self.optimization_options!r}" if optimize else "not-optimized"
         )
         assert (
             not optimize
@@ -7379,9 +7391,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder.make_local_function] fct {onx.name}[{onx.domain}]"
                 f"({', '.join(onx.input)}) -> {', '.join(onx.output)})"
             )
-        doc_string = f"function_options={function_options!r}"
+        doc_string = f"-- function_options={function_options!r}"
+        if self.constraints_:
+            doc_string += f"\n-- shape-constraints: {pprint.pformat(self.constraints_)}"
+        if self._known_value_shape:
+            filtered = {
+                k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
+            }
+            if filtered:
+                doc_string += (
+                    f"\n-- known-value-shape: {pprint.pformat(self._known_value_shape)}"
+                )
         onx.doc_string += doc_string + (
-            f"\noptimized:{builder.optimization_options!r}" if optimize else "not-optimized"
+            f"\n-- optimized:{builder.optimization_options!r}" if optimize else "not-optimized"
         )
 
         to_rename = {}
