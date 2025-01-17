@@ -3901,7 +3901,7 @@ def aten_index_put(
                 f"accumulate is True but it does not make sense in that case"
                 f"{g.get_debug_msg()}"
             )
-            res = g.op.Where(index, values, x, outputs=outputs)
+            res = g.op.Where(index, values, x, outputs=outputs, name=name)
             if not sts:
                 g.set_type(res, g.get_type(x))
                 g.set_shape(res, g.get_shape(x))
@@ -7159,14 +7159,15 @@ def aten__prelu_kernel_backward(
     grad_output: T,
     x: T,
     weight: T,
+    name: str = "_prelu_kernel_backward",
 ) -> Tuple[T, T]:
     "prelu backward"
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     zero = g.make_initializer(
         "zero", np.array([0], dtype=dtype), source="aten__prelu_kernel_backward.zero"
     )
-    xg0 = g.op.Greater(x, zero, name="_prelu_kernel_backward")
-    mu1 = g.op.Mul(weight, grad_output, name="_prelu_kernel_backward")
+    xg0 = g.op.Greater(x, zero, name=name)
+    mu1 = g.op.Mul(weight, grad_output, name=name)
     input_grad = g.op.Where(
         xg0,
         grad_output,
@@ -7174,10 +7175,8 @@ def aten__prelu_kernel_backward(
         name="_prelu_kernel_backward",
         outputs=outputs[:1],
     )
-    mu2 = g.op.Mul(x, grad_output, name="_prelu_kernel_backward")
-    weight_grad = g.op.Where(
-        xg0, zero, mu2, name="_prelu_kernel_backward", outputs=outputs[1:]
-    )
+    mu2 = g.op.Mul(x, grad_output, name=name)
+    weight_grad = g.op.Where(xg0, zero, mu2, name=name, outputs=outputs[1:])
     set_type_shape_unary_op(g, xg0, x, TensorProto.BOOL)
     set_type_shape_unary_op(g, mu1, weight)
     set_type_shape_unary_op(g, mu2, x)

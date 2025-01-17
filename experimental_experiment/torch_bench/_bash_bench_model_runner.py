@@ -218,16 +218,17 @@ class ModelRunner:
                 return o.to(dtype_or_device)
             return o
 
-        if isinstance(o, int):
+        if isinstance(o, bool):
+            # always check for boolean first as a boolean is an int
             # int gets ignored by torch.export.export
-            t = torch.Tensor([o]).to(torch.int32)
+            t = torch.Tensor([o]).to(torch.bool)
             if isinstance(dtype_or_device, str):
                 t = t.to(dtype_or_device)
             return t
 
-        if isinstance(o, bool):
+        if isinstance(o, int):
             # int gets ignored by torch.export.export
-            t = torch.Tensor([o]).to(torch.bool)
+            t = torch.Tensor([o]).to(torch.int32)
             if isinstance(dtype_or_device, str):
                 t = t.to(dtype_or_device)
             return t

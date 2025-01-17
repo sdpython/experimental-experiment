@@ -181,6 +181,7 @@ def aten_meth_masked_fill(
     x: T,
     mask: T,
     value: Any,
+    name: str = "aten_meth_masked_fill",
 ) -> T:
     "masked_fill"
     if isinstance(value, float):
@@ -192,9 +193,9 @@ def aten_meth_masked_fill(
         )
         set_shape_cast = False
     else:
-        value_cast = g.op.CastLike(value, x, name=".masked_fill")
+        value_cast = g.op.CastLike(value, x, name=name)
         set_shape_cast = True
-    res = g.op.Where(mask, value_cast, x, name=".masked_fill")
+    res = g.op.Where(mask, value_cast, x, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if set_shape_cast:
@@ -211,7 +212,6 @@ def aten_meth_masked_fill(
             else:
                 raise RuntimeError(f"Unable to guess shape from type {type(value)}")
         set_type_shape_binary_op(g, res, mask, value_cast, x, begin=1)
-
     return res
 
 

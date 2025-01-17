@@ -1790,6 +1790,10 @@ class DynamoInterpreter:
                     self.builder.set_shape(r, tuple())
                     self.builder.set_type(r, TensorProto.FLOAT)
                     self.builder.make_dynamic_object(r, v)
+                elif isinstance(v, bool):
+                    # check for boolean first because a boolean is an int.
+                    self.builder.set_shape(r, tuple())
+                    self.builder.set_type(r, TensorProto.BOOL)
                 elif isinstance(v, int):
                     # this is unknown
                     self.builder.set_shape(r, tuple())
