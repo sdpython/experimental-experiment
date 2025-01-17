@@ -1,11 +1,17 @@
 import unittest
 import onnx
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings, has_onnxscript
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    has_onnxscript,
+    requires_torch,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestOnnxScriptIssue2025(ExtTestCase):
+    @requires_torch("2.6")
     @ignore_warnings((FutureWarning, DeprecationWarning))
     def test_adaptive_enc_mask(self):
         import torch
