@@ -606,7 +606,9 @@ def _set_shape_type_op_any_conv_maxpool(self: "GraphBuilder", node: NodeProto): 
         return
     self.set_type(node.output[0], self.get_type(node.input[0]))
 
-    if not self.has_shape(node.input[0]) or not self.has_shape(node.input[1]):
+    if not self.has_shape(node.input[0]) or (
+        len(node.input) > 1 and not self.has_shape(node.input[1])
+    ):
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
@@ -685,7 +687,7 @@ def _set_shape_type_op_any_conv_maxpool(self: "GraphBuilder", node: NodeProto): 
     output_shape = []
     output_shape.append(input_shape[0])
     if require_kernel_shape:
-        output_shape.append(input_shape[1][0])
+        output_shape.append(input_shape[1])
     else:
         w_shape = self.get_shape(node.input[1])
         output_shape.append(w_shape[0])
