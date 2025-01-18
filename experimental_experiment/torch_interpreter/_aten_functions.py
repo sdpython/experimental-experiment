@@ -526,7 +526,7 @@ def aten_arange(
         if rk == 1:
             # It must be a scalar.
             dt = g.get_type(a)
-            a = g.op.SqueezeAnyOpset(a, np.array([0], dtype=np.int64), name=name)
+            a = g.op.SqueezeAnyOpset(a, g.ZERO, name=name)
             g.set_type(a, dt)
             g.set_shape(a, tuple())
         gi = g.get_type(a)
@@ -612,7 +612,7 @@ def aten_argmax(
 ) -> T:
     "argmax"
     if dim is None:
-        xf = g.op.Reshape(x, np.array([-1], dtype=np.int64))
+        xf = g.op.Reshape(x, g.MINUS_ONE)
         res = g.op.SqueezeAnyOpset(
             g.op.ArgMax(xf, keepdims=(1 if keepdim else 0)),
             outputs=outputs,
@@ -667,7 +667,7 @@ def aten_as_strided(
             i = ((np.arange(n_elems) // dimc) % dim) * strid
             indices += i
 
-        flat = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+        flat = g.op.Reshape(x, g.MINUS_ONE, name=name)
         g.set_type(flat, g.get_type(x))
         g.set_shape(flat, (int(np.prod(g.get_shape(x))),))
         new_values = g.op.Gather(flat, indices, name=name)
@@ -702,7 +702,7 @@ def aten_as_strided(
             ) from e
         np_strided = strided.detach().numpy().ravel()
 
-    flat = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+    flat = g.op.Reshape(x, g.MINUS_ONE, name=name)
     xflat = g.op.Gather(flat, np_strided.astype(np.int64), name=name)
     res = g.op.Reshape(xflat, np.array(size, dtype=np.int64), outputs=outputs, name=name)
 
@@ -2407,12 +2407,8 @@ def aten_embedding_bag_padding_idx(
     loop_condition = g.make_initializer(
         "", np.array(True, dtype=np.bool_), source="aten_embedding_bag_padding_idx.loop"
     )
-    zero = g.make_initializer(
-        "", np.array([0], dtype=np.int64), source="aten_embedding_bag_padding_idx.zero"
-    )
-    one = g.make_initializer(
-        "", np.array([1], dtype=np.int64), source="aten_embedding_bag_padding_idx.one"
-    )
+    zero = g.make_initializer("", g.ZERO, source="aten_embedding_bag_padding_idx.zero")
+    one = g.make_initializer("", g.ONE, source="aten_embedding_bag_padding_idx.one")
     very_end = g.make_initializer(
         "",
         np.array([sys.maxsize], dtype=np.int64),
@@ -2486,8 +2482,8 @@ def aten_embedding_bag_padding_idx(
             make_tensor_value_info("reduced_embedings", itype, None),
         ],
         [
-            from_array_extended(np.array([0], dtype=np.int64), name="zero"),
-            from_array_extended(np.array([1], dtype=np.int64), name="one"),
+            from_array_extended(g.ZERO, name="zero"),
+            from_array_extended(g.ONE, name="one"),
         ],
     )
 
@@ -2525,7 +2521,7 @@ def aten_embedding_bag_padding_idx(
 
     offset2bag = g.op.ConstantOfShape(
         offset2bag_shape,
-        value=from_array_extended(np.array([0], dtype=np.int64)),
+        value=from_array_extended(g.ZERO),
         name=name,
         outputs=[outputs[1]],
     )
@@ -2533,7 +2529,7 @@ def aten_embedding_bag_padding_idx(
     if len(outputs) > 2:
         bag_size = g.op.ConstantOfShape(
             bag_size_shape,
-            value=from_array_extended(np.array([0], dtype=np.int64)),
+            value=from_array_extended(g.ZERO),
             name=name,
             outputs=[outputs[2]],
         )
@@ -2541,7 +2537,7 @@ def aten_embedding_bag_padding_idx(
     if len(outputs) > 3:
         max_indices = g.op.ConstantOfShape(
             max_indices_shape,
-            value=from_array_extended(np.array([0], dtype=np.int64)),
+            value=from_array_extended(g.ZERO),
             name=name,
             outputs=[outputs[3]],
         )
@@ -2933,15 +2929,15 @@ def aten_flatten_using_ints(
                 end_dim = -1
         if start_dim == 1 and end_dim == -1:
             shape = g.op.Shape(x, name=name)
-            take = g.op.GatherElements(shape, np.array([0], dtype=np.int64), axis=0, name=name)
-            resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
+            take = g.op.GatherElements(shape, g.ZERO, axis=0, name=name)
+            resh = g.op.Concat(take, g.MINUS_ONE, axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
         if end_dim == -1:
             shape = g.op.Shape(x, name=name)
             take = g.op.GatherElements(
                 shape, np.arange(start_dim).astype(np.int64), axis=0, name=name
             )
-            resh = g.op.Concat(take, np.array([-1], dtype=np.int64), axis=0, name=name)
+            resh = g.op.Concat(take, g.MINUS_ONE, axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
 
         # x='_onx_tile03', start_dim=3, end_dim=-1 not supported, GPTJForCausalLM
@@ -2952,7 +2948,7 @@ def aten_flatten_using_ints(
     # start_dim == 0
     if end_dim == -1:
         # Flattens everything
-        res = g.op.Reshape(x, np.array([-1], dtype=np.int64), outputs=outputs, name=name)
+        res = g.op.Reshape(x, g.MINUS_ONE, outputs=outputs, name=name)
     else:
         if end_dim < 0:
             assert g.has_rank(
@@ -2961,7 +2957,7 @@ def aten_flatten_using_ints(
             rk = g.get_rank(x)
             start_dim += rk
         shape_x = g.op.Shape(x, start=end_dim + 1, name=name)
-        new_shape = g.op.Concat(np.array([-1], dtype=np.int64), shape_x, axis=0, name=name)
+        new_shape = g.op.Concat(g.MINUS_ONE, shape_x, axis=0, name=name)
         res = g.op.Reshape(x, new_shape, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
@@ -3779,13 +3775,13 @@ def aten_index_Tensor(
         dim2 = g.op.Shape(x, start=2, end=3, name=name)
         flat_index = g.op.Reshape(
             g.op.Add(g.op.Mul(indices[1], dim2, name=name), indices[2], name=name),
-            np.array([-1], dtype=np.int64),
+            g.MINUS_ONE,
             name=name,
         )
         reshaped_x = g.op.Reshape(x, np.array([0, -1], dtype=np.int64), name=name)
         gathered = g.op.Gather(reshaped_x, flat_index, axis=1, name=name)
         final_shape = g.op.Concat(
-            np.array([0], dtype=np.int64),
+            g.ZERO,
             g.op.Shape(indices[1], end=i_rank, name=name),
             g.op.Shape(indices[2], name=name),
             name=name,
@@ -3809,7 +3805,7 @@ def aten_index_Tensor(
         dim3 = g.op.Shape(x, start=3, end=4, name=name)
         flat_index = g.op.Reshape(
             g.op.Add(g.op.Mul(indices[2], dim3, name=name), indices[3], name=name),
-            np.array([-1], dtype=np.int64),
+            g.MINUS_ONE,
             name=name,
         )
         reshaped_x = g.op.Reshape(x, np.array([0, 0, -1], dtype=np.int64), name=name)
@@ -3843,7 +3839,7 @@ def aten_index_Tensor(
                 g.op.Mul(indices[2], g.op.Mul(dim3, dim4, name=name), name=name),
                 g.op.Add(g.op.Mul(indices[3], dim4, name=name), indices[4], name=name),
             ),
-            np.array([-1], dtype=np.int64),
+            g.MINUS_ONE,
             name=name,
         )
         reshaped_x = g.op.Reshape(x, np.array([0, 0, -1], dtype=np.int64), name=name)
@@ -3907,26 +3903,65 @@ def aten_index_put(
         index = indices[0]  # tensor
         index_dtype = g.get_type(index)
         if index_dtype == TensorProto.BOOL:
-            # index_put1b_
+            # index_put1b_ or index_put_1b_
             name += "b_"
-            assert not accumulate, (
-                f"accumulate is True but it does not make sense in that case"
-                f"{g.get_debug_msg()}"
+            use_where = True
+            shape_values = g.get_shape(values) if g.has_shape(values) else None
+            if (
+                shape_values is not None
+                and all_int(shape_values)
+                and 1 not in shape_values
+                and 0 not in shape_values
+                and len(shape_values) > 0
+            ):
+                # No broadcast is possible
+                use_where = False
+
+            if use_where:
+                name += "_where"
+                assert not accumulate, (
+                    f"accumulate is True but it does not make sense in that case"
+                    f"{g.get_debug_msg()}"
+                )
+                res = g.op.Where(index, values, x, outputs=outputs, name=name)
+                if not sts:
+                    g.set_type(res, g.get_type(x))
+                    g.set_shape(res, g.get_shape(x))
+                return res
+
+            # Let's make the indices as integers then.
+            name += "_sc"
+            flat_mask = g.op.Cast(
+                g.op.Reshape(index, g.MINUS_ONE, name=name), to=TensorProto.INT32, name=name
             )
-            res = g.op.Where(index, values, x, outputs=outputs, name=name)
+            flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+            flat_values = g.op.Reshape(values, g.MINUS_ONE, name=name)
+            flat_index = g.op.SqueezeAnyOpset(
+                g.op.NonZero(flat_mask, name=name), g.ZERO, name=name
+            )
+            updated = g.op.ScatterElements(
+                flat_x,
+                flat_index,
+                flat_values,
+                reduction="add" if accumulate else "none",
+            )
+            res = g.op.Reshape(updated, g.op.Shape(x, name=name), name=name, outputs=outputs)
             if not sts:
                 g.set_type(res, g.get_type(x))
-                g.set_shape(res, g.get_shape(x))
+                if g.has_shape(x):
+                    g.set_shape(res, g.get_shape(x))
+                elif g.has_rank(x):
+                    g.set_rank(res, g.get_rank(x))
             return res
 
-        new_index = g.op.UnsqueezeAnyOpset(index, np.array([-1], dtype=np.int64), name=name)
+        new_index = g.op.UnsqueezeAnyOpset(index, g.MINUS_ONE, name=name)
         g.set_type(new_index, index_dtype)
         if g.has_shape(index):
-            # index_put1s_
+            # index_put1s_ or index_put_1s_
             name += "s_"
             g.set_shape(new_index, (*g.get_shape(index), 1))
         else:
-            # index_put1r_
+            # index_put1r_ or index_put_1r_
             name += "r_"
             g.set_rank(new_index, g.get_rank(index) + 1)
 
@@ -3958,9 +3993,9 @@ def aten_index_put(
             return np.arange(shape_x[dim]).astype(np.int64), True
         return (
             g.op.Range(
-                np.array([0], dtype=np.int64),
+                g.ZERO,
                 g.op.Gather(shape_x, np.array([dim], dtype=np.int64), name=name),
-                np.array([1], dtype=np.int64),
+                g.ONE,
                 name=name,
             ),
             True,
@@ -3989,7 +4024,7 @@ def aten_index_put(
             and g.has_rank(values)
             and g.has_rank(x)
         ):
-            # index_put2i...
+            # index_put2i... or index_put_2i...
             name = (
                 f"{name}2i{'o' if ind0 is None else g.get_rank(ind0)}"
                 f"i{'o' if ind1 is None else g.get_rank(ind1)}"
@@ -4011,7 +4046,7 @@ def aten_index_put(
             else:
                 static_shape = False
                 shape_x = g.op.Shape(x, name=name)
-                n_cols = g.op.GatherElements(shape_x, np.array([1], dtype=np.int64), name=name)
+                n_cols = g.op.GatherElements(shape_x, g.ONE, name=name)
                 size = g.op.Size(x, name=name)
                 arange_1d = g.op.Range(
                     np.array(0, dtype=np.int64),
@@ -4057,12 +4092,12 @@ def aten_index_put(
 
             indices_1d = g.op.GatherElements(
                 arange_1d,
-                g.op.Reshape(indices_2d, np.array([-1], dtype=np.int64), name=name),
+                g.op.Reshape(indices_2d, g.MINUS_ONE, name=name),
                 name=name,
             )
 
-            expanded = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
-            flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+            expanded = g.op.Reshape(expanded, g.MINUS_ONE, name=name)
+            flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
             if accumulate:
                 flat_up_x = g.op.ScatterElements(
                     flat_x, indices_1d, expanded, name=name, reduction="add"
@@ -4216,13 +4251,13 @@ def aten_index_put(
 
             indices_1d = g.op.GatherElements(
                 arange_1d,
-                g.op.Reshape(indices_3d, np.array([-1], dtype=np.int64), name=name),
+                g.op.Reshape(indices_3d, g.MINUS_ONE, name=name),
                 name=name,
             )
 
-            expanded = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
+            expanded = g.op.Reshape(expanded, g.MINUS_ONE, name=name)
 
-            flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+            flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
             if accumulate:
                 flat_up_x = g.op.ScatterElements(
                     flat_x, indices_1d, expanded, name=name, reduction="add"
@@ -4415,13 +4450,13 @@ def aten_index_put(
 
             indices_1d = g.op.GatherElements(
                 arange_1d,
-                g.op.Reshape(indices_4d, np.array([-1], dtype=np.int64), name=name),
+                g.op.Reshape(indices_4d, g.MINUS_ONE, name=name),
                 name=name,
             )
 
-            expanded = g.op.Reshape(expanded, np.array([-1], dtype=np.int64), name=name)
+            expanded = g.op.Reshape(expanded, g.MINUS_ONE, name=name)
 
-            flat_x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
+            flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
             if accumulate:
                 flat_up_x = g.op.ScatterElements(
                     flat_x, indices_1d, expanded, name=name, reduction="add"
@@ -4447,12 +4482,11 @@ def aten_index_put(
             # shape of indices[3] is (a, b)
             name = f"{name}_4_2"
             new_indices = [
-                i if i is None else g.op.Reshape(i, np.array([-1], dtype=np.int64), name=name)
-                for i in indices
+                i if i is None else g.op.Reshape(i, g.MINUS_ONE, name=name) for i in indices
             ]
             new_shape = g.op.Concat(
                 g.op.Shape(values, start=0, end=2, name=name),
-                np.array([-1], dtype=np.int64),
+                g.MINUS_ONE,
                 g.op.Shape(new_indices[-1], name=name),
                 name=name,
                 axis=0,
@@ -4696,7 +4730,7 @@ def aten__unsafe_index_Tensor(
         *(
             g.op.Unsqueeze(
                 g.op.Expand(idx, broadcast_shape, name=name),
-                np.array([-1], dtype=np.int64),
+                g.MINUS_ONE,
                 name=name,
             )
             for idx in not_none_indices
@@ -5621,10 +5655,8 @@ def _aten_max_pool_with_indices_onnx(
     indices = g.op.Sub(indices, delta, name=name)
 
     if is_unbatched_rank:
-        pool_result = g.op.SqueezeAnyOpset(
-            pool_result, np.array([0], dtype=np.int64), name=name
-        )
-        indices = g.op.SqueezeAnyOpset(indices, np.array([0], dtype=np.int64), name=name)
+        pool_result = g.op.SqueezeAnyOpset(pool_result, g.ZERO, name=name)
+        indices = g.op.SqueezeAnyOpset(indices, g.ZERO, name=name)
 
     g.set_type(delta, g.get_type(flatten_indices))
 
@@ -6404,7 +6436,7 @@ def aten_cudnn_batch_norm(
     )
 
     d = g.op.ConstantOfShape(
-        np.array([0], dtype=np.int64),
+        g.ZERO,
         value=from_array_extended(
             np.array([0], dtype=tensor_dtype_to_np_dtype(TensorProto.UINT8))
         ),
@@ -7440,9 +7472,9 @@ def aten_scatter_reduce_two(
     onnx_reduce = reduce_mode[reduce]
     is_scalar = g.get_rank(x) == 0
     if is_scalar:
-        x = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
-        index = g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name)
-        src = g.op.Reshape(src, np.array([-1], dtype=np.int64), name=name)
+        x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+        index = g.op.Reshape(x, g.MINUS_ONE, name=name)
+        src = g.op.Reshape(src, g.MINUS_ONE, name=name)
         result = g.op.ScatterElements(
             x, index, src, axis=dim, reduction=onnx_reduce, name=name
         )
@@ -7753,7 +7785,7 @@ def aten_roll(
         # second part
         shape = g.op.Slice(
             result,
-            np.array([0], dtype=np.int64),
+            g.ZERO,
             np.array([-shifts[i]], dtype=np.int64),
             axis,
             name=name,
@@ -8302,7 +8334,7 @@ def _aten_slice_scatter_static(
                 if end is None
                 else g.get_dynamic_dimension(end)
             ),
-            np.array([0], dtype=np.int64),
+            g.ZERO,
             np.array([step or 1], dtype=np.int64),
             name=name,
         )
@@ -8385,9 +8417,9 @@ def _aten_slice_scatter_dynamic(
     dim_shape = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name)
 
     index_1 = g.op.Range(
-        np.array([0], dtype=np.int64),
+        g.ZERO,
         dim_shape,
-        np.array([1], dtype=np.int64),
+        g.ONE,
         name=name,
     )
     g.set_type(index_1, TensorProto.INT64)
@@ -8396,7 +8428,7 @@ def _aten_slice_scatter_dynamic(
         index_1,
         g.get_dynamic_dimension(start),
         (dim_shape if end is None else g.get_dynamic_dimension(end)),
-        np.array([0], dtype=np.int64),
+        g.ZERO,
         np.array([step or 1], dtype=np.int64),
         name=name,
     )

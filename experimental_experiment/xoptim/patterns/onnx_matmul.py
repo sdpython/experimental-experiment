@@ -147,7 +147,7 @@ class MatMulAddPattern(PatternOptimization):
                     )
                     minus1 = g.make_initializer(
                         "",
-                        np.array([-1], dtype=np.int64),
+                        g.MINUS_ONE,
                         source="MatMulAddPattern.new_shape.7",
                     )
                     reshape_nodes.append(
@@ -207,7 +207,7 @@ class MatMulAddPattern(PatternOptimization):
                 )
                 minus1 = g.make_initializer(
                     "",
-                    np.array([-1], dtype=np.int64),
+                    g.MINUS_ONE,
                     source="MatMulAddPattern.new_shape.3",
                 )
                 reshape_nodes.append(

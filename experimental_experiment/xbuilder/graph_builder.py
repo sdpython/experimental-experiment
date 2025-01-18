@@ -267,6 +267,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
     """
 
+    MINUS_ONE = np.array([-1], dtype=np.int64)
+    ONE = np.array([1], dtype=np.int64)
+    ZERO = np.array([0], dtype=np.int64)
+
     class ShapeConstant:
         """
         Wraps a constant shape even if the input producing the shape is not.
@@ -3460,12 +3464,23 @@ class GraphBuilder(_GraphBuilderRuntime):
             if outputs < 1:
                 raise ValueError(f"outputs={outputs} must be > 0.")
             assert isinstance(op_type, str), f"Unexpected type {type(op_type)}: {op_type}"
-            lower = op_type.lower()
+            if op_type == "Reshape":
+                lower = "_reshape_"
+            elif op_type == "Shape":
+                lower = "_shape_"
+            elif op_type == "Size":
+                lower = "_size_"
+            else:
+                lower = f"_onx_{op_type.lower()}_"
             if inputs and isinstance(inputs[0], str) and inputs[0]:
                 # The new name tries to keep track of the first input,
                 # usually the most meaningful.
-                lower = f"{lower}_{inputs[0]}"
-            output_names = [self.unique_name(f"_onx_{lower}{i}") for i in range(outputs)]
+                lower = (
+                    f"{lower}{inputs[0][5:]}"
+                    if inputs[0].startswith("_onx_")
+                    else f"{lower}{inputs[0]}"
+                )
+            output_names = [self.unique_name(f"{lower}{i}") for i in range(outputs)]
         elif isinstance(outputs, str):
             output_names = [outputs]
         else:
