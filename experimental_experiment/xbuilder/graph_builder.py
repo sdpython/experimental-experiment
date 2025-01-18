@@ -263,8 +263,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
-        self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
+        self._debug_node_type = os.environ.get("ONNXNODETYPE", "")
         self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
+        self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -438,8 +439,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
-        self._debug_node_type = os.environ.get("ONNXSTOPTYPE", "")
+        self._debug_node_type = os.environ.get("ONNXNODETYPE", "")
         self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
+        self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -687,10 +689,16 @@ class GraphBuilder(_GraphBuilderRuntime):
         return [o.name for o in self.outputs]
 
     def empty_copy(
-        self, as_function: bool = False, constant_size: int = 2**24
+        self, as_function: bool = False, constant_size: int = 2**24, _shapable: bool = True
     ) -> "GraphBuilder":
         """
         Creates an empty copy but with the same opsets.
+        This is used in pattern matching.
+
+        :param as_function: to create a function
+        :param constant_size: maximum size of a constant
+        :param _shapable: disable check on shapes if enable
+        :return: new graph
         """
         assert isinstance(as_function, bool), f"wrong type {type(as_function)} for as_function"
         opt = OptimizationOptions(
@@ -706,6 +714,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             as_function=as_function,
             optimization_options=opt,
         )
+        if not _shapable:
+            g._debug_shape_missing = False
         return g
 
     def make_key(self, value: Any) -> Optional[Tuple[Union[str, int], ...]]:
@@ -742,9 +752,46 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{tensor.dtype}:{tuple(tensor.shape)}"
         return f"no pretty: {type(tensor)}"
 
-    def pretty_node(self, node: Optional[NodeProto], limit: int = 80, short: bool = False):
+    def pretty_node(
+        self,
+        node: Optional[NodeProto],
+        limit: int = 80,
+        short: bool = True,
+        shape: bool = False,
+    ) -> str:
+        """
+        Pretty rendering for a node.
+
+        :param node: node to render
+        :param limit: to show type and shapes after the limit
+        :param short: do not display shape information on the left
+        :param shape: show shape information below
+        :return: string
+        """
         if node is None:
             return "None"
+        if shape:
+            st = []
+            for i in node.input:
+                dt = self.get_type(i) if self.has_type(i) else "-"
+                sh = (
+                    "x".join(str(_).replace(" ", "") for _ in self.get_shape(i))
+                    if self.has_shape(i)
+                    else (f"rk={self.get_rank(i)}" if self.has_rank(i) else "?")
+                )
+                st.append(f"{i}:{dt}|{sh}")
+            st.append("->")
+            for i in node.output:
+                dt = self.get_type(i) if self.has_type(i) else "-"
+                sh = (
+                    "x".join(str(_).replace(" ", "") for _ in self.get_shape(i))
+                    if self.has_shape(i)
+                    else (f"rk={self.get_rank(i)}" if self.has_rank(i) else "?")
+                )
+                st.append(f"{i}:{dt}|{sh}")
+            shape_info = " ".join(st)
+        else:
+            shape_info = ""
         text = (
             (
                 f"{node.op_type}[{node.domain}]: "
@@ -753,6 +800,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if node.domain
             else f"{node.op_type}: {', '.join(node.input)} -> {', '.join(node.output)}"
         )
+        if shape_info:
+            text = f"{text} ## {shape_info}"
         if short:
             return text
         add = " " * abs(80 - len(text))
@@ -768,7 +817,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         return f"{text}|{' '.join(info)}"
 
     def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
-        "Pretty rendering of the graph."
+        """
+        Pretty rendering of the graph.
+
+        :param add_fx_graph: add the fx Graph to the rendering
+        :param recursive: dig into subgraphs
+        :return: string
+        """
 
         def _d(d1):
             if isinstance(d1, self.torch.SymInt):
@@ -856,7 +911,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for i in self.input_names:
             rows.append(_io(i, "input:"))
         for node in self.nodes:
-            rows.append(self.pretty_node(node))
+            rows.append(self.pretty_node(node, short=False))
         for i in self.output_names:
             rows.append(_io(i, "output:"))
         for k, f in self.functions.items():
@@ -867,7 +922,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 n = op.domain if op.domain else "''"
                 rows.append(f"  opset: {n}: {op.version}")
             for node in f.node:
-                rows.append(f"  {self.pretty_node(node)}")
+                rows.append(f"  {self.pretty_node(node, short=False)}")
             if k in self.functions_builder:
                 rows.append(
                     self.functions_builder[k].pretty_text(
@@ -1853,7 +1908,29 @@ class GraphBuilder(_GraphBuilderRuntime):
             if n not in self._known_value_shape:
                 self._known_value_shape[n] = new_value
 
+    def unique_dimension_name(self, prefix: str) -> str:
+        """
+        Returns a unique dimension name.
+        If by any change, a dimension has the same name as a dimension,
+        the builder may be confused as a dynamic dimension can take part
+        of a known value for a shape.
+        """
+        existing = set(self.dynamic_objects) | set(self._unique_names)
+        for shape in self._known_shapes:
+            existing |= set(shape)
+        if prefix not in existing:
+            self._unique_names.add(prefix)
+            return prefix
+        sug = prefix
+        i = 0
+        while sug in existing:
+            i += 1
+            sug = f"{prefix}{i}"
+        self._unique_names.add(sug)
+        return sug
+
     def unique_name(self, prefix: str) -> str:
+        "Returns a unique result name."
         if prefix in self._unique_names:
             i = 2
             sug = f"{prefix}2"
@@ -1866,6 +1943,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return prefix
 
     def unique_node_name(self, name: str) -> str:
+        "Returns a unique node name."
         if name in self._unique_node_names:
             i = 2
             sug = f"{name}2"
@@ -3637,7 +3715,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             self.nodes.append(node)
 
-        if not shape_set:
+        if not shape_set or (node.output and not self.has_shape(node.output[0])):
             # second try
             self._make_node_set_type_shape(node)
 
@@ -3811,12 +3889,38 @@ class GraphBuilder(_GraphBuilderRuntime):
                             node.doc_string += ":constant-7b:"
         elif node.op_type == "Shape":
             self.set_type(node.output[0], TensorProto.INT64)
-            if self.has_shape(node.input[0]) and len(node.attribute) == 0:
-                shape = self.get_shape(node.input[0])
-                self.set_shape(node.output[0], (len(shape),))
+            if self.has_rank(node.input[0]):
+                rk = self.get_rank(node.input[0])
+                if len(node.attribute) == 0:
+                    self.set_shape(node.output[0], (rk,))
+                else:
+                    start = self.get_attribute_with_default(node, "start", 0)
+                    if start < 0:
+                        start += rk
+                    end = self.get_attribute_with_default(node, "end", rk)
+                    if end < 0:
+                        end += rk
+                    self.set_shape(node.output[0], (end - start,))
+            elif node.attribute:
+                start = self.get_attribute_with_default(node, "start", 0)
+                end = self.get_attribute_with_default(node, "end", None)
+                if end is not None and end - start > 0:
+                    self.set_shape(node.output[0], (end - start,))
+                else:
+                    self.set_rank(node.output[0], 1)
+                    assert not self._debug_shape_missing, (
+                        f"Unable to compute the shape of this shape: "
+                        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+                    )
             else:
                 self.set_rank(node.output[0], 1)
-            if self.is_constant(node.input[0]):
+                assert not self._debug_shape_missing, (
+                    f"Unable to compute the shape of this shape: "
+                    f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+                )
+            if self.is_constant(node.input[0]) or (
+                self.has_shape(node.input[0]) and all_int(self.get_shape(node.input[0]))
+            ):
                 self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-2:"
         elif node.op_type == "Size":
@@ -3865,6 +3969,34 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return None
 
+    def get_attribute_with_default(
+        self, node: NodeProto, name: str, default_value: Any
+    ) -> Any:
+        """
+        Returns an attribute or its default value if missing.
+
+        :param node: node
+        :param name: attribute name
+        :param default_value: default value
+        :return: value
+        """
+        for att in node.attribute:
+            if att.name == name:
+                if att.type == AttributeProto.INT:
+                    return att.i
+                if att.type == AttributeProto.INTS:
+                    return list(att.ints)
+                if att.type == AttributeProto.FLOAT:
+                    return att.f
+                if att.type == AttributeProto.FLOATS:
+                    return list(att.floats)
+                if att.type == AttributeProto.STRING:
+                    return att.s
+                raise TypeError(
+                    f"Not implemented for attribute name {att.name!r}, attribute={att}"
+                )
+        return default_value
+
     def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
         """
         Returns int or float attributes. If missing, the default value is returned
@@ -3878,8 +4010,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             if att.name in default_values:
                 if att.type == AttributeProto.INT:
                     res[att.name] = att.i
+                elif att.type == AttributeProto.INTS:
+                    res[att.name] = list(att.ints)
                 elif att.type == AttributeProto.FLOAT:
                     res[att.name] = att.f
+                elif att.type == AttributeProto.FLOATS:
+                    res[att.name] = list(att.floats)
                 elif att.type == AttributeProto.STRING:
                     res[att.name] = att.s
                 else:
@@ -5618,7 +5754,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             v, NodeProto
         ), f"Unexpected type {type(v)} for constant name={name!r}"
         if self._debug_get_constant:
-            print(f"[GraphBuilder.compute_constant] {self.pretty_node(v, short=True)}")
+            print(f"[GraphBuilder.compute_constant] {self.pretty_node(v)}")
 
         if v.op_type == "Shape":
             if not self.has_shape(v.input[0]):
@@ -6397,7 +6533,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             max_position = min(needed_at.get(o, N) for o in node.output)
 
             assert min_position <= max_position, (
-                f"Unable to insert node {self.pretty_node(node, short=True)}, "
+                f"Unable to insert node {self.pretty_node(node)}, "
                 f"min_position={min_position}, max_position={max_position}, "
                 f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
                 f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}, "
@@ -6413,7 +6549,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
 
             assert local_min_position <= local_max_position, (
-                f"Unable to insert node {self.pretty_node(node, short=True)}, "
+                f"Unable to insert node {self.pretty_node(node)}, "
                 f"local_min_position={local_min_position}, "
                 f"local_max_position={local_max_position}, "
                 f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
@@ -6910,14 +7046,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             if len(values) == 4 and all_int(values[1]) and all_int(values[2]):
                 assert len(values[1]) == len(values[2]) == 1, (
                     f"Unexpected values {values} to compute a shape from node "
-                    f"{self.pretty_node(node, short=True)}{self.get_debug_msg()}"
+                    f"{self.pretty_node(node)}{self.get_debug_msg()}"
                 )
                 node.doc_string += "#SV-Sl3"
                 self.set_value_shape(node.output[0], values[0][values[1][0] : values[2][0]])
                 return True
 
         raise RuntimeError(
-            f"Unable to compute a shape for node {self.pretty_node(node, short=True)} "
+            f"Unable to compute a shape for node {self.pretty_node(node)} "
             f"with values={values}{self.get_debug_msg()}"
         )
 

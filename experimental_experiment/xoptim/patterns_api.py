@@ -327,7 +327,7 @@ class EasyPatternOptimization(PatternOptimization):
 
         assert len(kwargs) == 0, f"Attributes are not supported yet but kwargs={kwargs}"
 
-        g2 = g.builder.empty_copy(as_function=True, constant_size=2**30)
+        g2 = g.builder.empty_copy(as_function=True, constant_size=2**30, _shapable=False)
         for name, ann in zip(args, anns):
             if ann is None or ann is str or ann is inspect._empty:
                 g2.make_tensor_input(name, 0, None, False, marker=f"_build_pattern1_{name}")

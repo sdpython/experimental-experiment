@@ -28,6 +28,7 @@ class TestOnnxExportAten(ExtTestCase):
         optimize: bool = False,
         strict: bool = False,
         patterns: Optional[str] = None,
+        dynamic_shapes: Optional[Any] = None,
         processor: str = "CPU",
     ) -> str:
         import torch
@@ -54,6 +55,7 @@ class TestOnnxExportAten(ExtTestCase):
                 verbose=verbose,
                 optimize=optimize,
                 options=opt_options,
+                dynamic_shapes=dynamic_shapes,
             )
         return filename
 
@@ -100,7 +102,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.params = torch.zeros((1, 8192, 4), dtype=torch.float32)
@@ -134,7 +135,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.params = torch.zeros((1, 8192, 6), dtype=torch.float32)
@@ -168,7 +168,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
 
@@ -204,7 +203,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
 
@@ -233,7 +231,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
 
@@ -311,7 +308,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
 
@@ -340,7 +336,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.weight = torch.nn.Buffer(torch.tensor([5, 7]).to(torch.float32)) * 2
@@ -389,7 +384,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.weight = torch.nn.Buffer(torch.tensor([5, 7]).to(torch.float32)) * 2
@@ -438,7 +432,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.weight = torch.nn.Buffer(
@@ -487,7 +480,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.weight = torch.nn.Buffer(
@@ -593,7 +585,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.weight = torch.nn.Buffer(
@@ -637,7 +628,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.i1 = torch.nn.Buffer(
@@ -672,7 +662,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.i2 = torch.nn.Buffer(
@@ -704,7 +693,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.i2 = torch.nn.Buffer(torch.randint(0, 14, (4, 14, 1, 1)).to(torch.int64))
@@ -737,7 +725,6 @@ class TestOnnxExportAten(ExtTestCase):
         import torch
 
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.i2 = torch.nn.Buffer(
@@ -851,6 +838,43 @@ class TestOnnxExportAten(ExtTestCase):
         )
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_conv(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv1d(16, 32, 1)
+
+            def forward(self, x):
+                return self.conv(x) + torch.tensor([1], dtype=x.dtype)
+
+        model = Model()
+        xs = (torch.randn((2, 16, 24)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_aten_conv",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
 
 
 if __name__ == "__main__":

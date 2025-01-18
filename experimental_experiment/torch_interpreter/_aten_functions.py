@@ -3834,6 +3834,8 @@ def aten_index_Tensor(
         name = f"{name}_d"
         dim3 = g.op.Shape(x, start=3, end=4, name=name)
         dim4 = g.op.Shape(x, start=4, end=5, name=name)
+        assert g.has_shape(dim3)
+        assert g.has_shape(dim4)
         flat_index = g.op.Reshape(
             g.op.Add(
                 g.op.Mul(indices[2], g.op.Mul(dim3, dim4, name=name), name=name),
@@ -6261,8 +6263,6 @@ def aten__native_batch_norm(
     )
     if training:
         norm, bmean, bvar = batch_out
-        g.set_type(bmean, TensorProto.FLOAT)
-        g.set_type(bvar, TensorProto.FLOAT)
     else:
         assert isinstance(
             batch_out, str
