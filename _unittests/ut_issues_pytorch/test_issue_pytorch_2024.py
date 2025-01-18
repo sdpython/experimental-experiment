@@ -156,6 +156,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             optimize=False,
             export_options=ExportOptions(decomposition_table="default"),
         )
+        onnx.save(onx, "test_export_set_custom.onnx")
         session = rt.InferenceSession(
             onx.SerializeToString(),
             providers=["CPUExecutionProvider"],
