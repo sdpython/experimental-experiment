@@ -141,9 +141,7 @@ def aten_meth_item(
             f"has_rank={g.has_rank(x)}{g.get_debug_msg()}"
         )
         if g.has_shape() == (1,):
-            res = g.op.SqueezeAnyOpset(
-                x, np.array([0], dtype=np.int64), outputs=outputs, name=name
-            )
+            res = g.op.SqueezeAnyOpset(x, g.ZERO, outputs=outputs, name=name)
         else:
             res = g.op.Identity(x, outputs=outputs, name=name)
     if not sts:
@@ -375,9 +373,7 @@ def aten_meth_size(
 
     s = g.op.Shape(x, name=name)
     d = g.op.Gather(s, np.array([dim], dtype=np.int64), name=f"{name}B")
-    res = g.op.SqueezeAnyOpset(
-        d, np.array([0], dtype=np.int64), name=f"{name}B", outputs=outputs
-    )
+    res = g.op.SqueezeAnyOpset(d, g.ZERO, name=f"{name}B", outputs=outputs)
     if not sts:
         g.set_type(res, TensorProto.INT64)
         g.set_shape(res, tuple())

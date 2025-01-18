@@ -112,12 +112,8 @@ class RotaryEmbeddingPattern(PatternOptimization):
         zero = g.make_initializer(
             "", np.array(0, dtype=np.int64), source="RotaryEmbeddingPattern.zero"
         )
-        zero1 = g.make_initializer(
-            "", np.array([0], dtype=np.int64), source="RotaryEmbeddingPattern.zero1"
-        )
-        mone = g.make_initializer(
-            "", np.array([-1], dtype=np.int64), source="RotaryEmbeddingPattern.mone"
-        )
+        zero1 = g.make_initializer("", g.ZERO, source="RotaryEmbeddingPattern.zero1")
+        mone = g.make_initializer("", g.MINUS_ONE, source="RotaryEmbeddingPattern.mone")
         one = g.make_initializer(
             "", np.array(1, dtype=np.int64), source="RotaryEmbeddingPattern.one"
         )

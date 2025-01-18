@@ -47,6 +47,10 @@ class GraphBuilderPatternOptimization:
         or this list of processors (comma separated value)
     """
 
+    MINUS_ONE = np.array([-1], dtype=np.int64)
+    ONE = np.array([1], dtype=np.int64)
+    ZERO = np.array([0], dtype=np.int64)
+
     def __init__(
         self,
         builder: "GraphBuilder",  # noqa: F821
