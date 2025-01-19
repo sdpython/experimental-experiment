@@ -1,5 +1,5 @@
 import unittest
-from typing import Optional
+from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.torch_interpreter.diagnose import (
     infer_shape_type_from_execution,
@@ -566,7 +566,7 @@ class TestDiagnose(ExtTestCase):
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=1,
+            verbose=10,
             replace_by_custom_op=CustomOpStrategy.ONLY_IF_FAILING,
             quiet=1,
         )
@@ -580,6 +580,20 @@ class TestDiagnose(ExtTestCase):
         import torch
         import transformers
 
+        def memo(
+            x: torch.Tensor, y: List[torch.Tensor], z: List[torch.Tensor]
+        ) -> List[torch.Tensor]:
+            pass
+
+        sch = torch.library.infer_schema(memo, mutates_args=())
+        self.assertEqual(sch, "(Tensor x, Tensor[] y, Tensor[] z) -> Tensor[]")
+
+        class SubModelCache(torch.nn.Module):
+            def forward(self, cache):
+                d = cache.__class__()
+                d.update(cache.key_cache[0] + 1, cache.value_cache[0] + 2, 0)
+                return d
+
         class SubModel(torch.nn.Module):
             def forward(self, x, cache):
                 return x + cache.key_cache[0] + cache.value_cache[0]
@@ -588,9 +602,10 @@ class TestDiagnose(ExtTestCase):
             def __init__(self):
                 super().__init__()
                 self.sub = SubModel()
+                self.subcache = SubModelCache()
 
             def forward(self, x, cache):
-                return self.sub(x, cache)
+                return self.sub(x, self.subcache(cache))
 
         cache = transformers.cache_utils.DynamicCache()
         cache.update(torch.ones((5, 6)), torch.ones((5, 6)) + 2, 0)
@@ -616,9 +631,10 @@ class TestDiagnose(ExtTestCase):
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=1,
+            verbose=10,
             replace_by_custom_op=CustomOpStrategy.ALWAYS,
-            quiet=10,
+            quiet=0,
+            bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
         )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
