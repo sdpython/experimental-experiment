@@ -596,8 +596,8 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
         )
 
 
-def _set_shape_type_op_any_conv_maxpool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    "Sets the output shape for node type Conv."
+def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    "Sets the output shape for node types Conv, MaxPool."
     if not self.has_type(node.input[0]):
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -605,6 +605,8 @@ def _set_shape_type_op_any_conv_maxpool(self: "GraphBuilder", node: NodeProto): 
         )
         return
     self.set_type(node.output[0], self.get_type(node.input[0]))
+    if len(node.output) > 1:
+        self.set_type(node.output[1], TensorProto.INT64)
 
     if not self.has_shape(node.input[0]) or (
         len(node.input) > 1 and not self.has_shape(node.input[1])
@@ -1236,14 +1238,14 @@ _set_shape_type_op_any_known = {
     "BatchNormalization": _set_shape_type_op_any_batch_normalization,
     "Cast": _set_shape_type_op_any_cast,
     "Concat": _set_shape_type_op_any_concat,
-    "Conv": _set_shape_type_op_any_conv_maxpool,
+    "Conv": _set_shape_type_op_any_conv_max_pool,
     "Expand": _set_shape_type_op_any_reshape,
     "Gather": _set_shape_type_op_any_gather,
     "GatherElements": _set_shape_type_op_any_gather_elements,
     "Gemm": _set_shape_type_op_any_gemm,
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "MatMul": _set_shape_type_op_any_matmul,
-    "MaxPool": _set_shape_type_op_any_conv_maxpool,
+    "MaxPool": _set_shape_type_op_any_conv_max_pool,
     "NonZero": _set_shape_type_op_any_non_zero,
     "Pad": _set_shape_type_op_any_pad,
     "Reshape": _set_shape_type_op_any_reshape,
