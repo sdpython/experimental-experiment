@@ -19,7 +19,9 @@ def serialize_one(
     if isinstance(obj, torch.Tensor):
         return obj
     if obj.__class__.__name__ in {"DynamicClass", "patched_DynamicCache"}:
-        return obj.key_cache + obj.value_cache
+        return [*obj.key_cache, *obj.value_cache]
+    if obj is None:
+        return None
     raise NotImplementedError(
         f"Unable to serialize type {type(obj)}, "
         f"class_name={obj.__class__.__name__!r}, "
@@ -28,12 +30,27 @@ def serialize_one(
 
 
 def serialize_args(
-    args: Tuple[Any], kwargs: Dict[str, Any], schema: str
+    args: Tuple[Any], kwargs: Optional[Dict[str, Any]], schema: str
 ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor]]:
     """Serializes args and kwargs before calling a custom ops."""
-    args = tuple(serialize_one(a, name=i, schema=schema) for i, a in enumerate(args))
-    kwargs = {k: serialize_one(v, name=k, schema=schema) for k, v in kwargs.items()}
-    return args, kwargs
+    if isinstance(args, torch.Tensor):
+        new_args = args
+    else:
+        new_args = []
+        for i, a in enumerate(args):
+            r = serialize_one(a, name=i, schema=schema)
+            if r is None or isinstance(r, torch.Tensor):
+                new_args.append(r)
+            else:
+                new_args.extend(r)
+        new_args = tuple(new_args)
+    assert not kwargs, (
+        f"Not implemented with args={string_type(args, with_shape=True)}, "
+        f"kwargs={string_type(kwargs, with_shape=True)}"
+    )
+    if kwargs is None:
+        return new_args
+    return new_args, {}
 
 
 def type_as_str_with_info(obj: Any) -> str:
@@ -42,6 +59,8 @@ def type_as_str_with_info(obj: Any) -> str:
         return "Tensor"
     if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
         return f"{obj.__class__.__name__}__{len(obj.key_cache)}_{len(obj.value_cache)}"
+    if obj is None:
+        return "None"
     raise NotImplementedError(
         f"Unable to produce serialize info for type {type(obj)}, "
         f"class_name={obj.__class__.__name__!r}."
@@ -239,6 +258,7 @@ class ModelDiagnoseOutput:
         names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
         self.forward_kwargs = names[0] if names else None
         self.forward_custom_op_schema = None
+        self.forward_need_serialization = False
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self.device = "cpu"
@@ -599,6 +619,8 @@ class ModelDiagnoseOutput:
                 )
                 self.exporter_status = "OK"
             except Exception as e:
+                if "'NoneType' object is not iterable" in str(e):
+                    raise
                 self.last_error = e
                 se = str(e).split("\n")[0].replace("<_DimHint.DYNAMIC: 3>", "DYN")
                 self.exporter_status = f"FAIL-EXPORT: {se}"
@@ -617,7 +639,23 @@ class ModelDiagnoseOutput:
         if verbose > 1:
             print(f"[try_export-FX] {self.dot_name}: done")
         mod = ep.module()
-        return ep, (lambda args, kwargs, _mod=mod: mod(*args, **kwargs))
+
+        def _call_model_(*args, _mod=mod, **kwargs):
+            if verbose > 2:
+                print(
+                    f"[try-export-FX] call module {mod!r} with "
+                    f"args={string_type(args, with_shape=True)} and "
+                    f"kwargs={string_type(kwargs, with_shape=True)}"
+                )
+            res = mod(*args, **kwargs)
+            if verbose > 2:
+                print(
+                    f"[try-export-FX] after called {mod!r} "
+                    f"res={string_type(args, with_shape=True)}"
+                )
+            return res
+
+        return ep, _call_model_
 
     def _do_replace_by_custom_op(
         self, replace_by_custom_op: Union[bool, CustomOpStrategy, Dict[str, CustomOpStrategy]]
@@ -644,9 +682,19 @@ class ModelDiagnoseOutput:
         if isinstance(obj, torch.Tensor):
             return "Tensor"
         if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicClass"):
-            # Should we inline this to handle this later while converting
-            # this operator into ONNX?
-            return "Tensor[]"
+            # It is safer to serialize everything, it is aligned with ONNX,
+            # and the use of list brought the following error:
+            # ::
+            #   RuntimeError: C_Model (with implementation in
+            #   <module 'torch._library.custom_ops' from
+            #   'torch/_library/custom_ops.py'>):
+            #   The output of this custom operator (1) must not also be an input to this
+            #   custom operator and (2) may not alias any inputs to this custom operator
+            #   or other returns. The most common way to trigger this error is if we have
+            #   y = custom_op(x) and y and x are the same Tensor. Please instead return a
+            #   clone of the offending output tensor(s) (e.g. return x.clone()) or
+            #   refactor the custom operator to not return y.
+            return ["Tensor" for i in range(len(obj.key_cache) + len(obj.value_cache))]
         if obj is None:
             # Let's assume it is a tensor. It should not matter anyway.
             # Unless it becomes None in another call.
@@ -812,7 +860,8 @@ class ModelDiagnoseOutput:
                     f"kwargs={string_type(kwargs, with_shape=True)}, "
                     f"schema_str={schema_str}"
                 )
-                print(f"[_replaced_forward_tensor_] {name_fct}-CALL: {fct}")
+                sfct = str(fct).replace("\n", " ")
+                print(f"[_replaced_forward_tensor_] {name_fct}-CALL: {sfct}")
             res = fct(*args, **kwargs)
             if verbose > 1:
                 print(
@@ -852,7 +901,8 @@ class ModelDiagnoseOutput:
                     f"args={string_type(new_args, with_shape=True)}, "
                     f"kwargs={string_type(new_kwargs, with_shape=True)}"
                 )
-                print(f"[_rewrite_forward_] {_diag.full_name}-CALL: {_diag.forward}")
+                sfct = str(_diag.forward).replace("\n", " ")
+                print(f"[_rewrite_forward_] {_diag.full_name}-CALL: {sfct}")
             res = _diag.forward(*new_args, **new_kwargs)
             if verbose > 1:
                 print(
@@ -860,7 +910,7 @@ class ModelDiagnoseOutput:
                     f"args={string_type(res, with_shape=True)}"
                 )
             # And we need to serialize before before returning the output.
-            serialized_res = serialize_args(res, {}, _diag.forward_custom_op_schema)
+            serialized_res = serialize_args(res, None, _diag.forward_custom_op_schema)
             if verbose > 1:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE-OUT: "
@@ -952,7 +1002,10 @@ class ModelDiagnoseOutput:
         if all(isinstance(t, torch.Tensor) for t in self.inputs[0]) and all(
             isinstance(t, torch.Tensor) for t in self.outputs[0]
         ):
+            self.forward_custom_op_serialize = False
             return self._put_custom_op_inplace_only_tensor(verbose=verbose)
+        self.forward_custom_op_serialize = True
+        self.forward_need_serialization = self.forward_custom_op_serialize
         return self._put_custom_op_inplace_any(verbose=verbose)
 
     def remove_custom_op_inplace(self, verbose: int = 0):
@@ -960,10 +1013,11 @@ class ModelDiagnoseOutput:
         Just replaces the forward, hoping the registration does not have to
         be removed.
         """
+        self.forward_need_serialization = False
         self.model.forward = self.forward
         if verbose > 1:
             print(
-                f"[try_export.put_custom_op_inplace] {self.dot_name}: unregisters "
+                f"[try_export.remove_custom_op_inplace] {self.dot_name}: unregisters "
                 f"'diag_lib.{self.custom_op_name}"
             )
 
@@ -1006,10 +1060,9 @@ class ModelDiagnoseOutput:
         else:
             raise NotImplementedError(f"Export not implemented yet for exporter={exporter!r}")
 
-        if cusdef is not None:
-            self.remove_custom_op_inplace(verbose=verbose)
-
         if not exported:
+            if cusdef is not None:
+                self.remove_custom_op_inplace(verbose=verbose)
             return None
         if discrepancies:
             has_disc = False
@@ -1018,16 +1071,30 @@ class ModelDiagnoseOutput:
             for i, (inp, out) in enumerate(zip(self.inputs, self.outputs)):
                 copy_inp = make_copy(modificator(inp) if modificator else inp)
                 args, kwargs = copy_inp
+                if verbose > 1:
+                    print(f"[try_export-{exporter.upper()}] {self.dot_name}: CALL {fct}")
+                    if verbose > 2:
+                        print(
+                            f"[try_export-{exporter.upper()}] {self.dot_name}: "
+                            f"args={string_type(args, with_shape=True)}"
+                        )
+                        print(
+                            f"[try_export-{exporter.upper()}] {self.dot_name}: "
+                            f"kwargs={string_type(kwargs, with_shape=True)}"
+                        )
+                    if verbose >= 10:
+                        print(f"[try_export-{exporter.upper()}] {self.dot_name}: GRAPH")
+                        print(exported.graph)
                 if quiet:
                     try:
-                        got = fct(args, kwargs)
+                        got = fct(*args, **kwargs)
                     except Exception as e:
                         self.last_error = e
                         se = str(e).split("\n")[0]
                         self.exporter_status = f"FAIL-EVAL: {se}"
                         break
                 else:
-                    got = fct(args, kwargs)
+                    got = fct(*args, **kwargs)
                 self.exporter_outputs.append(got)
                 diff = max_diff(out, got)
                 if verbose > 1:
@@ -1039,6 +1106,10 @@ class ModelDiagnoseOutput:
                     break
             if not has_disc:
                 self.exporter_status = "OK"
+
+        if cusdef is not None:
+            self.remove_custom_op_inplace(verbose=verbose)
+
         if verbose:
             print(
                 f"[try_export-{exporter.upper()}] {self.dot_name} --- {self.exporter_status}"

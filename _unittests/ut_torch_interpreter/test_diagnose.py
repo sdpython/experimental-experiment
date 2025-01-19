@@ -461,7 +461,7 @@ class TestDiagnose(ExtTestCase):
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
-        self.assertIn("torch.ops.diag_lib.C__main__.default", str(ep))
+        self.assertIn("torch.ops.diag_lib.C_Model.default", str(ep))
         self.assertNotEmpty(diag.forward_custom_op_schema)
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
 
@@ -512,14 +512,14 @@ class TestDiagnose(ExtTestCase):
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
-        self.assertIn("torch.ops.diag_lib.CC__main___subfail.default", str(ep))
+        self.assertIn("torch.ops.diag_lib.C_Model_subfail.default", str(ep))
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
         self.assertNotEmpty(diag.children[1].forward_custom_op_schema)
         report = diag.get_export_status()
         self.assertIn("OK with children as custom ops", report)
 
     @requires_torch("2.6")
-    @hide_stdout()
+    # @hide_stdout()
     def test_export_piece_none(self):
         import torch
 
