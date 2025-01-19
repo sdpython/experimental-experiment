@@ -90,6 +90,7 @@ class ModelDiagnoseOutput:
     def get_debug_msg(self) -> str:
         """Returns information about this instances to help debugging."""
         rows = [
+            "",
             f"name={self.name!r}",
             f"cls={self.model.__class__.__name__}",
             f"level={self.level}",

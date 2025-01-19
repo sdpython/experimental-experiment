@@ -574,6 +574,60 @@ class TestDiagnose(ExtTestCase):
         report = diag.get_export_status()
         self.assertIn("OK with children as custom ops", report)
 
+    @requires_torch("2.6")
+    # @hide_stdout()
+    def test_export_piece_dynamic_cache(self):
+        import torch
+        import transformers
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, cache):
+                return x + cache.key_cache[0] + cache.value_cache[0]
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, cache):
+                return self.sub(x, cache)
+
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.ones((5, 6)), torch.ones((5, 6)) + 2, 0)
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x, cache)
+        self.assertNotEmpty(y)
+
+        cache2 = transformers.cache_utils.DynamicCache()
+        cache2.update(torch.ones((6, 6)), torch.ones((6, 6)) + 2, 0)
+
+        inputs = [
+            ((torch.randn((5, 6)), cache), {}),
+            ((torch.randn((6, 6)), cache2), {}),
+        ]
+
+        expected_dyn_shapes = "(({0: DYN}, [[{0: DYN}], [{0: DYN}]]), {})"
+        diag = infer_shape_type_from_execution(model, inputs)
+        dyn_shapes = diag.guess_dynamic_shapes()
+        got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(expected_dyn_shapes, got)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=1,
+            replace_by_custom_op=CustomOpStrategy.ALWAYS,
+            quiet=10,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        self.assertIn("torch.ops.diag_lib.C__main__.default", str(ep))
+        self.assertNotEmpty(diag.forward_custom_op_schema)
+        self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
