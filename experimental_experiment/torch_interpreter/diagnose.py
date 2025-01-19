@@ -3,7 +3,7 @@ import copy
 import enum
 import inspect
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, max_diff
@@ -18,13 +18,19 @@ def serialize_one(
     """
     if isinstance(obj, torch.Tensor):
         return obj
-    if obj.__class__.__name__ in {"DynamicClass", "patched_DynamicCache"}:
+    if isinstance(obj, (tuple, list)):
+        assert all(
+            isinstance(t, torch.Tensor) for t in obj
+        ), f"Unexpected type in {string_type(obj)}. It should be all tensors."
+        return obj
+    if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
         return [*obj.key_cache, *obj.value_cache]
     if obj is None:
         return None
     raise NotImplementedError(
         f"Unable to serialize type {type(obj)}, "
         f"class_name={obj.__class__.__name__!r}, "
+        f"types={string_type(obj, with_shape=True)}, "
         f"name={name!r} from schema={schema!r}"
     )
 
@@ -262,6 +268,11 @@ class ModelDiagnoseOutput:
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self.device = "cpu"
+
+    def __iter__(self) -> Iterator:
+        """Iterates on all the nodes in the graph."""
+        yield self
+        yield from self.children
 
     def get_debug_msg(self) -> str:
         """Returns information about this instances to help debugging."""
@@ -733,13 +744,13 @@ class ModelDiagnoseOutput:
             ), f"unexpected type {type(annotated)} for name={o!r}"
             outputs.extend(annotated)
         unique = set(outputs)
-        if unique == {"Tensor"}:
-            return "Tensor"
-        return "Tensor[]"
+        assert unique == {
+            "Tensor"
+        }, f"{self.full_name}: no other tyoe than Tensor is supported, types={unique}"
+        return "Tensor" if len(outputs) == 1 else "Tensor[]"
 
-    def _register(
-        self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
-    ):
+    def build_c_schema(self) -> str:
+        """Returns a schema for the C function."""
         # schema_str = return f"({', '.join(params)}) -> {ret}"
         args = []
         for p in self.forward_ordered_parameter_names:
@@ -751,7 +762,12 @@ class ModelDiagnoseOutput:
                 args.append(self._annotated_input(p))
         outputs = self._annotated_output()
         schema_str = f"({', '.join(args)}) -> {outputs}"
+        return schema_str
 
+    def _register(
+        self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
+    ):
+        schema_str = self.build_c_schema()
         if verbose > 1:
             print(f"[try_export._register] {self.dot_name} schema_str={schema_str!r}")
 
@@ -760,6 +776,62 @@ class ModelDiagnoseOutput:
         custom_def.register_kernel(self.device)(fct)
         custom_def._abstract_fn = fct_shape
         return custom_def, schema_str
+
+    def build_shape_mapping_indices(
+        self,
+    ) -> List[Tuple[Union[int, Tuple[int, ...]], torch.dtype]]:
+        """
+        Builds a mapping output and input shapes so that a function
+        returns dynamic shapes can automatically inferred.
+        """
+        # The main idea. Knowning everything is going to be serialized,
+        # inputs and outputs are serialized, we try to match the output
+        # shapes with the inputs one.
+        flattened_inputs = [serialize_args(*i, schema=None) for i in self.inputs]
+        shaped_mapped = [{} for i in flattened_inputs]
+        for row in range(len(shaped_mapped)):
+            inp_args, inp_kwargs = flattened_inputs[row]
+            assert not inp_kwargs, (
+                f"Not implemented yet with kwargs={string_type(inp_kwargs)}"
+            )
+            for i, inp in enumerate(inp_args):
+                if inp.shape not in shaped_mapped[row]:
+                    shaped_mapped[row][inp.shape] = []
+                shaped_mapped[row][inp.shape].append(i)
+
+        flattened_outputs = [serialize_args(i, None, schema=None) for i in self.outputs]
+        n_outputs = len(flattened_outputs[0])
+
+        indices_map = [None for _ in range(n_outputs)]
+
+        def _msg_(i):
+            return (
+                f"{self.full_name}: inconsistencies for output {i}, "
+                f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
+                f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
+                f"\nshaped_mapped={shaped_mapped}, "
+                f"\nindices_map={indices_map}"
+            )
+
+        for i in range(n_outputs):
+            for row in range(len(shaped_mapped)):
+                shape = flattened_outputs[row][i].shape
+                if shape in shaped_mapped[row]:
+                    obtained = min(shaped_mapped[row][shape])
+                    if indices_map[i] is None:
+                        indices_map[i] = obtained
+                    else:
+                        assert obtained == indices_map[i], _msg_(i)
+
+        # When a shape is not mapped, it is a constant.
+        for i, mapped in enumerate(indices_map):
+            if mapped is not None:
+                continue
+            shapes = set(flattened_outputs[row][i] for row in len(self.outputs))
+            assert len(shapes) == 1, _msg_(i)
+            indices_map[i] = shapes.pop()
+
+        return tuple((i, f.dtype) for i, f in zip(indices_map, flattened_outputs[0]))
 
     def _get_symbolic_function_for_forward_shape(self) -> Callable:
         """
@@ -786,11 +858,31 @@ class ModelDiagnoseOutput:
 
                     return _symbolic_forward_tensor_1_tensor_like_first_input
 
-                def _symbolic_forward_tensor_n_tensor_like_first_input(*args, **kwargs):
-                    # TODO: change this
-                    return tuple(torch.empty_like(args[0]) for t in range(n_outputs))
+                def _symbolic_forward_tensor_n_tensor_like_first_input(
+                    *args, _n_outputs=n_outputs, **kwargs
+                ):
+                    return tuple(torch.empty_like(args[0]) for t in range(_n_outputs))
 
                 return _symbolic_forward_tensor_n_tensor_like_first_input
+
+        indices_map = self.build_shape_mapping_indices()
+        if indices_map is not None:
+
+            def _symbolic_forward_tensor_mapped_io_shapes(
+                *args, _indices_map=indices_map, **kwargs
+            ):
+                outputs = []
+                for ii, dtype in _indices_map:
+                    out = (
+                        torch.empty(ii)
+                        if isinstance(ii, tuple)
+                        else torch.empty_like(args[ii])
+                    )
+                    outputs.append(out if out.dtype == dtype else out.to(dtype))
+                return tuple(outputs)
+
+            return _symbolic_forward_tensor_mapped_io_shapes
+
         raise NotImplementedError(
             f"{self.full_name}: unable to create function producing the symbolic shapes, "
             f"input_types={string_type(self.inputs[0], with_shape=True)}, "
@@ -982,7 +1074,9 @@ class ModelDiagnoseOutput:
                     f"[_replaced_forward_] {name_fct}-OUT: "
                     f"des={string_type(des, with_shape=True)}"
                 )
-            return des
+            if isinstance(des, torch.Tensor):
+                return des
+            return tuple(des) if len(des) > 1 else des[0]
 
         _replaced_forward_.__signature__ = inspect.Signature.from_callable(self.forward)
         self.forward_calling_custom_op = _replaced_forward_
@@ -1103,6 +1197,13 @@ class ModelDiagnoseOutput:
                 if diff["abs"] > atol or diff["rel"] > rtol:
                     self.exporter_status = "DISC: abs"
                     has_disc = True
+                    if not quiet:
+                        raise AssertionError(
+                            f"{self.full_name}: discrepancies were observed, "
+                            f"diff={diff}, expected="
+                            f"{string_type(out, with_shape=True, with_min_max=True)}, "
+                            f"got={string_type(got, with_shape=True, with_min_max=True)}."
+                        )
                     break
             if not has_disc:
                 self.exporter_status = "OK"

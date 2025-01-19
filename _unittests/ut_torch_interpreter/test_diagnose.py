@@ -519,7 +519,7 @@ class TestDiagnose(ExtTestCase):
         self.assertIn("OK with children as custom ops", report)
 
     @requires_torch("2.6")
-    # @hide_stdout()
+    @hide_stdout()
     def test_export_piece_none(self):
         import torch
 
@@ -575,7 +575,7 @@ class TestDiagnose(ExtTestCase):
         self.assertIn("OK with children as custom ops", report)
 
     @requires_torch("2.6")
-    # @hide_stdout()
+    @hide_stdout()
     def test_export_piece_dynamic_cache(self):
         import torch
         import transformers
@@ -627,6 +627,23 @@ class TestDiagnose(ExtTestCase):
         dyn_shapes = diag.guess_dynamic_shapes()
         got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
         self.assertEqual(expected_dyn_shapes, got)
+
+        expected = [
+            ((0, torch.float32),),
+            ((0, torch.float32),),
+            ((0, torch.float32), (0, torch.float32)),
+        ]
+        c_schema = [
+            "(Tensor x, Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
+            "(Tensor x, Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
+            "(Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor[]",
+        ]
+        for iexp, obj, esch in zip(expected, diag, c_schema):
+            mapping = obj.build_shape_mapping_indices()
+            self.assertEqual(iexp, mapping)
+            sch = obj.build_c_schema()
+            self.assertEqual(esch, sch)
+
         ep = diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
@@ -640,9 +657,15 @@ class TestDiagnose(ExtTestCase):
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
-        self.assertIn("torch.ops.diag_lib.C__main__.default", str(ep))
-        self.assertNotEmpty(diag.forward_custom_op_schema)
-        self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
+
+        c_schema = [
+            "torch.ops.diag_lib.C_Model.default",
+            "torch.ops.diag_lib.C_Model_sub.default",
+            "torch.ops.diag_lib.C_Model_subcache.default",
+        ]
+        for obj, esch in zip(diag, c_schema):
+            ep = obj.fx
+            self.assertIn(esch, str(ep))
 
 
 if __name__ == "__main__":

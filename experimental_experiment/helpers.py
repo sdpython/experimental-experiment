@@ -1186,8 +1186,9 @@ def max_diff(
                 verbose=verbose,
             )
         raise AssertionError(
-            f"DynamicCache not fully implemented with expected="
-            f"{string_type(expected)}, got={string_type(got)},\n"
+            f"DynamicCache not fully implemented with classes "
+            f"{expected.__class__.__name__!r} and {got.__class__.__name__!r}, "
+            f"and expected={string_type(expected)}, got={string_type(got)},\n"
             f"level={level}"
         )
 
