@@ -6261,8 +6261,6 @@ def aten__native_batch_norm(
     )
     if training:
         norm, bmean, bvar = batch_out
-        g.set_type(bmean, TensorProto.FLOAT)
-        g.set_type(bvar, TensorProto.FLOAT)
     else:
         assert isinstance(
             batch_out, str
