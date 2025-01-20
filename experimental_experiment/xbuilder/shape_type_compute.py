@@ -597,7 +597,17 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
 
 
 def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    "Sets the output shape for node types Conv, MaxPool."
+    """
+    Sets the output shape for node types Conv, MaxPool.
+
+    This function defines the following functions::
+
+        conf_f1(d,s,stride) = s - (stride if d % stride == 0 else d % stride) // 2
+        conf_f2(d,s,stride) = (
+            s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
+        )
+        conv_f3(d,s,stride,ceil_mode,p) = ... (see the code)
+    """
     if not self.has_type(node.input[0]):
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -669,21 +679,40 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
             stride = strides[i]
             if stride > 1:
                 input_dim = input_shape[2 + i]
-                residual = input_dim % stride
-                total_pad = (
-                    (effective_kernel_shape[i] - stride)
-                    if residual == 0
-                    else (effective_kernel_shape[i] - residual)
-                )
-                total_pad = max(total_pad, 0)
-                half_pad_small = total_pad // 2
-                half_pad_big = total_pad - half_pad_small
-                if auto_pad_attr == "SAME_UPPER":
-                    pads[i] = half_pad_small
-                    pads[i + n_input_dims] = half_pad_big
-                elif auto_pad_attr == "SAME_LOWER":
-                    pads[i] = half_pad_big
-                    pads[i + n_input_dims] = half_pad_small
+                if isinstance(input_dim, str):
+                    if stride == 1:
+                        residual = 0
+                    else:
+                        residual = None
+                else:
+                    residual = input_dim % stride
+
+                if residual is not None:
+                    total_pad = (
+                        (effective_kernel_shape[i] - stride)
+                        if residual == 0
+                        else (effective_kernel_shape[i] - residual)
+                    )
+                    total_pad = max(total_pad, 0)
+                    half_pad_small = total_pad // 2
+                    half_pad_big = total_pad - half_pad_small
+                    if auto_pad_attr == "SAME_UPPER":
+                        pads[i] = half_pad_small
+                        pads[i + n_input_dims] = half_pad_big
+                    elif auto_pad_attr == "SAME_LOWER":
+                        pads[i] = half_pad_big
+                        pads[i + n_input_dims] = half_pad_small
+                else:
+                    # conf_f1=(d,s,stride) = (
+                    #   s - (stride if d % stride == 0 else d % stride)) // 2
+                    # )
+                    pads[i] = f"conf_f1({input_dim},{effective_kernel_shape[i]},{stride})"
+                    # conf_f2=(d,s,stride) = (
+                    #   s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
+                    # )
+                    pads[i + n_input_dims] = (
+                        f"conf_f2({input_dim},{effective_kernel_shape[i]},{stride})"
+                    )
 
     require_kernel_shape = node.op_type in {"MaxPool"}
     output_shape = []
@@ -695,19 +724,31 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
         output_shape.append(w_shape[0])
 
     for i in range(len(kernel_shape)):
-        input_size = input_shape[2 + i]
-        effective_input_size = input_size + pads[i] + pads[i + len(kernel_shape)]
         ceil_mode = self.get_attribute_with_default(node, "ceil_mode", 0)
+        input_size = input_shape[2 + i]
+        if isinstance(pads[i], int):
+            if isinstance(input_size, int):
+                effective_input_size = input_size + pads[i] + pads[i + len(kernel_shape)]
+                output_size = (
+                    (
+                        effective_input_size
+                        - effective_kernel_shape[i]
+                        + (strides[i] - 1 if ceil_mode else 0)
+                    )
+                    // strides[i]
+                ) + 1
+                if ceil_mode and (output_size - 1) * strides[i] >= input_size + pads[i]:
+                    output_size -= 1
+                output_shape.append(output_size)
+                continue
+
+        # conv_f3(d,s,stride,ceil_mode,p) = (
+        #       d + (stride if d % stride == 0 else d % stride) +
+        #       (stride - 1) * (ceil_mode == 1)
+        #   ) // stride + 1 + ...
         output_size = (
-            (
-                effective_input_size
-                - effective_kernel_shape[i]
-                + (strides[i] - 1 if ceil_mode else 0)
-            )
-            // strides[i]
-        ) + 1
-        if ceil_mode and (output_size - 1) * strides[i] >= input_size + pads[i]:
-            output_size -= 1
+            f"conf_f3({input_size},{effective_kernel_shape[i]},{strides[i]},{ceil_mode})"
+        )
         output_shape.append(output_size)
 
     self.set_shape(node.output[0], tuple(output_shape))

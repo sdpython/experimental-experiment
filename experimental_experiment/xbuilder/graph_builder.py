@@ -189,10 +189,12 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param check_empty_source: checks source are not empty
     :param graph_module: only used for debugging purpose
     :param exe_path: gives information on how the :class:`torch.fx.Graph` was obtained
+    :param output_names: output names
 
     Important attributes:
 
     - `input_names: List[str]`: list of input names
+    - `output_names: List[str]`: list of output names
     - `as_function: bool`: the model must be exported as a function or as a model,
       there are less assert when as_function is True
     - `optimization_options: OptimizationOptions`:
@@ -373,6 +375,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         check_empty_source: bool = False,
         graph_module: Optional["torch.fx.GraphModule"] = None,  # noqa: F821
         exe_path: str = "",
+        output_names: Optional[List[str]] = None,
     ):
         import torch
 
@@ -408,6 +411,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._events = {}
         self.signature = signature
         self.check_empty_source = check_empty_source
+        self.user_defined_output_names = output_names or []
 
         self.nodes = []
         self.initializers_dict = {}
@@ -572,6 +576,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             while name in unique_names:
                 i += 1
                 name = f"DYN{i}"
+            unique_names.add(name)
             return torch.export.Dim(name)
         raise AssertionError(f"Unexpected type {type(dynamic_shapes)} for dynamic_shapes")
 
@@ -2471,7 +2476,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             assert allow_empty or len(shape) == 0 or min(shape) > 0, (
                 f"Initializer {name!r} has an empty shape={shape}, itype={itype}, "
-                f"type={type(value)}{self.get_debug_msg()}"
+                f"type={type(value)}, "
+                f"value={string_type(value, with_shape=True, with_min_max=True)}"
+                f"{self.get_debug_msg()}"
             )
             assert existing is None or name not in self.initializers_dict, (
                 f"initializer {name!r} was already added (itype={itype}, shape={shape})"
@@ -3303,6 +3310,30 @@ class GraphBuilder(_GraphBuilderRuntime):
         if not self.as_function and not allow_untyped_output and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
+
+        index_output = len(self.outputs)
+        if index_output < len(self.user_defined_output_names):
+            new_name = self.user_defined_output_names[index_output]
+            assert not self.has_name(new_name), (
+                f"Cannot rename one output into {new_name!r} as it is already used"
+                f"{self.get_debug_msg()}"
+            )
+            self.make_node(
+                "Identity",
+                [name],
+                [new_name],
+                name=self.unique_node_name("make_tensor_output_rename"),
+            )
+            if self.verbose > 1:
+                print(
+                    f"[GraphBuilder-{self._hash()}.make_tensor_output] "
+                    f"rename {name} into {new_name}"
+                )
+            old_name = name
+            name = new_name
+        else:
+            old_name = None
+
         if elem_type != 0:
             node = oh.make_tensor_value_info(name, elem_type, dyn_shape, doc_string=doc_string)
         else:
@@ -3311,6 +3342,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             node.name = name
             if doc_string:
                 node.doc_string = doc_string
+
         node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         self.outputs.append(node)
         assert self.has_name(name), f"Output {name!r} not found{self.get_debug_msg()}"
@@ -3321,8 +3353,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
         if dyn_shape:
             self.set_shape(name, dyn_shape)
+            if old_name:
+                self.set_shape(old_name, dyn_shape)
         if elem_type:
             self.set_type(name, elem_type)
+            if old_name:
+                self.set_type(old_name, elem_type)
         return name
 
     def select_outputs(self, output_names: List[str]):
@@ -4914,6 +4950,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         model.graph.name = "experiment"
         model.graph.output.extend(o for mask, o in zip(mask_outputs, self.outputs) if mask)
 
+        # rename parameters following the original model names if possible
         if self._parameter_renaming:
             assert self.initializers_dict, (
                 f"Some parameters are renamed {self._parameter_renaming} "
@@ -4981,7 +5018,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             model.graph.node.extend(self.nodes)
             model.graph.input.extend(self.inputs)
 
-        # initializer
+        # initializers
         initializers, large_initializers = self._build_initializers(
             switch_low_high=sys.byteorder != "big",
             large_model=large_model,
@@ -5002,11 +5039,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                 "You should use large_model=True."
             ) from e
 
+        # opsets
         model.opset_import.extend(opsets)
         model.functions.extend(self.functions.values())
         model.ir_version = ir_version
+        # rewrite shape informations
         self._add_shape_information(model)
 
+        # final doc_string
         doc_string = (
             f"large_model={large_model}, inline={inline}, "
             f"external_threshold={external_threshold}"
@@ -5021,7 +5061,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
             }
             if filtered:
-                doc_string += f"\n-- known-value-shape: {pprint.pformat(filtered)}"
+                doc_string += f"\n-- known-value-shape: {self._format_dict(filtered)}"
         model.doc_string += doc_string + (
             f"\n-- optimized:{self.optimization_options!r}" if optimize else "not-optimized"
         )
@@ -5128,9 +5168,43 @@ class GraphBuilder(_GraphBuilderRuntime):
                     expanded_constraints[i] |= v
                     expanded_constraints[i] |= {k}
 
-            replacements = rename_dynamic_dimensions(
-                expanded_constraints, set(self.dynamic_dimensions_source)
-            )
+            # let's rename unknown dimension with basic rules
+            implicit_names = ["batch", "channel"]
+            original = set()
+            for k, v in self.dynamic_dimensions_source.items():
+                if not k.startswith("DYN"):
+                    original.add(k)
+                    continue
+                # We replace it with one implicit name.
+                axis = set(d["axis"] for d in v)
+                if len(axis) == 1:
+                    a = axis.pop()
+                    prefix = (
+                        implicit_names[a]
+                        if a < len(implicit_names)
+                        else f"D{a - len(implicit_names)}"
+                    )
+                else:
+                    prefix = "g0"
+                    i = 0
+                    while prefix in original:
+                        i += 1
+                        prefix = f"g{i}"
+                if prefix not in expanded_constraints:
+                    expanded_constraints[prefix] = {k}
+                    expanded_constraints[k].add(prefix)
+                    original.add(prefix)
+                    continue
+                n = f"{prefix}_{1}"
+                i = 1
+                while n in expanded_constraints:
+                    i += 1
+                    n = f"{prefix}_{i}"
+                expanded_constraints[n] = {k}
+                expanded_constraints[k].add(n)
+                original.add(n)
+
+            replacements = rename_dynamic_dimensions(expanded_constraints, original)
             if self.verbose:
                 print(
                     f"[GraphBuilder._add_shape_information] dynamic shapes "
@@ -5818,10 +5892,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert (
                 len(val.shape) == 0
                 or min(val.shape) > 0
-                or (val.shape == (0,) and v.op_type in {"Cast", "Identity"})
+                or (val.shape == (0,) and v.op_type in {"Cast", "Identity", "Pad"})
             ), (
-                f"One input has a empty shape {val.shape}, name={kval!r} "
-                f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
+                f"One input has a empty shape {val.shape}, name={kval!r}, v.name={v.name!r}, "
+                f"node={self.pretty_node(v)}{self.get_debug_msg()}"
             )
 
         with self.maybe_disable_fake_tensor_mode():
@@ -7454,6 +7528,21 @@ class GraphBuilder(_GraphBuilderRuntime):
             return self.constants_node_[key]
         return None
 
+    @classmethod
+    def _format_dict(cls, d: Dict[str, Any]) -> str:
+        "Formats a dictionay to avoid a too long string."
+        rows = ["{"]
+        for k, v in sorted(d.items()):
+            sv = str(v)
+            if "\n" in sv:
+                s_ = sv.split("\n")
+                sv = f"{s_[0]}...{s_[-1]}"
+            if len(sv) > 50:
+                sv = f"{sv[:20]}...{sv[-20:]}"
+            rows.append(f"  {k}: {sv},")
+        rows.append("}")
+        return "\n".join(rows)
+
     def make_local_function(
         self,
         builder: "GraphBuilder",
@@ -7548,7 +7637,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
             }
             if filtered:
-                doc_string += f"\n-- known-value-shape: {pprint.pformat(filtered)}"
+                doc_string += f"\n-- known-value-shape: {self._format_dict(filtered)}"
         onx.doc_string += doc_string + (
             f"\n-- optimized:{builder.optimization_options!r}" if optimize else "not-optimized"
         )

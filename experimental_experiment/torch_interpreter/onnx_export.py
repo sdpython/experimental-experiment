@@ -439,6 +439,7 @@ def _make_builder_interpreter(
     submodule_naming: Optional[Callable] = None,
     parameter_naming: Optional[Callable] = None,
     module_name: Optional[str] = None,
+    output_names: Optional[List[str]] = None,
 ) -> Tuple[
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
@@ -472,6 +473,7 @@ def _make_builder_interpreter(
     :param submodule_naming: a function which returns a submodule name in the onnx graph
     :param parameter_naming: a function which returns a parameter name in the onnx graph
     :param module_name: name of the module, to help retrieve the parameter name
+    :param output_names: output names
     :return: onnx model, interpreter, graph builder, mask_outputs
     """
 
@@ -527,41 +529,61 @@ def _make_builder_interpreter(
             print(graph_module.graph)
         exported_program = None
     else:
-        exe_path = "export"
-        if verbose > 0:
-            print(f"[_make_builder_interpreter] export_options={export_options!r}")
-            print(f"[_make_builder_interpreter] input args={string_type(args)}")
-            print(f"[_make_builder_interpreter] input kwargs={string_type(kwargs)}")
-            print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
-            print(
-                f"[_make_builder_interpreter] same_signature={same_signature}, "
-                f"tracing_mode={tracing_mode}"
+        if not isinstance(mod, torch.export.ExportedProgram):
+            exe_path = "export"
+            if verbose > 0:
+                print(f"[_make_builder_interpreter] export_options={export_options!r}")
+                print(f"[_make_builder_interpreter] input args={string_type(args)}")
+                print(f"[_make_builder_interpreter] input kwargs={string_type(kwargs)}")
+                print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
+                print(
+                    f"[_make_builder_interpreter] same_signature={same_signature}, "
+                    f"tracing_mode={tracing_mode}"
+                )
+            # If this step fails, try bypass_export_some_errors.
+            exported_program = export_options.export(
+                mod,
+                args if isinstance(args, tuple) else (tuple() if args is None else args),
+                kwargs,
+                tracing_mode=tracing_mode,
+                dynamic_shapes=dynamic_shapes,
+                same_signature=same_signature,
+                input_names=input_names,
+                verbose=verbose,
             )
-        # If this step fails, try bypass_export_some_errors.
-        exported_program = export_options.export(
-            mod,
-            args if isinstance(args, tuple) else (tuple() if args is None else args),
-            kwargs,
-            tracing_mode=tracing_mode,
-            dynamic_shapes=dynamic_shapes,
-            same_signature=same_signature,
-            input_names=input_names,
-            verbose=verbose,
-        )
-        if os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1"):
+        else:
+            exported_program = mod
+
+        debug_ep = os.environ.get("PRINT_EXPORTED_PROGRAM", "0")
+        if debug_ep in (1, "1"):
             print("-- EXPORTED PROGRAM --")
             print(f"-- export_options={export_options}")
             print(exported_program)
+        elif debug_ep not in ("0", "False", "false") and "." in debug_ep:
+            # We save it in this file.
+            print(f"-- EXPORTED PROGRAM SAVED in {debug_ep!r} --")
+            print(f"-- export_options={export_options}")
+            with open(debug_ep, "w") as f:
+                f.write(str(exported_program))
 
         graph_module = (
             exported_program
             if isinstance(exported_program, torch.fx.GraphModule)
             else exported_program.graph_module
         )
-        if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
+
+        debug_gm = os.environ.get("PRINT_GRAPH_MODULE", "0")
+        if debug_gm in (1, "1"):
             print("-- EXPORTED GRAPH MODULE --")
             print(f"-- export_options={export_options}")
             print(graph_module.graph)
+        elif debug_gm not in ("0", "False", "false") and "." in debug_gm:
+            # We save it in this file.
+            print(f"-- EXPORTED GRAPH MODULE SAVED in {debug_gm!r} --")
+            print(f"-- export_options={export_options}")
+            with open(debug_ep, "w") as f:
+                f.write(str(graph_module.graph))
+
         try:
             weights = dict(exported_program.named_parameters())
         except AttributeError:
@@ -624,6 +646,7 @@ def _make_builder_interpreter(
     builder = GraphBuilder(
         target_opset,
         input_names=input_names,
+        output_names=output_names,
         as_function=as_function,
         optimization_options=optimization_options,
         args=args,
@@ -821,6 +844,7 @@ def to_onnx(
         bool, Set[type["torch.nn.Module"]]  # noqa: F821
     ] = False,
     function_options: Optional[FunctionOptions] = None,
+    output_names: Optional[List[str]] = None,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -859,15 +883,17 @@ def to_onnx(
         all this other will be exported as usual
     :param function_options: to specify what to do with the initializers in local functions,
         add them as constants or inputs
+    :param output_names: to rename the output names
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
     information about the graph module is printed out.
-
     Environment variable ``ONNXVERBOSE=1`` can be used to
     increase verbosity in this function.
     Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
     a progress bar on big models.
+    Other debugging options are available, see :class:`GraphBuiler
+    <experimental_experiment.xbuilder.GraphBuilder>`.
     """
     if target_opset is None:
         target_opset = min(18, onnx_opset_version() - 1)
@@ -888,6 +914,7 @@ def to_onnx(
         args=args,
         kwargs=kwargs,
         input_names=input_names,
+        output_names=output_names,
         target_opset=target_opset,
         as_function=as_function,
         optimization_options=options,

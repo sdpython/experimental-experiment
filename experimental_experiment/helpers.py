@@ -616,7 +616,7 @@ def np_dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
 
 
 def rename_dynamic_dimensions(
-    constraints: Dict[str, Set[str]], original: Set[str]
+    constraints: Dict[str, Set[str]], original: Set[str], ban_prefix: str = "DYN"
 ) -> Dict[str, str]:
     """
     Renames dynamic shapes as requested by the user. :func:`torch.export.export` uses
@@ -625,6 +625,7 @@ def rename_dynamic_dimensions(
 
     :param constraints: exhaustive list of used name and all the values equal to it
     :param original: the names to use if possible
+    :param ban_prefix: avoid any rewriting by a constant starting with this prefix
     :return: replacement dictionary
     """
     replacements = {s: s for s in original}
@@ -640,6 +641,8 @@ def rename_dynamic_dimensions(
                 continue
             common = sorted(common)
             by = common[0]
+            if ban_prefix and by.startswith(ban_prefix):
+                continue
             replacements[k] = by
             for vv in v:
                 if vv not in replacements:

@@ -1,0 +1,176 @@
+import unittest
+from typing import Any, List, Optional
+import onnx
+from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.xbuilder import OptimizationOptions
+
+
+class TestOnnxExportShape(ExtTestCase):
+    def _call_exporter(
+        self,
+        test_name: str,
+        exporter: str,
+        model: "torch.nn.Module",  # noqa: F821
+        inputs: List[Any],
+        decomposition: bool = False,
+        verbose: int = 0,
+        optimize: bool = False,
+        strict: bool = False,
+        patterns: Optional[str] = None,
+        dynamic_shapes: Optional[Any] = None,
+        processor: str = "CPU",
+        output_names: Optional[List[str]] = None,
+    ) -> str:
+        import torch
+
+        filename = f"{test_name}_{exporter}_{'dec' if decomposition else ''}.onnx"
+        if exporter == "script":
+            torch.onnx.export(model, inputs, filename, opset_version=18)
+        elif exporter == "dynamo":
+            torch.onnx.export(model, inputs, filename, dynamo=True)
+        else:
+            export_options = ExportOptions(
+                decomposition_table="all" if decomposition else None, strict=strict
+            )
+            opt_options = (
+                OptimizationOptions(patterns=patterns, processor=processor)
+                if patterns or processor != "CPU"
+                else None
+            )
+            to_onnx(
+                model,
+                inputs,
+                filename=filename,
+                export_options=export_options,
+                verbose=verbose,
+                optimize=optimize,
+                options=opt_options,
+                dynamic_shapes=dynamic_shapes,
+                output_names=output_names,
+            )
+        return filename
+
+    def test_shape_DYN(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv1d(16, 32, 1)
+
+            def forward(self, x):
+                return self.conv(x) + torch.tensor([1], dtype=x.dtype)
+
+        model = Model()
+        xs = (torch.randn((2, 16, 24)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_shape_DYN",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={
+                "x": {
+                    0: torch.export.Dim.AUTO,
+                    1: torch.export.Dim.AUTO,
+                    2: torch.export.Dim.AUTO,
+                }
+            },
+        )
+        onx = onnx.load(model_path)
+        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
+        self.assertEqual(shape_x, ["batch", "channel", "D0"])
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    def test_shape_reshape(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x.reshape((-1, 1024)).reshape((-1, 2, 1024))
+
+        model = Model()
+        xs = (torch.randn((8, 2048)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_shape_reshape",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: torch.export.Dim.AUTO}},
+        )
+        onx = onnx.load(model_path)
+        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
+        self.assertEqual(shape_x, ["batch", ""])
+        for obs in onx.graph.value_info:
+            shape = tuple((d.dim_param or d.dim_value) for d in obs.type.tensor_type.shape.dim)
+            self.assertIn(shape, (("batch*2", 1024), ("batch", 2, 1024)))
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    def test_output_name(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x.reshape((-1, 1024)).reshape((-1, 2, 1024))
+
+        model = Model()
+        xs = (torch.randn((8, 2048)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_shape_reshape",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: torch.export.Dim.AUTO}},
+            output_names=["Y"],
+        )
+        onx = onnx.load(model_path)
+        self.assertEqual(len(onx.graph.output[0].name), 1)
+        self.assertEqual(onx.graph.output[0].name, "Y")
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

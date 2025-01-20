@@ -145,9 +145,7 @@ class DynamoInterpreter:
             self.parameter_naming = parent_interpreter.parameter_naming
 
     def flatten_inputs(self, x: Any) -> List["torch.Tensor"]:  # noqa: F821
-        """
-        Flatten inputs.
-        """
+        """Flatten inputs."""
         if x is None:
             return x
         if isinstance(x, (list, tuple)):
@@ -628,6 +626,7 @@ class DynamoInterpreter:
                     if parameter_name
                     else "DynamoInterpret.placeholder.0"
                 ),
+                allow_empty=True,
             )
 
         if isinstance(val, (self.torch.SymInt, self.torch.SymFloat)):
