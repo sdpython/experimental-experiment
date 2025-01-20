@@ -791,9 +791,7 @@ class ModelDiagnoseOutput:
         shaped_mapped = [{} for i in flattened_inputs]
         for row in range(len(shaped_mapped)):
             inp_args, inp_kwargs = flattened_inputs[row]
-            assert not inp_kwargs, (
-                f"Not implemented yet with kwargs={string_type(inp_kwargs)}"
-            )
+            assert not inp_kwargs, f"Not implemented yet with kwargs={string_type(inp_kwargs)}"
             for i, inp in enumerate(inp_args):
                 if inp.shape not in shaped_mapped[row]:
                     shaped_mapped[row][inp.shape] = []
