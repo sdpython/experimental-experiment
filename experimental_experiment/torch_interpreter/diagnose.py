@@ -3,10 +3,191 @@ import copy
 import enum
 import inspect
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, max_diff
+
+
+def serialize_one(
+    obj: Any, name: Union[str, int], schema: str
+) -> Union[torch.Tensor, List[torch.Tensor]]:
+    """
+    Serializes one object into a tensor or a list of tensors.
+    *name* and *schema* are just better error messages.
+    """
+    if isinstance(obj, torch.Tensor):
+        return obj
+    if isinstance(obj, (tuple, list)):
+        assert all(
+            isinstance(t, torch.Tensor) for t in obj
+        ), f"Unexpected type in {string_type(obj)}. It should be all tensors."
+        return obj
+    if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
+        return [*obj.key_cache, *obj.value_cache]
+    if obj is None:
+        return None
+    raise NotImplementedError(
+        f"Unable to serialize type {type(obj)}, "
+        f"class_name={obj.__class__.__name__!r}, "
+        f"types={string_type(obj, with_shape=True)}, "
+        f"name={name!r} from schema={schema!r}"
+    )
+
+
+def serialize_args(
+    args: Tuple[Any], kwargs: Optional[Dict[str, Any]], schema: str
+) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor]]:
+    """Serializes args and kwargs before calling a custom ops."""
+    if isinstance(args, torch.Tensor):
+        new_args = args
+    else:
+        new_args = []
+        for i, a in enumerate(args):
+            r = serialize_one(a, name=i, schema=schema)
+            if r is None or isinstance(r, torch.Tensor):
+                new_args.append(r)
+            else:
+                new_args.extend(r)
+        new_args = tuple(new_args)
+    assert not kwargs, (
+        f"Not implemented with args={string_type(args, with_shape=True)}, "
+        f"kwargs={string_type(kwargs, with_shape=True)}"
+    )
+    if kwargs is None:
+        return new_args
+    return new_args, {}
+
+
+def type_as_str_with_info(obj: Any) -> str:
+    """Returns a string with information about how to deserialize."""
+    if isinstance(obj, torch.Tensor):
+        return "Tensor"
+    if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
+        return f"{obj.__class__.__name__}__{len(obj.key_cache)}_{len(obj.value_cache)}"
+    if obj is None:
+        return "None"
+    raise NotImplementedError(
+        f"Unable to produce serialize info for type {type(obj)}, "
+        f"class_name={obj.__class__.__name__!r}."
+    )
+
+
+def deserialize_args(
+    res: List[torch.Tensor], expected_types: List[str], clone: bool = False
+) -> Tuple[Any, ...]:
+    """
+    Deserizalizes output results coming from the custom op and restores
+    the python classes attached to it.
+
+    :param res: args to deserialize
+    :param expected_types: information on how to deserialize
+    :param clone: clone tensors before returning them
+    :return: new args
+    """
+    assert isinstance(res, (list, tuple, torch.Tensor)), f"unexpected type for res {type(res)}"
+    if isinstance(res, torch.Tensor):
+        assert expected_types == [
+            "Tensor"
+        ], f"Mismatch information, expected_types={expected_types!r}"
+        return res
+    assert all(
+        isinstance(t, (list, torch.Tensor)) for t in res
+    ), f"unexpected element type in res: {string_type(res)}"
+    des = []
+    pos_res = 0
+    for tt in expected_types:
+        if tt == "Tensor":
+            des.append(res[pos_res].clone() if clone else res[pos_res])
+            pos_res += 1
+            continue
+        if tt.startswith(("DynamicCache__", "patched_DynamicCache__")):
+            info = tt.split("__")[-1]
+            n1, n2 = tuple(map(int, info.split("_")))
+            assert n1 == n2, f"Unexpected sizes for n1={n1} and n2={n2} for a DynamicCache"
+            if isinstance(res[pos_res], torch.Tensor):
+                # All flattened.
+                key_cache = res[pos_res : pos_res + n1]
+                value_cache = res[pos_res + n1 : pos_res + n1 + n2]
+                pos_res += n1 + n2
+            else:
+                value = res[pos_res]
+                assert isinstance(value, list) and all(
+                    isinstance(t, torch.Tensor) for t in value
+                ), (
+                    f"Unexpected type at position {pos_res}: "
+                    f"{string_type(value, with_shape=True)}, "
+                    f"deserialized into {tt}"
+                )
+                assert len(value) % 2 == 0 and len(value) == n1 + n2, (
+                    f"Number of tensors at position {pos_res} "
+                    f"in {string_type(value, with_shape=True)} "
+                    f"should be even. Unable to deserialize into {tt}, "
+                    f"n1={n1}, n2={n2}, len(res[pos_res])={len(value)}"
+                )
+                key_cache = value[:n1]
+                value_cache = value[n1:]
+                pos_res += 1
+
+            if tt.startswith("DynamicCache__"):
+                import transformers
+
+                cache = transformers.cache_utils.DynamicCache()
+            elif tt.startswith("patched_DynamicCache__"):
+                from .patches.patch_transformers import patched_DynamicCache
+
+                cache = patched_DynamicCache()
+            else:
+                raise NotImplementedError(f"Unable to handle type info {tt!r}")
+            if clone:
+                cache.key_cache = [t.clone() for t in key_cache]
+                cache.value_cache = [t.clone() for t in value_cache]
+            else:
+                cache.key_cache = key_cache
+                cache.value_cache = value_cache
+            des.append(cache)
+            continue
+
+        raise NotImplementedError(f"Unable to handle type info {tt!r}")
+    assert pos_res == len(res), (
+        f"Deserialization went wrong, pos_res={pos_res}, len(res)={len(res)}, "
+        f"expected_types={expected_types}, "
+        f"input types={string_type(res)}"
+    )
+    return des
+
+
+def deserialize_args_kwargs(
+    args: List[torch.Tensor],
+    kwargs: Dict[str, Any],
+    expected_types: Tuple[List[str], List[str]],
+    clone: bool = False,
+) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+    """
+    Deserializes a list of tensor or list of tensors into args and kwargs.
+    *kwargs* should be empty since this type is allowed as a serialized type.
+
+    :param args: arguments
+    :param kwargs: named arguments, they should be empty
+    :param expected_types: needed to understand how to deserialize
+    :param clone: clone every tensor
+    :return: new args, new named args
+    """
+    assert not kwargs, (
+        f"inputs coming from C++ functions should not have "
+        f"named arguments but kwargs={string_type(kwargs, with_shape=True)}."
+    )
+    assert (
+        isinstance(expected_types, tuple)
+        and len(expected_types) == 2
+        and not expected_types[1]
+    ), (
+        f"Unexpected value for expected_types={expected_types}, "
+        f"args={string_type(args, with_shape=True)}, "
+        f"kwargs={string_type(kwargs, with_shape=True)}, "
+    )
+    new_args = deserialize_args(args, expected_types[0], clone=clone)
+    return new_args, {}
 
 
 class CustomOpStrategy(enum.IntEnum):
@@ -83,13 +264,20 @@ class ModelDiagnoseOutput:
         names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
         self.forward_kwargs = names[0] if names else None
         self.forward_custom_op_schema = None
+        self.forward_need_serialization = False
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self.device = "cpu"
 
+    def __iter__(self) -> Iterator:
+        """Iterates on all the nodes in the graph."""
+        yield self
+        yield from self.children
+
     def get_debug_msg(self) -> str:
         """Returns information about this instances to help debugging."""
         rows = [
+            "",
             f"name={self.name!r}",
             f"cls={self.model.__class__.__name__}",
             f"level={self.level}",
@@ -169,8 +357,8 @@ class ModelDiagnoseOutput:
     def custom_op_name(self):
         "Returns a name and class name."
         if self.parent is None:
-            return f"C{self.name}"
-        return f"C{self.parent.custom_op_name}_{self.name}"
+            return f"C_{self.model.__class__.__name__}"
+        return f"{self.parent.custom_op_name}_{self.name}"
 
     @property
     def dot_name(self):
@@ -442,6 +630,8 @@ class ModelDiagnoseOutput:
                 )
                 self.exporter_status = "OK"
             except Exception as e:
+                if "'NoneType' object is not iterable" in str(e):
+                    raise
                 self.last_error = e
                 se = str(e).split("\n")[0].replace("<_DimHint.DYNAMIC: 3>", "DYN")
                 self.exporter_status = f"FAIL-EXPORT: {se}"
@@ -460,7 +650,23 @@ class ModelDiagnoseOutput:
         if verbose > 1:
             print(f"[try_export-FX] {self.dot_name}: done")
         mod = ep.module()
-        return ep, (lambda args, kwargs, _mod=mod: mod(*args, **kwargs))
+
+        def _call_model_(*args, _mod=mod, **kwargs):
+            if verbose > 2:
+                print(
+                    f"[try-export-FX] call module {mod!r} with "
+                    f"args={string_type(args, with_shape=True)} and "
+                    f"kwargs={string_type(kwargs, with_shape=True)}"
+                )
+            res = mod(*args, **kwargs)
+            if verbose > 2:
+                print(
+                    f"[try-export-FX] after called {mod!r} "
+                    f"res={string_type(args, with_shape=True)}"
+                )
+            return res
+
+        return ep, _call_model_
 
     def _do_replace_by_custom_op(
         self, replace_by_custom_op: Union[bool, CustomOpStrategy, Dict[str, CustomOpStrategy]]
@@ -486,6 +692,20 @@ class ModelDiagnoseOutput:
     def _annotation_from_type(self, obj) -> str:
         if isinstance(obj, torch.Tensor):
             return "Tensor"
+        if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicClass"):
+            # It is safer to serialize everything, it is aligned with ONNX,
+            # and the use of list brought the following error:
+            # ::
+            #   RuntimeError: C_Model (with implementation in
+            #   <module 'torch._library.custom_ops' from
+            #   'torch/_library/custom_ops.py'>):
+            #   The output of this custom operator (1) must not also be an input to this
+            #   custom operator and (2) may not alias any inputs to this custom operator
+            #   or other returns. The most common way to trigger this error is if we have
+            #   y = custom_op(x) and y and x are the same Tensor. Please instead return a
+            #   clone of the offending output tensor(s) (e.g. return x.clone()) or
+            #   refactor the custom operator to not return y.
+            return ["Tensor" for i in range(len(obj.key_cache) + len(obj.value_cache))]
         if obj is None:
             # Let's assume it is a tensor. It should not matter anyway.
             # Unless it becomes None in another call.
@@ -498,14 +718,39 @@ class ModelDiagnoseOutput:
         args, kwargs = self.inputs[0]
         if name in kwargs:
             o = kwargs[name]
-            return f"{self._annotation_from_type(o)} {name}"
-        index = self.forward_ordered_parameter_names.index(name)
-        o = args[index]
-        return f"{self._annotation_from_type(o)} {name}"
+            annotated = self._annotation_from_type(o)
+        else:
+            index = self.forward_ordered_parameter_names.index(name)
+            o = args[index]
+            annotated = self._annotation_from_type(o)
+        if isinstance(annotated, str):
+            return f"{annotated} {name}"
+        assert isinstance(
+            annotated, list
+        ), f"unexpected type {type(annotated)} for name={name!r}"
+        return ", ".join(
+            [f"{t} {name}_n{len(annotated)}_{i}" for i, t in enumerate(annotated)]
+        )
 
-    def _register(
-        self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
-    ):
+    def _annotated_output(self):
+        outputs = []
+        for o in self.outputs[0]:
+            annotated = self._annotation_from_type(o)
+            if isinstance(annotated, str):
+                outputs.append(annotated)
+                continue
+            assert isinstance(
+                annotated, list
+            ), f"unexpected type {type(annotated)} for name={o!r}"
+            outputs.extend(annotated)
+        unique = set(outputs)
+        assert unique == {
+            "Tensor"
+        }, f"{self.full_name}: no other tyoe than Tensor is supported, types={unique}"
+        return "Tensor" if len(outputs) == 1 else "Tensor[]"
+
+    def build_c_schema(self) -> str:
+        """Returns a schema for the C function."""
         # schema_str = return f"({', '.join(params)}) -> {ret}"
         args = []
         for p in self.forward_ordered_parameter_names:
@@ -515,16 +760,326 @@ class ModelDiagnoseOutput:
                 args.append(f"**{p}")
             else:
                 args.append(self._annotated_input(p))
-        outputs = [self._annotation_from_type(o) for o in self.outputs[0]]
-        schema_str = f"({', '.join(args)}) -> {', '.join(outputs)}"
+        outputs = self._annotated_output()
+        schema_str = f"({', '.join(args)}) -> {outputs}"
+        return schema_str
+
+    def _register(
+        self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
+    ):
+        schema_str = self.build_c_schema()
         if verbose > 1:
-            print(f"[try_export] {self.dot_name} schema_str={schema_str!r}")
+            print(f"[try_export._register] {self.dot_name} schema_str={schema_str!r}")
 
         # registration
         custom_def = torch.library.CustomOpDef(namespace, fname, schema_str, fct)
         custom_def.register_kernel(self.device)(fct)
         custom_def._abstract_fn = fct_shape
-        return custom_def
+        return custom_def, schema_str
+
+    def build_shape_mapping_indices(
+        self,
+    ) -> List[Tuple[Union[int, Tuple[int, ...]], torch.dtype]]:
+        """
+        Builds a mapping output and input shapes so that a function
+        returns dynamic shapes can automatically inferred.
+        """
+        # The main idea. Knowning everything is going to be serialized,
+        # inputs and outputs are serialized, we try to match the output
+        # shapes with the inputs one.
+        flattened_inputs = [serialize_args(*i, schema=None) for i in self.inputs]
+        shaped_mapped = [{} for i in flattened_inputs]
+        for row in range(len(shaped_mapped)):
+            inp_args, inp_kwargs = flattened_inputs[row]
+            assert not inp_kwargs, f"Not implemented yet with kwargs={string_type(inp_kwargs)}"
+            for i, inp in enumerate(inp_args):
+                if inp.shape not in shaped_mapped[row]:
+                    shaped_mapped[row][inp.shape] = []
+                shaped_mapped[row][inp.shape].append(i)
+
+        flattened_outputs = [serialize_args(i, None, schema=None) for i in self.outputs]
+        n_outputs = len(flattened_outputs[0])
+
+        indices_map = [None for _ in range(n_outputs)]
+
+        def _msg_(i):
+            return (
+                f"{self.full_name}: inconsistencies for output {i}, "
+                f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
+                f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
+                f"\nshaped_mapped={shaped_mapped}, "
+                f"\nindices_map={indices_map}"
+            )
+
+        for i in range(n_outputs):
+            for row in range(len(shaped_mapped)):
+                shape = flattened_outputs[row][i].shape
+                if shape in shaped_mapped[row]:
+                    obtained = min(shaped_mapped[row][shape])
+                    if indices_map[i] is None:
+                        indices_map[i] = obtained
+                    else:
+                        assert obtained == indices_map[i], _msg_(i)
+
+        # When a shape is not mapped, it is a constant.
+        for i, mapped in enumerate(indices_map):
+            if mapped is not None:
+                continue
+            shapes = set(flattened_outputs[row][i] for row in len(self.outputs))
+            assert len(shapes) == 1, _msg_(i)
+            indices_map[i] = shapes.pop()
+
+        return tuple((i, f.dtype) for i, f in zip(indices_map, flattened_outputs[0]))
+
+    def _get_symbolic_function_for_forward_shape(self) -> Callable:
+        """
+        Returns a function computed the output shape assuming it can be inferred
+        from inputs and outputs.
+        """
+        if all(isinstance(t, torch.Tensor) for t in self.outputs[0]):
+            inp_args, inp_kwargs = self.inputs[0]
+            out = self.outputs[0]
+            input_shape = inp_args[0].shape
+            unique_output_shape = set(t.shape for t in out)
+            if (
+                not inp_kwargs
+                and len(unique_output_shape) == 1
+                and unique_output_shape.pop() == input_shape
+            ):
+                n_outputs = len(out)
+
+                if n_outputs == 1:
+
+                    def _symbolic_forward_tensor_1_tensor_like_first_input(*args, **kwargs):
+                        # TODO: change this
+                        return torch.empty_like(args[0])
+
+                    return _symbolic_forward_tensor_1_tensor_like_first_input
+
+                def _symbolic_forward_tensor_n_tensor_like_first_input(
+                    *args, _n_outputs=n_outputs, **kwargs
+                ):
+                    return tuple(torch.empty_like(args[0]) for t in range(_n_outputs))
+
+                return _symbolic_forward_tensor_n_tensor_like_first_input
+
+        indices_map = self.build_shape_mapping_indices()
+        if indices_map is not None:
+
+            def _symbolic_forward_tensor_mapped_io_shapes(
+                *args, _indices_map=indices_map, **kwargs
+            ):
+                outputs = []
+                for ii, dtype in _indices_map:
+                    out = (
+                        torch.empty(ii)
+                        if isinstance(ii, tuple)
+                        else torch.empty_like(args[ii])
+                    )
+                    outputs.append(out if out.dtype == dtype else out.to(dtype))
+                return tuple(outputs)
+
+            return _symbolic_forward_tensor_mapped_io_shapes
+
+        raise NotImplementedError(
+            f"{self.full_name}: unable to create function producing the symbolic shapes, "
+            f"input_types={string_type(self.inputs[0], with_shape=True)}, "
+            f"output_types={string_type(self.outputs[0], with_shape=True)}"
+        )
+
+    def _put_custom_op_inplace_tensor(self, verbose: int = 0):
+        """
+        Replaces the submodule by a custom operator.
+        It rewrites the forward method to call a function.
+        Only tensors are supported so that there is no serialization
+        or deserialization to support.
+        """
+
+        def _rewrite_forward_tensor_(*args, _diag=self, **kwargs):
+            if verbose > 1:
+                print(
+                    f"[_rewrite_forward_tensor_] {_diag.full_name}: IN: "
+                    f"args={string_type(args, with_shape=True)}, "
+                    f"kwargs={string_type(kwargs, with_shape=True)}"
+                )
+            res = _diag.forward(*args, **kwargs)
+            if verbose > 1:
+                print(
+                    f"[_rewrite_forward_tensor_] {_diag.full_name}: "
+                    f"OUT: args={string_type(res, with_shape=True)}"
+                )
+            return res
+
+        name_fct = self.custom_op_name
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace_tensor] {self.dot_name}: "
+                f"registers 'diag_lib.{name_fct}"
+            )
+
+        cusdef, schema_str = self._register(
+            _rewrite_forward_tensor_,
+            self._get_symbolic_function_for_forward_shape(),
+            "diag_lib",
+            name_fct,
+            verbose=verbose,
+        )
+        assert cusdef is not None, f"{self.full_name}: registration of a custom op has failed."
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace_tensor] {self.dot_name}: "
+                f"schema_str={schema_str}"
+            )
+        # We stored to avoid the registration twice.
+        self.forward_custom_op_schema = cusdef
+        expected_output_type = [type_as_str_with_info(o) for o in self.outputs[0]]
+        self.forward_expected_output_type = expected_output_type
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace_tensor] {self.dot_name}: "
+                f"expected_output_type={expected_output_type}"
+            )
+
+        # Apparently, we need a function with the exact same signature.
+        def _replaced_forward_tensor_(*args, **kwargs):
+            fct = getattr(torch.ops.diag_lib, name_fct)
+            if verbose > 1:
+                print(
+                    f"[_replaced_forward_tensor_] {name_fct}-IN: "
+                    f"args={string_type(args, with_shape=True)}, "
+                    f"kwargs={string_type(kwargs, with_shape=True)}, "
+                    f"schema_str={schema_str}"
+                )
+                sfct = str(fct).replace("\n", " ")
+                print(f"[_replaced_forward_tensor_] {name_fct}-CALL: {sfct}")
+            res = fct(*args, **kwargs)
+            if verbose > 1:
+                print(
+                    f"[_replaced_forward_tensor_] {name_fct}-OUT: "
+                    f"des={string_type(res, with_shape=True)}"
+                )
+            return res
+
+        _replaced_forward_tensor_.__signature__ = inspect.Signature.from_callable(self.forward)
+        self.forward_calling_custom_op = _replaced_forward_tensor_
+        self.model.forward = _replaced_forward_tensor_
+        return cusdef
+
+    def _put_custom_op_inplace_any(self, verbose: int = 0):
+        """
+        Replaces the submodule by a custom operator.
+        It rewrites the forward method to call a function.
+        Any type among the supported list if support (an exception will
+        be raised otherwise). C++ does not support custom types so
+        serialization and deserialization are needed.
+        """
+
+        def _rewrite_forward_(*args, _diag=self, **kwargs):
+            if verbose > 1:
+                print(
+                    f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE_IN: "
+                    f"args={string_type(args, with_shape=True)}, "
+                    f"kwargs={string_type(kwargs, with_shape=True)}"
+                )
+            # We need to deserialize back before calling forward.
+            new_args, new_kwargs = deserialize_args_kwargs(
+                args, kwargs, _diag.forward_expected_input_type, clone=True
+            )
+            if verbose > 1:
+                print(
+                    f"[_rewrite_forward_] {_diag.full_name}-IN: "
+                    f"args={string_type(new_args, with_shape=True)}, "
+                    f"kwargs={string_type(new_kwargs, with_shape=True)}"
+                )
+                sfct = str(_diag.forward).replace("\n", " ")
+                print(f"[_rewrite_forward_] {_diag.full_name}-CALL: {sfct}")
+            res = _diag.forward(*new_args, **new_kwargs)
+            if verbose > 1:
+                print(
+                    f"[_rewrite_forward_] {_diag.full_name}-OUT: "
+                    f"args={string_type(res, with_shape=True)}"
+                )
+            # And we need to serialize before before returning the output.
+            serialized_res = serialize_args(res, None, _diag.forward_custom_op_schema)
+            if verbose > 1:
+                print(
+                    f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE-OUT: "
+                    f"args={string_type(serialized_res, with_shape=True)}"
+                )
+            return serialized_res
+
+        name_fct = self.custom_op_name
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace] {self.dot_name}: "
+                f"registers 'diag_lib.{name_fct}"
+            )
+
+        cusdef, schema_str = self._register(
+            _rewrite_forward_,
+            self._get_symbolic_function_for_forward_shape(),
+            "diag_lib",
+            name_fct,
+            verbose=verbose,
+        )
+        assert cusdef is not None, f"{self.full_name}: registration of a custom op has failed."
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace] {self.dot_name}: "
+                f"schema_str={schema_str}"
+            )
+        # We stored to avoid the registration twice.
+        self.forward_custom_op_schema = cusdef
+        expected_output_type = [type_as_str_with_info(o) for o in self.outputs[0]]
+        self.forward_expected_output_type = expected_output_type
+        self.forward_expected_input_type = (
+            [type_as_str_with_info(o) for o in self.inputs[0][0]],
+            {k: type_as_str_with_info(v) for k, v in self.inputs[0][1].items()},
+        )
+        if verbose > 1:
+            print(
+                f"[try_export.put_custom_op_inplace] {self.dot_name}: "
+                f"expected_output_type={expected_output_type}"
+            )
+
+        # Apparently, we need a function with the exact same signature.
+        def _replaced_forward_(*args, **kwargs):
+            fct = getattr(torch.ops.diag_lib, name_fct)
+            if verbose > 1:
+                print(
+                    f"[_replaced_forward_] {name_fct}-IN: "
+                    f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
+                    f"schema_str={schema_str}"
+                )
+            args, kwargs = serialize_args(args, kwargs, schema=schema_str)
+            if verbose > 1:
+                print(
+                    f"[_replaced_forward_] {name_fct}-SERIALIZED_IN: "
+                    f"args={string_type(args, with_shape=True)}, "
+                    f"kwargs={string_type(kwargs, with_shape=True)}"
+                )
+                print(f"[_replaced_forward_] {name_fct}-CALL: {fct}")
+            res = fct(*args, **kwargs)
+            if verbose > 1:
+                print(
+                    f"[_replaced_forward_] {name_fct}-SERIALIZED_OUT: "
+                    f"res={string_type(res, with_shape=True)}, "
+                    f"expected_output_type={expected_output_type}"
+                )
+            des = deserialize_args(res, expected_output_type)
+            if verbose > 1:
+                print(
+                    f"[_replaced_forward_] {name_fct}-OUT: "
+                    f"des={string_type(des, with_shape=True)}"
+                )
+            if isinstance(des, torch.Tensor):
+                return des
+            return tuple(des) if len(des) > 1 else des[0]
+
+        _replaced_forward_.__signature__ = inspect.Signature.from_callable(self.forward)
+        self.forward_calling_custom_op = _replaced_forward_
+        self.model.forward = _replaced_forward_
+        return cusdef
 
     def put_custom_op_inplace(self, verbose: int = 0):
         """
@@ -536,49 +1091,25 @@ class ModelDiagnoseOutput:
             self.model.forward = self.forward_calling_custom_op
             return self.forward_custom_op_schema
 
-        def _rewrite_forward_(*args, _diag=self, **kwargs):
-            return _diag.forward(*args, **kwargs)
-
-        def _symbolic_forward(*args, **kwargs):
-            return torch.empty_like(args[0])
-
-        name_fct = self.custom_op_name
-        if verbose > 1:
-            print(
-                f"[try_export.put_custom_op_inplace] {self.dot_name} "
-                f"registers 'diag_lib.{name_fct}"
-            )
-
-        cusdef = self._register(
-            _rewrite_forward_,
-            _symbolic_forward,
-            "diag_lib",
-            name_fct,
-            verbose=verbose,
-        )
-        assert cusdef is not None, f"{self.full_name}: registration of a custom op has failed."
-        # We stored to avoid the registration twice.
-        self.forward_custom_op_schema = cusdef
-
-        # Apparently, we need a function with the exact same signature.
-        def _replaced_forward_(*args, **kwargs):
-            fct = getattr(torch.ops.diag_lib, name_fct)
-            return fct(*args, **kwargs)
-
-        _replaced_forward_.__signature__ = inspect.Signature.from_callable(self.forward)
-        self.forward_calling_custom_op = _replaced_forward_
-        self.model.forward = _replaced_forward_
-        return cusdef
+        if all(isinstance(t, torch.Tensor) for t in self.inputs[0]) and all(
+            isinstance(t, torch.Tensor) for t in self.outputs[0]
+        ):
+            self.forward_custom_op_serialize = False
+            return self._put_custom_op_inplace_only_tensor(verbose=verbose)
+        self.forward_custom_op_serialize = True
+        self.forward_need_serialization = self.forward_custom_op_serialize
+        return self._put_custom_op_inplace_any(verbose=verbose)
 
     def remove_custom_op_inplace(self, verbose: int = 0):
         """
         Just replaces the forward, hoping the registration does not have to
         be removed.
         """
+        self.forward_need_serialization = False
         self.model.forward = self.forward
         if verbose > 1:
             print(
-                f"[try_export.put_custom_op_inplace] {self.dot_name}: unregisters "
+                f"[try_export.remove_custom_op_inplace] {self.dot_name}: unregisters "
                 f"'diag_lib.{self.custom_op_name}"
             )
 
@@ -621,10 +1152,9 @@ class ModelDiagnoseOutput:
         else:
             raise NotImplementedError(f"Export not implemented yet for exporter={exporter!r}")
 
-        if cusdef is not None:
-            self.remove_custom_op_inplace(verbose=verbose)
-
         if not exported:
+            if cusdef is not None:
+                self.remove_custom_op_inplace(verbose=verbose)
             return None
         if discrepancies:
             has_disc = False
@@ -633,16 +1163,30 @@ class ModelDiagnoseOutput:
             for i, (inp, out) in enumerate(zip(self.inputs, self.outputs)):
                 copy_inp = make_copy(modificator(inp) if modificator else inp)
                 args, kwargs = copy_inp
+                if verbose > 1:
+                    print(f"[try_export-{exporter.upper()}] {self.dot_name}: CALL {fct}")
+                    if verbose > 2:
+                        print(
+                            f"[try_export-{exporter.upper()}] {self.dot_name}: "
+                            f"args={string_type(args, with_shape=True)}"
+                        )
+                        print(
+                            f"[try_export-{exporter.upper()}] {self.dot_name}: "
+                            f"kwargs={string_type(kwargs, with_shape=True)}"
+                        )
+                    if verbose >= 10:
+                        print(f"[try_export-{exporter.upper()}] {self.dot_name}: GRAPH")
+                        print(exported.graph)
                 if quiet:
                     try:
-                        got = fct(args, kwargs)
+                        got = fct(*args, **kwargs)
                     except Exception as e:
                         self.last_error = e
                         se = str(e).split("\n")[0]
                         self.exporter_status = f"FAIL-EVAL: {se}"
                         break
                 else:
-                    got = fct(args, kwargs)
+                    got = fct(*args, **kwargs)
                 self.exporter_outputs.append(got)
                 diff = max_diff(out, got)
                 if verbose > 1:
@@ -651,9 +1195,20 @@ class ModelDiagnoseOutput:
                 if diff["abs"] > atol or diff["rel"] > rtol:
                     self.exporter_status = "DISC: abs"
                     has_disc = True
+                    if not quiet:
+                        raise AssertionError(
+                            f"{self.full_name}: discrepancies were observed, "
+                            f"diff={diff}, expected="
+                            f"{string_type(out, with_shape=True, with_min_max=True)}, "
+                            f"got={string_type(got, with_shape=True, with_min_max=True)}."
+                        )
                     break
             if not has_disc:
                 self.exporter_status = "OK"
+
+        if cusdef is not None:
+            self.remove_custom_op_inplace(verbose=verbose)
+
         if verbose:
             print(
                 f"[try_export-{exporter.upper()}] {self.dot_name} --- {self.exporter_status}"

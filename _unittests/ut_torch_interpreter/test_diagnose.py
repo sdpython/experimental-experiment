@@ -1,5 +1,5 @@
 import unittest
-from typing import Optional
+from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.torch_interpreter.diagnose import (
     infer_shape_type_from_execution,
@@ -461,7 +461,7 @@ class TestDiagnose(ExtTestCase):
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
-        self.assertIn("torch.ops.diag_lib.C__main__.default", str(ep))
+        self.assertIn("torch.ops.diag_lib.C_Model.default", str(ep))
         self.assertNotEmpty(diag.forward_custom_op_schema)
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
 
@@ -512,7 +512,7 @@ class TestDiagnose(ExtTestCase):
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
-        self.assertIn("torch.ops.diag_lib.CC__main___subfail.default", str(ep))
+        self.assertIn("torch.ops.diag_lib.C_Model_subfail.default", str(ep))
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
         self.assertNotEmpty(diag.children[1].forward_custom_op_schema)
         report = diag.get_export_status()
@@ -566,13 +566,106 @@ class TestDiagnose(ExtTestCase):
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=1,
+            verbose=10,
             replace_by_custom_op=CustomOpStrategy.ONLY_IF_FAILING,
             quiet=1,
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_status()
         self.assertIn("OK with children as custom ops", report)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_export_piece_dynamic_cache(self):
+        import torch
+        import transformers
+
+        def memo(
+            x: torch.Tensor, y: List[torch.Tensor], z: List[torch.Tensor]
+        ) -> List[torch.Tensor]:
+            pass
+
+        sch = torch.library.infer_schema(memo, mutates_args=())
+        self.assertEqual(sch, "(Tensor x, Tensor[] y, Tensor[] z) -> Tensor[]")
+
+        class SubModelCache(torch.nn.Module):
+            def forward(self, cache):
+                d = cache.__class__()
+                d.update(cache.key_cache[0] + 1, cache.value_cache[0] + 2, 0)
+                return d
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, cache):
+                return x + cache.key_cache[0] + cache.value_cache[0]
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+                self.subcache = SubModelCache()
+
+            def forward(self, x, cache):
+                return self.sub(x, self.subcache(cache))
+
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.ones((5, 6)), torch.ones((5, 6)) + 2, 0)
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x, cache)
+        self.assertNotEmpty(y)
+
+        cache2 = transformers.cache_utils.DynamicCache()
+        cache2.update(torch.ones((6, 6)), torch.ones((6, 6)) + 2, 0)
+
+        inputs = [
+            ((torch.randn((5, 6)), cache), {}),
+            ((torch.randn((6, 6)), cache2), {}),
+        ]
+
+        expected_dyn_shapes = "(({0: DYN}, [[{0: DYN}], [{0: DYN}]]), {})"
+        diag = infer_shape_type_from_execution(model, inputs)
+        dyn_shapes = diag.guess_dynamic_shapes()
+        got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(expected_dyn_shapes, got)
+
+        expected = [
+            ((0, torch.float32),),
+            ((0, torch.float32),),
+            ((0, torch.float32), (0, torch.float32)),
+        ]
+        c_schema = [
+            "(Tensor x, Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
+            "(Tensor x, Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
+            "(Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor[]",
+        ]
+        for iexp, obj, esch in zip(expected, diag, c_schema):
+            mapping = obj.build_shape_mapping_indices()
+            self.assertEqual(iexp, mapping)
+            sch = obj.build_c_schema()
+            self.assertEqual(esch, sch)
+
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.ALWAYS,
+            quiet=0,
+            bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+
+        c_schema = [
+            "torch.ops.diag_lib.C_Model.default",
+            "torch.ops.diag_lib.C_Model_sub.default",
+            "torch.ops.diag_lib.C_Model_subcache.default",
+        ]
+        for obj, esch in zip(diag, c_schema):
+            ep = obj.fx
+            self.assertIn(esch, str(ep))
 
 
 if __name__ == "__main__":
