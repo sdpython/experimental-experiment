@@ -9454,11 +9454,49 @@ def aten_tril(
 
 
 def aten_truediv(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "truediv",
 ) -> T:
     "truediv"
+    assert (not isinstance(x, str) or g.has_type(x)) and (
+        not isinstance(y, str) or g.has_type(y)
+    ), f"Missing types for {x!r} and {y!r}{g.get_debug_msg()}"
+    itypes = {TensorProto.INT32, TensorProto.INT64, TensorProto.UINT32, TensorProto.UINT64}
+    if (isinstance(x, int) or g.get_type(x) in itypes) and (
+        isinstance(y, int) or g.get_type(y) in itypes
+    ):
+        # The division needs to
+        itype = g.get_type_known(outputs[0])
+        if itype is None or itype not in itypes:
+            name = f"{name}B"
+            # Let's cast, the default is float32 with torch.
+            if itype is None:
+                itype = TensorProto.FLOAT
+            dtype = tensor_dtype_to_np_dtype(itype)
+            res = g.op.Div(
+                (
+                    g.op.Cast(x, to=itype, name=name)
+                    if isinstance(x, str)
+                    else np.array(x, dtype=dtype)
+                ),
+                (
+                    g.op.Cast(y, to=itype, name=name)
+                    if isinstance(y, str)
+                    else np.array(y, dtype=dtype)
+                ),
+                outputs=outputs,
+                name=name,
+            )
+            if not sts:
+                set_type_shape_binary_op(g, outputs[0], x, y, itype=itype)
+            return res
+
     x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Div(x, y, outputs=outputs, name="truediv")
+    res = g.op.Div(x, y, outputs=outputs, name=f"{name}A")
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res

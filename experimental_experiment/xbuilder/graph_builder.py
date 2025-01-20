@@ -313,7 +313,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return obj.__name__
             if isinstance(obj, torch.export.dynamic_shapes._Dim):
                 return obj.__name__
-            if isinstance(obj, torch.SymInt):
+            if isinstance(obj, (torch.SymInt, torch.SymFloat)):
                 if isinstance(obj.node, str):
                     return obj.node
                 i = obj.node._expr
@@ -5192,7 +5192,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         prefix = f"g{i}"
                 if prefix not in expanded_constraints:
                     expanded_constraints[prefix] = {k}
-                    expanded_constraints[k].add(prefix)
+                    if k in expanded_constraints:
+                        expanded_constraints[k].add(prefix)
                     original.add(prefix)
                     continue
                 n = f"{prefix}_{1}"
@@ -5201,7 +5202,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     i += 1
                     n = f"{prefix}_{i}"
                 expanded_constraints[n] = {k}
-                expanded_constraints[k].add(n)
+                if k in expanded_constraints:
+                    expanded_constraints[k].add(n)
                 original.add(n)
 
             replacements = rename_dynamic_dimensions(expanded_constraints, original)

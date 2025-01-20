@@ -148,7 +148,13 @@ class _GraphBuilderRuntime:
                 ttt *= s
 
         nsh[rep] = (
-            f"{'*'.join(st)}*{dt // ttt}" if dt % ttt == 0 else f"{'*'.join(st)}*{dt}/{ttt}"
+            "*".join(st)
+            if dt == ttt
+            else (
+                f"{'*'.join(st)}*{dt // ttt}"
+                if dt % ttt == 0
+                else f"{'*'.join(st)}*{dt}/{ttt}"
+            )
         )
         return tuple(nsh)
 

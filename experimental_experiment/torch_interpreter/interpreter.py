@@ -1,5 +1,6 @@
 import os
 import inspect
+import math
 import operator
 import pprint
 import types
@@ -859,6 +860,10 @@ class DynamoInterpreter:
             raise NotImplementedError(f"Unsupported function {node!r} (not implemented).")
 
         if isinstance(node.target, types.BuiltinFunctionType):
+            if node.target is math.ceil:
+                # We need to distinguish between match.ceil and torch.ceil.
+                # The output type is different.
+                return "math_ceil"
             return node.target
 
         if isinstance(node.target, self.torch._ops.OpOverload):
