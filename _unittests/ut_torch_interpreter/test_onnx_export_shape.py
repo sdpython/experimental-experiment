@@ -1,7 +1,7 @@
 import unittest
 from typing import Any, List, Optional
 import onnx
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, requires_torch
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -52,6 +52,7 @@ class TestOnnxExportShape(ExtTestCase):
             )
         return filename
 
+    @requires_torch("2.6", "torch.export.Dim.AUTO")
     def test_shape_DYN(self):
         import torch
 
@@ -97,6 +98,7 @@ class TestOnnxExportShape(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
+    @requires_torch("2.6", "torch.export.Dim.AUTO")
     def test_shape_reshape(self):
         import torch
 
@@ -135,6 +137,7 @@ class TestOnnxExportShape(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
+    @requires_torch("2.6", "torch.export.Dim.AUTO")
     def test_output_name(self):
         import torch
 
@@ -156,6 +159,46 @@ class TestOnnxExportShape(ExtTestCase):
         onx = onnx.load(model_path)
         self.assertEqual(len(onx.graph.output[0].name), 1)
         self.assertEqual(onx.graph.output[0].name, "Y")
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @requires_torch("2.6", "torch.export.Dim.AUTO")
+    def test_shape_named_dynamic_shapes(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv1d(16, 32, 1)
+
+            def forward(self, x):
+                return self.conv(x) + torch.tensor([1], dtype=x.dtype)
+
+        model = Model()
+        xs = (torch.randn((2, 16, 24)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_shape_DYN",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: "num_audios", 1: "num_frames", 2: "num_last"}},
+        )
+        onx = onnx.load(model_path)
+        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
+        self.assertEqual(shape_x, ["num_audios", "num_frames", "num_last"])
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]

@@ -275,9 +275,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     ZERO = np.array([0], dtype=np.int64)
 
     class ShapeConstant:
-        """
-        Wraps a constant shape even if the input producing the shape is not.
-        """
+        """Wraps a constant shape even if the input producing the shape is not."""
 
         def __init__(self, name: str, shape: Tuple[int, ...], node: NodeProto):
             self.name = name
@@ -291,15 +289,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
     class WrapSym:
-        """
-        Wraps a symbolic int (a dimension for example).
-        """
+        """Wraps a symbolic int (a dimension for example)."""
 
         def __init__(self, sym: Union["torch.SymInt", "torch.SymFloat"]):  # noqa: F821
-            self.sym = sym
-            assert isinstance(sym, str) or hasattr(
-                sym, "node"
-            ), f"Missing attribute node for type {type(sym)}"
+            if isinstance(sym, GraphBuilder.WrapDim):
+                self.sym = sym.name
+            else:
+                assert isinstance(sym, str) or hasattr(
+                    sym, "node"
+                ), f"Missing attribute node for type {type(sym)}"
+                self.sym = sym
 
         def __repr__(self) -> str:
             return f"WrapSym({self._dynamic_to_str(self.sym)})"
@@ -321,6 +320,15 @@ class GraphBuilder(_GraphBuilderRuntime):
                     return str(i)
                 return None
             raise AssertionError(f"Unexpected type {type(obj)} to convert into string")
+
+    class WrapDim:
+        """Wraps a string considered as a ``torch.export.Dim``."""
+
+        def __init__(self, name: str):
+            self.name = name
+
+        def __repr__(self) -> str:
+            return f"WrapDim({self.name!r})"
 
     class InitializerInfo:
         """
@@ -557,6 +565,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if isinstance(dynamic_shapes, torch.export.dynamic_shapes._Dim):
             return dynamic_shapes
+        if isinstance(dynamic_shapes, str):
+            # Not allowed by pytorch but allowed here.
+            return cls.WrapDim(dynamic_shapes)
         if not dynamic_shapes:
             return dynamic_shapes
         if unique_names is None:
@@ -610,6 +621,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.make_dynamic_object(
                     _v.__name__,
                     self.torch.SymInt(_v.__name__),
+                    axis=_k,
+                    input_name=input_name,
+                )
+            elif isinstance(_v, self.WrapDim):
+                self.make_dynamic_object(
+                    _v.name,
+                    self.torch.SymInt(_v.name),
                     axis=_k,
                     input_name=input_name,
                 )
@@ -1572,17 +1590,21 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
     def register_dynamic_objects_from_shape(self, shape: DYNAMIC_SHAPE):
-        """
-        Registers all the dynamic objects required in this shape.
-        """
+        """Registers all the dynamic objects required in this shape."""
         for dim in shape:
             if isinstance(dim, str):
                 self.register_dynamic_objects_from_dim(dim)
 
     def register_dynamic_objects_from_dim(self, dim: str):
-        """
-        Registers all the dynamic objects required in a dimension.
-        """
+        """Registers all the dynamic objects required in a dimension."""
+        if isinstance(dim, self.WrapDim):
+            token = dim.name
+            if token not in self.dynamic_objects:
+                self.add_dynamic_object(token, token)
+            if dim not in self.dynamic_objects:
+                self.add_dynamic_object(dim, dim)
+            return
+
         assert isinstance(
             dim, str
         ), f"type(dim)={type(dim)} must be a str{self.get_debug_msg()}"
@@ -2698,10 +2720,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert not isinstance(
             value, self.torch.export.dynamic_shapes._Dim
         ), f"Unexpected dimension type {type(value)} for key={key!r}{self.get_debug_msg()}"
-
-        self.dynamic_objects[key] = (
+        keykey = key.name if isinstance(key, self.WrapDim) else key
+        self.dynamic_objects[keykey] = (
             self.WrapSym(value)
-            if isinstance(value, (self.torch.SymInt, self.torch.SymFloat))
+            if isinstance(value, (self.torch.SymInt, self.torch.SymFloat, self.WrapDim))
             else value
         )
 
@@ -2712,7 +2734,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self._dynamic_alias[key] = dyndim.__name__
 
         if parse:
-            self.register_dynamic_objects_from_dim(key)
+            self.register_dynamic_objects_from_dim(keykey)
         elif check_tokens:
             tokens = parse_expression_tokens(key)
             for t in tokens:
@@ -2857,12 +2879,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             return tuple(int(i) for i in shape)
         new_shape = []
         for dim, d in enumerate(shape):
-            if isinstance(d, (self.torch.SymInt, str)):
+            if isinstance(d, (self.torch.SymInt, str, self.WrapDim)):
                 dyn_name = self._get_dynamic_dimension(name, dim)
                 if dyn_name is not None:
                     if add:
                         self.add_dynamic_object(dyn_name, dyn_name, parse=True)
-                    new_shape.append(dyn_name)
+                    new_shape.append(
+                        dyn_name.name if isinstance(dyn_name, self.WrapDim) else dyn_name
+                    )
                     continue
 
                 value = self._torch_sym_int(d, add=add)
@@ -3191,6 +3215,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"Object has {type(obj)} but could not find a dynamic interpretation"
                 )
             return None
+        if isinstance(obj, self.WrapDim):
+            return obj.name
         raise AssertionError(f"Unexpected type {type(obj)} to convert into string")
 
     def _is_dynamic_dimension(self, dyn: Any) -> bool:

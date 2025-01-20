@@ -418,6 +418,27 @@ class ParameterNaming:
         return res
 
 
+def rewrite_dynamic_shapes(dynamic_shapes: Any) -> Any:
+    """
+    Dynamic shapes may be given by names (string). This function
+    replaces them with ``torch.export.Dim.DYNAMIC``.
+    """
+    if dynamic_shapes is None:
+        return dynamic_shapes
+    if isinstance(dynamic_shapes, tuple):
+        return tuple(rewrite_dynamic_shapes(_) for _ in dynamic_shapes)
+    if isinstance(dynamic_shapes, list):
+        return [rewrite_dynamic_shapes(_) for _ in dynamic_shapes]
+    if isinstance(dynamic_shapes, dict):
+        return {k: rewrite_dynamic_shapes(v) for k, v in dynamic_shapes.items()}
+    if isinstance(dynamic_shapes, str):
+        import torch
+
+        assert hasattr(torch.export.Dim, "AUTO"), "This functionality requires pytorch>=2.6."
+        return torch.export.Dim.AUTO
+    return dynamic_shapes
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -540,13 +561,16 @@ def _make_builder_interpreter(
                     f"[_make_builder_interpreter] same_signature={same_signature}, "
                     f"tracing_mode={tracing_mode}"
                 )
+
+            # Let's rewrite the dyanmic shapes in case string replaced
+            # torch.export.Dim.
             # If this step fails, try bypass_export_some_errors.
             exported_program = export_options.export(
                 mod,
                 args if isinstance(args, tuple) else (tuple() if args is None else args),
                 kwargs,
                 tracing_mode=tracing_mode,
-                dynamic_shapes=dynamic_shapes,
+                dynamic_shapes=rewrite_dynamic_shapes(dynamic_shapes),
                 same_signature=same_signature,
                 input_names=input_names,
                 verbose=verbose,
