@@ -20,6 +20,7 @@ class TestOnnxExportShape(ExtTestCase):
         strict: bool = False,
         patterns: Optional[str] = None,
         dynamic_shapes: Optional[Any] = None,
+        output_dynamic_shapes: Optional[Any] = None,
         processor: str = "CPU",
         output_names: Optional[List[str]] = None,
         constant_folding: bool = False,
@@ -52,6 +53,7 @@ class TestOnnxExportShape(ExtTestCase):
                 options=opt_options,
                 dynamic_shapes=dynamic_shapes,
                 output_names=output_names,
+                output_dynamic_shapes=output_dynamic_shapes,
             )
         return filename
 
@@ -245,6 +247,44 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqual(["Add"], [n.op_type for n in onx.graph.node])
         shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
         self.assertEqual(shape_x, ["dx", "dy"])
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @requires_torch("2.6", "torch.export.Dim.AUTO")
+    def test_rename_output_dynamic_dimension(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.nonzero(x)
+
+        model = Model()
+        xs = (torch.randn((2, 4)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_rename_output_dynamic_dimension",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: "dx", 1: "dy"}},
+            output_dynamic_shapes={"Y": {0: "numf"}},
+            output_names=["Y"],
+            optimize=True,
+            patterns="default",
+            constant_folding=True,
+            verbose=0,
+        )
+        onx = onnx.load(model_path)
+        self.assertEqual(["NonZero", "Transpose"], [n.op_type for n in onx.graph.node])
+        self.assertEqual(onx.graph.output[0].name, "Y")
+        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
+        self.assertEqual(shape_x, ["dx", "dy"])
+        shape_y = [
+            d.dim_param or d.dim_value for d in onx.graph.output[0].type.tensor_type.shape.dim
+        ]
+        self.assertEqual(shape_y, ["numf", 2])
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]

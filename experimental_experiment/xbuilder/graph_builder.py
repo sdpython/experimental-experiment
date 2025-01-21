@@ -190,6 +190,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param graph_module: only used for debugging purpose
     :param exe_path: gives information on how the :class:`torch.fx.Graph` was obtained
     :param output_names: output names
+    :param output_dynamic_shapes: same as dynamic_shapes but for the output
 
     Important attributes:
 
@@ -385,6 +386,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         graph_module: Optional["torch.fx.GraphModule"] = None,  # noqa: F821
         exe_path: str = "",
         output_names: Optional[List[str]] = None,
+        output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     ):
         import torch
 
@@ -402,7 +404,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_msg = {"EXEPATH": exe_path}
         self.dynamic_dimensions_source = {}
         self.dynamic_dimensions_source_flat = None
+        self.output_dynamic_dimensions_source_flat = None
         self.dynamic_shapes = self._pre_process_dynamic_shape(dynamic_shapes)
+        self.output_dynamic_shapes = self._pre_process_dynamic_shape(output_dynamic_shapes)
         self.dynamic_objects = {}
         self.dynamic_objects_rev = {}
         self.functions = {}
@@ -472,6 +476,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if self.dynamic_shapes:
             self._register_dynamic_object_from_dynamic_shapes()
+        if self.output_dynamic_shapes:
+            self._register_dynamic_object_from_dynamic_shapes(output=True)
 
         if isinstance(infer_shapes_options, bool):
             infer_shapes_options = (
@@ -638,16 +644,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"Unexpected type {type(_v)} for dynamic "
                     f"dimension for axis {_k}, input_name={input_name!r}, "
                     f"pos_vv={shape_dict!r}, "
-                    f"self.dynamic_shapes={self.dynamic_shapes}"
+                    f"self.dynamic_shapes={self.dynamic_shapes}, "
+                    f"self.output_dynamic_shapes={self.output_dynamic_shapes}"
                 )
 
-    def _register_dynamic_object_from_dynamic_shapes(self):
+    def _register_dynamic_object_from_dynamic_shapes(self, output: bool = False):
+        dynamic_shapes = self.output_dynamic_shapes if output else self.dynamic_shapes
         assert (
-            self.dynamic_shapes is not None
-        ), "Call this method if self.dynamic_shapes is not None"
-        self.update_dynamic_shape_when_input_name_is_defined = not isinstance(
-            self.dynamic_shapes, dict
-        )
+            dynamic_shapes is not None
+        ), f"Call this method if dynamic_shapes is not None, output={output!r}"
+        if not output:
+            self.update_dynamic_shape_when_input_name_is_defined = not isinstance(
+                dynamic_shapes, dict
+            )
         _prefixes = []
 
         def _unfold(obj, prefix=None):
@@ -686,7 +695,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return res
             raise TypeError(f"Unexpected type {type(obj)} and prefix={prefix!r}")
 
-        seq_dynamic_shapes = _unfold(self.dynamic_shapes)
+        seq_dynamic_shapes = _unfold(dynamic_shapes)
 
         for input_name_or_position, pos_vv in seq_dynamic_shapes:
             assert isinstance(
@@ -695,7 +704,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._register_dynamic_object_from_dynamic_shapes_dict(
                 input_name_or_position, pos_vv
             )
-        self.dynamic_dimensions_source_flat = _prefixes
+        if not output:
+            self.dynamic_dimensions_source_flat = _prefixes
+        else:
+            self.output_dynamic_dimensions_source_flat = _prefixes
 
     def add_stat(self, kind: str, name: str):
         """
@@ -4616,6 +4628,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"dynamic_dimensions_source_flat="
             f"{pprint.pformat(self.dynamic_dimensions_source_flat)}"
         )
+        rows.append(
+            f"output_dynamic_dimensions_source_flat="
+            f"{pprint.pformat(self.output_dynamic_dimensions_source_flat)}"
+        )
         rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
@@ -4805,6 +4821,177 @@ class GraphBuilder(_GraphBuilderRuntime):
             for node in add.node:
                 self._check_constant(node, f"{prefix}-[add]")
 
+    def _to_onnx_function(self, function_options, opsets, mask_outputs):
+        if self._debug_local_function:
+            print(f"[GraphBuilder.to_onnx] export_as_function {function_options}")
+        if self.verbose:
+            print(
+                f"[GraphBuilder-{self._hash()}.to_onnx] make_function "
+                f"{len(self.initializers_dict)} inits "
+                f"{len(self._parameter_renaming)} params"
+            )
+        assert (
+            function_options.name not in FunctionOptions.empty_names
+            and function_options.domain not in FunctionOptions.empty_names
+        ), (
+            f"Function name={function_options.name!r} cannot be empty and "
+            f"Function domain={function_options.domain!r} cannot be empty."
+        )
+        key = function_options.domain, function_options.name
+        assert key not in self.functions, (
+            f"The given name {key} is already taken by a local function"
+            f"{self.pretty_text()}"
+        )
+        if function_options.move_initializer_to_constant:
+            if self._debug_local_function:
+                print(
+                    f"[GraphBuilder.to_onnx] move_initializers_to_constant "
+                    f"{len(self.initializers_dict)}"
+                )
+            self.move_initializers_to_constant(
+                full_parameter_name=False,
+                threshold=function_options.external_threshold,
+                verbose=max(0, self.verbose - 1),
+            )
+            if self._debug_local_function:
+                print(
+                    f"[GraphBuilder.to_onnx] remaining_initializers "
+                    f"{len(self.initializers_dict)}-{sorted(self.initializers_dict)}"
+                )
+        # if self._parameter_renaming: we don't necessarily need to rename here.
+        # We better not if we want to make this function equivalent to it.
+        proto = oh.make_function(
+            function_options.domain,
+            function_options.name,
+            [i.name for i in self.inputs],
+            [o.name for mask, o in zip(mask_outputs, self.outputs) if mask],
+            self.nodes,
+            opsets,
+        )
+
+        if not function_options.return_initializer:
+            return proto
+
+        if len(self.initializers_dict) == 0 and len(self.functions) == 0:
+            res = dict(proto=proto)
+            if self.functions:
+                used_functions = self._get_used_local_functions()
+                if used_functions:
+                    res["functions"] = used_functions
+            return res
+
+        # We need to move the initializers as inputs, we sort than by decresing size
+        inits, functions = self._extend_local_function_inputs()
+        proto.input.extend(inits)
+        res = dict(
+            proto=proto,
+            initializers_name=inits,
+            initializers_dict={
+                self._parameter_renaming.get(k, k): v
+                for k, v in self.initializers_dict.items()
+                if k in set(inits)
+            },
+            initializers_renaming={
+                k: self._parameter_renaming.get(k, k)
+                for k, v in self.initializers_dict.items()
+                if k in set(inits)
+            },
+        )
+        if functions:
+            res["functions"] = [v for k, v in self.functions.items() if k in functions]
+        return res
+
+    def _update_model_with_parameter_renaming(self, model: ModelProto):
+        assert self.initializers_dict, (
+            f"Some parameters are renamed {self._parameter_renaming} "
+            f"but there is no initializer{self.get_debug_msg()}"
+        )
+        # We rename.
+        nodes_add = []
+        setp = set(self._parameter_renaming)
+        for node in self.nodes:
+
+            needs_rewrite = False
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    hidden = self._get_hidden_inputs(att.g)
+                    if hidden & setp:
+                        needs_rewrite = True
+                        # needs rewrite
+                        new_g = self._rename_inputs_in_subgraph(
+                            att.g, self._parameter_renaming
+                        )
+
+            if not needs_rewrite:
+                seti = set(node.input)
+                if not (seti & setp):
+                    nodes_add.append(node)
+                    continue
+
+            node2 = NodeProto()
+            node2.doc_string = node.doc_string
+            node2.name = node.name
+            node2.op_type = node.op_type
+            node2.domain = node.domain
+            node2.input.extend([self._parameter_renaming.get(i, i) for i in node.input])
+            node2.output.extend(node.output)
+
+            atts = []
+            for att in node.attribute:
+                if att.type != AttributeProto.GRAPH:
+                    atts.append(att)
+                    continue
+
+                new_g = self._rename_inputs_in_subgraph(att.g, self._parameter_renaming)
+                atts.append(oh.make_attribute(att.name, new_g))
+
+            node2.attribute.extend(atts)
+            nodes_add.append(node2)
+
+        model.graph.node.extend(nodes_add)
+
+        seti = set(i.name for i in self.inputs)
+        if seti & setp:
+            new_inputs = []
+            for i in self.inputs:
+                if i.name in self.setp:
+                    v = ValueInfoProto()
+                    v.ParseFromString(v.SerializeToString())
+                    v.name = self._parameter_renaming[i.name]
+                    new_inputs.append(v)
+                else:
+                    new_inputs.append(i)
+            model.graph.input.extend(new_inputs)
+        else:
+            model.graph.input.extend(self.inputs)
+
+    def _update_doc_string(
+        self,
+        large_model: bool,
+        inline: bool,
+        external_threshold: int,
+        function_options: FunctionOptions,
+        optimize: bool,
+    ) -> str:
+        doc_string = (
+            f"large_model={large_model}, inline={inline}, "
+            f"external_threshold={external_threshold}"
+            f"\n-- function_options={function_options!r}"
+        )
+        if self.constraints_:
+            doc_string += (
+                f"\n-- discovered-shape-constraints: {pprint.pformat(self.constraints_)}"
+            )
+        if self._known_value_shape:
+            filtered = {
+                k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
+            }
+            if filtered:
+                doc_string += f"\n-- known-value-shape: {self._format_dict(filtered)}"
+        return doc_string + (
+            f"\n-- optimized:{self.optimization_options!r}" if optimize else "not-optimized"
+        )
+
     def to_onnx(
         self,
         optimize: bool = True,
@@ -4877,86 +5064,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Length mismatch between mask={mask_outputs} and outputs "
                 f"{self.outputs}{self.get_debug_msg()}"
             )
+
         if function_options.export_as_function:
-            if self._debug_local_function:
-                print(f"[GraphBuilder.to_onnx] export_as_function {function_options}")
-            if self.verbose:
-                print(
-                    f"[GraphBuilder-{self._hash()}.to_onnx] make_function "
-                    f"{len(self.initializers_dict)} inits "
-                    f"{len(self._parameter_renaming)} params"
-                )
-            assert (
-                function_options.name not in FunctionOptions.empty_names
-                and function_options.domain not in FunctionOptions.empty_names
-            ), (
-                f"Function name={function_options.name!r} cannot be empty and "
-                f"Function domain={function_options.domain!r} cannot be empty."
-            )
-            key = function_options.domain, function_options.name
-            assert key not in self.functions, (
-                f"The given name {key} is already taken by a local function"
-                f"{self.pretty_text()}"
-            )
-            if function_options.move_initializer_to_constant:
-                if self._debug_local_function:
-                    print(
-                        f"[GraphBuilder.to_onnx] move_initializers_to_constant "
-                        f"{len(self.initializers_dict)}"
-                    )
-                self.move_initializers_to_constant(
-                    full_parameter_name=False,
-                    threshold=function_options.external_threshold,
-                    verbose=max(0, self.verbose - 1),
-                )
-                if self._debug_local_function:
-                    print(
-                        f"[GraphBuilder.to_onnx] remaining_initializers "
-                        f"{len(self.initializers_dict)}-{sorted(self.initializers_dict)}"
-                    )
-            # if self._parameter_renaming: we don't necessarily need to rename here.
-            # We better not if we want to make this function equivalent to it.
-            proto = oh.make_function(
-                function_options.domain,
-                function_options.name,
-                [i.name for i in self.inputs],
-                [o.name for mask, o in zip(mask_outputs, self.outputs) if mask],
-                self.nodes,
-                opsets,
-            )
+            # export as a function
+            return self._to_onnx_function(function_options, opsets, mask_outputs)
 
-            if not function_options.return_initializer:
-                return proto
-
-            if len(self.initializers_dict) == 0 and len(self.functions) == 0:
-                res = dict(proto=proto)
-                if self.functions:
-                    used_functions = self._get_used_local_functions()
-                    if used_functions:
-                        res["functions"] = used_functions
-                return res
-
-            # We need to move the initializers as inputs, we sort than by decresing size
-            inits, functions = self._extend_local_function_inputs()
-            proto.input.extend(inits)
-            res = dict(
-                proto=proto,
-                initializers_name=inits,
-                initializers_dict={
-                    self._parameter_renaming.get(k, k): v
-                    for k, v in self.initializers_dict.items()
-                    if k in set(inits)
-                },
-                initializers_renaming={
-                    k: self._parameter_renaming.get(k, k)
-                    for k, v in self.initializers_dict.items()
-                    if k in set(inits)
-                },
-            )
-            if functions:
-                res["functions"] = [v for k, v in self.functions.items() if k in functions]
-            return res
-
+        # export as a model
         if self.ir_version:
             ir_version = self.ir_version
         elif "" in self.opsets:
@@ -4972,6 +5085,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}.time_evaluation_constants_] "
                 f"{self.time_evaluation_constants_}"
             )
+
         # building the model
         model = ModelProto()
         model.graph.CopyFrom(GraphProto())
@@ -4980,68 +5094,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         # rename parameters following the original model names if possible
         if self._parameter_renaming:
-            assert self.initializers_dict, (
-                f"Some parameters are renamed {self._parameter_renaming} "
-                f"but there is no initializer{self.get_debug_msg()}"
-            )
-            # We rename.
-            nodes_add = []
-            setp = set(self._parameter_renaming)
-            for node in self.nodes:
-
-                needs_rewrite = False
-                for att in node.attribute:
-                    if att.type == AttributeProto.GRAPH:
-                        hidden = self._get_hidden_inputs(att.g)
-                        if hidden & setp:
-                            needs_rewrite = True
-                            # needs rewrite
-                            new_g = self._rename_inputs_in_subgraph(
-                                att.g, self._parameter_renaming
-                            )
-
-                if not needs_rewrite:
-                    seti = set(node.input)
-                    if not (seti & setp):
-                        nodes_add.append(node)
-                        continue
-
-                node2 = NodeProto()
-                node2.doc_string = node.doc_string
-                node2.name = node.name
-                node2.op_type = node.op_type
-                node2.domain = node.domain
-                node2.input.extend([self._parameter_renaming.get(i, i) for i in node.input])
-                node2.output.extend(node.output)
-
-                atts = []
-                for att in node.attribute:
-                    if att.type != AttributeProto.GRAPH:
-                        atts.append(att)
-                        continue
-
-                    new_g = self._rename_inputs_in_subgraph(att.g, self._parameter_renaming)
-                    atts.append(oh.make_attribute(att.name, new_g))
-
-                node2.attribute.extend(atts)
-                nodes_add.append(node2)
-
-            model.graph.node.extend(nodes_add)
-
-            seti = set(i.name for i in self.inputs)
-            if seti & setp:
-                new_inputs = []
-                for i in self.inputs:
-                    if i.name in self.setp:
-                        v = ValueInfoProto()
-                        v.ParseFromString(v.SerializeToString())
-                        v.name = self._parameter_renaming[i.name]
-                        new_inputs.append(v)
-                    else:
-                        new_inputs.append(i)
-                model.graph.input.extend(new_inputs)
-            else:
-                model.graph.input.extend(self.inputs)
+            self._update_model_with_parameter_renaming(model)
         else:
             model.graph.node.extend(self.nodes)
             model.graph.input.extend(self.inputs)
@@ -5075,23 +5128,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._add_shape_information(model)
 
         # final doc_string
-        doc_string = (
-            f"large_model={large_model}, inline={inline}, "
-            f"external_threshold={external_threshold}"
-            f"\n-- function_options={function_options!r}"
-        )
-        if self.constraints_:
-            doc_string += (
-                f"\n-- discovered-shape-constraints: {pprint.pformat(self.constraints_)}"
-            )
-        if self._known_value_shape:
-            filtered = {
-                k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
-            }
-            if filtered:
-                doc_string += f"\n-- known-value-shape: {self._format_dict(filtered)}"
-        model.doc_string += doc_string + (
-            f"\n-- optimized:{self.optimization_options!r}" if optimize else "not-optimized"
+        model.doc_string += self._update_doc_string(
+            large_model, inline, external_threshold, function_options, optimize
         )
         assert (
             not optimize
@@ -5153,12 +5191,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             among each others, if True, the function renames as much as possible by using
             the names the user provides
         """
-        if update_dim_names:
-            if self.dynamic_dimensions_source_flat:
+
+        def _update(dd_flat, names):
+            if dd_flat:
                 # Let's update the constraints.
-                for dyn_name, iname in zip(
-                    self.dynamic_dimensions_source_flat, self.input_names
-                ):
+                for dyn_name, iname in zip(dd_flat, names):
                     # something like
                     if isinstance(dyn_name, str):
                         assert dyn_name == iname, (
@@ -5185,6 +5222,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                                 else:
                                     self.constraints_[sh] = {dim_name}
 
+        if update_dim_names:
+            _update(self.dynamic_dimensions_source_flat, self.input_names)
+            _update(self.output_dynamic_dimensions_source_flat, self.output_names)
+
             # Before calling rename_dynamic_dimension, we expand the list.
             expanded_constraints = {}
             for k, v in self.constraints_.items():
@@ -5196,7 +5237,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     expanded_constraints[i] |= v
                     expanded_constraints[i] |= {k}
 
-            # let's rename unknown dimension with basic rules
+            # let's rename unknown input dimension with basic rules.
             implicit_names = ["batch", "channel"]
             original = set()
             for k, v in self.dynamic_dimensions_source.items():
@@ -5234,6 +5275,32 @@ class GraphBuilder(_GraphBuilderRuntime):
                     expanded_constraints[k].add(n)
                 original.add(n)
 
+            # Let's process the output constraints.
+            assert isinstance(self.output_dynamic_shapes, dict), (
+                f"Not implemented when output_dynamic_shapes is not a dictionary, "
+                f"output_dynamic_shapes={self.output_dynamic_shapes}."
+            )
+            for k, v in self.output_dynamic_shapes.items():
+                if not self.has_shape(k):
+                    continue
+                shape = self.get_shape(k)
+                for axis, dim in v.items():
+                    assert isinstance(dim, self.WrapDim), (
+                        f"Unexpected type {type(dim)} in output_dynamic_shapes="
+                        f"{self.output_dynamic_shapes}"
+                    )
+                    current_name = shape[axis]
+                    new_name = dim.name
+                    if current_name == new_name:
+                        continue
+                    if new_name not in expanded_constraints:
+                        expanded_constraints[new_name] = set()
+                    expanded_constraints[new_name].add(current_name)
+                    if current_name not in expanded_constraints:
+                        expanded_constraints[current_name] = set()
+                    expanded_constraints[current_name].add(new_name)
+
+            # once everything is defined, the rewriting can begin.
             replacements = rename_dynamic_dimensions(expanded_constraints, original)
             if self.verbose:
                 print(

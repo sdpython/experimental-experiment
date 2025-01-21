@@ -461,6 +461,7 @@ def _make_builder_interpreter(
     parameter_naming: Optional[Callable] = None,
     module_name: Optional[str] = None,
     output_names: Optional[List[str]] = None,
+    output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
 ) -> Tuple[
     Union["torch.export.ExportedProgram", "torch.fx.GraphModule"],  # noqa: F821
     GraphBuilder,
@@ -495,6 +496,7 @@ def _make_builder_interpreter(
     :param parameter_naming: a function which returns a parameter name in the onnx graph
     :param module_name: name of the module, to help retrieve the parameter name
     :param output_names: output names
+    :param output_dynamic_shapes: same as dynamic shapes but for the outputs
     :return: onnx model, interpreter, graph builder, mask_outputs
     """
 
@@ -683,6 +685,7 @@ def _make_builder_interpreter(
         check_empty_source=True,
         graph_module=graph_module,
         exe_path=f"{exe_path}-export_options={export_options}",
+        output_dynamic_shapes=output_dynamic_shapes,
     )
 
     def retrieve(
@@ -869,6 +872,7 @@ def to_onnx(
     ] = False,
     function_options: Optional[FunctionOptions] = None,
     output_names: Optional[List[str]] = None,
+    output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -908,6 +912,7 @@ def to_onnx(
     :param function_options: to specify what to do with the initializers in local functions,
         add them as constants or inputs
     :param output_names: to rename the output names
+    :param output_dynamic_shapes: same as *dynamic_shapes* but for the output
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -950,6 +955,7 @@ def to_onnx(
         optimize_submodules=optimize,
         function_options=function_options,
         module_name="",
+        output_dynamic_shapes=output_dynamic_shapes,
     )
 
     add_stats = {}
