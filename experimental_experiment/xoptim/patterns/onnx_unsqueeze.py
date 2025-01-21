@@ -6,7 +6,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SqueezeUnsqueezePattern(PatternOptimization):
-    """Replaces the sequence Squeeze, Unsqueeze by the Identity."""
+    """Replaces the sequence Squeeze, Unsqueeze by Identity."""
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
@@ -22,7 +22,7 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         if g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         node_before = g.node_before(node.input[0])
-        if node_before.op_type != "Squeeze" or node_before.domain != "":
+        if node_before is None or node_before.op_type != "Squeeze" or node_before.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         axes1 = g.get_computed_constant(node_before.input[1])
         axes2 = g.get_computed_constant(node.input[1])
