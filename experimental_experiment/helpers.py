@@ -15,7 +15,12 @@ def size_type(dtype: Any) -> int:
     """Returns the element size for an element type."""
     if isinstance(dtype, int):
         # It is a TensorProto.DATATYPE
-        if dtype in {TensorProto.DOUBLE, TensorProto.INT64, TensorProto.UINT64}:
+        if dtype in {
+            TensorProto.DOUBLE,
+            TensorProto.INT64,
+            TensorProto.UINT64,
+            TensorProto.COMPLEX64,
+        }:
             return 8
         if dtype in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
             return 4
@@ -28,6 +33,8 @@ def size_type(dtype: Any) -> int:
             return 2
         if dtype in {TensorProto.INT8, TensorProto.UINT8, TensorProto.BOOL}:
             return 1
+        if dtype in {TensorProto.COMPLEX128}:
+            return 16
         raise AssertionError(f"Unable to return the element size for type {dtype}")
 
     if dtype == np.float64 or dtype == np.int64:
