@@ -5146,7 +5146,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 sum(np.prod(t.dims) * size_type(t.data_type) for t in initializers)
             ),
             size_large_initializers=int(
-                sum(np.prod(t.dims) * size_type(t.data_type) for t in large_initializers)
+                sum(np.prod(t.shape) * size_type(t.dtype) for t in large_initializers.values())
             ),
             n_nodes=len(model.graph.node),
             n_nodes_other_domain=len([n for n in model.graph.node if n.domain != ""]),
