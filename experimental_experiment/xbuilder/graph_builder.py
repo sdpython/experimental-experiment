@@ -43,6 +43,7 @@ from ..helpers import (
     pretty_onnx,
     rename_dynamic_dimensions,
     rename_dynamic_expression,
+    size_type,
     string_signature,
     string_type,
     tensor_dtype_to_np_dtype,
@@ -5139,8 +5140,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             external_threshold=external_threshold,
             function_options=function_options,
             optimize=optimize,
-            n_initializes=len(initializers),
+            n_initializers=len(initializers),
             n_large_initializers=len(large_initializers),
+            size_initializers=int(
+                sum(np.prod(t.dims) * size_type(t.data_type) for t in initializers)
+            ),
+            size_large_initializers=int(
+                sum(np.prod(t.dims) * size_type(t.data_type) for t in large_initializers)
+            ),
+            n_nodes=len(model.graph.node),
+            n_nodes_other_domain=len([n for n in model.graph.node if n.domain != ""]),
             mask_outputs=mask_outputs,
         )
         assert (

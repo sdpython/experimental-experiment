@@ -11,6 +11,25 @@ from onnx.helper import (
 from onnx.numpy_helper import from_array as onnx_from_array
 
 
+def size_type(dtype: Any) -> int:
+    """Returns the element size for an element type."""
+    # It is a TensorProto.DATATYPE
+    if dtype in {TensorProto.DOUBLE, TensorProto.INT64, TensorProto.UINT64}:
+        return 8
+    if dtype in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
+        return 4
+    if dtype in {
+        TensorProto.FLOAT16,
+        TensorProto.BFLOAT16,
+        TensorProto.INT16,
+        TensorProto.UINT16,
+    }:
+        return 2
+    if dtype in {TensorProto.INT8, TensorProto.UINT8, TensorProto.BOOL}:
+        return 1
+    raise AssertionError(f"Unable to return the element size for type {dtype}")
+
+
 def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:
     """
     Converts a TensorProto's data_type to corresponding numpy dtype.
