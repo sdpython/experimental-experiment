@@ -1160,16 +1160,26 @@ def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # 
                 "ConstantOfShape",
             ):
                 cst = self.get_constant(node.input[1], computed_value=True)
-        assert isinstance(cst, np.ndarray), (
-            f"Unexpected type {type(cst)} for {node.input[1]!r}, "
-            f"unable to set type and shape for node {node.op_type} "
-            f"with name={node.name!r}{self.get_debug_msg()}"
-        )
-        iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
-        shape = list(self.get_shape(node.input[0]))
-        for i in iaxes:
-            shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
-        self.set_shape(node.output[0], tuple(shape))
+
+        if isinstance(cst, np.ndarray):
+            iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+            shape = list(self.get_shape(node.input[0]))
+            for i in iaxes:
+                shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
+            self.set_shape(node.output[0], tuple(shape))
+        elif isinstance(cst, self.torch.Tensor):
+            with self.maybe_disable_fake_tensor_mode():
+                iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+                shape = list(self.get_shape(node.input[0]))
+                for i in iaxes:
+                    shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
+                self.set_shape(node.output[0], tuple(shape))
+        else:
+            raise AssertionError(
+                f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                f"unable to set type and shape for node {node.op_type} "
+                f"with name={node.name!r}{self.get_debug_msg()}"
+            )
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + cst.size)

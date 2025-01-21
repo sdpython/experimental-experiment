@@ -7850,6 +7850,7 @@ def aten_scalar_tensor(
     layout: str = "",
     device: Optional["torch.device"] = None,  # noqa: F821
     pin_memory=None,
+    name: str = "scalar_tensor",
 ) -> T:
     """constant"""
     import torch
@@ -7857,14 +7858,23 @@ def aten_scalar_tensor(
     assert layout in (
         None,
         torch.strided,
-    ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
+    ), f"scalar_tensor: not implemented for layout={layout!r}{g.get_debug_msg()}"
     assert pin_memory in (
         None,
         False,
-    ), f"not implemented for pin_memory={pin_memory!r} {g.get_debug_msg()}"
+    ), f"scalar_tensor: not implemented for pin_memory={pin_memory!r}{g.get_debug_msg()}"
+
+    if isinstance(s, str):
+        # a scalar is turned into a tensor which should already be the case.
+        if dtype is None:
+            return g.op.Identity(s, outputs=outputs, name=name)
+        # We need to cast.
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        return g.op.Cast(s, to=itype, outputs=outputs, name=name)
+
     assert isinstance(
         s, (float, int)
-    ), f"not implemented for type(s)={type(s)!r}{g.get_debug_msg()}"
+    ), f"scalar_tensor: not implemented for type(s)={type(s)!r}, s={s!r}{g.get_debug_msg()}"
     if dtype is None:
         if g.has_type(outputs[0]):
             dtype = tensor_dtype_to_np_dtype(g.get_type(outputs[0]))
@@ -7872,7 +7882,7 @@ def aten_scalar_tensor(
             np_dtype = np.float32  # if isinstance(s, float) else np.int64
     else:
         np_dtype = tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype))
-    return g.op.Identity(np.array(s, dtype=np_dtype), outputs=outputs)
+    return g.op.Identity(np.array(s, dtype=np_dtype), outputs=outputs, name=name)
 
 
 def aten_select_int(

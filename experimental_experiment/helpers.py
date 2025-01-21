@@ -164,6 +164,12 @@ def string_type(
         return "SymInt"
     if isinstance(obj, torch.SymFloat):
         return "SymFloat"
+    if isinstance(obj, torch._subclasses.fake_tensor.FakeTensor):
+        i = torch_dtype_to_onnx_dtype(obj.dtype)
+        prefix = ("G" if obj.get_device() >= 0 else "C") if with_device else ""
+        if not with_shape:
+            return f"{prefix}F{i}r{len(obj.shape)}"
+        return f"{prefix}F{i}s{'x'.join(map(str, obj.shape))}"
     if isinstance(obj, torch.Tensor):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape, with_device=with_device)
