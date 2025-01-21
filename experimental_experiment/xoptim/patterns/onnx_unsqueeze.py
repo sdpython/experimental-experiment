@@ -19,10 +19,15 @@ class SqueezeUnsqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Unsqueeze" or node.domain != "":
             return self.none()
-        if g.is_used_more_than_once(node.input[0]):
+        if g.is_used_more_than_once(node.input[0]) or len(node.input) < 2:
             return self.none(node, inspect.currentframe().f_lineno)
         node_before = g.node_before(node.input[0])
-        if node_before is None or node_before.op_type != "Squeeze" or node_before.domain != "":
+        if (
+            node_before is None
+            or node_before.op_type != "Squeeze"
+            or node_before.domain != ""
+            or len(node_before.input) < 2
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
         axes1 = g.get_computed_constant(node_before.input[1])
         axes2 = g.get_computed_constant(node.input[1])
