@@ -1226,16 +1226,25 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
                 "ConstantOfShape",
             ):
                 cst = self.get_constant(node.input[1], computed_value=True)
-        assert isinstance(cst, np.ndarray), (
-            f"Unexpected type {type(cst)} for {node.input[1]!r}, "
-            f"unable to set type and shape for node {node.op_type} "
-            f"with name={node.name!r}{self.get_debug_msg()}"
-        )
-        iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
-        shape = list(self.get_shape(node.input[0]))
-        iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
-        new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
-        self.set_shape(node.output[0], new_shape)
+        if isinstance(cst, np.ndarray):
+            iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
+            shape = list(self.get_shape(node.input[0]))
+            iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
+            new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
+            self.set_shape(node.output[0], new_shape)
+        elif isinstance(cst, self.torch.Tensor):
+            with self.maybe_disable_fake_tensor_mode():
+                iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
+                shape = list(self.get_shape(node.input[0]))
+                iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
+                new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
+                self.set_shape(node.output[0], new_shape)
+        else:
+            raise AssertionError(
+                f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                f"unable to set type and shape for node {node.op_type} "
+                f"with name={node.name!r}{self.get_debug_msg()}"
+            )
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) - cst.size)
