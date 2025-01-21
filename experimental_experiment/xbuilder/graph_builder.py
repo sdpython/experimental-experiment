@@ -5276,29 +5276,32 @@ class GraphBuilder(_GraphBuilderRuntime):
                 original.add(n)
 
             # Let's process the output constraints.
-            assert isinstance(self.output_dynamic_shapes, dict), (
+            assert self.output_dynamic_shapes is None or isinstance(
+                self.output_dynamic_shapes, dict
+            ), (
                 f"Not implemented when output_dynamic_shapes is not a dictionary, "
                 f"output_dynamic_shapes={self.output_dynamic_shapes}."
             )
-            for k, v in self.output_dynamic_shapes.items():
-                if not self.has_shape(k):
-                    continue
-                shape = self.get_shape(k)
-                for axis, dim in v.items():
-                    assert isinstance(dim, self.WrapDim), (
-                        f"Unexpected type {type(dim)} in output_dynamic_shapes="
-                        f"{self.output_dynamic_shapes}"
-                    )
-                    current_name = shape[axis]
-                    new_name = dim.name
-                    if current_name == new_name:
+            if self.output_dynamic_shapes is not None:
+                for k, v in self.output_dynamic_shapes.items():
+                    if not self.has_shape(k):
                         continue
-                    if new_name not in expanded_constraints:
-                        expanded_constraints[new_name] = set()
-                    expanded_constraints[new_name].add(current_name)
-                    if current_name not in expanded_constraints:
-                        expanded_constraints[current_name] = set()
-                    expanded_constraints[current_name].add(new_name)
+                    shape = self.get_shape(k)
+                    for axis, dim in v.items():
+                        assert isinstance(dim, self.WrapDim), (
+                            f"Unexpected type {type(dim)} in output_dynamic_shapes="
+                            f"{self.output_dynamic_shapes}"
+                        )
+                        current_name = shape[axis]
+                        new_name = dim.name
+                        if current_name == new_name:
+                            continue
+                        if new_name not in expanded_constraints:
+                            expanded_constraints[new_name] = set()
+                        expanded_constraints[new_name].add(current_name)
+                        if current_name not in expanded_constraints:
+                            expanded_constraints[current_name] = set()
+                        expanded_constraints[current_name].add(new_name)
 
             # once everything is defined, the rewriting can begin.
             replacements = rename_dynamic_dimensions(expanded_constraints, original)
