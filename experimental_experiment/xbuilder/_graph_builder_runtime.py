@@ -90,9 +90,7 @@ class _GraphBuilderRuntime:
     def _apply_reshape_to_shape(
         self, input_shape: DYNAMIC_SHAPE, new_shape: STATIC_SHAPE
     ) -> DYNAMIC_SHAPE:
-        """
-        Returns the shape of the output of a node Reshape.
-        """
+        """Returns the shape of the output of a node Reshape."""
         assert isinstance(
             input_shape, tuple
         ), f"unexpected type {type(input_shape)} for input_shape."
@@ -115,6 +113,7 @@ class _GraphBuilderRuntime:
 
         if -1 not in new_shape:
             return new_shape
+
         if all_int(input_shape):
             size = int(np.prod(input_shape))
             div = np.prod([i for i in new_shape if i != -1])
@@ -126,41 +125,38 @@ class _GraphBuilderRuntime:
                 # common case
                 return (1, "*".join(map(str, input_shape)))
 
-        if len(input_shape) == len(new_shape):
-            # It is easier to handle.
-            res = []
-            i_1 = None
-            a_int = True
-            b_int = True
-            for a, b in zip(input_shape, new_shape):
-                if not isinstance(a, int):
-                    a_int = False
-                if isinstance(b, int):
-                    if b >= 0:
-                        res.append(b)
-                    else:
-                        i_1 = len(res)
-                        res.append(None)
-                else:
-                    res.append(b)
-                    b_int = False
-            if i_1 is not None:
-                if a_int:
-                    size = int(np.prod(input_shape))
-                    if b_int:
-                        nz = -int(np.prod(new_shape)) // size
-                        res[i_1] = nz
-                    else:
-                        name = "*".join([str(x) for x in res if x is not None])
-                        res[i_1] = f"{name}/{size}"
-                else:
-                    an = "*".join(map(str, input_shape))
-                    name = "*".join([str(x) for x in res if x is not None])
-                    res[i_1] = f"{an}/({name})"
-            return tuple(res)
+        st = []
+        dt = 1
+        for s in input_shape:
+            if isinstance(s, str):
+                st.append(s)
+            else:
+                dt *= s
 
-        # The shape is dynamic and cannot be set.
-        return None
+        rep = None
+        nsh = []
+        ttt = 1
+        for i, s in enumerate(new_shape):
+            if s == -1:
+                rep = i
+                nsh.append(None)
+            elif s == 0:
+                nsh.append(input_shape[i])
+                ttt *= input_shape[i]
+            else:
+                nsh.append(s)
+                ttt *= s
+
+        nsh[rep] = (
+            "*".join(st)
+            if dt == ttt
+            else (
+                f"{'*'.join(st)}*{dt // ttt}"
+                if dt % ttt == 0
+                else f"{'*'.join(st)}*{dt}/{ttt}"
+            )
+        )
+        return tuple(nsh)
 
     def _apply_transpose(
         self,

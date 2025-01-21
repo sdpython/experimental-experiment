@@ -11,6 +11,70 @@ from onnx.helper import (
 from onnx.numpy_helper import from_array as onnx_from_array
 
 
+def size_type(dtype: Any) -> int:
+    """Returns the element size for an element type."""
+    if isinstance(dtype, int):
+        # It is a TensorProto.DATATYPE
+        if dtype in {
+            TensorProto.DOUBLE,
+            TensorProto.INT64,
+            TensorProto.UINT64,
+            TensorProto.COMPLEX64,
+        }:
+            return 8
+        if dtype in {TensorProto.FLOAT, TensorProto.INT32, TensorProto.UINT32}:
+            return 4
+        if dtype in {
+            TensorProto.FLOAT16,
+            TensorProto.BFLOAT16,
+            TensorProto.INT16,
+            TensorProto.UINT16,
+        }:
+            return 2
+        if dtype in {TensorProto.INT8, TensorProto.UINT8, TensorProto.BOOL}:
+            return 1
+        if dtype in {TensorProto.COMPLEX128}:
+            return 16
+        raise AssertionError(f"Unable to return the element size for type {dtype}")
+
+    if dtype == np.float64 or dtype == np.int64:
+        return 8
+    if dtype == np.float32 or dtype == np.float32:
+        return 4
+    if dtype == np.float16 or dtype == np.int16:
+        return 2
+    if dtype == np.int8 or dtype == np.uint8:
+        return 1
+    if hasattr(np, "uint64"):
+        # it fails on mac
+        if dtype == np.uint64:
+            return 8
+        if dtype == np.uint32:
+            return 4
+        if dtype == np.uint16:
+            return 2
+
+    import torch
+
+    if dtype in {torch.float64, torch.int64}:
+        return 8
+    if dtype in {torch.float32, torch.int32}:
+        return 4
+    if dtype in {torch.float16, torch.int16, torch.bfloat16}:
+        return 2
+    if dtype in {torch.int8, torch.uint8, torch.bool}:
+        return 1
+    if hasattr(torch, "uint64"):
+        # it fails on mac
+        if dtype in {torch.uint64}:
+            return 8
+        if dtype in {torch.uint32}:
+            return 4
+        if dtype in {torch.uint16}:
+            return 2
+    raise AssertionError(f"Unexpected dtype={dtype}")
+
+
 def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:
     """
     Converts a TensorProto's data_type to corresponding numpy dtype.
@@ -164,6 +228,12 @@ def string_type(
         return "SymInt"
     if isinstance(obj, torch.SymFloat):
         return "SymFloat"
+    if isinstance(obj, torch._subclasses.fake_tensor.FakeTensor):
+        i = torch_dtype_to_onnx_dtype(obj.dtype)
+        prefix = ("G" if obj.get_device() >= 0 else "C") if with_device else ""
+        if not with_shape:
+            return f"{prefix}F{i}r{len(obj.shape)}"
+        return f"{prefix}F{i}s{'x'.join(map(str, obj.shape))}"
     if isinstance(obj, torch.Tensor):
         if with_min_max:
             s = string_type(obj, with_shape=with_shape, with_device=with_device)
@@ -616,7 +686,7 @@ def np_dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
 
 
 def rename_dynamic_dimensions(
-    constraints: Dict[str, Set[str]], original: Set[str]
+    constraints: Dict[str, Set[str]], original: Set[str], ban_prefix: str = "DYN"
 ) -> Dict[str, str]:
     """
     Renames dynamic shapes as requested by the user. :func:`torch.export.export` uses
@@ -625,6 +695,7 @@ def rename_dynamic_dimensions(
 
     :param constraints: exhaustive list of used name and all the values equal to it
     :param original: the names to use if possible
+    :param ban_prefix: avoid any rewriting by a constant starting with this prefix
     :return: replacement dictionary
     """
     replacements = {s: s for s in original}
@@ -640,6 +711,8 @@ def rename_dynamic_dimensions(
                 continue
             common = sorted(common)
             by = common[0]
+            if ban_prefix and by.startswith(ban_prefix):
+                continue
             replacements[k] = by
             for vv in v:
                 if vv not in replacements:

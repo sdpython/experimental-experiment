@@ -597,7 +597,17 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
 
 
 def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    "Sets the output shape for node types Conv, MaxPool."
+    """
+    Sets the output shape for node types Conv, MaxPool.
+
+    This function defines the following functions::
+
+        conf_f1(d,s,stride) = s - (stride if d % stride == 0 else d % stride) // 2
+        conf_f2(d,s,stride) = (
+            s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
+        )
+        conv_f3(d,s,stride,ceil_mode,p) = ... (see the code)
+    """
     if not self.has_type(node.input[0]):
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -669,21 +679,40 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
             stride = strides[i]
             if stride > 1:
                 input_dim = input_shape[2 + i]
-                residual = input_dim % stride
-                total_pad = (
-                    (effective_kernel_shape[i] - stride)
-                    if residual == 0
-                    else (effective_kernel_shape[i] - residual)
-                )
-                total_pad = max(total_pad, 0)
-                half_pad_small = total_pad // 2
-                half_pad_big = total_pad - half_pad_small
-                if auto_pad_attr == "SAME_UPPER":
-                    pads[i] = half_pad_small
-                    pads[i + n_input_dims] = half_pad_big
-                elif auto_pad_attr == "SAME_LOWER":
-                    pads[i] = half_pad_big
-                    pads[i + n_input_dims] = half_pad_small
+                if isinstance(input_dim, str):
+                    if stride == 1:
+                        residual = 0
+                    else:
+                        residual = None
+                else:
+                    residual = input_dim % stride
+
+                if residual is not None:
+                    total_pad = (
+                        (effective_kernel_shape[i] - stride)
+                        if residual == 0
+                        else (effective_kernel_shape[i] - residual)
+                    )
+                    total_pad = max(total_pad, 0)
+                    half_pad_small = total_pad // 2
+                    half_pad_big = total_pad - half_pad_small
+                    if auto_pad_attr == "SAME_UPPER":
+                        pads[i] = half_pad_small
+                        pads[i + n_input_dims] = half_pad_big
+                    elif auto_pad_attr == "SAME_LOWER":
+                        pads[i] = half_pad_big
+                        pads[i + n_input_dims] = half_pad_small
+                else:
+                    # conf_f1=(d,s,stride) = (
+                    #   s - (stride if d % stride == 0 else d % stride)) // 2
+                    # )
+                    pads[i] = f"conf_f1({input_dim},{effective_kernel_shape[i]},{stride})"
+                    # conf_f2=(d,s,stride) = (
+                    #   s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
+                    # )
+                    pads[i + n_input_dims] = (
+                        f"conf_f2({input_dim},{effective_kernel_shape[i]},{stride})"
+                    )
 
     require_kernel_shape = node.op_type in {"MaxPool"}
     output_shape = []
@@ -695,19 +724,31 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
         output_shape.append(w_shape[0])
 
     for i in range(len(kernel_shape)):
-        input_size = input_shape[2 + i]
-        effective_input_size = input_size + pads[i] + pads[i + len(kernel_shape)]
         ceil_mode = self.get_attribute_with_default(node, "ceil_mode", 0)
+        input_size = input_shape[2 + i]
+        if isinstance(pads[i], int):
+            if isinstance(input_size, int):
+                effective_input_size = input_size + pads[i] + pads[i + len(kernel_shape)]
+                output_size = (
+                    (
+                        effective_input_size
+                        - effective_kernel_shape[i]
+                        + (strides[i] - 1 if ceil_mode else 0)
+                    )
+                    // strides[i]
+                ) + 1
+                if ceil_mode and (output_size - 1) * strides[i] >= input_size + pads[i]:
+                    output_size -= 1
+                output_shape.append(output_size)
+                continue
+
+        # conv_f3(d,s,stride,ceil_mode,p) = (
+        #       d + (stride if d % stride == 0 else d % stride) +
+        #       (stride - 1) * (ceil_mode == 1)
+        #   ) // stride + 1 + ...
         output_size = (
-            (
-                effective_input_size
-                - effective_kernel_shape[i]
-                + (strides[i] - 1 if ceil_mode else 0)
-            )
-            // strides[i]
-        ) + 1
-        if ceil_mode and (output_size - 1) * strides[i] >= input_size + pads[i]:
-            output_size -= 1
+            f"conf_f3({input_size},{effective_kernel_shape[i]},{strides[i]},{ceil_mode})"
+        )
         output_shape.append(output_size)
 
     self.set_shape(node.output[0], tuple(output_shape))
@@ -1119,16 +1160,26 @@ def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # 
                 "ConstantOfShape",
             ):
                 cst = self.get_constant(node.input[1], computed_value=True)
-        assert isinstance(cst, np.ndarray), (
-            f"Unexpected type {type(cst)} for {node.input[1]!r}, "
-            f"unable to set type and shape for node {node.op_type} "
-            f"with name={node.name!r}{self.get_debug_msg()}"
-        )
-        iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
-        shape = list(self.get_shape(node.input[0]))
-        for i in iaxes:
-            shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
-        self.set_shape(node.output[0], tuple(shape))
+
+        if isinstance(cst, np.ndarray):
+            iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+            shape = list(self.get_shape(node.input[0]))
+            for i in iaxes:
+                shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
+            self.set_shape(node.output[0], tuple(shape))
+        elif isinstance(cst, self.torch.Tensor):
+            with self.maybe_disable_fake_tensor_mode():
+                iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+                shape = list(self.get_shape(node.input[0]))
+                for i in iaxes:
+                    shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
+                self.set_shape(node.output[0], tuple(shape))
+        else:
+            raise AssertionError(
+                f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                f"unable to set type and shape for node {node.op_type} "
+                f"with name={node.name!r}{self.get_debug_msg()}"
+            )
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + cst.size)
@@ -1175,16 +1226,25 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
                 "ConstantOfShape",
             ):
                 cst = self.get_constant(node.input[1], computed_value=True)
-        assert isinstance(cst, np.ndarray), (
-            f"Unexpected type {type(cst)} for {node.input[1]!r}, "
-            f"unable to set type and shape for node {node.op_type} "
-            f"with name={node.name!r}{self.get_debug_msg()}"
-        )
-        iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
-        shape = list(self.get_shape(node.input[0]))
-        iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
-        new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
-        self.set_shape(node.output[0], new_shape)
+        if isinstance(cst, np.ndarray):
+            iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
+            shape = list(self.get_shape(node.input[0]))
+            iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
+            new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
+            self.set_shape(node.output[0], new_shape)
+        elif isinstance(cst, self.torch.Tensor):
+            with self.maybe_disable_fake_tensor_mode():
+                iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
+                shape = list(self.get_shape(node.input[0]))
+                iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
+                new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
+                self.set_shape(node.output[0], new_shape)
+        else:
+            raise AssertionError(
+                f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                f"unable to set type and shape for node {node.op_type} "
+                f"with name={node.name!r}{self.get_debug_msg()}"
+            )
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) - cst.size)

@@ -5,10 +5,68 @@ from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
+class SqueezeUnsqueezePattern(PatternOptimization):
+    """Replaces the sequence Squeeze, Unsqueeze by Identity."""
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Unsqueeze" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]) or len(node.input) < 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        node_before = g.node_before(node.input[0])
+        if node_before is None or node_before.op_type != "Squeeze" or node_before.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        axes1 = (
+            None
+            if len(node_before.input) == 1
+            else g.get_computed_constant(node_before.input[1])
+        )
+        axes2 = g.get_computed_constant(node.input[1])
+        if axes1 is None:
+            if (
+                axes2 is None
+                or tuple(map(int, axes2)) != (0,)
+                or not g.has_shape(node_before.input[0])
+                or g.get_shape(node_before.input[0]) != (1,)
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+        elif axes2 is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            if tuple(map(int, axes1)) != tuple(map(int, axes2)):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if len(axes1) > 1 and tuple(map(int, axes1)) != tuple(
+                range(min(axes1), max(axes1) + 1)
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node_before, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_squ: NodeProto,
+        node_uns: NodeProto,
+    ) -> List[NodeProto]:
+        new_node = g.make_node(
+            "Identity",
+            [node_squ.input[0]],
+            [node_uns.output[0]],
+            name=f"{self.__class__.__name__}--{node_uns.name}",
+            doc_string=node_uns.doc_string,
+        )
+        return [new_node]
+
+
 class UnsqueezeUnsqueezePattern(PatternOptimization):
-    """
-    Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
-    """
+    """Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze."""
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)

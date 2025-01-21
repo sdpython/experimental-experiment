@@ -472,6 +472,10 @@ class CustomTracer(torch.fx.Tracer):
             raise NotImplementedError(f"Unsupported function {node!r} (not implemented).")
 
         if isinstance(node.target, types.BuiltinFunctionType):
+            if node.target is math.ceil:
+                # We need to distinguish between match.ceil and torch.ceil.
+                # The output type is different.
+                return "math_ceil"
             return str(node.target)
 
         if isinstance(node.target, torch._ops.OpOverload):
