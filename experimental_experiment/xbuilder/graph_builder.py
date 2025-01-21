@@ -6600,7 +6600,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             for o in node.output:
                 if self.has_name(o):
-                    # connecting to existing input
+                    # connecting to existing output
                     n_existing.append(o)
                 else:
                     self.set_name(o, f"insert_and_remove_nodes_{node.op_type}_{o}")

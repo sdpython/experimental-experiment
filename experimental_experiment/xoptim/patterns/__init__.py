@@ -56,7 +56,7 @@ from .onnx_transpose import (
     TransposeReshapeTransposePattern,
     TransposeEqualReshapePattern,
 )
-from .onnx_unsqueeze import UnsqueezeUnsqueezePattern
+from .onnx_unsqueeze import SqueezeUnsqueezePattern, UnsqueezeUnsqueezePattern
 
 
 class AlmostDoNothingPattern(PatternOptimization):
@@ -149,6 +149,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SlicesSplitPattern(verbose=verbose),
         SoftmaxCrossEntropyLossCastPattern(verbose=verbose),
         SplitConcatPattern(verbose=verbose),
+        SqueezeUnsqueezePattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
         SwitchReshapeActivationPattern(verbose=verbose),

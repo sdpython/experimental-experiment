@@ -4610,6 +4610,94 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
 
+    def test_squeeze_unsqueeze(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Squeeze", ["X", "axes1"], ["mm"]),
+                    oh.make_node("Unsqueeze", ["mm", "axes2"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 1, "c", "d"])],
+                [_mkv_("Y", TFLOAT, ["a", 1, "c", "d"])],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), name="axes1"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="axes2"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        from onnxruntime import InferenceSession
+
+        feeds = {"X": self._range(3, 1, 6, 5).astype(np.float32)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["SqueezeUnsqueeze"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(
+            ["Identity"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(len(opt_onx.graph.initializer), 0)
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_squeeze_unsqueeze_2_axes(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Squeeze", ["X", "axes1"], ["mm"]),
+                    oh.make_node("Unsqueeze", ["mm", "axes2"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 1, 1, "d"])],
+                [_mkv_("Y", TFLOAT, ["a", 1, 1, "d"])],
+                [
+                    onh.from_array(np.array([1, 2], dtype=np.int64), name="axes1"),
+                    onh.from_array(np.array([1, 2], dtype=np.int64), name="axes2"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        from onnxruntime import InferenceSession
+
+        feeds = {"X": self._range(3, 1, 1, 5).astype(np.float32)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["SqueezeUnsqueeze"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(
+            ["Identity"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(len(opt_onx.graph.initializer), 0)
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
