@@ -4965,32 +4965,36 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             model.graph.input.extend(self.inputs)
 
-    def _update_doc_string(
-        self,
-        large_model: bool,
-        inline: bool,
-        external_threshold: int,
-        function_options: FunctionOptions,
-        optimize: bool,
-    ) -> str:
-        doc_string = (
-            f"large_model={large_model}, inline={inline}, "
-            f"external_threshold={external_threshold}"
-            f"\n-- function_options={function_options!r}"
+    def _update_metadata_props(self, model: ModelProto, **kwargs):
+        values = (
+            self.existing_metadata_props.copy()
+            if hasattr(self, "existing_metadata_props")
+            else {}
         )
+        values.update({k: str(v) for k, v in kwargs.items()})
+        values.update(
+            {
+                "input_args": string_type(self.input_args, with_shape=True, with_min_max=True),
+                "input_kwargs": string_type(
+                    self.input_kwargs, with_shape=True, with_min_max=True
+                ),
+                "optimizations": str(self.optimization_options),
+            }
+        )
+        if self.dynamic_shapes:
+            values["dynamic_shapes"] = pprint.pformat(self.dynamic_shapes)
+        if self.output_dynamic_shapes:
+            values["output_dynamic_shapes"] = pprint.pformat(self.output_dynamic_shapes)
         if self.constraints_:
-            doc_string += (
-                f"\n-- discovered-shape-constraints: {pprint.pformat(self.constraints_)}"
-            )
+            values["_discovered_shape_constraints"] = pprint.pformat(self.constraints_)
         if self._known_value_shape:
             filtered = {
                 k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
             }
             if filtered:
-                doc_string += f"\n-- known-value-shape: {self._format_dict(filtered)}"
-        return doc_string + (
-            f"\n-- optimized:{self.optimization_options!r}" if optimize else "not-optimized"
-        )
+                values["_known_value_shapes"] = self._format_dict(filtered)
+        if values:
+            oh.set_model_props(model, values)
 
     def to_onnx(
         self,
@@ -5128,8 +5132,16 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._add_shape_information(model)
 
         # final doc_string
-        model.doc_string += self._update_doc_string(
-            large_model, inline, external_threshold, function_options, optimize
+        self._update_metadata_props(
+            model,
+            large_model=large_model,
+            inline=inline,
+            external_threshold=external_threshold,
+            function_options=function_options,
+            optimize=optimize,
+            n_initializes=len(initializers),
+            n_large_initializers=len(large_initializers),
+            mask_outputs=mask_outputs,
         )
         assert (
             not optimize
@@ -7348,6 +7360,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder._update_structures_with_proto] -- starts with "
                 f"{len(proto.graph.node)} nodes"
             )
+        self.existing_metadata_props = {p.key: p.value for p in proto.metadata_props}
         self.opsets = {d.domain: d.version for d in proto.opset_import}
         if self.ir_version is None:
             self.ir_version = proto.ir_version
