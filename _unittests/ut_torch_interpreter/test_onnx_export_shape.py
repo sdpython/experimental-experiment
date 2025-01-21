@@ -22,6 +22,7 @@ class TestOnnxExportShape(ExtTestCase):
         dynamic_shapes: Optional[Any] = None,
         processor: str = "CPU",
         output_names: Optional[List[str]] = None,
+        constant_folding: bool = False,
     ) -> str:
         import torch
 
@@ -35,7 +36,9 @@ class TestOnnxExportShape(ExtTestCase):
                 decomposition_table="all" if decomposition else None, strict=strict
             )
             opt_options = (
-                OptimizationOptions(patterns=patterns, processor=processor)
+                OptimizationOptions(
+                    patterns=patterns, processor=processor, constant_folding=constant_folding
+                )
                 if patterns or processor != "CPU"
                 else None
             )
@@ -190,7 +193,7 @@ class TestOnnxExportShape(ExtTestCase):
         xs = (torch.randn((2, 16, 24)),)
         expected = model(*xs)
         model_path = self._call_exporter(
-            "test_shape_DYN",
+            "test_shape_named_dynamic_shapes",
             "custom",
             model,
             xs,
@@ -211,6 +214,39 @@ class TestOnnxExportShape(ExtTestCase):
         sess = onnxruntime.InferenceSession(
             model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @requires_torch("2.6", "torch.export.Dim.AUTO")
+    def test_reshape_folding(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x + torch.tensor([0, 1, 4, 5, 6, 7, 7, 8]).reshape((-1, 4)).to(
+                    torch.int64
+                ).to(torch.float32)
+
+        model = Model()
+        xs = (torch.randn((2, 4)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_reshape_folding",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: "dx", 1: "dy"}},
+            optimize=True,
+            patterns="default",
+            constant_folding=True,
+            verbose=0,
+        )
+        onx = onnx.load(model_path)
+        self.assertEqual(["Add"], [n.op_type for n in onx.graph.node])
+        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
+        self.assertEqual(shape_x, ["dx", "dy"])
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 

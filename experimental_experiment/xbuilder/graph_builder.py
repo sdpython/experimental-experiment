@@ -268,6 +268,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_node_type = os.environ.get("ONNXNODETYPE", "")
         self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
+        self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -454,6 +455,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_node_type = os.environ.get("ONNXNODETYPE", "")
         self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
+        self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -853,7 +855,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return f"SymInt({self._torch_sym_int_to_str(d1)})"
             if isinstance(d1, self.torch.SymBool):
                 return f"SymBool({self._torch_sym_int_to_str(d1)})"
-            if isinstance(d1, self.WrapSym):
+            if isinstance(d1, (self.WrapDim, self.WrapSym)):
                 return repr(d1)
             if isinstance(d1, self.torch.export.dynamic_shapes._DerivedDim):
                 return f"_DerivedDim({d1.__name__})"
@@ -5822,6 +5824,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         if self.main_opset < 18:
             # This functionality is not enabled before that opset.
+            assert not self._debug_constant_folding, (
+                f"Unable to compute constant opset={self.main_opset}<18"
+                f"for name={name!r}{self.get_debug_msg()}"
+            )
             return None, None
         assert self.is_constant(name), f"Name {name!r} is not a constant"
         if name in self.initializers_dict:
@@ -5847,6 +5853,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
                 return v, None
             if isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
+                assert not self._debug_constant_folding, (
+                    f"Unable to compute constant because value is a FakeTensor"
+                    f"{string_type(value, with_shape=True)}"
+                    f"in node {self.pretty_node(v)}{self.get_debug_msg()}"
+                )
                 return None, None
             return value, None
 
@@ -5861,6 +5872,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         if v.op_type == "Shape":
             if not self.has_shape(v.input[0]):
                 # We stop.
+                assert not self._debug_constant_folding, (
+                    f"Unable to compute constant because {v.input[0]!r} has no shape"
+                    f"in node {self.pretty_node(v)}{self.get_debug_msg()}"
+                )
                 return None, None
             shape = self.get_shape(v.input[0])
             if is_static_shape(shape):
@@ -5888,8 +5903,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 # One exception here as the input maybe not
                 # be constant but the shape may be known.
                 assert all_int(shape), (
-                    f"Shape must be static ({shape}) if shape is constant in {v}"
-                    f"{self.get_debug_msg()}"
+                    f"Shape must be static ({shape}) if shape is constant in {v} in "
+                    f"{self.pretty_node(v)}{self.get_debug_msg()}"
                 )
                 with self.maybe_disable_fake_tensor_mode():
                     output = self._apply_shape_on_shape(v, shape)
@@ -5904,11 +5919,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"{name}: {self.pretty_tensor(output[0])}"
                         )
                     return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
+            assert not self._debug_constant_folding, (
+                f"Unable to compute constant for node {self.pretty_node(v)}"
+                f"{self.get_debug_msg()}"
+            )
             return None, None
 
         feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
         for kval, val in feeds.items():
             if not exc and "FakeTensor" in str(type(val)):
+                assert not self._debug_constant_folding, (
+                    f"Unable to compute constant for node {self.pretty_node(v)}"
+                    f"because a FakeTensor appeared{self.get_debug_msg()}"
+                )
                 return None, None
             assert "FakeTensor" not in str(type(val)), (
                 f"FakeTensor {kval!r} cannot be an initializer {type(val)}, "
@@ -5916,6 +5939,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{self.get_debug_msg()}"
             )
             if val is None:
+                assert not self._debug_constant_folding, (
+                    f"Unable to compute constant for node {self.pretty_node(v)}"
+                    f"because val=None{self.get_debug_msg()}"
+                )
                 return None, None
             assert (
                 len(val.shape) == 0
@@ -5930,6 +5957,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             if v.op_type == "Identity":
                 # much faster this way
                 output = [feeds[v.input[0]]]
+            elif v.op_type == "Reshape":
+                # much faster this way
+                output = [feeds[v.input[0]].reshape(tuple(feeds[v.input[1]]))]
             elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
                 # bypassing onnx.numpy_helper.from_array, too slow
                 output = self._apply_binary_op(v, feeds)
@@ -5950,6 +5980,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"constant as it may be too big, shapes are "
                             f"{[_.shape for _ in feeds.values()]}"
                         )
+                    assert not self._debug_constant_folding, (
+                        f"Unable to compute constant for node {self.pretty_node(v)}"
+                        f"because max_dim={max_dim} (shape={_v.shape}){self.get_debug_msg()}"
+                    )
                     return None, None
 
                 begin = time.perf_counter()
@@ -5963,10 +5997,19 @@ class GraphBuilder(_GraphBuilderRuntime):
                     sv = str(v).replace("\n", " ")
                     self._debug_msg["warnings"].append(f"Issue with v={sv}, feeds={sf}, e={e}")
                     self.time_evaluation_constants_ += time.perf_counter() - begin
+                    assert not self._debug_constant_folding, (
+                        f"Unable to compute constant for node {self.pretty_node(v)}"
+                        f"due to {e}{self.get_debug_msg()}"
+                    )
                     return None, None
 
                 self.time_evaluation_constants_ += time.perf_counter() - begin
             else:
+                assert not self._debug_constant_folding, (
+                    f"Unable to compute constant for node {self.pretty_node(v)}, "
+                    f"feeds={string_type(feeds, with_shape=True, with_min_max=True)}"
+                    f"{self.get_debug_msg()}"
+                )
                 return None, None
 
             cst = None
@@ -5998,9 +6041,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         assert cst is not None, f"Constant {name!r} was not found in {v.output}"
         if isinstance(cst, self.torch._subclasses.fake_tensor.FakeTensor):
+            assert not self._debug_constant_folding, (
+                f"Unable to compute constant for node {self.pretty_node(v)}"
+                f"because a FakeTensor appeared{self.get_debug_msg()}"
+            )
             return None, None
         if self._debug_get_constant:
             print(f"[GraphBuilder.compute_constant]     - A {name}: {self.pretty_tensor(cst)}")
+        assert not self._debug_constant_folding or cst is not None, (
+            f"Unable to compute constant for node {self.pretty_node(v)}"
+            f"{self.get_debug_msg()}"
+        )
         return cst, feeds
 
     def constant_folding(self, convert_into_initializer: bool = True) -> Dict[str, float]:
@@ -6044,6 +6095,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 output, feeds = self.compute_constant(k, exc=False)
                 if output is None:
                     # Evaluation failed.
+                    assert not self._debug_constant_folding, (
+                        f"constant folding unable to fold node [{self.pretty_node(v)}], "
+                        f"self.compute_constant(k, exc=False)="
+                        f"{string_type(self.compute_constant(k, exc=False))}"
+                    )
                     continue
                 key = f"{v.domain}_{v.op_type}"
                 if key not in stats_cf:
