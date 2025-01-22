@@ -1,5 +1,6 @@
 import pprint
 from typing import List, Optional, Union
+from onnx import ModelProto
 from .graph_builder_optim import GraphBuilderPatternOptimization
 from .patterns_api import (
     MatchResult,
@@ -128,3 +129,21 @@ def get_pattern_list(
             continue
         res.append(p)
     return res
+
+
+def remove_constants_for_initializers(model: ModelProto):
+    """
+    Replaces nodes Constant by initialiazers.
+    """
+    from .patterns import ConstantToInitiliazerPattern
+    from ..xbuilder import GraphBuilder, OptimizationOptions
+
+    gr = GraphBuilder(
+        model,
+        infer_shapes_options=False,
+        optimization_options=OptimizationOptions(
+            patterns=[ConstantToInitiliazerPattern()], verbose=0
+        ),
+    )
+    opt_onx = gr.to_onnx(optimize=True)
+    return opt_onx

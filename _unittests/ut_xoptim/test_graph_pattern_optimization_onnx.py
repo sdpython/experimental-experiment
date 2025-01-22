@@ -38,11 +38,12 @@ from experimental_experiment.xbuilder.graph_builder import (
 from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
+from experimental_experiment.xoptim.patterns import ConstantToInitiliazerPattern
 from experimental_experiment.xbuilder._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
 )
-from experimental_experiment.xoptim import get_pattern_list
+from experimental_experiment.xoptim import get_pattern_list, remove_constants_for_initializers
 from experimental_experiment.helpers import pretty_onnx
 
 TFLOAT = TensorProto.FLOAT
@@ -4738,6 +4739,115 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_constant_to_initializer(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "Constant",
+                        [],
+                        ["cst"],
+                        value=onh.from_array(np.array([1, 2], dtype=np.float32)),
+                    ),
+                    oh.make_node("Add", ["X", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["a", "b"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        self.assertEqual(len(model.graph.initializer), 0)
+
+        feeds = {"X": self._range(5, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=[ConstantToInitiliazerPattern()], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(["Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 1)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_remove_constants_for_initializers(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "Constant",
+                        [],
+                        ["cst"],
+                        value=onh.from_array(np.array([1, 2], dtype=np.float32)),
+                    ),
+                    oh.make_node("Add", ["X", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["a", "b"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        self.assertEqual(len(model.graph.initializer), 0)
+        opt_onx = remove_constants_for_initializers(model)
+        self.assertEqual(len(opt_onx.graph.initializer), 1)
+
+    def test_constant_to_initializer_recursive(self):
+        value = np.array([0], dtype=np.float32)
+        zero = onh.from_array(value, name="zero")
+
+        X = oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [None, None])
+        Y = oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [None])
+
+        rsum = oh.make_node("ReduceSum", ["X"], ["rsum"])
+        cond = oh.make_node("Greater", ["rsum", "zero"], ["cond"])
+
+        then_out = oh.make_tensor_value_info("then_out", onnx.TensorProto.FLOAT, None)
+        then_cst = onh.from_array(np.array([1] * 129).astype(np.float32))
+
+        then_const_node = oh.make_node(
+            "Constant", inputs=[], outputs=["then_out"], value=then_cst, name="cst1"
+        )
+        then_body = oh.make_graph([then_const_node], "then_body", [], [then_out])
+
+        else_out = oh.make_tensor_value_info("else_out", onnx.TensorProto.FLOAT, None)
+        else_cst = onh.from_array(np.array([-1] * 129).astype(np.float32))
+        else_const_node = oh.make_node(
+            "Constant", inputs=[], outputs=["else_out"], value=else_cst, name="cst2"
+        )
+        else_body = oh.make_graph([else_const_node], "else_body", [], [else_out])
+
+        if_node = oh.make_node(
+            "If", ["cond"], ["Y"], then_branch=then_body, else_branch=else_body
+        )
+        graph = oh.make_graph([rsum, cond, if_node], "if", [X], [Y], [zero])
+        onnx_model = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 18)])
+        self.print_model(onnx_model)
+
+        x = np.ones((3, 2), dtype=np.float32)
+        oinf1 = ExtendedReferenceEvaluator(onnx_model)
+        y1 = oinf1.run(None, {"X": x})[0]
+        repl = remove_constants_for_initializers(onnx_model)
+        self.print_model(repl)
+
+        self.assertNotIn("Constant", str(repl))
+        oinf2 = ExtendedReferenceEvaluator(repl)
+        y2 = oinf2.run(None, {"X": x})[0]
+        self.assertEqualArray(y1, y2)
 
 
 if __name__ == "__main__":

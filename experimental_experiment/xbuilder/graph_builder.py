@@ -150,6 +150,7 @@ class FunctionOptions:
         self.merge_allowed = merge_allowed
 
     def __repr__(self) -> str:
+        "usual"
         return string_sig(self)
 
 
