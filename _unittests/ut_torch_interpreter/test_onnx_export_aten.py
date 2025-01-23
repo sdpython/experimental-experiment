@@ -776,6 +776,43 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not working on windows")
+    def test_aten_conv(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv1d(16, 32, 1)
+
+            def forward(self, x):
+                return self.conv(x) + torch.tensor([1], dtype=x.dtype)
+
+        model = Model()
+        xs = (torch.randn((2, 16, 24)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_aten_conv",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
     def test_aten_clone_index_Tensor(self):
         import torch
 
@@ -840,31 +877,29 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @skipif_ci_windows("not working on windows")
-    def test_aten_conv(self):
+    def test_aten_index_put_mask_bool_fixed_broadcast_2d(self):
         import torch
 
         class Model(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.conv = torch.nn.Conv1d(16, 32, 1)
-
-            def forward(self, x):
-                return self.conv(x) + torch.tensor([1], dtype=x.dtype)
+            def forward(self, x, values):
+                x = x.clone()
+                mask = torch.tensor([True, False, True, True, False]).to(torch.bool)
+                x[mask] = values
+                return x
 
         model = Model()
-        xs = (torch.randn((2, 16, 24)),)
+        xs = (
+            torch.arange(25).reshape((5, 5)).to(torch.float32),
+            torch.tensor([700, 800, 900, 1000, 1100], dtype=torch.float32),
+        )
         expected = model(*xs)
         model_path = self._call_exporter(
-            "test_aten_conv",
-            "custom",
-            model,
-            xs,
-            dynamic_shapes={"x": {0: torch.export.Dim("batch")}},
+            "test_aten_index_put_mask_bool_fixed_broadcast_2d", "custom", model, xs
         )
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got, atol=1e-5)
+        self.assertEqualArray(expected, got)
 
         # checking with onnxruntime as well
         import onnxruntime
@@ -874,7 +909,79 @@ class TestOnnxExportAten(ExtTestCase):
             model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got, atol=1e-5)
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_index_put_mask_bool_fixed_broadcast_3d(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, values):
+                x = x.clone()
+                mask = torch.tensor([True, False]).to(torch.bool)
+                x[mask] = values
+                return x
+                # return torch.ops.aten.index_put(x, (mask,), values)
+
+        model = Model()
+        xs = (
+            torch.arange(2 * 3 * 5).reshape((2, 3, 5)).to(torch.float32),
+            torch.tensor([700, 800, 900, 1000, 1100], dtype=torch.float32),
+        )
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_aten_index_put_mask_bool_fixed_broadcast_3d", "custom", model, xs
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_index_put_mask_bool_fixed_broadcast_3d_2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, values):
+                x = x.clone()
+                mask = torch.tensor([[True, False, False], [True, True, False]]).to(torch.bool)
+                x[mask] = values
+                return x
+                # return torch.ops.aten.index_put(x, (mask,), values)
+
+        model = Model()
+        xs = (
+            torch.arange(2 * 3 * 5).reshape((2, 3, 5)).to(torch.float32),
+            torch.tensor([700, 800, 900, 1000, 1100], dtype=torch.float32),
+        )
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_aten_index_put_mask_bool_fixed_broadcast_3d", "custom", model, xs
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":

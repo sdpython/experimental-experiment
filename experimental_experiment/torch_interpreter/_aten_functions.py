@@ -3909,10 +3909,11 @@ def aten_index_put(
             shape_values = g.get_shape(values) if g.has_shape(values) else None
             if (
                 shape_values is not None
-                and all_int(shape_values)
-                and 1 not in shape_values
-                and 0 not in shape_values
                 and len(shape_values) > 0
+                and all_int(shape_values)
+                and 0 not in shape_values
+                and g.has_shape(x)
+                and g.get_shape(x)[-len(shape_values) :] != shape_values
             ):
                 # No broadcast is possible
                 use_where = False
@@ -3923,6 +3924,25 @@ def aten_index_put(
                     f"accumulate is True but it does not make sense in that case"
                     f"{g.get_debug_msg()}"
                 )
+                assert g.has_rank(x) and g.has_rank(index) and g.has_rank(values), (
+                    f"One rank is missing: ?rk(x)={g.has_rank(x)}, "
+                    f"rk(index)={g.has_rank(index)}, ?rk(values)={g.has_rank(values)}, "
+                    f"{g.get_debug_msg()}"
+                )
+                if g.get_rank(x) != g.get_rank(index):
+                    rkx = g.get_rank(x)
+                    rki = g.get_rank(index)
+                    assert (
+                        rki < rkx
+                    ), f"Unexpected ranks rk(x)={rkx}, rk(index)={rki}{g.get_debug_msg()}"
+                    shape_i = g.op.Shape(index, name=name)
+                    new_shape = g.op.Concat(
+                        shape_i,
+                        np.array([1 for _ in range(rkx - rki)], dtype=np.int64),
+                        axis=0,
+                        name=name,
+                    )
+                    index = g.op.Reshape(index, new_shape, name=name)
                 res = g.op.Where(index, values, x, outputs=outputs, name=name)
                 if not sts:
                     g.set_type(res, g.get_type(x))
