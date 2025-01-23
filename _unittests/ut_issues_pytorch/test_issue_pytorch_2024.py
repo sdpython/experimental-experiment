@@ -494,10 +494,10 @@ class TestIssuesPytorch2024(ExtTestCase):
         expected_output = model(example_input)
         self.assertEqualArray(expected_output, output[0], atol=1e-3)
 
-    @requires_onnxscript("0.2")
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")
 
+    @requires_onnxscript("0.2")
     @hide_stdout()
     def test_in_projection_packed_dynamo(self):
         self._in_projection_packed("dynamo")
