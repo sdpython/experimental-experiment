@@ -131,18 +131,16 @@ def get_pattern_list(
     return res
 
 
-def remove_constants_for_initializers(model: ModelProto):
-    """
-    Replaces nodes Constant by initialiazers.
-    """
-    from .patterns import ConstantToInitiliazerPattern
+def remove_constants_for_initializers(model: ModelProto, verbose: int = 0):
+    """Replaces nodes Constant by initializers."""
+    from .patterns import ConstantToInitializerPattern
     from ..xbuilder import GraphBuilder, OptimizationOptions
 
     gr = GraphBuilder(
         model,
         infer_shapes_options=False,
         optimization_options=OptimizationOptions(
-            patterns=[ConstantToInitiliazerPattern()], verbose=0
+            patterns=[ConstantToInitializerPattern()], verbose=verbose, recursive=True
         ),
     )
     opt_onx = gr.to_onnx(optimize=True)

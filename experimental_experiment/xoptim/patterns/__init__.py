@@ -12,7 +12,7 @@ from .onnx_cast import (
     ComputationCastOpCastPattern,
 )
 from .onnx_clip import ClipClipPattern
-from .onnx_constants import ConstantToInitiliazerPattern  # noqa: F401
+from .onnx_constants import ConstantToInitializerPattern  # noqa: F401
 from .onnx_conv import ConvBiasNullPattern
 from .onnx_dropout import DropoutPattern
 from .onnx_equal import UnsqueezeEqualPattern

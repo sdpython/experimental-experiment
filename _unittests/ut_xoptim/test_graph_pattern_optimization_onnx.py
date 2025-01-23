@@ -39,7 +39,7 @@ from experimental_experiment.xbuilder.graph_builder import (
 from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
-from experimental_experiment.xoptim.patterns import ConstantToInitiliazerPattern
+from experimental_experiment.xoptim.patterns import ConstantToInitializerPattern
 from experimental_experiment.xbuilder._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
@@ -4771,7 +4771,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=[ConstantToInitiliazerPattern()], verbose=0
+                patterns=[ConstantToInitializerPattern()], verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -4907,10 +4907,10 @@ class TestGraphPatternOptimization(ExtTestCase):
         x = np.ones((3, 2), dtype=np.float32)
         oinf1 = ExtendedReferenceEvaluator(onnx_model)
         y1 = oinf1.run(None, {"X": x})[0]
-        repl = remove_constants_for_initializers(onnx_model)
+        repl = remove_constants_for_initializers(onnx_model, verbose=5)
         self.print_model(repl)
 
-        self.assertNotIn("Constant", str(repl))
+        self.assertNotIn("Constant", pretty_onnx(repl))
         oinf2 = ExtendedReferenceEvaluator(repl)
         y2 = oinf2.run(None, {"X": x})[0]
         self.assertEqualArray(y1, y2)

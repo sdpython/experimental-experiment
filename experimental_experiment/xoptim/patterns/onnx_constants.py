@@ -3,7 +3,7 @@ from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
-class ConstantToInitiliazerPattern(PatternOptimization):
+class ConstantToInitializerPattern(PatternOptimization):
     """Replaces a node Constant by an initializer and a node Identity."""
 
     def match(

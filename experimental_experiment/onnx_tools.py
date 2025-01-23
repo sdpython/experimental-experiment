@@ -165,7 +165,8 @@ def _validate_graph(
         if ins != set(node.input):
             raise AssertionError(
                 f"One input is missing from node.input={node.input}, "
-                f"existing={ins}, path={'/'.join(path)}"
+                f"existing={ins}, path={'/'.join(path)}, "
+                f"node: {node.op_type}-{node.name}"
             )
         if watch and ins & watch:
             if verbose:
