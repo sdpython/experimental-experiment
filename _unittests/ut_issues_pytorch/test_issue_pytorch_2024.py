@@ -428,6 +428,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_scaled_dot_product_attention_script(self):
         self._scaled_dot_product_attention("script")
 
+    @requires_onnxscript("0.2")
     @hide_stdout()
     def test_scaled_dot_product_attention_dynamo(self):
         self._scaled_dot_product_attention("dynamo")
@@ -496,6 +497,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")
 
+    @requires_onnxscript("0.2")
     @hide_stdout()
     def test_in_projection_packed_dynamo(self):
         self._in_projection_packed("dynamo")
@@ -722,6 +724,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_dyn_slice_4d_script(self):
         self._slice_4d("script")
 
+    @requires_onnxscript("0.2")
     @hide_stdout()
     def test_dyn_slice_4d_dynamo(self):
         self._slice_4d("dynamo")
