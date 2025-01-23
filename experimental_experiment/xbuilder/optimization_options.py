@@ -49,7 +49,7 @@ class OptimizationOptions:
       custom operators implemented by :epkg:`onnxruntime`
     * ``patterns="default+onnxruntime+experimental``: applies all patterns
       modifying standard onnx operators into other standard onnx operators,
-      patterns fusing nodes into custom operators implemented by :epkg:`onnxruntime`,
+      patterns fusing nodes into custom operators implemented by :epkg:`onnxruntime`.
     """
 
     def __init__(

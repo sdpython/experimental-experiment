@@ -17,6 +17,7 @@ import onnx
 from onnx import (
     ModelProto,
     TensorProto,
+    ValueInfoProto,
     helper as oh,
     numpy_helper as onh,
     load as onnx_load,
@@ -4805,6 +4806,71 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual(len(model.graph.initializer), 0)
         opt_onx = remove_constants_for_initializers(model)
         self.assertEqual(len(opt_onx.graph.initializer), 1)
+
+    def test_detect_broken_graph(self):
+
+        def _mkv_(name):
+            value_info_proto = ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                    oh.make_node("Add", ["X", "zero"], ["X0"]),
+                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                    oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                    oh.make_node(
+                        "If",
+                        ["cond"],
+                        ["Z_c"],
+                        then_branch=oh.make_graph(
+                            [oh.make_node("Add", ["X00", "one"], ["Y"])],
+                            "then",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                        else_branch=oh.make_graph(
+                            [oh.make_node("Sub", ["X0", "one"], ["Y"])],
+                            "else",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                    ),
+                    oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                [onh.from_array(np.array([0], dtype=np.float32), name="zero")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {
+            "X": np.array([1, 2, 3], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([2, 3, 4], dtype=np.float32))
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertNotIn("Add", set(n.op_type for n in opt_onx.graph.node))
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([2, 3, 4], dtype=np.float32))
 
     def test_constant_to_initializer_recursive(self):
         value = np.array([0], dtype=np.float32)

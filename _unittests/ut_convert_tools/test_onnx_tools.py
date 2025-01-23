@@ -5,7 +5,7 @@ import onnx.numpy_helper as onh
 from onnx import TensorProto
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.onnx_tools import onnx_lighten, onnx_unlighten
+from experimental_experiment.onnx_tools import onnx_lighten, onnx_unlighten, onnx_find
 from experimental_experiment._command_lines_parser import _cmd_lighten, _cmd_unlighten
 from experimental_experiment.torch_test_helper import check_model_ort
 
@@ -13,6 +13,7 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestOnnxTools(ExtTestCase):
+
     def _get_model(self):
         model = oh.make_model(
             oh.make_graph(
@@ -79,6 +80,13 @@ class TestOnnxTools(ExtTestCase):
         _, out, _ = self.capture(lambda: _cmd_unlighten(cmd))
         self.assertIn("done", out)
         self.assertExists(name3)
+
+    def test_onnx_find(self):
+        model = self._get_model()
+        res = onnx_find(model, watch={"xm2"})
+        self.assertEqual(len(res), 2)
+        self.assertIn("xm2", res[0].output)
+        self.assertIn("xm2", res[1].input)
 
 
 if __name__ == "__main__":

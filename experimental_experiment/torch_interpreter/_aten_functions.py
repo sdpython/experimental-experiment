@@ -1490,13 +1490,29 @@ def aten_cond(
         outputs,
         name=name,
         then_branch=make_graph(
-            [make_node(true_graph, inputs, outputs, domain=g.local_domain)],
+            [
+                make_node(
+                    true_graph,
+                    inputs,
+                    outputs,
+                    domain=g.local_domain,
+                    name=g.unique_node_name(f"{name}_then"),
+                )
+            ],
             true_graph,
             [],
             [mkv(o) for o in outputs],
         ),
         else_branch=make_graph(
-            [make_node(false_graph, inputs, outputs, domain=g.local_domain)],
+            [
+                make_node(
+                    false_graph,
+                    inputs,
+                    outputs,
+                    domain=g.local_domain,
+                    name=g.unique_node_name(f"{name}_else"),
+                )
+            ],
             false_graph,
             [],
             [mkv(o) for o in outputs],
