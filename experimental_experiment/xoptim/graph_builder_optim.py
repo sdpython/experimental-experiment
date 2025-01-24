@@ -3,7 +3,7 @@ import pprint
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import AttributeProto, NodeProto, TensorProto
+from onnx import AttributeProto, GraphProto, NodeProto, TensorProto
 from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
 from ..helpers import from_array_extended
@@ -1017,8 +1017,11 @@ class GraphBuilderPatternOptimization:
     ):
         begin = time.perf_counter()
         assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
-        known = set(n.name for n in self.builder.inputs)
-        known |= set(self.builder.initializers_dict)
+        known = (
+            set(n.name for n in self.builder.inputs)
+            | set(self.builder.initializers_dict)
+            | self.builder._context
+        )
         for p, node in enumerate(self.builder.nodes):
             assert (
                 node.domain in self.opsets
@@ -1104,6 +1107,9 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}"
                     f".optimize] start with subgraphs"
                 )
+            context = set(i.name for i in self.builder.inputs) | set(
+                self.builder.initializers_dict
+            )
             for node in self.builder.nodes:
                 if any(att.type == AttributeProto.GRAPH for att in node.attribute):
                     if self.verbose > 1:
@@ -1112,13 +1118,14 @@ class GraphBuilderPatternOptimization:
                             f"{self.builder._hash()}.optimize] "
                             f"optimize {self.builder.pretty_node(node)}"
                         )
-                    self.optimize_node_subgraphs_inplace(node)
+                    self.optimize_node_subgraphs_inplace(node, context)
                     if self.verbose > 1:
                         print(
                             f"[GraphBuilderPatternOptimization-"
                             f"{self.builder._hash()}.optimize] "
                             f"done {self.builder.pretty_node(node)}"
                         )
+                context |= set(node.output)
             if self.verbose > 0:
                 print(
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}"
@@ -1439,7 +1446,7 @@ class GraphBuilderPatternOptimization:
 
         return statistics
 
-    def optimize_node_subgraphs_inplace(self, node: NodeProto):
+    def optimize_node_subgraphs_inplace(self, node: NodeProto, context: Set[str]):
         """Optimizes the subgraphs for a node."""
         from ..xbuilder import GraphBuilder
 
@@ -1458,12 +1465,74 @@ class GraphBuilderPatternOptimization:
                 optimization_options=self.builder.optimization_options,
                 verbose=max(self.verbose - 1, 0),
                 _opsets=self.opsets,
+                _context=context,
             )
-            new_g = g.to_onnx()
+            assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
+            # We need to populate whatever exists.
+            if context:
+                for k in context:
+                    if g.has_name(k):
+                        # We cannot overwrite a local result.
+                        continue
+                    g.set_name(k, marker="optimize_node_subgraphs_inplace")
+                    if self.has_shape(k):
+                        g.set_shape(k, self.get_shape(k))
+                    elif self.has_rank(k):
+                        g.set_rank(k, self.get_rank(k))
+                    if self.has_type(k):
+                        g.set_type(k, self.get_type(k))
+                    if k in self.builder.constants_:
+                        g.constants_[k] = self.builder.constants_[k]
+                    if k in self.builder.constants_node_:
+                        g.constants_node_[k] = self.builder.constants_node_[k]
+                    if k in self.builder._known_value_shape:
+                        g._known_value_shape[k] = self.builder._known_value_shape[k]
+                    if k in self.builder._parameter_renaming:
+                        g._parameter_renaming[k] = self.builder._parameter_renaming[k]
+                    if k in self.builder._parameter_norename:
+                        g._parameter_norename.add(k)
+
+            g.optimize()
+
+            renaming = {}
+            for k in g.initializers_dict:
+                if self.builder.has_name(k):
+                    nk = self.builder.unique_name(k)
+                    renaming[k] = nk
+            if renaming:
+                g.rename_names(renaming)
+
+            new_g = g.to_onnx(optimize=False, as_graph_proto=True)
+            assert isinstance(new_g, GraphProto), f"unexpected type {type(new_g)}"
             if self.verbose > 1:
                 print(
                     f"[GraphBuilder-{self.builder._hash()}] done optimizing attribute "
                     f"{att.name!r} from node {node.op_type!r}, name={node.name!r}"
                 )
-            att.g = new_g
-            new_atts.append(att.g)
+            new_atts.append(oh.make_attribute(att.name, new_g))
+
+            # We need to append functions and initiliazers to the main graph.
+
+            for k, v in g.initializers_dict.items():
+                assert (
+                    k not in self.builder.initializers_dict
+                ), f"name {k!r} already present. That should not be the case."
+                self.builder.initializers_dict[k] = v
+                self.builder.initializers_dict_sources[k] = g.initializers_dict_sources[k]
+                self.builder.set_name(
+                    k,
+                    marker=g._events.get((k, "set_event"), "optimize_node_subgraphs_inplace"),
+                )
+                self.builder.set_type(k, g.get_type(k))
+                self.builder.set_shape(k, g.get_shape(k))
+                if k in g.constants_:
+                    self.builder.constants_[k] = g.constants_[k]
+                if k in g._parameter_renaming:
+                    self.builder._parameter_renaming[k] = g._parameter_renaming[k]
+                if k in g._parameter_norename:
+                    self.builder._parameter_norename.add(k)
+                if k in g._known_torch_value:
+                    self.builder._known_torch_value[k] = g._known_torch_value[k]
+
+        del node.attribute[:]
+        node.attribute.extend(new_atts)

@@ -61,7 +61,7 @@ class OptimizationOptions:
         remove_identity: bool = True,
         patterns: Union[str, List["PatternOptimization"]] = "default",  # noqa: F821
         max_iter: int = -1,
-        recursive: bool = False,
+        recursive: bool = True,
         stop_after: int = -1,
         verbose: int = 0,
         verifies: bool = False,

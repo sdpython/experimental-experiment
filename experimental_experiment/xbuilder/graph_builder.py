@@ -194,6 +194,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param output_names: output names
     :param output_dynamic_shapes: same as dynamic_shapes but for the output
     :param _opsets: to overwrite opsets when the builder receives a `GraphProto`
+    :param _context: known names from the parent graph is any
 
     Important attributes:
 
@@ -393,6 +394,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         output_names: Optional[List[str]] = None,
         output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         _opsets: Optional[Dict[str, int]] = None,
+        _context: Optional[Set[str]] = None,
     ):
         import torch
 
@@ -431,6 +433,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.signature = signature
         self.check_empty_source = check_empty_source
         self.user_defined_output_names = output_names or []
+        self._context = _context or set()
 
         self.nodes = []
         self.initializers_dict = {}
@@ -5030,6 +5033,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         inline: bool = False,
         function_options: Optional[FunctionOptions] = None,
         mask_outputs: Optional[List[bool]] = None,
+        as_graph_proto: bool = False,
     ) -> Union[FunctionProto, ModelProto, GraphProto, TorchModelContainer, Dict[str, Any]]:
         """
         Conversion to onnx. Only then the initializers are converted into TensorProto.
@@ -5046,6 +5050,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             any optimization takes place
         :param function_options: to be set to export as a function
         :param mask_outputs: to filter out some outputs if not None
+        :param as_graph_proto: return a GraphProto with no initializers,
+            they are returned as well.
         :return: the proto
         """
         assert self.nodes, f"No node to convert{self.get_debug_msg()}"
@@ -5127,6 +5133,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             model.graph.node.extend(self.nodes)
             model.graph.input.extend(self.inputs)
+
+        if as_graph_proto:
+            return model.graph
 
         # initializers
         initializers, large_initializers = self._build_initializers(
@@ -5436,8 +5445,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             len(self.nodes) > 0
         ), f"The onnx model is empty (step {step}, no node){self.get_debug_msg()}"
-        known = set(n.name for n in self.inputs)
-        known |= set(self.initializers_dict)
+        known = set(n.name for n in self.inputs) | set(self.initializers_dict) | self._context
         for node in self.nodes:
             assert (
                 node.domain in self.opsets
@@ -5452,7 +5460,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     continue
                 assert i in known, (
                     f"Unknown input {i!r}, step {step!r} in node type "
-                    f"{node.op_type}, name is {node.name!r}\n{node}{self.get_debug_msg()}"
+                    f"{node.op_type}, name is {node.name!r}\n"
+                    f"{self.pretty_node(node)}{self.get_debug_msg()}"
                 )
             known |= set(node.output)
         for o in self.outputs:
@@ -6414,6 +6423,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         # first pass: detect replacements
         new_nodes = []
         input_names = set(i.name for i in self.inputs)
+        input_names_and_init = set(self.initializers_dict) | input_names
         output_names = set(i.name for i in self.outputs)
         replacements = {}
         replacements_rev = {}
@@ -6426,7 +6436,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if node.output[0] not in output_names:
                 old_name, new_name = node.output[0], node.input[0]
             elif (
-                node.input[0] not in input_names
+                node.input[0] not in input_names_and_init
                 and node.input[0] not in output_names
                 and node.input[0] not in replacements
             ):
@@ -8755,3 +8765,72 @@ class GraphBuilder(_GraphBuilderRuntime):
             if dt == ml_dtypes.bfloat16:
                 return self.torch.tensor(np_array.astype(np.float32)).to(self.torch.bfloat16)
         return self.torch.tensor(np_array)
+
+    def rename_names(self, name_to_rename: Dict[str, str]):
+        """Renames some names in the graph and its subgraphs."""
+        set_inputs = set(_.name for _ in self.inputs)
+        set_outputs = set(_.name for _ in self.outputs)
+        for k, v in name_to_rename.items():
+            assert self.has_name(k), f"Name {k!r} not found{self.get_debug_msg()}"
+            assert not self.has_name(v), f"Name {v!r} already taken{self.get_debug_msg()}"
+            assert not self.is_sequence(
+                k
+            ), f"Renaming Not implemented for sequence {k!r}{self.get_debug_msg()}"
+            assert k not in set_inputs, f"Renaming not implemented for input {k!r} yet"
+            assert k not in set_outputs, f"Renaming not implemented for output {k!r} yet"
+            if self.has_type(k):
+                self.set_type(v, self.get_type(k))
+            if self.has_shape(k):
+                self.set_shape(v, self.get_shape(k))
+            elif self.has_rank(k):
+                self.set_shape(v, self.get_shape(k))
+            if k in self.initializers_dict:
+                self.initializers_dict[v] = self.initializers_dict[k]
+                del self.initializers_dict[k]
+            if k in self.initializers_dict_sources:
+                self.initializers_dict_sources[v] = self.initializers_dict_sources[k]
+                del self.initializers_dict_sources[k]
+            if k in self.constants_computed_:
+                self.constants_computed_[v] = self.constants_computed_[k]
+                del self.constants_computed_[k]
+            if k in self.constants_:
+                self.constants_[v] = self.constants_[k]
+                del self.constants_[k]
+            if k in self.constants_node_:
+                self.constants_node_[v] = self.constants_node_[k]
+                del self.constants_node_[k]
+            if k in self._known_torch_value:
+                self._known_torch_value[v] = self._known_torch_value[k]
+                del self._known_torch_value[k]
+            if k in self._known_sequences:
+                self._known_sequences[v] = self._known_sequences[k]
+                del self._known_sequences[k]
+            if k in self._known_value_shape:
+                self._known_value_shape[v] = self._known_value_shape[k]
+                del self._known_value_shape[k]
+            if k in self._registered_users:
+                self._registered_users[v] = self._registered_users[k]
+                del self._registered_users[k]
+            if k in self._parameter_renaming:
+                self._parameter_renaming[v] = self._parameter_renaming[k]
+                del self._parameter_renaming[k]
+            if k in self._parameter_norename:
+                self._parameter_norename.add(v)
+
+        to_rename = set(name_to_rename)
+
+        def _rename_in_nodes(nodes, to_rename):
+            for node in self.nodes:
+                if set(node.input) & to_rename:
+                    new_input = [name_to_rename.get(i, i) for i in node.input]
+                    del node.input[:]
+                    node.input.extend(new_input)
+                for att in node.attribute:
+                    if att.type != AttributeProto.GRAPH:
+                        continue
+                    _rename_in_nodes(att.g.node, to_rename)
+                for o in node.output:
+                    if o in to_rename:
+                        to_rename -= {o}
+
+        _rename_in_nodes(self.nodes, to_rename)
