@@ -44,10 +44,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
         def dummy_function(idx, x_len):
             # [1, 2, 3] becomes [1, 2, 3, x_len]
             return torch.cat(
-                [
-                    torch.tensor([0, 1], dtype=torch.int64),
-                    torch.tensor([x_len], dtype=torch.int64),
-                ],
+                [idx, torch.tensor([x_len], dtype=torch.int64)],
                 dim=0,
             )
 
