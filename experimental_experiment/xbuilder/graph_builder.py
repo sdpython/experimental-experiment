@@ -5468,10 +5468,103 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
         stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
 
-    def optimize(self) -> List[Dict[str, Any]]:
+    def _move_context_to_other_builder(self, context: Sequence[str], g: "GraphBuilder"):
+        if context:
+            for k in context:
+                if g.has_name(k):
+                    # We cannot overwrite a local result.
+                    continue
+                g.set_name(k, marker="optimize_node_subgraphs_inplace")
+                if self.has_shape(k):
+                    g.set_shape(k, self.get_shape(k))
+                elif self.has_rank(k):
+                    g.set_rank(k, self.get_rank(k))
+                if self.has_type(k):
+                    g.set_type(k, self.get_type(k))
+                if k in self.constants_:
+                    g.constants_[k] = self.constants_[k]
+                if k in self.constants_node_:
+                    g.constants_node_[k] = self.constants_node_[k]
+                if k in self._known_value_shape:
+                    g._known_value_shape[k] = self._known_value_shape[k]
+                if k in self._parameter_renaming:
+                    g._parameter_renaming[k] = self._parameter_renaming[k]
+                if k in self._parameter_norename:
+                    g._parameter_norename.add(k)
+
+    def optimize_node_subgraphs_inplace(self, node: NodeProto, context: Set[str]):
+        """Optimizes the subgraphs for a node."""
+        new_atts = []
+        for att in node.attribute:
+            if att.type != AttributeProto.GRAPH:
+                new_atts.append(att)
+                continue
+            if self.verbose > 1:
+                print(
+                    f"[GraphBuilder-{self._hash()}] optimizes attribute "
+                    f"{att.name!r} from node {node.op_type!r}, name={node.name!r}"
+                )
+            g = GraphBuilder(
+                att.g,
+                optimization_options=self.optimization_options,
+                verbose=max(self.verbose - 1, 0),
+                _opsets=self.opsets,
+                _context=context,
+            )
+            assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
+            # We need to populate whatever exists.
+            self._move_context_to_other_builder(context, g)
+            g.optimize()
+
+            renaming = {}
+            for k in g.initializers_dict:
+                if self.has_name(k):
+                    nk = self.unique_name(k)
+                    renaming[k] = nk
+            if renaming:
+                g.rename_names(renaming)
+
+            new_g = g.to_onnx(optimize=False, as_graph_proto=True)
+            assert isinstance(new_g, GraphProto), f"unexpected type {type(new_g)}"
+            if self.verbose > 1:
+                print(
+                    f"[GraphBuilder-{self._hash()}] done optimizing attribute "
+                    f"{att.name!r} from node {node.op_type!r}, name={node.name!r}"
+                )
+            new_atts.append(oh.make_attribute(att.name, new_g))
+
+            # We need to append functions and initiliazers to the main graph.
+
+            for k, v in g.initializers_dict.items():
+                assert (
+                    k not in self.initializers_dict
+                ), f"name {k!r} already present. That should not be the case."
+                self.initializers_dict[k] = v
+                self.initializers_dict_sources[k] = g.initializers_dict_sources[k]
+                self.set_name(
+                    k,
+                    marker=g._events.get((k, "set_event"), "optimize_node_subgraphs_inplace"),
+                )
+                self.set_type(k, g.get_type(k))
+                self.set_shape(k, g.get_shape(k))
+                if k in g.constants_:
+                    self.constants_[k] = g.constants_[k]
+                if k in g._parameter_renaming:
+                    self._parameter_renaming[k] = g._parameter_renaming[k]
+                if k in g._parameter_norename:
+                    self._parameter_norename.add(k)
+                if k in g._known_torch_value:
+                    self._known_torch_value[k] = g._known_torch_value[k]
+
+        del node.attribute[:]
+        node.attribute.extend(new_atts)
+
+    def optimize(self, recursive: bool = True) -> List[Dict[str, Any]]:
         """
         Optimizes a graph.
         Returns the list of applied processes.
+
+        :param recursive: to overwrite the value provided by the options if True.
         """
         self._clean_values_cache()
 
@@ -5488,6 +5581,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"[GraphBuilder-{self._hash()}.optimize] "
                     f"options={self.optimization_options!r}"
                 )
+            if self.verbose >= 10:
+                print("-- GRAPH BEFORE OPTIMIZATON --")
+                print(self.pretty_text())
+                print("-- END --")
             else:
                 n_patterns = (
                     0
@@ -5496,6 +5593,27 @@ class GraphBuilder(_GraphBuilderRuntime):
                     else len(self.optimization_options.patterns)
                 )
                 print(f"[GraphBuilder-{self._hash()}.optimize] #patterns={n_patterns}")
+
+        if self.optimization_options.recursive and recursive:
+            if self.verbose > 0:
+                print(f"[GraphBuilder-{self._hash()}.optimize] start with subgraphs")
+            context = set(i.name for i in self.inputs) | set(self.initializers_dict)
+            for node in self.nodes:
+                if any(att.type == AttributeProto.GRAPH for att in node.attribute):
+                    if self.verbose > 1:
+                        print(
+                            f"[GraphBuilder-{self._hash()}.optimize] "
+                            f"optimize {self.pretty_node(node)}"
+                        )
+                    self.optimize_node_subgraphs_inplace(node, context)
+                    if self.verbose > 1:
+                        print(
+                            f"[GraphBuilder-{self._hash()}.optimize] "
+                            f"done {self.pretty_node(node)}"
+                        )
+                context |= set(node.output)
+            if self.verbose > 0:
+                print(f"[GraphBuilder-{self._hash()}.optimize] done with subgraphs")
 
         self._check(statistics, "A")
         if self.optimization_options.remove_identity:
@@ -5563,7 +5681,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             ), "remove_unused must be positive for pattern optimizations"
             n = len(self.nodes)
             begin = time.perf_counter()
-            res = self.optimize_with_patterns()
+            res = self.optimize_with_patterns(recursive=False)
             statistics.extend(res)
             statistics.append(
                 dict(
@@ -5763,9 +5881,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     rows.append(f"          NODE: {v:3d} x {k[0]}.{k[1]}")
         return "\n".join(rows)
 
-    def optimize_with_patterns(self) -> List[Dict[str, Any]]:
+    def optimize_with_patterns(self, recursive: bool = True) -> List[Dict[str, Any]]:
         """
         Optimizes this graph with patterns.
+
+        :param recursive: overwrite the value given by the option if this one is True
+        :return: the method returns informations about the applied processes.
         """
         from ..xoptim import GraphBuilderPatternOptimization
 
@@ -5782,6 +5903,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             max_iter=self.optimization_options.max_iter,
             remove_identity=self.optimization_options.remove_identity,
             stop_after=self.optimization_options.stop_after,
+            recursive=recursive,
         )
 
     def optimize_order(self):

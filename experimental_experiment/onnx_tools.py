@@ -166,13 +166,13 @@ def _validate_graph(
             raise AssertionError(
                 f"One input is missing from node.input={node.input}, "
                 f"existing={ins}, path={'/'.join(path)}, "
-                f"node: {node.op_type}-{node.name}"
+                f"node: {node.op_type}[{node.name}]"
             )
         if watch and ins & watch:
             if verbose:
                 print(
                     f"-- found input {ins & watch} in "
-                    f"{'/'.join(path)}/{node.op_type}-{node.name}"
+                    f"{'/'.join(path)}/{node.op_type}[{node.name}]"
                 )
             found.append(node)
         for att in node.attribute:
@@ -182,7 +182,7 @@ def _validate_graph(
                         att.g,
                         existing.copy(),
                         watch=watch,
-                        path=[*path, f"{node.op_type}-{node.name}"],
+                        path=[*path, f"{node.op_type}[{node.name}]"],
                         verbose=verbose,
                     )
                 )
@@ -191,7 +191,7 @@ def _validate_graph(
             if verbose:
                 print(
                     f"-- found output {set(node.output) & watch} "
-                    f"in {'/'.join(path)}/{node.op_type}-{node.name}"
+                    f"in {'/'.join(path)}/{node.op_type}[{node.name}]"
                 )
             found.append(node)
     out = set(o.name for o in g.output)
@@ -214,7 +214,7 @@ def _validate_function(g: FunctionProto, verbose: int = 0, watch: Optional[Set[s
             )
         if watch and ins & watch:
             if verbose:
-                print(f"-- found input {ins & watch} in {node.op_type}-{node.name}")
+                print(f"-- found input {ins & watch} in {node.op_type}[{node.name}]")
             found.append(node)
         for att in node.attribute:
             if att.type == AttributeProto.GRAPH:
@@ -225,7 +225,8 @@ def _validate_function(g: FunctionProto, verbose: int = 0, watch: Optional[Set[s
         if watch and set(node.output) & watch:
             if verbose:
                 print(
-                    f"-- found output {set(node.output) & watch} in {node.op_type}-{node.name}"
+                    f"-- found output {set(node.output) & watch} "
+                    f"in {node.op_type}[{node.name}]"
                 )
     out = set(g.output)
     ins = out & existing

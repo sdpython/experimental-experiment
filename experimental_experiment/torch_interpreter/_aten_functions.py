@@ -2485,6 +2485,8 @@ def aten_embedding_bag_padding_idx(
         make_node(op_type, ["embeddings", "zero"], ["reduced_embedings"], keepdims=0),
         make_node("Identity", ["cond"], ["cond_out"]),
     ]
+    for i, node in enumerate(nodes):
+        node.name = f"loop.embedding_bag_padding_idx.{i}"
 
     loop_body = make_graph(
         nodes,

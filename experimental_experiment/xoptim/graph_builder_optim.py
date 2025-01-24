@@ -1063,7 +1063,11 @@ class GraphBuilderPatternOptimization:
         return self.builder.do_not_remove(node)
 
     def optimize(
-        self, max_iter=-1, remove_identity: bool = True, stop_after: int = -1
+        self,
+        max_iter=-1,
+        remove_identity: bool = True,
+        stop_after: int = -1,
+        recursive: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Optimizes the based on the given list of patterns.
@@ -1073,6 +1077,7 @@ class GraphBuilderPatternOptimization:
             not doing it might prevent other patterns to find a set of nodes to optimize
         :param sopt_after: stop after this number of replacements (to debug),
             -1 not to stop
+        :param recursive: to overwrites the value provided by the options
         :return: the method returns informations about the applied processes.
 
         The algorithm runs multiple iteration until the graph is not evolving
@@ -1101,7 +1106,7 @@ class GraphBuilderPatternOptimization:
         but it guarantees the local structure when applying the rewriting was
         not altered by another one.
         """
-        if self.recursive:
+        if self.recursive and recursive:
             if self.verbose > 0:
                 print(
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}"
@@ -1457,7 +1462,8 @@ class GraphBuilderPatternOptimization:
                 continue
             if self.verbose > 1:
                 print(
-                    f"[GraphBuilder-{self.builder._hash()}] optimizes attribute "
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}] "
+                    f"optimizes attribute "
                     f"{att.name!r} from node {node.op_type!r}, name={node.name!r}"
                 )
             g = GraphBuilder(
@@ -1469,29 +1475,7 @@ class GraphBuilderPatternOptimization:
             )
             assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
             # We need to populate whatever exists.
-            if context:
-                for k in context:
-                    if g.has_name(k):
-                        # We cannot overwrite a local result.
-                        continue
-                    g.set_name(k, marker="optimize_node_subgraphs_inplace")
-                    if self.has_shape(k):
-                        g.set_shape(k, self.get_shape(k))
-                    elif self.has_rank(k):
-                        g.set_rank(k, self.get_rank(k))
-                    if self.has_type(k):
-                        g.set_type(k, self.get_type(k))
-                    if k in self.builder.constants_:
-                        g.constants_[k] = self.builder.constants_[k]
-                    if k in self.builder.constants_node_:
-                        g.constants_node_[k] = self.builder.constants_node_[k]
-                    if k in self.builder._known_value_shape:
-                        g._known_value_shape[k] = self.builder._known_value_shape[k]
-                    if k in self.builder._parameter_renaming:
-                        g._parameter_renaming[k] = self.builder._parameter_renaming[k]
-                    if k in self.builder._parameter_norename:
-                        g._parameter_norename.add(k)
-
+            self._move_context_to_other_builder(context, g)
             g.optimize()
 
             renaming = {}
@@ -1506,7 +1490,8 @@ class GraphBuilderPatternOptimization:
             assert isinstance(new_g, GraphProto), f"unexpected type {type(new_g)}"
             if self.verbose > 1:
                 print(
-                    f"[GraphBuilder-{self.builder._hash()}] done optimizing attribute "
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}] "
+                    f"done optimizing attribute "
                     f"{att.name!r} from node {node.op_type!r}, name={node.name!r}"
                 )
             new_atts.append(oh.make_attribute(att.name, new_g))
