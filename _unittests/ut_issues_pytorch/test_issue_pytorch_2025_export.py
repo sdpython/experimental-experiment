@@ -24,7 +24,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
             (torch.arange(3) + 1).to(torch.int64),
             torch.tensor([0, 5], dtype=torch.int64),
         )
-        expected = model(*inputs)
+        model(*inputs)
 
         AUTO = torch.export.Dim.AUTO
         ep = torch.export.export(
@@ -58,7 +58,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
             (torch.arange(3) + 1).to(torch.int64),
             torch.tensor([0, 5], dtype=torch.int64),
         )
-        expected = model(*inputs)
+        model(*inputs)
 
         AUTO = torch.export.Dim.AUTO
         ep = torch.export.export(
