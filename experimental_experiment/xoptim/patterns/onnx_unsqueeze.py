@@ -102,6 +102,8 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
         ma = max(axis1.max(), axis2.max()) + 1
         all_axes = list(range(ma))
+        axis1 = axis1.reshape((-1,))
+        axis2 = axis2.reshape((-1,))
         for a in axis1[::-1]:
             all_axes.insert(a, -2)
         for a in axis2[::-1]:

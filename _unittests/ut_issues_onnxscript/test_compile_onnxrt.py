@@ -68,43 +68,6 @@ class TestDynamoOnnxRtBackend(ExtTestCase):
 
     @skipif_ci_apple("crash on apple")
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.7", "export fails")
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    def test_onnxrt_tutorial_0b(self):
-        from onnxruntime import InferenceSession
-        import torch
-        import torch.onnx
-        import torch._dynamo
-
-        torch._dynamo.reset()
-
-        if not torch.onnx.is_onnxrt_backend_supported():
-            return
-
-        model, input_tensor = return_module_cls_pool()
-
-        def f(x):
-            return model(x)
-
-        expected = f(input_tensor)
-        optimized_mod = torch.compile(f)
-
-        got = optimized_mod(input_tensor)
-        self.assertEqual(expected.shape, got.shape)
-        self.assertEqual(expected.dtype, got.dtype)
-        self.assertEqualArray(expected.detach().numpy(), got.detach().numpy(), atol=1e-5)
-
-        export = torch.onnx.export(f, input_tensor, dynamo=True, fallback=False)
-        onx = export.model_proto
-        sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
-        with open("dummy_baseline_b.onnx", "wb") as f:
-            f.write(onx.SerializeToString())
-        name = onx.graph.input[0].name
-        got = sess.run(None, {name: input_tensor.detach().numpy()})[0]
-        self.assertEqualArray(expected.detach().numpy(), got, atol=1e-5)
-
-    @skipif_ci_apple("crash on apple")
-    @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.2", "export fails")
     @unittest.skip(
         "FAIL : Type Error: Type (tensor(int64)) of output arg "

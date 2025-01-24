@@ -5487,8 +5487,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                     g.constants_node_[k] = self.constants_node_[k]
                 if k in self._known_value_shape:
                     g._known_value_shape[k] = self._known_value_shape[k]
-                if k in self._parameter_renaming:
-                    g._parameter_renaming[k] = self._parameter_renaming[k]
                 if k in self._parameter_norename:
                     g._parameter_norename.add(k)
 
