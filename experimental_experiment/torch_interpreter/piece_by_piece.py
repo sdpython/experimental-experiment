@@ -232,7 +232,7 @@ class ModelDiagnoseOutput:
     """
     Contains inputs and outputs, diagnose results when tracing
     intermediate results. An instance of this class is produced
-    by :func:`infer_shape_type_from_execution`.
+    by :func:`trace_execution_piece_by_piece`.
     Example :ref:`l-plot-exporter-recipes-custom-phi35` tells you
     more about how to use this class.
     """
@@ -1513,7 +1513,7 @@ def trace_forward_execution(model: torch.nn.Module, verbose: int = 0) -> ModelDi
         _untrace_forward_execution(diag, verbose=verbose)
 
 
-def infer_shape_type_from_execution(
+def trace_execution_piece_by_piece(
     model: torch.nn.Module,
     inputs: List[Tuple[Tuple[Any, ...], Dict[str, Any]]],
     verbose: int = 0,
@@ -1540,7 +1540,7 @@ def infer_shape_type_from_execution(
                 i = (i, {})
             if verbose:
                 print(
-                    f"[infer_shape_type_from_execution] run with "
+                    f"[trace_execution_piece_by_piece] run with "
                     f"{string_type(dict(args=i[0], kwargs=i[1]), with_shape=True)}"
                 )
             assert (
