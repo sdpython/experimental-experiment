@@ -15,7 +15,6 @@
     _torch_helper
     aten_functions
     aten_methods
-    diagnose
     dispatcher
     eval/index
     export_options
@@ -25,6 +24,7 @@
     onnx_export_serialization
     oxs_dispatcher
     oxs_opset
+    piece_by_piece
     patches/index
     tracing
 

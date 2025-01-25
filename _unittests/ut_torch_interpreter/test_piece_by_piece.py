@@ -1,16 +1,16 @@
 import unittest
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
-from experimental_experiment.torch_interpreter.diagnose import (
-    infer_shape_type_from_execution,
+from experimental_experiment.torch_interpreter.piece_by_piece import (
+    trace_execution_piece_by_piece,
     CustomOpStrategy,
 )
 
 
-class TestDiagnose(ExtTestCase):
+class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
-    def test_infer_shape_type_from_execution_args(self):
+    def test_trace_execution_piece_by_piece_args(self):
         import torch
 
         class MA(torch.nn.Module):
@@ -49,13 +49,13 @@ class TestDiagnose(ExtTestCase):
             ((torch.randn((6, 6)),), {}),
         ]
 
-        diag = infer_shape_type_from_execution(big, inputs, verbose=1)
+        diag = trace_execution_piece_by_piece(big, inputs, verbose=1)
         pretty = diag.pretty_text(with_dynamic_shape=True)
         self.assertIn("DS=", pretty)
 
     @requires_torch("2.6")
     @hide_stdout()
-    def test_infer_shape_type_from_execution_kwargs(self):
+    def test_trace_execution_piece_by_piece_kwargs(self):
         import torch
 
         class MA(torch.nn.Module):
@@ -94,13 +94,13 @@ class TestDiagnose(ExtTestCase):
             ((torch.randn((6, 6)),), {}),
         ]
 
-        diag = infer_shape_type_from_execution(big, inputs, verbose=1)
+        diag = trace_execution_piece_by_piece(big, inputs, verbose=1)
         pretty = diag.pretty_text(with_dynamic_shape=True)
         self.assertIn("DS=", pretty)
 
     @requires_torch("2.6")
     @hide_stdout()
-    def test_infer_shape_type_from_execution_phi2(self):
+    def test_trace_execution_piece_by_piece_phi2(self):
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         res = get_phi2(
@@ -118,7 +118,7 @@ class TestDiagnose(ExtTestCase):
         )
         inputs = [_inputs, _inputs2]
 
-        diag = infer_shape_type_from_execution(model, inputs, verbose=2)
+        diag = trace_execution_piece_by_piece(model, inputs, verbose=2)
         pretty = diag.pretty_text(with_dynamic_shape=True)
         self.assertIn("DS=", pretty)
         args, ds_found = diag.guess_dynamic_shapes()
@@ -143,7 +143,7 @@ class TestDiagnose(ExtTestCase):
 
     @requires_torch("2.6")
     @hide_stdout()
-    def test_infer_shape_type_from_execution_export(self):
+    def test_trace_execution_piece_by_piece_export(self):
         import torch
 
         class MA(torch.nn.Module):
@@ -182,7 +182,7 @@ class TestDiagnose(ExtTestCase):
             ((torch.randn((6, 6)),), {}),
         ]
 
-        diag = infer_shape_type_from_execution(big, inputs)
+        diag = trace_execution_piece_by_piece(big, inputs)
         ep = diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
@@ -196,7 +196,7 @@ class TestDiagnose(ExtTestCase):
 
     @requires_torch("2.6")
     @hide_stdout()
-    def test_infer_shape_type_from_execution_args_to_kwargs(self):
+    def test_trace_execution_piece_by_piece_args_to_kwargs(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -213,7 +213,7 @@ class TestDiagnose(ExtTestCase):
             (tuple(), {"x": torch.randn((6, 6))}),
         ]
 
-        diag = infer_shape_type_from_execution(model, inputs)
+        diag = trace_execution_piece_by_piece(model, inputs)
         ep = diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
@@ -230,7 +230,7 @@ class TestDiagnose(ExtTestCase):
         self.assertEqual(ds, (tuple(), {"kwargs": {"x": {0: torch.export.Dim.DYNAMIC}}}))
 
     @requires_torch("2.6")
-    def test_infer_shape_type_from_execution_piece_try_no_weight(self):
+    def test_trace_execution_piece_by_piece_piece_try_no_weight(self):
         import torch
 
         class SubModel(torch.nn.Module):
@@ -275,7 +275,7 @@ class TestDiagnose(ExtTestCase):
         self.assertIn("torch.ops.test_diag_lib.SubModel_forward", str(ep))
 
     @requires_torch("2.6")
-    def test_infer_shape_type_from_execution_piece_try_no_weight_args(self):
+    def test_trace_execution_piece_by_piece_piece_try_no_weight_args(self):
         import torch
 
         class SubModel(torch.nn.Module):
@@ -321,7 +321,7 @@ class TestDiagnose(ExtTestCase):
         self.assertIn("torch.ops.test_diag_lib.SubModelK_forward", str(ep))
 
     @requires_torch("2.6")
-    def test_infer_shape_type_from_execution_piece_try_weight(self):
+    def test_trace_execution_piece_by_piece_piece_try_weight(self):
         import torch
 
         class SubModel(torch.nn.Module):
@@ -371,7 +371,7 @@ class TestDiagnose(ExtTestCase):
         self.assertIn("torch.ops.test_diag_lib.SubModelWK_forward", str(ep))
 
     @requires_torch("2.6")
-    def test_infer_shape_type_from_execution_piece_try_weight_args(self):
+    def test_trace_execution_piece_by_piece_piece_try_weight_args(self):
         import torch
 
         class SubModel(torch.nn.Module):
@@ -423,7 +423,7 @@ class TestDiagnose(ExtTestCase):
 
     @requires_torch("2.6")
     @hide_stdout()
-    def test_infer_shape_type_from_execution_piece_all(self):
+    def test_trace_execution_piece_by_piece_piece_all(self):
         import torch
 
         class SubModel(torch.nn.Module):
@@ -448,7 +448,7 @@ class TestDiagnose(ExtTestCase):
             ((torch.randn((6, 6)),), {}),
         ]
 
-        diag = infer_shape_type_from_execution(model, inputs)
+        diag = trace_execution_piece_by_piece(model, inputs)
         ep = diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
@@ -499,7 +499,7 @@ class TestDiagnose(ExtTestCase):
             ((torch.randn((6, 6)),), {}),
         ]
 
-        diag = infer_shape_type_from_execution(model, inputs)
+        diag = trace_execution_piece_by_piece(model, inputs)
         ep = diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
@@ -561,7 +561,7 @@ class TestDiagnose(ExtTestCase):
             ((torch.randn((6, 6)),), {}),
         ]
 
-        diag = infer_shape_type_from_execution(model, inputs)
+        diag = trace_execution_piece_by_piece(model, inputs)
         ep = diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
@@ -623,7 +623,7 @@ class TestDiagnose(ExtTestCase):
         ]
 
         expected_dyn_shapes = "(({0: DYN}, [[{0: DYN}], [{0: DYN}]]), {})"
-        diag = infer_shape_type_from_execution(model, inputs)
+        diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
         got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
         self.assertEqual(expected_dyn_shapes, got)

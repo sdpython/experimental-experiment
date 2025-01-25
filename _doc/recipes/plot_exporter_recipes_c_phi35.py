@@ -16,7 +16,9 @@ from typing import Any, Dict
 import torch
 import transformers
 from experimental_experiment.helpers import string_type
-from experimental_experiment.torch_interpreter.diagnose import infer_shape_type_from_execution
+from experimental_experiment.torch_interpreter.piece_by_piece import (
+    trace_execution_piece_by_piece,
+)
 
 
 def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
@@ -210,7 +212,7 @@ print(string_type(inputs, with_shape=True))
 # including its submodules. It is going to execute the model twice
 # with the two sets of inputs and stores every intermediate input and output.
 
-diag = infer_shape_type_from_execution(model, [inputs, inputs2], verbose=2)
+diag = trace_execution_piece_by_piece(model, [inputs, inputs2], verbose=2)
 
 # %%
 # Now we keep in memory every input/output for the submodules,
