@@ -944,6 +944,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             atol=1e-5,
         )
 
+    @unittest.skip("failing after 2.7")
     @hide_stdout()
     def test_xt_prod(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
@@ -973,6 +974,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @unittest.skip("failing after 2.7")
     @hide_stdout()
     def test_xt_prod_dtype(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)

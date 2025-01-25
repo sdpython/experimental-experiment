@@ -38,6 +38,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
         onnx.save(onx, "test_pads_with_constant_1.custom.onnx")
         onnx.checker.check_model(onx)
 
+    @requires_torch("2.6")
     def test_pads_with_constant_2(self):
         import torch
 
