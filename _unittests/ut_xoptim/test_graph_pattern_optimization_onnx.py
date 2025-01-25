@@ -17,6 +17,7 @@ import onnx
 from onnx import (
     ModelProto,
     TensorProto,
+    ValueInfoProto,
     helper as oh,
     numpy_helper as onh,
     load as onnx_load,
@@ -38,11 +39,12 @@ from experimental_experiment.xbuilder.graph_builder import (
 from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
+from experimental_experiment.xoptim.patterns import ConstantToInitializerPattern
 from experimental_experiment.xbuilder._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
 )
-from experimental_experiment.xoptim import get_pattern_list
+from experimental_experiment.xoptim import get_pattern_list, remove_constants_for_initializers
 from experimental_experiment.helpers import pretty_onnx
 
 TFLOAT = TensorProto.FLOAT
@@ -166,12 +168,50 @@ class TestGraphPatternOptimization(ExtTestCase):
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
         self.assertNotEmpty(res)
-        self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
+        self.assertIn("[GraphBuilderPatternOptimization-", out)
+        self.assertIn(".optimize] done after", out)
         self.assertIn("UnsqueezeUnsqueezePattern", out)
 
         onx = gr.to_onnx(optimize=False)
         after = [node for node in onx.graph.node if node.op_type == "Unsqueeze"]
         self.assertEqual(len(after), len(before) - 2)
+
+    def test_unsqueeze_unsqueeze_0_0(self):
+        for i in range(0, 3):
+            for j in range(0, 4):
+                with self.subTest(i=i, j=j):
+                    model = oh.make_model(
+                        oh.make_graph(
+                            [
+                                oh.make_node("Unsqueeze", ["X", "ii"], ["x1"]),
+                                oh.make_node("Unsqueeze", ["x1", "jj"], ["Y"]),
+                            ],
+                            "dummy",
+                            [_mkv_("X", TFLOAT, ["a", "b"])],
+                            [_mkv_("Y", TFLOAT, [1, 1, "a", "b"])],
+                            [
+                                onh.from_array(np.array([i], dtype=np.int64), "ii"),
+                                onh.from_array(np.array([j], dtype=np.int64), "jj"),
+                            ],
+                        ),
+                        opset_imports=[oh.make_opsetid("", 18)],
+                        ir_version=10,
+                    )
+                    feeds = dict(X=self._range(3, 4))
+
+                    gr = GraphBuilder(
+                        model,
+                        optimization_options=OptimizationOptions(
+                            patterns=["UnsqueezeUnsqueeze"], verbose=0
+                        ),
+                    )
+                    opt_onx = gr.to_onnx()
+                    self.assertEqual(len(opt_onx.graph.node), 1)
+                    ref = ExtendedReferenceEvaluator(model, verbose=0)
+                    expected = ref.run(None, feeds)
+                    ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+                    got = ref.run(None, feeds)
+                    self.assertEqualArray(expected[0], got[0])
 
     def test_cast(self):
         origin = self._get_model("dort-c-custom__0.onnx")
@@ -183,7 +223,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
         self.assertNotEmpty(res)
-        self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
+        self.assertIn(".optimize] done after", out)
+        self.assertIn("[GraphBuilderPatternOptimization-", out)
         self.assertNotIn("UnsqueezeUnsqueezePattern", out)
         self.assertIn("CastPattern", out)
 
@@ -205,7 +246,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
         self.assertNotEmpty(res)
-        self.assertIn("[GraphBuilderPatternOptimization.optimize] done after", out)
+        self.assertIn("[GraphBuilderPatternOptimization-", out)
+        self.assertIn(".optimize] done after", out)
         self.assertIn("ReshapeMatMulReshapePattern", out)
 
         onx = gr.to_onnx(optimize=False)
@@ -4738,6 +4780,253 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_constant_to_initializer(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "Constant",
+                        [],
+                        ["cst"],
+                        value=onh.from_array(np.array([1, 2], dtype=np.float32)),
+                    ),
+                    oh.make_node("Add", ["X", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["a", "b"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        self.assertEqual(len(model.graph.initializer), 0)
+
+        feeds = {"X": self._range(5, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=[ConstantToInitializerPattern()], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        self.assertEqual(["Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 1)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_remove_constants_for_initializers(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "Constant",
+                        [],
+                        ["cst"],
+                        value=onh.from_array(np.array([1, 2], dtype=np.float32)),
+                    ),
+                    oh.make_node("Add", ["X", "cst"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["a", "b"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        self.assertEqual(len(model.graph.initializer), 0)
+        opt_onx = remove_constants_for_initializers(model)
+        self.assertEqual(len(opt_onx.graph.initializer), 1)
+
+    def test_detect_broken_graph(self):
+
+        def _mkv_(name):
+            value_info_proto = ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                    oh.make_node("Add", ["X", "zero"], ["X0"]),
+                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                    oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                    oh.make_node(
+                        "If",
+                        ["cond"],
+                        ["Z_c"],
+                        then_branch=oh.make_graph(
+                            [oh.make_node("Add", ["X00", "one"], ["Y"])],
+                            "then",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                        else_branch=oh.make_graph(
+                            [oh.make_node("Sub", ["X0", "one"], ["Y"])],
+                            "else",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                    ),
+                    oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                [onh.from_array(np.array([0], dtype=np.float32), name="zero")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        check_model(model)
+        feeds = {
+            "X": np.array([1, 2, 3], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([2, 3, 4], dtype=np.float32))
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertNotIn("Add", set(n.op_type for n in opt_onx.graph.node))
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([2, 3, 4], dtype=np.float32))
+
+    @hide_stdout()
+    def test_constant_to_initializer_recursive(self):
+        value = np.array([0], dtype=np.float32)
+        zero = onh.from_array(value, name="zero")
+
+        X = oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [None, None])
+        Y = oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [None])
+
+        rsum = oh.make_node("ReduceSum", ["X"], ["rsum"])
+        cond = oh.make_node("Greater", ["rsum", "zero"], ["cond"])
+
+        then_out = oh.make_tensor_value_info("then_out", onnx.TensorProto.FLOAT, None)
+        then_cst = onh.from_array(np.array([1] * 129).astype(np.float32))
+
+        then_const_node = oh.make_node(
+            "Constant", inputs=[], outputs=["then_out"], value=then_cst, name="cst1"
+        )
+        then_body = oh.make_graph([then_const_node], "then_body", [], [then_out])
+
+        else_out = oh.make_tensor_value_info("else_out", onnx.TensorProto.FLOAT, None)
+        else_cst = onh.from_array(np.array([-1] * 129).astype(np.float32))
+        else_const_node = oh.make_node(
+            "Constant", inputs=[], outputs=["else_out"], value=else_cst, name="cst2"
+        )
+        else_body = oh.make_graph([else_const_node], "else_body", [], [else_out])
+
+        if_node = oh.make_node(
+            "If", ["cond"], ["Y"], then_branch=then_body, else_branch=else_body
+        )
+        graph = oh.make_graph([rsum, cond, if_node], "if", [X], [Y], [zero])
+        onnx_model = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 18)])
+        self.print_model(onnx_model)
+
+        x = np.ones((3, 2), dtype=np.float32)
+        oinf1 = ExtendedReferenceEvaluator(onnx_model)
+        y1 = oinf1.run(None, {"X": x})[0]
+        repl = remove_constants_for_initializers(onnx_model, verbose=5)
+        self.print_model(repl)
+
+        self.assertNotIn("Constant", pretty_onnx(repl))
+        oinf2 = ExtendedReferenceEvaluator(repl)
+        y2 = oinf2.run(None, {"X": x})[0]
+        self.assertEqualArray(y1, y2)
+
+    @hide_stdout()
+    def test_constant_to_initializer_with_conflict(self):
+
+        def _mkv_(name):
+            value_info_proto = ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                    oh.make_node("Add", ["X", "two"], ["X0"]),
+                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                    oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                    oh.make_node(
+                        "If",
+                        ["cond"],
+                        ["Z_c"],
+                        then_branch=oh.make_graph(
+                            [
+                                oh.make_node("Constant", [], ["two"], value_floats=[2.1]),
+                                oh.make_node("Add", ["X00", "two"], ["Y"]),
+                            ],
+                            "then",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                        else_branch=oh.make_graph(
+                            [
+                                oh.make_node("Constant", [], ["two"], value_floats=[2.2]),
+                                oh.make_node("Sub", ["X0", "two"], ["Y"]),
+                            ],
+                            "else",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                    ),
+                    oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        # check_model(model)
+        self.assertEqual(len(model.graph.initializer), 2)
+        self.assertEqual(set(i.name for i in model.graph.initializer), {"zero", "two"})
+        opt_onnx = remove_constants_for_initializers(model, verbose=0)
+        self.print_model(opt_onnx)
+        self.assertEqual(len(opt_onnx.graph.initializer), 4)
+        check_model(opt_onnx)
+        self.print_model(opt_onnx)
+
+        feeds = {
+            "X": np.array([1, 2, 3], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(opt_onnx)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([5.1, 6.1, 7.1], dtype=np.float32))
 
 
 if __name__ == "__main__":

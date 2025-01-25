@@ -3,7 +3,7 @@ import pprint
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import AttributeProto, NodeProto, TensorProto
+from onnx import AttributeProto, GraphProto, NodeProto, TensorProto
 from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
 from ..helpers import from_array_extended
@@ -791,7 +791,10 @@ class GraphBuilderPatternOptimization:
         new_nodes = match.apply(self, *match.nodes)
 
         if self.verbose >= 10:
-            print(f"[GraphBuilderPatternOptimization.apply_match] {match}")
+            print(
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}.apply_match] {match}"
+            )
             for node in match.nodes:
                 if node is None:
                     continue
@@ -803,7 +806,10 @@ class GraphBuilderPatternOptimization:
 
         self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed, debug=match)
         if self.verbose >= 10:
-            print(f"[GraphBuilderPatternOptimization.apply_match] {match} applied.")
+            print(
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}.apply_match] {match} applied."
+            )
         if self.dump_applied_patterns:
             self._save_pattern_as_proto(self.dump_applied_patterns, match, new_nodes)
         return new_nodes
@@ -844,7 +850,8 @@ class GraphBuilderPatternOptimization:
 
         if self.verbose >= 10:
             print(
-                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] save {fullname!r}"
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}._save_pattern_as_proto] save {fullname!r}"
             )
 
         unique_names = set()
@@ -931,7 +938,8 @@ class GraphBuilderPatternOptimization:
             f.write(model.SerializeToString())
         if self.verbose >= 10:
             print(
-                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] "
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}._save_pattern_as_proto] "
                 f"saved {fullname!r}"
             )
 
@@ -941,7 +949,8 @@ class GraphBuilderPatternOptimization:
             f.write(model_apply.SerializeToString())
         if self.verbose >= 10:
             print(
-                f"[GraphBuilderPatternOptimization._save_pattern_as_proto] "
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}._save_pattern_as_proto] "
                 f"saved {fullname!r}"
             )
 
@@ -1008,8 +1017,11 @@ class GraphBuilderPatternOptimization:
     ):
         begin = time.perf_counter()
         assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
-        known = set(n.name for n in self.builder.inputs)
-        known |= set(self.builder.initializers_dict)
+        known = (
+            set(n.name for n in self.builder.inputs)
+            | set(self.builder.initializers_dict)
+            | self.builder._context
+        )
         for p, node in enumerate(self.builder.nodes):
             assert (
                 node.domain in self.opsets
@@ -1051,7 +1063,11 @@ class GraphBuilderPatternOptimization:
         return self.builder.do_not_remove(node)
 
     def optimize(
-        self, max_iter=-1, remove_identity: bool = True, stop_after: int = -1
+        self,
+        max_iter=-1,
+        remove_identity: bool = True,
+        stop_after: int = -1,
+        recursive: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Optimizes the based on the given list of patterns.
@@ -1061,6 +1077,7 @@ class GraphBuilderPatternOptimization:
             not doing it might prevent other patterns to find a set of nodes to optimize
         :param sopt_after: stop after this number of replacements (to debug),
             -1 not to stop
+        :param recursive: to overwrites the value provided by the options
         :return: the method returns informations about the applied processes.
 
         The algorithm runs multiple iteration until the graph is not evolving
@@ -1089,9 +1106,37 @@ class GraphBuilderPatternOptimization:
         but it guarantees the local structure when applying the rewriting was
         not altered by another one.
         """
-        assert (
-            not self.recursive
-        ), "GraphBuilderPatternOptimization.optimize does not implement recursivity"
+        if self.recursive and recursive:
+            if self.verbose > 0:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}"
+                    f".optimize] start with subgraphs"
+                )
+            context = set(i.name for i in self.builder.inputs) | set(
+                self.builder.initializers_dict
+            )
+            for node in self.builder.nodes:
+                if any(att.type == AttributeProto.GRAPH for att in node.attribute):
+                    if self.verbose > 1:
+                        print(
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] "
+                            f"optimize {self.builder.pretty_node(node)}"
+                        )
+                    self.optimize_node_subgraphs_inplace(node, context)
+                    if self.verbose > 1:
+                        print(
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] "
+                            f"done {self.builder.pretty_node(node)}"
+                        )
+                context |= set(node.output)
+            if self.verbose > 0:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}"
+                    f".optimize] done with subgraphs"
+                )
+
         continue_optimization = True
         priorities = list(sorted(set(p.priority for p in self.patterns)))  # noqa: C413
         assert priorities, "list of priority is null."
@@ -1099,7 +1144,8 @@ class GraphBuilderPatternOptimization:
             max_iter = len(self.builder.nodes) * max(len(priorities), 1)
         if self.verbose > 0:
             print(
-                f"[GraphBuilderPatternOptimization.optimize] start with "
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}.optimize] start with "
                 f"{len(self.builder.nodes)} nodes, "
                 f"{len(self.builder.initializers_dict)} initializers, "
                 f"{len(self.patterns)} patterns, priorities={priorities}"
@@ -1109,7 +1155,7 @@ class GraphBuilderPatternOptimization:
                     sorted((p.priority, repr(p), p) for p in self.patterns)
                 ):
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] "
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"use pattern {i+1:3d}/{len(self.patterns)} - P{pp} - {pattern!r}"
                     )
             if self.verbose >= 10:
@@ -1128,13 +1174,15 @@ class GraphBuilderPatternOptimization:
             if not continue_optimization:
                 if self.verbose > 0:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] stops at iteration {it}: "
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] stops at iteration {it}: "
                         f"continue_optimization={continue_optimization}"
                     )
                 break
             if self.verbose > 0:
                 print(
-                    f"[GraphBuilderPatternOptimization.optimize] iteration {it}: "
+                    f"[GraphBuilderPatternOptimization-"
+                    f"{self.builder._hash()}.optimize] iteration {it}: "
                     f"{len(self.builder.nodes)} nodes, "
                     f"priority={priorities[current_priority_index]}"
                 )
@@ -1151,7 +1199,8 @@ class GraphBuilderPatternOptimization:
                     # skipping that pattern
                     if self.verbose >= 10:
                         print(
-                            f"[GraphBuilderPatternOptimization.optimize] skips "
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] skips "
                             f"{pattern.__class__.__name__}, "
                             f"pattern.priority={pattern.priority}, "
                             f"current_priority_index={current_priority_index}, "
@@ -1196,13 +1245,17 @@ class GraphBuilderPatternOptimization:
                         marked.add(id(n))
                     found = True
                     if self.verbose > 2:
-                        print(f"[GraphBuilderPatternOptimization.optimize] match={match}")
+                        print(
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] match={match}"
+                        )
                     matches.append((pattern, match))
                     if stop_after > 0 and len(matches) + n_applied >= stop_after:
                         continue_optimization = False
                         if self.verbose > 0:
                             print(
-                                f"[GraphBuilderPatternOptimization.optimize] "
+                                f"[GraphBuilderPatternOptimization-"
+                                f"{self.builder._hash()}.optimize] "
                                 f"stop after with "
                                 f"{len(matches)} as stop_after={stop_after} "
                                 f"and n_applied={n_applied}"
@@ -1230,24 +1283,28 @@ class GraphBuilderPatternOptimization:
                     revs = f"{rev[-1]}:{rev[0]:.3f}"
                     if len(matches) == 1:
                         print(
-                            f"[GraphBuilderPatternOptimization.optimize] applies "
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] applies "
                             f"{len(matches)} matches, [0]={str(matches[0][-1])} - "
                             f"time={sum(durations.values()):.3f} | max_time={revs}"
                         )
                     else:
                         print(
-                            f"[GraphBuilderPatternOptimization.optimize] applies "
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] applies "
                             f"{len(matches)} matches, {_count(matches)} - "
                             f"time={sum(durations.values()):.3f} | max_time={revs}"
                         )
                 elif len(matches) == 1:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] applies "
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] applies "
                         f"{len(matches)} matches, [0]={str(matches[0][-1])}"
                     )
                 else:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] applies "
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] applies "
                         f"{len(matches)} matches, {_count(matches)}"
                     )
 
@@ -1261,7 +1318,7 @@ class GraphBuilderPatternOptimization:
             for im, (pattern, match) in enumerate(matches):
                 if self.verbose > 3:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] "
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"apply {match.to_string(short=False)}"
                     )
 
@@ -1271,7 +1328,8 @@ class GraphBuilderPatternOptimization:
 
                 if self.verbose > 3:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] - add "
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] - add "
                         f"{[n.op_type for n in added_nodes]}"
                     )
                 add = len(added_nodes)
@@ -1295,12 +1353,14 @@ class GraphBuilderPatternOptimization:
 
                 if self.verbose > 3:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] done "
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] done "
                         f"{match}: -{rem} +{add} nodes"
                     )
                     if full_removed and self.verbose > 4:
                         print(
-                            f"[GraphBuilderPatternOptimization.optimize] "
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] "
                             f"removed outputs {full_removed}"
                         )
 
@@ -1322,7 +1382,8 @@ class GraphBuilderPatternOptimization:
 
             if self.verbose > 2:
                 print(
-                    f"[GraphBuilderPatternOptimization.optimize] done all: "
+                    f"[GraphBuilderPatternOptimization-"
+                    f"{self.builder._hash()}.optimize] done all: "
                     f"-{n_removed} +{n_added} nodes"
                 )
 
@@ -1364,21 +1425,23 @@ class GraphBuilderPatternOptimization:
                     continue_optimization = len(matches) > 0
                     if self.verbose > 0:
                         print(
-                            f"[GraphBuilderPatternOptimization.optimize] stops "
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] stops "
                             f"current_priority_index={current_priority_index}, "
                             f"priorities={priorities}"
                         )
                     break
                 if self.verbose > 0:
                     print(
-                        f"[GraphBuilderPatternOptimization.optimize] increase priority "
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] increase priority "
                         f"to {priorities[current_priority_index]}"
                     )
 
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all
             print(
-                f"[GraphBuilderPatternOptimization.optimize] "
+                f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                 f"done after {last_it} iterations with "
                 f"{len(self.builder.nodes)} nodes in {duration:.3f}"
             )
@@ -1387,3 +1450,74 @@ class GraphBuilderPatternOptimization:
                 print(msg)
 
         return statistics
+
+    def optimize_node_subgraphs_inplace(self, node: NodeProto, context: Set[str]):
+        """Optimizes the subgraphs for a node."""
+        from ..xbuilder import GraphBuilder
+
+        new_atts = []
+        for att in node.attribute:
+            if att.type != AttributeProto.GRAPH:
+                new_atts.append(att)
+                continue
+            if self.verbose > 1:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}] "
+                    f"optimizes attribute "
+                    f"{att.name!r} from node {node.op_type!r}, name={node.name!r}"
+                )
+            g = GraphBuilder(
+                att.g,
+                optimization_options=self.builder.optimization_options,
+                verbose=max(self.verbose - 1, 0),
+                _opsets=self.opsets,
+                _context=context,
+            )
+            assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
+            # We need to populate whatever exists.
+            self._move_context_to_other_builder(context, g)
+            g.optimize()
+
+            renaming = {}
+            for k in g.initializers_dict:
+                if self.builder.has_name(k):
+                    nk = self.builder.unique_name(k)
+                    renaming[k] = nk
+            if renaming:
+                g.rename_names(renaming)
+
+            new_g = g.to_onnx(optimize=False, as_graph_proto=True)
+            assert isinstance(new_g, GraphProto), f"unexpected type {type(new_g)}"
+            if self.verbose > 1:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}] "
+                    f"done optimizing attribute "
+                    f"{att.name!r} from node {node.op_type!r}, name={node.name!r}"
+                )
+            new_atts.append(oh.make_attribute(att.name, new_g))
+
+            # We need to append functions and initiliazers to the main graph.
+
+            for k, v in g.initializers_dict.items():
+                assert (
+                    k not in self.builder.initializers_dict
+                ), f"name {k!r} already present. That should not be the case."
+                self.builder.initializers_dict[k] = v
+                self.builder.initializers_dict_sources[k] = g.initializers_dict_sources[k]
+                self.builder.set_name(
+                    k,
+                    marker=g._events.get((k, "set_event"), "optimize_node_subgraphs_inplace"),
+                )
+                self.builder.set_type(k, g.get_type(k))
+                self.builder.set_shape(k, g.get_shape(k))
+                if k in g.constants_:
+                    self.builder.constants_[k] = g.constants_[k]
+                if k in g._parameter_renaming:
+                    self.builder._parameter_renaming[k] = g._parameter_renaming[k]
+                if k in g._parameter_norename:
+                    self.builder._parameter_norename.add(k)
+                if k in g._known_torch_value:
+                    self.builder._known_torch_value[k] = g._known_torch_value[k]
+
+        del node.attribute[:]
+        node.attribute.extend(new_atts)

@@ -339,18 +339,19 @@ class ParameterNaming:
                 self._idmap[new_key] = name
 
         # modules names
-        for name, submod in mod.named_modules():
-            if not name:
-                continue
-            self._id_modules[name] = submod
-            new_key = name.replace(".", "_")
-            if new_key != name:
-                assert (
-                    new_key not in self._id_modules
-                ), f"Two modules have similar names {name!r} mapped into {new_key!r}"
-                self._id_modules[new_key] = name
-            else:
-                self._id_modules[new_key] = name
+        if hasattr(mod, "named_modules"):
+            for name, submod in mod.named_modules():
+                if not name:
+                    continue
+                self._id_modules[name] = submod
+                new_key = name.replace(".", "_")
+                if new_key != name:
+                    assert (
+                        new_key not in self._id_modules
+                    ), f"Two modules have similar names {name!r} mapped into {new_key!r}"
+                    self._id_modules[new_key] = name
+                else:
+                    self._id_modules[new_key] = name
         updates = {}
 
         # final step
@@ -579,6 +580,7 @@ def _make_builder_interpreter(
             )
         else:
             exported_program = mod
+            exe_path = "exising-torch.export.ExportProgram"
 
         debug_ep = os.environ.get("PRINT_EXPORTED_PROGRAM", "0")
         if debug_ep in (1, "1"):
@@ -681,7 +683,7 @@ def _make_builder_interpreter(
         raise_list=raise_list,
         dynamic_shapes=dynamic_shapes,
         local_domain=local_domain,
-        signature=inspect.signature(mod.forward),
+        signature=inspect.signature(mod.forward) if hasattr(mod, "forward") else None,
         check_empty_source=True,
         graph_module=graph_module,
         exe_path=f"{exe_path}-export_options={export_options}",

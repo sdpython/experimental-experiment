@@ -1,5 +1,5 @@
-import textwrap
 from typing import List, Optional, Union
+from ..helpers import string_sig
 
 
 class OptimizationOptions:
@@ -49,7 +49,7 @@ class OptimizationOptions:
       custom operators implemented by :epkg:`onnxruntime`
     * ``patterns="default+onnxruntime+experimental``: applies all patterns
       modifying standard onnx operators into other standard onnx operators,
-      patterns fusing nodes into custom operators implemented by :epkg:`onnxruntime`,
+      patterns fusing nodes into custom operators implemented by :epkg:`onnxruntime`.
     """
 
     def __init__(
@@ -61,7 +61,7 @@ class OptimizationOptions:
         remove_identity: bool = True,
         patterns: Union[str, List["PatternOptimization"]] = "default",  # noqa: F821
         max_iter: int = -1,
-        recursive: bool = False,
+        recursive: bool = True,
         stop_after: int = -1,
         verbose: int = 0,
         verifies: bool = False,
@@ -78,6 +78,7 @@ class OptimizationOptions:
         self.processor = processor
         self.order = order
         self.max_iter = max_iter
+        self.recursive = recursive
         if isinstance(patterns, str):
             from ..xoptim import get_pattern_list
 
@@ -98,25 +99,6 @@ class OptimizationOptions:
         self.verifies = verifies
         self.dump_applied_patterns = dump_applied_patterns
 
-    def __repr__(self):
-        pats = "None" if self.patterns is None else [str(p) for p in self.patterns]
-        add = []
-        for att in ["verifies", "stop_after", "dump_applied_patterns"]:
-            val = getattr(self, att)
-            if val in (-1, None, False):
-                continue
-            add.append(f", {att}={val!r}")
-        opts = "".join(add)
-        code = (
-            f"{self.__class__.__name__}(remove_unused={self.remove_unused}, "
-            f"remove_identity={self.remove_identity}, "
-            f"constant_folding={self.constant_folding}, "
-            f"constant_size={self.constant_size}, "
-            f"constant_fusing={self.constant_fusing}, "
-            f"verbose={self.verbose}, "
-            f"max_iter={self.max_iter}, recursive={self.recursive}, "
-            f"processor={self.processor}, "
-            f"order={self.order}, "
-            f"patterns={pats}{opts})"
-        )
-        return "\n".join(textwrap.wrap(code, width=80, tabsize=4, subsequent_indent="    "))
+    def __repr__(self) -> str:
+        "usual"
+        return string_sig(self)

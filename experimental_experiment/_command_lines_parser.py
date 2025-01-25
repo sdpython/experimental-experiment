@@ -22,12 +22,13 @@ def get_main_parser() -> ArgumentParser:
         optimize   - optimizes an onnx model by fusing nodes
         run        - runs a model and measure the inference time
         print      - prints the model on standard output
+        find       - find node consuming or producing a result
         """
         ),
     )
     parser.add_argument(
         "cmd",
-        choices=["lighten", "unlighten", "optimize", "run", "print"],
+        choices=["lighten", "unlighten", "optimize", "run", "print", "find"],
         help="Selects a command.",
     )
     return parser
@@ -441,6 +442,49 @@ def _cmd_print(argv: List[Any]):
         raise ValueError(f"Unexpected value fmt={args.fmt!r}")
 
 
+def get_parser_find() -> ArgumentParser:
+    parser = ArgumentParser(
+        prog="find",
+        description=dedent(
+            """
+        Look into a model and search for a set of names,
+        tells which node is consuming or producing it.
+        """
+        ),
+        epilog="Enables Some quick validation.",
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        type=str,
+        required=True,
+        help="onnx model to unlighten",
+    )
+    parser.add_argument(
+        "-n",
+        "--names",
+        type=str,
+        required=False,
+        help="names to look at comma separated values",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        default=0,
+        required=False,
+        help="verbosity",
+    )
+    return parser
+
+
+def _cmd_find(argv: List[Any]):
+    from .onnx_tools import onnx_find
+
+    parser = get_parser_find()
+    args = parser.parse_args(argv[1:])
+    onnx_find(args.input, verbose=args.verbose, watch=set(args.names.split(",")))
+
+
 def main(argv: Optional[List[Any]] = None):
     fcts = dict(
         lighten=_cmd_lighten,
@@ -448,11 +492,16 @@ def main(argv: Optional[List[Any]] = None):
         optimize=_cmd_optimize,
         run=_cmd_run,
         print=_cmd_print,
+        find=_cmd_find,
     )
 
     if argv is None:
         argv = sys.argv[1:]
-    if (len(argv) <= 1 and argv[0] not in fcts) or argv[-1] in ("--help", "-h"):
+    if (
+        len(argv) == 0
+        or (len(argv) <= 1 and argv[0] not in fcts)
+        or argv[-1] in ("--help", "-h")
+    ):
         if len(argv) < 2:
             parser = get_main_parser()
             parser.parse_args(argv)
@@ -463,6 +512,7 @@ def main(argv: Optional[List[Any]] = None):
                 optimize=get_parser_optimize,
                 run=get_parser_run,
                 print=get_parser_print,
+                find=get_parser_find,
             )
             cmd = argv[0]
             if cmd not in parsers:

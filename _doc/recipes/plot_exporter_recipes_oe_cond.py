@@ -4,9 +4,8 @@
 torch.onnx.export and a model with a test
 =========================================
 
-Control flow cannot be exported with a change.
-The code of the model can be changed or patched
-to introduce function :func:`torch.cond`.
+Tests cannot be exported into ONNX unless they refactored
+to use :func:`torch.cond`.
 
 A model with a test
 +++++++++++++++++++
@@ -16,7 +15,7 @@ from onnx.printer import to_text
 import torch
 
 
-#################################
+# %%
 # We define a model with a control flow (-> graph break)
 
 
@@ -43,12 +42,12 @@ class ModelWithControlFlowTest(torch.nn.Module):
 
 model = ModelWithControlFlowTest()
 
-######################################
+# %%
 # Let's check it runs.
 x = torch.randn(3)
 model(x)
 
-######################################
+# %%
 # As expected, it does not export.
 try:
     torch.export.export(model, (x,))
@@ -56,14 +55,15 @@ try:
 except Exception as e:
     print(e)
 
-####################################
-# It does export with torch.onnx.export because it uses JIT to trace the execution.
+# %%
+# It does export with :func:`torch.onnx.export` because
+# it uses JIT to trace the execution.
 # But the model is not exactly the same as the initial model.
 ep = torch.onnx.export(model, (x,), dynamo=True)
 print(to_text(ep.model_proto))
 
 
-####################################
+# %%
 # Suggested Patch
 # +++++++++++++++
 #
@@ -86,19 +86,19 @@ for name, mod in model.named_modules():
     if isinstance(mod, ForwardWithControlFlowTest):
         mod.forward = new_forward
 
-####################################
+# %%
 # Let's see what the fx graph looks like.
 
 print(torch.export.export(model, (x,)).graph)
 
-####################################
+# %%
 # Let's export again.
 
 ep = torch.onnx.export(model, (x,), dynamo=True)
 print(to_text(ep.model_proto))
 
 
-####################################
+# %%
 # Let's optimize to see a small model.
 
 ep = torch.onnx.export(model, (x,), dynamo=True)

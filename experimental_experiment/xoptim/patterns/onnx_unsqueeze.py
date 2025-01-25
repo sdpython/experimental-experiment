@@ -100,8 +100,19 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     ) -> List[NodeProto]:
         axis1 = g.get_constant_or_attribute(node, "axis", 1)
         axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
+        ma = max(axis1.max(), axis2.max()) + 1
+        all_axes = list(range(ma))
+        axis1 = axis1.reshape((-1,))
+        axis2 = axis2.reshape((-1,))
+        for a in axis1[::-1]:
+            all_axes.insert(a, -2)
+        for a in axis2[::-1]:
+            all_axes.insert(a, -2)
+        new_axes = [i for i, a in enumerate(all_axes) if a == -2]
         new_axis = g.make_initializer(
-            "", np.hstack([axis1, axis2]), source="UnsqueezeUnsqueezePattern.apply.new_axis"
+            "",
+            np.array(new_axes, dtype=np.int64),
+            source="UnsqueezeUnsqueezePattern.apply.new_axis",
         )
         new_node = g.make_node(
             "Unsqueeze",

@@ -13,6 +13,7 @@
     onnx_any
     onnx_cast
     onnx_clip
+    onnx_constants
     onnx_conv
     onnx_dropout
     onnx_equal
