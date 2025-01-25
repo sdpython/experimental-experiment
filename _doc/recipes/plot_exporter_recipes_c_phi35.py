@@ -16,7 +16,9 @@ from typing import Any, Dict
 import torch
 import transformers
 from experimental_experiment.helpers import string_type
-from experimental_experiment.torch_interpreter.diagnose import trace_execution_piece_by_piece
+from experimental_experiment.torch_interpreter.piece_by_piece import (
+    trace_execution_piece_by_piece,
+)
 
 
 def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:

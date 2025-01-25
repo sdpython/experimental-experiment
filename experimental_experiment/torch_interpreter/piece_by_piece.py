@@ -230,7 +230,7 @@ def make_copy(obj: Any) -> Any:
 
 class ModelDiagnoseOutput:
     """
-    Contains inputs and outputs, diagnose results when tracing
+    Contains inputs and outputs, traced results when tracing
     intermediate results. An instance of this class is produced
     by :func:`trace_execution_piece_by_piece`.
     Example :ref:`l-plot-exporter-recipes-custom-phi35` tells you

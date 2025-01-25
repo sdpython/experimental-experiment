@@ -1,7 +1,7 @@
 import unittest
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
-from experimental_experiment.torch_interpreter.diagnose import (
+from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
 )
