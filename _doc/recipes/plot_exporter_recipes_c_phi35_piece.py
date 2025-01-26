@@ -267,6 +267,7 @@ ep = diag.try_export(
     bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
     verbose=1,
 )
+print(f"success: {ep.status}")
 print(diag.get_export_status())
 
 # %%
@@ -285,6 +286,7 @@ ep = diag.try_export(
     verbose=1,
     replace_by_custom_op=True,
 )
+print(f"success: {ep.status}")
 
 # %%
 # Let's print a readable report.

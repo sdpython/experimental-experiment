@@ -1,4 +1,5 @@
 import ast
+import enum
 import inspect
 import sys
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
@@ -398,11 +399,13 @@ def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
         if d is inspect._empty:
             if p in kwargs:
                 v = kwargs[p]
-                rows.append(f"{p}={v!r}")
+                rows.append(
+                    f"{p}={v!r}" if not isinstance(v, enum.IntEnum) else f"{p}={v.name}"
+                )
             continue
         v = kwargs.get(p, d)
         if d != v:
-            rows.append(f"{p}={v!r}")
+            rows.append(f"{p}={v!r}" if not isinstance(v, enum.IntEnum) else f"{p}={v.name}")
             continue
     atts = ", ".join(rows)
     return f"{name}({atts})"
@@ -820,6 +823,8 @@ def max_diff(
         of this output
     * dnan: difference in the number of nan
     """
+    if expected is None and got is None:
+        return dict(abs=0, rel=0, sum=0, n=0, dnan=0)
     if allow_unique_tensor_with_list_of_one_element:
         if hasattr(expected, "shape") and isinstance(got, (list, tuple)) and len(got) == 1:
             return max_diff(

@@ -4,10 +4,33 @@ from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requ
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
+    StatusExport,
+    StatusExportCode,
 )
 
 
 class TestPieceByPiece(ExtTestCase):
+    def test_name_status_export(self):
+        st = StatusExport(StatusExportCode.NONE)
+        self.assertEqual(st.status.name, "NONE")
+        st = StatusExport(StatusExportCode.OK)
+        self.assertEqual(st.status.name, "OK")
+        st = StatusExport(StatusExportCode.OK | StatusExportCode.CHILDC)
+        self.assertEqual(st.status.name, "OK_CHILDC")
+        st = StatusExport(StatusExportCode.OK | StatusExportCode.CUSTOM)
+        self.assertEqual(st.status.name, "OK_CUSTOM")
+        st = StatusExport(StatusExportCode.FAIL)
+        self.assertEqual(st.status.name, "FAIL")
+        st = StatusExport(StatusExportCode.FAIL | StatusExportCode.CHILDC)
+        self.assertEqual(st.status.name, "FAIL_CHILDC")
+        st = StatusExport(StatusExportCode.FAIL | StatusExportCode.CUSTOM)
+        self.assertEqual(st.status.name, "FAIL_CUSTOM")
+        #
+        st = StatusExportCode.FAIL
+        self.assertEqual(st.name, "FAIL")
+        st = st.remove(StatusExportCode.FAIL)
+        self.assertEqual(st.name, "NONE")
+
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args(self):
@@ -189,7 +212,7 @@ class TestPieceByPiece(ExtTestCase):
             exporter_kwargs=dict(strict=False),
             verbose=10,
         )
-        self.assertNotEmpty(ep)
+        self.assertIsInstance(ep, StatusExport)
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
@@ -461,7 +484,7 @@ class TestPieceByPiece(ExtTestCase):
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
-        self.assertIn("torch.ops.diag_lib.C_Model.default", str(ep))
+        self.assertIn("torch.ops.diag_lib.C_Model.default", str(ep.exported))
         self.assertNotEmpty(diag.forward_custom_op_schema)
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
 
@@ -504,19 +527,20 @@ class TestPieceByPiece(ExtTestCase):
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=1,
+            verbose=2,
             replace_by_custom_op=CustomOpStrategy.ONLY_IF_FAILING,
             quiet=1,
         )
-        self.assertNotEmpty(ep)
+        self.assertIsInstance(ep, StatusExport)
+        self.assertIsInstance(ep.exported, torch.export.ExportedProgram)
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
-        self.assertIn("torch.ops.diag_lib.C_Model_subfail.default", str(ep))
+        self.assertIn("torch.ops.diag_lib.C_Model_subfail.default", str(ep.exported))
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
         self.assertNotEmpty(diag.children[1].forward_custom_op_schema)
         report = diag.get_export_status()
-        self.assertIn("OK with children as custom ops", report)
+        self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -572,7 +596,7 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_status()
-        self.assertIn("OK with children as custom ops", report)
+        self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -666,6 +690,50 @@ class TestPieceByPiece(ExtTestCase):
         for obj, esch in zip(diag, c_schema):
             ep = obj.fx
             self.assertIn(esch, str(ep))
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_piece_by_piece_piece_local(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=1,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=10,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        self.assertIn("torch.ops.diag_lib.C_Model_sub.default", str(ep.exported))
+        # self.assertNotEmpty(diag.forward_custom_op_schema)
+        self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
 
 
 if __name__ == "__main__":
