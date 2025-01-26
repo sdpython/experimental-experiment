@@ -539,7 +539,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertIn("torch.ops.diag_lib.C_Model_subfail.default", str(ep.exported))
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
         self.assertNotEmpty(diag.children[1].forward_custom_op_schema)
-        report = diag.get_export_status()
+        report = diag.get_export_report()
         self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.6")
@@ -595,7 +595,7 @@ class TestPieceByPiece(ExtTestCase):
             quiet=1,
         )
         self.assertNotEmpty(ep)
-        report = diag.get_export_status()
+        report = diag.get_export_report()
         self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.6")
@@ -723,17 +723,71 @@ class TestPieceByPiece(ExtTestCase):
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=1,
+            verbose=10,
             replace_by_custom_op=CustomOpStrategy.LOCAL,
-            quiet=10,
+            quiet=0,
         )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
         self.assertIn("torch.ops.diag_lib.C_Model_sub.default", str(ep.exported))
-        # self.assertNotEmpty(diag.forward_custom_op_schema)
+        self.assertEmpty(diag.forward_custom_op_schema)
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
+
+    @requires_torch("2.6")
+    def test_piece_by_piece_piece_exporter_report(self):
+        import torch
+
+        class SubSubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x * y
+
+        class SubModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subsub = SubSubModel()
+
+            def forward(self, x, y):
+                return self.subsub(x - y, y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn(
+            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+        )
+        report = diag.get_export_report(fx=True)
+        self.assertIn(
+            "fx:     %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]",
+            report,
+        )
 
 
 if __name__ == "__main__":

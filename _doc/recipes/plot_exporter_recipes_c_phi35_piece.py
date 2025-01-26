@@ -268,7 +268,7 @@ ep = diag.try_export(
     verbose=1,
 )
 print(f"success: {ep.status}")
-print(diag.get_export_status())
+print(diag.get_export_report())
 
 # %%
 # Export piece by piece
@@ -290,4 +290,4 @@ print(f"success: {ep.status}")
 
 # %%
 # Let's print a readable report.
-print(diag.get_export_status())
+print(diag.get_export_report())

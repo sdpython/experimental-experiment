@@ -2,6 +2,7 @@ import contextlib
 import enum
 import inspect
 import os
+import textwrap
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
@@ -1511,9 +1512,13 @@ class ModelDiagnoseOutput:
             )
         return exported
 
-    def get_export_status(self) -> str:
+    def get_export_report(self, exported_program: bool = False, fx: bool = False) -> str:
         """
         Returns a report status on the conversion.
+
+        :param exported_program: adds the exported program if available
+        :param fx: display the graph instead of the exported program
+        :return: string
         """
 
         def iter_status(here):
@@ -1532,6 +1537,7 @@ class ModelDiagnoseOutput:
                     if hasattr(r, "exporter_status")
                     else "OK as part of its owner"
                 ),
+                r,
             )
             for r in rows
         ]
@@ -1544,6 +1550,27 @@ class ModelDiagnoseOutput:
             c2 = t[1]
             s2 = " " * (mc2 - len(t[1]))
             srows.append(f"{c}{s}{c2}{s2}{t[2]}")
+
+            diag = t[-1]
+            if exported_program:
+                if hasattr(diag, "fx"):
+                    eps = str(diag.fx)
+                    indent = " " * (mc1 + mc2)
+                    prefix = f"{indent}ep: "
+                    srows.append(textwrap.indent(eps, prefix))
+                else:
+                    indent = " " * (mc1 + mc2)
+                    srows.append(f"{indent}ep: -")
+            if fx:
+                if hasattr(diag, "fx"):
+                    eps = str(diag.fx.graph)
+                    indent = " " * (mc1 + mc2)
+                    prefix = f"{indent}fx: "
+                    srows.append(textwrap.indent(eps, prefix))
+                else:
+                    indent = " " * (mc1 + mc2)
+                    srows.append(f"{indent}fx: -")
+
         return "\n".join(srows)
 
 
