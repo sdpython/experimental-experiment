@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from ..helpers import string_type, string_sig, max_diff
 from .piece_by_piece_serialize import (
+    choose_kwargs_for_dynamic_shapes,
     deserialize_args,
     deserialize_args_kwargs,
     make_copy,
@@ -971,7 +972,6 @@ class ModelDiagnoseOutput:
 
         args, kwargs = export_inputs
         dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
-        print("--------", dynamic_shapes)
         if dynamic_shapes and (self.forward_kwargs or self.forward_args):
             # The export should change dynamic shapes to have only named arguments.
             if debug or verbose > 1:
@@ -987,23 +987,15 @@ class ModelDiagnoseOutput:
                         f"kwargs={string_type(kwargs, with_shape=True)}"
                     )
             args, kwargs, dynamic_shapes = self._move_to_kwargs(args, kwargs, dynamic_shapes)
-        if dynamic_shapes[0] or dynamic_shapes[1]:
-            # Both are specified, we need to choose
-            if len(self.forward_positioned_parameter_names) >= len(dynamic_shapes[0]):
-                # No *args.
-                ds = dynamic_shapes[1]
-                for k, v in zip(self.forward_positioned_parameter_names, dynamic_shapes[0]):
-                    ds[k] = v
-            else:
-                raise NotImplementedError(
-                    f"forward_positioned_parameter_names="
-                    f"{self.forward_positioned_parameter_names}, "
-                    f"dynamic_shapes={dynamic_shapes}"
-                )
-        else:
-            ds = dynamic_shapes[0] or dynamic_shapes[1]
+        ds = (
+            choose_kwargs_for_dynamic_shapes(
+                *dynamic_shapes, self.forward_positioned_parameter_names
+            )
+            if dynamic_shapes[0] and dynamic_shapes[1]
+            else (dynamic_shapes[0] or dynamic_shapes[1])
+        )
         if debug or verbose > 1:
-            sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+            sds = str(ds).replace("<_DimHint.DYNAMIC: 3>", "DYN")
             print(f"[try_export-FX] {self.dot_name}: convert with dynamic_shapes={sds}")
             if debug or verbose > 2:
                 print(
@@ -1080,10 +1072,18 @@ class ModelDiagnoseOutput:
                         f"-- _try_export_no_bypass_export-2"
                     )
                 if verbose:
-                    print(
-                        f"[try_export-FX] {self.dot_name} --- "
-                        f"{self.exporter_status.status.name}"
-                    )
+                    if self.exporter_status.is_ok():
+                        print(
+                            f"[try_export-FX] {self.dot_name} --- "
+                            f"{self.exporter_status.status.name}"
+                        )
+                    else:
+                        print(
+                            f"[try_export-FX] {self.dot_name} --- "
+                            f"{self.exporter_status.status.name}, "
+                            f"step={self.exporter_status.step}, "
+                            f"reason={self.exporter_status.reason}"
+                        )
                 return self.exporter_status, None
         else:
             ep = torch.export.export(

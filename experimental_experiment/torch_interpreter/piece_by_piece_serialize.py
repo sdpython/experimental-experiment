@@ -16,6 +16,31 @@ def extract_names_from_schema(schema: str) -> List[str]:
     return matches
 
 
+def choose_kwargs_for_dynamic_shapes(
+    ds_args: Tuple[Dict[int, Any], ...],
+    ds_kwargs: Dict[str, Dict[int, Any]],
+    forward_names: List[str],
+) -> Dict[str, Dict[int, Any]]:
+    """
+    Chooses a dictionary to express dynamic shapes when the module uses both
+    unnamed arguments and named ones.
+    """
+    assert ds_args and ds_kwargs and forward_names, (
+        f"No need to choose as ds_args={ds_args} or ds_kwargs={ds_kwargs} "
+        f"or forward_names={forward_names} is None."
+    )
+    if len(forward_names) >= len(ds_args):
+        # No *args.
+        ds = ds_kwargs
+        for k, v in zip(forward_names, ds_args):
+            ds[k] = v
+        return ds
+    raise NotImplementedError(
+        f"forward_positioned_parameter_names={forward_names}, "
+        f"ds_args={ds_args}, ds_kwargs={ds_kwargs}"
+    )
+
+
 def serialize_one(
     obj: Any, name: Union[str, int], schema: str
 ) -> Union[torch.Tensor, List[torch.Tensor]]:

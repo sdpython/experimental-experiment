@@ -8,6 +8,7 @@ from experimental_experiment.torch_interpreter.piece_by_piece import (
     StatusExportCode,
 )
 from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
+    choose_kwargs_for_dynamic_shapes,
     extract_names_from_schema,
 )
 
@@ -802,7 +803,53 @@ class TestPieceByPiece(ExtTestCase):
             self.assertEqual(b, g)
 
     @requires_torch("2.6")
-    def test_piece_by_piece_piece_custom_kwargs(self):
+    @hide_stdout()
+    def test_piece_by_piece_piece_custom_kwargs_always(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, y=None):
+                return x + y
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ds = diag.guess_dynamic_shapes()
+        sds = str(ds).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(sds, "(({0: DYN},), {'y': {0: DYN}})")
+        choose = choose_kwargs_for_dynamic_shapes(*ds, diag.forward_positioned_parameter_names)
+        schoose = str(choose).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(schoose, "{'y': {0: DYN}, 'x': {0: DYN}}")
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=2,
+            replace_by_custom_op=CustomOpStrategy.ALWAYS,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn(
+            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+        )
+        report = diag.get_export_report(fx=True)
+        self.assertIn(
+            "fx:     %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]",
+            report,
+        )
+
+    @requires_torch("2.6")
+    def test_piece_by_piece_piece_custom_kwargs_local(self):
         import torch
 
         class SubModel(torch.nn.Module):

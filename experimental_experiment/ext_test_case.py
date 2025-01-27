@@ -145,13 +145,18 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
 
 def hide_stdout(f: Optional[Callable] = None) -> Callable:
     """
-    Catches warnings.
+    Catches warnings, hides standard output.
+    The function may be disabled by setting ``UNHIDE=1``
+    before running the unit test.
 
     :param f: the function is called with the stdout as an argument
     """
 
     def wrapper(fct):
         def call_f(self):
+            if os.environ.get("UNHIDE", ""):
+                fct(self)
+                return
             st = StringIO()
             with redirect_stdout(st), warnings.catch_warnings():
                 warnings.simplefilter("ignore", (UserWarning, DeprecationWarning))
