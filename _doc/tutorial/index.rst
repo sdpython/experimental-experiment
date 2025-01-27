@@ -27,6 +27,10 @@ already has many examples about it. Here are some corner cases.
 * :ref:`l-plot-torch-export-with-dynamic-cache-201`
 * :ref:`l-plot-exporter-nn_modules_inputs`
 
+**Export piece by piece**
+
+* :ref:`l-plot-exporter-recipes-custom-phi35`
+
 **strict = ?**
 
 The exporter relies on :func:`torch.export.export`. It exposes a parameter called
@@ -227,10 +231,9 @@ inputs having different shapes even though they have the same rank.
 
 * :ref:`l-plot-exporter-recipes-custom-modules`
 
-**LLM Models**
+**Models**
 
 * :ref:`l-plot-exporter-recipes-custom-phi2`
-* :ref:`l-plot-exporter-recipes-custom-phi35`
 
 **Optimization**
 

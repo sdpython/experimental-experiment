@@ -814,6 +814,23 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(kwargs, {})
         sargs = string_type(args, with_shape=True)
         self.assertEqual(sargs, "(T1s5x6,T1s5x6)")
+        self.assertEqualArray(inputs_args[0][0][0], args[0])
+        self.assertEqualArray(inputs_args[0][0][1], args[1])
+
+    def test_serialize_args_in_dict(self):
+        import torch
+
+        inputs_args = [((torch.randn((5, 6)),), {"y": torch.randn((5, 6))})]
+
+        args, kwargs = serialize_args(
+            *inputs_args[0], schema="(Tensor x, Tensor y) -> Tensor", args_names=["x", "y"]
+        )
+        self.assertNotEmpty(args)
+        self.assertEqual(kwargs, {})
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, "(T1s5x6,T1s5x6)")
+        self.assertEqualArray(inputs_args[0][0][0], args[0])
+        self.assertEqualArray(inputs_args[0][1]["y"], args[1])
 
     def test_serialize_args_out(self):
         import torch
@@ -824,44 +841,23 @@ class TestPieceByPiece(ExtTestCase):
         self.assertIsInstance(args, tuple)
         sargs = string_type(args, with_shape=True)
         self.assertEqual(sargs, ("(T1s5x6,T1s5x6)"))
+        self.assertEqualArray(inputs_args[0][0][0], args[0])
+        self.assertEqualArray(inputs_args[0][0][1], args[1])
 
     def test_serialize_args_out1(self):
         import torch
 
-        args = serialize_args(
-            torch.randn((5, 6)), None, schema="(Tensor x, Tensor y) -> Tensor"
-        )
+        x = torch.randn((5, 6))
+        args = serialize_args(x, None, schema="(Tensor x, Tensor y) -> Tensor")
         self.assertIsInstance(args, torch.Tensor)
         sargs = string_type(args, with_shape=True)
         self.assertEqual(sargs, "T1s5x6")
+        self.assertEqualArray(x, args)
 
     @requires_torch("2.6")
     @hide_stdout()
     def test_piece_by_piece_piece_custom_kwargs_always(self):
         import torch
-
-        if False:
-
-            class ModelArgs(torch.nn.Module):
-                def forward(self, x, y):
-                    return x + y
-
-            inputs_args = [
-                ((torch.randn((5, 6)), torch.randn((5, 6))), {}),
-                ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
-            ]
-
-            diagkw = trace_execution_piece_by_piece(ModelArgs(), inputs_args)
-            print("----------------------")
-            diagkw.try_export(
-                exporter="fx",
-                use_dynamic_shapes=True,
-                exporter_kwargs=dict(strict=False),
-                verbose=4,
-                replace_by_custom_op=CustomOpStrategy.ALWAYS,
-                quiet=0,
-            )
-            print("----------------------")
 
         class Model(torch.nn.Module):
             def forward(self, x, y=None):
@@ -896,13 +892,10 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
         self.assertIn(
-            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s1, 6]"):', report
         )
         report = diag.get_export_report(fx=True)
-        self.assertIn(
-            "fx:     %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]",
-            report,
-        )
+        self.assertIn("torch.ops.diag_lib.C_Model.default", report)
 
     @requires_torch("2.6")
     def test_piece_by_piece_piece_custom_kwargs_local(self):

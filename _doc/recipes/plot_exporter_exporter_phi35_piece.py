@@ -1,11 +1,16 @@
 """
-.. _l-plot-exporter-recipes-custom-phi35:
+.. _l-plot-exporter-exporter-phi35-piece:
 
-to_onnx, export Phi-3.5-mini-instruct piece by piece
-====================================================
+Export Phi-3.5-mini-instruct piece by piece
+===========================================
 
-Example :ref:`l-plot-exporter-recipes-custom-phi2` shows how to export
-a simple LLM model with dynamic shapes. What if it does not work?
+:func:`torch.export.export` often breaks on big models because there
+are control flows or instructions breaking the propagation of
+dynamic shapes (see ...). The function usually gives an indication where
+the model implementation can be fixed but in case, that is not possible,
+we can try to export the model piece by piece: every module
+is converted separately from its submodule. A model can be exported even
+if one of its submodules cannot.
 
 Model
 +++++
@@ -17,11 +22,12 @@ import torch
 import transformers
 from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_interpreter.piece_by_piece import (
+    CustomOpStrategy,
     trace_execution_piece_by_piece,
 )
 
 
-def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
+def get_phi35_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
     """
     Gets a non initialized model with two sets of inputs and different shapes.
 
@@ -198,7 +204,7 @@ def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
     return dict(inputs=inputs, model=model, inputs2=inputs2)
 
 
-data = get_phi2_untrained(num_hidden_layers=2)
+data = get_phi35_untrained(num_hidden_layers=2)
 model, inputs, inputs2 = data["model"], data["inputs"], data["inputs2"]
 
 print(string_type(inputs, with_shape=True))
@@ -260,12 +266,13 @@ print(
 # The we try to export to see the submodule failing the whole model.
 # We can pickle the failing model and restore it to speedup
 # the refactoring to make it work.
+print("----------------------")
 ep = diag.try_export(
     exporter="fx",
     use_dynamic_shapes=True,
     exporter_kwargs=dict(strict=False),
     bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
-    verbose=1,
+    verbose=2,
 )
 print(f"success: {ep.status}")
 print(diag.get_export_report())
@@ -276,18 +283,21 @@ print(diag.get_export_report())
 #
 # The main module is not exportable because one piece cannot be exported.
 # But maybe if we assume it works, maybe everything else is working.
-# That way, we could export most of the model except the failing piece
-# we need to rewrite.
+# By using ``replace_by_custom_op=CustomOpStrategy.LOCAL``, the function
+# replaces every submodule by a custom operator so that it can
+# the exported program for every module without its submodules.
+
 ep = diag.try_export(
     exporter="fx",
     use_dynamic_shapes=True,
     exporter_kwargs=dict(strict=False),
     bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
     verbose=1,
-    replace_by_custom_op=True,
+    replace_by_custom_op=CustomOpStrategy.LOCAL,
+    quiet=0,
 )
 print(f"success: {ep.status}")
 
 # %%
 # Let's print a readable report.
-print(diag.get_export_report())
+print(diag.get_export_report(fx=True))

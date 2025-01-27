@@ -111,6 +111,7 @@ def serialize_args(
     )
     if args_names is None:
         args_names = extract_names_from_schema(schema)
+
     new_args = [new_args] if is_tensor else list(new_args)
     args_names = args_names[n_args:]
     assert args_names, (
@@ -124,7 +125,7 @@ def serialize_args(
             new_args.append(None)
             continue
         v = kwargs[name]
-        r = serialize_one(a, name=name, schema=schema)
+        r = serialize_one(v, name=name, schema=schema)
         if r is None or isinstance(r, torch.Tensor):
             new_args.append(r)
         else:
@@ -137,7 +138,7 @@ def serialize_args(
             continue
         if v is None:
             new_args.append(None)
-        r = serialize_one(a, name=name, schema=schema)
+        r = serialize_one(v, name=name, schema=schema)
         if r is None or isinstance(r, torch.Tensor):
             new_args.append(r)
         else:

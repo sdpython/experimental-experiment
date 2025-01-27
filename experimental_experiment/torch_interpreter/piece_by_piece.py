@@ -613,10 +613,11 @@ class ModelDiagnoseOutput:
         """
         Builds a mapping output and input shapes so that a function
         returns dynamic shapes can automatically inferred.
+
+        The main idea: knowning everything is going to be serialized,
+        inputs and outputs are serialized, we try to match the output
+        shapes with the inputs one.
         """
-        # The main idea. Knowning everything is going to be serialized,
-        # inputs and outputs are serialized, we try to match the output
-        # shapes with the inputs one.
         flattened_inputs = [
             serialize_args(*i, schema=None, args_names=self.forward_ordered_parameter_names)
             for i in self.inputs
@@ -1268,6 +1269,8 @@ class ModelDiagnoseOutput:
                         )
                         self.exporter_status.status.step = "EVAL"
                         self.exporter_status.reason = se
+                        if "Ran into a kwarg keyword misma" in se:
+                            raise
                         if self._debug_print_status:
                             print(
                                 f"-- torch.export.export name={self.full_name} -- "
@@ -1291,9 +1294,13 @@ class ModelDiagnoseOutput:
                     if not quiet:
                         raise AssertionError(
                             f"{self.full_name}: discrepancies were observed, "
-                            f"diff={diff}, expected="
+                            f"diff={diff}, \nargs="
+                            f"{string_type(args, with_shape=True, with_min_max=True)}, "
+                            f"\nkwargs="
+                            f"{string_type(kwargs, with_shape=True, with_min_max=True)}, "
+                            f"\nexpected="
                             f"{string_type(out, with_shape=True, with_min_max=True)}, "
-                            f"got={string_type(got, with_shape=True, with_min_max=True)}."
+                            f"\ngot={string_type(got, with_shape=True, with_min_max=True)}."
                         )
                     break
 
@@ -1345,7 +1352,7 @@ class ModelDiagnoseOutput:
             from .onnx_export_errors import bypass_export_some_errors
 
             with bypass_export_some_errors(
-                verbose=max(verbose - 1, 0), **bypass_kwargs
+                verbose=max(verbose - 2, 0), **bypass_kwargs
             ) as modificator:
                 exported, fct = self._try_export_no_bypass(
                     modificator,
@@ -1448,7 +1455,7 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} START "
-                    f"{custom_op_strat.name}, no custom op"
+                    f"{custom_op_strat.name}, no custom op for {self.full_name}"
                 )
             exported, _fct = self._try_export(
                 exporter=exporter,
@@ -1476,7 +1483,7 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} -DONE "
-                    f"{custom_op_strat.name}, no custom op, "
+                    f"{custom_op_strat.name} for {self.full_name} no custom op, "
                     f"name={self.name!r}, exported={exported.exported.__class__.__name__}, "
                     f"status={self.exporter_status.status.name}"
                 )
@@ -1498,7 +1505,7 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} START "
-                    f"{custom_op_strat.name}, name={self.name!r} "
+                    f"{custom_op_strat.name}, name={self.full_name!r} "
                     f"--- children replaced by custom ops"
                 )
             elif verbose:
@@ -1544,7 +1551,7 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} -DONE "
-                    f"{custom_op_strat.name}, name={self.name!r}, "
+                    f"{custom_op_strat.name}, name={self.full_name!r}, "
                     f"exported={exported.__class__.__name__}, "
                     f"status={self.exporter_status.status.name}"
                 )
@@ -1563,11 +1570,17 @@ class ModelDiagnoseOutput:
         ):
             # We don't want to return if custom ops were applied,
             # we need to look into every of them.
-            if verbose:
+            if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} -DONE "
-                    f"{custom_op_strat.name}, exported={exported.exported.__class__.__name__} "
+                    f"{custom_op_strat.name}, name={self.name!r}, "
+                    f"exported={exported.exported.__class__.__name__} "
                     f"status={self.exporter_status.status.name}"
+                )
+            elif verbose:
+                print(
+                    f"[try_export-{exporter.upper()}] {self.dot_name} "
+                    f"--- {self.exporter_status.status.name}"
                 )
             return exported
 
@@ -1593,7 +1606,7 @@ class ModelDiagnoseOutput:
                 f"{exported.status.name}/{self.exporter_status.status.name} "
                 f"-- try_export-10"
             )
-        if verbose:
+        if verbose > 1:
             print(
                 f"[try-export-{exporter.upper()}] {'.' * self.level * 2} =DONE "
                 f"{custom_op_strat.name}, exported={exported.exported.__class__.__name__}, "
