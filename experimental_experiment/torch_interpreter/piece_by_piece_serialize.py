@@ -160,7 +160,10 @@ def type_as_str_with_info(obj: Any) -> str:
 
 
 def deserialize_args(
-    res: List[torch.Tensor], expected_types: List[str], clone: bool = False
+    res: List[torch.Tensor],
+    expected_types: List[str],
+    clone: bool = False,
+    return_n_args: bool = False,
 ) -> Tuple[Any, ...]:
     """
     Deserizalizes output results coming from the custom op and restores
@@ -169,6 +172,8 @@ def deserialize_args(
     :param res: args to deserialize
     :param expected_types: information on how to deserialize
     :param clone: clone tensors before returning them
+    :param return_n_args: if True, the function returns the number of deserialized arguments,
+        if False, it assumes this number if equal to the number of expected types
     :return: new args
     """
     assert isinstance(res, (list, tuple, torch.Tensor)), f"unexpected type for res {type(res)}"
@@ -241,6 +246,8 @@ def deserialize_args(
             continue
 
         raise NotImplementedError(f"Unable to handle type info {tt!r}")
+    if return_n_args:
+        return des, pos_res
     assert pos_res == len(res), (
         f"Deserialization went wrong, pos_res={pos_res}, len(res)={len(res)}, "
         f"expected_types={expected_types}, "
@@ -254,6 +261,7 @@ def deserialize_args_kwargs(
     kwargs: Dict[str, Any],
     expected_types: Tuple[List[str], List[str]],
     clone: bool = False,
+    ordered_names: Optional[List[str]] = None,
 ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
     """
     Deserializes a list of tensor or list of tensors into args and kwargs.
@@ -263,6 +271,7 @@ def deserialize_args_kwargs(
     :param kwargs: named arguments, they should be empty
     :param expected_types: needed to understand how to deserialize
     :param clone: clone every tensor
+    :param ordered_names: ordered need to restore **kwargs
     :return: new args, new named args
     """
     assert not kwargs, (
@@ -271,13 +280,42 @@ def deserialize_args_kwargs(
     )
     assert (
         isinstance(expected_types, tuple)
+        and not kwargs
         and len(expected_types) == 2
-        and not expected_types[1]
+        and (not expected_types[1] or ordered_names)
     ), (
         f"Unexpected value for expected_types={expected_types}, "
         f"args={string_type(args, with_shape=True)}, "
         f"kwargs={string_type(kwargs, with_shape=True)}, "
+        f"ordered_names={ordered_names}"
     )
+    if expected_types[1]:
+        new_args, n_args = deserialize_args(
+            args, expected_types[0], clone=clone, return_n_args=True
+        )
+        left_args = args[n_args:]
+        left_names = ordered_names[n_args:]
+        new_kwargs = {}
+        pos_res = 0
+        for name in left_names:
+            if expected_types[1][name] == "Tensor":
+                new_kwargs[name] = left_args[pos_res]
+                pos_res += 1
+                continue
+            a, n = deserialize_args(
+                left_args[pos_res:], expected_types[1][name], clone=clone, return_n_args=True
+            )
+            pos_res += n
+            new_kwargs[name] = a
+        assert pos_res + n_args == len(args), (
+            f"Deserialization went wrong, pos_res={pos_res + n_args}, len(args)={len(args)}, "
+            f"expected_types={expected_types}, "
+            f"input types={string_type(args)}, "
+            f"new_args={string_type(new_args)}, "
+            f"new_kwargs={string_type(new_kwargs)}"
+        )
+        return new_args, new_kwargs
+
     new_args = deserialize_args(args, expected_types[0], clone=clone)
     return new_args, {}
 

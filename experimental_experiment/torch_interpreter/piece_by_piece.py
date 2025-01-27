@@ -743,16 +743,30 @@ class ModelDiagnoseOutput:
                 )
             return res
 
+        if verbose > 2:
+            # Let's check the rewrite function is working.
+            print(
+                f"[try_export._rewrite_forward_tensor_] {self.full_name}: "
+                f"check _rewrite_forward_tensor_ is working"
+            )
+            got = _rewrite_forward_tensor_(*self.inputs[0][0], **self.inputs[0][1])
+            diff = max_diff(self.outputs[0], got)
+            print(
+                f"[try_export._rewrite_forward_tensor_] {self.full_name}: "
+                f"done checking with diff={diff}"
+            )
+
         name_fct = self.custom_op_name
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace_tensor] {self.dot_name}: "
-                f"registers 'diag_lib.{name_fct}"
+                f"registers diag_lib.{name_fct}"
             )
 
+        shape_fct = self._get_symbolic_function_for_forward_shape()
         cusdef, schema_str = self._register(
             _rewrite_forward_tensor_,
-            self._get_symbolic_function_for_forward_shape(),
+            shape_fct,
             "diag_lib",
             name_fct,
             verbose=verbose,
@@ -761,7 +775,7 @@ class ModelDiagnoseOutput:
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace_tensor] {self.dot_name}: "
-                f"schema_str={schema_str}"
+                f"schema_str={schema_str!r}"
             )
         # We stored to avoid the registration twice.
         self.forward_custom_op_schema = cusdef
@@ -781,7 +795,7 @@ class ModelDiagnoseOutput:
                     f"[_replaced_forward_tensor_] {name_fct}-IN: "
                     f"args={string_type(args, with_shape=True)}, "
                     f"kwargs={string_type(kwargs, with_shape=True)}, "
-                    f"schema_str={schema_str}"
+                    f"schema_str={schema_str!r}"
                 )
                 sfct = str(fct).replace("\n", " ")
                 print(f"[_replaced_forward_tensor_] {name_fct}-CALL: {sfct}")
@@ -816,7 +830,11 @@ class ModelDiagnoseOutput:
                 )
             # We need to deserialize back before calling forward.
             new_args, new_kwargs = deserialize_args_kwargs(
-                args, kwargs, _diag.forward_expected_input_type, clone=True
+                args,
+                kwargs,
+                _diag.forward_expected_input_type,
+                clone=True,
+                ordered_names=_diag.forward_ordered_parameter_names,
             )
             if verbose > 2:
                 print(
@@ -848,9 +866,10 @@ class ModelDiagnoseOutput:
                 f"registers 'diag_lib.{name_fct}"
             )
 
+        shape_fct = self._get_symbolic_function_for_forward_shape()
         cusdef, schema_str = self._register(
             _rewrite_forward_,
-            self._get_symbolic_function_for_forward_shape(),
+            shape_fct,
             "diag_lib",
             name_fct,
             verbose=verbose,
@@ -859,7 +878,7 @@ class ModelDiagnoseOutput:
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace] {self.dot_name}: "
-                f"schema_str={schema_str}"
+                f"schema_str={schema_str!r}"
             )
         # We stored to avoid the registration twice.
         self.forward_custom_op_schema = cusdef
@@ -869,10 +888,35 @@ class ModelDiagnoseOutput:
             [type_as_str_with_info(o) for o in self.inputs[0][0]],
             {k: type_as_str_with_info(v) for k, v in self.inputs[0][1].items()},
         )
+
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace] {self.dot_name}: "
                 f"expected_output_type={expected_output_type}"
+            )
+            # Let's check the rewrite function is working.
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: "
+                f"check _rewrite_forward_ is working with "
+                f"{string_type(self.inputs[0], with_shape=True)}"
+            )
+            a, kw = serialize_args(*self.inputs[0], schema=schema_str)
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: serialized into "
+                f"{string_type(a, with_shape=True)} and {string_type(kw, with_shape=True)}"
+            )
+            got = _rewrite_forward_(*a, **kw)
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: "
+                f"check shape_fct={shape_fct} is working with "
+                f"{string_type(self.inputs[0], with_shape=True)}"
+            )
+            got_shape = shape_fct(*a, **kw)
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: "
+                f"check done, forward returned "
+                f"{string_type(got, with_shape=True)}, shape_fct returned "
+                f"{string_type(got_shape, with_shape=True)}"
             )
 
         # Apparently, we need a function with the exact same signature.
@@ -882,7 +926,7 @@ class ModelDiagnoseOutput:
                 print(
                     f"[_replaced_forward_] {name_fct}-IN: "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
-                    f"schema_str={schema_str}"
+                    f"schema_str={schema_str!r}"
                 )
             # , args_names=self.forward_ordered_parameter_names
             args, kwargs = serialize_args(args, kwargs, schema=schema_str)
@@ -1104,7 +1148,7 @@ class ModelDiagnoseOutput:
         if verbose > 1:
             print(
                 f"[try_export-FX] {self.dot_name}: done, "
-                f"{'CUSTOM -- ' if self.is_customized() else ''}"
+                f"{'CUSTOMIZED -- ' if self.is_customized() else ''}"
                 f"status={self.exporter_status.status.name}"
             )
         mod = ep.module()
