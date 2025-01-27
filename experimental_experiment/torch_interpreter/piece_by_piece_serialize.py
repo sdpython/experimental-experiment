@@ -1,8 +1,19 @@
 import copy
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type
+
+
+def extract_names_from_schema(schema: str) -> List[str]:
+    """
+    Extracts name from a C++ schema produced by ``infer_schema``.
+    Example: ``(Tensor x, Tensor y) -> Tensor`` returns ["x", "y"]
+    """
+    pattern = r"\w+\??\s+(\w+)"
+    matches = re.findall(pattern, schema)
+    return matches
 
 
 def serialize_one(
@@ -32,11 +43,24 @@ def serialize_one(
 
 
 def serialize_args(
-    args: Tuple[Any], kwargs: Optional[Dict[str, Any]], schema: str
+    args: Tuple[Any],
+    kwargs: Optional[Dict[str, Any]],
+    schema: str,
+    args_names: Optional[List[str]] = None,
 ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor]]:
-    """Serializes args and kwargs before calling a custom ops."""
+    """
+    Serializes args and kwargs before calling a custom ops.
+
+    :param args: unnamed arguments
+    :param kwargs: named arguments
+    :param schema: schema function
+    :param args_names: ordered argument names, it must be specified
+        if *kwargs* is specified
+    """
     if isinstance(args, torch.Tensor):
         new_args = args
+        n_args = 1
+        is_tensor = True
     else:
         new_args = []
         for i, a in enumerate(args):
@@ -46,13 +70,52 @@ def serialize_args(
             else:
                 new_args.extend(r)
         new_args = tuple(new_args)
-    assert not kwargs, (
-        f"Not implemented with args={string_type(args, with_shape=True)}, "
-        f"kwargs={string_type(kwargs, with_shape=True)}"
-    )
-    if kwargs is None:
+        n_args = len(new_args)
+        is_tensor = False
+
+    if not kwargs:
         return new_args
-    return new_args, {}
+
+    assert args_names is not None or schema, (
+        f"Not implemented when args_names={args_names}, "
+        f"args={string_type(args, with_shape=True)}, "
+        f"kwargs={string_type(kwargs, with_shape=True)}, "
+        f"schema={schema!r}"
+    )
+    if args_names is None:
+        args_names = extract_names_from_schema(schema)
+    new_args = [new_args] if is_tensor else list(new_args)
+    args_names = args_names[n_args:]
+    assert args_names, (
+        f"kwargs={string_type(kwargs, with_shape=True)} is specified "
+        f"then args_names should be as well, schema={schema!r}, "
+        f"args={string_type(args, with_shape=True)}"
+    )
+    # handling arguments
+    for name in args_names:
+        if name not in kwargs:
+            new_args.append(None)
+            continue
+        v = kwargs[name]
+        r = serialize_one(a, name=name, schema=schema)
+        if r is None or isinstance(r, torch.Tensor):
+            new_args.append(r)
+        else:
+            new_args.extend(r)
+
+    # remaining arguments (**kwargs, *args)
+    set_names = set(args_names)
+    for k, v in kwargs.items():
+        if k in set_names:
+            continue
+        if v is None:
+            new_args.append(None)
+        r = serialize_one(a, name=name, schema=schema)
+        if r is None or isinstance(r, torch.Tensor):
+            new_args.append(r)
+        else:
+            new_args.extend(r)
+    return tuple(new_args), {}
 
 
 def type_as_str_with_info(obj: Any) -> str:

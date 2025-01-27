@@ -7,6 +7,9 @@ from experimental_experiment.torch_interpreter.piece_by_piece import (
     StatusExport,
     StatusExportCode,
 )
+from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
+    extract_names_from_schema,
+)
 
 
 class TestPieceByPiece(ExtTestCase):
@@ -767,6 +770,64 @@ class TestPieceByPiece(ExtTestCase):
         inputs = [
             ((torch.randn((5, 6)),), {}),
             ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn(
+            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+        )
+        report = diag.get_export_report(fx=True)
+        self.assertIn(
+            "fx:     %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]",
+            report,
+        )
+
+    def test_extract_names_from_schema(self):
+        expected = [
+            ("((Tensor x, Tensor y) -> Tensor)", ["x", "y"]),
+            ("((Tensor x, Tensor? y) -> Tensor)", ["x", "y"]),
+        ]
+        for a, b in expected:
+            g = extract_names_from_schema(a)
+            self.assertEqual(b, g)
+
+    @requires_torch("2.6")
+    def test_piece_by_piece_piece_custom_kwargs(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y=None):
+                if y is None:
+                    return x**2
+                return x**2 - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y=None):
+                return self.sub(x, y=y * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
         ]
 
         diag = trace_execution_piece_by_piece(model, inputs)

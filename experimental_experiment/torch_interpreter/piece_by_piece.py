@@ -140,6 +140,9 @@ class ModelDiagnoseOutput:
     * ``model``: module
     * ``level``: depth level
     * ``device``: device
+    * ``inputs``: stored inputs like the following ``(args, kwargs)``
+    * ``outputs``: stored outputs
+    * ``signature``: signature of the module or function
 
     After the tracing:
 
@@ -167,6 +170,7 @@ class ModelDiagnoseOutput:
 
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self._debug_print_status = os.environ.get("DIAGPRINTSTATUS", "")
+        self._debug_print_export = os.environ.get("DIAGPRINTEXPORT", "")
     """
 
     def __init__(
@@ -184,16 +188,23 @@ class ModelDiagnoseOutput:
         self.inputs = []
         self.outputs = []
         self.children: List[ModelDiagnoseOutput] = []
-        sig = inspect.signature(self.forward)
+        self.signature = inspect.signature(self.forward)
         self.forward_parameter_names = set(
             p.name
-            for p in sig.parameters.values()
+            for p in self.signature.parameters.values()
             if p.kind not in {p.VAR_POSITIONAL, p.VAR_KEYWORD}
         )
-        self.forward_ordered_parameter_names = list(sig.parameters)
-        names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_POSITIONAL]
+        self.forward_ordered_parameter_names = list(self.signature.parameters)
+        self.forward_positioned_parameter_names = [
+            p.name
+            for p in self.signature.parameters.values()
+            if p.kind in (p.VAR_POSITIONAL, p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
+        names = [
+            p.name for p in self.signature.parameters.values() if p.kind == p.VAR_POSITIONAL
+        ]
         self.forward_args = names[0] if names else None
-        names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
+        names = [p.name for p in self.signature.parameters.values() if p.kind == p.VAR_KEYWORD]
         self.forward_kwargs = names[0] if names else None
         self.forward_custom_op_schema = None
         self.forward_need_serialization = False
@@ -202,6 +213,7 @@ class ModelDiagnoseOutput:
 
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self._debug_print_status = os.environ.get("DIAGPRINTSTATUS", "")
+        self._debug_print_export = os.environ.get("DIAGPRINTEXPORT", "")
 
     def __iter__(self) -> Iterator:
         """Iterates on all the nodes in the graph."""
@@ -604,7 +616,10 @@ class ModelDiagnoseOutput:
         # The main idea. Knowning everything is going to be serialized,
         # inputs and outputs are serialized, we try to match the output
         # shapes with the inputs one.
-        flattened_inputs = [serialize_args(*i, schema=None) for i in self.inputs]
+        flattened_inputs = [
+            serialize_args(*i, schema=None, args_names=self.forward_ordered_parameter_names)
+            for i in self.inputs
+        ]
         shaped_mapped = [{} for i in flattened_inputs]
         for row in range(len(shaped_mapped)):
             inp_args, inp_kwargs = flattened_inputs[row]
@@ -868,6 +883,7 @@ class ModelDiagnoseOutput:
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
                     f"schema_str={schema_str}"
                 )
+            # , args_names=self.forward_ordered_parameter_names
             args, kwargs = serialize_args(args, kwargs, schema=schema_str)
             if verbose > 2:
                 print(
@@ -955,6 +971,7 @@ class ModelDiagnoseOutput:
 
         args, kwargs = export_inputs
         dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        print("--------", dynamic_shapes)
         if dynamic_shapes and (self.forward_kwargs or self.forward_args):
             # The export should change dynamic shapes to have only named arguments.
             if debug or verbose > 1:
@@ -970,7 +987,21 @@ class ModelDiagnoseOutput:
                         f"kwargs={string_type(kwargs, with_shape=True)}"
                     )
             args, kwargs, dynamic_shapes = self._move_to_kwargs(args, kwargs, dynamic_shapes)
-        ds = dynamic_shapes[0] or dynamic_shapes[1]
+        if dynamic_shapes[0] or dynamic_shapes[1]:
+            # Both are specified, we need to choose
+            if len(self.forward_positioned_parameter_names) >= len(dynamic_shapes[0]):
+                # No *args.
+                ds = dynamic_shapes[1]
+                for k, v in zip(self.forward_positioned_parameter_names, dynamic_shapes[0]):
+                    ds[k] = v
+            else:
+                raise NotImplementedError(
+                    f"forward_positioned_parameter_names="
+                    f"{self.forward_positioned_parameter_names}, "
+                    f"dynamic_shapes={dynamic_shapes}"
+                )
+        else:
+            ds = dynamic_shapes[0] or dynamic_shapes[1]
         if debug or verbose > 1:
             sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
             print(f"[try_export-FX] {self.dot_name}: convert with dynamic_shapes={sds}")
@@ -1005,6 +1036,17 @@ class ModelDiagnoseOutput:
                     f"{string_type(self.outputs[1], with_shape=True)}"
                 )
 
+        if self._debug_print_export:
+            print(f"[try_export-FX] {self.dot_name}")
+            print(f"inputs={string_type(self.inputs[0], with_shape=True, with_min_max=True)}")
+            print(f"  args={string_type(args, with_shape=True, with_min_max=True)}")
+            print(f"kwargs={string_type(kwargs, with_shape=True, with_min_max=True)}")
+            if dynamic_shapes:
+                print(f"   ds0={dynamic_shapes}")
+            if ds:
+                print(f"    ds={ds}")
+            if exporter_kwargs:
+                print(f"    exporter_kwargs={exporter_kwargs}")
         if quiet:
             try:
                 ep = torch.export.export(
