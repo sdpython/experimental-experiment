@@ -272,7 +272,7 @@ ep = diag.try_export(
     use_dynamic_shapes=True,
     exporter_kwargs=dict(strict=False),
     bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
-    verbose=2,
+    verbose=1,
 )
 print(f"success: {ep.status}")
 print(diag.get_export_report())

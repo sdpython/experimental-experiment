@@ -1034,7 +1034,10 @@ class ModelDiagnoseOutput:
                         f"[try_export-FX] {self.dot_name}: "
                         f"kwargs={string_type(kwargs, with_shape=True)}"
                     )
-            args, kwargs, dynamic_shapes = self._move_to_kwargs(args, kwargs, dynamic_shapes)
+            if self.forward_kwargs:
+                args, kwargs, dynamic_shapes = self._move_to_kwargs(
+                    args, kwargs, dynamic_shapes
+                )
         ds = (
             choose_kwargs_for_dynamic_shapes(
                 *dynamic_shapes, self.forward_positioned_parameter_names
@@ -1076,7 +1079,8 @@ class ModelDiagnoseOutput:
                     f"{string_type(self.outputs[1], with_shape=True)}"
                 )
 
-        if self._debug_print_export:
+        if debug or self._debug_print_export:
+            print("-- DEBUG")
             print(f"[try_export-FX] {self.dot_name}")
             print(f"inputs={string_type(self.inputs[0], with_shape=True, with_min_max=True)}")
             print(f"  args={string_type(args, with_shape=True, with_min_max=True)}")
