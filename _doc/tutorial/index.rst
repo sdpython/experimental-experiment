@@ -26,6 +26,7 @@ already has many examples about it. Here are some corner cases.
 * :ref:`l-plot-exporter-dynamic_shapes`
 * :ref:`l-plot-torch-export-with-dynamic-cache-201`
 * :ref:`l-plot-exporter-nn_modules_inputs`
+* :ref:`l-plot-exporter-lost_dynamic_dimension`
 
 **Export piece by piece**
 
