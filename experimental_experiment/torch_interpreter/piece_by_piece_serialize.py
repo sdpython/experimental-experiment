@@ -59,6 +59,9 @@ def serialize_one(
         return [*obj.key_cache, *obj.value_cache]
     if obj is None:
         return None
+    if isinstance(obj, (bool, int, float)):
+        # This cannot be traced.
+        return obj
     raise NotImplementedError(
         f"Unable to serialize type {type(obj)}, "
         f"class_name={obj.__class__.__name__!r}, "
@@ -126,7 +129,7 @@ def serialize_args(
             continue
         v = kwargs[name]
         r = serialize_one(v, name=name, schema=schema)
-        if r is None or isinstance(r, torch.Tensor):
+        if r is None or isinstance(r, (torch.Tensor, int, bool, float)):
             new_args.append(r)
         else:
             new_args.extend(r)
@@ -154,6 +157,12 @@ def type_as_str_with_info(obj: Any) -> str:
         return f"{obj.__class__.__name__}__{len(obj.key_cache)}_{len(obj.value_cache)}"
     if obj is None:
         return "None"
+    if isinstance(obj, bool):
+        return "bool"
+    if isinstance(obj, float):
+        return "float"
+    if isinstance(obj, int):
+        return "int"
     raise NotImplementedError(
         f"Unable to produce serialize info for type {type(obj)}, "
         f"class_name={obj.__class__.__name__!r}."
@@ -184,7 +193,7 @@ def deserialize_args(
         ], f"Mismatch information, expected_types={expected_types!r}"
         return res
     assert all(
-        t is None or isinstance(t, (list, torch.Tensor)) for t in res
+        t is None or isinstance(t, (list, torch.Tensor, bool, int, float)) for t in res
     ), f"unexpected element type in res: {string_type(res)}"
     des = []
     pos_res = 0
@@ -195,6 +204,10 @@ def deserialize_args(
             continue
         if tt == "Tensor":
             des.append(res[pos_res].clone() if clone else res[pos_res])
+            pos_res += 1
+            continue
+        if tt in ("bool", "int", "float"):
+            des.append(res[pos_res])
             pos_res += 1
             continue
         if tt.startswith(("DynamicCache__", "patched_DynamicCache__")):
@@ -300,6 +313,10 @@ def deserialize_args_kwargs(
         pos_res = 0
         for name in left_names:
             if expected_types[1][name] == "Tensor":
+                new_kwargs[name] = left_args[pos_res]
+                pos_res += 1
+                continue
+            if expected_types[1][name] in ("bool", "int", "float"):
                 new_kwargs[name] = left_args[pos_res]
                 pos_res += 1
                 continue

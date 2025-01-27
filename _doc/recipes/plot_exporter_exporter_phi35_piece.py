@@ -287,12 +287,13 @@ print(diag.get_export_report())
 # replaces every submodule by a custom operator so that it can
 # the exported program for every module without its submodules.
 
+print("-----------------------------")
 ep = diag.try_export(
     exporter="fx",
     use_dynamic_shapes=True,
     exporter_kwargs=dict(strict=False),
     bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
-    verbose=1,
+    verbose=10,
     replace_by_custom_op=CustomOpStrategy.LOCAL,
     quiet=0,
 )

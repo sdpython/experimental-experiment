@@ -462,7 +462,6 @@ class ModelDiagnoseOutput:
         for i, p in enumerate(sig.parameters):
             if i >= len(arg_dyn):
                 break
-            kwargs[p] = args[i]
             kw_dyn[p] = arg_dyn[i]
         if self.forward_kwargs:
             kdw = {}
@@ -473,6 +472,7 @@ class ModelDiagnoseOutput:
                 for k in kdw:
                     del kw_dyn[k]
                 kw_dyn[self.forward_kwargs] = kdw
+
             # Let's reorder as it seems to matter later
             # in the shape inference algorithm.
             _kwargs = kwargs
@@ -498,7 +498,7 @@ class ModelDiagnoseOutput:
                 f"and kwargs={set(kwargs)}, "
                 f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
             )
-        return tuple(), kwargs, (tuple(), kw_dyn)
+        return args, kwargs, (tuple(), kw_dyn)
 
     def _do_replace_by_custom_op(
         self, replace_by_custom_op: Union[bool, CustomOpStrategy, Dict[str, CustomOpStrategy]]
@@ -542,6 +542,12 @@ class ModelDiagnoseOutput:
             # Let's assume it is a tensor. It should not matter anyway.
             # Unless it becomes None in another call.
             return "Tensor?"
+        if isinstance(obj, bool):
+            return "bool"
+        if isinstance(obj, float):
+            return "float"
+        if isinstance(obj, int):
+            return "int"
         raise NotImplementedError(
             f"Annotation for type {string_type(obj)} is not implemented{self.get_debug_msg()}"
         )
@@ -627,6 +633,8 @@ class ModelDiagnoseOutput:
             inp_args, inp_kwargs = flattened_inputs[row]
             assert not inp_kwargs, f"Not implemented yet with kwargs={string_type(inp_kwargs)}"
             for i, inp in enumerate(inp_args):
+                if not hasattr(inp, "shape"):
+                    continue
                 if inp.shape not in shaped_mapped[row]:
                     shaped_mapped[row][inp.shape] = []
                 shaped_mapped[row][inp.shape].append(i)
@@ -1034,10 +1042,7 @@ class ModelDiagnoseOutput:
                         f"[try_export-FX] {self.dot_name}: "
                         f"kwargs={string_type(kwargs, with_shape=True)}"
                     )
-            if self.forward_kwargs:
-                args, kwargs, dynamic_shapes = self._move_to_kwargs(
-                    args, kwargs, dynamic_shapes
-                )
+            args, kwargs, dynamic_shapes = self._move_to_kwargs(args, kwargs, dynamic_shapes)
         ds = (
             choose_kwargs_for_dynamic_shapes(
                 *dynamic_shapes, self.forward_positioned_parameter_names
@@ -1512,6 +1517,19 @@ class ModelDiagnoseOutput:
                     f"{custom_op_strat.name}, name={self.full_name!r} "
                     f"--- children replaced by custom ops"
                 )
+                if verbose >= 10:
+                    print(
+                        f"[try-export-{exporter.upper()}] {'.' * self.level * 2} "
+                        f"       args={string_type(self.inputs[0][0], with_shape=True)}"
+                    )
+                    print(
+                        f"[try-export-{exporter.upper()}] {'.' * self.level * 2} "
+                        f"     kwargs={string_type(self.inputs[0][1], with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}] {'.' * self.level * 2} "
+                        f"    outputs={string_type(self.outputs[0], with_shape=True)}"
+                    )
             elif verbose:
                 print(
                     f"[try_export-{exporter.upper()}] {self.dot_name} "
@@ -1519,6 +1537,23 @@ class ModelDiagnoseOutput:
                 )
 
             for child in self.children:
+                if verbose >= 10:
+                    print(
+                        f"[try_export-{exporter.upper()}]     "
+                        f"child {child.full_name} as custom op"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}]           "
+                        f"args={string_type(child.inputs[0][0], with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}]         "
+                        f"kwargs={string_type(child.inputs[0][1], with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}]        "
+                        f"outputs={string_type(child.outputs[0], with_shape=True)}"
+                    )
                 child.put_custom_op_inplace(verbose=verbose)
 
             # We export again.

@@ -248,6 +248,7 @@ class TestPieceByPiece(ExtTestCase):
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
             verbose=10,
+            quiet=0,
         )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
@@ -257,6 +258,96 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
         _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
         self.assertEqual(ds, (tuple(), {"kwargs": {"x": {0: torch.export.Dim.DYNAMIC}}}))
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_piece_by_piece_args_not_to_kwargs(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x=None, **kwargs):
+                return x.abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x=x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            (tuple(), {"x": x}),
+            (tuple(), {"x": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        ds = diag.guess_dynamic_shapes()
+        self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
+        _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
+        self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_piece_by_piece_args_or_not_to_kwargs(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, y=None, **kwargs):
+                return x.abs() + torch.exp(y) + torch.cos(kwargs["z"])
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = torch.randn((5, 6))
+        w = model(x, y=y, z=z)
+        self.assertNotEmpty(w)
+
+        inputs = [
+            ((x,), {"y": y, "z": z}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6)), "z": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        ds = diag.guess_dynamic_shapes()
+        self.assertEqual(
+            ds,
+            (
+                ({0: torch.export.Dim.DYNAMIC},),
+                {"y": {0: torch.export.Dim.DYNAMIC}, "z": {0: torch.export.Dim.DYNAMIC}},
+            ),
+        )
+        _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
+        self.assertEqual(
+            ds,
+            (
+                tuple(),
+                {
+                    "x": {0: torch.export.Dim.DYNAMIC},
+                    "y": {0: torch.export.Dim.DYNAMIC},
+                    "kwargs": {"z": {0: torch.export.Dim.DYNAMIC}},
+                },
+            ),
+        )
 
     @requires_torch("2.6")
     def test_trace_execution_piece_by_piece_piece_try_no_weight(self):
@@ -945,6 +1036,50 @@ class TestPieceByPiece(ExtTestCase):
             "fx:     %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]",
             report,
         )
+
+    @requires_torch("2.6")
+    def test_piece_by_piece_piece_bool(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y=None, square=False):
+                if y is None:
+                    if square:
+                        return x**2
+                    return torch.abs(x)
+                return x**2 - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y=None):
+                return self.sub(x, y=y * x, square=True)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.pow", report)
 
 
 if __name__ == "__main__":
