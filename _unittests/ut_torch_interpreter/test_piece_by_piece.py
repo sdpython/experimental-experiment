@@ -840,7 +840,7 @@ class TestPieceByPiece(ExtTestCase):
     def test_piece_by_piece_piece_custom_kwargs_always(self):
         import torch
 
-        if True:
+        if False:
 
             class ModelArgs(torch.nn.Module):
                 def forward(self, x, y):

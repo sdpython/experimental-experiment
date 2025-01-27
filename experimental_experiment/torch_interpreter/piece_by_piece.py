@@ -710,6 +710,8 @@ class ModelDiagnoseOutput:
                         else torch.empty_like(args[ii])
                     )
                     outputs.append(out if out.dtype == dtype else out.to(dtype))
+                if len(outputs) == 1 and isinstance(self.outputs[0][0], torch.Tensor):
+                    return outputs[0]
                 return tuple(outputs)
 
             return _symbolic_forward_tensor_mapped_io_shapes
@@ -916,7 +918,8 @@ class ModelDiagnoseOutput:
                 f"[try_export._rewrite_forward_] {self.full_name}: "
                 f"check done, forward returned "
                 f"{string_type(got, with_shape=True)}, shape_fct returned "
-                f"{string_type(got_shape, with_shape=True)}"
+                f"{string_type(got_shape, with_shape=True)}, outputs[0]="
+                f"{string_type(self.outputs[0], with_shape=True)}"
             )
 
         # Apparently, we need a function with the exact same signature.
