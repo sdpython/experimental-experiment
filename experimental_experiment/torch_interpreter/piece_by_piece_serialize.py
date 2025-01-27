@@ -99,7 +99,9 @@ def serialize_args(
         is_tensor = False
 
     if not kwargs:
-        return new_args
+        if kwargs is None:
+            return new_args if is_tensor else tuple(new_args)
+        return new_args, {}
 
     assert args_names is not None or schema, (
         f"Not implemented when args_names={args_names}, "

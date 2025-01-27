@@ -1,6 +1,7 @@
 import unittest
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
+from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
@@ -10,6 +11,7 @@ from experimental_experiment.torch_interpreter.piece_by_piece import (
 from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
     choose_kwargs_for_dynamic_shapes,
     extract_names_from_schema,
+    serialize_args,
 )
 
 
@@ -802,10 +804,64 @@ class TestPieceByPiece(ExtTestCase):
             g = extract_names_from_schema(a)
             self.assertEqual(b, g)
 
+    def test_serialize_args_in(self):
+        import torch
+
+        inputs_args = [((torch.randn((5, 6)), torch.randn((5, 6))), {})]
+
+        args, kwargs = serialize_args(*inputs_args[0], schema="(Tensor x, Tensor y) -> Tensor")
+        self.assertNotEmpty(args)
+        self.assertEqual(kwargs, {})
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, "(T1s5x6,T1s5x6)")
+
+    def test_serialize_args_out(self):
+        import torch
+
+        inputs_args = [((torch.randn((5, 6)), torch.randn((5, 6))), None)]
+
+        args = serialize_args(*inputs_args[0], schema="(Tensor x, Tensor y) -> Tensor")
+        self.assertIsInstance(args, tuple)
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, ("(T1s5x6,T1s5x6)"))
+
+    def test_serialize_args_out1(self):
+        import torch
+
+        args = serialize_args(
+            torch.randn((5, 6)), None, schema="(Tensor x, Tensor y) -> Tensor"
+        )
+        self.assertIsInstance(args, torch.Tensor)
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, "T1s5x6")
+
     @requires_torch("2.6")
     @hide_stdout()
     def test_piece_by_piece_piece_custom_kwargs_always(self):
         import torch
+
+        if True:
+
+            class ModelArgs(torch.nn.Module):
+                def forward(self, x, y):
+                    return x + y
+
+            inputs_args = [
+                ((torch.randn((5, 6)), torch.randn((5, 6))), {}),
+                ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+            ]
+
+            diagkw = trace_execution_piece_by_piece(ModelArgs(), inputs_args)
+            print("----------------------")
+            diagkw.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=4,
+                replace_by_custom_op=CustomOpStrategy.ALWAYS,
+                quiet=0,
+            )
+            print("----------------------")
 
         class Model(torch.nn.Module):
             def forward(self, x, y=None):
@@ -833,7 +889,7 @@ class TestPieceByPiece(ExtTestCase):
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=2,
+            verbose=4,
             replace_by_custom_op=CustomOpStrategy.ALWAYS,
             quiet=0,
         )
