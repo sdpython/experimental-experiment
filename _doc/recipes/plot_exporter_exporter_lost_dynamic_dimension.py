@@ -1,12 +1,22 @@
 """
 .. _l-plot-exporter-lost_dynamic_dimension:
 
-A lost dyanmic dimension
-=================================
+A dynamic dimension lost by torch.export.export
+===============================================
 
+Dynamic shapes ensures a model is valid not matter what the
+dimension value is for a dynamic dimension.
+:func:`torch.export.export` is trying to keep track of that information
+for every intermediate result the model produces.
+But something it fails. Let's see one case.
 
-A dynamic dimension is replaced by a constant
-+++++++++++++++++++++++++++++++++++++++++++++
+A dynamic dimension is replaced by a constant by function pad
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+It could by any other function. A function is taking an integer as an argument.
+Despite the fact this value may change with different input, the exporter
+loses than information as it consider the value as an integer, therefore,
+a constant.
 """
 
 import torch
@@ -33,7 +43,9 @@ print(model(*inputs))
 # %%
 # Let's export.
 AUTO = torch.export.Dim.AUTO
-ep = torch.export.export(model, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}})
+ep = torch.export.export(
+    model, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}}, strict=False
+)
 
 # %%
 # Let's check it works.
@@ -74,14 +86,14 @@ except Exception as e:
 # to produce the desired result.
 
 
-def dummy_function(idx, x_len):
+def dummy_function_cat(idx, x_len):
     # [1, 2, 3] becomes [1, 2, 3, x_len]
     return torch.cat([idx, torch.tensor([x_len], dtype=torch.int64)], dim=0)
 
 
 class ModelCat(torch.nn.Module):
     def forward(self, x, y):
-        padded = dummy_function(x, y.shape[0])
+        padded = dummy_function_cat(x, y.shape[0])
         return padded.reshape((-1, 1)) + torch.arange(padded.max()).reshape((1, -1))
 
 
@@ -90,7 +102,9 @@ print(modelcat(*inputs))
 
 # %%
 # Let's export.
-epcat = torch.export.export(modelcat, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}})
+epcat = torch.export.export(
+    modelcat, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}}, strict=False
+)
 
 # %%
 # Let's check it works.
