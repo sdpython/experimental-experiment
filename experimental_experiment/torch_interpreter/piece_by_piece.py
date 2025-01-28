@@ -524,15 +524,9 @@ class ModelDiagnoseOutput:
     def _annotation_from_type(self, obj) -> str:
         if isinstance(obj, torch.Tensor):
             return "Tensor"
-        if isinstance(obj, (tuple, list)):
-            assert all(
-                isinstance(t, torch.Tensor) for t in obj
-            ), f"Not implemented yet for mixed types such as {string_type(obj)}"
+        if isinstance(obj, (tuple, list)) and all(isinstance(t, torch.Tensor) for t in obj):
             return ["Tensor" for _t in obj]
-        if isinstance(obj, dict):
-            assert all(
-                isinstance(t, torch.Tensor) for t in obj.values()
-            ), f"Not implemented yet for mixed types such as {string_type(obj)}"
+        if isinstance(obj, dict) and all(isinstance(t, torch.Tensor) for t in obj.values()):
             return ["Tensor" for _t in obj]
         if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicClass"):
             # It is safer to serialize everything, it is aligned with ONNX,
@@ -558,9 +552,10 @@ class ModelDiagnoseOutput:
             return "float"
         if isinstance(obj, int):
             return "int"
-        raise NotImplementedError(
-            f"Annotation for type {string_type(obj)} is not implemented{self.get_debug_msg()}"
-        )
+
+        # Let's use torch to flatten the list.
+        flat, _spec = torch.utils._pytree.tree_flatten(obj)
+        return ["Tensor" for _ in flat]
 
     def _annotated_input(self, name):
         args, kwargs = self.inputs[0]
@@ -665,6 +660,7 @@ class ModelDiagnoseOutput:
 
         for i in range(n_outputs):
             for row in range(len(shaped_mapped)):
+                assert hasattr(flattened_outputs[row][i], "shape"), _msg_(i)
                 shape = flattened_outputs[row][i].shape
                 if shape in shaped_mapped[row]:
                     obtained = min(shaped_mapped[row][shape])

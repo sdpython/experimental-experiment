@@ -12,6 +12,8 @@ from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
     choose_kwargs_for_dynamic_shapes,
     extract_names_from_schema,
     serialize_args,
+    tree_spec_as_name,
+    tree_spec_from_name,
 )
 
 
@@ -1123,6 +1125,121 @@ class TestPieceByPiece(ExtTestCase):
         report = diag.get_export_report(fx=True)
         self.assertIn("torch.ops.aten.abs", report)
         self.assertEqual(diag.children[0].forward_expected_output_type, ["dict__2_da__dm"])
+
+    def test_serialize_any(self):
+        import torch
+
+        nested = [
+            torch.randn((4, 5)),
+            [torch.randn((7, 5)), torch.randn((8, 5))],
+            {
+                "a": torch.randn((14, 5)),
+                "b": torch.randn((12, 5)),
+                "cl": [torch.randn((11, 5))],
+            },
+        ]
+        flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
+
+        self.assertEqual(len(flat_list), 6)
+        unflatten = torch.utils._pytree.tree_unflatten(flat_list, tree_spec)
+        self.assertEqualAny(nested, unflatten)
+
+        # Let's get a name
+        name = tree_spec_as_name(tree_spec, 6)
+        _, new_spec = tree_spec_from_name(name)
+        unflatten = torch.utils._pytree.tree_unflatten(flat_list, new_spec)
+        self.assertEqualAny(nested, unflatten)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_dict_list(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return dict(dm=x - y, da=[x + y, x * y])
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y):
+                r = self.sub(x, y)
+                return r["dm"].abs() + r["da"][0].abs() + r["da"][1].abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.abs", report)
+        self.assertEqual(len(diag.children[0].forward_expected_output_type), 1)
+        self.assertStartsWith("___", diag.children[0].forward_expected_output_type[0])
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_tuple_cache(self):
+        import torch
+        import transformers
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                cache = transformers.cache_utils.DynamicCache()
+                cache.update(x + 1, y + 2, 0)
+                return x + y, cache
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y):
+                r, cache = self.sub(x, y)
+                return r.abs() + cache.key_cache[0].abs() + cache.value_cache[0].abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.abs", report)
+        self.assertEqual(len(diag.children[0].forward_expected_output_type), 1)
+        self.assertStartsWith("___", diag.children[0].forward_expected_output_type[0])
 
 
 if __name__ == "__main__":

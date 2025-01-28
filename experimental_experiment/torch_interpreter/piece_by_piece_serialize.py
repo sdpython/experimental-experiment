@@ -1,5 +1,9 @@
+import base64
 import copy
+import io
+import pickle
 import re
+import zlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
@@ -50,15 +54,9 @@ def serialize_one(
     """
     if isinstance(obj, torch.Tensor):
         return obj
-    if isinstance(obj, (tuple, list)):
-        assert all(
-            isinstance(t, torch.Tensor) for t in obj
-        ), f"Unexpected type in {string_type(obj)}. It should be all tensors."
+    if isinstance(obj, (tuple, list)) and all(isinstance(t, torch.Tensor) for t in obj):
         return obj
-    if isinstance(obj, dict):
-        assert all(
-            isinstance(t, torch.Tensor) for t in obj.values()
-        ), f"Unexpected type in {string_type(obj)}. It should be all tensors."
+    if isinstance(obj, dict) and all(isinstance(t, torch.Tensor) for t in obj.values()):
         sorted_items = sorted(obj.items())
         return [_[1] for _ in sorted_items]
     if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
@@ -68,12 +66,9 @@ def serialize_one(
     if isinstance(obj, (bool, int, float)):
         # This cannot be traced.
         return obj
-    raise NotImplementedError(
-        f"Unable to serialize type {type(obj)}, "
-        f"class_name={obj.__class__.__name__!r}, "
-        f"types={string_type(obj, with_shape=True)}, "
-        f"name={name!r} from schema={schema!r}"
-    )
+    # Let's flatten the structure using pytorch.
+    flat_list, _spec = torch.utils._pytree.tree_flatten(obj)
+    return flat_list
 
 
 def serialize_args(
@@ -95,15 +90,12 @@ def serialize_args(
         new_args = args
         n_args = 1
         is_tensor = True
-    elif isinstance(args, dict):
-        assert all(
-            isinstance(t, torch.Tensor) for t in args.values()
-        ), f"Mixed type not implemented for {string_type(args)}."
+    elif isinstance(args, dict) and all(isinstance(t, torch.Tensor) for t in args.values()):
         sorted_items = sorted(args.items())
         new_args = [_[1] for _ in sorted_items]
         n_args = len(new_args)
         is_tensor = False
-    elif isinstance(args, (list, tuple)):
+    elif isinstance(args, (list, tuple)) and all(isinstance(i, torch.Tensor) for i in args):
         new_args = []
         for i, a in enumerate(args):
             r = serialize_one(a, name=i, schema=schema)
@@ -115,7 +107,10 @@ def serialize_args(
         n_args = len(new_args)
         is_tensor = False
     else:
-        raise NotImplementedError(f"Unexpected type for args={string_type(args)}")
+        # Let's use pytorch serialization.
+        new_args, spec = torch.utils._pytree.tree_flatten(args)
+        n_args = len(new_args)
+        is_tensor = False
 
     if not kwargs:
         if kwargs is None:
@@ -169,15 +164,9 @@ def type_as_str_with_info(obj: Any) -> str:
     """Returns a string with information about how to deserialize."""
     if isinstance(obj, torch.Tensor):
         return "Tensor"
-    if isinstance(obj, list):
-        assert all(
-            isinstance(t, torch.Tensor) for t in obj
-        ), f"Mixed type not implemented for {string_type(obj)}"
+    if isinstance(obj, list) and all(isinstance(t, torch.Tensor) for t in obj):
         return f"list__{len(obj)}"
-    if isinstance(obj, dict):
-        assert all(
-            isinstance(t, torch.Tensor) for t in obj.values()
-        ), f"Mixed type not implemented for {string_type(obj)}"
+    if isinstance(obj, dict) and all(isinstance(t, torch.Tensor) for t in obj.values()):
         sorted_keys = "__".join(sorted(obj))
         return f"dict__{len(obj)}_{sorted_keys}"
     if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
@@ -190,10 +179,9 @@ def type_as_str_with_info(obj: Any) -> str:
         return "float"
     if isinstance(obj, int):
         return "int"
-    raise NotImplementedError(
-        f"Unable to produce serialize info for type {type(obj)}, "
-        f"class_name={obj.__class__.__name__!r}."
-    )
+    # Let's use pytorch serialization.
+    flat_list, spec = torch.utils._pytree.tree_flatten(obj)
+    return tree_spec_as_name(spec, len(flat_list))
 
 
 def deserialize_args(
@@ -301,6 +289,13 @@ def deserialize_args(
             des.append(cache)
             continue
 
+        if tt.startswith("___"):
+            n_args, spec = tree_spec_from_name(tt)
+            obj = torch.utils._pytree.tree_unflatten(res[pos_res : pos_res + n_args], spec)
+            pos_res += n_args
+            des.append(obj)
+            continue
+
         raise NotImplementedError(f"Unable to handle type info {tt!r}")
     if return_n_args:
         return des, pos_res
@@ -405,3 +400,37 @@ def make_copy(obj: Any) -> Any:
         raise RuntimeError(
             f"deepcopy did not work on type {type(obj)}: {string_type(obj)}"
         ) from e
+
+
+def tree_spec_as_name(tree_spec: torch.utils._pytree.TreeSpec, n_elements: int) -> str:
+    """
+    Returns a string containing all the information needed to code
+    an instance of TreeSpec in a string.
+
+    :param tree_spec: instance of TreeSpec to convert into a name
+    :param n_elements: number of elements it serializes
+    :return: string
+    """
+    buffer = io.BytesIO()
+    pickle.dump((n_elements, tree_spec), buffer)
+    data = buffer.getvalue()
+    compressed_data = zlib.compress(data)
+    chars = base64.b32encode(compressed_data).decode("utf-8")
+    chars = chars.replace("=", "_")
+    return f"___{chars}"
+
+
+def tree_spec_from_name(name: str) -> Tuple[int, torch.utils._pytree.TreeSpec]:
+    """
+    Restores the instance of TreeSpec converted into a name by
+    function :func:`tree_spec_as_name`.
+
+    :param name: name of the TreeSpec
+    :return: instance of TreeSpec, number of elements it contains
+    """
+    assert len(name) > 3 and name[:3] == "___", f"Incorrect name {name!r}"
+    name = name[3:].replace("_", "=")
+    buffer = base64.b32decode(name)
+    unzip = zlib.decompress(buffer)
+    n_elements, treespec = pickle.load(io.BytesIO(unzip))
+    return n_elements, treespec
