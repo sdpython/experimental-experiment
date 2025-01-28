@@ -660,7 +660,14 @@ class ModelDiagnoseOutput:
 
         for i in range(n_outputs):
             for row in range(len(shaped_mapped)):
-                assert hasattr(flattened_outputs[row][i], "shape"), _msg_(i)
+                assert hasattr(flattened_outputs[row][i], "shape"), (
+                    f"Not implemented for type {string_type(flattened_outputs[row][i])} "
+                    f"(row={row}, i={i})"
+                    f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
+                    f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
+                    f"\nshaped_mapped={shaped_mapped}, "
+                    f"\nindices_map={indices_map}"
+                )
                 shape = flattened_outputs[row][i].shape
                 if shape in shaped_mapped[row]:
                     obtained = min(shaped_mapped[row][shape])
@@ -673,7 +680,12 @@ class ModelDiagnoseOutput:
         for i, mapped in enumerate(indices_map):
             if mapped is not None:
                 continue
-            shapes = set(flattened_outputs[row][i] for row in len(self.outputs))
+            assert isinstance(flattened_outputs[0][i], torch.Tensor), (
+                f"Unexpected type {string_type(flattened_outputs[0][i])}, i={i}"
+                f"\nflattened_outputs[0]="
+                f"{string_type(flattened_outputs[0], with_shape=True)}"
+            )
+            shapes = set(flattened_outputs[row][i].shape for row in len(self.outputs))
             assert len(shapes) == 1, _msg_(i)
             indices_map[i] = shapes.pop()
 

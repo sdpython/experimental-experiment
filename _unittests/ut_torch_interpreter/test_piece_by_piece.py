@@ -2,6 +2,9 @@ import unittest
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.helpers import string_type
+from experimental_experiment.torch_interpreter.onnx_export_errors import (
+    bypass_export_some_errors,
+)
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
@@ -1150,6 +1153,36 @@ class TestPieceByPiece(ExtTestCase):
         unflatten = torch.utils._pytree.tree_unflatten(flat_list, new_spec)
         self.assertEqualAny(nested, unflatten)
 
+    def test_serialize_dynamic_cache(self):
+        import torch
+        import transformers
+
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.randn((19, 5)), torch.randn((21, 5)), 0)
+
+        nested = [
+            torch.randn((4, 5)),
+            [torch.randn((7, 5)), torch.randn((8, 5))],
+            {
+                "a": torch.randn((14, 5)),
+                "cl": cache,
+            },
+        ]
+
+        with bypass_export_some_errors():
+            flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
+
+            self.assertTrue(all(isinstance(i, torch.Tensor) for i in flat_list))
+            self.assertEqual(len(flat_list), 6)
+            unflatten = torch.utils._pytree.tree_unflatten(flat_list, tree_spec)
+            self.assertEqualAny(nested, unflatten)
+
+            # Let's get a name
+            name = tree_spec_as_name(tree_spec, 6)
+            _, new_spec = tree_spec_from_name(name)
+            unflatten = torch.utils._pytree.tree_unflatten(flat_list, new_spec)
+            self.assertEqualAny(nested, unflatten)
+
     @requires_torch("2.6")
     @hide_stdout()
     def test_piece_by_piece_piece_dict_list(self):
@@ -1227,14 +1260,16 @@ class TestPieceByPiece(ExtTestCase):
         ]
 
         diag = trace_execution_piece_by_piece(model, inputs)
-        ep = diag.try_export(
-            exporter="fx",
-            use_dynamic_shapes=True,
-            exporter_kwargs=dict(strict=False),
-            verbose=10,
-            replace_by_custom_op=CustomOpStrategy.LOCAL,
-            quiet=0,
-        )
+        with bypass_export_some_errors():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+            )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(fx=True)
         self.assertIn("torch.ops.aten.abs", report)

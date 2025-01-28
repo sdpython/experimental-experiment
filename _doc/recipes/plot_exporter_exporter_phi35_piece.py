@@ -25,6 +25,9 @@ from experimental_experiment.torch_interpreter.piece_by_piece import (
     CustomOpStrategy,
     trace_execution_piece_by_piece,
 )
+from experimental_experiment.torch_interpreter.onnx_export_errors import (
+    bypass_export_some_errors,
+)
 
 
 def get_phi35_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
@@ -288,15 +291,16 @@ print(diag.get_export_report())
 # the exported program for every module without its submodules.
 
 print("-----------------------------")
-ep = diag.try_export(
-    exporter="fx",
-    use_dynamic_shapes=True,
-    exporter_kwargs=dict(strict=False),
-    bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
-    verbose=10,
-    replace_by_custom_op=CustomOpStrategy.LOCAL,
-    quiet=0,
-)
+with bypass_export_some_errors():
+    ep = diag.try_export(
+        exporter="fx",
+        use_dynamic_shapes=True,
+        exporter_kwargs=dict(strict=False),
+        # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+        verbose=10,
+        replace_by_custom_op=CustomOpStrategy.LOCAL,
+        quiet=0,
+    )
 print(f"success: {ep.status}")
 
 # %%
