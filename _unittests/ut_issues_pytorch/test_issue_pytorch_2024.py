@@ -294,17 +294,17 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_index_put_update_parameter_script_3d(self):
         self._updated_parameter("script", True)
 
-    @requires_onnxscript("0.2")
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_index_put_update_parameter_dynamo_2d_static(self):
         self._updated_parameter("dynamo", False, dynamic=False)
 
-    @requires_onnxscript("0.2")
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_index_put_update_parameter_dynamo_2d_dynamic(self):
         self._updated_parameter("dynamo", False, dynamic=True)
 
-    @requires_onnxscript("0.2")
+    @requires_onnxscript("0.3")
     @hide_stdout()
     def test_index_put_update_parameter_dynamo_3d(self):
         self._updated_parameter("dynamo", True)

@@ -115,6 +115,7 @@ def string_type(
     with_min_max: bool = False,
     with_device: bool = False,
     ignore: bool = False,
+    limit: int = 10,
 ) -> str:
     """
     Displays the types of an object as a string.
@@ -142,9 +143,10 @@ def string_type(
                 with_min_max=with_min_max,
                 with_device=with_device,
                 ignore=ignore,
+                limit=limit,
             )
             return f"({s},)"
-        if len(obj) < 10:
+        if len(obj) < limit:
             js = ",".join(
                 string_type(
                     o,
@@ -152,6 +154,7 @@ def string_type(
                     with_min_max=with_min_max,
                     with_device=with_device,
                     ignore=ignore,
+                    limit=limit,
                 )
                 for o in obj
             )
@@ -169,6 +172,7 @@ def string_type(
                     with_min_max=with_min_max,
                     with_device=with_device,
                     ignore=ignore,
+                    limit=limit,
                 )
                 for o in obj
             )
@@ -186,6 +190,7 @@ def string_type(
                     with_min_max=with_min_max,
                     with_device=with_device,
                     ignore=ignore,
+                    limit=limit,
                 )
                 for o in obj
             )
@@ -202,6 +207,7 @@ def string_type(
             with_min_max=with_min_max,
             with_device=with_device,
             ignore=ignore,
+            limit=limit,
         )
         s = ",".join(f"{kv[0]}:{string_type(kv[1],**kws)}" for kv in obj.items())
         return f"dict({s})"
@@ -284,12 +290,14 @@ def string_type(
             with_shape=with_shape,
             with_min_max=with_min_max,
             with_device=with_device,
+            limit=limit,
         )
         d = string_type(
             obj.ssm_states,
             with_shape=with_shape,
             with_min_max=with_min_max,
             with_device=with_device,
+            limit=limit,
         )
         return f"MambaCache(conv_states={c}, ssm_states={d})"
     if type(obj).__name__ == "Node" and hasattr(obj, "meta"):
@@ -304,24 +312,34 @@ def string_type(
             with_shape=with_shape,
             with_min_max=with_min_max,
             with_device=with_device,
+            limit=limit,
         )
         vc = string_type(
             obj.value_cache,
             with_shape=with_shape,
             with_min_max=with_min_max,
             with_device=with_device,
+            limit=limit,
         )
         return f"{obj.__class__.__name__}(key_cache={kc}, value_cache={vc})"
 
     if obj.__class__.__name__ == "BatchFeature":
         s = string_type(
-            obj.data, with_shape=with_shape, with_min_max=with_min_max, with_device=with_device
+            obj.data,
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+            limit=limit,
         )
         return f"BatchFeature(data={s})"
 
     if obj.__class__.__name__ == "BatchEncoding":
         s = string_type(
-            obj.data, with_shape=with_shape, with_min_max=with_min_max, with_device=with_device
+            obj.data,
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+            limit=limit,
         )
         return f"BatchEncoding(data={s})"
 
