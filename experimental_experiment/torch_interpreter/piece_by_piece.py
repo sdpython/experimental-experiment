@@ -651,7 +651,7 @@ class ModelDiagnoseOutput:
 
         def _msg_(i):
             return (
-                f"{self.full_name}: inconsistencies for output {i}, "
+                f"{self.full_name}: inconsistencies for output i={i}, "
                 f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
                 f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
                 f"\nshaped_mapped={shaped_mapped}, "
@@ -662,11 +662,7 @@ class ModelDiagnoseOutput:
             for row in range(len(shaped_mapped)):
                 assert hasattr(flattened_outputs[row][i], "shape"), (
                     f"Not implemented for type {string_type(flattened_outputs[row][i])} "
-                    f"(row={row}, i={i})"
-                    f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
-                    f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
-                    f"\nshaped_mapped={shaped_mapped}, "
-                    f"\nindices_map={indices_map}"
+                    f"{_msg_(i)}"
                 )
                 shape = flattened_outputs[row][i].shape
                 if shape in shaped_mapped[row]:
@@ -680,13 +676,11 @@ class ModelDiagnoseOutput:
         for i, mapped in enumerate(indices_map):
             if mapped is not None:
                 continue
-            assert isinstance(flattened_outputs[0][i], torch.Tensor), (
-                f"Unexpected type {string_type(flattened_outputs[0][i])}, i={i}"
-                f"\nflattened_outputs[0]="
-                f"{string_type(flattened_outputs[0], with_shape=True)}"
-            )
-            shapes = set(flattened_outputs[row][i].shape for row in len(self.outputs))
-            assert len(shapes) == 1, _msg_(i)
+            assert isinstance(
+                flattened_outputs[0][i], torch.Tensor
+            ), f"Unexpected type {string_type(flattened_outputs[0][i])}, {_msg_(i)}"
+            shapes = set(flattened_outputs[row][i].shape for row in range(len(self.outputs)))
+            assert len(shapes) == 1, f"shapes={shapes}\n{_msg_(i)}"
             indices_map[i] = shapes.pop()
 
         return tuple((i, f.dtype) for i, f in zip(indices_map, flattened_outputs[0]))
@@ -696,7 +690,9 @@ class ModelDiagnoseOutput:
         Returns a function computed the output shape assuming it can be inferred
         from inputs and outputs.
         """
-        if all(isinstance(t, torch.Tensor) for t in self.outputs[0]):
+        if all(isinstance(t, torch.Tensor) for t in self.outputs[0]) and isinstance(
+            self.inputs[0][0][0], torch.Tensor
+        ):
             inp_args, inp_kwargs = self.inputs[0]
             out = self.outputs[0]
             input_shape = inp_args[0].shape

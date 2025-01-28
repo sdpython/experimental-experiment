@@ -795,6 +795,89 @@ class TestPieceByPiece(ExtTestCase):
 
     @requires_torch("2.6")
     @hide_stdout()
+    def test_export_piece_dynamic_cache_io(self):
+        import torch
+        import transformers
+
+        class SubModelCacheIn(torch.nn.Module):
+            def forward(self, cache):
+                return cache.key_cache[0] * cache.value_cache[0]
+
+        class SubModelCacheOut(torch.nn.Module):
+            def forward(self, x, y):
+                d = cache.__class__()
+                d.update(x + 1, y + 2, 0)
+                return d
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subin = SubModelCacheIn()
+                self.subout = SubModelCacheOut()
+
+            def forward(self, x, y):
+                cache = self.subout(x, y)
+                return self.subin(cache)
+
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.ones((5, 6)), torch.ones((5, 6)) + 2, 0)
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+
+        inputs = [
+            ((x, y), {}),
+            ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+        ]
+
+        expected_dyn_shapes = "(({0: DYN}, {0: DYN}), {})"
+        diag = trace_execution_piece_by_piece(model, inputs)
+        dyn_shapes = diag.guess_dynamic_shapes()
+        got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(expected_dyn_shapes, got)
+
+        expected = [
+            ((0, torch.float32),),
+            ((0, torch.float32),),
+            ((0, torch.float32), (0, torch.float32)),
+        ]
+        c_schema = [
+            "(Tensor x, Tensor y) -> Tensor",
+            "(Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
+            "(Tensor x, Tensor y) -> Tensor[]",
+        ]
+        for _iexp, obj, esch in zip(expected, diag, c_schema):
+            #    mapping = obj.build_shape_mapping_indices()
+            #    self.assertEqual(iexp, mapping)
+            sch = obj.build_c_schema()
+            self.assertEqual(esch, sch)
+
+        with bypass_export_some_errors():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.ALWAYS,
+                quiet=0,
+                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+            )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+
+        c_schema = [
+            "torch.ops.diag_lib.C_Model.default",
+            "torch.ops.diag_lib.C_Model_subin.default",
+            "torch.ops.diag_lib.C_Model_subout.default",
+        ]
+        for obj, esch in zip(diag, c_schema):
+            ep = obj.fx
+            self.assertIn(esch, str(ep))
+
+    @requires_torch("2.6")
+    @hide_stdout()
     def test_trace_execution_piece_by_piece_piece_local(self):
         import torch
 
@@ -1273,8 +1356,9 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(ep)
         report = diag.get_export_report(fx=True)
         self.assertIn("torch.ops.aten.abs", report)
-        self.assertEqual(len(diag.children[0].forward_expected_output_type), 1)
-        self.assertStartsWith("___", diag.children[0].forward_expected_output_type[0])
+        self.assertEqual(
+            diag.children[0].forward_expected_output_type, ["Tensor", "DynamicCache__1_1"]
+        )
 
 
 if __name__ == "__main__":
