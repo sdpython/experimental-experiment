@@ -524,6 +524,16 @@ class ModelDiagnoseOutput:
     def _annotation_from_type(self, obj) -> str:
         if isinstance(obj, torch.Tensor):
             return "Tensor"
+        if isinstance(obj, (tuple, list)):
+            assert all(
+                isinstance(t, torch.Tensor) for t in obj
+            ), f"Not implemented yet for mixed types such as {string_type(obj)}"
+            return ["Tensor" for _t in obj]
+        if isinstance(obj, dict):
+            assert all(
+                isinstance(t, torch.Tensor) for t in obj.values()
+            ), f"Not implemented yet for mixed types such as {string_type(obj)}"
+            return ["Tensor" for _t in obj]
         if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicClass"):
             # It is safer to serialize everything, it is aligned with ONNX,
             # and the use of list brought the following error:
@@ -859,8 +869,10 @@ class ModelDiagnoseOutput:
             if verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-OUT: "
-                    f"args={string_type(res, with_shape=True)}"
+                    f"res={string_type(res, with_shape=True)}"
                 )
+                if verbose > 3:
+                    print(f"[_rewrite_forward_] schema={_diag.forward_custom_op_schema}")
             # And we need to serialize before before returning the output.
             serialized_res = serialize_args(res, None, _diag.forward_custom_op_schema)
             if verbose > 2:

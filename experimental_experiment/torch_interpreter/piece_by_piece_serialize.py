@@ -55,6 +55,12 @@ def serialize_one(
             isinstance(t, torch.Tensor) for t in obj
         ), f"Unexpected type in {string_type(obj)}. It should be all tensors."
         return obj
+    if isinstance(obj, dict):
+        assert all(
+            isinstance(t, torch.Tensor) for t in obj.values()
+        ), f"Unexpected type in {string_type(obj)}. It should be all tensors."
+        sorted_items = sorted(obj.items())
+        return [_[1] for _ in sorted_items]
     if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
         return [*obj.key_cache, *obj.value_cache]
     if obj is None:
@@ -89,7 +95,15 @@ def serialize_args(
         new_args = args
         n_args = 1
         is_tensor = True
-    else:
+    elif isinstance(args, dict):
+        assert all(
+            isinstance(t, torch.Tensor) for t in args.values()
+        ), f"Mixed type not implemented for {string_type(args)}."
+        sorted_items = sorted(args.items())
+        new_args = [_[1] for _ in sorted_items]
+        n_args = len(new_args)
+        is_tensor = False
+    elif isinstance(args, (list, tuple)):
         new_args = []
         for i, a in enumerate(args):
             r = serialize_one(a, name=i, schema=schema)
@@ -100,6 +114,8 @@ def serialize_args(
         new_args = tuple(new_args)
         n_args = len(new_args)
         is_tensor = False
+    else:
+        raise NotImplementedError(f"Unexpected type for args={string_type(args)}")
 
     if not kwargs:
         if kwargs is None:
@@ -153,6 +169,17 @@ def type_as_str_with_info(obj: Any) -> str:
     """Returns a string with information about how to deserialize."""
     if isinstance(obj, torch.Tensor):
         return "Tensor"
+    if isinstance(obj, list):
+        assert all(
+            isinstance(t, torch.Tensor) for t in obj
+        ), f"Mixed type not implemented for {string_type(obj)}"
+        return f"list__{len(obj)}"
+    if isinstance(obj, dict):
+        assert all(
+            isinstance(t, torch.Tensor) for t in obj.values()
+        ), f"Mixed type not implemented for {string_type(obj)}"
+        sorted_keys = "__".join(sorted(obj))
+        return f"dict__{len(obj)}_{sorted_keys}"
     if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
         return f"{obj.__class__.__name__}__{len(obj.key_cache)}_{len(obj.value_cache)}"
     if obj is None:
@@ -210,6 +237,21 @@ def deserialize_args(
             des.append(res[pos_res])
             pos_res += 1
             continue
+        if tt.startswith("dict__"):
+            nl = tt[6:].split("_", maxsplit=1)
+            n = int(nl[0])
+            keys = nl[1].split("__")
+            assert len(keys) == n, f"Unable to parse {tt!r}, expecting {n} keys but got {keys}"
+            value = res[pos_res]
+            if isinstance(res[pos_res], torch.Tensor):
+                values = res[pos_res : pos_res + n]
+                des.append(dict(zip(keys, values)))
+                pos_res += n
+            else:
+                des.append(dict(zip(keys, value)))
+                pos_res += 1
+            continue
+
         if tt.startswith(("DynamicCache__", "patched_DynamicCache__")):
             info = tt.split("__")[-1]
             n1, n2 = tuple(map(int, info.split("_")))

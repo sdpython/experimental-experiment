@@ -1081,6 +1081,49 @@ class TestPieceByPiece(ExtTestCase):
         report = diag.get_export_report(fx=True)
         self.assertIn("torch.ops.aten.pow", report)
 
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_dict(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return dict(dm=x - y, da=x + y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y):
+                r = self.sub(x, y)
+                return r["dm"].abs() + r["da"].abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.abs", report)
+        self.assertEqual(diag.children[0].forward_expected_output_type, ["dict__2_da__dm"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
