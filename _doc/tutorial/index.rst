@@ -26,6 +26,11 @@ already has many examples about it. Here are some corner cases.
 * :ref:`l-plot-exporter-dynamic_shapes`
 * :ref:`l-plot-torch-export-with-dynamic-cache-201`
 * :ref:`l-plot-exporter-nn_modules_inputs`
+* :ref:`l-plot-exporter-lost_dynamic_dimension`
+
+**Export piece by piece**
+
+* :ref:`l-plot-exporter-recipes-custom-phi35`
 
 **strict = ?**
 
@@ -227,10 +232,9 @@ inputs having different shapes even though they have the same rank.
 
 * :ref:`l-plot-exporter-recipes-custom-modules`
 
-**LLM Models**
+**Models**
 
 * :ref:`l-plot-exporter-recipes-custom-phi2`
-* :ref:`l-plot-exporter-recipes-custom-phi35`
 
 **Optimization**
 

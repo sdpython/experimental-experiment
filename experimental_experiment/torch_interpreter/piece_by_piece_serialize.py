@@ -1,8 +1,44 @@
 import copy
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type
+
+
+def extract_names_from_schema(schema: str) -> List[str]:
+    """
+    Extracts name from a C++ schema produced by ``infer_schema``.
+    Example: ``(Tensor x, Tensor y) -> Tensor`` returns ["x", "y"]
+    """
+    pattern = r"\w+\??\s+(\w+)"
+    matches = re.findall(pattern, schema)
+    return matches
+
+
+def choose_kwargs_for_dynamic_shapes(
+    ds_args: Tuple[Dict[int, Any], ...],
+    ds_kwargs: Dict[str, Dict[int, Any]],
+    forward_names: List[str],
+) -> Dict[str, Dict[int, Any]]:
+    """
+    Chooses a dictionary to express dynamic shapes when the module uses both
+    unnamed arguments and named ones.
+    """
+    assert ds_args and ds_kwargs and forward_names, (
+        f"No need to choose as ds_args={ds_args} or ds_kwargs={ds_kwargs} "
+        f"or forward_names={forward_names} is None."
+    )
+    if len(forward_names) >= len(ds_args):
+        # No *args.
+        ds = ds_kwargs
+        for k, v in zip(forward_names, ds_args):
+            ds[k] = v
+        return ds
+    raise NotImplementedError(
+        f"forward_positioned_parameter_names={forward_names}, "
+        f"ds_args={ds_args}, ds_kwargs={ds_kwargs}"
+    )
 
 
 def serialize_one(
@@ -23,6 +59,9 @@ def serialize_one(
         return [*obj.key_cache, *obj.value_cache]
     if obj is None:
         return None
+    if isinstance(obj, (bool, int, float)):
+        # This cannot be traced.
+        return obj
     raise NotImplementedError(
         f"Unable to serialize type {type(obj)}, "
         f"class_name={obj.__class__.__name__!r}, "
@@ -32,11 +71,24 @@ def serialize_one(
 
 
 def serialize_args(
-    args: Tuple[Any], kwargs: Optional[Dict[str, Any]], schema: str
+    args: Tuple[Any],
+    kwargs: Optional[Dict[str, Any]],
+    schema: str,
+    args_names: Optional[List[str]] = None,
 ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, torch.Tensor]]:
-    """Serializes args and kwargs before calling a custom ops."""
+    """
+    Serializes args and kwargs before calling a custom ops.
+
+    :param args: unnamed arguments
+    :param kwargs: named arguments
+    :param schema: schema function
+    :param args_names: ordered argument names, it must be specified
+        if *kwargs* is specified
+    """
     if isinstance(args, torch.Tensor):
         new_args = args
+        n_args = 1
+        is_tensor = True
     else:
         new_args = []
         for i, a in enumerate(args):
@@ -46,13 +98,55 @@ def serialize_args(
             else:
                 new_args.extend(r)
         new_args = tuple(new_args)
-    assert not kwargs, (
-        f"Not implemented with args={string_type(args, with_shape=True)}, "
-        f"kwargs={string_type(kwargs, with_shape=True)}"
+        n_args = len(new_args)
+        is_tensor = False
+
+    if not kwargs:
+        if kwargs is None:
+            return new_args if is_tensor else tuple(new_args)
+        return new_args, {}
+
+    assert args_names is not None or schema, (
+        f"Not implemented when args_names={args_names}, "
+        f"args={string_type(args, with_shape=True)}, "
+        f"kwargs={string_type(kwargs, with_shape=True)}, "
+        f"schema={schema!r}"
     )
-    if kwargs is None:
-        return new_args
-    return new_args, {}
+    if args_names is None:
+        args_names = extract_names_from_schema(schema)
+
+    new_args = [new_args] if is_tensor else list(new_args)
+    args_names = args_names[n_args:]
+    assert args_names, (
+        f"kwargs={string_type(kwargs, with_shape=True)} is specified "
+        f"then args_names should be as well, schema={schema!r}, "
+        f"args={string_type(args, with_shape=True)}"
+    )
+    # handling arguments
+    for name in args_names:
+        if name not in kwargs:
+            new_args.append(None)
+            continue
+        v = kwargs[name]
+        r = serialize_one(v, name=name, schema=schema)
+        if r is None or isinstance(r, (torch.Tensor, int, bool, float)):
+            new_args.append(r)
+        else:
+            new_args.extend(r)
+
+    # remaining arguments (**kwargs, *args)
+    set_names = set(args_names)
+    for k, v in kwargs.items():
+        if k in set_names:
+            continue
+        if v is None:
+            new_args.append(None)
+        r = serialize_one(v, name=name, schema=schema)
+        if r is None or isinstance(r, torch.Tensor):
+            new_args.append(r)
+        else:
+            new_args.extend(r)
+    return tuple(new_args), {}
 
 
 def type_as_str_with_info(obj: Any) -> str:
@@ -63,6 +157,12 @@ def type_as_str_with_info(obj: Any) -> str:
         return f"{obj.__class__.__name__}__{len(obj.key_cache)}_{len(obj.value_cache)}"
     if obj is None:
         return "None"
+    if isinstance(obj, bool):
+        return "bool"
+    if isinstance(obj, float):
+        return "float"
+    if isinstance(obj, int):
+        return "int"
     raise NotImplementedError(
         f"Unable to produce serialize info for type {type(obj)}, "
         f"class_name={obj.__class__.__name__!r}."
@@ -70,7 +170,10 @@ def type_as_str_with_info(obj: Any) -> str:
 
 
 def deserialize_args(
-    res: List[torch.Tensor], expected_types: List[str], clone: bool = False
+    res: List[torch.Tensor],
+    expected_types: List[str],
+    clone: bool = False,
+    return_n_args: bool = False,
 ) -> Tuple[Any, ...]:
     """
     Deserizalizes output results coming from the custom op and restores
@@ -79,6 +182,8 @@ def deserialize_args(
     :param res: args to deserialize
     :param expected_types: information on how to deserialize
     :param clone: clone tensors before returning them
+    :param return_n_args: if True, the function returns the number of deserialized arguments,
+        if False, it assumes this number if equal to the number of expected types
     :return: new args
     """
     assert isinstance(res, (list, tuple, torch.Tensor)), f"unexpected type for res {type(res)}"
@@ -88,7 +193,7 @@ def deserialize_args(
         ], f"Mismatch information, expected_types={expected_types!r}"
         return res
     assert all(
-        t is None or isinstance(t, (list, torch.Tensor)) for t in res
+        t is None or isinstance(t, (list, torch.Tensor, bool, int, float)) for t in res
     ), f"unexpected element type in res: {string_type(res)}"
     des = []
     pos_res = 0
@@ -99,6 +204,10 @@ def deserialize_args(
             continue
         if tt == "Tensor":
             des.append(res[pos_res].clone() if clone else res[pos_res])
+            pos_res += 1
+            continue
+        if tt in ("bool", "int", "float"):
+            des.append(res[pos_res])
             pos_res += 1
             continue
         if tt.startswith(("DynamicCache__", "patched_DynamicCache__")):
@@ -151,6 +260,8 @@ def deserialize_args(
             continue
 
         raise NotImplementedError(f"Unable to handle type info {tt!r}")
+    if return_n_args:
+        return des, pos_res
     assert pos_res == len(res), (
         f"Deserialization went wrong, pos_res={pos_res}, len(res)={len(res)}, "
         f"expected_types={expected_types}, "
@@ -164,6 +275,7 @@ def deserialize_args_kwargs(
     kwargs: Dict[str, Any],
     expected_types: Tuple[List[str], List[str]],
     clone: bool = False,
+    ordered_names: Optional[List[str]] = None,
 ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
     """
     Deserializes a list of tensor or list of tensors into args and kwargs.
@@ -173,6 +285,7 @@ def deserialize_args_kwargs(
     :param kwargs: named arguments, they should be empty
     :param expected_types: needed to understand how to deserialize
     :param clone: clone every tensor
+    :param ordered_names: ordered need to restore **kwargs
     :return: new args, new named args
     """
     assert not kwargs, (
@@ -181,13 +294,46 @@ def deserialize_args_kwargs(
     )
     assert (
         isinstance(expected_types, tuple)
+        and not kwargs
         and len(expected_types) == 2
-        and not expected_types[1]
+        and (not expected_types[1] or ordered_names)
     ), (
         f"Unexpected value for expected_types={expected_types}, "
         f"args={string_type(args, with_shape=True)}, "
         f"kwargs={string_type(kwargs, with_shape=True)}, "
+        f"ordered_names={ordered_names}"
     )
+    if expected_types[1]:
+        new_args, n_args = deserialize_args(
+            args, expected_types[0], clone=clone, return_n_args=True
+        )
+        left_args = args[n_args:]
+        left_names = ordered_names[n_args:]
+        new_kwargs = {}
+        pos_res = 0
+        for name in left_names:
+            if expected_types[1][name] == "Tensor":
+                new_kwargs[name] = left_args[pos_res]
+                pos_res += 1
+                continue
+            if expected_types[1][name] in ("bool", "int", "float"):
+                new_kwargs[name] = left_args[pos_res]
+                pos_res += 1
+                continue
+            a, n = deserialize_args(
+                left_args[pos_res:], expected_types[1][name], clone=clone, return_n_args=True
+            )
+            pos_res += n
+            new_kwargs[name] = a
+        assert pos_res + n_args == len(args), (
+            f"Deserialization went wrong, pos_res={pos_res + n_args}, len(args)={len(args)}, "
+            f"expected_types={expected_types}, "
+            f"input types={string_type(args)}, "
+            f"new_args={string_type(new_args)}, "
+            f"new_kwargs={string_type(new_kwargs)}"
+        )
+        return new_args, new_kwargs
+
     new_args = deserialize_args(args, expected_types[0], clone=clone)
     return new_args, {}
 

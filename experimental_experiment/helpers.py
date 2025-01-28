@@ -195,6 +195,8 @@ def string_type(
             return f"{{...}}#{len(obj)}[{mini},{maxi}:A{avg}]"
         return f"{{...}}#{len(obj)}" if with_shape else "{...}"
     if isinstance(obj, dict):
+        if len(obj) == 0:
+            return "{}"
         kws = dict(
             with_shape=with_shape,
             with_min_max=with_min_max,

@@ -1,11 +1,17 @@
 import unittest
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
+from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
     StatusExport,
     StatusExportCode,
+)
+from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
+    choose_kwargs_for_dynamic_shapes,
+    extract_names_from_schema,
+    serialize_args,
 )
 
 
@@ -242,6 +248,7 @@ class TestPieceByPiece(ExtTestCase):
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
             verbose=10,
+            quiet=0,
         )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
@@ -251,6 +258,96 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
         _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
         self.assertEqual(ds, (tuple(), {"kwargs": {"x": {0: torch.export.Dim.DYNAMIC}}}))
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_piece_by_piece_args_not_to_kwargs(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x=None, **kwargs):
+                return x.abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x=x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            (tuple(), {"x": x}),
+            (tuple(), {"x": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        ds = diag.guess_dynamic_shapes()
+        self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
+        _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
+        self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_piece_by_piece_args_or_not_to_kwargs(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, y=None, **kwargs):
+                return x.abs() + torch.exp(y) + torch.cos(kwargs["z"])
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = torch.randn((5, 6))
+        w = model(x, y=y, z=z)
+        self.assertNotEmpty(w)
+
+        inputs = [
+            ((x,), {"y": y, "z": z}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6)), "z": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        ds = diag.guess_dynamic_shapes()
+        self.assertEqual(
+            ds,
+            (
+                ({0: torch.export.Dim.DYNAMIC},),
+                {"y": {0: torch.export.Dim.DYNAMIC}, "z": {0: torch.export.Dim.DYNAMIC}},
+            ),
+        )
+        _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
+        self.assertEqual(
+            ds,
+            (
+                tuple(),
+                {
+                    "x": {0: torch.export.Dim.DYNAMIC},
+                    "y": {0: torch.export.Dim.DYNAMIC},
+                    "kwargs": {"z": {0: torch.export.Dim.DYNAMIC}},
+                },
+            ),
+        )
 
     @requires_torch("2.6")
     def test_trace_execution_piece_by_piece_piece_try_no_weight(self):
@@ -539,7 +636,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertIn("torch.ops.diag_lib.C_Model_subfail.default", str(ep.exported))
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
         self.assertNotEmpty(diag.children[1].forward_custom_op_schema)
-        report = diag.get_export_status()
+        report = diag.get_export_report()
         self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.6")
@@ -595,7 +692,7 @@ class TestPieceByPiece(ExtTestCase):
             quiet=1,
         )
         self.assertNotEmpty(ep)
-        report = diag.get_export_status()
+        report = diag.get_export_report()
         self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.6")
@@ -723,17 +820,266 @@ class TestPieceByPiece(ExtTestCase):
             exporter="fx",
             use_dynamic_shapes=True,
             exporter_kwargs=dict(strict=False),
-            verbose=1,
+            verbose=10,
             replace_by_custom_op=CustomOpStrategy.LOCAL,
-            quiet=10,
+            quiet=0,
         )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
         self.assertIn("torch.ops.diag_lib.C_Model_sub.default", str(ep.exported))
-        # self.assertNotEmpty(diag.forward_custom_op_schema)
+        self.assertEmpty(diag.forward_custom_op_schema)
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
+
+    @requires_torch("2.6")
+    def test_piece_by_piece_piece_exporter_report(self):
+        import torch
+
+        class SubSubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x * y
+
+        class SubModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subsub = SubSubModel()
+
+            def forward(self, x, y):
+                return self.subsub(x - y, y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn(
+            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+        )
+        report = diag.get_export_report(fx=True)
+        self.assertIn(
+            "fx:     %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]",
+            report,
+        )
+
+    def test_extract_names_from_schema(self):
+        expected = [
+            ("((Tensor x, Tensor y) -> Tensor)", ["x", "y"]),
+            ("((Tensor x, Tensor? y) -> Tensor)", ["x", "y"]),
+        ]
+        for a, b in expected:
+            g = extract_names_from_schema(a)
+            self.assertEqual(b, g)
+
+    def test_serialize_args_in(self):
+        import torch
+
+        inputs_args = [((torch.randn((5, 6)), torch.randn((5, 6))), {})]
+
+        args, kwargs = serialize_args(*inputs_args[0], schema="(Tensor x, Tensor y) -> Tensor")
+        self.assertNotEmpty(args)
+        self.assertEqual(kwargs, {})
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, "(T1s5x6,T1s5x6)")
+        self.assertEqualArray(inputs_args[0][0][0], args[0])
+        self.assertEqualArray(inputs_args[0][0][1], args[1])
+
+    def test_serialize_args_in_dict(self):
+        import torch
+
+        inputs_args = [((torch.randn((5, 6)),), {"y": torch.randn((5, 6))})]
+
+        args, kwargs = serialize_args(
+            *inputs_args[0], schema="(Tensor x, Tensor y) -> Tensor", args_names=["x", "y"]
+        )
+        self.assertNotEmpty(args)
+        self.assertEqual(kwargs, {})
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, "(T1s5x6,T1s5x6)")
+        self.assertEqualArray(inputs_args[0][0][0], args[0])
+        self.assertEqualArray(inputs_args[0][1]["y"], args[1])
+
+    def test_serialize_args_out(self):
+        import torch
+
+        inputs_args = [((torch.randn((5, 6)), torch.randn((5, 6))), None)]
+
+        args = serialize_args(*inputs_args[0], schema="(Tensor x, Tensor y) -> Tensor")
+        self.assertIsInstance(args, tuple)
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, ("(T1s5x6,T1s5x6)"))
+        self.assertEqualArray(inputs_args[0][0][0], args[0])
+        self.assertEqualArray(inputs_args[0][0][1], args[1])
+
+    def test_serialize_args_out1(self):
+        import torch
+
+        x = torch.randn((5, 6))
+        args = serialize_args(x, None, schema="(Tensor x, Tensor y) -> Tensor")
+        self.assertIsInstance(args, torch.Tensor)
+        sargs = string_type(args, with_shape=True)
+        self.assertEqual(sargs, "T1s5x6")
+        self.assertEqualArray(x, args)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_custom_kwargs_always(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, y=None):
+                return x + y
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ds = diag.guess_dynamic_shapes()
+        sds = str(ds).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(sds, "(({0: DYN},), {'y': {0: DYN}})")
+        choose = choose_kwargs_for_dynamic_shapes(*ds, diag.forward_positioned_parameter_names)
+        schoose = str(choose).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(schoose, "{'y': {0: DYN}, 'x': {0: DYN}}")
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=4,
+            replace_by_custom_op=CustomOpStrategy.ALWAYS,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn(
+            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s1, 6]"):', report
+        )
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.diag_lib.C_Model.default", report)
+
+    @requires_torch("2.6")
+    def test_piece_by_piece_piece_custom_kwargs_local(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y=None):
+                if y is None:
+                    return x**2
+                return x**2 - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y=None):
+                return self.sub(x, y=y * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn(
+            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+        )
+        report = diag.get_export_report(fx=True)
+        self.assertIn(
+            "fx:     %mul : [num_users=1] = call_function[target=torch.ops.aten.mul.Tensor]",
+            report,
+        )
+
+    @requires_torch("2.6")
+    def test_piece_by_piece_piece_bool(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y=None, square=False):
+                if y is None:
+                    if square:
+                        return x**2
+                    return torch.abs(x)
+                return x**2 - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y=None):
+                return self.sub(x, y=y * x, square=True)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.pow", report)
 
 
 if __name__ == "__main__":

@@ -2,11 +2,13 @@ import contextlib
 import enum
 import inspect
 import os
+import textwrap
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, string_sig, max_diff
 from .piece_by_piece_serialize import (
+    choose_kwargs_for_dynamic_shapes,
     deserialize_args,
     deserialize_args_kwargs,
     make_copy,
@@ -139,6 +141,9 @@ class ModelDiagnoseOutput:
     * ``model``: module
     * ``level``: depth level
     * ``device``: device
+    * ``inputs``: stored inputs like the following ``(args, kwargs)``
+    * ``outputs``: stored outputs
+    * ``signature``: signature of the module or function
 
     After the tracing:
 
@@ -166,6 +171,7 @@ class ModelDiagnoseOutput:
 
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self._debug_print_status = os.environ.get("DIAGPRINTSTATUS", "")
+        self._debug_print_export = os.environ.get("DIAGPRINTEXPORT", "")
     """
 
     def __init__(
@@ -183,16 +189,23 @@ class ModelDiagnoseOutput:
         self.inputs = []
         self.outputs = []
         self.children: List[ModelDiagnoseOutput] = []
-        sig = inspect.signature(self.forward)
+        self.signature = inspect.signature(self.forward)
         self.forward_parameter_names = set(
             p.name
-            for p in sig.parameters.values()
+            for p in self.signature.parameters.values()
             if p.kind not in {p.VAR_POSITIONAL, p.VAR_KEYWORD}
         )
-        self.forward_ordered_parameter_names = list(sig.parameters)
-        names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_POSITIONAL]
+        self.forward_ordered_parameter_names = list(self.signature.parameters)
+        self.forward_positioned_parameter_names = [
+            p.name
+            for p in self.signature.parameters.values()
+            if p.kind in (p.VAR_POSITIONAL, p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
+        names = [
+            p.name for p in self.signature.parameters.values() if p.kind == p.VAR_POSITIONAL
+        ]
         self.forward_args = names[0] if names else None
-        names = [p.name for p in sig.parameters.values() if p.kind == p.VAR_KEYWORD]
+        names = [p.name for p in self.signature.parameters.values() if p.kind == p.VAR_KEYWORD]
         self.forward_kwargs = names[0] if names else None
         self.forward_custom_op_schema = None
         self.forward_need_serialization = False
@@ -201,6 +214,7 @@ class ModelDiagnoseOutput:
 
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self._debug_print_status = os.environ.get("DIAGPRINTSTATUS", "")
+        self._debug_print_export = os.environ.get("DIAGPRINTEXPORT", "")
 
     def __iter__(self) -> Iterator:
         """Iterates on all the nodes in the graph."""
@@ -448,7 +462,6 @@ class ModelDiagnoseOutput:
         for i, p in enumerate(sig.parameters):
             if i >= len(arg_dyn):
                 break
-            kwargs[p] = args[i]
             kw_dyn[p] = arg_dyn[i]
         if self.forward_kwargs:
             kdw = {}
@@ -459,6 +472,7 @@ class ModelDiagnoseOutput:
                 for k in kdw:
                     del kw_dyn[k]
                 kw_dyn[self.forward_kwargs] = kdw
+
             # Let's reorder as it seems to matter later
             # in the shape inference algorithm.
             _kwargs = kwargs
@@ -484,7 +498,7 @@ class ModelDiagnoseOutput:
                 f"and kwargs={set(kwargs)}, "
                 f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
             )
-        return tuple(), kwargs, (tuple(), kw_dyn)
+        return args, kwargs, (tuple(), kw_dyn)
 
     def _do_replace_by_custom_op(
         self, replace_by_custom_op: Union[bool, CustomOpStrategy, Dict[str, CustomOpStrategy]]
@@ -528,6 +542,12 @@ class ModelDiagnoseOutput:
             # Let's assume it is a tensor. It should not matter anyway.
             # Unless it becomes None in another call.
             return "Tensor?"
+        if isinstance(obj, bool):
+            return "bool"
+        if isinstance(obj, float):
+            return "float"
+        if isinstance(obj, int):
+            return "int"
         raise NotImplementedError(
             f"Annotation for type {string_type(obj)} is not implemented{self.get_debug_msg()}"
         )
@@ -599,16 +619,22 @@ class ModelDiagnoseOutput:
         """
         Builds a mapping output and input shapes so that a function
         returns dynamic shapes can automatically inferred.
+
+        The main idea: knowning everything is going to be serialized,
+        inputs and outputs are serialized, we try to match the output
+        shapes with the inputs one.
         """
-        # The main idea. Knowning everything is going to be serialized,
-        # inputs and outputs are serialized, we try to match the output
-        # shapes with the inputs one.
-        flattened_inputs = [serialize_args(*i, schema=None) for i in self.inputs]
+        flattened_inputs = [
+            serialize_args(*i, schema=None, args_names=self.forward_ordered_parameter_names)
+            for i in self.inputs
+        ]
         shaped_mapped = [{} for i in flattened_inputs]
         for row in range(len(shaped_mapped)):
             inp_args, inp_kwargs = flattened_inputs[row]
             assert not inp_kwargs, f"Not implemented yet with kwargs={string_type(inp_kwargs)}"
             for i, inp in enumerate(inp_args):
+                if not hasattr(inp, "shape"):
+                    continue
                 if inp.shape not in shaped_mapped[row]:
                     shaped_mapped[row][inp.shape] = []
                 shaped_mapped[row][inp.shape].append(i)
@@ -693,6 +719,8 @@ class ModelDiagnoseOutput:
                         else torch.empty_like(args[ii])
                     )
                     outputs.append(out if out.dtype == dtype else out.to(dtype))
+                if len(outputs) == 1 and isinstance(self.outputs[0][0], torch.Tensor):
+                    return outputs[0]
                 return tuple(outputs)
 
             return _symbolic_forward_tensor_mapped_io_shapes
@@ -726,16 +754,30 @@ class ModelDiagnoseOutput:
                 )
             return res
 
+        if verbose > 2:
+            # Let's check the rewrite function is working.
+            print(
+                f"[try_export._rewrite_forward_tensor_] {self.full_name}: "
+                f"check _rewrite_forward_tensor_ is working"
+            )
+            got = _rewrite_forward_tensor_(*self.inputs[0][0], **self.inputs[0][1])
+            diff = max_diff(self.outputs[0], got)
+            print(
+                f"[try_export._rewrite_forward_tensor_] {self.full_name}: "
+                f"done checking with diff={diff}"
+            )
+
         name_fct = self.custom_op_name
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace_tensor] {self.dot_name}: "
-                f"registers 'diag_lib.{name_fct}"
+                f"registers diag_lib.{name_fct}"
             )
 
+        shape_fct = self._get_symbolic_function_for_forward_shape()
         cusdef, schema_str = self._register(
             _rewrite_forward_tensor_,
-            self._get_symbolic_function_for_forward_shape(),
+            shape_fct,
             "diag_lib",
             name_fct,
             verbose=verbose,
@@ -744,7 +786,7 @@ class ModelDiagnoseOutput:
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace_tensor] {self.dot_name}: "
-                f"schema_str={schema_str}"
+                f"schema_str={schema_str!r}"
             )
         # We stored to avoid the registration twice.
         self.forward_custom_op_schema = cusdef
@@ -764,7 +806,7 @@ class ModelDiagnoseOutput:
                     f"[_replaced_forward_tensor_] {name_fct}-IN: "
                     f"args={string_type(args, with_shape=True)}, "
                     f"kwargs={string_type(kwargs, with_shape=True)}, "
-                    f"schema_str={schema_str}"
+                    f"schema_str={schema_str!r}"
                 )
                 sfct = str(fct).replace("\n", " ")
                 print(f"[_replaced_forward_tensor_] {name_fct}-CALL: {sfct}")
@@ -799,7 +841,11 @@ class ModelDiagnoseOutput:
                 )
             # We need to deserialize back before calling forward.
             new_args, new_kwargs = deserialize_args_kwargs(
-                args, kwargs, _diag.forward_expected_input_type, clone=True
+                args,
+                kwargs,
+                _diag.forward_expected_input_type,
+                clone=True,
+                ordered_names=_diag.forward_ordered_parameter_names,
             )
             if verbose > 2:
                 print(
@@ -831,9 +877,10 @@ class ModelDiagnoseOutput:
                 f"registers 'diag_lib.{name_fct}"
             )
 
+        shape_fct = self._get_symbolic_function_for_forward_shape()
         cusdef, schema_str = self._register(
             _rewrite_forward_,
-            self._get_symbolic_function_for_forward_shape(),
+            shape_fct,
             "diag_lib",
             name_fct,
             verbose=verbose,
@@ -842,7 +889,7 @@ class ModelDiagnoseOutput:
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace] {self.dot_name}: "
-                f"schema_str={schema_str}"
+                f"schema_str={schema_str!r}"
             )
         # We stored to avoid the registration twice.
         self.forward_custom_op_schema = cusdef
@@ -852,10 +899,36 @@ class ModelDiagnoseOutput:
             [type_as_str_with_info(o) for o in self.inputs[0][0]],
             {k: type_as_str_with_info(v) for k, v in self.inputs[0][1].items()},
         )
+
         if verbose > 2:
             print(
                 f"[try_export.put_custom_op_inplace] {self.dot_name}: "
                 f"expected_output_type={expected_output_type}"
+            )
+            # Let's check the rewrite function is working.
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: "
+                f"check _rewrite_forward_ is working with "
+                f"{string_type(self.inputs[0], with_shape=True)}"
+            )
+            a, kw = serialize_args(*self.inputs[0], schema=schema_str)
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: serialized into "
+                f"{string_type(a, with_shape=True)} and {string_type(kw, with_shape=True)}"
+            )
+            got = _rewrite_forward_(*a, **kw)
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: "
+                f"check shape_fct={shape_fct} is working with "
+                f"{string_type(self.inputs[0], with_shape=True)}"
+            )
+            got_shape = shape_fct(*a, **kw)
+            print(
+                f"[try_export._rewrite_forward_] {self.full_name}: "
+                f"check done, forward returned "
+                f"{string_type(got, with_shape=True)}, shape_fct returned "
+                f"{string_type(got_shape, with_shape=True)}, outputs[0]="
+                f"{string_type(self.outputs[0], with_shape=True)}"
             )
 
         # Apparently, we need a function with the exact same signature.
@@ -865,8 +938,9 @@ class ModelDiagnoseOutput:
                 print(
                     f"[_replaced_forward_] {name_fct}-IN: "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
-                    f"schema_str={schema_str}"
+                    f"schema_str={schema_str!r}"
                 )
+            # , args_names=self.forward_ordered_parameter_names
             args, kwargs = serialize_args(args, kwargs, schema=schema_str)
             if verbose > 2:
                 print(
@@ -969,9 +1043,15 @@ class ModelDiagnoseOutput:
                         f"kwargs={string_type(kwargs, with_shape=True)}"
                     )
             args, kwargs, dynamic_shapes = self._move_to_kwargs(args, kwargs, dynamic_shapes)
-        ds = dynamic_shapes[0] or dynamic_shapes[1]
+        ds = (
+            choose_kwargs_for_dynamic_shapes(
+                *dynamic_shapes, self.forward_positioned_parameter_names
+            )
+            if dynamic_shapes[0] and dynamic_shapes[1]
+            else (dynamic_shapes[0] or dynamic_shapes[1])
+        )
         if debug or verbose > 1:
-            sds = str(dynamic_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+            sds = str(ds).replace("<_DimHint.DYNAMIC: 3>", "DYN")
             print(f"[try_export-FX] {self.dot_name}: convert with dynamic_shapes={sds}")
             if debug or verbose > 2:
                 print(
@@ -1004,6 +1084,18 @@ class ModelDiagnoseOutput:
                     f"{string_type(self.outputs[1], with_shape=True)}"
                 )
 
+        if debug or self._debug_print_export:
+            print("-- DEBUG")
+            print(f"[try_export-FX] {self.dot_name}")
+            print(f"inputs={string_type(self.inputs[0], with_shape=True, with_min_max=True)}")
+            print(f"  args={string_type(args, with_shape=True, with_min_max=True)}")
+            print(f"kwargs={string_type(kwargs, with_shape=True, with_min_max=True)}")
+            if dynamic_shapes:
+                print(f"   ds0={dynamic_shapes}")
+            if ds:
+                print(f"    ds={ds}")
+            if exporter_kwargs:
+                print(f"    exporter_kwargs={exporter_kwargs}")
         if quiet:
             try:
                 ep = torch.export.export(
@@ -1037,10 +1129,18 @@ class ModelDiagnoseOutput:
                         f"-- _try_export_no_bypass_export-2"
                     )
                 if verbose:
-                    print(
-                        f"[try_export-FX] {self.dot_name} --- "
-                        f"{self.exporter_status.status.name}"
-                    )
+                    if self.exporter_status.is_ok():
+                        print(
+                            f"[try_export-FX] {self.dot_name} --- "
+                            f"{self.exporter_status.status.name}"
+                        )
+                    else:
+                        print(
+                            f"[try_export-FX] {self.dot_name} --- "
+                            f"{self.exporter_status.status.name}, "
+                            f"step={self.exporter_status.step}, "
+                            f"reason={self.exporter_status.reason}"
+                        )
                 return self.exporter_status, None
         else:
             ep = torch.export.export(
@@ -1061,7 +1161,7 @@ class ModelDiagnoseOutput:
         if verbose > 1:
             print(
                 f"[try_export-FX] {self.dot_name}: done, "
-                f"{'CUSTOM -- ' if self.is_customized() else ''}"
+                f"{'CUSTOMIZED -- ' if self.is_customized() else ''}"
                 f"status={self.exporter_status.status.name}"
             )
         mod = ep.module()
@@ -1178,6 +1278,8 @@ class ModelDiagnoseOutput:
                         )
                         self.exporter_status.status.step = "EVAL"
                         self.exporter_status.reason = se
+                        if "Ran into a kwarg keyword misma" in se:
+                            raise
                         if self._debug_print_status:
                             print(
                                 f"-- torch.export.export name={self.full_name} -- "
@@ -1201,9 +1303,13 @@ class ModelDiagnoseOutput:
                     if not quiet:
                         raise AssertionError(
                             f"{self.full_name}: discrepancies were observed, "
-                            f"diff={diff}, expected="
+                            f"diff={diff}, \nargs="
+                            f"{string_type(args, with_shape=True, with_min_max=True)}, "
+                            f"\nkwargs="
+                            f"{string_type(kwargs, with_shape=True, with_min_max=True)}, "
+                            f"\nexpected="
                             f"{string_type(out, with_shape=True, with_min_max=True)}, "
-                            f"got={string_type(got, with_shape=True, with_min_max=True)}."
+                            f"\ngot={string_type(got, with_shape=True, with_min_max=True)}."
                         )
                     break
 
@@ -1255,7 +1361,7 @@ class ModelDiagnoseOutput:
             from .onnx_export_errors import bypass_export_some_errors
 
             with bypass_export_some_errors(
-                verbose=max(verbose - 1, 0), **bypass_kwargs
+                verbose=max(verbose - 2, 0), **bypass_kwargs
             ) as modificator:
                 exported, fct = self._try_export_no_bypass(
                     modificator,
@@ -1358,7 +1464,7 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} START "
-                    f"{custom_op_strat.name}, no custom op"
+                    f"{custom_op_strat.name}, no custom op for {self.full_name}"
                 )
             exported, _fct = self._try_export(
                 exporter=exporter,
@@ -1386,7 +1492,7 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} -DONE "
-                    f"{custom_op_strat.name}, no custom op, "
+                    f"{custom_op_strat.name} for {self.full_name} no custom op, "
                     f"name={self.name!r}, exported={exported.exported.__class__.__name__}, "
                     f"status={self.exporter_status.status.name}"
                 )
@@ -1408,9 +1514,22 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} START "
-                    f"{custom_op_strat.name}, name={self.name!r} "
+                    f"{custom_op_strat.name}, name={self.full_name!r} "
                     f"--- children replaced by custom ops"
                 )
+                if verbose >= 10:
+                    print(
+                        f"[try-export-{exporter.upper()}] {'.' * self.level * 2} "
+                        f"       args={string_type(self.inputs[0][0], with_shape=True)}"
+                    )
+                    print(
+                        f"[try-export-{exporter.upper()}] {'.' * self.level * 2} "
+                        f"     kwargs={string_type(self.inputs[0][1], with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}] {'.' * self.level * 2} "
+                        f"    outputs={string_type(self.outputs[0], with_shape=True)}"
+                    )
             elif verbose:
                 print(
                     f"[try_export-{exporter.upper()}] {self.dot_name} "
@@ -1418,6 +1537,23 @@ class ModelDiagnoseOutput:
                 )
 
             for child in self.children:
+                if verbose >= 10:
+                    print(
+                        f"[try_export-{exporter.upper()}]     "
+                        f"child {child.full_name} as custom op"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}]           "
+                        f"args={string_type(child.inputs[0][0], with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}]         "
+                        f"kwargs={string_type(child.inputs[0][1], with_shape=True)}"
+                    )
+                    print(
+                        f"[try_export-{exporter.upper()}]        "
+                        f"outputs={string_type(child.outputs[0], with_shape=True)}"
+                    )
                 child.put_custom_op_inplace(verbose=verbose)
 
             # We export again.
@@ -1454,7 +1590,7 @@ class ModelDiagnoseOutput:
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} -DONE "
-                    f"{custom_op_strat.name}, name={self.name!r}, "
+                    f"{custom_op_strat.name}, name={self.full_name!r}, "
                     f"exported={exported.__class__.__name__}, "
                     f"status={self.exporter_status.status.name}"
                 )
@@ -1473,11 +1609,17 @@ class ModelDiagnoseOutput:
         ):
             # We don't want to return if custom ops were applied,
             # we need to look into every of them.
-            if verbose:
+            if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} -DONE "
-                    f"{custom_op_strat.name}, exported={exported.exported.__class__.__name__} "
+                    f"{custom_op_strat.name}, name={self.name!r}, "
+                    f"exported={exported.exported.__class__.__name__} "
                     f"status={self.exporter_status.status.name}"
+                )
+            elif verbose:
+                print(
+                    f"[try_export-{exporter.upper()}] {self.dot_name} "
+                    f"--- {self.exporter_status.status.name}"
                 )
             return exported
 
@@ -1503,7 +1645,7 @@ class ModelDiagnoseOutput:
                 f"{exported.status.name}/{self.exporter_status.status.name} "
                 f"-- try_export-10"
             )
-        if verbose:
+        if verbose > 1:
             print(
                 f"[try-export-{exporter.upper()}] {'.' * self.level * 2} =DONE "
                 f"{custom_op_strat.name}, exported={exported.exported.__class__.__name__}, "
@@ -1511,9 +1653,13 @@ class ModelDiagnoseOutput:
             )
         return exported
 
-    def get_export_status(self) -> str:
+    def get_export_report(self, exported_program: bool = False, fx: bool = False) -> str:
         """
         Returns a report status on the conversion.
+
+        :param exported_program: adds the exported program if available
+        :param fx: display the graph instead of the exported program
+        :return: string
         """
 
         def iter_status(here):
@@ -1532,6 +1678,7 @@ class ModelDiagnoseOutput:
                     if hasattr(r, "exporter_status")
                     else "OK as part of its owner"
                 ),
+                r,
             )
             for r in rows
         ]
@@ -1544,6 +1691,27 @@ class ModelDiagnoseOutput:
             c2 = t[1]
             s2 = " " * (mc2 - len(t[1]))
             srows.append(f"{c}{s}{c2}{s2}{t[2]}")
+
+            diag = t[-1]
+            if exported_program:
+                if hasattr(diag, "fx"):
+                    eps = str(diag.fx)
+                    indent = " " * (mc1 + mc2)
+                    prefix = f"{indent}ep: "
+                    srows.append(textwrap.indent(eps, prefix))
+                else:
+                    indent = " " * (mc1 + mc2)
+                    srows.append(f"{indent}ep: -")
+            if fx:
+                if hasattr(diag, "fx"):
+                    eps = str(diag.fx.graph)
+                    indent = " " * (mc1 + mc2)
+                    prefix = f"{indent}fx: "
+                    srows.append(textwrap.indent(eps, prefix))
+                else:
+                    indent = " " * (mc1 + mc2)
+                    srows.append(f"{indent}fx: -")
+
         return "\n".join(srows)
 
 
