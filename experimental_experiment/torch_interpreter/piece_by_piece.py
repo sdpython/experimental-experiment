@@ -620,7 +620,7 @@ class ModelDiagnoseOutput:
 
     def build_shape_mapping_indices(
         self,
-    ) -> List[Tuple[Union[int, Tuple[int, ...]], torch.dtype]]:
+    ) -> List[Tuple[Union[int, Tuple[int, ...]], torch.dtype, Optional[Callable]]]:
         """
         Builds a mapping output and input shapes so that a function
         returns dynamic shapes can automatically inferred.
@@ -628,6 +628,13 @@ class ModelDiagnoseOutput:
         The main idea: knowning everything is going to be serialized,
         inputs and outputs are serialized, we try to match the output
         shapes with the inputs one.
+
+        It returns for every output:
+
+        * a list if indices of input to consider
+        * an element type
+        * if the output shape is not one of the input, it adds a function
+          which can automatically create it
         """
         flattened_inputs = [
             serialize_args(*i, schema=None, args_names=self.forward_ordered_parameter_names)
@@ -640,9 +647,10 @@ class ModelDiagnoseOutput:
             for i, inp in enumerate(inp_args):
                 if not hasattr(inp, "shape"):
                     continue
+                key = tuple(map(int, inp.shape))
                 if inp.shape not in shaped_mapped[row]:
-                    shaped_mapped[row][inp.shape] = []
-                shaped_mapped[row][inp.shape].append(i)
+                    shaped_mapped[row][key] = []
+                shaped_mapped[row][key].append(i)
 
         flattened_outputs = [serialize_args(i, None, schema=None) for i in self.outputs]
         n_outputs = len(flattened_outputs[0])
@@ -651,19 +659,29 @@ class ModelDiagnoseOutput:
 
         def _msg_(i):
             return (
-                f"{self.full_name}: inconsistencies for output i={i}, "
+                f"Module {self.full_name}: shape inconsistencies for output i={i}, "
+                f"the new shape cannot be automatically determined."
                 f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
                 f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
                 f"\nshaped_mapped={shaped_mapped}, "
                 f"\nindices_map={indices_map}"
             )
 
+        shape_fct = [None for i in range(n_outputs)]
         for i in range(n_outputs):
             for row in range(len(shaped_mapped)):
                 assert hasattr(flattened_outputs[row][i], "shape"), (
                     f"Not implemented for type {string_type(flattened_outputs[row][i])} "
                     f"{_msg_(i)}"
                 )
+
+                possible_values = set(
+                    tuple(map(int, trow[i].shape)) for trow in flattened_outputs
+                )
+                if len(possible_values) == 1:
+                    # It is a constant shape.
+                    continue
+
                 shape = flattened_outputs[row][i].shape
                 if shape in shaped_mapped[row]:
                     obtained = min(shaped_mapped[row][shape])
@@ -671,19 +689,134 @@ class ModelDiagnoseOutput:
                         indices_map[i] = obtained
                     else:
                         assert obtained == indices_map[i], _msg_(i)
+                    continue
+
+                # The output shape is not found in the inputs. We try to expand it.
+                sh_fct = self.determine_shape_fct(i, flattened_inputs, flattened_outputs)
+                assert (
+                    sh_fct
+                ), f"{_msg_(i)}\nNo function could be found to produce shape {shape}."
+                shape_fct[i] = sh_fct
 
         # When a shape is not mapped, it is a constant.
         for i, mapped in enumerate(indices_map):
-            if mapped is not None:
+            if mapped is not None or shape_fct[i] is not None:
                 continue
             assert isinstance(
                 flattened_outputs[0][i], torch.Tensor
             ), f"Unexpected type {string_type(flattened_outputs[0][i])}, {_msg_(i)}"
-            shapes = set(flattened_outputs[row][i].shape for row in range(len(self.outputs)))
-            assert len(shapes) == 1, f"shapes={shapes}\n{_msg_(i)}"
+            shapes = set(
+                tuple(map(int, flattened_outputs[row][i].shape))
+                for row in range(len(self.outputs))
+            )
+            assert len(shapes) == 1, f"{_msg_(i)}\nfound shapes for output {i} are {shapes}"
             indices_map[i] = shapes.pop()
 
-        return tuple((i, f.dtype) for i, f in zip(indices_map, flattened_outputs[0]))
+        return tuple(
+            (i, f.dtype, fh) for i, f, fh in zip(indices_map, flattened_outputs[0], shape_fct)
+        )
+
+    @classmethod
+    def _find_sub_shape(cls, sub_shape: Tuple[int, ...], shape: Tuple[int, ...]) -> int:
+        """
+        Finds a subshape into another one. Example::
+
+            _find_sub_shape((1,2), (16,1,2,3)) -> 1
+        """
+        if len(sub_shape) > len(shape):
+            return -1
+        for k in range(len(shape) - len(sub_shape) + 1):
+            if shape[k : k + len(sub_shape)] == sub_shape:
+                return k
+        return -1
+
+    def determine_shape_fct(
+        self,
+        output_index: int,
+        flattened_inputs: List[Tuple[Tuple[Any, ...], Dict[str, Any]]],
+        flattened_outputs: List[Tuple[Any, ...]],
+    ) -> Callable:
+        """
+        Determines a function producing an output shape based in this inputs.
+        """
+        assert (
+            isinstance(flattened_inputs, list)
+            and isinstance(flattened_outputs, list)
+            and len(flattened_inputs) == len(flattened_outputs)
+        ), (
+            f"Expected the same number of observations in two lists, "
+            f"{len(flattened_inputs)} != {len(flattened_outputs)}."
+        )
+
+        def list_indices(flat):
+            yield from enumerate(flat[0])
+            yield from flat[1].items()
+
+        def get_input(flat, j):
+            if isinstance(j, int):
+                return flat[0][j]
+            return flat[1][j]
+
+        shape = tuple(map(int, flattened_outputs[0][output_index].shape))
+        for j, value in list_indices(flattened_inputs[0]):
+            if not hasattr(value, "shape"):
+                continue
+            shape_j = tuple(map(int, value.shape))
+            found_j = j
+            found_k = self._find_sub_shape(shape_j, shape)
+            if found_k >= 0:
+                # The output shape includes an input shape.
+                for fin, fout in zip(flattened_inputs, flattened_outputs):
+                    shape_o = tuple(map(int, fout[output_index].shape))
+                    shape_i = tuple(map(int, get_input(fin, found_j).shape))
+                    k2 = self._find_sub_shape(shape_i, shape_o)
+                    if k2 != found_k:
+                        found_k = -1
+                        break
+            if found_k == -1:
+                continue
+
+            # We determine
+            shape_j = tuple(map(int, get_input(flattened_inputs[0], found_j).shape))
+            unsqueeze_dims = tuple(
+                [k for k in range(len(shape)) if k < found_k or k >= found_k + len(shape_j)]
+            )
+            expand_shape = tuple(
+                (shape[k] if k < found_k or k >= found_k + len(shape_j) else -1)
+                for k in range(len(shape))
+            )
+
+            # functions
+            def _modifiy_(
+                *args,
+                _unsqueeze_dims=unsqueeze_dims,
+                _expand_shape=expand_shape,
+                _input_index=found_j,
+                **kwargs,
+            ):
+                t = kwargs[_input_index] if _input_index in kwargs else args[_input_index]
+                for dim in _unsqueeze_dims:
+                    t = t.unsqueeze(dim)
+                return t.expand(_expand_shape)
+
+            # Verification
+            for fin, fout in zip(flattened_inputs, flattened_outputs):
+                shape_o = tuple(map(int, _modifiy_(get_input(fin, found_j)).shape))
+                expected_shape_o = tuple(map(int, fout[output_index].shape))
+                if shape_o != expected_shape_o:
+                    # It does not work.
+                    found_j = -1
+                    break
+
+            if found_j >= 0:
+                return _modifiy_
+
+        raise NotImplementedError(
+            f"Unable to produce a function able to compute the output shape for output "
+            f"{output_index} (shape={shape})\n"
+            f"flattened_inputs={string_type(flattened_inputs, with_shape=True, limit=20)}\n"
+            f"flattened_outputs={string_type(flattened_outputs, with_shape=True, limit=20)}"
+        )
 
     def _get_symbolic_function_for_forward_shape(self) -> Callable:
         """
@@ -726,13 +859,17 @@ class ModelDiagnoseOutput:
                 *args, _indices_map=indices_map, **kwargs
             ):
                 outputs = []
-                for ii, dtype in _indices_map:
-                    out = (
-                        torch.empty(ii)
-                        if isinstance(ii, tuple)
-                        else torch.empty_like(args[ii])
-                    )
+                for ii, dtype, shape_fct in _indices_map:
+                    if shape_fct is None:
+                        out = (
+                            torch.empty(ii)
+                            if isinstance(ii, tuple)
+                            else torch.empty_like(args[ii])
+                        )
+                    else:
+                        out = shape_fct(*args, **kwargs)
                     outputs.append(out if out.dtype == dtype else out.to(dtype))
+
                 if len(outputs) == 1 and isinstance(self.outputs[0][0], torch.Tensor):
                     return outputs[0]
                 return tuple(outputs)

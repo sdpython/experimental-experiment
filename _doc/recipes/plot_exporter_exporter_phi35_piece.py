@@ -289,8 +289,10 @@ print(diag.get_export_report())
 # By using ``replace_by_custom_op=CustomOpStrategy.LOCAL``, the function
 # replaces every submodule by a custom operator so that it can
 # the exported program for every module without its submodules.
-
-print("-----------------------------")
+#
+# It does not work yet because it does not know how to automatically produce
+# a function producing a shape based on the input ones.
+# This function needs to be written by the user.
 with bypass_export_some_errors():
     ep = diag.try_export(
         exporter="fx",
