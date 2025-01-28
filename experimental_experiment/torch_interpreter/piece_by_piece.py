@@ -1571,6 +1571,7 @@ class ModelDiagnoseOutput:
         ] = CustomOpStrategy.NONE,
         atol: float = 1e-2,
         rtol: float = 1e-1,
+        shape_functions: Optional[Dict[str, Callable]] = None,
     ) -> StatusExport:
         """
         Tries to export a model. If not possible,
@@ -1594,6 +1595,12 @@ class ModelDiagnoseOutput:
             it can be a boolean to replace all or a selected classes (name or type), or names
         :param atol: absolute tolerance
         :param rtol: relative tolerance
+        :param shape_functions: dictionary of functions to compute the shape of the output,
+            the signature should be the following
+            ``fct(_output_index:i, *args, **kwargs) -> Optional[Any]``.
+            If it returns None, the shape is automacally computed.
+            The key of the dictionary is a class name, the class of the submodule
+            to handle with this function.
         :return: result of the export function
 
         See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.

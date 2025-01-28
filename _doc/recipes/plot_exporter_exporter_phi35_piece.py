@@ -292,7 +292,9 @@ print(diag.get_export_report())
 #
 # It does not work yet because it does not know how to automatically produce
 # a function producing a shape based on the input ones.
-# This function needs to be written by the user.
+# This function needs to be written by the user for
+# class Phi3RotaryEmbedding.
+
 with bypass_export_some_errors():
     ep = diag.try_export(
         exporter="fx",

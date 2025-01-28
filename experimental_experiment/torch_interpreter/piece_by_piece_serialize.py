@@ -240,6 +240,18 @@ def deserialize_args(
                 pos_res += 1
             continue
 
+        if tt.startswith("list__"):
+            n = int(tt[6:])
+            value = res[pos_res]
+            if isinstance(res[pos_res], torch.Tensor):
+                values = res[pos_res : pos_res + n]
+                des.append(values)
+                pos_res += n
+            else:
+                des.append(value)
+                pos_res += 1
+            continue
+
         if tt.startswith(("DynamicCache__", "patched_DynamicCache__")):
             info = tt.split("__")[-1]
             n1, n2 = tuple(map(int, info.split("_")))

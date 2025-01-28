@@ -755,9 +755,9 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(expected_dyn_shapes, got)
 
         expected = [
-            ((0, torch.float32),),
-            ((0, torch.float32),),
-            ((0, torch.float32), (0, torch.float32)),
+            ((0, torch.float32, None),),
+            ((0, torch.float32, None),),
+            ((0, torch.float32, None), (0, torch.float32, None)),
         ]
         c_schema = [
             "(Tensor x, Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
@@ -1400,6 +1400,60 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
         self.assertIn('add: "f32[s0, 6, 16]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6, 16)")
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_custom_shape_fct(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x):
+                y = torch.arange(0, 16, dtype=x.dtype).reshape((1, 1, 16))
+                return x.unsqueeze(dim=2) + y, [x, y]
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                res = self.sub(x)
+                return res[0][0] + res[1][0].sum() + res[1][1].sum()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        z = model(x)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn('add: "f32[s0, 6, 16]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6, 16)")
 
 
 if __name__ == "__main__":
