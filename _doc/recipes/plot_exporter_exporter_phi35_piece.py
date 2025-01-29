@@ -25,6 +25,9 @@ from experimental_experiment.torch_interpreter.piece_by_piece import (
     CustomOpStrategy,
     trace_execution_piece_by_piece,
 )
+from experimental_experiment.torch_interpreter.onnx_export_errors import (
+    register_additional_serialization_functions,
+)
 
 
 def get_phi35_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
@@ -286,17 +289,38 @@ print(diag.get_export_report())
 # By using ``replace_by_custom_op=CustomOpStrategy.LOCAL``, the function
 # replaces every submodule by a custom operator so that it can
 # the exported program for every module without its submodules.
+#
+# It does not work yet because it does not know how to automatically produce
+# a function producing a shape based on the input ones.
+# This function needs to be written by the user for
+# class Phi3RotaryEmbedding.
 
-print("-----------------------------")
-ep = diag.try_export(
-    exporter="fx",
-    use_dynamic_shapes=True,
-    exporter_kwargs=dict(strict=False),
-    bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
-    verbose=10,
-    replace_by_custom_op=CustomOpStrategy.LOCAL,
-    quiet=0,
-)
+
+def result_of_same_shape(*args, **kwargs):
+    "Returns the shape of one element of the cache based on the inputs."
+    return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
+        args[3].dtype
+    )
+
+
+with register_additional_serialization_functions():
+    ep = diag.try_export(
+        exporter="fx",
+        use_dynamic_shapes=True,
+        exporter_kwargs=dict(strict=False),
+        # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+        verbose=10,
+        replace_by_custom_op=CustomOpStrategy.LOCAL,
+        quiet=0,
+        shape_functions={
+            "Phi3Model": {
+                1: result_of_same_shape,
+                2: result_of_same_shape,
+                3: result_of_same_shape,
+                4: result_of_same_shape,
+            }
+        },
+    )
 print(f"success: {ep.status}")
 
 # %%

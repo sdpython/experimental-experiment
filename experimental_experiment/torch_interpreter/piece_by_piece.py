@@ -524,6 +524,10 @@ class ModelDiagnoseOutput:
     def _annotation_from_type(self, obj) -> str:
         if isinstance(obj, torch.Tensor):
             return "Tensor"
+        if isinstance(obj, (tuple, list)) and all(isinstance(t, torch.Tensor) for t in obj):
+            return ["Tensor" for _t in obj]
+        if isinstance(obj, dict) and all(isinstance(t, torch.Tensor) for t in obj.values()):
+            return ["Tensor" for _t in obj]
         if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicClass"):
             # It is safer to serialize everything, it is aligned with ONNX,
             # and the use of list brought the following error:
@@ -548,9 +552,10 @@ class ModelDiagnoseOutput:
             return "float"
         if isinstance(obj, int):
             return "int"
-        raise NotImplementedError(
-            f"Annotation for type {string_type(obj)} is not implemented{self.get_debug_msg()}"
-        )
+
+        # Let's use torch to flatten the list.
+        flat, _spec = torch.utils._pytree.tree_flatten(obj)
+        return ["Tensor" for _ in flat]
 
     def _annotated_input(self, name):
         args, kwargs = self.inputs[0]
@@ -587,15 +592,27 @@ class ModelDiagnoseOutput:
         }, f"{self.full_name}: no other tyoe than Tensor is supported, types={unique}"
         return "Tensor" if len(outputs) == 1 else "Tensor[]"
 
-    def build_c_schema(self) -> str:
+    def build_c_schema(self, verbose: int = 0) -> str:
         """Returns a schema for the C function."""
         # schema_str = return f"({', '.join(params)}) -> {ret}"
         args = []
         for p in self.forward_ordered_parameter_names:
             if p == self.forward_args:
-                args.append(f"*{p}")
+                if verbose >= 5:
+                    # C API does not support **kwargs
+                    print(
+                        f"[try_export.build_c_schema] {self.full_name}: ignore "
+                        f"*{self.forward_args}, not supported by C API"
+                    )
+                # args.append(f"*{p}")
             elif p == self.forward_kwargs:
-                args.append(f"**{p}")
+                if verbose >= 5:
+                    # C API does not support **kwargs
+                    print(
+                        f"[try_export.build_c_schema] {self.full_name}: ignore "
+                        f"**{self.forward_kwargs}, not supported by C API"
+                    )
+                # args.append(f"**{p}")
             else:
                 args.append(self._annotated_input(p))
         return f"({', '.join(args)}) -> {self._annotated_output()}"
@@ -603,7 +620,10 @@ class ModelDiagnoseOutput:
     def _register(
         self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
     ):
-        schema_str = self.build_c_schema()
+        schema_str = self.build_c_schema(verbose=verbose)
+        assert (
+            "**" not in schema_str
+        ), f"{self.full_name}: '**' is not support in {schema_str!r}"
         if verbose > 2:
             print(f"[try_export._register] {self.dot_name} schema_str={schema_str!r}")
 
@@ -614,8 +634,8 @@ class ModelDiagnoseOutput:
         return custom_def, schema_str
 
     def build_shape_mapping_indices(
-        self,
-    ) -> List[Tuple[Union[int, Tuple[int, ...]], torch.dtype]]:
+        self, shape_functions: Optional[Dict[str, Callable]] = None, verbose: int = 0
+    ) -> List[Tuple[Union[int, Tuple[int, ...]], torch.dtype, Optional[Callable]]]:
         """
         Builds a mapping output and input shapes so that a function
         returns dynamic shapes can automatically inferred.
@@ -623,6 +643,13 @@ class ModelDiagnoseOutput:
         The main idea: knowning everything is going to be serialized,
         inputs and outputs are serialized, we try to match the output
         shapes with the inputs one.
+
+        It returns for every output:
+
+        * a list if indices of input to consider
+        * an element type
+        * if the output shape is not one of the input, it adds a function
+          which can automatically create it
         """
         flattened_inputs = [
             serialize_args(*i, schema=None, args_names=self.forward_ordered_parameter_names)
@@ -635,9 +662,10 @@ class ModelDiagnoseOutput:
             for i, inp in enumerate(inp_args):
                 if not hasattr(inp, "shape"):
                     continue
+                key = tuple(map(int, inp.shape))
                 if inp.shape not in shaped_mapped[row]:
-                    shaped_mapped[row][inp.shape] = []
-                shaped_mapped[row][inp.shape].append(i)
+                    shaped_mapped[row][key] = []
+                shaped_mapped[row][key].append(i)
 
         flattened_outputs = [serialize_args(i, None, schema=None) for i in self.outputs]
         n_outputs = len(flattened_outputs[0])
@@ -646,15 +674,29 @@ class ModelDiagnoseOutput:
 
         def _msg_(i):
             return (
-                f"{self.full_name}: inconsistencies for output {i}, "
+                f"Module {self.full_name}: shape inconsistencies for output i={i}, "
+                f"the new shape cannot be automatically determined."
                 f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
                 f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
                 f"\nshaped_mapped={shaped_mapped}, "
                 f"\nindices_map={indices_map}"
             )
 
+        shape_fct = [None for i in range(n_outputs)]
         for i in range(n_outputs):
             for row in range(len(shaped_mapped)):
+                assert hasattr(flattened_outputs[row][i], "shape"), (
+                    f"Not implemented for type {string_type(flattened_outputs[row][i])} "
+                    f"{_msg_(i)}"
+                )
+
+                possible_values = set(
+                    tuple(map(int, trow[i].shape)) for trow in flattened_outputs
+                )
+                if len(possible_values) == 1:
+                    # It is a constant shape.
+                    continue
+
                 shape = flattened_outputs[row][i].shape
                 if shape in shaped_mapped[row]:
                     obtained = min(shaped_mapped[row][shape])
@@ -662,23 +704,193 @@ class ModelDiagnoseOutput:
                         indices_map[i] = obtained
                     else:
                         assert obtained == indices_map[i], _msg_(i)
+                    continue
+
+                # The output shape is not found in the inputs. We try to expand it.
+                sh_fct = self.determine_shape_fct(
+                    i,
+                    flattened_inputs,
+                    flattened_outputs,
+                    verbose=verbose,
+                    shape_functions=shape_functions,
+                )
+                assert (
+                    sh_fct
+                ), f"{_msg_(i)}\nNo function could be found to produce shape {shape}."
+                shape_fct[i] = sh_fct
 
         # When a shape is not mapped, it is a constant.
         for i, mapped in enumerate(indices_map):
-            if mapped is not None:
+            if mapped is not None or shape_fct[i] is not None:
                 continue
-            shapes = set(flattened_outputs[row][i] for row in len(self.outputs))
-            assert len(shapes) == 1, _msg_(i)
+            assert isinstance(
+                flattened_outputs[0][i], torch.Tensor
+            ), f"Unexpected type {string_type(flattened_outputs[0][i])}, {_msg_(i)}"
+            shapes = set(
+                tuple(map(int, flattened_outputs[row][i].shape))
+                for row in range(len(self.outputs))
+            )
+            assert len(shapes) == 1, f"{_msg_(i)}\nfound shapes for output {i} are {shapes}"
             indices_map[i] = shapes.pop()
 
-        return tuple((i, f.dtype) for i, f in zip(indices_map, flattened_outputs[0]))
+        res = tuple(
+            (i, f.dtype, fh) for i, f, fh in zip(indices_map, flattened_outputs[0], shape_fct)
+        )
+        if verbose > 3:
+            print(f"[try_export.build_shape_mapping_indices] {self.full_name}")
+            print(
+                f"  --- flattened_inputs="
+                f"{string_type(flattened_inputs[0], with_shape=True, limit=20)}"
+            )
+            print(
+                f"  -- flattened_outputs={string_type(flattened_outputs[0], with_shape=True)}"
+            )
+            for i in res:
+                print(f"  -- {i}")
+        return res
 
-    def _get_symbolic_function_for_forward_shape(self) -> Callable:
+    @classmethod
+    def _find_sub_shape(cls, sub_shape: Tuple[int, ...], shape: Tuple[int, ...]) -> int:
+        """
+        Finds a subshape into another one. Example::
+
+            _find_sub_shape((1,2), (16,1,2,3)) -> 1
+        """
+        if len(sub_shape) > len(shape):
+            return -1
+        for k in range(len(shape) - len(sub_shape) + 1):
+            if shape[k : k + len(sub_shape)] == sub_shape:
+                return k
+        return -1
+
+    def determine_shape_fct(
+        self,
+        output_index: int,
+        flattened_inputs: List[Tuple[Tuple[Any, ...], Dict[str, Any]]],
+        flattened_outputs: List[Tuple[Any, ...]],
+        verbose: int = 0,
+        shape_functions: Optional[Dict[str, Callable]] = None,
+    ) -> Callable:
+        """
+        Determines a function producing an output shape based in this inputs.
+        """
+        assert (
+            isinstance(flattened_inputs, list)
+            and isinstance(flattened_outputs, list)
+            and len(flattened_inputs) == len(flattened_outputs)
+        ), (
+            f"Expected the same number of observations in two lists, "
+            f"{len(flattened_inputs)} != {len(flattened_outputs)}."
+        )
+
+        if shape_functions and self.model.__class__.__name__ in shape_functions:
+            shape_functions_class = shape_functions[self.model.__class__.__name__]
+            if output_index in shape_functions_class:
+                fct = shape_functions_class[output_index]
+                if verbose > 4:
+                    print(
+                        f"[try_export.determine_shape_fct] {self.full_name}, "
+                        f"output_index={output_index} found custom shape function "
+                        f"{fct}"
+                    )
+
+                for fin, fout in zip(flattened_inputs, flattened_outputs):
+                    shape_o = tuple(map(int, fct(*fin[0], **fin[1]).shape))
+                    expected_shape_o = tuple(map(int, fout[output_index].shape))
+                    assert shape_o == expected_shape_o, (
+                        f"Custom shape function {fct} for output_index={output_index} "
+                        f"for class {self.model.__class__.__name__} is failing. "
+                        f"It returns {shape_o} when the expected shape is {expected_shape_o}."
+                    )
+
+                return fct
+
+        def list_indices(flat):
+            yield from enumerate(flat[0])
+            yield from flat[1].items()
+
+        def get_input(flat, j):
+            if isinstance(j, int):
+                return flat[0][j]
+            return flat[1][j]
+
+        shape = tuple(map(int, flattened_outputs[0][output_index].shape))
+        for j, value in list_indices(flattened_inputs[0]):
+            if not hasattr(value, "shape"):
+                continue
+            shape_j = tuple(map(int, value.shape))
+            found_j = j
+            found_k = self._find_sub_shape(shape_j, shape)
+            if found_k >= 0:
+                # The output shape includes an input shape.
+                for fin, fout in zip(flattened_inputs, flattened_outputs):
+                    shape_o = tuple(map(int, fout[output_index].shape))
+                    shape_i = tuple(map(int, get_input(fin, found_j).shape))
+                    k2 = self._find_sub_shape(shape_i, shape_o)
+                    if k2 != found_k:
+                        found_k = -1
+                        break
+            if found_k == -1:
+                continue
+
+            # We determine
+            shape_j = tuple(map(int, get_input(flattened_inputs[0], found_j).shape))
+            unsqueeze_dims = tuple(
+                [k for k in range(len(shape)) if k < found_k or k >= found_k + len(shape_j)]
+            )
+            expand_shape = tuple(
+                (shape[k] if k < found_k or k >= found_k + len(shape_j) else -1)
+                for k in range(len(shape))
+            )
+
+            # functions
+            def _modifiy_(
+                *args,
+                _unsqueeze_dims=unsqueeze_dims,
+                _expand_shape=expand_shape,
+                _input_index=found_j,
+                **kwargs,
+            ):
+                t = kwargs[_input_index] if _input_index in kwargs else args[_input_index]
+                for dim in _unsqueeze_dims:
+                    t = t.unsqueeze(dim)
+                return t.expand(_expand_shape)
+
+            # Verification
+            for fin, fout in zip(flattened_inputs, flattened_outputs):
+                shape_o = tuple(map(int, _modifiy_(*fin[0], **fin[1]).shape))
+                expected_shape_o = tuple(map(int, fout[output_index].shape))
+                if shape_o != expected_shape_o:
+                    # It does not work.
+                    found_j = -1
+                    break
+
+            if found_j >= 0:
+                if verbose > 4:
+                    print(
+                        f"[try_export.determine_shape_fct] {self.full_name}, "
+                        f"output_index={output_index} unsqueeze_dims={unsqueeze_dims} "
+                        f"expand_shape={expand_shape}, input_index={found_j}"
+                    )
+                return _modifiy_
+
+        raise NotImplementedError(
+            f"{self.full_name}: unable to produce a function able to "
+            f"compute the output shape for output {output_index} (shape={shape})\n"
+            f"flattened_inputs={string_type(flattened_inputs, with_shape=True, limit=20)}\n"
+            f"flattened_outputs={string_type(flattened_outputs, with_shape=True, limit=20)}"
+        )
+
+    def _get_symbolic_function_for_forward_shape(
+        self, shape_functions: Optional[Dict[str, Callable]] = None, verbose: int = 0
+    ) -> Callable:
         """
         Returns a function computed the output shape assuming it can be inferred
         from inputs and outputs.
         """
-        if all(isinstance(t, torch.Tensor) for t in self.outputs[0]):
+        if all(isinstance(t, torch.Tensor) for t in self.outputs[0]) and isinstance(
+            self.inputs[0][0][0], torch.Tensor
+        ):
             inp_args, inp_kwargs = self.inputs[0]
             out = self.outputs[0]
             input_shape = inp_args[0].shape
@@ -691,6 +903,12 @@ class ModelDiagnoseOutput:
                 n_outputs = len(out)
 
                 if n_outputs == 1:
+                    if verbose > 2:
+                        print(
+                            f"[try_export._get_symbolic_function_for_forward_shape] "
+                            f"{self.full_name}: 1 tensor like 1st input inp_args="
+                            f"{string_type(inp_args, with_shape=True)}"
+                        )
 
                     def _symbolic_forward_tensor_1_tensor_like_first_input(*args, **kwargs):
                         # TODO: change this
@@ -703,22 +921,39 @@ class ModelDiagnoseOutput:
                 ):
                     return tuple(torch.empty_like(args[0]) for t in range(_n_outputs))
 
+                if verbose > 2:
+                    print(
+                        f"[try_export._get_symbolic_function_for_forward_shape] "
+                        f"{self.full_name}: n tensors like 1st input inp_args="
+                        f"{string_type(inp_args, with_shape=True)}"
+                    )
                 return _symbolic_forward_tensor_n_tensor_like_first_input
 
-        indices_map = self.build_shape_mapping_indices()
+        indices_map = self.build_shape_mapping_indices(
+            verbose=verbose, shape_functions=shape_functions
+        )
         if indices_map is not None:
+            if verbose > 2:
+                print(
+                    f"[try_export._get_symbolic_function_for_forward_shape] "
+                    f"-- {self.full_name}, len(indices_map)={len(indices_map)}"
+                )
 
             def _symbolic_forward_tensor_mapped_io_shapes(
                 *args, _indices_map=indices_map, **kwargs
             ):
                 outputs = []
-                for ii, dtype in _indices_map:
-                    out = (
-                        torch.empty(ii)
-                        if isinstance(ii, tuple)
-                        else torch.empty_like(args[ii])
-                    )
+                for ii, dtype, shape_fct in _indices_map:
+                    if shape_fct is None:
+                        out = (
+                            torch.empty(ii)
+                            if isinstance(ii, tuple)
+                            else torch.empty_like(args[ii])
+                        )
+                    else:
+                        out = shape_fct(*args, **kwargs)
                     outputs.append(out if out.dtype == dtype else out.to(dtype))
+
                 if len(outputs) == 1 and isinstance(self.outputs[0][0], torch.Tensor):
                     return outputs[0]
                 return tuple(outputs)
@@ -731,7 +966,9 @@ class ModelDiagnoseOutput:
             f"output_types={string_type(self.outputs[0], with_shape=True)}"
         )
 
-    def _put_custom_op_inplace_tensor(self, verbose: int = 0):
+    def _put_custom_op_inplace_tensor(
+        self, shape_functions: Optional[Dict[str, Callable]] = None, verbose: int = 0
+    ):
         """
         Replaces the submodule by a custom operator.
         It rewrites the forward method to call a function.
@@ -774,7 +1011,7 @@ class ModelDiagnoseOutput:
                 f"registers diag_lib.{name_fct}"
             )
 
-        shape_fct = self._get_symbolic_function_for_forward_shape()
+        shape_fct = self._get_symbolic_function_for_forward_shape(verbose=verbose)
         cusdef, schema_str = self._register(
             _rewrite_forward_tensor_,
             shape_fct,
@@ -823,7 +1060,9 @@ class ModelDiagnoseOutput:
         self.model.forward = _replaced_forward_tensor_
         return cusdef
 
-    def _put_custom_op_inplace_any(self, verbose: int = 0):
+    def _put_custom_op_inplace_any(
+        self, shape_functions: Optional[Dict[str, Callable]] = None, verbose: int = 0
+    ):
         """
         Replaces the submodule by a custom operator.
         It rewrites the forward method to call a function.
@@ -837,7 +1076,8 @@ class ModelDiagnoseOutput:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE_IN: "
                     f"args={string_type(args, with_shape=True)}, "
-                    f"kwargs={string_type(kwargs, with_shape=True)}"
+                    f"kwargs={string_type(kwargs, with_shape=True)}, "
+                    f"_diag.forward_expected_input_type={_diag.forward_expected_input_type}"
                 )
             # We need to deserialize back before calling forward.
             new_args, new_kwargs = deserialize_args_kwargs(
@@ -859,8 +1099,10 @@ class ModelDiagnoseOutput:
             if verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-OUT: "
-                    f"args={string_type(res, with_shape=True)}"
+                    f"res={string_type(res, with_shape=True)}"
                 )
+                if verbose > 3:
+                    print(f"[_rewrite_forward_] schema={_diag.forward_custom_op_schema}")
             # And we need to serialize before before returning the output.
             serialized_res = serialize_args(res, None, _diag.forward_custom_op_schema)
             if verbose > 2:
@@ -877,7 +1119,9 @@ class ModelDiagnoseOutput:
                 f"registers 'diag_lib.{name_fct}"
             )
 
-        shape_fct = self._get_symbolic_function_for_forward_shape()
+        shape_fct = self._get_symbolic_function_for_forward_shape(
+            verbose=verbose, shape_functions=shape_functions
+        )
         cusdef, schema_str = self._register(
             _rewrite_forward_,
             shape_fct,
@@ -971,7 +1215,9 @@ class ModelDiagnoseOutput:
         self.model.forward = _replaced_forward_
         return cusdef
 
-    def put_custom_op_inplace(self, verbose: int = 0):
+    def put_custom_op_inplace(
+        self, shape_functions: Optional[Dict[str, Callable]] = None, verbose: int = 0
+    ):
         """
         Replaces the submodule by a custom operator.
         It rewrites the forward method to call a function
@@ -987,10 +1233,14 @@ class ModelDiagnoseOutput:
             isinstance(t, torch.Tensor) for t in self.outputs[0]
         ):
             self.forward_custom_op_serialize = False
-            return self._put_custom_op_inplace_only_tensor(verbose=verbose)
+            return self._put_custom_op_inplace_only_tensor(
+                verbose=verbose, shape_functions=shape_functions
+            )
         self.forward_custom_op_serialize = True
         self.forward_need_serialization = self.forward_custom_op_serialize
-        return self._put_custom_op_inplace_any(verbose=verbose)
+        return self._put_custom_op_inplace_any(
+            verbose=verbose, shape_functions=shape_functions
+        )
 
     def remove_custom_op_inplace(self, verbose: int = 0):
         """
@@ -1019,6 +1269,7 @@ class ModelDiagnoseOutput:
         verbose: int = 0,
         quiet: bool = True,
         use_dynamic_shapes: Optional[bool] = None,
+        shape_functions: Optional[Dict[str, Callable]] = None,
     ) -> Tuple[Optional[Any], Optional[Callable]]:
         if quiet:
             quiet = self._debug_noquiet_name != self.name
@@ -1195,6 +1446,7 @@ class ModelDiagnoseOutput:
         replace_by_custom_op: CustomOpStrategy = CustomOpStrategy.NONE,
         atol: float = 1e-2,
         rtol: float = 1e-1,
+        shape_functions: Optional[Dict[str, Callable]] = None,
     ) -> Tuple[StatusExport, Optional[Callable]]:
         """
         Tries to export the module of submodule held by this class.
@@ -1210,7 +1462,11 @@ class ModelDiagnoseOutput:
         assert (
             not use_dynamic_shapes or len(self.inputs) > 1
         ), "Unable to use dynamic_shapes, only one set of inputs is available."
-        cusdef = self.put_custom_op_inplace(verbose=verbose) if replace_by_custom_op else None
+        cusdef = (
+            self.put_custom_op_inplace(verbose=verbose, shape_functions=shape_functions)
+            if replace_by_custom_op
+            else None
+        )
 
         if exporter == "fx":
             exported, fct = self._try_export_no_bypass_export(
@@ -1265,6 +1521,7 @@ class ModelDiagnoseOutput:
                         )
                     if verbose >= 10:
                         print(f"[try_export-{exporter.upper()}] {self.dot_name}: GRAPH")
+                        print(exported.exported)
                         print(exported.exported.graph)
                 if quiet:
                     try:
@@ -1349,6 +1606,7 @@ class ModelDiagnoseOutput:
         replace_by_custom_op: CustomOpStrategy = CustomOpStrategy.NONE,
         atol: float = 1e-2,
         rtol: float = 1e-1,
+        shape_functions: Optional[Dict[str, Callable]] = None,
     ) -> Tuple[StatusExport, Optional[Any]]:
         """
         Tries to export the module of submodule held by this class.
@@ -1374,6 +1632,7 @@ class ModelDiagnoseOutput:
                     replace_by_custom_op=replace_by_custom_op,
                     atol=atol,
                     rtol=rtol,
+                    shape_functions=shape_functions,
                 )
                 if self._debug_print_status:
                     print(
@@ -1383,6 +1642,7 @@ class ModelDiagnoseOutput:
                         f"-- _try_export-6"
                     )
                 return exported, fct
+
         exported, fct = self._try_export_no_bypass(
             None,
             exporter,
@@ -1394,6 +1654,7 @@ class ModelDiagnoseOutput:
             replace_by_custom_op=replace_by_custom_op,
             atol=atol,
             rtol=rtol,
+            shape_functions=shape_functions,
         )
         if self._debug_print_status:
             print(
@@ -1418,6 +1679,7 @@ class ModelDiagnoseOutput:
         ] = CustomOpStrategy.NONE,
         atol: float = 1e-2,
         rtol: float = 1e-1,
+        shape_functions: Optional[Dict[str, Callable]] = None,
     ) -> StatusExport:
         """
         Tries to export a model. If not possible,
@@ -1441,6 +1703,12 @@ class ModelDiagnoseOutput:
             it can be a boolean to replace all or a selected classes (name or type), or names
         :param atol: absolute tolerance
         :param rtol: relative tolerance
+        :param shape_functions: dictionary of functions to compute the shape of the output,
+            the signature should be the following
+            ``fct(_output_index:i, *args, **kwargs) -> Optional[Any]``.
+            If it returns None, the shape is automacally computed.
+            The key of the dictionary is a class name, the class of the submodule
+            to handle with this function.
         :return: result of the export function
 
         See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
@@ -1477,6 +1745,7 @@ class ModelDiagnoseOutput:
                 replace_by_custom_op=custom_op_strat == CustomOpStrategy.ALWAYS,
                 atol=atol,
                 rtol=rtol,
+                shape_functions=shape_functions,
             )
             if self._debug_print_status:
                 print(
@@ -1554,7 +1823,7 @@ class ModelDiagnoseOutput:
                         f"[try_export-{exporter.upper()}]        "
                         f"outputs={string_type(child.outputs[0], with_shape=True)}"
                     )
-                child.put_custom_op_inplace(verbose=verbose)
+                child.put_custom_op_inplace(verbose=verbose, shape_functions=shape_functions)
 
             # We export again.
             exported, _fct = self._try_export(
@@ -1568,6 +1837,7 @@ class ModelDiagnoseOutput:
                 replace_by_custom_op=False,
                 atol=atol,
                 rtol=rtol,
+                shape_functions=shape_functions,
             )
             if self._debug_print_status:
                 print(
@@ -1637,6 +1907,7 @@ class ModelDiagnoseOutput:
                 replace_by_custom_op=replace_by_custom_op,
                 atol=atol,
                 rtol=rtol,
+                shape_functions=shape_functions,
             )
         if self._debug_print_status:
             print(

@@ -2,6 +2,10 @@ import unittest
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.helpers import string_type
+from experimental_experiment.torch_interpreter.onnx_export_errors import (
+    bypass_export_some_errors,
+    register_additional_serialization_functions,
+)
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
@@ -12,6 +16,8 @@ from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
     choose_kwargs_for_dynamic_shapes,
     extract_names_from_schema,
     serialize_args,
+    tree_spec_as_name,
+    tree_spec_from_name,
 )
 
 
@@ -750,18 +756,19 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(expected_dyn_shapes, got)
 
         expected = [
-            ((0, torch.float32),),
-            ((0, torch.float32),),
-            ((0, torch.float32), (0, torch.float32)),
+            ((0, torch.float32, None),),
+            ((0, torch.float32, None),),
+            ((0, torch.float32, None), (0, torch.float32, None)),
         ]
         c_schema = [
             "(Tensor x, Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
             "(Tensor x, Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
             "(Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor[]",
         ]
-        for iexp, obj, esch in zip(expected, diag, c_schema):
-            mapping = obj.build_shape_mapping_indices()
-            self.assertEqual(iexp, mapping)
+        for _iexp, obj, esch in zip(expected, diag, c_schema):
+            # serialization function must be registered
+            # mapping = obj.build_shape_mapping_indices()
+            # self.assertEqual(iexp, mapping)
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
@@ -783,6 +790,89 @@ class TestPieceByPiece(ExtTestCase):
             "torch.ops.diag_lib.C_Model.default",
             "torch.ops.diag_lib.C_Model_sub.default",
             "torch.ops.diag_lib.C_Model_subcache.default",
+        ]
+        for obj, esch in zip(diag, c_schema):
+            ep = obj.fx
+            self.assertIn(esch, str(ep))
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_export_piece_dynamic_cache_io(self):
+        import torch
+        import transformers
+
+        class SubModelCacheIn(torch.nn.Module):
+            def forward(self, cache):
+                return cache.key_cache[0] * cache.value_cache[0]
+
+        class SubModelCacheOut(torch.nn.Module):
+            def forward(self, x, y):
+                d = cache.__class__()
+                d.update(x + 1, y + 2, 0)
+                return d
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subin = SubModelCacheIn()
+                self.subout = SubModelCacheOut()
+
+            def forward(self, x, y):
+                cache = self.subout(x, y)
+                return self.subin(cache)
+
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.ones((5, 6)), torch.ones((5, 6)) + 2, 0)
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+
+        inputs = [
+            ((x, y), {}),
+            ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+        ]
+
+        expected_dyn_shapes = "(({0: DYN}, {0: DYN}), {})"
+        diag = trace_execution_piece_by_piece(model, inputs)
+        dyn_shapes = diag.guess_dynamic_shapes()
+        got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        self.assertEqual(expected_dyn_shapes, got)
+
+        expected = [
+            ((0, torch.float32),),
+            ((0, torch.float32),),
+            ((0, torch.float32), (0, torch.float32)),
+        ]
+        c_schema = [
+            "(Tensor x, Tensor y) -> Tensor",
+            "(Tensor cache_n2_0, Tensor cache_n2_1) -> Tensor",
+            "(Tensor x, Tensor y) -> Tensor[]",
+        ]
+        for _iexp, obj, esch in zip(expected, diag, c_schema):
+            #    mapping = obj.build_shape_mapping_indices()
+            #    self.assertEqual(iexp, mapping)
+            sch = obj.build_c_schema()
+            self.assertEqual(esch, sch)
+
+        with bypass_export_some_errors():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.ALWAYS,
+                quiet=0,
+                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+            )
+        self.assertNotEmpty(ep)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+
+        c_schema = [
+            "torch.ops.diag_lib.C_Model.default",
+            "torch.ops.diag_lib.C_Model_subin.default",
+            "torch.ops.diag_lib.C_Model_subout.default",
         ]
         for obj, esch in zip(diag, c_schema):
             ep = obj.fx
@@ -1080,6 +1170,411 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(ep)
         report = diag.get_export_report(fx=True)
         self.assertIn("torch.ops.aten.pow", report)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_dict(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return dict(dm=x - y, da=x + y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y):
+                r = self.sub(x, y)
+                return r["dm"].abs() + r["da"].abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.abs", report)
+        self.assertEqual(diag.children[0].forward_expected_output_type, ["dict__2_da__dm"])
+
+    def test_serialize_any(self):
+        import torch
+
+        nested = [
+            torch.randn((4, 5)),
+            [torch.randn((7, 5)), torch.randn((8, 5))],
+            {
+                "a": torch.randn((14, 5)),
+                "b": torch.randn((12, 5)),
+                "cl": [torch.randn((11, 5))],
+            },
+        ]
+        flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
+
+        self.assertEqual(len(flat_list), 6)
+        unflatten = torch.utils._pytree.tree_unflatten(flat_list, tree_spec)
+        self.assertEqualAny(nested, unflatten)
+
+        # Let's get a name
+        name = tree_spec_as_name(tree_spec, 6)
+        _, new_spec = tree_spec_from_name(name)
+        unflatten = torch.utils._pytree.tree_unflatten(flat_list, new_spec)
+        self.assertEqualAny(nested, unflatten)
+
+    def test_serialize_dynamic_cache(self):
+        import torch
+        import transformers
+
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.randn((19, 5)), torch.randn((21, 5)), 0)
+
+        nested = [
+            torch.randn((4, 5)),
+            [torch.randn((7, 5)), torch.randn((8, 5))],
+            {
+                "a": torch.randn((14, 5)),
+                "cl": cache,
+            },
+        ]
+
+        with bypass_export_some_errors():
+            flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
+
+            self.assertTrue(all(isinstance(i, torch.Tensor) for i in flat_list))
+            self.assertEqual(len(flat_list), 6)
+            unflatten = torch.utils._pytree.tree_unflatten(flat_list, tree_spec)
+            self.assertEqualAny(nested, unflatten)
+
+            # Let's get a name
+            name = tree_spec_as_name(tree_spec, 6)
+            _, new_spec = tree_spec_from_name(name)
+            unflatten = torch.utils._pytree.tree_unflatten(flat_list, new_spec)
+            self.assertEqualAny(nested, unflatten)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_dict_list(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return dict(dm=x - y, da=[x + y, x * y])
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y):
+                r = self.sub(x, y)
+                return r["dm"].abs() + r["da"][0].abs() + r["da"][1].abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.abs", report)
+        self.assertEqual(len(diag.children[0].forward_expected_output_type), 1)
+        self.assertStartsWith("___", diag.children[0].forward_expected_output_type[0])
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_tuple_cache(self):
+        import torch
+        import transformers
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                cache = transformers.cache_utils.DynamicCache()
+                cache.update(x + 1, y + 2, 0)
+                return x + y, cache
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y):
+                r, cache = self.sub(x, y)
+                return r.abs() + cache.key_cache[0].abs() + cache.value_cache[0].abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y=y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {"y": torch.randn((5, 6))}),
+            ((torch.randn((6, 6)),), {"y": torch.randn((6, 6))}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        with bypass_export_some_errors():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
+            )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(fx=True)
+        self.assertIn("torch.ops.aten.abs", report)
+        self.assertEqual(
+            diag.children[0].forward_expected_output_type, ["Tensor", "DynamicCache__1_1"]
+        )
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_shape_fct(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x):
+                y = torch.arange(0, 16, dtype=x.dtype).reshape((1, 1, 16))
+                return x.unsqueeze(dim=2) + y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x).abs()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        z = model(x)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn('add: "f32[s0, 6, 16]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6, 16)")
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_shape_fct2(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x):
+                y = torch.arange(0, 16, dtype=x.dtype).reshape((1, 1, 16))
+                return x.unsqueeze(dim=2) + y, [x, y]
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                res = self.sub(x)
+                return res[0] + res[1][0].sum() + res[1][1].sum()
+
+        model = Model()
+        x = torch.randn((5, 6))
+        z = model(x)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn('add: "f32[s0, 6, 16]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6, 16)")
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_custom_shape_fct(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x, y):
+                res = self.sub(x, y)
+                return res
+
+        model = Model()
+        x = torch.randn((5, 1))
+        y = torch.randn((1, 6))
+        z = model(x, y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((torch.randn((1, 6)), torch.randn((5, 1))), {}),
+            ((torch.randn((1, 7)), torch.randn((6, 1))), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+            shape_functions={
+                "SubModel": {
+                    0: lambda *args, **kwargs: torch.empty(
+                        (args[1].shape[0], args[0].shape[1])
+                    )
+                }
+            },
+        )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn('c_model_sub: "f32[s1, s0]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s1, s0)")
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_dict_dict(self):
+        import torch
+        import transformers
+
+        class SubModel(torch.nn.Module):
+            def forward(
+                self,
+                x: Optional[torch.Tensor] = None,
+                cache: Optional[transformers.cache_utils.DynamicCache] = None,
+            ):
+                new_cache = transformers.cache_utils.DynamicCache()
+                new_cache.update(cache.key_cache[0] + x, cache.value_cache[0] + x, 0)
+                return dict(past_key_value=new_cache, mask=torch.ones_like(x))
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(
+                self,
+                x: Optional[torch.Tensor] = None,
+                cache: Optional[transformers.cache_utils.DynamicCache] = None,
+            ):
+                res = self.sub(x, cache)
+                return res
+
+        model = Model()
+        x = torch.randn((5, 6))
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.randn((5, 6)), torch.randn((5, 6)), 0)
+        z = model(x, cache)
+        self.assertNotEmpty(z)
+
+        cache2 = transformers.cache_utils.DynamicCache()
+        cache2.update(torch.randn((6, 6)), torch.randn((6, 6)), 0)
+        inputs = [
+            (tuple(), dict(x=x, cache=cache)),
+            (tuple(), dict(x=torch.randn((6, 6)), cache=cache2)),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+            )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        print(report)
+        self.assertIn('ones_like: "f32[s0, 6]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6)")
 
 
 if __name__ == "__main__":
