@@ -772,14 +772,15 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        ep = diag.try_export(
-            exporter="fx",
-            use_dynamic_shapes=True,
-            exporter_kwargs=dict(strict=False),
-            verbose=10,
-            replace_by_custom_op=CustomOpStrategy.ALWAYS,
-            quiet=0,
-        )
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.ALWAYS,
+                quiet=0,
+            )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
