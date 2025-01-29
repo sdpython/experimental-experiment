@@ -1614,8 +1614,7 @@ class TestPieceByPiece(ExtTestCase):
             )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        print(report)
-        self.assertIn('ones_like: "f32[s0, 6]"', report)
+        self.assertIn('c_model_sub: "f32[s0, 6]"', report)
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node

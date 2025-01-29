@@ -172,6 +172,13 @@ class ModelDiagnoseOutput:
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self._debug_print_status = os.environ.get("DIAGPRINTSTATUS", "")
         self._debug_print_export = os.environ.get("DIAGPRINTEXPORT", "")
+
+    The class can be improved:
+
+    * It cannot infer how to produce in all cases outputs with expected dynamic
+      dimensions based on inputs ones
+    * Custom ops are not working well yet with forward method using ``**kwargs``
+      ``*args`` in their signature. It is better to keep them empty.
     """
 
     def __init__(
@@ -209,6 +216,7 @@ class ModelDiagnoseOutput:
         self.forward_kwargs = names[0] if names else None
         self.forward_custom_op_schema = None
         self.forward_need_serialization = False
+        self.forward_fill_kwargs = bool(self.forward_kwargs)
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
         self.device = "cpu"
 
@@ -325,6 +333,8 @@ class ModelDiagnoseOutput:
                 f"name={self.name!r}, model={self.model.__class__.__name__}, "
                 f"module={self.model.__class__.__module__}, model={self.model}"
             )
+            if self.forward_kwargs and k not in self.forward_ordered_parameter_names:
+                self.forward_fill_kwargs = False
 
         self.inputs.append(make_copy((args, kwargs)))
 
@@ -1064,7 +1074,8 @@ class ModelDiagnoseOutput:
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE_IN: "
                     f"args={string_type(args, with_shape=True, limit=20)}, "
                     f"kwargs={string_type(kwargs, with_shape=True, limit=20)}, "
-                    f"_diag.forward_expected_input_type={_diag.forward_expected_input_type}"
+                    f"_diag.forward_expected_input_type={_diag.forward_expected_input_type}, "
+                    f"_diag.forward_fill_kwargs={_diag.forward_fill_kwargs}"
                 )
             # We need to deserialize back before calling forward.
             new_args, new_kwargs = deserialize_args_kwargs(
@@ -1073,6 +1084,7 @@ class ModelDiagnoseOutput:
                 _diag.forward_expected_input_type,
                 clone=True,
                 ordered_names=_diag.forward_ordered_parameter_names,
+                fill_kwargs=_diag.forward_fill_kwargs,
             )
             if verbose > 2:
                 print(
@@ -1175,10 +1187,13 @@ class ModelDiagnoseOutput:
                 print(
                     f"[_replaced_forward_] {name_fct}-IN: "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
-                    f"schema_str={schema_str!r}"
+                    f"schema_str={schema_str!r}, "
+                    f"self.forward_fill_kwargs={self.forward_fill_kwargs}"
                 )
             # , args_names=self.forward_ordered_parameter_names
             args, kwargs = serialize_args(args, kwargs, schema=schema_str)
+            if self.forward_fill_kwargs:
+                args = (*args, [])
             if verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-SERIALIZED_IN: "
