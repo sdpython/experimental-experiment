@@ -366,6 +366,9 @@ def deserialize_args_kwargs(
         new_kwargs = {}
         pos_res = 0
         for name in left_names:
+            if name not in expected_types[1]:
+                # no **kwargs
+                continue
             if expected_types[1][name] == "Tensor":
                 new_kwargs[name] = left_args[pos_res]
                 pos_res += 1
@@ -386,9 +389,10 @@ def deserialize_args_kwargs(
         assert pos_res + n_args == len(args), (
             f"Deserialization went wrong, pos_res={pos_res + n_args}, len(args)={len(args)}, "
             f"expected_types={expected_types}, "
-            f"input types={string_type(args)}, "
-            f"new_args={string_type(new_args)}, "
-            f"new_kwargs={string_type(new_kwargs)}"
+            f"input types={string_type(args, limit=20)}, "
+            f"new_args={string_type(new_args, limit=20)}, "
+            f"new_kwargs={string_type(new_kwargs)}, "
+            f"ordered_names={ordered_names}"
         )
         return new_args, new_kwargs
 

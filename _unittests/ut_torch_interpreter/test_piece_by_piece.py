@@ -1574,6 +1574,55 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEqual(shape, (6, 16))
         self.assertEqual(str(shape), "(s0, 6)")
 
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_kwargs_local(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x: Optional[torch.Tensor] = None, **flash_args):
+                return x
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x: Optional[torch.Tensor] = None, **flash_args):
+                res = self.sub(x, **flash_args)
+                return res
+
+        model = Model()
+        x = torch.randn((5, 6))
+        z = model(x)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            (tuple(), dict(x=x)),
+            (tuple(), dict(x=torch.randn((6, 6)))),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+            )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        print(report)
+        self.assertIn('ones_like: "f32[s0, 6]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6)")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

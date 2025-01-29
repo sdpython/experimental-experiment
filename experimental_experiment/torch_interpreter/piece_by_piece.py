@@ -597,22 +597,8 @@ class ModelDiagnoseOutput:
         # schema_str = return f"({', '.join(params)}) -> {ret}"
         args = []
         for p in self.forward_ordered_parameter_names:
-            if p == self.forward_args:
-                if verbose >= 5:
-                    # C API does not support **kwargs
-                    print(
-                        f"[try_export.build_c_schema] {self.full_name}: ignore "
-                        f"*{self.forward_args}, not supported by C API"
-                    )
-                # args.append(f"*{p}")
-            elif p == self.forward_kwargs:
-                if verbose >= 5:
-                    # C API does not support **kwargs
-                    print(
-                        f"[try_export.build_c_schema] {self.full_name}: ignore "
-                        f"**{self.forward_kwargs}, not supported by C API"
-                    )
-                # args.append(f"**{p}")
+            if p in (self.forward_args, self.forward_kwargs):
+                args.append(f"Tensor[] {p}")
             else:
                 args.append(self._annotated_input(p))
         return f"({', '.join(args)}) -> {self._annotated_output()}"
@@ -1155,8 +1141,11 @@ class ModelDiagnoseOutput:
                 f"check _rewrite_forward_ is working with "
                 f"{string_type(self.inputs[0], with_shape=True)}"
             )
-            print("-----------------")
-            a, kw = serialize_args(*self.inputs[0], schema=schema_str)
+            # The schema is misleading as everything is serialized into a flat list
+            # of tensors. It is better to use *forward_ordered_parameter_names*.
+            a, kw = serialize_args(
+                *self.inputs[0], schema=None, args_names=self.forward_ordered_parameter_names
+            )
             print(
                 f"[try_export._rewrite_forward_] {self.full_name}: serialized into "
                 f"{string_type(a, with_shape=True, limit=20)} and "
