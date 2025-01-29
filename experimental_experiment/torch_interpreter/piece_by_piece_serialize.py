@@ -308,7 +308,12 @@ def deserialize_args(
             des.append(obj)
             continue
 
-        raise NotImplementedError(f"Unable to handle type info {tt!r}")
+        raise NotImplementedError(
+            f"Unable to handle type info {tt!r}, "
+            f"expected_types={expected_types!r}, "
+            f"res={string_type(res, with_shape=True)}, "
+            f"des={string_type(des, with_shape=True)}"
+        )
     if return_n_args:
         return des, pos_res
     assert pos_res == len(res), (
@@ -365,7 +370,7 @@ def deserialize_args_kwargs(
                 new_kwargs[name] = left_args[pos_res]
                 pos_res += 1
                 continue
-            if expected_types[1][name] in ("bool", "int", "float"):
+            if expected_types[1][name] in ("bool", "int", "float", "None"):
                 new_kwargs[name] = left_args[pos_res]
                 pos_res += 1
                 continue

@@ -295,6 +295,14 @@ print(diag.get_export_report())
 # This function needs to be written by the user for
 # class Phi3RotaryEmbedding.
 
+
+def result_of_same_shape(*args, **kwargs):
+    "Returns the shape of one element of the cache based on the inputs."
+    return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
+        args[3].dtype
+    )
+
+
 with bypass_export_some_errors():
     ep = diag.try_export(
         exporter="fx",
@@ -304,6 +312,14 @@ with bypass_export_some_errors():
         verbose=10,
         replace_by_custom_op=CustomOpStrategy.LOCAL,
         quiet=0,
+        shape_functions={
+            "Phi3Model": {
+                1: result_of_same_shape,
+                2: result_of_same_shape,
+                3: result_of_same_shape,
+                4: result_of_same_shape,
+            }
+        },
     )
 print(f"success: {ep.status}")
 
