@@ -325,6 +325,7 @@ class ModelDiagnoseOutput:
                 f"name={self.name!r}, model={self.model.__class__.__name__}, "
                 f"module={self.model.__class__.__module__}, model={self.model}"
             )
+
         self.inputs.append(make_copy((args, kwargs)))
 
     def add_outputs(self, args: Tuple[Any, ...]):

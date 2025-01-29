@@ -1,31 +1,20 @@
 """
-.. _l-plot-exporter-exporter-phi35-piece:
+.. _l-plot-exporter-exporter-reportability:
 
-Export Phi-3.5-mini-instruct piece by piece
-===========================================
+Export Phi-3.5-mini-instruct with report_exportability
+======================================================
 
-:func:`torch.export.export` often breaks on big models because there
-are control flows or instructions breaking the propagation of
-dynamic shapes (see ...). The function usually gives an indication where
-the model implementation can be fixed but in case, that is not possible,
-we can try to export the model piece by piece: every module
-is converted separately from its submodule. A model can be exported even
-if one of its submodules cannot.
+Tries :func:`torch._export.tools.report_exportability`.
 
 Model
 +++++
 """
 
-import pprint
 from typing import Any, Dict
 import torch
 import torch._export.tools
 import transformers
 from experimental_experiment.helpers import string_type
-from experimental_experiment.torch_interpreter.piece_by_piece import (
-    CustomOpStrategy,
-    trace_execution_piece_by_piece,
-)
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     register_additional_serialization_functions,
 )
@@ -214,114 +203,13 @@ model, inputs, inputs2 = data["model"], data["inputs"], data["inputs2"]
 print(string_type(inputs, with_shape=True))
 
 # %%
-# Dynamic Shapes
-# ++++++++++++++
-#
-# We want to infer the dynamic shapes from the two sets of inputs we gave.
-# For that, we use a function to trace the execution of the model
-# including its submodules. It is going to execute the model twice
-# with the two sets of inputs and stores every intermediate input and output.
-
-diag = trace_execution_piece_by_piece(model, [inputs, inputs2], verbose=2)
-
-# %%
-# Now we keep in memory every input/output for the submodules,
-# we can guess the dynamic shapes for every of them.
-# The final ones:
-dynamic_shapes = diag.guess_dynamic_shapes()
-print("The dynamic shapes are:")
-pprint.pprint(dynamic_shapes)
-
-# %%
-# And all the dynamic shapes all along the traced submodules.
-print(
-    diag.pretty_text(
-        with_dynamic_shape=True,
-        with_shape=False,
-        with_min_max=False,
-        with_device=False,
-        with_inputs=False,
-    ).replace("<_DimHint.DYNAMIC: 3>", "DYN")
-)
-
-# %%
-# Evaluate the export
-# +++++++++++++++++++
-#
-# In many cases, the export (to :class:`torch.fx.Graph`, to ONNX)
-# does not work on the first try. We need a way to understand
-# how much the model can be exported. It can be used to evaluate
-# the how much code needs to be rewritten or patched to be exportable.
-# The verbosity can be increase to show dynamic shapes, results
-# of the discrepancies.
-# Let's display the module and its submodule first.
-
-print(
-    diag.pretty_text(
-        with_dynamic_shape=False,
-        with_shape=False,
-        with_min_max=False,
-        with_device=False,
-        with_inputs=False,
-    )
-)
-
-# %%
-# The we try to export to see the submodule failing the whole model.
-# We can pickle the failing model and restore it to speedup
-# the refactoring to make it work.
-print("----------------------")
-ep = diag.try_export(
-    exporter="fx",
-    use_dynamic_shapes=True,
-    exporter_kwargs=dict(strict=False),
-    verbose=1,
-)
-print(f"success: {ep.status}")
-print(diag.get_export_report())
-
-# %%
-# Export piece by piece
-# +++++++++++++++++++++
-#
-# The main module is not exportable because one piece cannot be exported.
-# But maybe if we assume it works, maybe everything else is working.
-# By using ``replace_by_custom_op=CustomOpStrategy.LOCAL``, the function
-# replaces every submodule by a custom operator so that it can
-# the exported program for every module without its submodules.
-#
-# It does not work yet because it does not know how to automatically produce
-# a function producing a shape based on the input ones.
-# This function needs to be written by the user for
-# class Phi3RotaryEmbedding.
-
-
-def result_of_same_shape(*args, **kwargs):
-    "Returns the shape of one element of the cache based on the inputs."
-    return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
-        args[3].dtype
-    )
-
+# The function we want to try.
 
 with register_additional_serialization_functions():
-    ep = diag.try_export(
-        exporter="fx",
-        use_dynamic_shapes=True,
-        exporter_kwargs=dict(strict=False),
-        verbose=10,
-        replace_by_custom_op=CustomOpStrategy.LOCAL,
-        quiet=0,
-        shape_functions={
-            "Phi3Model": {
-                1: result_of_same_shape,
-                2: result_of_same_shape,
-                3: result_of_same_shape,
-                4: result_of_same_shape,
-            }
-        },
+    report = torch._export.tools.report_exportability(
+        model, tuple(), kwargs=inputs, strict=False
     )
-print(f"success: {ep.status}")
 
 # %%
-# Let's print a readable report.
-print(diag.get_export_report(fx=True))
+# Let's print the report.
+print(report)
