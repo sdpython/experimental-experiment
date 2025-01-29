@@ -779,7 +779,6 @@ class TestPieceByPiece(ExtTestCase):
             verbose=10,
             replace_by_custom_op=CustomOpStrategy.ALWAYS,
             quiet=0,
-            bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
         )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
@@ -862,7 +861,6 @@ class TestPieceByPiece(ExtTestCase):
                 verbose=10,
                 replace_by_custom_op=CustomOpStrategy.ALWAYS,
                 quiet=0,
-                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
             )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
@@ -1353,7 +1351,6 @@ class TestPieceByPiece(ExtTestCase):
                 verbose=10,
                 replace_by_custom_op=CustomOpStrategy.LOCAL,
                 quiet=0,
-                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
             )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(fx=True)

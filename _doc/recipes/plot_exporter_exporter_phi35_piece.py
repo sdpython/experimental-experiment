@@ -274,7 +274,6 @@ ep = diag.try_export(
     exporter="fx",
     use_dynamic_shapes=True,
     exporter_kwargs=dict(strict=False),
-    bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
     verbose=1,
 )
 print(f"success: {ep.status}")
@@ -308,7 +307,6 @@ with register_additional_serialization_functions():
         exporter="fx",
         use_dynamic_shapes=True,
         exporter_kwargs=dict(strict=False),
-        # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
         verbose=10,
         replace_by_custom_op=CustomOpStrategy.LOCAL,
         quiet=0,

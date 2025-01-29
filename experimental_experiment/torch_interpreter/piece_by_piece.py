@@ -1598,7 +1598,6 @@ class ModelDiagnoseOutput:
         self,
         exporter: str = "fx",
         exporter_kwargs: Optional[Dict[str, Any]] = None,
-        bypass_kwargs: Optional[Dict[str, Any]] = None,
         verbose: int = 0,
         quiet: bool = True,
         discrepancies: bool = True,
@@ -1615,33 +1614,6 @@ class ModelDiagnoseOutput:
         assert isinstance(
             replace_by_custom_op, bool
         ), f"Not implemented yet for replace_by_custom_op={replace_by_custom_op!r}"
-        if bypass_kwargs:
-            from .onnx_export_errors import bypass_export_some_errors
-
-            with bypass_export_some_errors(
-                verbose=max(verbose - 2, 0), **bypass_kwargs
-            ) as modificator:
-                exported, fct = self._try_export_no_bypass(
-                    modificator,
-                    exporter,
-                    exporter_kwargs=exporter_kwargs,
-                    quiet=quiet,
-                    verbose=verbose,
-                    use_dynamic_shapes=use_dynamic_shapes,
-                    discrepancies=discrepancies,
-                    replace_by_custom_op=replace_by_custom_op,
-                    atol=atol,
-                    rtol=rtol,
-                    shape_functions=shape_functions,
-                )
-                if self._debug_print_status:
-                    print(
-                        f"-- torch.export.export name={self.full_name} -- "
-                        f"{'CUSTOM -- ' if self.is_customized() else ''}"
-                        f"{exported.status.name} "
-                        f"-- _try_export-6"
-                    )
-                return exported, fct
 
         exported, fct = self._try_export_no_bypass(
             None,
@@ -1669,7 +1641,6 @@ class ModelDiagnoseOutput:
         self,
         exporter: str = "fx",
         exporter_kwargs: Optional[Dict[str, Any]] = None,
-        bypass_kwargs: Optional[Dict[str, Any]] = None,
         verbose: int = 0,
         quiet: bool = True,
         discrepancies: bool = True,
@@ -1692,8 +1663,6 @@ class ModelDiagnoseOutput:
             `'torch_script'` to call :func:`torch.onnx.export` ``(..., dynamo=False)``,
             `'to_onnx'` to call :func:`experimental_experiment.torch_interpreter.to_onnx`.
         :param exporter_kwargs: argument for the export function
-        :param bypass_kwargs: argument for function :func:`bypass_export_some_errors
-            <experimental_experiment.torch_interpreter.onnx_export_errors.bypass_export_some_errors>`
         :param verbose: verbosity, to see what the function is doing
         :param discrepancies: run the exported model to measure the discrepancies
         :param quiet: do not catch the first exception
@@ -1737,7 +1706,6 @@ class ModelDiagnoseOutput:
             exported, _fct = self._try_export(
                 exporter=exporter,
                 exporter_kwargs=exporter_kwargs,
-                bypass_kwargs=bypass_kwargs,
                 verbose=verbose,
                 quiet=quiet,
                 discrepancies=discrepancies,
@@ -1829,7 +1797,6 @@ class ModelDiagnoseOutput:
             exported, _fct = self._try_export(
                 exporter=exporter,
                 exporter_kwargs=exporter_kwargs,
-                bypass_kwargs=bypass_kwargs,
                 verbose=verbose,
                 quiet=quiet,
                 discrepancies=discrepancies,
@@ -1899,7 +1866,6 @@ class ModelDiagnoseOutput:
             child.try_export(
                 exporter=exporter,
                 exporter_kwargs=exporter_kwargs,
-                bypass_kwargs=bypass_kwargs,
                 verbose=verbose,
                 quiet=quiet,
                 discrepancies=discrepancies,
