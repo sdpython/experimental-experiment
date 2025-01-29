@@ -26,7 +26,7 @@ from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
 )
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
-    bypass_export_some_errors,
+    register_additional_serialization_functions,
 )
 
 
@@ -303,7 +303,7 @@ def result_of_same_shape(*args, **kwargs):
     )
 
 
-with bypass_export_some_errors():
+with register_additional_serialization_functions():
     ep = diag.try_export(
         exporter="fx",
         use_dynamic_shapes=True,

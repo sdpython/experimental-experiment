@@ -1642,6 +1642,7 @@ class ModelDiagnoseOutput:
                         f"-- _try_export-6"
                     )
                 return exported, fct
+
         exported, fct = self._try_export_no_bypass(
             None,
             exporter,

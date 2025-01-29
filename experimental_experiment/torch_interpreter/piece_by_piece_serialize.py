@@ -374,8 +374,12 @@ def deserialize_args_kwargs(
                 new_kwargs[name] = left_args[pos_res]
                 pos_res += 1
                 continue
+            assert isinstance(expected_types[1][name], str), (
+                f"Unexpected type {type(expected_types[1][name])} for name={name!r} in "
+                f"expected_types={expected_types}"
+            )
             a, n = deserialize_args(
-                left_args[pos_res:], expected_types[1][name], clone=clone, return_n_args=True
+                left_args[pos_res:], [expected_types[1][name]], clone=clone, return_n_args=True
             )
             pos_res += n
             new_kwargs[name] = a

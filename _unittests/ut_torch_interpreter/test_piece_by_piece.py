@@ -4,6 +4,7 @@ from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requ
 from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
+    register_additional_serialization_functions,
 )
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
@@ -1510,6 +1511,70 @@ class TestPieceByPiece(ExtTestCase):
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
         self.assertEqual(str(shape), "(s1, s0)")
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_dict_dict(self):
+        import torch
+        import transformers
+
+        class SubModel(torch.nn.Module):
+            def forward(
+                self,
+                x: Optional[torch.Tensor] = None,
+                cache: Optional[transformers.cache_utils.DynamicCache] = None,
+            ):
+                new_cache = transformers.cache_utils.DynamicCache()
+                new_cache.update(cache.key_cache[0] + x, cache.value_cache[0] + x, 0)
+                return dict(past_key_value=new_cache, mask=torch.ones_like(x))
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(
+                self,
+                x: Optional[torch.Tensor] = None,
+                cache: Optional[transformers.cache_utils.DynamicCache] = None,
+            ):
+                res = self.sub(x, cache)
+                return res
+
+        model = Model()
+        x = torch.randn((5, 6))
+        cache = transformers.cache_utils.DynamicCache()
+        cache.update(torch.randn((5, 6)), torch.randn((5, 6)), 0)
+        z = model(x, cache)
+        self.assertNotEmpty(z)
+
+        cache2 = transformers.cache_utils.DynamicCache()
+        cache2.update(torch.randn((6, 6)), torch.randn((6, 6)), 0)
+        inputs = [
+            (tuple(), dict(x=x, cache=cache)),
+            (tuple(), dict(x=torch.randn((6, 6)), cache=cache2)),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+            )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        print(report)
+        self.assertIn('ones_like: "f32[s0, 6]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6)")
 
 
 if __name__ == "__main__":
