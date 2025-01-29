@@ -1075,8 +1075,8 @@ class ModelDiagnoseOutput:
             if verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE_IN: "
-                    f"args={string_type(args, with_shape=True)}, "
-                    f"kwargs={string_type(kwargs, with_shape=True)}, "
+                    f"args={string_type(args, with_shape=True, limit=20)}, "
+                    f"kwargs={string_type(kwargs, with_shape=True, limit=20)}, "
                     f"_diag.forward_expected_input_type={_diag.forward_expected_input_type}"
                 )
             # We need to deserialize back before calling forward.
@@ -1155,10 +1155,13 @@ class ModelDiagnoseOutput:
                 f"check _rewrite_forward_ is working with "
                 f"{string_type(self.inputs[0], with_shape=True)}"
             )
+            print("-----------------")
             a, kw = serialize_args(*self.inputs[0], schema=schema_str)
             print(
                 f"[try_export._rewrite_forward_] {self.full_name}: serialized into "
-                f"{string_type(a, with_shape=True)} and {string_type(kw, with_shape=True)}"
+                f"{string_type(a, with_shape=True, limit=20)} and "
+                f"{string_type(kw, with_shape=True, limit=20)}, "
+                f"schema_str={schema_str!r}"
             )
             got = _rewrite_forward_(*a, **kw)
             print(
