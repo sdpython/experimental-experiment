@@ -1680,6 +1680,25 @@ class ModelDiagnoseOutput:
             )
         return exported, fct
 
+    def verifies(self, verbose: int = 0):
+        """Does some verifications. Raises an exception if it fails."""
+        assert (
+            isinstance(self.inputs, list)
+            and all(isinstance(i, tuple) for i in self.inputs)
+            and all(len(i) == 2 for i in self.inputs)
+            and all(isinstance(i[0], tuple) and isinstance(i[1], dict) for i in self.inputs)
+        ), f"{self.full_name}: unexpected type for self.inputs: {string_type(self.inputs)}"
+        assert isinstance(self.outputs, list) and all(
+            isinstance(i, tuple) for i in self.outputs
+        ), f"{self.full_name}: unexpected type for self.outputs: {string_type(self.outputs)}"
+        assert len(self.inputs) == len(self.outputs), (
+            f"{self.full_name}: input and outputs mismatch: "
+            f"{len(self.inputs)} != {len(self.outputs)}"
+        )
+        assert len(self.inputs) > 0, f"{self.full_name}: expecting at least one input"
+        for child in self.children:
+            child.verifies()
+
     def try_export(
         self,
         exporter: str = "fx",
@@ -1732,6 +1751,7 @@ class ModelDiagnoseOutput:
             f"{self.full_name}: unexpected value for exporter={exporter!r} "
             f"not in {allowed}"
         )
+        self.verifies()
         custom_op_strat = self._do_replace_by_custom_op(replace_by_custom_op)
         if verbose and self.level == 0:
             print()
