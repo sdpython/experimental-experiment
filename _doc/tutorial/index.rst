@@ -28,8 +28,10 @@ already has many examples about it. Here are some corner cases.
 * :ref:`l-plot-exporter-nn_modules_inputs`
 * :ref:`l-plot-exporter-lost_dynamic_dimension`
 
-**Export piece by piece**
+**Investigate, Export piece by piece**
 
+* :ref:`l-plot-exporter-exporter-reportability`
+* :ref:`l-plot-exporter-exporter-draft_export`
 * :ref:`l-plot-exporter-recipes-custom-phi35`
 
 **strict = ?**

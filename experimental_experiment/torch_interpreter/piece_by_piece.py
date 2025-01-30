@@ -172,6 +172,13 @@ class ModelDiagnoseOutput:
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
         self._debug_print_status = os.environ.get("DIAGPRINTSTATUS", "")
         self._debug_print_export = os.environ.get("DIAGPRINTEXPORT", "")
+
+    The class can be improved:
+
+    * It cannot infer how to produce in all cases outputs with expected dynamic
+      dimensions based on inputs ones
+    * Custom ops are not working well yet with forward method using ``**kwargs``
+      ``*args`` in their signature. It is better to keep them empty.
     """
 
     def __init__(
@@ -209,6 +216,7 @@ class ModelDiagnoseOutput:
         self.forward_kwargs = names[0] if names else None
         self.forward_custom_op_schema = None
         self.forward_need_serialization = False
+        self.forward_fill_kwargs = bool(self.forward_kwargs)
         assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
         self.device = "cpu"
 
@@ -325,6 +333,9 @@ class ModelDiagnoseOutput:
                 f"name={self.name!r}, model={self.model.__class__.__name__}, "
                 f"module={self.model.__class__.__module__}, model={self.model}"
             )
+            if self.forward_kwargs and k not in self.forward_ordered_parameter_names:
+                self.forward_fill_kwargs = False
+
         self.inputs.append(make_copy((args, kwargs)))
 
     def add_outputs(self, args: Tuple[Any, ...]):
@@ -597,22 +608,8 @@ class ModelDiagnoseOutput:
         # schema_str = return f"({', '.join(params)}) -> {ret}"
         args = []
         for p in self.forward_ordered_parameter_names:
-            if p == self.forward_args:
-                if verbose >= 5:
-                    # C API does not support **kwargs
-                    print(
-                        f"[try_export.build_c_schema] {self.full_name}: ignore "
-                        f"*{self.forward_args}, not supported by C API"
-                    )
-                # args.append(f"*{p}")
-            elif p == self.forward_kwargs:
-                if verbose >= 5:
-                    # C API does not support **kwargs
-                    print(
-                        f"[try_export.build_c_schema] {self.full_name}: ignore "
-                        f"**{self.forward_kwargs}, not supported by C API"
-                    )
-                # args.append(f"**{p}")
+            if p in (self.forward_args, self.forward_kwargs):
+                args.append(f"Tensor[] {p}")
             else:
                 args.append(self._annotated_input(p))
         return f"({', '.join(args)}) -> {self._annotated_output()}"
@@ -621,6 +618,10 @@ class ModelDiagnoseOutput:
         self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
     ):
         schema_str = self.build_c_schema(verbose=verbose)
+        if self._debug_print_export:
+            print(f"-- REGISTER: {self.custom_op_name} - {self.full_name}")
+            print(f"   schema_str={schema_str}")
+            print(f"   inputs={string_type(self.inputs[0], limit=20)}")
         assert (
             "**" not in schema_str
         ), f"{self.full_name}: '**' is not support in {schema_str!r}"
@@ -783,8 +784,15 @@ class ModelDiagnoseOutput:
             f"{len(flattened_inputs)} != {len(flattened_outputs)}."
         )
 
-        if shape_functions and self.model.__class__.__name__ in shape_functions:
-            shape_functions_class = shape_functions[self.model.__class__.__name__]
+        if shape_functions and (
+            self.model.__class__.__name__ in shape_functions
+            or self.custom_op_name in shape_functions
+        ):
+            shape_functions_class = (
+                shape_functions[self.model.__class__.__name__]
+                if self.model.__class__.__name__ in shape_functions
+                else shape_functions[self.custom_op_name]
+            )
             if output_index in shape_functions_class:
                 fct = shape_functions_class[output_index]
                 if verbose > 4:
@@ -875,8 +883,10 @@ class ModelDiagnoseOutput:
                 return _modifiy_
 
         raise NotImplementedError(
-            f"{self.full_name}: unable to produce a function able to "
-            f"compute the output shape for output {output_index} (shape={shape})\n"
+            f"{self.full_name} (custom_op_name is {self.custom_op_name!r}): "
+            f"unable to produce a function able to compute the output shape "
+            f"for output {output_index} (shape={shape}), a custom shape function "
+            f"should be added.\n"
             f"flattened_inputs={string_type(flattened_inputs, with_shape=True, limit=20)}\n"
             f"flattened_outputs={string_type(flattened_outputs, with_shape=True, limit=20)}"
         )
@@ -1075,9 +1085,10 @@ class ModelDiagnoseOutput:
             if verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE_IN: "
-                    f"args={string_type(args, with_shape=True)}, "
-                    f"kwargs={string_type(kwargs, with_shape=True)}, "
-                    f"_diag.forward_expected_input_type={_diag.forward_expected_input_type}"
+                    f"args={string_type(args, with_shape=True, limit=20)}, "
+                    f"kwargs={string_type(kwargs, with_shape=True, limit=20)}, "
+                    f"_diag.forward_expected_input_type={_diag.forward_expected_input_type}, "
+                    f"_diag.forward_fill_kwargs={_diag.forward_fill_kwargs}"
                 )
             # We need to deserialize back before calling forward.
             new_args, new_kwargs = deserialize_args_kwargs(
@@ -1086,6 +1097,7 @@ class ModelDiagnoseOutput:
                 _diag.forward_expected_input_type,
                 clone=True,
                 ordered_names=_diag.forward_ordered_parameter_names,
+                fill_kwargs=_diag.forward_fill_kwargs,
             )
             if verbose > 2:
                 print(
@@ -1155,10 +1167,16 @@ class ModelDiagnoseOutput:
                 f"check _rewrite_forward_ is working with "
                 f"{string_type(self.inputs[0], with_shape=True)}"
             )
-            a, kw = serialize_args(*self.inputs[0], schema=schema_str)
+            # The schema is misleading as everything is serialized into a flat list
+            # of tensors. It is better to use *forward_ordered_parameter_names*.
+            a, kw = serialize_args(
+                *self.inputs[0], schema=None, args_names=self.forward_ordered_parameter_names
+            )
             print(
                 f"[try_export._rewrite_forward_] {self.full_name}: serialized into "
-                f"{string_type(a, with_shape=True)} and {string_type(kw, with_shape=True)}"
+                f"{string_type(a, with_shape=True, limit=20)} and "
+                f"{string_type(kw, with_shape=True, limit=20)}, "
+                f"schema_str={schema_str!r}"
             )
             got = _rewrite_forward_(*a, **kw)
             print(
@@ -1182,10 +1200,30 @@ class ModelDiagnoseOutput:
                 print(
                     f"[_replaced_forward_] {name_fct}-IN: "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
-                    f"schema_str={schema_str!r}"
+                    f"schema_str={schema_str!r}, "
+                    f"self.forward_fill_kwargs={self.forward_fill_kwargs}, "
+                    f"self.forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
                 )
             # , args_names=self.forward_ordered_parameter_names
-            args, kwargs = serialize_args(args, kwargs, schema=schema_str)
+            _args, _kwargs = args, kwargs
+            has_kwargs = bool(kwargs)
+            args, kwargs = serialize_args(
+                args, kwargs, schema=None, args_names=self.forward_ordered_parameter_names
+            )
+            if has_kwargs and self.forward_fill_kwargs:
+                assert args and isinstance(args[-1], list) and len(args[-1]) == 0, (
+                    f"Unexpected value for args[-1], "
+                    f"schema_str={schema_str!r}, "
+                    f"self.forward_fill_kwargs={self.forward_fill_kwargs}, "
+                    f"self.forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
+                    f"\nargs={string_type(_args)},\nkwargs={string_type(_kwargs)}"
+                    f"\n-- after serialization --"
+                    f"\nargs={string_type(args)},\nkwargs={string_type(kwargs)}"
+                )
+                args = args[:-1]
+
+            if self.forward_fill_kwargs:
+                args = (*args, [])
             if verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-SERIALIZED_IN: "
@@ -1193,6 +1231,11 @@ class ModelDiagnoseOutput:
                     f"kwargs={string_type(kwargs, with_shape=True)}"
                 )
                 print(f"[_replaced_forward_] {name_fct}-CALL: {fct}")
+            if self._debug_print_export:
+                print(f"-- CALL custom op {self.custom_op_name} - {self.full_name}")
+                print(f"   args={string_type(args, limit=20)}")
+                print(f"   kwargs={string_type(kwargs, limit=20)}")
+                print(f"   schema_str={schema_str}")
             res = fct(*args, **kwargs)
             if verbose > 2:
                 print(
@@ -1598,7 +1641,6 @@ class ModelDiagnoseOutput:
         self,
         exporter: str = "fx",
         exporter_kwargs: Optional[Dict[str, Any]] = None,
-        bypass_kwargs: Optional[Dict[str, Any]] = None,
         verbose: int = 0,
         quiet: bool = True,
         discrepancies: bool = True,
@@ -1615,33 +1657,6 @@ class ModelDiagnoseOutput:
         assert isinstance(
             replace_by_custom_op, bool
         ), f"Not implemented yet for replace_by_custom_op={replace_by_custom_op!r}"
-        if bypass_kwargs:
-            from .onnx_export_errors import bypass_export_some_errors
-
-            with bypass_export_some_errors(
-                verbose=max(verbose - 2, 0), **bypass_kwargs
-            ) as modificator:
-                exported, fct = self._try_export_no_bypass(
-                    modificator,
-                    exporter,
-                    exporter_kwargs=exporter_kwargs,
-                    quiet=quiet,
-                    verbose=verbose,
-                    use_dynamic_shapes=use_dynamic_shapes,
-                    discrepancies=discrepancies,
-                    replace_by_custom_op=replace_by_custom_op,
-                    atol=atol,
-                    rtol=rtol,
-                    shape_functions=shape_functions,
-                )
-                if self._debug_print_status:
-                    print(
-                        f"-- torch.export.export name={self.full_name} -- "
-                        f"{'CUSTOM -- ' if self.is_customized() else ''}"
-                        f"{exported.status.name} "
-                        f"-- _try_export-6"
-                    )
-                return exported, fct
 
         exported, fct = self._try_export_no_bypass(
             None,
@@ -1669,7 +1684,6 @@ class ModelDiagnoseOutput:
         self,
         exporter: str = "fx",
         exporter_kwargs: Optional[Dict[str, Any]] = None,
-        bypass_kwargs: Optional[Dict[str, Any]] = None,
         verbose: int = 0,
         quiet: bool = True,
         discrepancies: bool = True,
@@ -1692,8 +1706,6 @@ class ModelDiagnoseOutput:
             `'torch_script'` to call :func:`torch.onnx.export` ``(..., dynamo=False)``,
             `'to_onnx'` to call :func:`experimental_experiment.torch_interpreter.to_onnx`.
         :param exporter_kwargs: argument for the export function
-        :param bypass_kwargs: argument for function :func:`bypass_export_some_errors
-            <experimental_experiment.torch_interpreter.onnx_export_errors.bypass_export_some_errors>`
         :param verbose: verbosity, to see what the function is doing
         :param discrepancies: run the exported model to measure the discrepancies
         :param quiet: do not catch the first exception
@@ -1737,7 +1749,6 @@ class ModelDiagnoseOutput:
             exported, _fct = self._try_export(
                 exporter=exporter,
                 exporter_kwargs=exporter_kwargs,
-                bypass_kwargs=bypass_kwargs,
                 verbose=verbose,
                 quiet=quiet,
                 discrepancies=discrepancies,
@@ -1784,7 +1795,8 @@ class ModelDiagnoseOutput:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} START "
                     f"{custom_op_strat.name}, name={self.full_name!r} "
-                    f"--- children replaced by custom ops"
+                    f"--- children replaced by custom ops "
+                    f"[{', '.join(ch.full_name for ch in self.children)}]"
                 )
                 if verbose >= 10:
                     print(
@@ -1802,7 +1814,8 @@ class ModelDiagnoseOutput:
             elif verbose:
                 print(
                     f"[try_export-{exporter.upper()}] {self.dot_name} "
-                    f"--- children replaced by custom ops"
+                    f"--- children replaced by custom ops "
+                    f"[{', '.join(ch.full_name for ch in self.children)}]"
                 )
 
             for child in self.children:
@@ -1829,7 +1842,6 @@ class ModelDiagnoseOutput:
             exported, _fct = self._try_export(
                 exporter=exporter,
                 exporter_kwargs=exporter_kwargs,
-                bypass_kwargs=bypass_kwargs,
                 verbose=verbose,
                 quiet=quiet,
                 discrepancies=discrepancies,
@@ -1899,7 +1911,6 @@ class ModelDiagnoseOutput:
             child.try_export(
                 exporter=exporter,
                 exporter_kwargs=exporter_kwargs,
-                bypass_kwargs=bypass_kwargs,
                 verbose=verbose,
                 quiet=quiet,
                 discrepancies=discrepancies,

@@ -316,7 +316,9 @@ def deserialize_args(
         )
     if return_n_args:
         return des, pos_res
-    assert pos_res == len(res), (
+    assert pos_res == len(res) or (
+        pos_res == len(res) - 1 and isinstance(res[-1], list) and len(res[-1]) == 0
+    ), (
         f"Deserialization went wrong, pos_res={pos_res}, len(res)={len(res)}, "
         f"expected_types={expected_types}, "
         f"input types={string_type(res)}"
@@ -330,6 +332,7 @@ def deserialize_args_kwargs(
     expected_types: Tuple[List[str], List[str]],
     clone: bool = False,
     ordered_names: Optional[List[str]] = None,
+    fill_kwargs: bool = False,
 ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
     """
     Deserializes a list of tensor or list of tensors into args and kwargs.
@@ -340,6 +343,8 @@ def deserialize_args_kwargs(
     :param expected_types: needed to understand how to deserialize
     :param clone: clone every tensor
     :param ordered_names: ordered need to restore **kwargs
+    :param fill_kwargs: if True, the last parameter is **kwargs
+        and it should be empty
     :return: new args, new named args
     """
     assert not kwargs, (
@@ -366,6 +371,9 @@ def deserialize_args_kwargs(
         new_kwargs = {}
         pos_res = 0
         for name in left_names:
+            if name not in expected_types[1]:
+                # no **kwargs
+                continue
             if expected_types[1][name] == "Tensor":
                 new_kwargs[name] = left_args[pos_res]
                 pos_res += 1
@@ -381,14 +389,21 @@ def deserialize_args_kwargs(
             a, n = deserialize_args(
                 left_args[pos_res:], [expected_types[1][name]], clone=clone, return_n_args=True
             )
+            assert len(a) == 1, (
+                f"Unexpected length, a={string_type(a, limit=20)}, "
+                f"expected_types[1][name]={expected_types[1][name]!r}"
+            )
             pos_res += n
-            new_kwargs[name] = a
-        assert pos_res + n_args == len(args), (
-            f"Deserialization went wrong, pos_res={pos_res + n_args}, len(args)={len(args)}, "
-            f"expected_types={expected_types}, "
-            f"input types={string_type(args)}, "
-            f"new_args={string_type(new_args)}, "
-            f"new_kwargs={string_type(new_kwargs)}"
+            new_kwargs[name] = a[0]
+        assert pos_res + n_args + (1 if fill_kwargs else 0) == len(args), (
+            f"Deserialization went wrong, pos_res={pos_res + n_args}, "
+            f"n_args={n_args}, len(args)={len(args)}, "
+            f"\nfill_kwargs={fill_kwargs}, "
+            f"\nexpected_types={expected_types}, "
+            f"\nargs={string_type(args, limit=20)}, "
+            f"\nnew_args={string_type(new_args, limit=20)}, "
+            f"\nnew_kwargs={string_type(new_kwargs)}, "
+            f"\nordered_names={ordered_names}"
         )
         return new_args, new_kwargs
 

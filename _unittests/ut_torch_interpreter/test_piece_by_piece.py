@@ -19,6 +19,9 @@ from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
     tree_spec_as_name,
     tree_spec_from_name,
 )
+from experimental_experiment.torch_models.llm_model_helper import (
+    get_phi35_mini_instruct,
+)
 
 
 class TestPieceByPiece(ExtTestCase):
@@ -42,6 +45,14 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(st.name, "FAIL")
         st = st.remove(StatusExportCode.FAIL)
         self.assertEqual(st.name, "NONE")
+
+    def test_serizalize_arg_1(self):
+        import torch
+
+        x = torch.randn((5, 6))
+        args, kwargs = serialize_args((x,), {}, schema=None, args_names=["x", "flash_args"])
+        st = string_type(args, with_shape=True)
+        self.assertEqual(st, "(T1s5x6,)")
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -772,15 +783,15 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        ep = diag.try_export(
-            exporter="fx",
-            use_dynamic_shapes=True,
-            exporter_kwargs=dict(strict=False),
-            verbose=10,
-            replace_by_custom_op=CustomOpStrategy.ALWAYS,
-            quiet=0,
-            bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
-        )
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.ALWAYS,
+                quiet=0,
+            )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
@@ -862,7 +873,6 @@ class TestPieceByPiece(ExtTestCase):
                 verbose=10,
                 replace_by_custom_op=CustomOpStrategy.ALWAYS,
                 quiet=0,
-                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
             )
         self.assertNotEmpty(ep)
         assert hasattr(diag, "fx"), "No exported program found in diag."
@@ -1353,7 +1363,6 @@ class TestPieceByPiece(ExtTestCase):
                 verbose=10,
                 replace_by_custom_op=CustomOpStrategy.LOCAL,
                 quiet=0,
-                # bypass_kwargs=dict(patch_transformers=True, replace_dynamic_cache=True),
             )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(fx=True)
@@ -1575,6 +1584,116 @@ class TestPieceByPiece(ExtTestCase):
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
         self.assertEqual(str(shape), "(s0, 6)")
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_piece_by_piece_piece_kwargs_local(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x: Optional[torch.Tensor] = None, **flash_args):
+                return x
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x: Optional[torch.Tensor] = None, **flash_args):
+                res = self.sub(x, **flash_args)
+                return res
+
+        model = Model()
+        x = torch.randn((5, 6))
+        z = model(x)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            (tuple(), dict(x=x)),
+            (tuple(), dict(x=torch.randn((6, 6)))),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=10,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+            )
+        self.assertNotEmpty(ep)
+        report = diag.get_export_report(exported_program=True)
+        self.assertIn('c_model_sub: "f32[s0, 6]"', report)
+        for node in ep.exported.graph.nodes:
+            if "val" in node.meta:
+                last_node = node
+        shape = tuple(last_node.meta["val"].shape)
+        self.assertNotEqual(shape, (6, 16))
+        self.assertEqual(str(shape), "(s0, 6)")
+
+    @requires_torch("2.6")
+    @hide_stdout
+    def test_piece_by_piece_phi35_local(self):
+        import torch
+
+        def result_of_same_shape1(*args, **kwargs):
+            "Returns the shape of one element of the cache based on the inputs."
+            return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
+                args[3].dtype
+            )
+
+        def result_of_same_shape2(*args, **kwargs):
+            "Returns the shape of one element of the cache based on the inputs."
+            return torch.empty((*args[0].shape[:2], 32064)).to(args[0].dtype)
+
+        data = get_phi35_mini_instruct(num_hidden_layers=2, common_dynamic_shapes=True)
+        model, inputs, inputs2 = data["model"], data["inputs"], data["inputs2"]
+        diag = trace_execution_piece_by_piece(model, [inputs, inputs2], verbose=2)
+
+        raise unittest.SkipTest(
+            "Not ready yet to work: see the content of the test to understand"
+        )
+
+        """
+        Class ModelOutput contains this:
+
+        ```
+        def __getitem__(self, k):
+            if isinstance(k, str):
+                inner_dict = dict(self.items())
+                return inner_dict[k]
+            else:
+                return self.to_tuple()[k]
+        ```
+
+        An attribute of this class can be accessed with a string index or an integer.
+        But after it is serialized, the second option is no longer available.
+        This must be fixed before before able to export every submodule.
+        """
+
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=1,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+                shape_functions={
+                    "Phi3Model": {
+                        1: result_of_same_shape1,
+                        2: result_of_same_shape1,
+                        3: result_of_same_shape1,
+                        4: result_of_same_shape1,
+                    },
+                    "C_Phi3ForCausalLM_lm_head": {
+                        0: result_of_same_shape2,
+                    },
+                },
+            )
+            self.assertNotEmpty(ep)
 
 
 if __name__ == "__main__":

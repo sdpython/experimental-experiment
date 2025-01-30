@@ -259,7 +259,7 @@ class TestIssuesPytorch2024(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         session = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
 
         def gen_numpy_inputs(n: int, idx: int):
@@ -414,7 +414,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         session = onnxruntime.InferenceSession(
             onnx_file_path,
             sess_options=sess_options,
-            providers=[("CPUExecutionProvider")],
+            providers=["CPUExecutionProvider"],
         )
         inputs_names = [i.name for i in session.get_inputs()]
         feeds = dict(
@@ -488,7 +488,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         session = onnxruntime.InferenceSession(
             onnx_file_path,
             sess_options=sess_options,
-            providers=[("CPUExecutionProvider")],
+            providers=["CPUExecutionProvider"],
         )
         inputs_names = [i.name for i in session.get_inputs()]
         output = session.run(None, dict(zip(inputs_names, (example_input.numpy(),))))
@@ -563,7 +563,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         session = onnxruntime.InferenceSession(
             onnx_file_path,
             sess_options=sess_options,
-            providers=[("CPUExecutionProvider")],
+            providers=["CPUExecutionProvider"],
         )
         inputs_names = [i.name for i in session.get_inputs()]
         output = session.run(None, dict(zip(inputs_names, (example_input.numpy(),))))
@@ -714,7 +714,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         session = onnxruntime.InferenceSession(
             onnx_file_path,
             sess_options=sess_options,
-            providers=[("CPUExecutionProvider")],
+            providers=["CPUExecutionProvider"],
         )
         inputs_names = [i.name for i in session.get_inputs()]
         output = session.run(None, dict(zip(inputs_names, (example_input.numpy(),))))
@@ -929,7 +929,7 @@ class TestIssuesPytorch2024(ExtTestCase):
 
         sess_options = onnxruntime.SessionOptions()
         session = onnxruntime.InferenceSession(
-            model_path, sess_options=sess_options, providers=[("CPUExecutionProvider")]
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
 
         input_n = dict(
