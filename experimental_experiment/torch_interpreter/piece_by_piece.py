@@ -618,6 +618,10 @@ class ModelDiagnoseOutput:
         self, fct: Callable, fct_shape: Callable, namespace: str, fname: str, verbose: int = 0
     ):
         schema_str = self.build_c_schema(verbose=verbose)
+        if self._debug_print_export:
+            print(f"-- REGISTER: {self.custom_op_name} - {self.full_name}")
+            print(f"   schema_str={schema_str}")
+            print(f"   inputs={string_type(self.inputs[0], limit=20)}")
         assert (
             "**" not in schema_str
         ), f"{self.full_name}: '**' is not support in {schema_str!r}"
@@ -780,8 +784,15 @@ class ModelDiagnoseOutput:
             f"{len(flattened_inputs)} != {len(flattened_outputs)}."
         )
 
-        if shape_functions and self.model.__class__.__name__ in shape_functions:
-            shape_functions_class = shape_functions[self.model.__class__.__name__]
+        if shape_functions and (
+            self.model.__class__.__name__ in shape_functions
+            or self.custom_op_name in shape_functions
+        ):
+            shape_functions_class = (
+                shape_functions[self.model.__class__.__name__]
+                if self.model.__class__.__name__ in shape_functions
+                else shape_functions[self.custom_op_name]
+            )
             if output_index in shape_functions_class:
                 fct = shape_functions_class[output_index]
                 if verbose > 4:
@@ -872,8 +883,10 @@ class ModelDiagnoseOutput:
                 return _modifiy_
 
         raise NotImplementedError(
-            f"{self.full_name}: unable to produce a function able to "
-            f"compute the output shape for output {output_index} (shape={shape})\n"
+            f"{self.full_name} (custom_op_name is {self.custom_op_name!r}): "
+            f"unable to produce a function able to compute the output shape "
+            f"for output {output_index} (shape={shape}), a custom shape function "
+            f"should be added.\n"
             f"flattened_inputs={string_type(flattened_inputs, with_shape=True, limit=20)}\n"
             f"flattened_outputs={string_type(flattened_outputs, with_shape=True, limit=20)}"
         )
@@ -1201,6 +1214,11 @@ class ModelDiagnoseOutput:
                     f"kwargs={string_type(kwargs, with_shape=True)}"
                 )
                 print(f"[_replaced_forward_] {name_fct}-CALL: {fct}")
+            if self._debug_print_export:
+                print(f"-- CALL custom op {self.custom_op_name} - {self.full_name}")
+                print(f"   args={string_type(args, limit=20)}")
+                print(f"   kwargs={string_type(kwargs, limit=20)}")
+                print(f"   schema_str={schema_str}")
             res = fct(*args, **kwargs)
             if verbose > 2:
                 print(
@@ -1760,7 +1778,8 @@ class ModelDiagnoseOutput:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} START "
                     f"{custom_op_strat.name}, name={self.full_name!r} "
-                    f"--- children replaced by custom ops"
+                    f"--- children replaced by custom ops "
+                    f"[{', '.join(ch.full_name for ch in self.children)}]"
                 )
                 if verbose >= 10:
                     print(
@@ -1778,7 +1797,8 @@ class ModelDiagnoseOutput:
             elif verbose:
                 print(
                     f"[try_export-{exporter.upper()}] {self.dot_name} "
-                    f"--- children replaced by custom ops"
+                    f"--- children replaced by custom ops "
+                    f"[{', '.join(ch.full_name for ch in self.children)}]"
                 )
 
             for child in self.children:

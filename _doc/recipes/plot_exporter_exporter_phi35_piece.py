@@ -296,28 +296,38 @@ print(diag.get_export_report())
 # class Phi3RotaryEmbedding.
 
 
-def result_of_same_shape(*args, **kwargs):
+def result_of_same_shape1(*args, **kwargs):
     "Returns the shape of one element of the cache based on the inputs."
     return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
         args[3].dtype
     )
 
 
+def result_of_same_shape2(*args, **kwargs):
+    "Returns the shape of one element of the cache based on the inputs."
+    return torch.empty((*args[0].shape[:2], 32064)).to(args[0].dtype)
+
+
+print("####################################", type(model))
+
 with register_additional_serialization_functions():
     ep = diag.try_export(
         exporter="fx",
         use_dynamic_shapes=True,
         exporter_kwargs=dict(strict=False),
-        verbose=10,
+        verbose=1,
         replace_by_custom_op=CustomOpStrategy.LOCAL,
         quiet=0,
         shape_functions={
             "Phi3Model": {
-                1: result_of_same_shape,
-                2: result_of_same_shape,
-                3: result_of_same_shape,
-                4: result_of_same_shape,
-            }
+                1: result_of_same_shape1,
+                2: result_of_same_shape1,
+                3: result_of_same_shape1,
+                4: result_of_same_shape1,
+            },
+            "C_Phi3ForCausalLM_lm_head": {
+                0: result_of_same_shape2,
+            },
         },
     )
 print(f"success: {ep.status}")
