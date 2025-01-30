@@ -10,6 +10,7 @@ Model
 +++++
 """
 
+import pprint
 from typing import Any, Dict
 import torch
 import torch._export.tools
@@ -203,6 +204,9 @@ model, inputs, inputs2 = data["model"], data["inputs"], data["inputs2"]
 print(string_type(inputs, with_shape=True))
 
 # %%
+# Exportability
+# +++++++++++++
+#
 # The function we want to try.
 
 with register_additional_serialization_functions():
@@ -212,4 +216,4 @@ with register_additional_serialization_functions():
 
 # %%
 # Let's print the report.
-print(report)
+pprint.pprint(report)

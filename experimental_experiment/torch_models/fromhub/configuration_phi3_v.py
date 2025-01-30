@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Phi-3-V model configuration"""
+"""Phi-3-V model configuration"""
 
 
 from transformers.configuration_utils import PretrainedConfig
