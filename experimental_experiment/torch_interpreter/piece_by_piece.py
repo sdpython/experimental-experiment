@@ -2050,7 +2050,7 @@ class ModelDiagnoseOutput:
                     indent = " " * (mc1 + mc2)
                     srows.append(f"{indent}ep: -")
             if fx:
-                if hasattr(diag, "fx"):
+                if hasattr(diag, "fx") and diag.fx is not None:
                     eps = str(diag.fx.graph)
                     indent = " " * (mc1 + mc2)
                     prefix = f"{indent}fx: "
