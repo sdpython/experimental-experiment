@@ -1204,7 +1204,12 @@ class ModelDiagnoseOutput:
                     f"self.forward_fill_kwargs={self.forward_fill_kwargs}"
                 )
             # , args_names=self.forward_ordered_parameter_names
-            args, kwargs = serialize_args(args, kwargs, schema=schema_str)
+            args, kwargs = serialize_args(
+                args, kwargs, schema=None, args_names=self.forward_ordered_parameter_names
+            )
+            if self.forward_fill_kwargs:
+                args = args[:-1]
+
             if self.forward_fill_kwargs:
                 args = (*args, [])
             if verbose > 2:
