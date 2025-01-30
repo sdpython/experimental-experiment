@@ -1201,13 +1201,25 @@ class ModelDiagnoseOutput:
                     f"[_replaced_forward_] {name_fct}-IN: "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
                     f"schema_str={schema_str!r}, "
-                    f"self.forward_fill_kwargs={self.forward_fill_kwargs}"
+                    f"self.forward_fill_kwargs={self.forward_fill_kwargs}, "
+                    f"self.forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
                 )
             # , args_names=self.forward_ordered_parameter_names
+            _args, _kwargs = args, kwargs
+            has_kwargs = bool(kwargs)
             args, kwargs = serialize_args(
                 args, kwargs, schema=None, args_names=self.forward_ordered_parameter_names
             )
-            if self.forward_fill_kwargs:
+            if has_kwargs and self.forward_fill_kwargs:
+                assert args and isinstance(args[-1], list) and len(args[-1]) == 0, (
+                    f"Unexpected value for args[-1], "
+                    f"schema_str={schema_str!r}, "
+                    f"self.forward_fill_kwargs={self.forward_fill_kwargs}, "
+                    f"self.forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
+                    f"\nargs={string_type(_args)},\nkwargs={string_type(_kwargs)}"
+                    f"\n-- after serialization --"
+                    f"\nargs={string_type(args)},\nkwargs={string_type(kwargs)}"
+                )
                 args = args[:-1]
 
             if self.forward_fill_kwargs:

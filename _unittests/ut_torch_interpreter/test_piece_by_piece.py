@@ -46,6 +46,14 @@ class TestPieceByPiece(ExtTestCase):
         st = st.remove(StatusExportCode.FAIL)
         self.assertEqual(st.name, "NONE")
 
+    def test_serizalize_arg_1(self):
+        import torch
+
+        x = torch.randn((5, 6))
+        args, kwargs = serialize_args((x,), {}, schema=None, args_names=["x", "flash_args"])
+        st = string_type(args, with_shape=True)
+        self.assertEqual(st, "(T1s5x6,)")
+
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args(self):
