@@ -377,8 +377,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class ScanModel(torch.nn.Module):
             def forward(self, x):
                 init = torch.zeros_like(x[0])
-                carry, out = torch.ops.higher_order.scan(
-                    add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+                carry, out = torch.ops.higher_order.scan(  # dim=0 fails
+                    add, [init], [x], reverse=False, additional_inputs=[]
                 )
                 return carry
 
@@ -437,7 +437,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     add,
                     [init1, init2],
                     [x, x * 2],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[],
                 )
@@ -499,7 +499,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     dist,
                     [x],
                     [x],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[],
                 )
@@ -562,7 +562,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     dist,
                     [z],
                     [x],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[y],
                 )
@@ -619,7 +619,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     dist,
                     [y],
                     [x],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[],
                 )
