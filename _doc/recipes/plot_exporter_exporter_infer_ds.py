@@ -1,14 +1,14 @@
 """
-.. _l-plot-exporter-recipes-custom-ds:
+.. _l-plot-exporter-exporter-infer-ds:
 
-to_onnx and infer dynamic shapes
-================================
+Infer dynamic shapes before exporting
+=====================================
 
-We try to make it easier to export with dynamic shapes.
-To do that, we run the model at least twice with a different
-set of inputs and we try to guess the dynamic shapes found
-along the way.
-
+Dynamic shapes need to be specified to get a model able to cope
+with different dimensions. Input rank are expected to be the same
+but the dimension may change. The user has the ability to
+set them up or to call a function able to infer them from
+two sets of inputs having different values for the dynamic dimensions.
 
 Infer dynamic shapes
 ++++++++++++++++++++
@@ -76,19 +76,21 @@ print(pretty)
 ds = diag.guess_dynamic_shapes()
 print(ds)
 
-
 # %%
 # Export
 # ++++++
 #
 # We use these dynamic shapes to export.
 
-onx, builder = to_onnx(
-    model, inputs[0][0], kwargs=inputs[0][1], dynamic_shapes=ds[0], return_builder=True
-)
-onnx.save(onx, "plot_exporter_recipes_c_ds.onnx")
-print(builder.pretty_text())
+ep = torch.export.export(model, inputs[0][0], kwargs=inputs[0][1], dynamic_shapes=ds[0])
+print(ep)
 
+# %%
+# We can use that graph to get the onnx model.
+
+onx, builder = to_onnx(ep, return_builder=True)
+onnx.save(onx, "plot_exporter_exporter_infer_ds.onnx")
+print(builder.pretty_text())
 
 ####################################
 # And visually.

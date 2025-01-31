@@ -71,7 +71,7 @@ class DynamicCache:
         return layer_seq_length
 
 
-##############################
+# %%
 # A model uses the class we introduced.
 
 
@@ -93,7 +93,7 @@ class ModelTakingDynamicCacheAsInput(torch.nn.Module):
         return x + y
 
 
-###########################
+# %%
 # Let's check the model runs.
 
 x = torch.randn(3, 8, 7, 1)
@@ -105,8 +105,8 @@ expected = model(x, cache)
 
 print(expected.shape)
 
-###########################
-# Let's check it works with others shapes.
+# %%
+# Let's check it works with other shapes.
 
 x = torch.randn(4, 8, 7, 1)
 cache = DynamicCache(1)
@@ -117,7 +117,7 @@ expected = model(x, cache)
 
 print(expected.shape)
 
-##########################
+# %%
 # Let's export after serialization functions were registered as shown in
 # :ref:`l-plot-torch-export-with-dynamic-cache-201`
 
@@ -165,7 +165,7 @@ torch.fx._pytree.register_pytree_flatten_spec(
 )
 
 
-########################################
+# %%
 # Let's export with dynamic shapes.
 
 batch = torch.export.Dim("batch", min=1, max=1024)
@@ -179,14 +179,14 @@ ep = torch.export.export(
 print(ep)
 
 
-#####################################
+# %%
 # We remove the changes for pytorch.
 
 torch.utils._pytree.SUPPORTED_NODES.pop(DynamicCache)
 torch.fx._pytree.SUPPORTED_NODES.pop(DynamicCache)
 torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(DynamicCache)
 
-##########################################
+# %%
 # Everything looks fine but now...
 #
 # DynamicCache(torch.nn.Module)
@@ -250,7 +250,7 @@ class DynamicCache(torch.nn.Module):
         return layer_seq_length
 
 
-##############################
+# %%
 # A model uses the class we introduced.
 
 
@@ -272,7 +272,7 @@ class ModelTakingDynamicCacheAsInput(torch.nn.Module):
         return x + y
 
 
-###########################
+# %%
 # Let's check the model runs.
 
 x = torch.randn(3, 8, 7, 1)
@@ -284,8 +284,8 @@ expected = model(x, cache)
 
 print(expected.shape)
 
-###########################
-# Let's check it works with others shapes.
+# %%
+# Let's check it works with other shapes.
 
 x = torch.randn(4, 8, 7, 1)
 cache = DynamicCache(1)
@@ -296,7 +296,7 @@ expected = model(x, cache)
 
 print(expected.shape)
 
-##########################
+# %%
 # Let's export after serialization functions were registered as shown in
 # :ref:`l-plot-torch-export-with-dynamic-cache-201`
 
@@ -344,7 +344,7 @@ torch.fx._pytree.register_pytree_flatten_spec(
 )
 
 
-########################################
+# %%
 # Let's export with dynamic shapes.
 
 batch = torch.export.Dim("batch", min=1, max=1024)
@@ -361,7 +361,7 @@ except Exception as e:
     print(f"It did not work: {e}")
 
 
-######################################
+# %%
 # There exists a little trick to bypass that issue:
 # we changed the base class.
 
@@ -379,7 +379,7 @@ ep = torch.export.export(
 )
 print(ep)
 
-#####################################
+# %%
 # We remove the changes for pytorch.
 
 torch.utils._pytree.SUPPORTED_NODES.pop(DynamicCache)

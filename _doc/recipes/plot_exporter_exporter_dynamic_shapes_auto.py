@@ -1,8 +1,8 @@
 """
 .. _l-plot-exporter-dynamic_shapes:
 
-A few tricks about dynamic shapes
-=================================
+Use DYNAMIC or AUTO when dynamic shapes has constraints
+=======================================================
 
 Settings the dynamic shapes is not always easy.
 Here are a few tricks to make it work.
@@ -38,8 +38,9 @@ dy = torch.export.Dim("dy")
 
 try:
     dz = dx + dy
-except Exception as e:
-    print(f"unable to add dimension because {e}")
+    raise AssertionError("able to add dynamic dimensions, please update the tutorial")
+except NotImplementedError as e:
+    print(f"unable to add dynamic dimensions because {type(e)}, {e}")
 
 ##########################################
 # Then we could make it a different one.
@@ -55,11 +56,13 @@ try:
             "z": {0: batch, 1: dz},
         },
     )
-except Exception as e:
-    print(e)
+    raise AssertionError("able to add dynamic dimensions, please update the tutorial")
+except torch._dynamo.exc.UserError as e:
+    print(f"still failing due to {e}")
 
 ########################################
-# Still no luck but with ``torch.export.Dim.DYNAMIC``.
+# We need to use ``torch.export.Dim.DYNAMIC`` or ``torch.export.Dim.AUTO``
+# for the dimension we cannot set.
 
 ep = torch.export.export(
     model,
@@ -74,14 +77,14 @@ ep = torch.export.export(
 print(ep)
 
 #####################################
-# Still no luck but with ``torch.export.Dim.AUTO``.
+# The same result can be obtained with ``torch.export.Dim.AUTO``.
 
 print(
     torch.export.export(
         model,
         (x, y, z),
         dynamic_shapes=(
-            {0: batch, 1: torch.export.Dim.STATIC},
+            {0: batch, 1: torch.export.Dim.AUTO},
             {0: batch, 1: torch.export.Dim.AUTO},
             {0: batch, 1: torch.export.Dim.AUTO},
         ),

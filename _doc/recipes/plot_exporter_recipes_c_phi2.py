@@ -82,8 +82,8 @@ def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
     model = transformers.PhiForCausalLM(conf)
     model.eval()
 
-    batch = torch.export.Dim("batch")
-    seq_length = torch.export.Dim("seq_length")
+    batch = torch.export.Dim("batch", min=1, max=1024)
+    seq_length = torch.export.Dim("seq_length", min=1, max=4096)
     shapes = {}
 
     cache = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
@@ -110,7 +110,7 @@ def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
         past_key_values=cache2,
     )
     n = len(cache.key_cache)
-    cache_length = torch.export.Dim("cache_length")
+    cache_length = torch.export.Dim("cache_length", min=1, max=4096)
     shapes.update(
         {
             "input_ids": {0: batch, 1: seq_length},
@@ -140,7 +140,7 @@ print("dynamic_shapes", dynamic_shapes)
 # %%
 # Let's check it is working.
 # We need to copy the input before calling the model
-# because it modified the inputs and they are not properly
+# because it modifies the inputs and they are not properly
 # set up when the export starts.
 model(**copy.deepcopy(inputs))
 
@@ -150,23 +150,15 @@ model(**copy.deepcopy(inputs))
 #
 # We try to export with :func:`experimental_experiment.torch_interpreter.to_onnx`.
 #
-# ``to_onnx(model, (), kwargs=copy.deepcopy(inputs), dynamic_shapes=dynamic_shapes)``
-#
-# This fails because of dynamic shapes issues.
-#
-# ::
-#
-#   Constraints violated (batch, seq_length)! For more information,
-#   run with TORCH_LOGS="+dynamic".
-#   Cannot associate shape
-#       [[{0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>},
-#         {0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>}],
-#        [{0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>},
-#         {0: <class '__main__.batch'>, 2: <class '__main__.cache_length'>}]]
-#       specified at `dynamic_shapes['past_key_values']`
-#           to non-tensor type <class 'transformers.cache_utils.DynamicCache'>
-#           at `inputs['past_key_values']` (expected None)
-#
+try:
+    to_onnx(
+        copy.deepcopy(model),
+        (),
+        kwargs=copy.deepcopy(inputs),
+        dynamic_shapes=dynamic_shapes,
+    )
+except Exception as e:
+    print(f"export failed due to {e}")
 
 # %%
 # The export fails for a couple of reason but it is possible to patch the
@@ -198,6 +190,9 @@ with bypass_export_some_errors(
     large_onx.save("plot_exporter_recipes_c_phi2.onnx", all_tensors_to_one_file=True)
 
 # %%
+# Exported Model
+# ++++++++++++++
+#
 # Let's display the model.
 
 onx = onnx.load("plot_exporter_recipes_c_phi2.onnx")

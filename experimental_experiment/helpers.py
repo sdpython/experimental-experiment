@@ -1,10 +1,18 @@
 import ast
 import enum
+import functools
 import inspect
 import sys
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import FunctionProto, GraphProto, ModelProto, TensorProto, load as onnx_load
+from onnx import (
+    FunctionProto,
+    GraphProto,
+    ModelProto,
+    TensorProto,
+    ValueInfoProto,
+    load as onnx_load,
+)
 from onnx.helper import (
     np_dtype_to_tensor_dtype as onnx_np_dtype_to_tensor_dtype,
     tensor_dtype_to_np_dtype as onnx_tensor_dtype_to_np_dtype,
@@ -431,7 +439,19 @@ def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
     return f"{name}({atts})"
 
 
-def pretty_onnx(onx: Union[FunctionProto, GraphProto, ModelProto, str]) -> str:
+@functools.cache
+def onnx_dtype_name(itype: int) -> str:
+    """Returns the ONNX name for a specific element type."""
+    for k in dir(TensorProto):
+        v = getattr(TensorProto, k)
+        if v == itype:
+            return k
+    raise ValueError(f"Unexpected value itype: {itype}")
+
+
+def pretty_onnx(
+    onx: Union[FunctionProto, GraphProto, ModelProto, ValueInfoProto, str],
+) -> str:
     """
     Displays an onnx prot in a better way.
     """
@@ -439,6 +459,14 @@ def pretty_onnx(onx: Union[FunctionProto, GraphProto, ModelProto, str]) -> str:
     if isinstance(onx, str):
         onx = onnx_load(onx, load_external_data=False)
     assert onx is not None, "onx cannot be None"
+
+    if isinstance(onx, ValueInfoProto):
+        name = onx.name
+        itype = onx.type.tensor_type.elem_type
+        shape = tuple((d.dim_param or d.dim_value) for d in onx.type.tensor_type.shape.dim)
+        shape_str = ",".join(map(str, shape))
+        return f"{onnx_dtype_name(itype)}[{shape_str}] {name}"
+
     try:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 
