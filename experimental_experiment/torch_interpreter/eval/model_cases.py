@@ -372,7 +372,7 @@ class ControlFlowScan(torch.nn.Module):
     def forward(self, x):
         init = torch.zeros_like(x[0])
         carry, out = torch.ops.higher_order.scan(
-            ControlFlowScan.add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+            ControlFlowScan.add, [init], [x], reverse=False, additional_inputs=[]
         )
         return carry
 
@@ -394,7 +394,7 @@ class ControlFlowScan2Carried(torch.nn.Module):
             ControlFlowScan2Carried.add,
             [init1, init2],
             [x, x * 2],
-            dim=0,
+            # dim=0,  # 01/31/2025, not supported anymore
             reverse=False,
             additional_inputs=[],
         )
@@ -421,7 +421,7 @@ class ControlFlowScanCDist(torch.nn.Module):
             ControlFlowScanCDist.dist,
             [x],
             [x],
-            dim=0,
+            # dim=0,  # 01/31/2025, not supported anymore
             reverse=False,
             additional_inputs=[],
         )
@@ -450,7 +450,7 @@ class ControlFlowScanCDist2(torch.nn.Module):
             ControlFlowScanCDist2.dist,
             [z],
             [x],
-            dim=0,
+            # dim=0,  # 01/31/2025, not supported anymore
             reverse=False,
             additional_inputs=[y],
         )
@@ -478,7 +478,7 @@ class ControlFlowScanCDistXY(torch.nn.Module):
             ControlFlowScanCDistXY.dist,
             [y],
             [x],
-            dim=0,
+            # dim=0,  # 01/31/2025, not supported anymore
             reverse=False,
             additional_inputs=[],
         )
