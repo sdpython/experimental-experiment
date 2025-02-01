@@ -119,7 +119,7 @@ def system_info():
 
 pprint.pprint(system_info())
 
-#####################################
+# %%
 # Scripts arguments
 
 
@@ -137,7 +137,7 @@ print(f"warmup={script_args.warmup}")
 print(f"repeat={script_args.repeat}")
 print(f"maxtime={script_args.maxtime}")
 
-############################
+# %%
 # The model
 # +++++++++
 #
@@ -241,7 +241,7 @@ model, input_tensor = create_model_and_input()
 model_size = torch_model_size(model)
 print(f"model size={model_size / 2 ** 20} Mb")
 
-#######################################
+# %%
 # The exporters
 # +++++++++++++
 
@@ -298,7 +298,7 @@ def export_cus_p2(filename, model, *args):
         f.write(onx.SerializeToString())
 
 
-#########################################
+# %%
 # Let's check they are working.
 
 export_functions = [
@@ -324,7 +324,7 @@ for k, v in exporters.items():
     print(f"done. size={os.stat(filename).st_size / 2 ** 20:1.0f} Mb")
 
 
-#################################
+# %%
 # Exporter memory
 # +++++++++++++++
 
@@ -359,7 +359,7 @@ obs = flatten(stat.stop())
 obs.update(dict(export="torch.fx"))
 data.append(obs)
 
-#############################
+# %%
 # The result.
 df1 = pandas.DataFrame(data)
 df1.to_csv("plot_torch_export_memory.csv", index=False)
@@ -373,7 +373,7 @@ ax = memory_peak_plot(
 )
 get_figure(ax).savefig("plot_torch_export_memory.png")
 
-#################################
+# %%
 # Exporter speed
 # ++++++++++++++
 
@@ -404,7 +404,7 @@ for k, v in supported_exporters.items():
     )
 
 
-#########################################
+# %%
 # The last export to measure time torch spends in export the model
 # before any other export can begin the translation
 # except the first one.
@@ -428,7 +428,7 @@ data.append(
     )
 )
 
-#############################
+# %%
 # The result.
 df1 = pandas.DataFrame(data)
 df1.to_csv("plot_torch_export_time.csv", index=False)
@@ -441,7 +441,7 @@ dfi["time"].plot.bar(ax=ax, title="Export time", yerr=dfi["std"], rot=30)
 fig.tight_layout()
 fig.savefig("plot_torch_export_time.png")
 
-####################################
+# %%
 # Exporter Profiling
 # ++++++++++++++++++
 
@@ -492,7 +492,7 @@ profile_function("custom0", export_cus_p0, True)
 profile_function("custom2", export_cus_p2)
 
 
-####################################
+# %%
 # Same with dynamo-exporter.
 
 profile_function("dynamo", export_dynamo, verbose=True)
@@ -500,7 +500,7 @@ if "dynopt" in supported_exporters:
     profile_function("dynopt", export_dynopt)
 
 
-######################################
+# %%
 # Benchmark exported models with ORT
 # ++++++++++++++++++++++++++++++++++
 
@@ -650,7 +650,7 @@ def benchmark(shape):
 df, df_init, dfmem, dfmemfr, dfmemr = benchmark(list(input_tensor.shape))
 print(df)
 
-#####################################
+# %%
 # Other view
 
 
@@ -687,7 +687,7 @@ def view_time(df, title, suffix="time"):
 
 view_time(df, "Compares onnxruntime time on exported models")
 
-#####################################
+# %%
 # New graph without the very long times.
 
 piv_cpu = pandas.pivot_table(
@@ -717,7 +717,7 @@ fig.tight_layout()
 fig.savefig("plot_torch_export_ort_time_2.png")
 
 
-####################################
+# %%
 # Let's do the same with the loading time + the first run.
 
 view_time(
@@ -727,7 +727,7 @@ view_time(
 )
 
 
-########################################
+# %%
 # Memory Loading Time (ORT)
 # +++++++++++++++++++++++++
 
@@ -743,7 +743,7 @@ for compute in ["CPU", "CUDA"]:
     )
     get_figure(ax).savefig(f"plot_torch_export_ort_load_mem_{compute}.png")
 
-########################################
+# %%
 # Memory First Running Time (ORT)
 # +++++++++++++++++++++++++++++++
 
@@ -760,7 +760,7 @@ for compute in ["CPU", "CUDA"]:
     )
     get_figure(ax).savefig(f"plot_torch_export_ort_first_run_mem_{compute}.png")
 
-########################################
+# %%
 # Memory Running Time (ORT)
 # +++++++++++++++++++++++++
 
@@ -777,7 +777,7 @@ for compute in ["CPU", "CUDA"]:
     get_figure(ax).savefig(f"plot_torch_export_ort_run_mem_{compute}.png")
 
 
-######################################################
+# %%
 # Show the interesting models for CPU
 # +++++++++++++++++++++++++++++++++++
 #
@@ -788,7 +788,7 @@ model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
 if os.path.exists(model):
     print(pretty_onnx(onnx.load(model)))
 
-###############################################
+# %%
 # cus_p2
 # ~~~~~~
 
@@ -796,7 +796,7 @@ model = "ort-plot_torch_export_cus_p2-cpu-aot0.onnx"
 if os.path.exists(model):
     print(pretty_onnx(onnx.load(model)))
 
-###############################################
+# %%
 # dynopt
 # ~~~~~~
 
@@ -804,7 +804,7 @@ model = "ort-plot_torch_export_dynopt-cpu-aot1.onnx"
 if os.path.exists(model):
     print(pretty_onnx(onnx.load(model)))
 
-###############################################
+# %%
 # dynamo
 # ~~~~~~
 
@@ -813,7 +813,7 @@ if os.path.exists(model):
     print(pretty_onnx(onnx.load(model)))
 
 
-######################################################
+# %%
 # Show the interesting models for CUDA
 # ++++++++++++++++++++++++++++++++++++
 #
@@ -824,7 +824,7 @@ model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
 if os.path.exists(model):
     print(pretty_onnx(onnx.load(model)))
 
-###############################################
+# %%
 # cus_p2
 # ~~~~~~
 
@@ -832,7 +832,7 @@ model = "ort-plot_torch_export_cus_p2-cuda-aot0.onnx"
 if os.path.exists(model):
     print(pretty_onnx(onnx.load(model)))
 
-###############################################
+# %%
 # dynopt
 # ~~~~~~
 
@@ -840,7 +840,7 @@ model = "ort-plot_torch_export_dynopt-cuda-aot1.onnx"
 if os.path.exists(model):
     print(pretty_onnx(onnx.load(model)))
 
-###############################################
+# %%
 # dynamo
 # ~~~~~~
 

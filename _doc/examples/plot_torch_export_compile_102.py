@@ -42,20 +42,20 @@ exported_program = torch.export.export(model, inputs)
 print("-- fx graph with torch.export.export")
 print(exported_program.graph)
 
-####################################
+# %%
 # The export keeps track of the submodules calls.
 
 print("-- module_call_graph", type(exported_program.module_call_graph))
 print(exported_program.module_call_graph)
 
-#########################################
+# %%
 # That information can be converted back into a exported program.
 
 ep = torch.export.unflatten(exported_program)
 print("-- unflatten", type(exported_program.graph))
 print(ep.graph)
 
-##########################################
+# %%
 # Another graph obtained with torch.compile.
 
 
@@ -68,7 +68,7 @@ def my_compiler(gm, example_inputs):
 optimized_mod = torch.compile(model, fullgraph=True, backend=my_compiler)
 optimized_mod(*inputs)
 
-############################################
+# %%
 # Unflattened
 # ===========
 
@@ -100,7 +100,7 @@ expected = model(*inputs)
 onx = to_onnx(model, inputs)
 print(pretty_onnx(onx))
 
-#################################
+# %%
 # Let's preserve the module.
 
 

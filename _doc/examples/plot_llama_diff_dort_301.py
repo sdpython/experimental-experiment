@@ -93,7 +93,7 @@ logging.disable(logging.ERROR)
 provider = "cuda" if has_cuda else "cpu"
 
 
-#####################################
+# %%
 # The exporting functions
 # +++++++++++++++++++++++
 
@@ -109,7 +109,7 @@ print(f"mixed={use_mixed}")
 opset = int(script_args.opset)
 print(f"opset={opset}")
 
-###################################
+# %%
 # Model and data
 # ++++++++++++++
 
@@ -162,7 +162,7 @@ else:
     print(results_to_string(expected))
 
 
-###################################
+# %%
 # Exporting
 # +++++++++
 
@@ -260,7 +260,7 @@ else:
     if got is not None:
         assert_all_close(expected, got, atol=1 if use_mixed else 1e-3)
 
-#############################
+# %%
 # For forward, there are two files, one onnx model and the graph module
 # printed in a txt file. For backward, there are two onnx models.
 # Then it is multiplied by the number of backends.
@@ -268,7 +268,7 @@ else:
 models = os.listdir(folder)
 print(f"exported models: {models}")
 
-##############################
+# %%
 # Inputs used by the debug backend
 
 if "instance" in storage:
@@ -276,7 +276,7 @@ if "instance" in storage:
     for k, v in feeds.items():
         print(f"-- {k} {v.dtype} {v.shape}")
 
-################################
+# %%
 # Let's the first line of the graph module
 
 if "instance" in storage:
@@ -284,7 +284,7 @@ if "instance" in storage:
     print("\n".join(str(graph_module.graph).split("\n")[:10]))
 
 
-#########################################
+# %%
 # Comparison and execution
 # ++++++++++++++++++++++++
 
@@ -316,21 +316,21 @@ if "instance" in storage:
     print(f"model_onnxrt={model_onnxrt}")
     print(f"model_debug={model_debug}")
 
-############################
+# %%
 # The inputs of both models
 
 if "instance" in storage:
     print("onnxrt:", inputs_from_onnx_model(model_onnxrt))
     print("debug:", inputs_from_onnx_model(model_debug))
 
-#################################
+# %%
 # Inputs are not the same. The first model has more and some inputs were
 # moved into the initializer list into for `model_debug`.
 
 if "instance" in storage:
     print("debug:", inputs_from_onnx_model(model_debug, init=True))
 
-#####################################
+# %%
 # Optimization and Verification
 # +++++++++++++++++++++++++++++
 #
@@ -344,7 +344,7 @@ if "instance" in storage:
 if "instance" in storage:
     reorder_functions_in_proto(model_onnxrt)
 
-####################################
+# %%
 # Let's load the model and optimize them.
 
 if "instance" in storage:
@@ -355,7 +355,7 @@ if "instance" in storage:
         print("missing library", e)
         onnxrt = debug
 
-###################################
+# %%
 # Let's apply onnxruntime optimization
 
 if "instance" in storage and ortopt:
@@ -376,7 +376,7 @@ if "instance" in storage and ortopt:
     ort_optimize(debug, output=optimized, disable_aot=True, providers=providers)
     debug = onnx.load(optimized)
 
-#################################
+# %%
 # For what's following, we need to build two lists of matching inputs.
 
 if "instance" in storage:
@@ -385,7 +385,7 @@ if "instance" in storage:
     print("done")
 
 
-#######################
+# %%
 # We check both models are running.
 
 if "instance" in storage:
@@ -396,7 +396,7 @@ if "instance" in storage:
 
 # assert_all_close(out_onnxrt, out_debug)
 
-####################################
+# %%
 # Side by side
 
 

@@ -39,7 +39,7 @@ print(f"num_hidden_layers={script_args.num_hidden_layers!r}")
 print(f"with_mask={script_args.with_mask!r}")
 print(f"optim={script_args.optim!r}")
 
-#################################
+# %%
 # Imports.
 
 import time
@@ -60,7 +60,7 @@ print(f"has_cuda={has_cuda}")
 print(f"processor: {machine['processor_name']}")
 print(f"device: {machine.get('device_name', '?')}")
 
-########################################
+# %%
 # The dummy model
 # ===============
 
@@ -77,7 +77,7 @@ def ids_tensor(shape, vocab_size):
     return torch.tensor(data=values, dtype=torch.long).view(shape).contiguous()
 
 
-################################
+# %%
 # The size of the input.
 if script_args.config == "large":
     batch, seq, vocab_size = 2, 1024, 32000
@@ -90,7 +90,7 @@ else:
     hidden_size = 512
     num_attention_heads = 8
 
-################################
+# %%
 # The configuration of the model.
 
 config = LlamaConfig(
@@ -103,13 +103,13 @@ config = LlamaConfig(
 )
 config._attn_implementation = "eager"
 
-######################################
+# %%
 # The number of time we run the model to measure
 # the inference.
 warmup = 10 if script_args.config == "medium" else 5
 N = 50 if script_args.config == "medium" else 25
 
-###########################################
+# %%
 # Let's create the model with dummy inputs.
 print("creates the model")
 model = LlamaModel(config)
@@ -125,7 +125,7 @@ model = model.to(processor)
 inputs = tuple(i.to(processor) for i in inputs)
 
 
-##########################################
+# %%
 # Measure of eager mode
 # =====================
 
@@ -153,7 +153,7 @@ with torch.no_grad():
     times.append(dict(optim="eager", processor=processor, avg_time=d, warmup=warmup, N=N))
     print("avg time eager", d)
 
-############################################
+# %%
 # Measure with the custom backend
 # ===============================
 #
@@ -269,7 +269,7 @@ with torch.no_grad():
         )
         print(f"avg time custom backend with optimization={optim!r}", d)
 
-###############################################
+# %%
 # Final results
 # =============
 #
@@ -280,7 +280,7 @@ if times:
     df = pandas.DataFrame(times)
     print(df)
 
-######################################
+# %%
 # Plot
 
 if times:

@@ -27,7 +27,7 @@ print(X.shape, y.shape)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y)
 
-################################
+# %%
 # scikit-learn: the simple regression
 # ===================================
 #
@@ -41,7 +41,7 @@ clr.fit(X_train, y_train)
 
 print(f"coefficients: {clr.coef_}, {clr.intercept_}")
 
-#############################
+# %%
 # Evaluation
 # ==========
 
@@ -50,7 +50,7 @@ l2 = mean_squared_error(y_test, y_pred)
 r2 = r2_score(y_test, y_pred)
 print(f"LinearRegression: l2={l2}, r2={r2}")
 
-################################
+# %%
 # scikit-learn: SGD algorithm
 # ===================================
 #
@@ -61,7 +61,7 @@ clr.fit(X_train, y_train)
 
 print(f"coefficients: {clr.coef_}, {clr.intercept_}")
 
-#############################
+# %%
 # Evaluation
 
 y_pred = clr.predict(X_test)
@@ -70,7 +70,7 @@ sr2 = r2_score(y_test, y_pred)
 print(f"SGDRegressor: sl2={sl2}, sr2={sr2}")
 
 
-###############################
+# %%
 # Linrar Regression with pytorch
 # ==============================
 
@@ -122,7 +122,7 @@ for i in range(5):
     loss = train_loop(dataloader, model, loss_fn, optimizer)
     print(f"iteration {i}, loss={loss}")
 
-######################
+# %%
 # Let's check the error
 
 y_pred = model(torch.Tensor(X_test)).detach().numpy()
@@ -130,7 +130,7 @@ tl2 = mean_squared_error(y_test, y_pred)
 tr2 = r2_score(y_test, y_pred)
 print(f"TorchLinearRegression: tl2={tl2}, tr2={tr2}")
 
-###########################
+# %%
 # And the coefficients.
 
 print("coefficients:")
@@ -138,7 +138,7 @@ for p in model.parameters():
     print(p)
 
 
-################################
+# %%
 # Conversion to ONNX
 # ==================
 #
@@ -147,20 +147,20 @@ for p in model.parameters():
 ep = torch.onnx.export(model, (torch.Tensor(X_test[:2]),), dynamo=True)
 onx = ep.model_proto
 
-################################
+# %%
 # Let's check it is work.
 
 sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
 res = sess.run(None, {"x": X_test.astype(np.float32)[:2]})
 print(res)
 
-#############################
+# %%
 # And the model.
 
 plot_dot(onx)
 
 
-#############################
+# %%
 # Optimization
 # ============
 #
@@ -173,7 +173,7 @@ onx = ep.model_proto
 plot_dot(onx)
 
 
-###############################
+# %%
 # With dynamic shapes
 # ===================
 #
@@ -191,7 +191,7 @@ onx = ep.model_proto
 
 print(pretty_onnx(onx))
 
-#########################################
+# %%
 # For simplicity, it is possible to use ``torch.export.Dim.DYNAMIC``
 # or ``torch.export.Dim.AUTO``.
 

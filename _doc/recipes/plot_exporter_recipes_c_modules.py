@@ -146,7 +146,7 @@ y = llm(input_ids)
 
 print(f"output: shape={y.shape}, min={y.min()}, max={y.max()}")
 
-###########################################
+# %%
 # First conversion to ONNX
 # ++++++++++++++++++++++++
 #
@@ -156,14 +156,14 @@ print(f"output: shape={y.shape}, min={y.min()}, max={y.max()}")
 ep = torch.export.export(llm, (input_ids,))
 print(ep.graph)
 
-############################################
+# %%
 # Then function :func:`to_onnx <experimental_experiment.torch_interpreter.to_onnx>`
 # converts it into ONNX.
 
 onx = to_onnx(llm, (input_ids,))
 print(pretty_onnx(onx))
 
-###########################################
+# %%
 # Let's check there is no discrepancy.
 
 sess = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
@@ -174,12 +174,12 @@ diff = max_diff(y, got)
 print(f"output: shape={got.shape}, min={got.min()}, max={got.max()}")
 print(f"max discrepancy={diff['abs']}")
 
-###########################################
+# %%
 # Let's save the ONNX model.
 
 onnx.save(onx, "plot_exporter_recipes_c_modules.inlined.onnx")
 
-###########################################
+# %%
 # ONNX with submodules
 # ++++++++++++++++++++
 #
@@ -192,7 +192,7 @@ ep = torch.export.export(llm, (input_ids,))
 unflatten_ep = torch.export.unflatten(ep)
 print(unflatten_ep.graph)
 
-###########################################
+# %%
 # The exported graph looks simpler and shows something like::
 #
 #   %decoder : [num_users=1] = call_module[target=decoder](args = (%embedding,), kwargs = {})
@@ -210,7 +210,7 @@ print(unflatten_ep.graph)
 onx_module = to_onnx(llm, (input_ids,), export_modules_as_functions=True)
 print(pretty_onnx(onx_module))
 
-##########################################
+# %%
 # We check again there is no new discrepancies.
 
 sess = InferenceSession(onx_module.SerializeToString(), providers=["CPUExecutionProvider"])
@@ -221,17 +221,17 @@ diff = max_diff(y, got)
 print(f"output: shape={got.shape}, min={got.min()}, max={got.max()}")
 print(f"max discrepancy={diff['abs']}")
 
-###########################################
+# %%
 # Let's save the ONNX model.
 
 onnx.save(onx_module, "plot_exporter_recipes_c_modules.module.onnx")
 
-####################################
+# %%
 # And visually.
 
 plot_dot(onx_module)
 
-###########################################
+# %%
 # Inlining
 # ++++++++
 #
@@ -240,7 +240,7 @@ plot_dot(onx_module)
 onx_inlined = inline_local_functions(onx_module)
 print(pretty_onnx(onx_inlined))
 
-###########################################
+# %%
 # Optimizations
 # +++++++++++++
 #
@@ -258,7 +258,7 @@ onx_optimized = to_onnx(
 )
 print(pretty_onnx(onx_optimized))
 
-##################################
+# %%
 # This shows a kernel ``FusedMatMul[com.microsoft]`` which implement a kernel equivalent Gemm
 # but working for any tensors, not only 2D.
 # How does it work on the model which keeps exports the moduels as local functions?
@@ -273,7 +273,7 @@ onx_module_optimized = to_onnx(
 )
 print(pretty_onnx(onx_module_optimized))
 
-#################################
+# %%
 # It seems to be working as well on this simple case even though the optimizers were
 # not tested on such models. However, keeping the submodule information might be useful
 # to implement optimizer for a fmaily of models sharing the same components.
@@ -298,7 +298,7 @@ onx_cuda_optimized = to_onnx(
 print(pretty_onnx(onx_cuda_optimized))
 
 
-###########################################
+# %%
 # Comparison optimized and not optimized?
 # +++++++++++++++++++++++++++++++++++++++
 #
@@ -313,6 +313,6 @@ print("------------")
 text = dc.to_str(res1, res2, align)
 print(text)
 
-###########################################
+# %%
 # The conversion should handle dynamic shapes as well as the input sequence
 # can be of any length. But that's a topic for another example.

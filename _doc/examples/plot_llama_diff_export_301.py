@@ -73,7 +73,7 @@ logging.disable(logging.ERROR)
 provider = "cuda" if has_cuda else "cpu"
 
 
-#####################################
+# %%
 # The exporting functions
 # +++++++++++++++++++++++
 
@@ -133,7 +133,7 @@ def export_custom(filename, model, *args):
         ort_optimize(new_model, opt_filename(filename), providers=provider)
 
 
-###################################
+# %%
 # Model and data
 # ++++++++++++++
 
@@ -161,7 +161,7 @@ expected = model(*inputs[0])
 print(f"eager worked: {string_type(expected, with_shape=True)}")
 
 
-###################################
+# %%
 # Exporting
 # +++++++++
 
@@ -181,7 +181,7 @@ elif exporter == "custom":
 else:
     raise AssertionError(f"Unexpected value for exporter={exporter!r}.")
 
-#########################################
+# %%
 # Verification
 # ++++++++++++
 
@@ -220,7 +220,7 @@ if ortopt:
 
     print(f"Error with the eager model and onnxruntime: {diff1}, {diff2}")
 
-#########################################
+# %%
 # Verification with the reference evaluator
 # +++++++++++++++++++++++++++++++++++++++++
 
@@ -246,7 +246,7 @@ else:
 
 print(f"Error with the eager model and the reference evaluator: {diff1}, {diff2}")
 
-#########################################
+# %%
 # Comparison and execution
 # ++++++++++++++++++++++++
 
@@ -277,5 +277,5 @@ if sess2 is not None:
             raise
         print(e)
 
-#################################
+# %%
 # See :ref:`l-long-outputs-llama-diff-export` for a better view.

@@ -18,7 +18,7 @@ from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.torch_interpreter import to_onnx
 
 
-#################################
+# %%
 # We define a model with a control flow (-> graph break)
 
 
@@ -45,12 +45,12 @@ class ModelWithControlFlow(torch.nn.Module):
 
 model = ModelWithControlFlow()
 
-######################################
+# %%
 # Let's check it runs.
 x = torch.randn(1, 3)
 model(x)
 
-######################################
+# %%
 # As expected, it does not export.
 try:
     torch.export.export(model, (x,))
@@ -58,7 +58,7 @@ try:
 except Exception as e:
     print(e)
 
-####################################
+# %%
 # The exporter fails with the same eror as it expects torch.export.export to work.
 
 try:
@@ -67,7 +67,7 @@ except Exception as e:
     print(e)
 
 
-####################################
+# %%
 # Suggested Patch
 # +++++++++++++++
 #
@@ -90,25 +90,25 @@ for name, mod in model.named_modules():
     if isinstance(mod, ForwardWithControlFlowTest):
         mod.forward = new_forward
 
-####################################
+# %%
 # Let's see what the fx graph looks like.
 
 print(torch.export.export(model, (x,)).graph)
 
-####################################
+# %%
 # Let's export again.
 
 onx = to_onnx(model, (x,))
 print(pretty_onnx(onx))
 
-####################################
+# %%
 # We can also inline the local function.
 
 onx = to_onnx(model, (x,), inline=True)
 print(pretty_onnx(onx))
 
 
-####################################
+# %%
 # And visually.
 
 plot_dot(onx)

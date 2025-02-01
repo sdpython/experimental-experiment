@@ -21,7 +21,7 @@ from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
 
 
-#################################
+# %%
 # We define a model with a custom operator.
 
 
@@ -38,12 +38,12 @@ class ModuleWithACustomOperator(torch.nn.Module):
 
 model = ModuleWithACustomOperator()
 
-######################################
+# %%
 # Let's check it runs.
 x = torch.randn(1, 3)
 model(x)
 
-######################################
+# %%
 # As expected, it does not export.
 try:
     torch.export.export(model, (x,))
@@ -51,7 +51,7 @@ try:
 except Exception as e:
     print(e)
 
-####################################
+# %%
 # The exporter fails with the same eror as it expects torch.export.export to work.
 
 try:
@@ -60,7 +60,7 @@ except Exception as e:
     print(e)
 
 
-####################################
+# %%
 # Registration
 # ++++++++++++
 #
@@ -87,16 +87,16 @@ class ModuleWithACustomOperator(torch.nn.Module):
 
 model = ModuleWithACustomOperator()
 
-###########################
+# %%
 # Let's check it runs again.
 model(x)
 
-####################################
+# %%
 # Let's see what the fx graph looks like.
 
 print(torch.export.export(model, (x,)).graph)
 
-#####################################
+# %%
 # Next is the conversion to onnx.
 T = str  # a tensor name
 
@@ -112,30 +112,30 @@ def numpy_sin_to_onnx(
     return g.op.Sin(x, name=name, outputs=outputs)
 
 
-####################################
+# %%
 # We create a :class:`Dispatcher <experimental_experiment.torch_interpreter.Dispatcher>`.
 
 dispatcher = Dispatcher({"mylib::numpy_sin": numpy_sin_to_onnx})
 
-#####################################
+# %%
 # And we convert again.
 
 onx = to_onnx(model, (x,), dispatcher=dispatcher, optimize=False)
 print(pretty_onnx(onx))
 
-#####################################
+# %%
 # And we convert again with optimization this time.
 
 onx = to_onnx(model, (x,), dispatcher=dispatcher, optimize=True)
 print(pretty_onnx(onx))
 
-###################################
+# %%
 # Let's make sure the node was produce was the user defined converter for numpy_sin.
 # The name should be 'mylib.numpy_sin'.
 
 print(onx.graph.node[0])
 
-####################################
+# %%
 # And visually.
 
 plot_dot(onx)

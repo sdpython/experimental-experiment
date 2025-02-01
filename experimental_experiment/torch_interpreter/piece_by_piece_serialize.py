@@ -13,7 +13,7 @@ from ..helpers import string_type
 def extract_names_from_schema(schema: str) -> List[str]:
     """
     Extracts name from a C++ schema produced by ``infer_schema``.
-    Example: ``(Tensor x, Tensor y) -> Tensor`` returns ["x", "y"]
+    Example: ``(Tensor x, Tensor y) -> Tensor`` returns ["x", "y"].
     """
     pattern = r"\w+\??\s+(\w+)"
     matches = re.findall(pattern, schema)
@@ -342,8 +342,8 @@ def deserialize_args_kwargs(
     :param kwargs: named arguments, they should be empty
     :param expected_types: needed to understand how to deserialize
     :param clone: clone every tensor
-    :param ordered_names: ordered need to restore **kwargs
-    :param fill_kwargs: if True, the last parameter is **kwargs
+    :param ordered_names: ordered needed to restore ``**kwargs``
+    :param fill_kwargs: if True, the last parameter is ``**kwargs``
         and it should be empty
     :return: new args, new named args
     """

@@ -23,6 +23,8 @@ rm dump_test_models -rf
 rm neural_coder_workspace -rf
 rm output_data*
 
+rm _doc/sg_execution_times.rst
+
 rm _doc/examples/plot*.onnx
 rm _doc/examples/plot*.txt
 rm _doc/examples/ort*.onnx
@@ -40,6 +42,8 @@ rm _doc/examples/dump_models -rf
 rm _doc/examples/dump_onx_*
 
 rm _doc/recipes/plot*.onnx
+rm _doc/recipes/plot*.onnx.weight
+rm _doc/recipes/plot*.onnx.data
 rm _doc/recipes/plot*.txt
 rm _doc/recipes/ort*.onnx
 rm _doc/recipes/*.sarif
@@ -49,6 +53,7 @@ rm _doc/recipes/*.csv
 rm _doc/recipes/*.pte
 rm _doc/recipes/*.xlsx
 rm _doc/recipes/dummy*.onnx
+rm _doc/recipes/evaluation*-script.onnx
 rm _doc/recipes/*.opt.onnx
 rm _doc/recipes/*.dynamo.onnx
 rm _doc/recipes/*.script.onnx

@@ -7387,9 +7387,9 @@ def aten_scan(
     scan_graph: str,
     scan_inits: List[str],
     scan_inputs: List[str],
-    dim: int,
     reverse: bool,
     additional_inputs: List[str],
+    dim: int = 0,
     name="scan",
 ) -> T:
     "cond"

@@ -23,7 +23,7 @@ class ModelTakingDynamicCacheAsInput(torch.nn.Module):
         return x + y
 
 
-###########################
+# %%
 # Let's check the model runs.
 
 x = torch.randn(3, 8, 7, 1)
@@ -35,8 +35,8 @@ expected = model(x, cache)
 
 print(expected.shape)
 
-###########################
-# Let's check it works with others shapes.
+# %%
+# Let's check it works with other shapes.
 
 x = torch.randn(4, 8, 7, 1)
 cache = transformers.cache_utils.DynamicCache(1)
@@ -47,7 +47,7 @@ expected = model(x, cache)
 
 print(expected.shape)
 
-##########################
+# %%
 # Let's export.
 
 try:
@@ -56,7 +56,7 @@ except Exception as e:
     print("export failed with", e)
 
 
-###########################
+# %%
 # Register serialization of DynamicCache
 # ++++++++++++++++++++++++++++++++++++++
 #
@@ -110,12 +110,12 @@ torch.fx._pytree.register_pytree_flatten_spec(
 )
 
 
-########################################
+# %%
 # Let's try to export again.
 ep = torch.export.export(model, (x, cache))
 print(ep.graph)
 
-########################################
+# %%
 # With dynamic shapes now.
 
 
@@ -134,7 +134,7 @@ except Exception as e:
     print("FAILS:", e)
     failed = True
 
-########################################
+# %%
 # If it failed, let's understand why.
 
 if failed:
@@ -156,7 +156,7 @@ if failed:
         # but it should be ``dc_key_cache_0 -> FakeTensor(..., size=(s0, 8, s1, 6))``
 
 
-######################################
+# %%
 # Let's undo the registration.
 
 torch.utils._pytree.SUPPORTED_NODES.pop(transformers.cache_utils.DynamicCache)

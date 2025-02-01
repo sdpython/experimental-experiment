@@ -41,7 +41,7 @@ script_args = get_parsed_args(
 for att in "filename,repeat".split(","):
     print(f"{att}={getattr(script_args, att)}")
 
-########################################
+# %%
 # Random inputs.
 
 
@@ -74,7 +74,7 @@ feeds = create_random_input(sess)
 sess.run(None, feeds)
 
 
-#######################################
+# %%
 # Profiling
 # +++++++++
 

@@ -51,14 +51,14 @@ expected = model(*inputs)
 exported_program = torch.export.export(model, inputs)
 print(exported_program.graph)
 
-######################################
+# %%
 # Conversion to an `EdgeProgramManager`.
 
 if executorch:
     edge_program: EdgeProgramManager = to_edge(exported_program)
     print(f"edge_program {edge_program!r}")
 
-######################################
+# %%
 # Serializes.
 
 if executorch:
@@ -74,7 +74,7 @@ if executorch:
     print(f"model saved into {save_path!r}")
 
 
-########################################
+# %%
 # It can be specialized for a specific backend.
 #
 # ::
@@ -89,7 +89,7 @@ if executorch:
 #       with open(save_path, "wb") as f:
 #           f.write(lowered_module.buffer())
 
-######################################
+# %%
 # Execution
 # +++++++++
 
@@ -105,7 +105,7 @@ if executorch:
     outputs = forward.execute(inputs)
     print("forward:", forward)
 
-###################
+# %%
 # Let's compare.
 
 if executorch:

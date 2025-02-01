@@ -1090,7 +1090,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         The method returns the constant *name*. It is a tensor (numpy array)
         or a NodeProto which must be evaluated.
-        If *computed_value* is True, the NodeProto is evaluated wuth the
+        If *computed_value* is True, the NodeProto is evaluated with the
         ReferenceEvaluator.
 
         :param name: constant name

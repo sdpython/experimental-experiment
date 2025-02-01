@@ -29,7 +29,7 @@ class Neuron(torch.nn.Module):
 exported_program = torch.export.export(Neuron(), (torch.randn(1, 5),))
 print(exported_program.graph)
 
-######################################
+# %%
 # With an integer as input
 # ++++++++++++++++++++++++
 #
@@ -52,7 +52,7 @@ class NeuronIInt(torch.nn.Module):
 exported_program = torch.export.export(NeuronIInt(), (torch.randn(1, 5), 2))
 print(exported_program.graph)
 
-######################################
+# %%
 # With an integer as input
 # ++++++++++++++++++++++++
 #
@@ -75,7 +75,7 @@ exported_program = torch.export.export(
 print(exported_program.graph)
 
 
-######################################
+# %%
 # Wrapped
 # +++++++
 #
@@ -97,7 +97,7 @@ exported_program = torch.export.export(
 print(exported_program.graph)
 
 
-###########################################
+# %%
 # List
 # ++++
 #
@@ -130,7 +130,7 @@ except torch._dynamo.exc.Unsupported as e:
     print(e)
 
 
-###########################################
+# %%
 # Loops
 # +++++
 #
@@ -158,7 +158,7 @@ exported_program = torch.export.export(
 )
 print(exported_program.graph)
 
-#####################################
+# %%
 # Export for training
 # +++++++++++++++++++
 #
@@ -182,7 +182,7 @@ exported_program = torch.export.export_for_training(mod, (torch.randn(1, 5),))
 print(exported_program.graph)
 
 
-#####################################
+# %%
 # Preserve Modules
 # ++++++++++++++++
 #
@@ -208,14 +208,14 @@ class NeuronNeuron(torch.nn.Module):
         return -z
 
 
-######################
+# %%
 # The list of the modules.
 
 mod = NeuronNeuron()
 for item in mod.named_modules():
     print(item)
 
-############################
+# %%
 # The exported module did not change.
 
 print("-- preserved?")
@@ -224,7 +224,7 @@ exported_program = torch.export.export(
 )
 print(exported_program.graph)
 
-############################
+# %%
 # And now?
 
 import torch.export._swap
@@ -234,6 +234,6 @@ swapped_gm = torch.export._swap._swap_modules(exported_program, {"my_neuron": Ne
 print("-- preserved?")
 print(swapped_gm.graph)
 
-###################################
+# %%
 # Unfortunately this approach does not work well on big models
 # and it is a provite API.

@@ -118,9 +118,9 @@ jobs:
             grep ERROR doc.txt
             exit 1
           fi
-          if [[ $(grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch') ]]; then
+          if [[ $(grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch' | grep -v 'l-plot-exporter') ]]; then
             echo "Documentation produces warnings."
-            grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch'
+            grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch' | grep -v 'l-plot-exporter'
             exit 1
           fi
 

@@ -35,12 +35,12 @@ print(f"number of nodes: {len(proto.graph.node)}")
 
 print(pretty_onnx(proto))
 
-##############################
+# %%
 # And visually.
 
 plot_dot(proto)
 
-###############################
+# %%
 # Optimization
 # ============
 
@@ -58,7 +58,7 @@ df.to_csv("plot_optimize.csv")
 df.to_excel("plot_optimize.xlsx")
 df
 
-##############################
+# %%
 # Summary
 
 for c in df.columns:
@@ -75,14 +75,14 @@ aggs = {
 }
 print(df.groupby("pattern").agg(aggs))
 
-##############################
+# %%
 # The total is:
 
 diff = df["added"].sum() - df["removed"].sum()
 
 print(f"number of removed nodes: {-diff}")
 
-##############################
+# %%
 # Conversion to onnx.
 optimized_proto = gr.to_onnx(optimize=False)
 with open("plot_optimize_101.onnx", "wb") as f:
@@ -91,17 +91,17 @@ with open("plot_optimize_101.onnx", "wb") as f:
 print(f"number of new nodes: {len(optimized_proto.graph.node)}")
 
 
-##########################################
+# %%
 # It gives the following.
 
 print(pretty_onnx(optimized_proto))
 
-##############################
+# %%
 # And visually.
 
 plot_dot(optimized_proto)
 
-#################################
+# %%
 # The first list of patterns optimizes the graph with only
 # standard onnx operators: :ref:`l-pattern-optimization-onnx`.
 # The second list is specific to :epkg:`onnxruntime`:

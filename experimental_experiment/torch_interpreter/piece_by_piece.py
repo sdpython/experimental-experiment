@@ -110,6 +110,14 @@ class StatusExport:
         self.reason = reason
         self.exported = exported
 
+    @property
+    def short_reason(self) -> str:
+        "Shortened reason"
+        r = self.reason.split("\n", maxsplit=1)[0]
+        if len(r) < 30:
+            return r
+        return f"{r[:30]}..."
+
     def is_ok(self) -> bool:
         "Returns True if the export succeeds."
         return bool(int(self.status) & int(StatusExportCode.OK))
@@ -123,8 +131,8 @@ class StatusExport:
         if self.is_ok():
             return f"{self.status.name} -- {self.exported.__class__.__name__}"
         reason = self.reason.split("\n", maxsplit=1)[0]
-        if len(reason) > 30:
-            reason = reason[:30] + "..."
+        if len(reason) > 40:
+            reason = reason[:40] + "..."
         return f"{self.status.name} -- step={self.step}, reason={reason!r}"
 
 
@@ -145,6 +153,7 @@ class ModelDiagnoseOutput:
     * ``outputs``: stored outputs
     * ``signature``: signature of the module or function
 
+    The default method spied on is ``forward`` but it can be changed.
     After the tracing:
 
     * ``inputs``: traced inputs
@@ -187,12 +196,15 @@ class ModelDiagnoseOutput:
         name: str,
         model: torch.nn.Module,
         level: int = 0,
+        method_name: str = "forward",
     ):
+        assert isinstance(model, torch.nn.Module), f"unexpected type for model={type(model)}"
         self.parent = parent
         self.name = name
         self.model = model
         self.level = level
-        self.forward = model.forward
+        self.method_name = method_name
+        self.forward = getattr(model, method_name)
         self.inputs = []
         self.outputs = []
         self.children: List[ModelDiagnoseOutput] = []
@@ -217,7 +229,9 @@ class ModelDiagnoseOutput:
         self.forward_custom_op_schema = None
         self.forward_need_serialization = False
         self.forward_fill_kwargs = bool(self.forward_kwargs)
-        assert not isinstance(model, torch.nn.ModuleList), "ModuleList should not be traced."
+        assert not isinstance(
+            model, (torch.nn.ModuleList, torch.nn.ModuleDict)
+        ), f"ModuleList or ModuleDict should not be traced: {type(model)}"
         self.device = "cpu"
 
         self._debug_noquiet_name = os.environ.get("DIAGNAME", "")
@@ -231,10 +245,14 @@ class ModelDiagnoseOutput:
 
     def get_debug_msg(self) -> str:
         """Returns information about this instances to help debugging."""
+        import sys
+
         rows = [
             "",
             f"name={self.name!r}",
-            f"cls={self.model.__class__.__name__}",
+            f"cls={self.model.__class__.__name__!r}",
+            f"module={self.model.__class__.__module__}",
+            f"module_file=\n    {sys.modules[self.model.__class__.__module__].__file__}",
             f"level={self.level}",
             f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}",
             f"forward_args={self.forward_args}",
@@ -306,24 +324,37 @@ class ModelDiagnoseOutput:
     @property
     def full_name(self):
         "Returns a name and class name."
-        return f"{self.name}:{self.model.__class__.__name__}"
+        if self.method_name == "forward":
+            return f"{self.name}:{self.model.__class__.__name__}"
+        return f"{self.name}:{self.model.__class__.__name__}.{self.method_name}"
 
     @property
     def custom_op_name(self):
         "Returns a name and class name."
+        if self.method_name == "forward":
+            if self.parent is None:
+                return f"C_{self.model.__class__.__name__}"
+            return f"{self.parent.custom_op_name}_{self.name}"
         if self.parent is None:
-            return f"C_{self.model.__class__.__name__}"
-        return f"{self.parent.custom_op_name}_{self.name}"
+            return f"C_{self.model.__class__.__name__}.{self.method_name}"
+        return f"{self.parent.custom_op_name}_{self.name}.{self.method_name}"
 
     @property
     def dot_name(self):
         "Returns a kind of indented name."
-        return f"{'..' * self.level} {self.name} - {self.model.__class__.__name__}"
+        if self.method_name == "forward":
+            return f"{'..' * self.level} {self.name}-{self.model.__class__.__name__}"
+        return (
+            f"{'..' * self.level} {self.name}-"
+            f"{self.model.__class__.__name__}.{self.method_name}"
+        )
 
     @property
     def module_name_type(self):
         "Returns name and module type."
-        return f"type({self.name})={self.model.__class__.__name__}"
+        if self.method_name == "forward":
+            return f"type({self.name})={self.model.__class__.__name__}"
+        return f"type({self.name})={self.model.__class__.__name__}.{self.method_name}"
 
     def add_inputs(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]):
         """Stores used inputs. Makes a copy."""
@@ -1067,7 +1098,8 @@ class ModelDiagnoseOutput:
 
         _replaced_forward_tensor_.__signature__ = inspect.Signature.from_callable(self.forward)
         self.forward_calling_custom_op = _replaced_forward_tensor_
-        self.model.forward = _replaced_forward_tensor_
+        # self.model.forward = _replaced_forward_tensor_
+        setattr(self.model, self.method_name, _replaced_forward_tensor_)
         return cusdef
 
     def _put_custom_op_inplace_any(
@@ -1255,7 +1287,8 @@ class ModelDiagnoseOutput:
 
         _replaced_forward_.__signature__ = inspect.Signature.from_callable(self.forward)
         self.forward_calling_custom_op = _replaced_forward_
-        self.model.forward = _replaced_forward_
+        # self.model.forward = _replaced_forward_
+        setattr(self.model, self.method_name, _replaced_forward_)
         return cusdef
 
     def put_custom_op_inplace(
@@ -1269,7 +1302,8 @@ class ModelDiagnoseOutput:
             print(f"[try_export.put_custom_op_inplace] {self.dot_name}")
         if self.forward_custom_op_schema is not None:
             # Registration was already done.
-            self.model.forward = self.forward_calling_custom_op
+            # self.model.forward = self.forward_calling_custom_op
+            setattr(self.model, self.method_name, self.forward_calling_custom_op)
             return self.forward_custom_op_schema
 
         if all(isinstance(t, torch.Tensor) for t in self.inputs[0]) and all(
@@ -1291,7 +1325,8 @@ class ModelDiagnoseOutput:
         be removed.
         """
         self.forward_need_serialization = False
-        self.model.forward = self.forward
+        # self.model.forward = self.forward
+        setattr(self.model, self.method_name, self.forward)
         if verbose > 2:
             print(
                 f"[try_export.remove_custom_op_inplace] {self.dot_name}: unregisters "
@@ -1302,7 +1337,7 @@ class ModelDiagnoseOutput:
         """Tells of this module was bypassed."""
         return (
             hasattr(self, "forward_calling_custom_op")
-            and self.model.forward == self.forward_calling_custom_op
+            and getattr(self.model, self.method_name) == self.forward_calling_custom_op
         )
 
     def _try_export_no_bypass_export(
@@ -1680,6 +1715,33 @@ class ModelDiagnoseOutput:
             )
         return exported, fct
 
+    def verifies(self, verbose: int = 0):
+        """Does some verifications. Raises an exception if it fails."""
+        assert (
+            isinstance(self.inputs, list)
+            and all(isinstance(i, tuple) for i in self.inputs)
+            and all(len(i) == 2 for i in self.inputs)
+            and all(isinstance(i[0], tuple) and isinstance(i[1], dict) for i in self.inputs)
+        ), (
+            f"{self.full_name}: unexpected type for self.inputs: "
+            f"{string_type(self.inputs)}{self.get_debug_msg()}"
+        )
+        assert isinstance(self.outputs, list) and all(
+            isinstance(i, tuple) for i in self.outputs
+        ), (
+            f"{self.full_name}: unexpected type for self.outputs: "
+            f"{string_type(self.outputs)}{self.get_debug_msg()}"
+        )
+        assert len(self.inputs) == len(self.outputs), (
+            f"{self.full_name}: input and outputs mismatch: "
+            f"{len(self.inputs)} != {len(self.outputs)}{self.get_debug_msg()}"
+        )
+        assert (
+            len(self.inputs) > 0
+        ), f"{self.full_name}: expecting at least one input{self.get_debug_msg()}"
+        for child in self.children:
+            child.verifies()
+
     def try_export(
         self,
         exporter: str = "fx",
@@ -1732,6 +1794,7 @@ class ModelDiagnoseOutput:
             f"{self.full_name}: unexpected value for exporter={exporter!r} "
             f"not in {allowed}"
         )
+        self.verifies()
         custom_op_strat = self._do_replace_by_custom_op(replace_by_custom_op)
         if verbose and self.level == 0:
             print()
@@ -1879,7 +1942,8 @@ class ModelDiagnoseOutput:
             elif verbose:
                 print(
                     f"[try_export-{exporter.upper()}] {self.dot_name} "
-                    f"--- {self.exporter_status.status.name}"
+                    f"--- {self.exporter_status.status.name}: "
+                    f"{self.exporter_status.short_reason}"
                 )
 
         assert exported is not None, (
@@ -1901,7 +1965,8 @@ class ModelDiagnoseOutput:
             elif verbose:
                 print(
                     f"[try_export-{exporter.upper()}] {self.dot_name} "
-                    f"--- {self.exporter_status.status.name}"
+                    f"--- {self.exporter_status.status.name}: "
+                    f"{self.exporter_status.short_reason}"
                 )
             return exported
 
@@ -1985,7 +2050,7 @@ class ModelDiagnoseOutput:
                     indent = " " * (mc1 + mc2)
                     srows.append(f"{indent}ep: -")
             if fx:
-                if hasattr(diag, "fx"):
+                if hasattr(diag, "fx") and diag.fx is not None:
                     eps = str(diag.fx.graph)
                     indent = " " * (mc1 + mc2)
                     prefix = f"{indent}fx: "
@@ -2041,30 +2106,75 @@ def _rewrite_forward(
     return res
 
 
+def _flatten_module_containes(
+    mod: Union[torch.nn.ModuleList, torch.nn.ModuleDict],
+) -> Iterator[Tuple[Tuple[Union[str, int], ...], torch.nn.Module]]:
+    if isinstance(mod, torch.nn.ModuleList):
+        for i, m in enumerate(mod):
+            for ind, mn in _flatten_module_containes(m):
+                yield (i, *ind), mn
+    elif isinstance(mod, torch.nn.ModuleDict):
+        for i, m in mod.items():
+            for ind, mn in _flatten_module_containes(m):
+                yield (i, *ind), mn
+    else:
+        yield tuple(), mod
+
+
 def _trace_forward_execution(
     parent: ModelDiagnoseOutput,
     model: torch.nn.Module,
     name: str = "__main__",
     level: int = 0,
     verbose: int = 0,
+    traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
 ):
-    diag = ModelDiagnoseOutput(parent, name, model, level=level)
+    if traced_method is None:
+        traced_method = {}
+    if model.__class__ in traced_method:
+        method_name = traced_method[model.__class__]
+    elif model.__class__.__name__ in traced_method:
+        method_name = traced_method[model.__class__.__name__]
+    else:
+        method_name = "forward"
+
+    if method_name is None:
+        # This is not traced.
+        return None
+
+    diag = ModelDiagnoseOutput(parent, name, model, level=level, method_name=method_name)
     if verbose:
-        print(f"[_trace_forward_execution] {diag.dot_name}")
-    model.forward = lambda *args, _diag=diag, verbose=verbose, **kwargs: _rewrite_forward(
-        *args, _diag=_diag, verbose=verbose, **kwargs
+        print(f"[_trace_forward_execution] {diag.dot_name}.{diag.method_name}")
+    rewritten_method = lambda *args, _diag=diag, verbose=verbose, **kwargs: (  # noqa: E731
+        _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
     )
+    setattr(model, method_name, rewritten_method)
     for name, mod in model.named_children():
-        if isinstance(mod, torch.nn.ModuleList):
-            for i, m in enumerate(mod):
+        if isinstance(mod, (torch.nn.ModuleList, torch.nn.ModuleDict)):
+            mod_items = _flatten_module_containes(mod)
+            for i, m in mod_items:
                 d = _trace_forward_execution(
-                    diag, m, f"{name}[{i}]", verbose=max(verbose - 1, 0), level=level + 1
+                    diag,
+                    m,
+                    name if i == tuple() else f"{name}[{','.join(map(repr,i))}]",
+                    verbose=verbose,
+                    level=level + 1,
+                    traced_method=traced_method,
                 )
+                if d is None:
+                    continue
                 diag.add_child(d)
         else:
             d = _trace_forward_execution(
-                diag, mod, name, verbose=max(verbose - 1, 0), level=level + 1
+                diag,
+                mod,
+                name,
+                verbose=verbose,
+                level=level + 1,
+                traced_method=traced_method,
             )
+            if d is None:
+                continue
             diag.add_child(d)
     return diag
 
@@ -2072,19 +2182,27 @@ def _trace_forward_execution(
 def _untrace_forward_execution(diag: ModelDiagnoseOutput, verbose: int = 0):
     if verbose:
         print(f"[_untrace_forward_execution] {diag.dot_name}")
-    diag.model.forward = diag.forward
+    # diag.model.forward = diag.forward
+    setattr(diag.model, diag.method_name, diag.forward)
     for child in diag.children:
         _untrace_forward_execution(child, verbose=verbose)
 
 
 @contextlib.contextmanager
-def trace_forward_execution(model: torch.nn.Module, verbose: int = 0) -> ModelDiagnoseOutput:
+def trace_forward_execution(
+    model: torch.nn.Module,
+    verbose: int = 0,
+    traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
+) -> ModelDiagnoseOutput:
     """
     Replaces all forward to store the inputs and outputs of the module
     and every submodules.
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
     """
-    diag = _trace_forward_execution(None, model, verbose=verbose)
+    diag = _trace_forward_execution(None, model, verbose=verbose, traced_method=traced_method)
+    assert (
+        diag is not None
+    ), f"Model type {type(model)} cannot be traced, see traced_method={traced_method!r}"
     try:
         yield diag
     finally:
@@ -2095,6 +2213,7 @@ def trace_execution_piece_by_piece(
     model: torch.nn.Module,
     inputs: List[Tuple[Tuple[Any, ...], Dict[str, Any]]],
     verbose: int = 0,
+    traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
 ) -> ModelDiagnoseOutput:
     """
     Runs a model, traces the intermediate output and infers dynamic shapes
@@ -2104,11 +2223,17 @@ def trace_execution_piece_by_piece(
     :param inputs: list of input sets ``[(args, kwargs), (args, kwargs), ...]``
         with different shapes (at least for the dynamic dimensions)
     :param verbose: verbosity
+    :param traced_method: by default the class traced method ``forward`` but another
+        one can be traced, if the traced method is empty, then it is not traced at all
     :return: see :class:`ModelDiagnoseOutput`
 
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
     """
-    with trace_forward_execution(model, verbose=verbose) as tracer:
+    if traced_method is None:
+        traced_method = {}
+    with trace_forward_execution(
+        model, verbose=verbose, traced_method=traced_method
+    ) as tracer:
         for i in inputs:
             if isinstance(i, dict):
                 i = (tuple(), i)
@@ -2131,7 +2256,11 @@ def trace_execution_piece_by_piece(
                 f"{string_type(i)}"
             )
             args, kwargs = i
-            model(*args, **kwargs)
+            if model.__class__ in traced_method:
+                method = getattr(model, traced_method[model.__class__])
+                method(*args, **kwargs)
+            else:
+                model(*args, **kwargs)
         if verbose:
             print(
                 f"[trace_forward_execution] traced execution of model "

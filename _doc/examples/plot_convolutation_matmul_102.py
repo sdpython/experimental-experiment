@@ -41,14 +41,14 @@ data = np.arange(N).astype(np.float32).reshape(shape)
 # data[2, 3] = 1
 data.shape
 
-#############################
+# %%
 # Let's a 2D kernel, the same one.
 
 kernel = (np.arange(9) + 1).reshape(3, 3).astype(np.float32)
 kernel
 
 
-###############################
+# %%
 # raw convolution
 # +++++++++++++++
 #
@@ -74,13 +74,13 @@ def raw_convolution(data: np.ndarray, kernel: Sequence[int]) -> np.ndarray:
 res = raw_convolution(data, kernel)
 res.shape
 
-############################
+# %%
 # Full result.
 
 res
 
 
-###########################
+# %%
 # With pytorch
 # ++++++++++++
 #
@@ -96,18 +96,18 @@ rest = conv2d(
 )
 rest.shape
 
-############################
+# %%
 # Full result.
 
 rest
 
-############################
+# %%
 # Everything works.
 
 
 assert_almost_equal(res, rest[0, 0].numpy())
 
-##################################
+# %%
 # using Gemm?
 # +++++++++++
 #
@@ -125,7 +125,7 @@ unfold = Unfold(kernel_size=(3, 3), padding=(1, 1))(
 )
 unfold.shape
 
-#########################################
+# %%
 # We then multiply this matrix with the flattened kernel and reshape it.
 
 
@@ -133,19 +133,19 @@ impl = kernel.flatten() @ unfold.numpy()
 impl = impl.reshape(data.shape)
 impl.shape
 
-##########################
+# %%
 # Full result.
 
 impl
 
-#########################
+# %%
 # Everything works as expected.
 
 
 assert_almost_equal(res, impl)
 
 
-##############################
+# %%
 # What is ConvTranspose?
 # ++++++++++++++++++++++
 #
@@ -163,7 +163,7 @@ assert_almost_equal(res, impl)
 # impl[2, 3] = 1
 impl
 
-################################
+# %%
 # ConvTranspose...
 
 
@@ -174,7 +174,7 @@ ct = conv_transpose2d(
 ).numpy()
 ct
 
-##############################
+# %%
 # And now the version with `col2im` or
 # `Fold <https://pytorch.org/docs/stable/generated/torch.nn.Fold.html#torch.nn.Fold>`_
 # applied on the result product of the output from `Conv` and the kernel:
@@ -186,7 +186,7 @@ ct
 p = kernel.flatten().reshape((-1, 1)) @ impl.flatten().reshape((1, -1))
 p.shape
 
-#############################
+# %%
 # Fold...
 
 
@@ -195,12 +195,12 @@ fold = Fold(kernel_size=(3, 3), output_size=(5, 7), padding=(1, 1))(
 )
 fold.shape
 
-########################
+# %%
 # Full result.
 
 fold
 
-##############################
+# %%
 # onnxruntime-training
 # ====================
 #
@@ -225,7 +225,7 @@ model = (
 plot_dot(model)
 
 
-################################
+# %%
 # Execution
 
 
@@ -233,7 +233,7 @@ ref = ReferenceEvaluator(model)
 ref.run(None, {"X": data[np.newaxis, np.newaxis, ...]})[0]
 
 
-##############################
+# %%
 # Gradient
 
 
@@ -243,7 +243,7 @@ grad = onnx_derivative(
 plot_dot(grad)
 
 
-###############################
+# %%
 # Execution.
 
 
@@ -257,7 +257,7 @@ res = sess.run(
 )
 res
 
-################################
+# %%
 # ConvTranspose
 # +++++++++++++
 
@@ -275,7 +275,7 @@ model = (
 )
 plot_dot(model)
 
-############################
+# %%
 # Execution.
 
 sess = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
@@ -283,7 +283,7 @@ ct = sess.run(None, {"X": impl[np.newaxis, np.newaxis, ...]})[0]
 ct
 
 
-###############################
+# %%
 # im2col and col2im
 # =================
 #
@@ -350,7 +350,7 @@ v = np.arange(5).astype(np.float32)
 w = im2col_naive_implementation(v, (3,))
 w
 
-##################################
+# %%
 # All is left is the matrix multiplication.
 
 
@@ -358,14 +358,14 @@ k = np.array([1, 1, 1], dtype=np.float32)
 conv = w @ k
 conv
 
-######################################
+# %%
 # Let's compare with the numpy function.
 
 
 np.convolve(v, k, mode="same")
 
 
-#########################################################
+# %%
 # ..math::
 #
 #     conv(v, k) = im2col(v, shape(k)) \; k = w \; k` where `w = im2col(v, shape(k))
