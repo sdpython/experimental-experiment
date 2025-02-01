@@ -241,7 +241,7 @@ Section :ref:`l-torch-export-export-ds provides` a couple of examples
 on how to define them, as their definition aligns with those used
 in :func:`torch.export.export`.
 
-* :ref:`l-plot-exporter-recipes-custom-modules`
+* :ref:`l-plot-exporter-recipes-custom-named-dynamic-shapes`
 
 **Control Flow**
 

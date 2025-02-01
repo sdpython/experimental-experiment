@@ -1,5 +1,5 @@
 """
-.. _l-plot-exporter-recipes-custom-modules:
+.. _l-plot-exporter-recipes-custom-named-dynamic-shapes:
 
 to_onnx: Rename Dynamic Shapes
 ==============================
