@@ -45,7 +45,7 @@ except NotImplementedError as e:
 # %%
 # Then we could make it a different one.
 
-dz = torch.export.Dim("dz")
+dz = torch.export.Dim("dz") * 2
 try:
     ep = torch.export.export(
         model,
