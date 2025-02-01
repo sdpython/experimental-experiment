@@ -37,7 +37,7 @@ pwd = spd.cdist(x.numpy(), y.numpy())
 expected = torch.from_numpy(pwd)
 print(f"shape={pwd.shape}, discrepancies={torch.abs(expected - model(x,y)).max()}")
 
-########################################
+# %%
 # :func:`torch.export.export` works because it unrolls the loop.
 # It works if the input size never change.
 
@@ -45,7 +45,7 @@ print(f"shape={pwd.shape}, discrepancies={torch.abs(expected - model(x,y)).max()
 ep = torch.export.export(model, (x, y))
 print(ep.graph)
 
-#####################################
+# %%
 # However, with dynamic shapes, that's another story.
 
 x_rows = torch.export.Dim("x_rows")
@@ -59,7 +59,7 @@ try:
 except Exception as e:
     print(e)
 
-####################################
+# %%
 # Suggested Patch
 # +++++++++++++++
 #
@@ -93,7 +93,7 @@ class ModuleWithControlFlowLoopScan(torch.nn.Module):
 model = ModuleWithControlFlowLoopScan()
 print(f"shape={pwd.shape}, discrepancies={torch.abs(expected - model(x,y)).max()}")
 
-###################################
+# %%
 # That works. Let's export again.
 
 ep = torch.export.export(
@@ -101,13 +101,13 @@ ep = torch.export.export(
 )
 print(ep.graph)
 
-########################################
+# %%
 # The graph shows some unused results and this might confuse the exporter.
 # We need to run :meth:`torch.export.ExportedProgram.run_decompositions`.
 ep = ep.run_decompositions({})
 print(ep.graph)
 
-####################################
+# %%
 # Let's export again with ONNX.
 
 onx = torch.onnx.export(
@@ -118,7 +118,7 @@ onx = torch.onnx.export(
 )
 print(pretty_onnx(onx))
 
-####################################
+# %%
 # And visually.
 
 plot_dot(onx)

@@ -44,12 +44,12 @@ proto = oh.make_model(
 
 print(pretty_onnx(proto))
 
-##############################
+# %%
 # And visually.
 
 plot_dot(proto)
 
-###############################
+# %%
 # The pattern
 # ===========
 
@@ -62,7 +62,7 @@ class MulMulSigmoidPattern(EasyPatternOptimization):
         return g.anyop.MulMulSigmoid(X, Y, domain="onnx_extended.ortops.optim.cuda")
 
 
-###############################
+# %%
 # Optimization
 # ============
 
@@ -78,12 +78,12 @@ gr = GraphBuilder(
 new_proto = gr.to_onnx()
 print(pretty_onnx(new_proto))
 
-##############################
+# %%
 # And visually.
 
 plot_dot(new_proto)
 
-################################
+# %%
 # Filtering
 # =========
 #

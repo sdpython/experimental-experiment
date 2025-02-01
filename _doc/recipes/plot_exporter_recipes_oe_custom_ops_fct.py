@@ -18,7 +18,7 @@ import onnxscript
 import torch
 
 
-#################################
+# %%
 # We define a model with a custom operator.
 
 
@@ -35,12 +35,12 @@ class ModuleWithACustomOperator(torch.nn.Module):
 
 model = ModuleWithACustomOperator()
 
-######################################
+# %%
 # Let's check it runs.
 x = torch.randn(1, 3)
 model(x)
 
-######################################
+# %%
 # As expected, it does not export.
 try:
     torch.export.export(model, (x,))
@@ -48,7 +48,7 @@ try:
 except Exception as e:
     print(e)
 
-####################################
+# %%
 # The exporter fails with the same eror as it expects torch.export.export to work.
 
 try:
@@ -57,7 +57,7 @@ except Exception as e:
     print(e)
 
 
-####################################
+# %%
 # Registration
 # ++++++++++++
 #
@@ -77,7 +77,7 @@ def register(fct, fct_shape, namespace, fname):
 
 register(numpy_sin, lambda x: torch.empty_like(x), "mylib", "numpy_sin")
 
-##################################
+# %%
 # We also need to rewrite the module to be able to use it.
 
 
@@ -88,16 +88,16 @@ class ModuleWithACustomOperator(torch.nn.Module):
 
 model = ModuleWithACustomOperator()
 
-###########################
+# %%
 # Let's check it runs again.
 model(x)
 
-####################################
+# %%
 # Let's see what the fx graph looks like.
 
 print(torch.export.export(model, (x,)).graph)
 
-#####################################
+# %%
 # Next is the conversion to onnx.
 
 op = onnxscript.opset18
@@ -108,7 +108,7 @@ def numpy_sin_to_onnx(x):
     return op.Sin(x)
 
 
-#####################################
+# %%
 # And we convert again.
 
 ep = torch.onnx.export(

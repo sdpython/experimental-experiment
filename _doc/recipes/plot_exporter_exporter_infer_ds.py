@@ -92,7 +92,7 @@ onx, builder = to_onnx(ep, return_builder=True)
 onnx.save(onx, "plot_exporter_exporter_infer_ds.onnx")
 print(builder.pretty_text())
 
-####################################
+# %%
 # And visually.
 
 plot_dot(onx)

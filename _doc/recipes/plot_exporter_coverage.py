@@ -60,7 +60,7 @@ obs = evaluation(
     exporters=exporters, dynamic=dynamic, cases=cases, quiet=quiet, verbose=verbose
 )
 
-#####################################
+# %%
 # The results
 
 df = pandas.DataFrame(obs).sort_values(["dynamic", "name", "exporter"]).reset_index(drop=True)
@@ -71,7 +71,7 @@ for c in ["error", "error_step"]:
         df[c] = df[c].fillna("")
 print(df)
 
-######################################
+# %%
 # Errors if any or all successes.
 
 piv = df.pivot(

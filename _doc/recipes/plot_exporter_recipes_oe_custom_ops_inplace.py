@@ -20,7 +20,7 @@ import onnxscript
 import torch
 
 
-#################################
+# %%
 # We define a model with a custom operator.
 
 
@@ -42,12 +42,12 @@ class ModuleWithACustomOperator(torch.nn.Module):
 
 model = ModuleWithACustomOperator()
 
-######################################
+# %%
 # Let's check it runs.
 x = torch.randn(1, 3)
 model(x)
 
-######################################
+# %%
 # As expected, it does not export.
 try:
     torch.export.export(model, (x,))
@@ -55,7 +55,7 @@ try:
 except Exception as e:
     print(e)
 
-####################################
+# %%
 # The exporter fails with the same eror as it expects torch.export.export to work.
 
 try:
@@ -64,7 +64,7 @@ except Exception as e:
     print(e)
 
 
-####################################
+# %%
 # Registration
 # ++++++++++++
 #
@@ -79,19 +79,19 @@ def numpy_sin_shape(x, output):
     pass
 
 
-####################################
+# %%
 # Let's see what the fx graph looks like.
 
 print(torch.export.export(model, (x,)).graph)
 
-#####################################
+# %%
 # Next is the conversion to onnx.
 T = str  # a tensor name
 
 
 op = onnxscript.opset18
 
-#####################################
+# %%
 # Let's convert the custom op into onnx.
 
 
@@ -100,7 +100,7 @@ def numpy_sin_to_onnx(x):
     return op.Sin(x)
 
 
-#####################################
+# %%
 # And we convert again.
 
 ep = torch.onnx.export(
