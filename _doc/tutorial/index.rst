@@ -75,7 +75,7 @@ These examples relies on :func:`torch.onnx.export`.
 
 Dynamic shapes should be utilized to create a model capable of handling
 inputs with varying shapes while maintaining the same rank.
-Section :ref:`l-torch-export-export-ds provides` a couple of examples
+Section :ref:`l-torch-export-export-ds` provides a couple of examples
 on how to define them, as their definition aligns with those used
 in :func:`torch.export.export`.
 
@@ -237,7 +237,7 @@ It is used to investigate export issues raised by :func:`torch.export.export`.
 
 Dynamic shapes should be utilized to create a model capable of handling
 inputs with varying shapes while maintaining the same rank.
-Section :ref:`l-torch-export-export-ds provides` a couple of examples
+Section :ref:`l-torch-export-export-ds` provides a couple of examples
 on how to define them, as their definition aligns with those used
 in :func:`torch.export.export`.
 
