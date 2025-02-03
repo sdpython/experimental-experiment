@@ -1,4 +1,6 @@
+import ast
 import unittest
+import inspect
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.helpers import string_type
@@ -22,6 +24,10 @@ from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
 from experimental_experiment.torch_models.llm_model_helper import (
     get_phi35_mini_instruct,
 )
+
+
+def traceable_local_f(x, y):
+    return x.abs() + y.abs() + 1e-5
 
 
 class TestPieceByPiece(ExtTestCase):
@@ -1747,6 +1753,59 @@ class TestPieceByPiece(ExtTestCase):
         assert hasattr(diag, "fx"), "No exported program found in diag."
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+
+    @requires_torch("2.6")
+    # @hide_stdout()
+    def test_trace_execution_functions(self):
+        import torch
+
+        def local_f(x, y):
+            return x.abs() + y.abs() + 1e-5
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return (x + y) / local_f(x, y) + traceable_local_f(x, y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subm = SubModel()
+
+            def forward(self, x, y):
+                return self.subm(x, y)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y)
+        self.assertNotEmpty(z)
+
+        lines = inspect.getsource(SubModel.forward)
+        parsed = ast.parse(f"if True:\n{lines}")
+        names = [node.func.id for node in ast.walk(parsed) if isinstance(node, ast.Call)]
+        self.assertEqual(names, ["traceable_local_f", "local_f"])
+
+        inputs = [
+            ((x, y), {}),
+            ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs, trace_functions=True, verbose=1)
+        self.assertEqual(len(diag.children), 1)
+        self.assertEqual(len(diag.children[0].children), 1)
+        all_diag = list(diag)
+        for d in all_diag:
+            print("+++", d)
+        self.assertEqual(len(all_diag), 3)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            quiet=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+        )
+        self.assertNotEmpty(ep)
 
 
 if __name__ == "__main__":
