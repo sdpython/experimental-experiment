@@ -152,7 +152,7 @@ sphinx_gallery_conf = {
 
 if int(os.environ.get("UNITTEST_GOING", "0")):
     sphinx_gallery_conf["ignore_pattern"] = (
-        ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)|(export_201)|(c_phi2)|(oe_custom_ops_inplace)|(oe_scan)).*"
+        ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)|(export_201)|(c_phi2)|(oe_custom_ops_inplace)|(oe_scan)|(draft_mode)).*"
     )
 elif pv.Version(torch.__version__) < pv.Version("2.8"):
     sphinx_gallery_conf["ignore_pattern"] = (
