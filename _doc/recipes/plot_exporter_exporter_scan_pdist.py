@@ -1,8 +1,8 @@
 """
-.. _l-plot-exporter-recipes-onnx-exporter-pdist:
+.. _l-plot-exporter-exporter-pdist:
 
-torch.onnx.export and a model with a loop (scan)
-================================================
+Export a model with a loop (scan)
+=================================
 
 Control flow cannot be exported with a change.
 The code of the model can be changed or patched
@@ -16,8 +16,6 @@ We appy loops to the pairwise distances (:class:`torch.nn.PairwiseDistance`).
 
 import scipy.spatial.distance as spd
 import torch
-from onnx_array_api.plotting.graphviz_helper import plot_dot
-from experimental_experiment.helpers import pretty_onnx
 
 
 class ModuleWithControlFlowLoop(torch.nn.Module):
@@ -83,7 +81,7 @@ class ModuleWithControlFlowLoopScan(torch.nn.Module):
             dist,
             [y],
             [x],
-            dim=0,
+            # dim=0,
             reverse=False,
             additional_inputs=[],
         )
@@ -91,7 +89,8 @@ class ModuleWithControlFlowLoopScan(torch.nn.Module):
 
 
 model = ModuleWithControlFlowLoopScan()
-print(f"shape={pwd.shape}, discrepancies={torch.abs(expected - model(x,y)).max()}")
+model_output = model(x, y)
+print(f"shape={pwd.shape}, discrepancies={torch.abs(expected - model_output).max()}")
 
 # %%
 # That works. Let's export again.
@@ -100,25 +99,3 @@ ep = torch.export.export(
     model, (x, y), dynamic_shapes={"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}}
 )
 print(ep.graph)
-
-# %%
-# The graph shows some unused results and this might confuse the exporter.
-# We need to run :meth:`torch.export.ExportedProgram.run_decompositions`.
-ep = ep.run_decompositions({})
-print(ep.graph)
-
-# %%
-# Let's export again with ONNX.
-
-onx = torch.onnx.export(
-    model,
-    (x, y),
-    dynamic_shapes={"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}},
-    dynamo=True,
-)
-print(pretty_onnx(onx))
-
-# %%
-# And visually.
-
-plot_dot(onx)

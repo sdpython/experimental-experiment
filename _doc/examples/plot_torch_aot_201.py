@@ -84,7 +84,7 @@ def system_info():
 
 pprint.pprint(system_info())
 
-#####################################
+# %%
 # Scripts arguments
 
 
@@ -115,7 +115,7 @@ print(f"repeat={script_args.repeat}")
 print(f"repeat1={script_args.repeat1}")
 print(f"maxtime={script_args.maxtime}")
 
-############################
+# %%
 # The model
 # +++++++++
 #
@@ -212,7 +212,7 @@ model, input_tensors = create_model_and_input()
 model_size = torch_model_size(model)
 print(f"model size={model_size / 2 ** 20} Mb")
 
-#######################################
+# %%
 # Backends
 # ++++++++
 
@@ -268,7 +268,7 @@ def get_torch_dort(model, *args):
             return optimized_mod
 
 
-#########################################
+# %%
 # Let's check they are working.
 
 export_functions = [
@@ -296,7 +296,7 @@ for k, v in exporters.items():
     time.sleep(1)
 
 
-#################################
+# %%
 # Compile and Memory
 # ++++++++++++++++++
 
@@ -348,7 +348,7 @@ for k in supported_exporters:
     gc.collect()
     time.sleep(1)
 
-#############################
+# %%
 # The result.
 df1 = pandas.DataFrame(data)
 df1.to_csv("plot_torch_aot_1_memory.csv", index=False)
@@ -367,7 +367,7 @@ for p in ["cpu", "cuda"]:
     )
     get_figure(ax).savefig(f"plot_torch_aot_1_memory_{p}.png")
 
-#################################
+# %%
 # dort first iteration speed
 # ++++++++++++++++++++++++++
 
@@ -433,7 +433,7 @@ for k in supported_exporters:
         )
     )
 
-#############################
+# %%
 # The result.
 df1 = pandas.DataFrame(data)
 df1.to_csv("plot_torch_aot_1_time.csv", index=False)
@@ -446,7 +446,7 @@ dfi["time"].plot.bar(ax=ax, title="Compilation time", yerr=dfi["std"], rot=30)
 fig.tight_layout()
 fig.savefig("plot_torch_aot_1_time.png")
 
-####################################
+# %%
 # Compilation Profiling
 # +++++++++++++++++++++
 
@@ -516,7 +516,7 @@ def function_to_profile(model=model, input_tensors=input_tensors):
 profile_function("dort", function_to_profile, verbose=True, suffix="1")
 
 
-######################################
+# %%
 # Benchmark exported models with ORT
 # ++++++++++++++++++++++++++++++++++
 
@@ -615,7 +615,7 @@ def benchmark(shape):
 df, dfmemfr, dfmemr = benchmark(list(input_tensors[0].shape))
 print(df)
 
-#####################################
+# %%
 # Other view
 
 
@@ -653,7 +653,7 @@ def view_time(df, title, suffix="time"):
 view_time(df, "Compares processing time on backends")
 
 
-########################################
+# %%
 # Memory First Running Time (ORT)
 # +++++++++++++++++++++++++++++++
 
@@ -670,7 +670,7 @@ for compute in ["CPU", "CUDA"]:
     )
     get_figure(ax).savefig(f"plot_torch_aot_first_run_mem_{compute}.png")
 
-########################################
+# %%
 # Memory Running Time (ORT)
 # +++++++++++++++++++++++++
 

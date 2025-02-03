@@ -1,3 +1,4 @@
+import packaging.version as pv
 import numpy as np
 import torch
 
@@ -362,136 +363,267 @@ class ControlFlowCondNonZero(torch.nn.Module):
     )
 
 
-class ControlFlowScan(torch.nn.Module):
+if pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.7"):
 
-    @staticmethod
-    def add(carry: torch.Tensor, y: torch.Tensor):
-        next_carry = carry + y
-        return [next_carry, next_carry]
+    class ControlFlowScan(torch.nn.Module):
 
-    def forward(self, x):
-        init = torch.zeros_like(x[0])
-        carry, out = torch.ops.higher_order.scan(
-            ControlFlowScan.add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+        @staticmethod
+        def add(carry: torch.Tensor, y: torch.Tensor):
+            next_carry = carry + y
+            return [next_carry, next_carry]
+
+        def forward(self, x):
+            init = torch.zeros_like(x[0])
+            carry, out = torch.ops.higher_order.scan(
+                ControlFlowScan.add, [init], [x], reverse=False, additional_inputs=[]
+            )
+            return carry
+
+        _inputs = (torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32),)
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+    class ControlFlowScan2Carried(torch.nn.Module):
+        @staticmethod
+        def add(
+            carry1: torch.Tensor, carry2: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor
+        ):
+            next_carry1 = carry1 + y1
+            next_carry2 = carry2 * y2
+            return [next_carry1, next_carry2, next_carry1, next_carry2]
+
+        def forward(self, x):
+            init1 = torch.zeros_like(x[0])
+            init2 = torch.ones_like(x[0])
+            carry1, carry2, out1, out2 = torch.ops.higher_order.scan(
+                ControlFlowScan2Carried.add,
+                [init1, init2],
+                [x, x * 2],
+                # dim=0,  # 01/31/2025, not supported anymore
+                reverse=False,
+                additional_inputs=[],
+            )
+            return carry1, carry2, out1, out2
+
+        _inputs = (
+            torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
         )
-        return carry
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
-    _inputs = (torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32),)
-    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+    class ControlFlowScanCDist(torch.nn.Module):
+        @staticmethod
+        def dist(carry: torch.Tensor, x: torch.Tensor):
+            sub = carry - x.reshape((1, -1))
+            sq = sub * sub
+            rd = sq.sum(axis=1) ** 0.5
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [carry.clone(), rd]
 
+        def forward(self, x):
+            carry, out = torch.ops.higher_order.scan(
+                ControlFlowScanCDist.dist,
+                [x],
+                [x],
+                # dim=0,  # 01/31/2025, not supported anymore
+                reverse=False,
+                additional_inputs=[],
+            )
+            return out
 
-class ControlFlowScan2Carried(torch.nn.Module):
-    @staticmethod
-    def add(carry1: torch.Tensor, carry2: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor):
-        next_carry1 = carry1 + y1
-        next_carry2 = carry2 * y2
-        return [next_carry1, next_carry2, next_carry1, next_carry2]
-
-    def forward(self, x):
-        init1 = torch.zeros_like(x[0])
-        init2 = torch.ones_like(x[0])
-        carry1, carry2, out1, out2 = torch.ops.higher_order.scan(
-            ControlFlowScan2Carried.add,
-            [init1, init2],
-            [x, x * 2],
-            dim=0,
-            reverse=False,
-            additional_inputs=[],
+        _inputs = (
+            torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
         )
-        return carry1, carry2, out1, out2
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
-    _inputs = (
-        torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
-    )
-    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+    class ControlFlowScanCDist2(torch.nn.Module):
+        @staticmethod
+        def dist(unused: torch.Tensor, x: torch.Tensor, samex: torch.Tensor):
+            sub = samex - x.reshape((1, -1))
+            sq = sub * sub
+            rd = torch.sqrt(sq.sum(axis=1))
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [unused.clone(), rd]
 
+        def forward(self, x):
+            z = torch.tensor([0], dtype=torch.float32)
+            y = x.clone()
+            out = torch.ops.higher_order.scan(
+                ControlFlowScanCDist2.dist,
+                [z],
+                [x],
+                # dim=0,  # 01/31/2025, not supported anymore
+                reverse=False,
+                additional_inputs=[y],
+            )
+            return out[1]
 
-class ControlFlowScanCDist(torch.nn.Module):
-    @staticmethod
-    def dist(carry: torch.Tensor, x: torch.Tensor):
-        sub = carry - x.reshape((1, -1))
-        sq = sub * sub
-        rd = sq.sum(axis=1) ** 0.5
-        # clone --> UnsupportedAliasMutationException:
-        # Combine_fn might be aliasing the input!
-        return [carry.clone(), rd]
-
-    def forward(self, x):
-        carry, out = torch.ops.higher_order.scan(
-            ControlFlowScanCDist.dist,
-            [x],
-            [x],
-            dim=0,
-            reverse=False,
-            additional_inputs=[],
+        _inputs = (
+            torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
         )
-        return out
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
-    _inputs = (
-        torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
-    )
-    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+    class ControlFlowScanCDistXY(torch.nn.Module):
 
+        @staticmethod
+        def dist(y: torch.Tensor, scanned_x: torch.Tensor):
+            sub = y - scanned_x.reshape((1, -1))
+            sq = sub * sub
+            rd = torch.sqrt(sq.sum(axis=1))
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [y.clone(), rd]
 
-class ControlFlowScanCDist2(torch.nn.Module):
-    @staticmethod
-    def dist(unused: torch.Tensor, x: torch.Tensor, samex: torch.Tensor):
-        sub = samex - x.reshape((1, -1))
-        sq = sub * sub
-        rd = torch.sqrt(sq.sum(axis=1))
-        # clone --> UnsupportedAliasMutationException:
-        # Combine_fn might be aliasing the input!
-        return [unused.clone(), rd]
+        def forward(self, x, y):
+            carry, out = torch.ops.higher_order.scan(
+                ControlFlowScanCDistXY.dist,
+                [y],
+                [x],
+                # dim=0,  # 01/31/2025, not supported anymore
+                reverse=False,
+                additional_inputs=[],
+            )
+            return out
 
-    def forward(self, x):
-        z = torch.tensor([0], dtype=torch.float32)
-        y = x.clone()
-        out = torch.ops.higher_order.scan(
-            ControlFlowScanCDist2.dist,
-            [z],
-            [x],
-            dim=0,
-            reverse=False,
-            additional_inputs=[y],
+        _inputs = [
+            (torch.randn(3, 4), torch.randn(5, 4)),
+            (torch.randn(13, 14), torch.randn(15, 14)),
+        ]
+        _dynamic = {
+            "x": {0: torch.export.Dim("x_rows"), 1: torch.export.Dim("dim")},
+            "y": {0: torch.export.Dim("y_rows"), 1: torch.export.Dim("dim")},
+        }
+
+else:
+
+    class ControlFlowScan(torch.nn.Module):
+
+        @staticmethod
+        def add(carry: torch.Tensor, y: torch.Tensor):
+            next_carry = carry + y
+            return [next_carry, next_carry]
+
+        def forward(self, x):
+            init = torch.zeros_like(x[0])
+            carry, out = torch.ops.higher_order.scan(
+                ControlFlowScan.add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+            )
+            return carry
+
+        _inputs = (torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32),)
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+    class ControlFlowScan2Carried(torch.nn.Module):
+        @staticmethod
+        def add(
+            carry1: torch.Tensor, carry2: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor
+        ):
+            next_carry1 = carry1 + y1
+            next_carry2 = carry2 * y2
+            return [next_carry1, next_carry2, next_carry1, next_carry2]
+
+        def forward(self, x):
+            init1 = torch.zeros_like(x[0])
+            init2 = torch.ones_like(x[0])
+            carry1, carry2, out1, out2 = torch.ops.higher_order.scan(
+                ControlFlowScan2Carried.add,
+                [init1, init2],
+                [x, x * 2],
+                dim=0,
+                reverse=False,
+                additional_inputs=[],
+            )
+            return carry1, carry2, out1, out2
+
+        _inputs = (
+            torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
         )
-        return out[1]
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
-    _inputs = (
-        torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
-    )
-    _dynamic = {"x": {0: torch.export.Dim("batch")}}
+    class ControlFlowScanCDist(torch.nn.Module):
+        @staticmethod
+        def dist(carry: torch.Tensor, x: torch.Tensor):
+            sub = carry - x.reshape((1, -1))
+            sq = sub * sub
+            rd = sq.sum(axis=1) ** 0.5
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [carry.clone(), rd]
 
+        def forward(self, x):
+            carry, out = torch.ops.higher_order.scan(
+                ControlFlowScanCDist.dist,
+                [x],
+                [x],
+                dim=0,
+                reverse=False,
+                additional_inputs=[],
+            )
+            return out
 
-class ControlFlowScanCDistXY(torch.nn.Module):
-
-    @staticmethod
-    def dist(y: torch.Tensor, scanned_x: torch.Tensor):
-        sub = y - scanned_x.reshape((1, -1))
-        sq = sub * sub
-        rd = torch.sqrt(sq.sum(axis=1))
-        # clone --> UnsupportedAliasMutationException:
-        # Combine_fn might be aliasing the input!
-        return [y.clone(), rd]
-
-    def forward(self, x, y):
-        carry, out = torch.ops.higher_order.scan(
-            ControlFlowScanCDistXY.dist,
-            [y],
-            [x],
-            dim=0,
-            reverse=False,
-            additional_inputs=[],
+        _inputs = (
+            torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
         )
-        return out
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
 
-    _inputs = [
-        (torch.randn(3, 4), torch.randn(5, 4)),
-        (torch.randn(13, 14), torch.randn(15, 14)),
-    ]
-    _dynamic = {
-        "x": {0: torch.export.Dim("x_rows"), 1: torch.export.Dim("dim")},
-        "y": {0: torch.export.Dim("y_rows"), 1: torch.export.Dim("dim")},
-    }
+    class ControlFlowScanCDist2(torch.nn.Module):
+        @staticmethod
+        def dist(unused: torch.Tensor, x: torch.Tensor, samex: torch.Tensor):
+            sub = samex - x.reshape((1, -1))
+            sq = sub * sub
+            rd = torch.sqrt(sq.sum(axis=1))
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [unused.clone(), rd]
+
+        def forward(self, x):
+            z = torch.tensor([0], dtype=torch.float32)
+            y = x.clone()
+            out = torch.ops.higher_order.scan(
+                ControlFlowScanCDist2.dist,
+                [z],
+                [x],
+                dim=0,
+                reverse=False,
+                additional_inputs=[y],
+            )
+            return out[1]
+
+        _inputs = (
+            torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32),
+        )
+        _dynamic = {"x": {0: torch.export.Dim("batch")}}
+
+    class ControlFlowScanCDistXY(torch.nn.Module):
+
+        @staticmethod
+        def dist(y: torch.Tensor, scanned_x: torch.Tensor):
+            sub = y - scanned_x.reshape((1, -1))
+            sq = sub * sub
+            rd = torch.sqrt(sq.sum(axis=1))
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [y.clone(), rd]
+
+        def forward(self, x, y):
+            carry, out = torch.ops.higher_order.scan(
+                ControlFlowScanCDistXY.dist,
+                [y],
+                [x],
+                dim=0,
+                reverse=False,
+                additional_inputs=[],
+            )
+            return out
+
+        _inputs = [
+            (torch.randn(3, 4), torch.randn(5, 4)),
+            (torch.randn(13, 14), torch.randn(15, 14)),
+        ]
+        _dynamic = {
+            "x": {0: torch.export.Dim("x_rows"), 1: torch.export.Dim("dim")},
+            "y": {0: torch.export.Dim("y_rows"), 1: torch.export.Dim("dim")},
+        }
 
 
 class SignatureInt1(torch.nn.Module):

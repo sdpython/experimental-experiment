@@ -12,6 +12,8 @@ to the onnx graph. The official exporter is implemented in :epkg:`pytorch`
 itself through the function :func:`torch.onnx.export`.
 Next sections show many examples, including how to deal with some possible issues.
 
+.. _l-torch-export-export-ds:
+
 torch.export.export: export to a Graph
 ======================================
 
@@ -24,9 +26,17 @@ already has many examples about it. Here are some corner cases.
 **Dynamic Shapes**
 
 * :ref:`l-plot-exporter-dynamic_shapes`
+* :ref:`l-plot-exporter-lost_dynamic_dimension`
+* :ref:`l-plot-exporter-exporter-infer-ds`
+
+**Control Flow**
+
+* :ref:`l-plot-exporter-exporter-pdist`
+
+**Custom Types as Inputs**
+
 * :ref:`l-plot-torch-export-with-dynamic-cache-201`
 * :ref:`l-plot-exporter-nn_modules_inputs`
-* :ref:`l-plot-exporter-lost_dynamic_dimension`
 
 **Investigate, Export piece by piece**
 
@@ -60,6 +70,16 @@ These examples relies on :func:`torch.onnx.export`.
 **Simple Case**
 
 :ref:`l-plot-torch-linreg-101-oe`
+
+**Dynamic Shapes**
+
+Dynamic shapes should be utilized to create a model capable of handling
+inputs with varying shapes while maintaining the same rank.
+Section :ref:`l-torch-export-export-ds` provides a couple of examples
+on how to define them, as their definition aligns with those used
+in :func:`torch.export.export`.
+
+* :ref:`l-plot-exporter-recipes-onnx-exporter-modules`
 
 **Control Flow**
 
@@ -215,10 +235,13 @@ It is used to investigate export issues raised by :func:`torch.export.export`.
 
 **Dynamic Shapes**
 
-Dynamic shapes must be used to produce a model able to deal with
-inputs having different shapes even though they have the same rank.
+Dynamic shapes should be utilized to create a model capable of handling
+inputs with varying shapes while maintaining the same rank.
+Section :ref:`l-torch-export-export-ds` provides a couple of examples
+on how to define them, as their definition aligns with those used
+in :func:`torch.export.export`.
 
-* :ref:`l-plot-exporter-recipes-custom-ds`
+* :ref:`l-plot-exporter-recipes-custom-named-dynamic-shapes`
 
 **Control Flow**
 

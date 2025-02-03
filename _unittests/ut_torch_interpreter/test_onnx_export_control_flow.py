@@ -366,7 +366,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
             got = sess.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_scan_1(self):
         import torch
 
@@ -377,8 +377,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class ScanModel(torch.nn.Module):
             def forward(self, x):
                 init = torch.zeros_like(x[0])
-                carry, out = torch.ops.higher_order.scan(
-                    add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+                carry, out = torch.ops.higher_order.scan(  # dim=0 fails
+                    add, [init], [x], reverse=False, additional_inputs=[]
                 )
                 return carry
 
@@ -418,7 +418,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_scan_2(self):
         import torch
 
@@ -437,7 +437,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     add,
                     [init1, init2],
                     [x, x * 2],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[],
                 )
@@ -481,7 +481,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     for e, g in zip(expected, got):
                         self.assertEqualArray(e, g, atol=1e-5)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_scan_cdist_carry(self):
         import torch
 
@@ -499,7 +499,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     dist,
                     [x],
                     [x],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[],
                 )
@@ -542,7 +542,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_scan_cdist_add(self):
         import torch
 
@@ -562,7 +562,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     dist,
                     [z],
                     [x],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[y],
                 )
@@ -600,7 +600,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     def test_scan_cdist_dynamic(self):
         import torch
 
@@ -619,7 +619,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     dist,
                     [y],
                     [x],
-                    dim=0,
+                    # dim=0,  # it fails
                     reverse=False,
                     additional_inputs=[],
                 )

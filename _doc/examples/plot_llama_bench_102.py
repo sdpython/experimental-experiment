@@ -258,7 +258,7 @@ else:
         ),
     ]
 
-################################
+# %%
 # All configurations to consider.
 
 configs = [cf for cf in configs if cf]
@@ -266,7 +266,7 @@ if verbose:
     for i, cf in enumerate(configs):
         print(f"config {i+1}: {cf}")
 
-################################
+# %%
 # Running configuration.
 
 
@@ -284,7 +284,7 @@ except BenchmarkError as e:
         print(e)
     data_collected = False
 
-#########################
+# %%
 # Let's process the data.
 
 prefix = (
@@ -353,24 +353,24 @@ if data_collected:
     dfs.to_csv(filename, index=False)
     print(dfs)
 
-########################
+# %%
 # First lines.
 
 print(df.head(2).T)
 
-################################
+# %%
 # More simple
 
 for c in ["time", "warmup_time"]:
     if c not in df.columns:
         df[c] = np.nan
 
-########################################
+# %%
 # Simplified data
 
 print(df.sort_values("legend") if "legend" in df.columns else df)
 
-###############################
+# %%
 # Plot warmup time.
 
 torch_version = list(set(df["torch"].dropna())) if "torch" in df.columns else (0, 0)
@@ -397,7 +397,7 @@ if data_collected and "legend" in df.columns:
     fig.tight_layout()
     fig.savefig(f"plot_{prefix}_bench_warmup_time.png")
 
-###############################
+# %%
 # Plot time.
 
 if data_collected and "time" in df.columns:
@@ -413,7 +413,7 @@ if data_collected and "time" in df.columns:
     fig.tight_layout()
     fig.savefig(f"plot_{prefix}_bench_time.png")
 
-###############################
+# %%
 # Plot increase.
 
 if data_collected and "increase" in df.columns:

@@ -50,7 +50,7 @@ x = torch.randn(3, 10, dtype=torch.float32)
 mlp = MLP()
 print(mlp(x))
 
-##############################
+# %%
 # A custom backend
 # ================
 #
@@ -69,7 +69,7 @@ compiled_model = torch.compile(
 
 print(compiled_model(x))
 
-###################################
+# %%
 # Training
 # ========
 #
@@ -102,7 +102,7 @@ compiled_model = torch.compile(
 
 print(compiled_model(x))
 
-####################################
+# %%
 # Let's see an iteration loop.
 
 from sklearn.datasets import load_diabetes
@@ -168,7 +168,7 @@ def trained_model(max_iter=5, dynamic=False, storage=None):
 
 trained_model(3)
 
-#################################
+# %%
 # What about the ONNX model?
 # ==========================
 #
@@ -187,19 +187,19 @@ for i, inst in enumerate(storage["instance"][:2]):
     print(pretty_onnx(inst["onnx"]))
 
 
-################################
+# %%
 # The forward graph.
 
 plot_dot(storage["instance"][0]["onnx"])
 
 
-################################
+# %%
 # The backward graph.
 
 plot_dot(storage["instance"][1]["onnx"])
 
 
-################################
+# %%
 # What about dynamic shapes?
 # ==========================
 #
@@ -219,19 +219,19 @@ for i, inst in enumerate(storage["instance"]):
     print()
     print(pretty_onnx(inst["onnx"]))
 
-################################
+# %%
 # The forward graph.
 
 plot_dot(storage["instance"][0]["onnx"])
 
 
-################################
+# %%
 # The backward graph.
 
 plot_dot(storage["instance"][1]["onnx"])
 
 
-################################
+# %%
 # Pattern Optimizations
 # =====================
 #
@@ -239,4 +239,4 @@ plot_dot(storage["instance"][1]["onnx"])
 # looking for patterns. Each of them locally replaces a couple of
 # nodes to optimize the computation
 # (see :ref:`l-pattern-optimization-onnx` and
-# # :ref:`l-pattern-optimization-ort`).
+# :ref:`l-pattern-optimization-ort`).

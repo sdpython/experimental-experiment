@@ -119,14 +119,14 @@ print("inputs", string_type(inputs, with_shape=True))
 print("dynamic_shapes", dynamic_shapes)
 
 
-###################################
+# %%
 # Let's check it is working.
 # We need to copy the input before calling the model
 # because it modifies the inputs and they are not properly
 # set up when the export starts.
 model(**copy.deepcopy(inputs))
 
-###################################
+# %%
 # Export
 # ++++++
 #
@@ -143,7 +143,7 @@ try:
 except Exception as e:
     print(f"export failed due to {e}")
 
-##################################
+# %%
 # The export fails for a couple of reason but it is possible to patch the
 # code to make it work. All those modifications are put in place by
 # :func:`onnx_export_errors <experimental_experiment.torch_interpreter.onnx_export_errors>`
@@ -168,7 +168,7 @@ with bypass_export_some_errors(
     ep.optimize()
     ep.save("plot_exporter_recipes_oe_phi2.onnx")
 
-########################################
+# %%
 # Exported Model
 # ++++++++++++++
 #
@@ -177,7 +177,7 @@ with bypass_export_some_errors(
 onx = onnx.load("plot_exporter_recipes_oe_phi2.onnx")
 print(pretty_onnx(onx))
 
-########################################
+# %%
 # Visually.
 
 plot_dot(onx)

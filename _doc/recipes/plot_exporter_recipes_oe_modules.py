@@ -143,7 +143,7 @@ y = llm(input_ids)
 
 print(f"output: shape={y.shape}, min={y.min()}, max={y.max()}")
 
-###########################################
+# %%
 # First conversion to ONNX
 # ++++++++++++++++++++++++
 #
@@ -158,7 +158,7 @@ print(ep.graph)
 epo = torch.onnx.export(llm, (input_ids,), dynamo=True)
 print(to_text(epo.model_proto))
 
-###########################################
+# %%
 # Let's check there is no discrepancy.
 
 sess = InferenceSession(
@@ -171,12 +171,12 @@ diff = torch.abs(y - torch.from_numpy(got)).max()
 print(f"output: shape={got.shape}, min={got.min()}, max={got.max()}")
 print(f"max discrepancy={diff}")
 
-###########################################
+# %%
 # Let's save the ONNX model.
 
 onnx.save(epo.model_proto, "plot_exporter_recipes_c_modules.inlined.onnx")
 
-###########################################
+# %%
 # ONNX with submodules
 # ++++++++++++++++++++
 #
@@ -189,7 +189,7 @@ ep = torch.export.export(llm, (input_ids,))
 unflatten_ep = torch.export.unflatten(ep)
 print(unflatten_ep.graph)
 
-###########################################
+# %%
 # The exported graph looks simpler and shows something like::
 #
 #   %decoder : [num_users=1] = call_module[target=decoder](args = (%embedding,), kwargs = {})

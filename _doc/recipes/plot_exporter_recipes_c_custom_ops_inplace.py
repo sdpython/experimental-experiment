@@ -23,7 +23,7 @@ from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
 
 
-#################################
+# %%
 # We define a model with a custom operator.
 
 
@@ -45,12 +45,12 @@ class ModuleWithACustomOperator(torch.nn.Module):
 
 model = ModuleWithACustomOperator()
 
-######################################
+# %%
 # Let's check it runs.
 x = torch.randn(1, 3)
 model(x)
 
-######################################
+# %%
 # As expected, it does not export.
 try:
     torch.export.export(model, (x,))
@@ -58,7 +58,7 @@ try:
 except Exception as e:
     print(e)
 
-####################################
+# %%
 # The exporter fails with the same eror as it expects torch.export.export to work.
 
 try:
@@ -67,7 +67,7 @@ except Exception as e:
     print(e)
 
 
-####################################
+# %%
 # Registration
 # ++++++++++++
 #
@@ -82,12 +82,12 @@ def numpy_sin_shape(x, output):
     pass
 
 
-####################################
+# %%
 # Let's see what the fx graph looks like.
 
 print(torch.export.export(model, (x,)).graph)
 
-#####################################
+# %%
 # Next is the conversion to onnx.
 T = str  # a tensor name
 
@@ -107,12 +107,12 @@ def numpy_sin_to_onnx(
     return outputs
 
 
-####################################
+# %%
 # We create a :class:`Dispatcher <experimental_experiment.torch_interpreter.Dispatcher>`.
 
 dispatcher = Dispatcher({"mylib::numpy_sin": numpy_sin_to_onnx})
 
-#####################################
+# %%
 # And we convert again.
 
 onx = to_onnx(
@@ -124,7 +124,7 @@ onx = to_onnx(
 )
 print(pretty_onnx(onx))
 
-#####################################
+# %%
 # And we convert again with optimization this time.
 
 onx = to_onnx(
@@ -136,7 +136,7 @@ onx = to_onnx(
 )
 print(pretty_onnx(onx))
 
-####################################
+# %%
 # And visually.
 
 plot_dot(onx)

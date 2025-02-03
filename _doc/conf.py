@@ -112,9 +112,12 @@ nitpick_ignore = [
     ("py:class", "torch.fx.proxy.TracerBase"),
     ("py:class", "torch.utils._pytree.Context"),
     ("py:class", "torch.utils._pytree.KeyEntry"),
+    ("py:class", "torch.utils._pytree.TreeSpec"),
     ("py:class", "transformers.cache_utils.Cache"),
     ("py:class", "transformers.cache_utils.DynamicCache"),
     ("py:class", "transformers.cache_utils.MambaCache"),
+    ("py:func", "torch.export._draft_export.draft_export"),
+    ("py:func", "torch._export.tools.report_exportability"),
 ]
 
 nitpick_ignore_regex = [
@@ -143,11 +146,13 @@ sphinx_gallery_conf = {
     "recommender": {"enable": True, "n_examples": 3, "min_df": 3, "max_df": 0.9},
     # ignore capture for matplotib axes
     "ignore_repr_types": "matplotlib\\.(text|axes)",
+    # robubstness
+    "reset_modules_order": "both",
 }
 
 if int(os.environ.get("UNITTEST_GOING", "0")):
     sphinx_gallery_conf["ignore_pattern"] = (
-        ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)|(export_201)|(oe_custom_ops_inplace)|(oe_scan)).*"
+        ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)|(export_201)|(c_phi2)|(oe_custom_ops_inplace)|(oe_scan)|(draft_mode)).*"
     )
 elif pv.Version(torch.__version__) < pv.Version("2.8"):
     sphinx_gallery_conf["ignore_pattern"] = (
