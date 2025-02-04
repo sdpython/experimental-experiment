@@ -1281,9 +1281,9 @@ class ModelDiagnoseOutput:
                     f"schema_str={schema_str!r}, "
                     f"self.forward_fill_kwargs={self.forward_fill_kwargs}, "
                     f"self.forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
-                    f"\nargs={string_type(_args)},\nkwargs={string_type(_kwargs)}"
+                    f"\nargs={string_type(_args, limit=20)},\nkwargs={string_type(_kwargs)}"
                     f"\n-- after serialization --"
-                    f"\nargs={string_type(args)},\nkwargs={string_type(kwargs)}"
+                    f"\nargs={string_type(args, limit=20)},\nkwargs={string_type(kwargs)}"
                 )
                 args = args[:-1]
 
