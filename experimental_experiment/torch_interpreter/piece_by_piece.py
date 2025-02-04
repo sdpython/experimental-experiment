@@ -5,7 +5,7 @@ import inspect
 import os
 import sys
 import textwrap
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, string_sig, max_diff
@@ -504,7 +504,7 @@ class ModelDiagnoseOutput:
             len(s1) == 1
         ), f"Different numbers of unnamed arguments {s1} for {self.full_name}"
         s2 = set(tuple(sorted(set(i[1]))) for i in self.inputs)
-        assert len(s1) == 1, f"Different named arguments {s2} for {self.full_name}"
+        assert len(s2) == 1, f"Different named arguments {s2} for {self.full_name}"
         args = []
         kwargs = {}
         for i in range(s1.pop()):
@@ -512,7 +512,14 @@ class ModelDiagnoseOutput:
             args.append(
                 self.guess_dynamic_shape_object(*objs, msg=lambda i=i: f" failing input {i}")
             )
-        for name in s2.pop():
+        names = s2.pop()
+        for name in names:
+            assert name not in {"_diag", "verbose"}, (
+                f"{self.full_name}: unexpected parameter {name!r}, names={names}"
+                f"\ninputs[0]={string_type(self.inputs[0], with_shape=True)}"
+                f"\ninputs[1]={string_type(self.inputs[1], with_shape=True)}"
+            )
+
             objs = [_[1][name] for _ in self.inputs]
             kwargs[name] = self.guess_dynamic_shape_object(
                 *objs, msg=lambda name=name: f" failing input {name!r}"
@@ -1453,14 +1460,34 @@ class ModelDiagnoseOutput:
                 print(f"    exporter_kwargs={exporter_kwargs}")
 
         if inspect.ismodule(self.model):
-            # The function needs to be wrapped into a module
-            # before being exported.
-            raise NotImplementedError("module")
+            # The function needs to be wrapped into a module before being exported.
+            class LocalModuleCallingAFunction(torch.nn.Module):
+                def __init__(self, local_f):
+                    super().__init__()
+                    self.local_f = local_f
+
+                def forward(self, *args, **kwargs):
+                    return self.local_f(*args, **kwargs)
+
+            if not kwargs and isinstance(ds, tuple):
+                ds = (ds,)
+            else:
+                raise NotImplementedError(
+                    f"{self.full_name}: exporting function {self.forward} "
+                    f"with:\nargs={string_type(args)},"
+                    f"\nforward_positioned_parameter_names={self.forward_positioned_parameter_names}"
+                    f"\nkwargs={string_type(kwargs)},\nds={ds}"
+                    f"\ndynamic_shapes={dynamic_shapes}"
+                    f"\ninputs[0]={string_type(self.inputs[0])}"
+                )
+            model_to_export = LocalModuleCallingAFunction(self.forward)
+        else:
+            model_to_export = self.model
 
         if quiet:
             try:
                 ep = torch.export.export(
-                    self.model,
+                    model_to_export,
                     args,
                     kwargs=kwargs,
                     dynamic_shapes=ds,
@@ -1505,7 +1532,7 @@ class ModelDiagnoseOutput:
                 return self.exporter_status, None
         else:
             ep = torch.export.export(
-                self.model,
+                model_to_export,
                 args,
                 kwargs=kwargs,
                 dynamic_shapes=ds,
@@ -2041,6 +2068,9 @@ class ModelDiagnoseOutput:
         :return: string
         """
 
+        def _suffix(r):
+            return "::func" if inspect.ismodule(r.model) else ""
+
         def iter_status(here):
             rows = [here]
             for child in here.children:
@@ -2050,13 +2080,13 @@ class ModelDiagnoseOutput:
         rows = iter_status(self)
         to_display = [
             (
-                f"{'..' * r.level}{r.name}",
-                r.model.__class__.__name__,
+                f"{'..' * r.level}{r.name}{_suffix(r)}",
                 (
-                    r.exporter_status.pretty_text()
-                    if hasattr(r, "exporter_status")
-                    else "OK as part of its owner"
+                    r.model.__class__.__name__
+                    if isinstance(r.model, torch.nn.Module)
+                    else f"mod::{r.model.__name__}"
                 ),
+                (r.exporter_status.pretty_text() if hasattr(r, "exporter_status") else "<OK>"),
                 r,
             )
             for r in rows
@@ -2161,6 +2191,7 @@ def _trace_forward_execution(
     verbose: int = 0,
     traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
     trace_functions: bool = False,
+    black_list_functions: Optional[Set[str]] = None,
 ):
     if traced_method is None:
         traced_method = {}
@@ -2179,61 +2210,70 @@ def _trace_forward_execution(
             _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
         )
         setattr(model, method_name, rewritten_method)
-        # Should we do that recursively?
-        return diag
 
-    if model.__class__ in traced_method:
-        method_name = traced_method[model.__class__]
-    elif model.__class__.__name__ in traced_method:
-        method_name = traced_method[model.__class__.__name__]
     else:
-        method_name = "forward"
+        # a module is traced
 
-    if method_name is None:
-        # This is not traced.
-        return None
+        if model.__class__ in traced_method:
+            method_name = traced_method[model.__class__]
+        elif model.__class__.__name__ in traced_method:
+            method_name = traced_method[model.__class__.__name__]
+        else:
+            method_name = "forward"
 
-    diag = ModelDiagnoseOutput(parent, name, model, level=level, method_name=method_name)
-    if verbose:
-        print(f"[_trace_forward_execution] -trace- {diag.dot_name}.{diag.method_name}")
-    rewritten_method = lambda *args, _diag=diag, verbose=verbose, **kwargs: (  # noqa: E731
-        _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
-    )
-    setattr(model, method_name, rewritten_method)
-    for name, mod in model.named_children():
-        if isinstance(mod, (torch.nn.ModuleList, torch.nn.ModuleDict)):
-            mod_items = _flatten_module_containes(mod)
-            for i, m in mod_items:
+        if method_name is None:
+            # This is not traced.
+            return None
+
+        diag = ModelDiagnoseOutput(parent, name, model, level=level, method_name=method_name)
+        if verbose:
+            print(f"[_trace_forward_execution] -trace- {diag.dot_name}.{diag.method_name}")
+        rewritten_method = lambda *args, _diag=diag, verbose=verbose, **kwargs: (  # noqa: E731
+            _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
+        )
+        setattr(model, method_name, rewritten_method)
+        for name, mod in model.named_children():
+            if isinstance(mod, (torch.nn.ModuleList, torch.nn.ModuleDict)):
+                mod_items = _flatten_module_containes(mod)
+                for i, m in mod_items:
+                    d = _trace_forward_execution(
+                        diag,
+                        m,
+                        name if i == tuple() else f"{name}[{','.join(map(repr,i))}]",
+                        verbose=verbose,
+                        level=level + 1,
+                        traced_method=traced_method,
+                        trace_functions=trace_functions,
+                        black_list_functions=black_list_functions,
+                    )
+                    if d is None:
+                        continue
+                    diag.add_child(d)
+            else:
                 d = _trace_forward_execution(
                     diag,
-                    m,
-                    name if i == tuple() else f"{name}[{','.join(map(repr,i))}]",
+                    mod,
+                    name,
                     verbose=verbose,
                     level=level + 1,
                     traced_method=traced_method,
                     trace_functions=trace_functions,
+                    black_list_functions=black_list_functions,
                 )
                 if d is None:
                     continue
                 diag.add_child(d)
-        else:
-            d = _trace_forward_execution(
-                diag,
-                mod,
-                name,
-                verbose=verbose,
-                level=level + 1,
-                traced_method=traced_method,
-                trace_functions=trace_functions,
-            )
-            if d is None:
-                continue
-            diag.add_child(d)
 
     if trace_functions:
+        if black_list_functions is None:
+            # Usual functions to skip.
+            black_list_functions = {
+                "replace_return_docstrings",
+                "add_start_docstrings_to_model_forward",
+            }
         lines = inspect.getsource(diag.forward)
         parsed = ast.parse(textwrap.dedent(lines))
-        names = []
+        names = set()
         for node in ast.walk(parsed):
             if not isinstance(node, ast.Call):
                 continue
@@ -2241,8 +2281,14 @@ def _trace_forward_execution(
                 # This is a method.
                 continue
             name = node.func.id
-            names.append(name)
-            mod = sys.modules[model.__class__.__module__]
+            if name in names or name in black_list_functions:
+                continue
+            mod = model if inspect.ismodule(model) else sys.modules[model.__class__.__module__]
+            called_function = getattr(mod, name, None)
+            if called_function is None or not inspect.isfunction(called_function):
+                continue
+            names.add(name)
+
             if hasattr(mod, name):
                 d = _trace_forward_execution(
                     diag,
@@ -2252,6 +2298,7 @@ def _trace_forward_execution(
                     level=level + 1,
                     traced_method=traced_method,
                     trace_functions=trace_functions,
+                    black_list_functions=black_list_functions,
                 )
                 if d is None:
                     continue
@@ -2280,6 +2327,7 @@ def trace_forward_execution(
     verbose: int = 0,
     traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
     trace_functions: bool = False,
+    black_list_functions: Optional[Set[str]] = None,
 ) -> ModelDiagnoseOutput:
     """
     Replaces all forward to store the inputs and outputs of the module
@@ -2292,6 +2340,7 @@ def trace_forward_execution(
         verbose=verbose,
         traced_method=traced_method,
         trace_functions=trace_functions,
+        black_list_functions=black_list_functions,
     )
     assert (
         diag is not None
@@ -2308,6 +2357,7 @@ def trace_execution_piece_by_piece(
     verbose: int = 0,
     traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
     trace_functions: bool = False,
+    black_list_functions: Optional[Set[str]] = None,
 ) -> ModelDiagnoseOutput:
     """
     Runs a model, traces the intermediate output and infers dynamic shapes
@@ -2321,6 +2371,8 @@ def trace_execution_piece_by_piece(
         one can be traced, if the traced method is empty, then it is not traced at all
     :param trace_functions: traces not only submodules but function called by
         the traced method or function inside this method or function
+    :param black_list_functions: if trace_functions is true, this option
+        can be used to avoid tracing some functions
     :return: see :class:`ModelDiagnoseOutput`
 
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
@@ -2328,7 +2380,11 @@ def trace_execution_piece_by_piece(
     if traced_method is None:
         traced_method = {}
     with trace_forward_execution(
-        model, verbose=verbose, traced_method=traced_method, trace_functions=trace_functions
+        model,
+        verbose=verbose,
+        traced_method=traced_method,
+        trace_functions=trace_functions,
+        black_list_functions=black_list_functions,
     ) as tracer:
         for i in inputs:
             if isinstance(i, dict):
