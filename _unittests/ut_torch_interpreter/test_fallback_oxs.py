@@ -23,6 +23,7 @@ class TestFallbackOxs(ExtTestCase):
         reg = default_registry
         self.assertIn("aten::celu", reg)
 
+    @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_celu(self):
         from onnxscript.function_libs.torch_lib.registration import default_registry
         import onnxscript.function_libs.torch_lib.ops.core
@@ -38,14 +39,14 @@ class TestFallbackOxs(ExtTestCase):
         f = reg["aten::celu"]
         self.assertGreater(len(f.overloads), 1)
         fct = f.overloads[0]
-        mod = mods[fct.function.__module__]
+        mod = mods[fct.__module__]
 
         gr = GraphBuilder(18, ir_version=9)
         gr.make_tensor_input("X", TensorProto.FLOAT, ("a", "b"), is_dimension=False)
 
         old_value = mod.op
         mod.op = OxsOpset(gr)
-        y = gr.op.Identity(fct.function("X", alpha=2.0), outputs=["Y"])
+        y = gr.op.Identity(fct.__wrapped__("X", alpha=2.0), outputs=["Y"])
         mod.op = old_value
 
         gr.make_tensor_output(
@@ -58,78 +59,7 @@ class TestFallbackOxs(ExtTestCase):
         y = ext.run(None, {"X": x})[0]
         self.assertEqual(x.shape, y.shape)
 
-    def test_is_scalar(self):
-        from onnxscript.function_libs.torch_lib.registration import default_registry
-        import onnxscript.function_libs.torch_lib.ops.core
-        import onnxscript.function_libs.torch_lib.ops.nn
-
-        mods = {
-            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,  # noqa: E501
-            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,  # noqa: E501
-        }
-
-        reg = default_registry
-        f = reg["aten::all.dim"]
-        self.assertGreater(len(f.overloads), 0)
-        fct = f.overloads[0]
-        mod = mods[fct.function.__module__]
-
-        gr = GraphBuilder(18, ir_version=9, verbose=0)
-        gr.make_tensor_input("X", TensorProto.INT64, ("a", "b"), is_dimension=False)
-
-        old_value = [mod.op, mod.IsScalar]
-
-        mod.op = OxsOpset(gr)
-        mod.IsScalar = mod.op.IsScalar
-        y = gr.op.Identity(fct.function("X", dim=0, keepdim=True), outputs=["Y"])
-
-        mod.op, mod.IsScalar = old_value
-
-        gr.make_tensor_output(y, TensorProto.BOOL, (1, "b"), indexed=False, is_dimension=False)
-        onx = gr.to_onnx()
-
-        ext = ExtendedReferenceEvaluator(onx)
-        x = np.random.rand(3, 4).astype(np.int64)
-        y = ext.run(None, {"X": x})[0]
-        self.assertEqual((1, 4), y.shape)
-
-    def test_rank(self):
-        from onnxscript.function_libs.torch_lib.registration import default_registry
-        import onnxscript.function_libs.torch_lib.ops.core
-        import onnxscript.function_libs.torch_lib.ops.nn
-
-        mods = {
-            "onnxscript.function_libs.torch_lib.ops.core": onnxscript.function_libs.torch_lib.ops.core,  # noqa: E501
-            "onnxscript.function_libs.torch_lib.ops.nn": onnxscript.function_libs.torch_lib.ops.nn,  # noqa: E501
-        }
-
-        reg = default_registry
-        f = reg["aten::atleast_2d"]
-        self.assertGreater(len(f.overloads), 0)
-        fct = f.overloads[0]
-        mod = mods[fct.function.__module__]
-
-        gr = GraphBuilder(18, ir_version=9)
-        gr.make_tensor_input("X", TensorProto.INT64, ("a",), is_dimension=False)
-
-        old_value = [mod.op, mod.Rank]
-
-        mod.op = OxsOpset(gr)
-        mod.Rank = mod.op.Rank
-        y = gr.op.Identity(fct.function("X"), outputs=["Y"])
-
-        mod.op, mod.Rank = old_value
-
-        gr.make_tensor_output(
-            y, TensorProto.INT64, (1, "a"), indexed=False, is_dimension=False
-        )
-        onx = gr.to_onnx()
-
-        ext = ExtendedReferenceEvaluator(onx)
-        x = np.random.rand(12).astype(np.int64)
-        y = ext.run(None, {"X": x})[0]
-        self.assertEqual((1, 12), y.shape)
-
+    @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_gather(self):
         from onnxscript.function_libs.torch_lib.registration import default_registry
         import onnxscript.function_libs.torch_lib.ops.core
@@ -144,28 +74,25 @@ class TestFallbackOxs(ExtTestCase):
         f = reg["aten::gather"]
         self.assertGreater(len(f.overloads), 0)
         fct = f.overloads[0]
-        mod = mods[fct.function.__module__]
-
-        # def aten_gather(self: TReal, dim: int, index: TInt,
-        #   sparse_grad: bool = False) -> TReal:
+        mod = mods[fct.__module__]
 
         gr = GraphBuilder(18, ir_version=9)
         gr.make_tensor_input("X", TensorProto.INT64, ("a",), is_dimension=False)
         gr.make_tensor_input("I", TensorProto.INT64, ("b",), is_dimension=False)
 
         self.assertEqual(repr(Var("X")), "Var('X')")
-        old_value = mod.op, mod.IsScalar
+        old_value = mod.op
 
         mod.op = OxsOpset(gr)
-        mod.IsScalar = mod.op.IsScalar
         try:
-            fct.function(Var("X"), 0, Var("I"))
+            fct.__wrapped__(Var("X"), 0, Var("I"))
         except RuntimeError as e:
             self.assertIn("The function being traced", str(e))
 
-        mod.op, mod.IsScalar = old_value
+        mod.op = old_value
 
     @skipif_ci_windows("dynamo not supported on Windows")
+    @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_fallback_oxs(self):
         import torch
         from experimental_experiment.torch_interpreter import to_onnx
@@ -191,7 +118,7 @@ class TestFallbackOxs(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.6", "bug")
-    @ignore_warnings(DeprecationWarning)
+    @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_llama_model_fallback_debug(self):
         import torch
         from experimental_experiment.torch_models.llama_helper import get_llama_model
