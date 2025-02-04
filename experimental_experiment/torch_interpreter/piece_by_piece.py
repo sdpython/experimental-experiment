@@ -359,15 +359,19 @@ class ModelDiagnoseOutput:
                 return f"C_{self.true_model_name}"
             return f"{self.parent.custom_op_name}_{self.name}"
         if self.parent is None:
-            return f"C_{self.true_model_name}.{self.method_name}"
-        return f"{self.parent.custom_op_name}_{self.name}.{self.method_name}"
+            return f"C_{self.true_model_name}_{self.method_name}"
+        return f"{self.parent.custom_op_name}_{self.name}_{self.method_name}"
 
     @property
     def dot_name(self):
         "Returns a kind of indented name."
+        prefix = "M:" if isinstance(self.model, torch.nn.Module) else "f:"
         if self.method_name == "forward":
-            return f"{'..' * self.level} {self.name}-{self.true_model_name}"
-        return f"{'..' * self.level} {self.name}-{self.true_model_name}.{self.method_name}"
+            return f"{'..' * self.level} {prefix}{self.name}-{self.true_model_name}"
+        return (
+            f"{'..' * self.level} {prefix}{self.name}-"
+            f"{self.true_model_name}.{self.method_name}"
+        )
 
     @property
     def module_name_type(self):
@@ -496,9 +500,11 @@ class ModelDiagnoseOutput:
 
         # Otherwise.
         s1 = set(len(i[0]) for i in self.inputs)
-        assert len(s1) == 1, f"Different numbers of unnamed arguments {s1}"
+        assert (
+            len(s1) == 1
+        ), f"Different numbers of unnamed arguments {s1} for {self.full_name}"
         s2 = set(tuple(sorted(set(i[1]))) for i in self.inputs)
-        assert len(s1) == 1, f"Different named arguments {s2}"
+        assert len(s1) == 1, f"Different named arguments {s2} for {self.full_name}"
         args = []
         kwargs = {}
         for i in range(s1.pop()):
@@ -680,6 +686,7 @@ class ModelDiagnoseOutput:
             print(f"[try_export._register] {self.dot_name} schema_str={schema_str!r}")
 
         # registration
+        assert "." not in fname, f"Not dot allowed in fname={fname!r}"
         custom_def = torch.library.CustomOpDef(namespace, fname, schema_str, fct)
         custom_def.register_kernel(self.device)(fct)
         custom_def._abstract_fn = fct_shape
@@ -1444,6 +1451,12 @@ class ModelDiagnoseOutput:
                 print(f"    ds={ds}")
             if exporter_kwargs:
                 print(f"    exporter_kwargs={exporter_kwargs}")
+
+        if inspect.ismodule(self.model):
+            # The function needs to be wrapped into a module
+            # before being exported.
+            raise NotImplementedError("module")
+
         if quiet:
             try:
                 ep = torch.export.export(
@@ -2162,6 +2175,10 @@ def _trace_forward_execution(
                 f"[_trace_forward_execution] -trace-function- "
                 f"{diag.dot_name!r} imported in {model.__name__!r}"
             )
+        rewritten_method = lambda *args, _diag=diag, verbose=verbose, **kwargs: (  # noqa: E731
+            _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
+        )
+        setattr(model, method_name, rewritten_method)
         # Should we do that recursively?
         return diag
 
@@ -2242,7 +2259,7 @@ def _trace_forward_execution(
             else:
                 if verbose:
                     print(
-                        f"[_trace_forward_execution] cannot trace function={name!r}, "
+                        f"[_trace_forward_execution] -cannot-trace- function={name!r}, "
                         f"not found in {mod.__name__!r}"
                     )
     return diag

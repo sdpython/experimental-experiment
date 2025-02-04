@@ -1794,8 +1794,6 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(len(diag.children), 1)
         self.assertEqual(len(diag.children[0].children), 1)
         all_diag = list(diag)
-        for d in all_diag:
-            print("+++", d)
         self.assertEqual(len(all_diag), 3)
         ep = diag.try_export(
             exporter="fx",
