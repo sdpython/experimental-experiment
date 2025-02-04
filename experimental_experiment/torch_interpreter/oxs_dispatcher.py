@@ -99,8 +99,8 @@ class OxsDispatcher(Dispatcher):
             f"key={key!r}, name={name!r}{builder.get_debug_msg()}"
         )
         fct = regfct.overloads[0]
-        assert fct.function.__module__ in self.submodules, (
-            f"Unable to find onnxscript submodule {fct.function.__module__!r}. "
+        assert fct.__module__ in self.submodules, (
+            f"Unable to find onnxscript submodule {fct.__module__!r}. "
             f"The fallback to onnxscript is not implemented yet for function "
             f"key={key!r}, name={name!r}{builder.get_debug_msg()}"
         )
@@ -119,7 +119,7 @@ class OxsDispatcher(Dispatcher):
             old = self._update_oxs(op)
 
             # call the function
-            res = _fct.function(*vargs, **kwargs)
+            res = _fct.__wrapped__(*vargs, **kwargs)
 
             # restore op, Rank, IsScalar
             self._restore_oxs(old)

@@ -11,6 +11,7 @@ from experimental_experiment.xbuilder.graph_builder import GraphBuilder
 from experimental_experiment.torch_interpreter.oxs_opset import (
     OxsOpset,
     Var,
+    VarShapeType,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 
@@ -85,7 +86,9 @@ class TestFallbackOxs(ExtTestCase):
 
         mod.op = OxsOpset(gr)
         try:
-            fct.__wrapped__(Var("X"), 0, Var("I"))
+            fct.__wrapped__(
+                VarShapeType("X", shape=("a",)), 0, VarShapeType("I", shape=("b",))
+            )
         except RuntimeError as e:
             self.assertIn("The function being traced", str(e))
 

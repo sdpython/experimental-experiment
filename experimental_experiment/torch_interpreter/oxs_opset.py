@@ -1,11 +1,9 @@
 from functools import partial
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 
 class Var:
-    """
-    Traceable variable name.
-    """
+    """Traceable variable name."""
 
     def __init__(
         self,
@@ -54,6 +52,21 @@ class Var:
 
     def __len__(self, _) -> str:
         return self._raise("__len__")
+
+
+class VarShapeType(Var):
+    """Traceable variable name."""
+
+    def __init__(
+        self,
+        name: str,
+        builder: Optional["GraphBuilder"] = None,  # noqa: F821
+        dtype: int = 0,
+        shape: Optional[Tuple[Union[str, int], ...]] = None,
+    ):
+        super().__init__(name, builder)
+        self.shape = shape
+        self.dtype = dtype
 
 
 class OxsOpset:
