@@ -8896,7 +8896,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert not self.is_sequence(
                 k
             ), f"Renaming Not implemented for sequence {k!r}{self.get_debug_msg()}"
-            assert k not in set_inputs, f"Renaming not implemented for input {k!r} yet"
             assert k not in set_outputs, f"Renaming not implemented for output {k!r} yet"
             if self.has_type(k):
                 self.set_type(v, self.get_type(k))
@@ -8904,6 +8903,15 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.set_shape(v, self.get_shape(k))
             elif self.has_rank(k):
                 self.set_shape(v, self.get_shape(k))
+
+            if k in set_inputs:
+                for inp in self.inputs:
+                    if inp.name == k:
+                        inp.name = v
+                        self.set_name(v, marker="rename_names_input")
+                        break
+                continue
+
             if k in self.initializers_dict:
                 self.initializers_dict[v] = self.initializers_dict[k]
                 del self.initializers_dict[k]
