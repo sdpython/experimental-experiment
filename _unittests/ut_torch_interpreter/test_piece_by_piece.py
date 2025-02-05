@@ -1794,7 +1794,7 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout
     def test_piece_by_piece_phi35_local(self):
         import torch
@@ -1856,8 +1856,8 @@ class TestPieceByPiece(ExtTestCase):
             )
             self.assertNotEmpty(ep)
 
-    @requires_torch("2.6")
-    # @hide_stdout
+    @requires_torch("2.7")
+    @hide_stdout
     def test_piece_by_piece_phi35_functions(self):
         import torch
 
