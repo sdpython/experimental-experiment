@@ -15,6 +15,6 @@ to_onnx
 Other functions
 +++++++++++++++
 
-.. automodule:: experimental_experiment.xbuilder
+.. automodule:: experimental_experiment.skl
     :members:
     :no-undoc-members:
