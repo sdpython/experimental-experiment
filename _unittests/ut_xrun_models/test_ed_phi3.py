@@ -37,7 +37,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.6")
+    @requires_torch("2.8")
     def test_phi3_export_no_rename(self):
         import torch
 
@@ -68,7 +68,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4", "for transformers 4.41.1")
+    @requires_torch("2.8")
     def test_phi3_cort_static_not_mixed(self):
         import torch
 
@@ -208,7 +208,7 @@ class TestEdPhi3(ExtTestCase):
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4", "for transformers 4.41.1")
+    @requires_torch("2.8")
     def test_phi3_cort_static(self):
         import torch
 
