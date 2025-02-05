@@ -1,4 +1,6 @@
+import ast
 import unittest
+import inspect
 from typing import List, Optional
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.helpers import string_type
@@ -22,6 +24,14 @@ from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
 from experimental_experiment.torch_models.llm_model_helper import (
     get_phi35_mini_instruct,
 )
+
+
+def traceable_local_f(x, y):
+    return x.abs() + y.abs() + 1e-5
+
+
+def traceable_local_f_recursive(x, y):
+    return traceable_local_f(x, y)
 
 
 class TestPieceByPiece(ExtTestCase):
@@ -1634,6 +1644,157 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(str(shape), "(s0, 6)")
 
     @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_piece_by_piece_method_name(self):
+        import torch
+
+        class MA(torch.nn.Module):
+            def forward(self, x, y):
+                return x + y
+
+        class MM(torch.nn.Module):
+            def execute(self, x, y):
+                return x * y
+
+        class MASMM(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.ma = MA()
+                self.mm = MM()
+
+            def forward(self, x, y, z):
+                return self.ma(x, y) - self.mm.execute(y, z)
+
+        class Big(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.ma = MA()
+                self.masmm = MASMM()
+
+            def forward(self, x):
+                return self.ma(x, self.masmm(x, x, x))
+
+        big = Big()
+        x = torch.randn((5, 6))
+        y = big(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(big, inputs, traced_method={MM: "execute"})
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+        )
+        self.assertIsInstance(ep, StatusExport)
+        assert hasattr(diag, "fx"), "No exported program found in diag."
+        atts = [k for k in dir(diag) if k.startswith("exporter")]
+        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_functions(self):
+        import torch
+
+        def local_f(x, y):
+            return x.abs() + y.abs() + 1e-5
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return (x + y) / local_f(x, y) + traceable_local_f(x, y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subm = SubModel()
+
+            def forward(self, x, y):
+                return self.subm(x, y)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y)
+        self.assertNotEmpty(z)
+
+        lines = inspect.getsource(SubModel.forward)
+        parsed = ast.parse(f"if True:\n{lines}")
+        names = [node.func.id for node in ast.walk(parsed) if isinstance(node, ast.Call)]
+        self.assertEqual(names, ["traceable_local_f", "local_f"])
+
+        inputs = [
+            ((x, y), {}),
+            ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs, trace_functions=True, verbose=1)
+        self.assertEqual(len(diag.children), 1)
+        self.assertEqual(len(diag.children[0].children), 1)
+        all_diag = list(diag)
+        self.assertEqual(len(all_diag), 3)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            quiet=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+        )
+        self.assertNotEmpty(ep)
+
+    @requires_torch("2.6")
+    # @hide_stdout()
+    def test_trace_execution_recursive_functions(self):
+        import torch
+
+        def local_f(x, y):
+            return x.abs() + y.abs() + 1e-5
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return (x + y) / local_f(x, y) + traceable_local_f_recursive(x, y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subm = SubModel()
+
+            def forward(self, x, y):
+                return self.subm(x, y)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.randn((5, 6))
+        z = model(x, y)
+        self.assertNotEmpty(z)
+
+        inputs = [
+            ((x, y), {}),
+            ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs, trace_functions=True, verbose=1)
+        self.assertEqual(len(diag.children), 1)
+        self.assertEqual(len(diag.children[0].children), 1)
+        self.assertEqual(len(diag.children[0].children[0].children), 1)
+        all_diag = list(diag)
+        self.assertEqual(len(all_diag), 4)
+        ep = diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            quiet=0,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+        )
+        self.assertNotEmpty(ep)
+
+    @requires_torch("2.7")
     @hide_stdout
     def test_piece_by_piece_phi35_local(self):
         import torch
@@ -1695,58 +1856,71 @@ class TestPieceByPiece(ExtTestCase):
             )
             self.assertNotEmpty(ep)
 
-    @requires_torch("2.6")
-    @hide_stdout()
-    def test_trace_execution_piece_by_piece_method_name(self):
+    @requires_torch("2.7")
+    @hide_stdout
+    def test_piece_by_piece_phi35_functions(self):
         import torch
 
-        class MA(torch.nn.Module):
-            def forward(self, x, y):
-                return x + y
+        def result_of_same_shape1(*args, **kwargs):
+            "Returns the shape of one element of the cache based on the inputs."
+            return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
+                args[3].dtype
+            )
 
-        class MM(torch.nn.Module):
-            def execute(self, x, y):
-                return x * y
+        def result_of_same_shape2(*args, **kwargs):
+            "Returns the shape of one element of the cache based on the inputs."
+            return torch.empty((*args[0].shape[:2], 32064)).to(args[0].dtype)
 
-        class MASMM(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.ma = MA()
-                self.mm = MM()
-
-            def forward(self, x, y, z):
-                return self.ma(x, y) - self.mm.execute(y, z)
-
-        class Big(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.ma = MA()
-                self.masmm = MASMM()
-
-            def forward(self, x):
-                return self.ma(x, self.masmm(x, x, x))
-
-        big = Big()
-        x = torch.randn((5, 6))
-        y = big(x)
-        self.assertNotEmpty(y)
-
-        inputs = [
-            ((torch.randn((5, 6)),), {}),
-            ((torch.randn((6, 6)),), {}),
-        ]
-
-        diag = trace_execution_piece_by_piece(big, inputs, traced_method={MM: "execute"})
-        ep = diag.try_export(
-            exporter="fx",
-            use_dynamic_shapes=True,
-            exporter_kwargs=dict(strict=False),
-            verbose=10,
+        data = get_phi35_mini_instruct(num_hidden_layers=2, common_dynamic_shapes=True)
+        model, inputs, inputs2 = data["model"], data["inputs"], data["inputs2"]
+        diag = trace_execution_piece_by_piece(
+            model, [inputs, inputs2], verbose=2, trace_functions=True
         )
-        self.assertIsInstance(ep, StatusExport)
-        assert hasattr(diag, "fx"), "No exported program found in diag."
-        atts = [k for k in dir(diag) if k.startswith("exporter")]
-        self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
+        report = diag.get_export_report()
+        self.assertIn("mod::transformers.models.phi3.modeling_phi3", report)
+
+        raise unittest.SkipTest(
+            "Not ready yet to work: see the content of the test to understand"
+        )
+
+        """
+        Class ModelOutput contains this:
+
+        ```
+        def __getitem__(self, k):
+            if isinstance(k, str):
+                inner_dict = dict(self.items())
+                return inner_dict[k]
+            else:
+                return self.to_tuple()[k]
+        ```
+
+        An attribute of this class can be accessed with a string index or an integer.
+        But after it is serialized, the second option is no longer available.
+        This must be fixed before before able to export every submodule.
+        """
+
+        with register_additional_serialization_functions():
+            ep = diag.try_export(
+                exporter="fx",
+                use_dynamic_shapes=True,
+                exporter_kwargs=dict(strict=False),
+                verbose=1,
+                replace_by_custom_op=CustomOpStrategy.LOCAL,
+                quiet=0,
+                shape_functions={
+                    "Phi3Model": {
+                        1: result_of_same_shape1,
+                        2: result_of_same_shape1,
+                        3: result_of_same_shape1,
+                        4: result_of_same_shape1,
+                    },
+                    "C_Phi3ForCausalLM_lm_head": {
+                        0: result_of_same_shape2,
+                    },
+                },
+            )
+            self.assertNotEmpty(ep)
 
 
 if __name__ == "__main__":

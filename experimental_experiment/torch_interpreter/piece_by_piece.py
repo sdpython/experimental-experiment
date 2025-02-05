@@ -1,9 +1,11 @@
+import ast
 import contextlib
 import enum
 import inspect
 import os
+import sys
 import textwrap
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, string_sig, max_diff
@@ -198,7 +200,9 @@ class ModelDiagnoseOutput:
         level: int = 0,
         method_name: str = "forward",
     ):
-        assert isinstance(model, torch.nn.Module), f"unexpected type for model={type(model)}"
+        assert isinstance(model, torch.nn.Module) or inspect.ismodule(
+            model
+        ), f"unexpected type for model={type(model)}"
         self.parent = parent
         self.name = name
         self.model = model
@@ -241,18 +245,25 @@ class ModelDiagnoseOutput:
     def __iter__(self) -> Iterator:
         """Iterates on all the nodes in the graph."""
         yield self
-        yield from self.children
+        for ch in self.children:
+            yield from ch
 
     def get_debug_msg(self) -> str:
         """Returns information about this instances to help debugging."""
         import sys
 
+        if inspect.ismodule(self.model):
+            module_name = self.model.__name__
+            module_file = self.model.__file__
+        else:
+            module_name = self.model.__class__.__module__
+            module_file = sys.modules[self.model.__class__.__module__].__file__
         rows = [
             "",
             f"name={self.name!r}",
-            f"cls={self.model.__class__.__name__!r}",
-            f"module={self.model.__class__.__module__}",
-            f"module_file=\n    {sys.modules[self.model.__class__.__module__].__file__}",
+            f"cls={self.true_model_name!r}",
+            f"module={module_name}",
+            f"module_file=\n    {module_file}",
             f"level={self.level}",
             f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}",
             f"forward_args={self.forward_args}",
@@ -297,13 +308,13 @@ class ModelDiagnoseOutput:
         if not self.children and not with_inputs and not any(kws.values()):
             return (
                 (
-                    f"{indent}>>> {self.name}: {self.model.__class__.__name__}: "
+                    f"{indent}>>> {self.name}: {self.true_model_name}: "
                     f"DS={self.guess_dynamic_shapes()} <<<"
                 )
                 if with_dynamic_shape
-                else f"{indent}>>> {self.name}: {self.model.__class__.__name__} <<<"
+                else f"{indent}>>> {self.name}: {self.true_model_name} <<<"
             )
-        rows = [f"{indent}>>> {self.name}: {self.model.__class__.__name__}"]
+        rows = [f"{indent}>>> {self.name}: {self.true_model_name}"]
         if with_dynamic_shape:
             ds = self.guess_dynamic_shapes()
             rows.append(f"{indent}  DS={ds}")
@@ -321,47 +332,60 @@ class ModelDiagnoseOutput:
         rows.append(f"{indent}<<<")
         return "\n".join(rows)
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}(~{self.full_name}~)"
+
+    @property
+    def true_model_name(self):
+        "Returns class name or module name."
+        return (
+            self.model.__class__.__name__
+            if isinstance(self.model, torch.nn.Module)
+            else self.model.__name__
+        )
+
     @property
     def full_name(self):
         "Returns a name and class name."
         if self.method_name == "forward":
-            return f"{self.name}:{self.model.__class__.__name__}"
-        return f"{self.name}:{self.model.__class__.__name__}.{self.method_name}"
+            return f"{self.name}:{self.true_model_name}"
+        return f"{self.name}:{self.true_model_name}.{self.method_name}"
 
     @property
     def custom_op_name(self):
         "Returns a name and class name."
         if self.method_name == "forward":
             if self.parent is None:
-                return f"C_{self.model.__class__.__name__}"
+                return f"C_{self.true_model_name}"
             return f"{self.parent.custom_op_name}_{self.name}"
         if self.parent is None:
-            return f"C_{self.model.__class__.__name__}.{self.method_name}"
-        return f"{self.parent.custom_op_name}_{self.name}.{self.method_name}"
+            return f"C_{self.true_model_name}_{self.method_name}"
+        return f"{self.parent.custom_op_name}_{self.name}_{self.method_name}"
 
     @property
     def dot_name(self):
         "Returns a kind of indented name."
+        prefix = "M:" if isinstance(self.model, torch.nn.Module) else "f:"
         if self.method_name == "forward":
-            return f"{'..' * self.level} {self.name}-{self.model.__class__.__name__}"
+            return f"{'..' * self.level} {prefix}{self.name}-{self.true_model_name}"
         return (
-            f"{'..' * self.level} {self.name}-"
-            f"{self.model.__class__.__name__}.{self.method_name}"
+            f"{'..' * self.level} {prefix}{self.name}-"
+            f"{self.true_model_name}.{self.method_name}"
         )
 
     @property
     def module_name_type(self):
         "Returns name and module type."
         if self.method_name == "forward":
-            return f"type({self.name})={self.model.__class__.__name__}"
-        return f"type({self.name})={self.model.__class__.__name__}.{self.method_name}"
+            return f"type({self.name})={self.true_model_name}"
+        return f"type({self.name})={self.true_model_name}.{self.method_name}"
 
     def add_inputs(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]):
         """Stores used inputs. Makes a copy."""
         for k in kwargs:
             assert self.forward_kwargs or k in self.forward_parameter_names, (
                 f"Unexpected parameter {k!r} (not found in {self.forward_parameter_names}), "
-                f"name={self.name!r}, model={self.model.__class__.__name__}, "
+                f"name={self.name!r}, model={self.true_model_name}, "
                 f"module={self.model.__class__.__module__}, model={self.model}"
             )
             if self.forward_kwargs and k not in self.forward_ordered_parameter_names:
@@ -388,7 +412,7 @@ class ModelDiagnoseOutput:
         assert len(set_length) == 1, (
             f"Shapes can be different but not ranks possible shapes={set_length} "
             f"shapes={shapes} for module {self.name!r}, "
-            f"class={self.model.__class__.__name__!r}"
+            f"class={self.true_model_name!r}"
         )
         dynamic = torch.export.Dim.DYNAMIC
         rk = set_length.pop()
@@ -476,9 +500,11 @@ class ModelDiagnoseOutput:
 
         # Otherwise.
         s1 = set(len(i[0]) for i in self.inputs)
-        assert len(s1) == 1, f"Different numbers of unnamed arguments {s1}"
+        assert (
+            len(s1) == 1
+        ), f"Different numbers of unnamed arguments {s1} for {self.full_name}"
         s2 = set(tuple(sorted(set(i[1]))) for i in self.inputs)
-        assert len(s1) == 1, f"Different named arguments {s2}"
+        assert len(s2) == 1, f"Different named arguments {s2} for {self.full_name}"
         args = []
         kwargs = {}
         for i in range(s1.pop()):
@@ -486,7 +512,14 @@ class ModelDiagnoseOutput:
             args.append(
                 self.guess_dynamic_shape_object(*objs, msg=lambda i=i: f" failing input {i}")
             )
-        for name in s2.pop():
+        names = s2.pop()
+        for name in names:
+            assert name not in {"_diag", "verbose"}, (
+                f"{self.full_name}: unexpected parameter {name!r}, names={names}"
+                f"\ninputs[0]={string_type(self.inputs[0], with_shape=True)}"
+                f"\ninputs[1]={string_type(self.inputs[1], with_shape=True)}"
+            )
+
             objs = [_[1][name] for _ in self.inputs]
             kwargs[name] = self.guess_dynamic_shape_object(
                 *objs, msg=lambda name=name: f" failing input {name!r}"
@@ -557,8 +590,8 @@ class ModelDiagnoseOutput:
         if isinstance(replace_by_custom_op, CustomOpStrategy):
             return replace_by_custom_op
         if isinstance(replace_by_custom_op, set):
-            if self.model.__class__.__name__ in replace_by_custom_op:
-                return replace_by_custom_op[self.model.__class__.__name__]
+            if self.true_model_name in replace_by_custom_op:
+                return replace_by_custom_op[self.true_model_name]
             if self.name.__class__.__name__ in replace_by_custom_op:
                 return replace_by_custom_op[self.name.__class__.__name__]
         return False
@@ -660,6 +693,7 @@ class ModelDiagnoseOutput:
             print(f"[try_export._register] {self.dot_name} schema_str={schema_str!r}")
 
         # registration
+        assert "." not in fname, f"Not dot allowed in fname={fname!r}"
         custom_def = torch.library.CustomOpDef(namespace, fname, schema_str, fct)
         custom_def.register_kernel(self.device)(fct)
         custom_def._abstract_fn = fct_shape
@@ -816,12 +850,11 @@ class ModelDiagnoseOutput:
         )
 
         if shape_functions and (
-            self.model.__class__.__name__ in shape_functions
-            or self.custom_op_name in shape_functions
+            self.true_model_name in shape_functions or self.custom_op_name in shape_functions
         ):
             shape_functions_class = (
-                shape_functions[self.model.__class__.__name__]
-                if self.model.__class__.__name__ in shape_functions
+                shape_functions[self.true_model_name]
+                if self.true_model_name in shape_functions
                 else shape_functions[self.custom_op_name]
             )
             if output_index in shape_functions_class:
@@ -838,7 +871,7 @@ class ModelDiagnoseOutput:
                     expected_shape_o = tuple(map(int, fout[output_index].shape))
                     assert shape_o == expected_shape_o, (
                         f"Custom shape function {fct} for output_index={output_index} "
-                        f"for class {self.model.__class__.__name__} is failing. "
+                        f"for class {self.true_model_name} is failing. "
                         f"It returns {shape_o} when the expected shape is {expected_shape_o}."
                     )
 
@@ -1248,9 +1281,9 @@ class ModelDiagnoseOutput:
                     f"schema_str={schema_str!r}, "
                     f"self.forward_fill_kwargs={self.forward_fill_kwargs}, "
                     f"self.forward_ordered_parameter_names={self.forward_ordered_parameter_names}"
-                    f"\nargs={string_type(_args)},\nkwargs={string_type(_kwargs)}"
+                    f"\nargs={string_type(_args, limit=20)},\nkwargs={string_type(_kwargs)}"
                     f"\n-- after serialization --"
-                    f"\nargs={string_type(args)},\nkwargs={string_type(kwargs)}"
+                    f"\nargs={string_type(args, limit=20)},\nkwargs={string_type(kwargs)}"
                 )
                 args = args[:-1]
 
@@ -1425,10 +1458,36 @@ class ModelDiagnoseOutput:
                 print(f"    ds={ds}")
             if exporter_kwargs:
                 print(f"    exporter_kwargs={exporter_kwargs}")
+
+        if inspect.ismodule(self.model):
+            # The function needs to be wrapped into a module before being exported.
+            class LocalModuleCallingAFunction(torch.nn.Module):
+                def __init__(self, local_f):
+                    super().__init__()
+                    self.local_f = local_f
+
+                def forward(self, *args, **kwargs):
+                    return self.local_f(*args, **kwargs)
+
+            if not kwargs and isinstance(ds, tuple):
+                ds = (ds,)
+            else:
+                raise NotImplementedError(
+                    f"{self.full_name}: exporting function {self.forward} "
+                    f"with:\nargs={string_type(args)},"
+                    f"\nforward_positioned_parameter_names={self.forward_positioned_parameter_names}"
+                    f"\nkwargs={string_type(kwargs)},\nds={ds}"
+                    f"\ndynamic_shapes={dynamic_shapes}"
+                    f"\ninputs[0]={string_type(self.inputs[0])}"
+                )
+            model_to_export = LocalModuleCallingAFunction(self.forward)
+        else:
+            model_to_export = self.model
+
         if quiet:
             try:
                 ep = torch.export.export(
-                    self.model,
+                    model_to_export,
                     args,
                     kwargs=kwargs,
                     dynamic_shapes=ds,
@@ -1473,7 +1532,7 @@ class ModelDiagnoseOutput:
                 return self.exporter_status, None
         else:
             ep = torch.export.export(
-                self.model,
+                model_to_export,
                 args,
                 kwargs=kwargs,
                 dynamic_shapes=ds,
@@ -2009,6 +2068,9 @@ class ModelDiagnoseOutput:
         :return: string
         """
 
+        def _suffix(r):
+            return "::func" if inspect.ismodule(r.model) else ""
+
         def iter_status(here):
             rows = [here]
             for child in here.children:
@@ -2018,13 +2080,13 @@ class ModelDiagnoseOutput:
         rows = iter_status(self)
         to_display = [
             (
-                f"{'..' * r.level}{r.name}",
-                r.model.__class__.__name__,
+                f"{'..' * r.level}{r.name}{_suffix(r)}",
                 (
-                    r.exporter_status.pretty_text()
-                    if hasattr(r, "exporter_status")
-                    else "OK as part of its owner"
+                    r.model.__class__.__name__
+                    if isinstance(r.model, torch.nn.Module)
+                    else f"mod::{r.model.__name__}"
                 ),
+                (r.exporter_status.pretty_text() if hasattr(r, "exporter_status") else "<OK>"),
                 r,
             )
             for r in rows
@@ -2123,59 +2185,130 @@ def _flatten_module_containes(
 
 def _trace_forward_execution(
     parent: ModelDiagnoseOutput,
-    model: torch.nn.Module,
+    model: Union["module", torch.nn.Module],  # noqa: F821
     name: str = "__main__",
     level: int = 0,
     verbose: int = 0,
     traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
+    trace_functions: bool = False,
+    black_list_functions: Optional[Set[str]] = None,
 ):
     if traced_method is None:
         traced_method = {}
-    if model.__class__ in traced_method:
-        method_name = traced_method[model.__class__]
-    elif model.__class__.__name__ in traced_method:
-        method_name = traced_method[model.__class__.__name__]
+
+    if not isinstance(model, torch.nn.Module):
+        # a function is traced.
+
+        method_name = name
+        diag = ModelDiagnoseOutput(parent, name, model, level=level, method_name=name)
+        if verbose:
+            print(
+                f"[_trace_forward_execution] -trace-function- "
+                f"{diag.dot_name!r} imported in {model.__name__!r}"
+            )
+        rewritten_method = lambda *args, _diag=diag, verbose=verbose, **kwargs: (  # noqa: E731
+            _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
+        )
+        setattr(model, method_name, rewritten_method)
+
     else:
-        method_name = "forward"
+        # a module is traced
 
-    if method_name is None:
-        # This is not traced.
-        return None
+        if model.__class__ in traced_method:
+            method_name = traced_method[model.__class__]
+        elif model.__class__.__name__ in traced_method:
+            method_name = traced_method[model.__class__.__name__]
+        else:
+            method_name = "forward"
 
-    diag = ModelDiagnoseOutput(parent, name, model, level=level, method_name=method_name)
-    if verbose:
-        print(f"[_trace_forward_execution] {diag.dot_name}.{diag.method_name}")
-    rewritten_method = lambda *args, _diag=diag, verbose=verbose, **kwargs: (  # noqa: E731
-        _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
-    )
-    setattr(model, method_name, rewritten_method)
-    for name, mod in model.named_children():
-        if isinstance(mod, (torch.nn.ModuleList, torch.nn.ModuleDict)):
-            mod_items = _flatten_module_containes(mod)
-            for i, m in mod_items:
+        if method_name is None:
+            # This is not traced.
+            return None
+
+        diag = ModelDiagnoseOutput(parent, name, model, level=level, method_name=method_name)
+        if verbose:
+            print(f"[_trace_forward_execution] -trace- {diag.dot_name}.{diag.method_name}")
+        rewritten_method = lambda *args, _diag=diag, verbose=verbose, **kwargs: (  # noqa: E731
+            _rewrite_forward(*args, _diag=_diag, verbose=verbose, **kwargs)
+        )
+        setattr(model, method_name, rewritten_method)
+        for name, mod in model.named_children():
+            if isinstance(mod, (torch.nn.ModuleList, torch.nn.ModuleDict)):
+                mod_items = _flatten_module_containes(mod)
+                for i, m in mod_items:
+                    d = _trace_forward_execution(
+                        diag,
+                        m,
+                        name if i == tuple() else f"{name}[{','.join(map(repr,i))}]",
+                        verbose=verbose,
+                        level=level + 1,
+                        traced_method=traced_method,
+                        trace_functions=trace_functions,
+                        black_list_functions=black_list_functions,
+                    )
+                    if d is None:
+                        continue
+                    diag.add_child(d)
+            else:
                 d = _trace_forward_execution(
                     diag,
-                    m,
-                    name if i == tuple() else f"{name}[{','.join(map(repr,i))}]",
+                    mod,
+                    name,
                     verbose=verbose,
                     level=level + 1,
                     traced_method=traced_method,
+                    trace_functions=trace_functions,
+                    black_list_functions=black_list_functions,
                 )
                 if d is None:
                     continue
                 diag.add_child(d)
-        else:
-            d = _trace_forward_execution(
-                diag,
-                mod,
-                name,
-                verbose=verbose,
-                level=level + 1,
-                traced_method=traced_method,
-            )
-            if d is None:
+
+    if trace_functions:
+        if black_list_functions is None:
+            # Usual functions to skip.
+            black_list_functions = {
+                "replace_return_docstrings",
+                "add_start_docstrings_to_model_forward",
+            }
+        lines = inspect.getsource(diag.forward)
+        parsed = ast.parse(textwrap.dedent(lines))
+        names = set()
+        for node in ast.walk(parsed):
+            if not isinstance(node, ast.Call):
                 continue
-            diag.add_child(d)
+            if not isinstance(node.func, ast.Name):
+                # This is a method.
+                continue
+            name = node.func.id
+            if name in names or name in black_list_functions:
+                continue
+            mod = model if inspect.ismodule(model) else sys.modules[model.__class__.__module__]
+            called_function = getattr(mod, name, None)
+            if called_function is None or not inspect.isfunction(called_function):
+                continue
+            names.add(name)
+
+            if hasattr(mod, name):
+                d = _trace_forward_execution(
+                    diag,
+                    mod,
+                    name,
+                    verbose=verbose,
+                    level=level + 1,
+                    traced_method=traced_method,
+                    trace_functions=trace_functions,
+                    black_list_functions=black_list_functions,
+                )
+                if d is None:
+                    continue
+                diag.add_child(d)
+            else:
+                if verbose:
+                    print(
+                        f"[_trace_forward_execution] -cannot-trace- function={name!r}, "
+                        f"not found in {mod.__name__!r}"
+                    )
     return diag
 
 
@@ -2193,13 +2326,22 @@ def trace_forward_execution(
     model: torch.nn.Module,
     verbose: int = 0,
     traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
+    trace_functions: bool = False,
+    black_list_functions: Optional[Set[str]] = None,
 ) -> ModelDiagnoseOutput:
     """
     Replaces all forward to store the inputs and outputs of the module
     and every submodules.
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
     """
-    diag = _trace_forward_execution(None, model, verbose=verbose, traced_method=traced_method)
+    diag = _trace_forward_execution(
+        None,
+        model,
+        verbose=verbose,
+        traced_method=traced_method,
+        trace_functions=trace_functions,
+        black_list_functions=black_list_functions,
+    )
     assert (
         diag is not None
     ), f"Model type {type(model)} cannot be traced, see traced_method={traced_method!r}"
@@ -2214,6 +2356,8 @@ def trace_execution_piece_by_piece(
     inputs: List[Tuple[Tuple[Any, ...], Dict[str, Any]]],
     verbose: int = 0,
     traced_method: Optional[Dict[Union[type[torch.nn.Module], str], str]] = None,
+    trace_functions: bool = False,
+    black_list_functions: Optional[Set[str]] = None,
 ) -> ModelDiagnoseOutput:
     """
     Runs a model, traces the intermediate output and infers dynamic shapes
@@ -2225,6 +2369,10 @@ def trace_execution_piece_by_piece(
     :param verbose: verbosity
     :param traced_method: by default the class traced method ``forward`` but another
         one can be traced, if the traced method is empty, then it is not traced at all
+    :param trace_functions: traces not only submodules but function called by
+        the traced method or function inside this method or function
+    :param black_list_functions: if trace_functions is true, this option
+        can be used to avoid tracing some functions
     :return: see :class:`ModelDiagnoseOutput`
 
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
@@ -2232,7 +2380,11 @@ def trace_execution_piece_by_piece(
     if traced_method is None:
         traced_method = {}
     with trace_forward_execution(
-        model, verbose=verbose, traced_method=traced_method
+        model,
+        verbose=verbose,
+        traced_method=traced_method,
+        trace_functions=trace_functions,
+        black_list_functions=black_list_functions,
     ) as tracer:
         for i in inputs:
             if isinstance(i, dict):
