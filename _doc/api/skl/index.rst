@@ -10,7 +10,7 @@
 to_onnx
 +++++++
 
-.. autofunction:: to_onnx
+.. autofunction:: experimental_experiment.skl.to_onnx
 
 Other functions
 +++++++++++++++
