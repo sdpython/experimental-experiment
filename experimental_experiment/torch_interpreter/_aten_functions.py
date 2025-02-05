@@ -2085,10 +2085,7 @@ def aten_div__Tensor(
     name: str = "div__Tensor",
 ) -> T:
     "div"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_div__Tensor)."
-    )
+    return aten_div_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_div_Tensor_mode(
@@ -5442,6 +5439,9 @@ def aten_maximum(
     ):
         # unexpected case: Max(x, y=a float)
         y = g.op.Cast(y, to=g.get_type(x), name=name)
+    assert (
+        not g.has_type(x) or not g.has_type(y) or g.get_type(x) == g.get_type(y)
+    ), f"Type mismatch for {x!r} and {y!r}{g.get_debug_msg()}"
     res = g.op.Max(x, y, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
@@ -9103,10 +9103,7 @@ def aten_sub__Tensor(
     name: str = "sub__Tensor",
 ) -> T:
     "sub"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_sub__Tensor)."
-    )
+    return aten_sub_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_sum(
