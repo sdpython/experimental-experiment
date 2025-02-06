@@ -151,9 +151,10 @@ class TorchKNNImputer(torch.nn.Module):
         return torch.cat([X_imputed, X_indicator], dim=0)
 
     def _calc_impute(self, dist_pot_donors, n_neighbors, fit_X_col, mask_fit_X_col):
-        donors_idx = torch.topk(dist_pot_donors, n_neighbors - 1, dim=1, largest=False)[
-            :, :n_neighbors
-        ]
+        donors_idx = torch.topk(
+            dist_pot_donors, n_neighbors, dim=1, largest=False, sorted=True
+        )
+        donors_idx = donors_idx.indices[:, :n_neighbors]
 
         # Get weight matrix from distance matrix
         donors_dist = dist_pot_donors[torch.arange(donors_idx.shape[0])[:, None], donors_idx]
@@ -169,10 +170,15 @@ class TorchKNNImputer(torch.nn.Module):
 
         # Retrieve donor values and calculate kNN average
         donors = fit_X_col.take(donors_idx)
-        donors_mask = mask_fit_X_col.take(donors_idx)
-        donors = np.ma.array(donors, mask=donors_mask)
+        donors_mask = 1 - mask_fit_X_col.take(donors_idx).to(int)
 
-        return np.ma.average(donors, axis=1, weights=weight_matrix).data
+        new_weights = donors_mask.to(donors.dtype)
+        new_weights *= weight_matrix.to(donors.dtype)
+
+        weights_sum = new_weights.sum(axis=1, keepdim=True)
+        div = torch.where(weights_sum == 0, 1, weights_sum)
+        res = (donors * new_weights).sum(axis=1, keepdim=True) / div
+        return res.squeeze(dim=1)
 
     def transform(self, X):
         X = X.clone()
@@ -216,31 +222,19 @@ class TorchKNNImputer(torch.nn.Module):
             all_nan_dist_mask = torch.isnan(dist_subset).all(axis=1)
             all_nan_receivers_idx = receivers_idx[all_nan_dist_mask]
 
-            if all_nan_receivers_idx.size:
-                mask_ = (~mask_fit_X[:, col]).to(self._fit_X.dtype)
-                mask_sum = mask_.to(X.dtype).sum()
+            # when all_nan_receivers_idx is empty (training set is small)
+            mask_ = (~mask_fit_X[:, col]).to(self._fit_X.dtype)
+            mask_sum = mask_.to(X.dtype).sum()
 
-                col_sum = (self._fit_X[mask_ == 1, col]).sum().to(X.dtype)
-                # if mask_sum > 0:
-                #    col_mean = col_sum / mask_sum
-                # else:
-                #    col_mean = torch.tensor(0)
-                col_mean = torch.cond(
-                    mask_sum > 0,
-                    (lambda col_sum, mask_sum: col_sum / mask_sum),
-                    (lambda col_sum, mask_sum: mask_sum),
-                    [col_sum, mask_sum],
-                )
-                X[all_nan_receivers_idx, col] = col_mean
+            col_sum = (self._fit_X[mask_ == 1, col]).sum().to(X.dtype)
+            div = torch.where(mask_sum > 0, mask_sum, 1)
+            X[all_nan_receivers_idx, col] = col_sum / div
 
-                # if len(all_nan_receivers_idx) == len(receivers_idx):
-                #    # all receivers imputed with mean
-                #    return
+            # receivers with at least one defined distance
+            receivers_idx = receivers_idx[~all_nan_dist_mask]
+            dist_subset = dist_chunk[dist_idx_map[receivers_idx]][:, potential_donors_idx]
 
-                # receivers with at least one defined distance
-                receivers_idx = receivers_idx[~all_nan_dist_mask]
-                dist_subset = dist_chunk[dist_idx_map[receivers_idx]][:, potential_donors_idx]
-
+            # when all_nan_receivers_idx is not empty (training set is big)
             n_neighbors = min(self.n_neighbors, len(potential_donors_idx))
             value = self._calc_impute(
                 dist_subset,
@@ -248,7 +242,7 @@ class TorchKNNImputer(torch.nn.Module):
                 self._fit_X[potential_donors_idx, col],
                 mask_fit_X[potential_donors_idx, col],
             )
-            X[receivers_idx, col] = value
+            X[receivers_idx, col] = value.to(X.dtype)
 
         for col in range(X.shape[1]):
             if not self._valid_mask[col]:
@@ -272,19 +266,34 @@ class TorchKNNImputer(torch.nn.Module):
 # %%
 # Validation
 # ++++++++++
+#
+# We need to do that with different sizes of training set.
 
-knn_imputer = sklearn.impute.KNNImputer(n_neighbors=3)
-knn_imputer.fit(X)
 
-model = TorchKNNImputer(knn_imputer)
+def validate(size):
+    X = torch.randn((size, 2))
+    Y = torch.randn((5, 2))
+    for i in range(5):
+        X[i, i % 2] = torch.nan
+    for i in range(4):
+        Y[i + 1, i % 2] = torch.nan
 
-p1 = knn_imputer.transform(Y)
-p2 = model.transform(Y)
-print(f"knn discrepancies: {max_diff(p1, p2)}")
+    knn_imputer = sklearn.impute.KNNImputer(n_neighbors=3)
+    knn_imputer.fit(X)
 
-p1 = knn_imputer.transform(Y[1:-1])
-p2 = model.transform(Y[1:-1])
-print(f"knn discrepancies: {max_diff(p1, p2)}")
+    model = TorchKNNImputer(knn_imputer)
+
+    p1 = knn_imputer.transform(Y)
+    p2 = model.transform(Y)
+    print(f"knn discrepancies for size={size}: {max_diff(p1, p2)}")
+
+    p1 = knn_imputer.transform(Y[1:2])
+    p2 = model.transform(Y[1:2])
+    print(f"knn discrepancies for size={size}: {max_diff(p1, p2)}")
+
+
+validate(5)
+validate(50)
 
 # %%
 # Export to ONNX
