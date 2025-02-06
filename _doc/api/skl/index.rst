@@ -6,6 +6,7 @@
     :caption: modules
 
     convert
+    helpers
 
 to_onnx
 +++++++

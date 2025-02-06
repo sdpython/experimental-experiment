@@ -1394,11 +1394,13 @@ class DynamoInterpreter:
                 f"Unable to interpret function {type(aten_name)}: "
                 f"{aten_name!r}, searched for "
                 f"{lookup} and attributes {lookup_names}, "
-                f"args={node.args}, kwargs={node.kwargs}"
-                f"{self.builder.get_debug_msg()}"
+                f"args={node.args}, kwargs={node.kwargs}, dispatcher="
+                f"{self.dispatcher.supported if self.dispatcher else None}"
+                f"{self.builder.get_debug_msg()}, "
             )
         if self.builder.verbose > 1:
-            print(f"[DynamoInterpreter-{self._hash()}.call_function][{fct.__name__}]")
+            name = fct.__class__.__name__ if isinstance(fct, GraphBuilder) else fct.__name__
+            print(f"[DynamoInterpreter-{self._hash()}.call_function][{name}]")
 
         args = [self._process_arg(node, aten_name, a) for a in fx_args]
         output_names = self._get_output_names(node)
@@ -1442,6 +1444,38 @@ class DynamoInterpreter:
             res = self.add_aten_as_function(
                 str(aten_name), fct, can_set, output_names, args=args, kwargs=fx_kwargs
             )
+        elif isinstance(fct, GraphBuilder):
+            # The function is already implemented in a graph builder, we
+            # add it as a local function.
+            fct_builder = fct
+            name_fct = str(aten_name).replace(".", "_")
+            domain = "local_domain"
+
+            inits, (fdomain, fname) = self.builder.make_local_function(
+                fct_builder,
+                FunctionOptions(
+                    export_as_function=True,
+                    name=name_fct.replace(".", "_"),
+                    domain=domain,
+                    inline=False,
+                    merge_allowed=True,
+                    rename_allowed=True,
+                    move_initializer_to_constant=True,
+                    return_initializer=True,
+                    external_threshold=2**8,
+                ),
+                optimize=False,
+            )
+            new_inits = []
+            for init in inits:
+                new_init = self.builder.make_initializer(
+                    init.name, init, source="add_aten_as_function"
+                )
+                new_inits.append(new_init)
+            self.builder.make_node(
+                fname, [*args, *new_inits], output_names, domain=fdomain, name=name_fct
+            )
+            res = output_names[0] if len(output_names) == 1 else tuple(output_names)
         else:
             res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)
 

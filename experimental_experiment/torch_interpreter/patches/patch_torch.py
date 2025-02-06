@@ -1,5 +1,67 @@
-from typing import List, Sequence, Union
+import inspect
+import os
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 import torch
+from torch._subclasses.fake_tensor import FakeTensorMode
+
+
+def _catch_produce_guards_and_solve_constraints(
+    previous_function: Callable,
+    fake_mode: "FakeTensorMode",  # noqa: F821
+    gm: "torch.fx.GraphModule",  # noqa: F821
+    dynamic_shapes: Union[Dict[str, Any], Tuple[Any], List[Any], None],
+    equalities_inputs: "EqualityConstraint",  # noqa: F821
+    original_signature: inspect.Signature,
+    _is_torch_jit_trace: bool = False,
+    verbose: int = 0,
+):
+    try:
+        return previous_function(
+            fake_mode=fake_mode,
+            gm=gm,
+            dynamic_shapes=dynamic_shapes,
+            equalities_inputs=equalities_inputs,
+            original_signature=original_signature,
+            _is_torch_jit_trace=_is_torch_jit_trace,
+        )
+    except Exception as e:
+        if not int(os.environ.get("SKIP_SOLVE_CONSTRAINTS", "1")):
+            raise
+        if verbose:
+            print(
+                f"[_catch_produce_guards_and_solve_constraints] ERROR"
+                f"produce_guards_and_solve_constraints failed, "
+                f"use SKIP_SOLVE_CONSTRAINTS=0 to avoid skipping\n"
+                f"fake_mode={fake_mode}\n"
+                f"dynamic_shapes={dynamic_shapes}\n"
+                f"equalities_inputs={equalities_inputs}\n"
+                f"original_signature={original_signature}\n"
+                f"_is_torch_jit_trace={_is_torch_jit_trace}\n"
+                f"exc={e}\ngm={gm}"
+            )
+
+
+def patch__check_input_constraints_for_graph(
+    previous_function: Callable,
+    input_placeholders: list[torch.fx.Node],
+    flat_args_with_path,
+    range_constraints,
+    verbose: int = 0,
+) -> None:
+    try:
+        return previous_function(input_placeholders, flat_args_with_path, range_constraints)
+    except Exception as e:
+        if not int(os.environ.get("SKIP_SOLVE_CONSTRAINTS", "1")):
+            raise
+        if verbose:
+            print(
+                f"[_check_input_constraints_for_graph] ERROR"
+                f"_check_input_constraints_for_graph failed, "
+                f"use SKIP_SOLVE_CONSTRAINTS=0 to avoid skipping\n"
+                f"input_placeholders={input_placeholders}\n"
+                f"range_constraints={range_constraints}\n"
+                f"exc={e}"
+            )
 
 
 def patched_infer_size(a, b):

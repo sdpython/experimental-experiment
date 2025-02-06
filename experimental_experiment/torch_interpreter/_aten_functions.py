@@ -2085,10 +2085,7 @@ def aten_div__Tensor(
     name: str = "div__Tensor",
 ) -> T:
     "div"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_div__Tensor)."
-    )
+    return aten_div_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_div_Tensor_mode(
@@ -3754,13 +3751,17 @@ def aten_index_Tensor(
         # shape(B) = (B,)
         # X[A, B] = ...
         shapes = [g.get_shape(i) for i in indices]
-        assert (
-            len(set(shapes)) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (1){g.get_debug_msg()}"
+        assert len(set(shapes)) == 1, (
+            f"aten_index is not implemented for shapes={shapes} (1), x={x!r}, "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}"
+            f"{g.get_debug_msg()}"
+        )
         same_shape = shapes[0]
-        assert (
-            len(same_shape) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
+        assert len(same_shape) == 1, (
+            f"aten_index is not implemented for shapes={shapes} (2), x={x!r}, "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}"
+            f"{g.get_debug_msg()}"
+        )
         reshaped = [
             g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name) for i in indices
         ]
@@ -5442,6 +5443,9 @@ def aten_maximum(
     ):
         # unexpected case: Max(x, y=a float)
         y = g.op.Cast(y, to=g.get_type(x), name=name)
+    assert (
+        not g.has_type(x) or not g.has_type(y) or g.get_type(x) == g.get_type(y)
+    ), f"Type mismatch for {x!r} and {y!r}{g.get_debug_msg()}"
     res = g.op.Max(x, y, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
@@ -9103,10 +9107,7 @@ def aten_sub__Tensor(
     name: str = "sub__Tensor",
 ) -> T:
     "sub"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_sub__Tensor)."
-    )
+    return aten_sub_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_sum(
@@ -9250,6 +9251,33 @@ def aten_t(
             g.set_shape(res, tuple(shape))
         else:
             g.set_rank(res, g.get_rank(x))
+    return res
+
+
+def aten_take(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    indices: T,
+    name: str = "take",
+) -> T:
+    """take"""
+    res = g.op.Gather(
+        g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name),
+        indices,
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = g.get_shape(x)
+            g.set_shape(
+                x, (int(np.prod(shape)),) if all_int(shape) else ("x".join(map(str, shape)),)
+            )
+        else:
+            g.set_rank(res, 1)
     return res
 
 

@@ -1239,13 +1239,25 @@ def max_diff(
         diff = (got_cpu - exp_cpu).abs()
         ndiff = (expected.isnan().cpu().to(int) - got.isnan().cpu().to(int)).abs()
         rdiff = diff / (exp_cpu.abs() + 1e-3)
-        abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
-            float(diff.max()),
-            float(rdiff.max()),
-            float(diff.sum()),
-            float(diff.numel()),
-            float(ndiff.sum()),
-        )
+        if diff.numel() > 0:
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+                float(diff.max()),
+                float(rdiff.max()),
+                float(diff.sum()),
+                float(diff.numel()),
+                float(ndiff.sum()),
+            )
+        elif got_cpu.numel() == exp_cpu.numel():
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (0.0, 0.0, 0.0, 0.0, 0.0)
+        else:
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+                np.inf,
+                np.inf,
+                np.inf,
+                np.inf,
+                np.inf,
+            )
+
         if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
             # To understand the value it comes from.
             if debug_info:

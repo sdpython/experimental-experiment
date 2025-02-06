@@ -212,6 +212,7 @@ Deeper into pytorch and onnx
 * :ref:`l-plot-torch-dort-201`
 * :ref:`l-torch-aot-201`
 * :ref:`l-plot-torch-export-with-dynamic-cache-201`
+* :ref:`l-plot-torch-sklearn-201`
 
 **301**
 

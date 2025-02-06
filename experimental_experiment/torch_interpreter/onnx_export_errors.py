@@ -1,7 +1,5 @@
 import contextlib
-import inspect
-import os
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict
 from .onnx_export_serialization import (
     flatten_with_keys_dynamic_cache,
     flatten_dynamic_cache,
@@ -11,42 +9,6 @@ from .onnx_export_serialization import (
     flatten_with_keys_mamba_cache,
     unflatten_mamba_cache,
 )
-
-
-def _catch_produce_guards_and_solve_constraints(
-    previous_function: Callable,
-    fake_mode: "FakeTensorMode",  # noqa: F821
-    gm: "torch.fx.GraphModule",  # noqa: F821
-    dynamic_shapes: Union[Dict[str, Any], Tuple[Any], List[Any], None],
-    equalities_inputs: "EqualityConstraint",  # noqa: F821
-    original_signature: inspect.Signature,
-    _is_torch_jit_trace: bool = False,
-    verbose: int = 0,
-):
-    try:
-        return previous_function(
-            fake_mode=fake_mode,
-            gm=gm,
-            dynamic_shapes=dynamic_shapes,
-            equalities_inputs=equalities_inputs,
-            original_signature=original_signature,
-            _is_torch_jit_trace=_is_torch_jit_trace,
-        )
-    except Exception as e:
-        if not int(os.environ.get("SKIP_SOLVE_CONSTRAINTS", "1")):
-            raise
-        if verbose:
-            print(
-                f"[_catch_produce_guards_and_solve_constraints] ERROR"
-                f"produce_guards_and_solve_constraints failed, "
-                f"use SKIP_SOLVE_CONSTRAINTS=0 to avoid skipping\n"
-                f"fake_mode={fake_mode}\n"
-                f"dynamic_shapes={dynamic_shapes}\n"
-                f"equalities_inputs={equalities_inputs}\n"
-                f"original_signature={original_signature}\n"
-                f"_is_torch_jit_trace={_is_torch_jit_trace}\n"
-                f"exc={e}\ngm={gm}"
-            )
 
 
 def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
@@ -120,12 +82,12 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
 
 
 def _unregister_cache_serialization(undo: Dict[str, bool], verbose: int = 0):
-    import torch
+    import optree
 
     if undo.get("MambaCache", False):
         from transformers.cache_utils import MambaCache
 
-        torch.utils._pytree.SUPPORTED_NODES.pop(MambaCache)
+        optree.unregister_pytree_node(MambaCache, namespace="torch")
         if verbose:
             print("[bypass_export_some_errors] unregistered MambaCache")
 
@@ -133,15 +95,11 @@ def _unregister_cache_serialization(undo: Dict[str, bool], verbose: int = 0):
         from transformers.cache_utils import DynamicCache
         from .patches.patch_transformers import patched_DynamicCache
 
-        torch.utils._pytree.SUPPORTED_NODES.pop(DynamicCache)
-        torch.fx._pytree.SUPPORTED_NODES.pop(DynamicCache)
-        torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(DynamicCache)
+        optree.unregister_pytree_node(DynamicCache, namespace="torch")
         if verbose:
             print("[bypass_export_some_errors] unregistered DynamicCache")
 
-        torch.utils._pytree.SUPPORTED_NODES.pop(patched_DynamicCache)
-        torch.fx._pytree.SUPPORTED_NODES.pop(patched_DynamicCache)
-        torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH.pop(patched_DynamicCache)
+        optree.unregister_pytree_node(patched_DynamicCache, namespace="torch")
         if verbose:
             print("[bypass_export_some_errors] unregistered patched_DynamicCache")
 
@@ -275,7 +233,12 @@ def bypass_export_some_errors(
     ###############
 
     if patch_torch:
-        from .patches.patch_torch import patched_infer_size, patched__broadcast_shapes
+        from .patches.patch_torch import (
+            patched_infer_size,
+            patched__broadcast_shapes,
+            _catch_produce_guards_and_solve_constraints,
+            patch__check_input_constraints_for_graph,
+        )
 
         if verbose:
             print("[bypass_export_some_errors] patch pytorch")
@@ -300,13 +263,21 @@ def bypass_export_some_errors(
     # torch._export.non_strict_utils.produce_guards_and_solve_constraints
     if catch_constraints:
         if verbose:
-            print("[bypass_export_some_errors] catch produce_guards_and_solve_constraints")
+            print("[bypass_export_some_errors] modifies shape constraints")
         f_produce_guards_and_solve_constraints = (
             torch._export.non_strict_utils.produce_guards_and_solve_constraints
+        )
+        f__check_input_constraints_for_graph = (
+            torch._export.utils._check_input_constraints_for_graph
         )
         torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
             lambda *args, **kwargs: _catch_produce_guards_and_solve_constraints(
                 f_produce_guards_and_solve_constraints, *args, verbose=verbose, **kwargs
+            )
+        )
+        torch._export.utils._check_input_constraints_for_graph = (
+            lambda *args, **kwargs: patch__check_input_constraints_for_graph(
+                f__check_input_constraints_for_graph, *args, verbose=verbose, **kwargs
             )
         )
 
@@ -390,10 +361,11 @@ def bypass_export_some_errors(
             torch._export.non_strict_utils.produce_guards_and_solve_constraints = (
                 f_produce_guards_and_solve_constraints
             )
+            torch._export.utils._check_input_constraints_for_graph = (
+                f__check_input_constraints_for_graph
+            )
             if verbose:
-                print(
-                    "[bypass_export_some_errors] restored produce_guards_and_solve_constraints"
-                )
+                print("[bypass_export_some_errors] restored shape constraints")
 
         ##############
         # transformers
