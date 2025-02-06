@@ -1860,7 +1860,8 @@ class DynamoInterpreter:
                         dtype = list(set(_.dtype for _ in v))
                         assert len(dtype) == 1, (
                             f"Only sequence of tensors of the same type are allowed "
-                            f"but dtype={dtype}{self.builder.get_debug_msg()}"
+                            f"but dtype={dtype}, node={node!r}, target={node.target!r}"
+                            f"{self.builder.get_debug_msg()}"
                         )
                         itype = torch_dtype_to_onnx_dtype(dtype[0])
                         self.builder.set_sequence(

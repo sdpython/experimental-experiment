@@ -172,7 +172,9 @@ class SubDonorsIdx(torch.nn.Module):
 
 class MakeDiv(torch.nn.Module):
     def forward(self, weights_sum):
-        return torch.where(weights_sum == 0, 1, weights_sum)
+        return torch.where(
+            weights_sum == 0, torch.tensor([1], dtype=weights_sum.dtype), weights_sum
+        )
 
 
 class MakeMask(torch.nn.Module):

@@ -3750,6 +3750,18 @@ def aten_index_Tensor(
         # shape(A) = (4,)
         # shape(B) = (B,)
         # X[A, B] = ...
+        ranks = [g.get_rank(i) for i in indices]
+        set_ranks = set(ranks)
+        if len(set_ranks) == 1 and set_ranks.pop() == 2 and len(indices) == 2:
+            name = f"{name}_rk2"
+            ind1, ind2 = indices
+            t1 = g.op.GatherND(x, ind1, batch_dims=0, name=name)
+            res = g.op.GatherElements(t1, ind2, axis=1, outputs=outputs, name=name)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+            return res
+
+        name = f"{name}_rk1"
         shapes = [g.get_shape(i) for i in indices]
         assert len(set(shapes)) == 1, (
             f"aten_index is not implemented for shapes={shapes} (1), x={x!r}, "

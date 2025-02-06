@@ -16,6 +16,11 @@ class Dispatcher:
         self.registered_functions = registered_functions
         self.verbose = verbose
 
+    def merge(self, other_dispatcher: "Dispatcher"):
+        """Adds other dispateched fucntions into this one."""
+        self.registered_functions = self.registered_functions.copy()
+        self.registered_functions.update(other_dispatcher.registered_functions)
+
     @property
     def supported(self) -> Set[str]:
         "Returns the list supported dispateched names."
