@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 
 class Dispatcher:
@@ -15,6 +15,11 @@ class Dispatcher:
     def __init__(self, registered_functions: Dict[str, Callable], verbose: int = 0):
         self.registered_functions = registered_functions
         self.verbose = verbose
+
+    @property
+    def supported(self) -> Set[str]:
+        "Returns the list supported dispateched names."
+        return set(self.registered_functions)
 
     def _get_function_name(self, name: Any) -> str:
         if isinstance(name, str):
