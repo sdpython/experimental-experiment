@@ -133,8 +133,8 @@ class StatusExport:
         if self.is_ok():
             return f"{self.status.name} -- {self.exported.__class__.__name__}"
         reason = self.reason.split("\n", maxsplit=1)[0]
-        if len(reason) > 40:
-            reason = reason[:40] + "..."
+        if len(reason) > 70:
+            reason = reason[:70] + "..."
         return f"{self.status.name} -- step={self.step}, reason={reason!r}"
 
 
@@ -354,13 +354,17 @@ class ModelDiagnoseOutput:
     @property
     def custom_op_name(self):
         "Returns a name and class name."
+
+        def _clean_(s):
+            return s.replace("[", "_").replace("]", "_")
+
         if self.method_name == "forward":
             if self.parent is None:
-                return f"C_{self.true_model_name}"
-            return f"{self.parent.custom_op_name}_{self.name}"
+                return _clean_(f"C_{self.true_model_name}")
+            return _clean_(f"{self.parent.custom_op_name}_{self.name}")
         if self.parent is None:
-            return f"C_{self.true_model_name}_{self.method_name}"
-        return f"{self.parent.custom_op_name}_{self.name}_{self.method_name}"
+            return _clean_(f"C_{self.true_model_name}_{self.method_name}")
+        return _clean_(f"{self.parent.custom_op_name}_{self.name}_{self.method_name}")
 
     @property
     def dot_name(self):
@@ -639,6 +643,11 @@ class ModelDiagnoseOutput:
             annotated = self._annotation_from_type(o)
         else:
             index = self.forward_ordered_parameter_names.index(name)
+            assert index < len(args), (
+                f"{self.full_name}: unexpected index={index} for name={name!r}, "
+                f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}, "
+                f"args={string_type(args, with_shape=True)}"
+            )
             o = args[index]
             annotated = self._annotation_from_type(o)
         if isinstance(annotated, str):
@@ -872,7 +881,9 @@ class ModelDiagnoseOutput:
                     assert shape_o == expected_shape_o, (
                         f"Custom shape function {fct} for output_index={output_index} "
                         f"for class {self.true_model_name} is failing. "
-                        f"It returns {shape_o} when the expected shape is {expected_shape_o}."
+                        f"It returns {shape_o} when the expected shape is {expected_shape_o}, "
+                        f"inputs={string_type(fin, with_shape=True)}, "
+                        f"outputs={string_type(fout, with_shape=True)}."
                     )
 
                 return fct
@@ -1373,23 +1384,7 @@ class ModelDiagnoseOutput:
             and getattr(self.model, self.method_name) == self.forward_calling_custom_op
         )
 
-    def _try_export_no_bypass_export(
-        self,
-        export_inputs,
-        exporter_kwargs: Optional[Dict[str, Any]] = None,
-        verbose: int = 0,
-        quiet: bool = True,
-        use_dynamic_shapes: Optional[bool] = None,
-        shape_functions: Optional[Dict[str, Callable]] = None,
-    ) -> Tuple[Optional[Any], Optional[Callable]]:
-        if quiet:
-            quiet = self._debug_noquiet_name != self.name
-            debug = not quiet
-        else:
-            debug = False
-
-        args, kwargs = export_inputs
-        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+    def _post_process_dynamic_shapes(self, args, kwargs, dynamic_shapes, debug, verbose):
         if dynamic_shapes and (self.forward_kwargs or self.forward_args):
             # The export should change dynamic shapes to have only named arguments.
             if debug or verbose > 1:
@@ -1411,6 +1406,28 @@ class ModelDiagnoseOutput:
             )
             if dynamic_shapes[0] and dynamic_shapes[1]
             else (dynamic_shapes[0] or dynamic_shapes[1])
+        )
+        return args, kwargs, ds
+
+    def _try_export_no_bypass_export(
+        self,
+        export_inputs,
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        quiet: bool = True,
+        use_dynamic_shapes: Optional[bool] = None,
+        shape_functions: Optional[Dict[str, Callable]] = None,
+    ) -> Tuple[Optional[Any], Optional[Callable]]:
+        if quiet:
+            quiet = self._debug_noquiet_name != self.name
+            debug = not quiet
+        else:
+            debug = False
+
+        args, kwargs = export_inputs
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        args, kwargs, ds = self._post_process_dynamic_shapes(
+            args, kwargs, dynamic_shapes, debug, verbose
         )
         if debug or verbose > 1:
             sds = str(ds).replace("<_DimHint.DYNAMIC: 3>", "DYN")
@@ -1800,6 +1817,96 @@ class ModelDiagnoseOutput:
         ), f"{self.full_name}: expecting at least one input{self.get_debug_msg()}"
         for child in self.children:
             child.verifies()
+
+    def draft_export_local(
+        self,
+        use_dynamic_shapes: Optional[bool] = None,
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        shape_functions: Optional[Dict[str, Callable]] = None,
+    ):
+        if use_dynamic_shapes is None:
+            use_dynamic_shapes = len(self.inputs) > 1
+        args, kwargs = self.inputs[0]
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        args, kwargs, ds = self._post_process_dynamic_shapes(
+            args, kwargs, dynamic_shapes, False, verbose
+        )
+
+        import torch.export._draft_export
+
+        for child in self.children:
+            if verbose >= 10:
+                print(f"[try_export-FX]     child {child.full_name} as custom op")
+                print(
+                    f"[try_export-FX]           "
+                    f"args={string_type(child.inputs[0][0], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]         "
+                    f"kwargs={string_type(child.inputs[0][1], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]        "
+                    f"outputs={string_type(child.outputs[0], with_shape=True)}"
+                )
+            child.put_custom_op_inplace(verbose=verbose, shape_functions=shape_functions)
+        ep_report = torch.export._draft_export.draft_export(
+            self.model,
+            args,
+            kwargs=kwargs,
+            dynamic_shapes=ds,
+            **(exporter_kwargs or {}),
+        )
+        assert ep_report is not None, f"No result for {self.full_name}"
+        # We restore the initial state.
+        for child in self.children:
+            child.remove_custom_op_inplace(verbose=verbose)
+        return ep_report
+
+    def export_local(
+        self,
+        use_dynamic_shapes: Optional[bool] = None,
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        shape_functions: Optional[Dict[str, Callable]] = None,
+    ):
+        if use_dynamic_shapes is None:
+            use_dynamic_shapes = len(self.inputs) > 1
+        args, kwargs = self.inputs[0]
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        args, kwargs, ds = self._post_process_dynamic_shapes(
+            args, kwargs, dynamic_shapes, False, verbose
+        )
+
+        for child in self.children:
+            if verbose >= 10:
+                print(f"[try_export-FX]     child {child.full_name} as custom op")
+                print(
+                    f"[try_export-FX]           "
+                    f"args={string_type(child.inputs[0][0], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]         "
+                    f"kwargs={string_type(child.inputs[0][1], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]        "
+                    f"outputs={string_type(child.outputs[0], with_shape=True)}"
+                )
+            child.put_custom_op_inplace(verbose=verbose, shape_functions=shape_functions)
+        ep_report = torch.export.export(
+            self.model,
+            args,
+            kwargs=kwargs,
+            dynamic_shapes=ds,
+            **(exporter_kwargs or {}),
+        )
+        assert ep_report is not None, f"No result for {self.full_name}"
+        # We restore the initial state.
+        for child in self.children:
+            child.remove_custom_op_inplace(verbose=verbose)
+        return ep_report
 
     def try_export(
         self,
