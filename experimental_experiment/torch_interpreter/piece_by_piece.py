@@ -2278,6 +2278,8 @@ class ModelDiagnoseOutput:
         external_threshold: int = 1024,
         return_optimize_report: bool = False,
         function_options: Optional[FunctionOptions] = None,
+        dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+        output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
     ):
         """
         Exports into ONNX with submodule as local functions.
@@ -2304,7 +2306,9 @@ class ModelDiagnoseOutput:
         :param function_options: to specify what to do
             with the initializers in local functions,
             add them as constants or inputs
+        :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
         :param output_names: to rename the output names
+        :param output_dynamic_shapes: same as *dynamic_shapes* but for the output
         :return: onnx model
         """
         # First export the submodule.
@@ -2316,8 +2320,13 @@ class ModelDiagnoseOutput:
             StatusExportCode.OK,
             StatusExportCode.OK_CHILDC,
         ), (
-            f"{self.full_name}: exporter failed, a custom onnx converter must be provided for "
-            f"{self.custom_op_name!r}"
+            f"{self.full_name}: exporter failed, "
+            f"status={self.exporter_status.status!r}, "
+            f"a custom onnx converter must be provided for "
+            f"'diag_lib::{self.custom_op_name}', "
+            f"args={string_type(self.inputs[0][0], with_shape=True)}, "
+            f"kwargs={string_type(self.inputs[0][1], with_shape=True)}, outputs="
+            f"{string_type(self.outputs[0], with_shape=True)}"
         )
         all_stats = {}
         dispatched = {}
@@ -2326,6 +2335,16 @@ class ModelDiagnoseOutput:
         if self.children:
             stats = []
             for child in self.children:
+                if dispatcher and dispatcher.find_function(
+                    f"diag_lib::{child.custom_op_name}"
+                ):
+                    # No need to export.
+                    if verbose:
+                        print(
+                            f"[to_onnx_local] {'..' * self.level} "
+                            f"skip {child.custom_op_name!r}"
+                        )
+                    continue
                 if verbose:
                     print(
                         f"[to_onnx_local] {'..' * self.level} "
@@ -2346,6 +2365,7 @@ class ModelDiagnoseOutput:
                     raise_list=raise_list,
                     return_optimize_report=return_optimize_report,
                     function_options=function_options,
+                    dispatcher=dispatcher,
                 )
                 if return_optimize_report:
                     _, builder, st = res
@@ -2353,13 +2373,19 @@ class ModelDiagnoseOutput:
                 else:
                     _, builder = res
 
-            local_functions.append(builder)
-            dispatched[f"diag_lib::{child.custom_op_name}"] = builder
+                local_functions.append(builder)
+                dispatched[f"diag_lib::{child.custom_op_name}"] = builder
             all_stats["children"] = stats
 
         if verbose:
             print(f"[to_onnx_local] {self.dot_name!r} - export starts")
-        dispatcher = Dispatcher(dispatched) if dispatched else None
+        if dispatched:
+            new_dispatcher = Dispatcher(dispatched)
+            if dispatcher:
+                new_dispatcher.merge(dispatcher)
+        else:
+            new_dispatcher = dispatcher
+
         res = to_onnx(
             self.exporter_status.exported,
             as_function=False,
@@ -2368,14 +2394,15 @@ class ModelDiagnoseOutput:
             filename=filename,
             inline=inline,
             input_names=input_names,
-            output_names=output_names,
             large_model=large_model,
             verbose=max(verbose - 2, 0),
             return_builder=return_builder,
             raise_list=raise_list,
             return_optimize_report=return_optimize_report,
             function_options=function_options,
-            dispatcher=dispatcher,
+            dispatcher=new_dispatcher,
+            output_names=output_names,
+            output_dynamic_shapes=output_dynamic_shapes,
         )
         if verbose:
             print(f"[to_onnx_local] {self.dot_name!r} - export done")

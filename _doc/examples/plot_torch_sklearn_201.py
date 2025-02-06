@@ -24,16 +24,19 @@ Module
 import contextlib
 import io
 import logging
+from typing import Any, Dict, List, Optional
 import onnx
 import sklearn
 import torch
 import onnxruntime
+from experimental_experiment.xbuilder import GraphBuilder
 from experimental_experiment.helpers import max_diff
 from experimental_experiment.skl.helpers import flatnonzero, _get_weights
 from experimental_experiment.torch_interpreter import (
     to_onnx,
     ExportOptions,
     make_undefined_dimension,
+    Dispatcher,
 )
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
@@ -578,11 +581,34 @@ print(trace.get_export_report())
 # Final step
 # ++++++++++
 #
-# Let's export everything. Every submodule is exported as a local function.
-# That's make
+# Let's export everything. Every submodule is exported as a local function
+# except topk for which we must provide an ONNX conversion.
+T = str
+
+
+def onnx_topk_indices(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    k: T,
+    name: str = "topk",
+):
+    unique_name = g.unique_name("unused_topk_values")
+    g.op.TopK(x, k, name=name, outputs=[unique_name, *outputs])
+    return outputs[0]
+
+
+dispatcher = Dispatcher(
+    {
+        (
+            "diag_lib::C_TorchKNNImputer_columns_0___calc_impute__donors_idx__topk"
+        ): onnx_topk_indices
+    }
+)
 
 # onx = trace.to_onnx()
-onx = trace.to_onnx_local(verbose=0)
+onx = trace.to_onnx_local(verbose=0, dispatcher=dispatcher)
 
 onnx.save(onx, "plot_torch_sklearn_201.onnx")
 print(onx)
