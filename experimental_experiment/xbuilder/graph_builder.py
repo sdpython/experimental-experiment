@@ -2266,7 +2266,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     if self.get_rank(name) == 0:
                         r = self.op.UnsqueezeAnyOpset(
-                            name, np.array([0], dtype=np.int64), name=f"_mkshape1_{name}"
+                            name, self.ZERO, name=f"_mkshape1_{name}"
                         )
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
@@ -2310,7 +2310,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     if self.get_rank(name) == 0:
                         r = self.op.UnsqueezeAnyOpset(
-                            name, np.array([0], dtype=np.int64), name=f"_mkshape2_{name}"
+                            name, self.ZERO, name=f"_mkshape2_{name}"
                         )
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
@@ -2601,10 +2601,21 @@ class GraphBuilder(_GraphBuilderRuntime):
         return name
 
     def is_dynamic_shape(
-        self, shape: DYNAMIC_SHAPE, verify: bool = True, allow_none: bool = False
+        self,
+        shape: DYNAMIC_SHAPE,
+        verify: bool = True,
+        allow_none: bool = False,
+        allow_new_dynamic_dimension: bool = False,
     ) -> bool:
+        """Tells if a shape is dynamic or static (only integers)."""
         return all(
-            self.is_dynamic_dimension(x, verify=verify, allow_none=allow_none) for x in shape
+            self.is_dynamic_dimension(
+                x,
+                verify=verify,
+                allow_none=allow_none,
+                allow_new_dynamic_dimension=allow_new_dynamic_dimension,
+            )
+            for x in shape
         )
 
     def is_constant_or_attribute(
@@ -2636,7 +2647,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         return None
 
     def is_dynamic_dimension(
-        self, dim: Any, verify: bool = True, allow_none: bool = False
+        self,
+        dim: Any,
+        verify: bool = True,
+        allow_none: bool = False,
+        allow_new_dynamic_dimension: bool = False,
     ) -> bool:
         if allow_none and dim is None:
             return True
@@ -2650,7 +2665,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             or str(dim) in self.dynamic_objects
             or str(dim) in self.dynamic_objects_rev
             or self.has_name(str(dim))
-            or self.parse_dimension_expression(dim)
+            or self.parse_dimension_expression(
+                dim, allow_new_dynamic_dimension=allow_new_dynamic_dimension
+            )
         ), (
             f"dim={dim!r} (type={type(dim)}) not in found in "
             f"{self.dynamic_objects}, self.dynamic_shapes={self.dynamic_shapes}, "
@@ -2679,7 +2696,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if self.get_rank(dim) == 0:
                     return self.op.UnsqueezeAnyOpset(
                         dim,
-                        np.array([0], dtype=np.int64),
+                        self.ZERO,
                         name=f"get_dynamic_dimension_a_{dim}",
                     )
                 return dim
@@ -2703,7 +2720,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert self.has_rank(name), f"name={name!r} has no rank{self.get_debug_msg()}"
             if self.get_rank(name) == 0:
                 return self.op.UnsqueezeAnyOpset(
-                    dim, np.array([0], dtype=np.int64), name=f"get_dynamic_dimension_b_{name}"
+                    dim, self.ZERO, name=f"get_dynamic_dimension_b_{name}"
                 )
             return dim
         assert name in self.dynamic_objects, (
@@ -7820,20 +7837,31 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{time.perf_counter() - begin_}"
             )
 
-    def parse_dimension_expression(self, expr: str, exc: bool = True) -> Expression:
+    def parse_dimension_expression(
+        self, expr: str, exc: bool = True, allow_new_dynamic_dimension: bool = False
+    ) -> Expression:
         """
         Parses an expression involving dimension.
 
         :param expr: expr
         :param exc: raises an exception if it fails
+        :param allow_new_dynamic_dimension: the new dimension is considered as a new one,
+            if the dimension is only one variable (:meth:`str.isidentifier`)
         :return: an expression or None if exc is False and the parsing failed
         """
         try:
             return parse_expression(expr, exc=exc, context=self.dynamic_objects)
         except AssertionError as e:
+            if allow_new_dynamic_dimension:
+                name = parse_expression(expr, exc=False, context=self.dynamic_objects)
+                if name.isidentifier():
+                    return name
             raise AssertionError(
-                f"Unable to parse an expression expr=[{expr!r}] "
-                f"due to {e}{self.get_debug_msg()}"
+                f"Unable to parse an expression expr=[{expr!r}], "
+                f"allow_new_dynamic_dimension={allow_new_dynamic_dimension}, "
+                f"due to {e}, self.dynamic_objects={self.dynamic_objects}, "
+                f"self.dynamic_shapes={self.dynamic_shapes}, "
+                f"self._dynamic_alias={self._dynamic_alias}{self.get_debug_msg()}"
             ) from e
 
     def _constant_key(self, node: NodeProto) -> Optional[bytes]:

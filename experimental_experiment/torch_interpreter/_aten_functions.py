@@ -4882,9 +4882,7 @@ def aten_item(
         f"{g.get_shape(x) if g.has_shape(x) else 'missing'}{g.get_debug_msg()}"
     )
     if g.get_shape(x) == (1,):
-        return g.op.SqueezeAnyOpset(
-            x, np.array([0], dtype=np.int64), outputs=outputs, name=name
-        )
+        return g.op.SqueezeAnyOpset(x, g.ZERO, outputs=outputs, name=name)
     return g.op.Identity(x, outputs=outputs, name=name)
 
 
@@ -10248,6 +10246,17 @@ def aten_view(
     "slice"
     if isinstance(size, (int, tuple, list)):
         asize = [size] if isinstance(size, int) else list(size)
+        if len(asize) == 0:
+            # Squeeze?
+            assert g.has_shape(x) and g.get_shape(x) in (tuple(), (1,)), (
+                f"Cannot reshape {x!r} if its shape is "
+                f"{g.get_shape(x) if g.has_shape(x) else '?'}"
+                f"{g.get_debug_msg()}"
+            )
+            if g.get_shape(x) == tuple():
+                return g.op.Identity(x, name=node_name, outputs=outputs)
+            return g.op.SqueezeAnyOpset(x, g.ZERO, name=node_name, outputs=outputs)
+
         if is_static_shape(asize):
             asize = np.array(asize, dtype=np.int64)
             assert (

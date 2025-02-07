@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from ..helpers import string_type, string_sig, max_diff
 from ..xbuilder import OptimizationOptions
-from . import to_onnx, FunctionOptions, Dispatcher
+from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
 from .piece_by_piece_serialize import (
     choose_kwargs_for_dynamic_shapes,
     deserialize_args,
@@ -335,6 +335,7 @@ class ModelDiagnoseOutput:
         return "\n".join(rows)
 
     def __str__(self) -> str:
+        "usual"
         return f"{self.__class__.__name__}(~{self.full_name}~)"
 
     @property
@@ -429,9 +430,7 @@ class ModelDiagnoseOutput:
         return res
 
     def guess_dynamic_shape_object(self, *objs: Any, msg: Optional[Callable] = None) -> Any:
-        """
-        Guesses the dynamic shapes for one argument.
-        """
+        """Guesses the dynamic shapes for one argument."""
         assert (
             len(objs) > 1
         ), f"Unable to infer shapes with only one object {string_type(objs)}"
@@ -584,9 +583,7 @@ class ModelDiagnoseOutput:
     def _do_replace_by_custom_op(
         self, replace_by_custom_op: Union[bool, CustomOpStrategy, Dict[str, CustomOpStrategy]]
     ) -> CustomOpStrategy:
-        """
-        Tells if a module must be replaced by a custom op.
-        """
+        """Tells if a module must be replaced by a custom op."""
         if isinstance(replace_by_custom_op, bool):
             return (
                 CustomOpStrategy.ONLY_IF_FAILING
@@ -848,9 +845,7 @@ class ModelDiagnoseOutput:
         verbose: int = 0,
         shape_functions: Optional[Dict[str, Callable]] = None,
     ) -> Callable:
-        """
-        Determines a function producing an output shape based in this inputs.
-        """
+        """Determines a function producing an output shape based in this inputs."""
         assert (
             isinstance(flattened_inputs, list)
             and isinstance(flattened_outputs, list)
@@ -982,10 +977,13 @@ class ModelDiagnoseOutput:
             out = self.outputs[0]
             input_shape = inp_args[0].shape
             unique_output_shape = set(t.shape for t in out)
+            unique_output_dtype = set(t.dtype for t in out)
             if (
                 not inp_kwargs
                 and len(unique_output_shape) == 1
+                and len(unique_output_dtype) == 1
                 and unique_output_shape.pop() == input_shape
+                and unique_output_dtype.pop() == inp_args[0].dtype
             ):
                 n_outputs = len(out)
 
@@ -2280,6 +2278,7 @@ class ModelDiagnoseOutput:
         function_options: Optional[FunctionOptions] = None,
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+        export_options: Optional[Union[str, ExportOptions]] = None,
     ):
         """
         Exports into ONNX with submodule as local functions.
@@ -2309,6 +2308,7 @@ class ModelDiagnoseOutput:
         :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
         :param output_names: to rename the output names
         :param output_dynamic_shapes: same as *dynamic_shapes* but for the output
+        :param export_options: to apply differents options before to get the exported program
         :return: onnx model
         """
         # First export the submodule.
@@ -2331,6 +2331,8 @@ class ModelDiagnoseOutput:
         all_stats = {}
         dispatched = {}
         local_functions = []
+        if verbose:
+            print(f"[to_onnx_local] {self.dot_name} - to_onnx_local ")
 
         if self.children:
             stats = []
@@ -2341,14 +2343,14 @@ class ModelDiagnoseOutput:
                     # No need to export.
                     if verbose:
                         print(
-                            f"[to_onnx_local] {'..' * self.level} "
-                            f"skip {child.custom_op_name!r}"
+                            f"[to_onnx_local] {self.dot_name} - "
+                            f"skip child {child.custom_op_name!r}"
                         )
                     continue
                 if verbose:
                     print(
-                        f"[to_onnx_local] {'..' * self.level} "
-                        f"export {child.custom_op_name!r}"
+                        f"[to_onnx_local] {self.dot_name} - "
+                        f"export child {child.custom_op_name!r}"
                     )
                 res = child.to_onnx_local(
                     target_opset=target_opset,
@@ -2366,6 +2368,7 @@ class ModelDiagnoseOutput:
                     return_optimize_report=return_optimize_report,
                     function_options=function_options,
                     dispatcher=dispatcher,
+                    export_options=export_options,
                 )
                 if return_optimize_report:
                     _, builder, st = res
@@ -2378,7 +2381,7 @@ class ModelDiagnoseOutput:
             all_stats["children"] = stats
 
         if verbose:
-            print(f"[to_onnx_local] {self.dot_name!r} - export starts")
+            print(f"[to_onnx_local] {self.dot_name!r} - export starts {self.custom_op_name}")
         if dispatched:
             new_dispatcher = Dispatcher(dispatched)
             if dispatcher:
@@ -2403,6 +2406,7 @@ class ModelDiagnoseOutput:
             dispatcher=new_dispatcher,
             output_names=output_names,
             output_dynamic_shapes=output_dynamic_shapes,
+            export_options=export_options,
         )
         if verbose:
             print(f"[to_onnx_local] {self.dot_name!r} - export done")

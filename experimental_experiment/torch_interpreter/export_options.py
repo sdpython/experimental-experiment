@@ -167,6 +167,40 @@ class ExportOptions:
             ]
         raise AssertionError(f"Unable to return fallback strategy with kind={kind!r}")
 
+    def post_process_exported_program(
+        self,
+        exported_program: "torch.export.ExportedProgram",  # noqa: F821
+        verbose: int = 0,
+        print_exported_program: bool = False,
+    ) -> "torch.export.ExportedProgram":  # noqa: F821
+        """
+        Run decompositions, remove inplace operations.
+        The graph is modified inplace.
+        """
+        if self.decomposition_table:
+            begin = time.perf_counter()
+            dec = apply_decompositions(exported_program, self.decomposition_table)
+            if verbose:
+                print(
+                    f"[ExportOptions.export] done after decomposition "
+                    f"in {time.perf_counter() - begin}"
+                )
+            if print_exported_program:
+                print("-- EXPORTED PROGRAM AFTER DECOMPOSITION -- ")
+                print(dec)
+                print("-- DONE -- ")
+            return dec
+
+        if self.remove_inplace:
+            self.remove_inplace_nodes(
+                exported_program.graph, exported_program=exported_program, verbose=verbose
+            )
+            if print_exported_program:
+                print("-- EXPORTED PROGRAM AFTER REMOVING INLINE -- ")
+                print(exported_program)
+                print("-- DONE -- ")
+        return exported_program
+
     def export(
         self,
         mod: Any,

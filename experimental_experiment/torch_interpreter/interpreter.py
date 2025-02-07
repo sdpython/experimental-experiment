@@ -1444,6 +1444,7 @@ class DynamoInterpreter:
             res = self.add_aten_as_function(
                 str(aten_name), fct, can_set, output_names, args=args, kwargs=fx_kwargs
             )
+            allow_new_dynamic_dimension = False
         elif isinstance(fct, GraphBuilder):
             # The function is already implemented in a graph builder, we
             # add it as a local function.
@@ -1491,8 +1492,10 @@ class DynamoInterpreter:
                 elif fct_builder.has_rank(bout):
                     self.builder.set_rank(out, fct_builder.get_rank(bout))
             res = output_names[0] if len(output_names) == 1 else tuple(output_names)
+            allow_new_dynamic_dimension = True
         else:
             res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)
+            allow_new_dynamic_dimension = False
 
         n_nodes_after = len(self.builder.nodes) + len(self.builder.initializers_dict)
         if res is None:
@@ -1509,7 +1512,12 @@ class DynamoInterpreter:
                 f"for node={node}{self.builder.get_debug_msg()}"
             )
 
-        self._set_shape_and_type(node, res, fct_name=aten_name)
+        self._set_shape_and_type(
+            node,
+            res,
+            fct_name=aten_name,
+            allow_new_dynamic_dimension=allow_new_dynamic_dimension,
+        )
         res = self._check_output_name(node, res, output_names)
         return res
 
@@ -1754,7 +1762,14 @@ class DynamoInterpreter:
         node: "torch.fx.Node",  # noqa: F821
         res: Union[str, List[str]],
         fct_name: Optional[str] = None,
+        allow_new_dynamic_dimension: bool = False,
     ):
+        """
+        Sets shape and type for a result.r
+        This information is coming from the torch exporter.
+        ``allow_new_dynamic_dimension`` can be use to bypass errors
+        related to new shape.
+        """
         val = node.meta.get("val", None)
         exa = node.meta.get("example_value", None)
         if val is not None and exa is not None:
@@ -1856,10 +1871,13 @@ class DynamoInterpreter:
                 elif isinstance(v, list) and len(v) > 0:
                     if len(v) == len(r) and r[0].endswith("#0"):
                         # Operator Split was used instead of SplitToSequence.
+                        # Or any other node producing multiple results.
                         for r_, v_ in zip(r, v):
                             self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
                             shape = tuple(v_.shape)
-                            if self.builder.is_dynamic_shape(shape):
+                            if self.builder.is_dynamic_shape(
+                                shape, allow_new_dynamic_dimension=allow_new_dynamic_dimension
+                            ):
                                 self.builder.set_shape(r_, shape, set_if_more_precise=False)
                             elif self.builder.has_rank(r_):
                                 assert len(shape) == self.builder.get_rank(r_), (

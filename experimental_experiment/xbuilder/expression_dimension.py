@@ -5,6 +5,9 @@ from typing import Any, Dict, Optional
 class Expression:
     """
     A formula using dimension.
+
+    :param expr: a string
+    :param parsed: parsed tree (from :func:`ast.parse`)
     """
 
     def __init__(self, expr: str, parsed: Optional[ast.Expression] = None):
@@ -12,7 +15,12 @@ class Expression:
         self.parsed = parsed
 
     def __repr__(self):
+        "usual"
         return f"{self.__class__.__name__}({self.expr!r})"
+
+    def isidentifier(self):
+        "Tells if this expression is a single dimension or an expression."
+        return self.expr.isidentifier
 
 
 def parse_expression_tokens(expr: str):
@@ -53,7 +61,6 @@ def parse_expression(
     assert isinstance(
         expr, str
     ), f"Unexpected type {type(expr)} for expr={expr!r} and context={context}"
-    assert exc, "parse_expression not implemented when exc is False"
     if context is None:
         context = {}
     st = ast.parse(expr, mode="eval")
@@ -73,7 +80,7 @@ def parse_expression(
                             f"Unable to convert type {type(d)} into string"
                         ) from e
                 sds.append(sd)
-            assert context is None or node.id in context or node.id in set(sds), (
+            assert not exc or context is None or node.id in context or node.id in set(sds), (
                 f"Unable to find name {node.id!r} from expression {expr!r}, "
                 f"context is {sorted(context)}"
             )

@@ -24,6 +24,7 @@ Module
 import contextlib
 import io
 import logging
+import warnings
 from typing import Any, Dict, List, Optional
 import onnx
 import sklearn
@@ -272,7 +273,7 @@ class ColProcessor(torch.nn.Module):
         mask_sum = mask_.to(X.dtype).sum()
 
         col_sum = (_fit_X[mask_ == 1, col]).sum().to(X.dtype)
-        div = torch.where(mask_sum > 0, mask_sum, 1)
+        div = torch.where(mask_sum > 0, mask_sum, torch.tensor([1], dtype=mask_sum.dtype))
         X[all_nan_receivers_idx, col] = col_sum / div
 
         # receivers with at least one defined distance
@@ -285,7 +286,9 @@ class ColProcessor(torch.nn.Module):
             tn < potential_donors_idx.shape[0], tn, potential_donors_idx.shape[0]
         )
         # to make sure n_neighbors > 0
-        n_neighbors = torch.where(n_neighbors <= 0, torch.tensor(1), n_neighbors)
+        n_neighbors = torch.where(
+            n_neighbors <= 0, torch.tensor([1], dtype=n_neighbors.dtype), n_neighbors
+        )
         value = self._calc_impute(
             dist_subset,
             n_neighbors,
@@ -610,7 +613,17 @@ dispatcher = Dispatcher(
 )
 
 # onx = trace.to_onnx()
-onx = trace.to_onnx_local(verbose=0, dispatcher=dispatcher)
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+
+    if False:
+        for t in trace:
+            if t.exporter_status.exported is None:
+                print(f"[run_decompositions] {t.dot_name} - skipped")
+                continue
+            print(f"[run_decompositions] {t.dot_name}")
+            t.exporter_status.exported.run_decompositions()
+onx = trace.to_onnx_local(verbose=1, dispatcher=dispatcher)
 
 onnx.save(onx, "plot_torch_sklearn_201.onnx")
 print(onx)
@@ -621,7 +634,7 @@ print(onx)
 # ==========
 
 
-def validate_onnx(size):
+def validate_onnx(size, onx):
     X = torch.randn((size, 2))
     Y = torch.randn((5, 2))
     for i in range(5):

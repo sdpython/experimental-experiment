@@ -579,7 +579,9 @@ def _make_builder_interpreter(
                 verbose=verbose,
             )
         else:
-            exported_program = mod
+            exported_program = export_options.post_process_exported_program(
+                mod, verbose=verbose
+            )
             exe_path = "exising-torch.export.ExportProgram"
 
         debug_ep = os.environ.get("PRINT_EXPORTED_PROGRAM", "0")
