@@ -10344,6 +10344,19 @@ def aten_where_Scalar(
     return aten_where(g, sts, outputs, condition, x, other, name=name)
 
 
+def aten_where_ScalarOther(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
+    name: str = "where_ScalarOther",
+) -> T:
+    "where"
+    return aten_where_Scalar(g, sts, outputs, condition, x, other, name=name)
+
+
 def aten_where_self(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

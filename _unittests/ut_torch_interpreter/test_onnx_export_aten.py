@@ -37,7 +37,9 @@ class TestOnnxExportAten(ExtTestCase):
         if exporter == "script":
             torch.onnx.export(model, inputs, filename, opset_version=18)
         elif exporter == "dynamo":
-            torch.onnx.export(model, inputs, filename, dynamo=True)
+            torch.onnx.export(
+                model, inputs, filename, dynamo=True, dynamic_shapes=dynamic_shapes
+            )
         else:
             export_options = ExportOptions(
                 decomposition_table="all" if decomposition else None, strict=strict
@@ -1027,6 +1029,55 @@ class TestOnnxExportAten(ExtTestCase):
         )
         expected = model(*xs)
         model_path = self._call_exporter("test_aten_index_tensor_2_1_2", "custom", model, xs)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=10)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_index_put_inplace_column(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind, vals):
+                x = x.clone()
+                col = x[:, 0]
+                col[ind] = vals
+                return x
+
+        model = Model()
+        xs = (
+            torch.arange(4 * 5).reshape((4, -1)).to(torch.float32),
+            torch.tensor([1, 2], dtype=torch.int64),
+            torch.tensor([100, 101], dtype=torch.float32),
+        )
+        expected = model(*xs)
+
+        DYNAMIC = torch.export.Dim.DYNAMIC
+        ds = ({0: DYNAMIC, 1: DYNAMIC}, {0: DYNAMIC}, {0: DYNAMIC})
+        ep1 = torch.export.export(model, xs, dynamic_shapes=ds, strict=False)
+        s1 = str(ep1)
+        ep1 = ep1.run_decompositions()
+        s2 = str(ep1)
+        self.assertNotEqual(s1, s2)
+
+        model_path = self._call_exporter(
+            "test_aten_index_put_inplace_column",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes=ds,
+            decomposition=True,
+        )
         sess = ExtendedReferenceEvaluator(model_path, verbose=10)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]

@@ -30,15 +30,11 @@ import onnx
 import sklearn
 import torch
 import onnxruntime
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder
-from experimental_experiment.helpers import max_diff
+from experimental_experiment.helpers import max_diff, pretty_onnx
 from experimental_experiment.skl.helpers import flatnonzero, _get_weights
-from experimental_experiment.torch_interpreter import (
-    to_onnx,
-    ExportOptions,
-    make_undefined_dimension,
-    Dispatcher,
-)
+from experimental_experiment.torch_interpreter import make_undefined_dimension, Dispatcher
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
@@ -445,7 +441,7 @@ def validate(size, sizey):
         Y,
     )
     d = max_diff(p1, p2)
-    assert d["abs"] < 1e-5, f"Discrepancies for size={size}, d={d}"
+    assert d["abs"] < 1e-5, f"Discrepancies for size={size} and sizey={sizey}, d={d}"
     print(f"knn discrepancies for size={size}: {d}")
 
     p1 = knn_imputer.transform(Y[1:2])
@@ -456,7 +452,7 @@ def validate(size, sizey):
         Y[1:2],
     )
     d = max_diff(p1, p2)
-    assert d["abs"] < 1e-5, f"Discrepancies for size={size}, d={d}"
+    assert d["abs"] < 1e-5, f"Discrepancies for size={size} and sizey={sizey}, d={d}"
     print(f"knn discrepancies for size={size}: {d}")
     return knn_imputer, Y
 
@@ -580,12 +576,25 @@ print(trace.get_export_report())
 # can be exported after its submodules are replaced by custom ops.
 # It works except for the topk function. ``FAIL`` means
 # the submodule cannot be exported at all but that
-# module is sipple enough and its ONNX conversion can be provided.
+# module is simple enough and its ONNX conversion can be provided.
 
 # %%
 # Final step
 # ++++++++++
 #
+# We first start by running the decompositions on every exported program.
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+
+    for t in trace:
+        if t.exporter_status.exported is None:
+            print(f"[run_decompositions] {t.dot_name} - skipped")
+            continue
+        print(f"[run_decompositions] {t.dot_name}")
+        t.exporter_status.exported = t.exporter_status.exported.run_decompositions({})
+
+# %%
 # Let's export everything. Every submodule is exported as a local function
 # except topk for which we must provide an ONNX conversion.
 T = str
@@ -608,25 +617,17 @@ dispatcher = Dispatcher(
     {
         (
             "diag_lib::C_TorchKNNImputer_columns_0___calc_impute__donors_idx__topk"
-        ): onnx_topk_indices
+        ): onnx_topk_indices,
+        (
+            "diag_lib::C_TorchKNNImputer_columns_1___calc_impute__donors_idx__topk"
+        ): onnx_topk_indices,
     }
 )
 
-# onx = trace.to_onnx()
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-
-    if False:
-        for t in trace:
-            if t.exporter_status.exported is None:
-                print(f"[run_decompositions] {t.dot_name} - skipped")
-                continue
-            print(f"[run_decompositions] {t.dot_name}")
-            t.exporter_status.exported.run_decompositions()
 onx = trace.to_onnx_local(verbose=1, dispatcher=dispatcher)
 
 onnx.save(onx, "plot_torch_sklearn_201.onnx")
-print(onx)
+print(pretty_onnx(onx))
 
 
 # %%
@@ -634,9 +635,9 @@ print(onx)
 # ==========
 
 
-def validate_onnx(size, onx):
+def validate_onnx(size, sizey, onx, verbose: int = 1):
     X = torch.randn((size, 2))
-    Y = torch.randn((5, 2))
+    Y = torch.randn((sizey, 2))
     for i in range(5):
         X[i, i % 2] = torch.nan
     for i in range(4):
@@ -648,27 +649,65 @@ def validate_onnx(size, onx):
     model = TorchKNNImputer(knn_imputer)
 
     p1 = knn_imputer.transform(Y)
-    p2 = model.transform(Y)
-    print(f"knn discrepancies for size={size}: {max_diff(p1, p2)}")
 
-    p1 = knn_imputer.transform(Y[1:2])
-    p2 = model.transform(Y[1:2])
-    print(f"knn discrepancies for size={size}: {max_diff(p1, p2)}")
-
-    onx = to_onnx(
-        model,
-        (Y,),
-        dynamic_shapes=({0: "batch"},),
-        verbose=0,
-        export_options=ExportOptions(strict=False),
+    model_inputs = (
+        torch.from_numpy(knn_imputer._mask_fit_X),
+        torch.from_numpy(knn_imputer._valid_mask),
+        torch.from_numpy(knn_imputer._fit_X),
+        Y,
     )
+    p2 = model.transform(*model_inputs)
+    d = max_diff(p1, p2)
+    assert d["abs"] < 1e-5, f"Discrepancies for size={size} and sizey={sizey}, d={d}"
+    if verbose:
+        print(f"Torch Discrepancies for size={size} and sizey={sizey}, d={d}")
 
+    input_names = [i.name for i in onx.graph.input]
+    feeds = dict(zip(input_names, [t.numpy() for t in model_inputs]))
+
+    if verbose:
+        print("python: loading the model...")
+    sess = ExtendedReferenceEvaluator(onx, verbose=10)
+    if verbose:
+        print("onnxruntime: running the model...")
+    got = sess.run(None, feeds)
+    d = max_diff(p1, got[0])
+    assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
+    if verbose:
+        print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
+
+    if verbose:
+        print("onnxruntime: loading the model...")
     sess = onnxruntime.InferenceSession(
         onx.SerializeToString(), providers=["CPUExecutionProvider"]
     )
-    got = sess.run(None, {"X": Y.numpy()})
-    print(f"onnx discrepancies: {max_diff(p1, got[0])}")
+    if verbose:
+        print("onnxruntime: running the model...")
+    got = sess.run(None, feeds)
+    d = max_diff(p1, got[0])
+    assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
+    if verbose:
+        print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
+
+    model_inputs = (
+        torch.from_numpy(knn_imputer._mask_fit_X),
+        torch.from_numpy(knn_imputer._valid_mask),
+        torch.from_numpy(knn_imputer._fit_X),
+        Y[1:2],
+    )
+    p1 = knn_imputer.transform(Y[1:2])
+    p2 = model.transform(*model_inputs)
+    d = max_diff(p1, p2)
+    assert d["abs"] < 1e-5, f"Discrepancies for size={size} and sizey={sizey}, d={d}"
+    feeds = dict(zip(input_names, [t.numpy() for t in model_inputs]))
+    if verbose:
+        print("onnxruntime: running the model...")
+    got = sess.run(None, feeds)
+    d = max_diff(p1, got[0])
+    assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
+    if verbose:
+        print("done")
 
 
-validate_onnx(5)
-validate_onnx(50)
+validate_onnx(5, 10, onx)
+validate_onnx(50, 40, onx)
