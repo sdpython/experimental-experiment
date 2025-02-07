@@ -1472,9 +1472,24 @@ class DynamoInterpreter:
                     init.name, init, source="add_aten_as_function"
                 )
                 new_inits.append(new_init)
+            n_outputs = len(fct_builder.output_names)
+            if len(output_names) == 1 and n_outputs > 1:
+                output_names = [f"{output_names[0]}#{i}" for i in range(n_outputs)]
+            else:
+                assert len(output_names) == n_outputs, (
+                    f"Unexpected output_names={output_names}, new functions:\n"
+                    f"{fct_builder.pretty_text()}\n{self.builder.get_debug_msg()}"
+                )
             self.builder.make_node(
                 fname, [*args, *new_inits], output_names, domain=fdomain, name=name_fct
             )
+            for bout, out in zip(fct_builder.output_names, output_names):
+                if fct_builder.has_type(bout):
+                    self.builder.set_type(out, fct_builder.get_type(bout))
+                if fct_builder.has_shape(bout):
+                    self.builder.set_shape(out, fct_builder.get_shape(bout))
+                elif fct_builder.has_rank(bout):
+                    self.builder.set_rank(out, fct_builder.get_rank(bout))
             res = output_names[0] if len(output_names) == 1 else tuple(output_names)
         else:
             res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)

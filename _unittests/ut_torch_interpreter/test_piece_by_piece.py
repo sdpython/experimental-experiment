@@ -1040,7 +1040,7 @@ class TestPieceByPiece(ExtTestCase):
 
             def forward(self, x):
                 a, b = self.sub(x, x * x)
-                return a + b.to(a.dtype)
+                return a + b.to(a.dtype) * 2
 
         model = Model()
         x = torch.randn((5, 6))
@@ -1061,7 +1061,7 @@ class TestPieceByPiece(ExtTestCase):
             replace_by_custom_op=CustomOpStrategy.LOCAL,
             quiet=0,
         )
-        onx = diag.to_onnx_local(verbose=10)
+        onx = diag.to_onnx_local(verbose=10, optimize=True)
         self.dump_onnx("test_to_onnx_local_2s.onnx", onx)
         self.assertNotIn("SequenceAt", str(onx))
         self.assertNotEmpty(onx)
