@@ -54,7 +54,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         self.assertEqualAny(flatten_expected, flatten_got)
         diff = max_diff(expected, got)
         self.assertLess(diff["abs"], 1e-5)
-        diff = max_diff(expected, flatten_got)
+        diff = max_diff(flatten_expected, flatten_got)
         self.assertLess(diff["abs"], 1e-5)
 
     @ignore_warnings("TracerWarning")
