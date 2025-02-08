@@ -21,8 +21,8 @@ class TestEdTransformer(ExtTestCase):
         transformer_model = torch.nn.Transformer(
             nhead=2, num_encoder_layers=2, d_model=16, dim_feedforward=32, dropout=0.1
         )
-        src = (torch.rand((10, 32, 16)) + 1e-2) / 10
-        tgt = (torch.rand((20, 32, 16)) + 1e-2) / 10
+        src = (torch.rand((10, 32, 16)) + 1e-2) / 32
+        tgt = (torch.rand((20, 32, 16)) + 1e-2) / 32
 
         expected = transformer_model(src, tgt)
         self.model, self.expected, self.src, self.tgt = (

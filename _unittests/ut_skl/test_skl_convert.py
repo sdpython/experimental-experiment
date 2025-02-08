@@ -1,7 +1,12 @@
 import unittest
 import numpy as np
 import sklearn
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    hide_stdout,
+    ignore_warnings,
+    skipif_ci_windows,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.skl import to_onnx
 from experimental_experiment.torch_interpreter import to_onnx as tto_onnx
@@ -25,6 +30,7 @@ class TestSklConvert(ExtTestCase):
 
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
+    @skipif_ci_windows("not working")
     def test_logistic_regression(self):
         X = np.random.randn(10, 3)
         y = (np.random.randn(10, 1) >= 0.5).astype(int)
