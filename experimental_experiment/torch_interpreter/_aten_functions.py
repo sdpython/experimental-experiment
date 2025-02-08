@@ -6806,11 +6806,23 @@ def aten_nonzero_numpy(
         if not sts:
             g.set_type(res, TensorProto.INT64)
         return res
-    res = g.op.NonZero(x, name=name)
+    assert g.has_rank(x), f"Rank of {x!r} must known for nonzero{g.get_debug_msg()}"
+    rk = g.get_rank(x)
+    nz = g.op.NonZero(x, name=name)
+    g.set_type(nz, TensorProto.INT64)
+    if rk > 1:
+        split_names = g.op.Split(nz, num_outputs=rk, name=name)
+        new_names = [f"{outputs[0]}#{i}" for i in range(rk)]
+        for spl, out in zip(split_names, new_names):
+            g.set_type(spl, TensorProto.INT64)
+            g.op.Reshape(spl, g.MINUS_ONE, name=name, outputs=[out])
+            g.set_type(out, TensorProto.INT64)
+        return new_names
+
+    new_names = [f"{outputs[0]}#0"]
+    res = g.op.Reshape(nz, g.MINUS_ONE, name=name, outputs=new_names)
     g.set_type(res, TensorProto.INT64)
-    seq = g.op.SplitToSequence(res, axis=0, keepdims=0, outputs=outputs)
-    g.set_sequence(seq, TensorProto.INT64, ranks=1)
-    return seq
+    return res
 
 
 def aten_not(

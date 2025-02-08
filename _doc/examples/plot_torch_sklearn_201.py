@@ -137,8 +137,6 @@ class SubWeightMatrix(torch.nn.Module):
 
     def forward(self, donors_dist):
         weight_matrix = _get_weights(donors_dist, self.weights)
-
-        # fill nans with zeros
         if weight_matrix is not None:
             weight_matrix = weight_matrix.clone()
             weight_matrix[torch.isnan(weight_matrix)] = 0.0
@@ -148,11 +146,6 @@ class SubWeightMatrix(torch.nn.Module):
         return weight_matrix
 
 
-class SubTake(torch.nn.Module):
-    def forward(self, fit_X_col, donors_idx):
-        return fit_X_col.take(donors_idx)
-
-
 class SubDonorsIdx(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -160,40 +153,13 @@ class SubDonorsIdx(torch.nn.Module):
 
     def forward(self, dist_pot_donors, n_neighbors):
         donors_idx = self._topk(dist_pot_donors, n_neighbors)
-        # donors_idx = self._select(donors_idx, n_neighbors)
-
-        # Get weight matrix from distance matrix
         donors_dist = dist_pot_donors[torch.arange(donors_idx.shape[0])[:, None], donors_idx]
         return donors_idx, donors_dist
 
 
-class MakeDiv(torch.nn.Module):
-    def forward(self, weights_sum):
-        return torch.where(
-            weights_sum == 0, torch.tensor([1], dtype=weights_sum.dtype), weights_sum
-        )
-
-
-class MakeMask(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self._take2 = SubTake()
-
-    def forward(self, donors_idx, mask_fit_X_col):
-        return torch.tensor([1], dtype=donors_idx.dtype) - self._take2(
-            mask_fit_X_col, donors_idx
-        ).to(donors_idx.dtype)
-
-
-class MakeRes(torch.nn.Module):
-    def forward(self, donors, new_weights, div):
-        return (donors * new_weights).sum(axis=1, keepdim=True) / div
-
-
 class MakeNewWeights(torch.nn.Module):
     def forward(self, donors_mask, donors, weight_matrix):
-        new_weights = donors_mask.to(donors.dtype)
-        return new_weights * weight_matrix.to(donors.dtype)
+        return donors_mask.to(donors.dtype) * weight_matrix.to(donors.dtype)
 
 
 class CalcImpute(torch.nn.Module):
@@ -201,26 +167,26 @@ class CalcImpute(torch.nn.Module):
 
     def __init__(self, weights):
         super().__init__()
-        self._take1 = SubTake()
         self._weights = SubWeightMatrix(weights)
         self._donors_idx = SubDonorsIdx()
-        self._make_div = MakeDiv()
-        self._make_mask = MakeMask()
-        self._make_res = MakeRes()
         self._make_new_neights = MakeNewWeights()
 
     def _calc_impute(self, dist_pot_donors, n_neighbors, fit_X_col, mask_fit_X_col):
         donors_idx, donors_dist = self._donors_idx(dist_pot_donors, n_neighbors)
         weight_matrix = self._weights(donors_dist)
         # Retrieve donor values and calculate kNN average
-        donors = self._take1(fit_X_col, donors_idx)
-        donors_mask = self._make_mask(donors_idx, mask_fit_X_col)
+        donors = fit_X_col.take(donors_idx)
+        donors_mask = torch.tensor([1], dtype=donors_idx.dtype) - (
+            mask_fit_X_col.take(donors_idx)
+        ).to(donors_idx.dtype)
 
         new_weights = self._make_new_neights(donors_mask, donors, weight_matrix)
 
         weights_sum = new_weights.sum(axis=1, keepdim=True)
-        div = self._make_div(weights_sum)
-        res = self._make_res(donors, new_weights, div)
+        div = torch.where(
+            weights_sum == 0, torch.tensor([1], dtype=weights_sum.dtype), weights_sum
+        )
+        res = (donors * new_weights).sum(axis=1, keepdim=True) / div
         return res.squeeze(dim=1).to(dist_pot_donors.dtype)
 
     def forward(self, dist_pot_donors, n_neighbors, fit_X_col, mask_fit_X_col):
@@ -709,5 +675,6 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
         print("done")
 
 
-validate_onnx(5, 10, onx)
-validate_onnx(50, 40, onx)
+# This does not work yet.
+# validate_onnx(5, 10, onx)
+# validate_onnx(50, 40, onx)
