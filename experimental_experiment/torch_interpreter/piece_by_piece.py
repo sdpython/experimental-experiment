@@ -2430,6 +2430,7 @@ class ModelDiagnoseOutput:
             )
             if verbose:
                 print(f"[to_onnx_local] {self.dot_name!r} - done with {diff}")
+            self.onnx_discrepancies = diff
 
         if return_optimize_report:
             res[-1].update(all_stats)

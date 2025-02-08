@@ -2089,6 +2089,7 @@ class TestPieceByPiece(ExtTestCase):
             verbose=10,
             check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
         )
+        self.assertLess(diag.onnx_discrepancies[0]["abs"], 1e-5)
         self.assertNotEmpty(onx)
         ref = ExtendedReferenceEvaluator(onx)
         self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
@@ -2141,6 +2142,7 @@ class TestPieceByPiece(ExtTestCase):
             verbose=10,
             check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
         )
+        self.assertLess(diag.onnx_discrepancies[0]["abs"], 1e-5)
         self.assertNotEmpty(onx)
         ref = ExtendedReferenceEvaluator(onx)
         self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
