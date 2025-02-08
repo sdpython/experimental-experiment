@@ -7,6 +7,7 @@ import sys
 import textwrap
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
+import onnx
 import torch
 from ..helpers import string_type, string_sig, max_diff
 from ..xbuilder import OptimizationOptions
@@ -2279,6 +2280,7 @@ class ModelDiagnoseOutput:
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         export_options: Optional[Union[str, ExportOptions]] = None,
+        check_conversion_cls: Optional[Union[Dict[str, Any], type]] = None,
     ):
         """
         Exports into ONNX with submodule as local functions.
@@ -2309,6 +2311,10 @@ class ModelDiagnoseOutput:
         :param output_names: to rename the output names
         :param output_dynamic_shapes: same as *dynamic_shapes* but for the output
         :param export_options: to apply differents options before to get the exported program
+        :param check_conversion_cls: a runtime with the same API than
+            :class:`onnx.reference.ReferenceEvaluator` than can be used to check that the
+            onnx models produce the same outputs,
+            it can be also a dictionary to specify atol, rtol to be used after it runs
         :return: onnx model
         """
         # First export the submodule.
@@ -2369,6 +2375,7 @@ class ModelDiagnoseOutput:
                     function_options=function_options,
                     dispatcher=dispatcher,
                     export_options=export_options,
+                    check_conversion_cls=check_conversion_cls,
                 )
                 if return_optimize_report:
                     _, builder, st = res
@@ -2411,9 +2418,93 @@ class ModelDiagnoseOutput:
         if verbose:
             print(f"[to_onnx_local] {self.dot_name!r} - export done")
 
+        if check_conversion_cls:
+            if verbose:
+                print(
+                    f"[to_onnx_local] {self.dot_name!r} - "
+                    f"run validation with {check_conversion_cls}"
+                )
+            onx = res[0] if isinstance(res, tuple) else res
+            diff = self.compute_onnx_discrepancies(
+                onx, check_conversion_cls, verbose=max(verbose - 1, 0)
+            )
+            if verbose:
+                print(f"[to_onnx_local] {self.dot_name!r} - done with {diff}")
+
         if return_optimize_report:
             res[-1].update(all_stats)
         return res
+
+    def compute_onnx_discrepancies(
+        self,
+        onx: Union[onnx.FunctionProto, onnx.ModelProto],
+        check_conversion_cls: Union[Dict[str, Any], type],
+        verbose: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Computes the discrepancies by using the intermediate inputs and outputs.
+
+        :param onx: proto
+        :param check_conversion_cls: class to use to compute the discrepancies,
+            it should follow the same API as :class:`onnx.reference.ReferenceEvaluator`,
+            it can be also a dictionary to specify atol, rtol to be used after it runs
+        :param verbose: verbosity
+        :return: discrepancies for each set of inputs
+        """
+        flattened_inputs = [
+            serialize_args(*i, schema=None, args_names=self.forward_ordered_parameter_names)
+            for i in self.inputs
+        ]
+        flattened_outputs = [serialize_args(i, None, schema=None) for i in self.outputs]
+        input_names = (
+            list(onx.input)
+            if isinstance(onx, onnx.FunctionProto)
+            else [i.name for i in onx.graph.input]
+        )
+        cls, atol, rtol = (
+            (
+                check_conversion_cls["cls"],
+                check_conversion_cls["atol"],
+                check_conversion_cls["rtol"],
+            )
+            if isinstance(check_conversion_cls, dict)
+            else (check_conversion_cls, None, None)
+        )
+
+        sess = cls(onx)
+        diffs = []
+        for i in range(len(flattened_inputs)):
+            inp, out = flattened_inputs[i], flattened_outputs[i]
+            if verbose:
+                print(
+                    f"[compute_onnx_discrepancies] run with "
+                    f"{string_type(self.inputs[i], with_shape=True)}"
+                )
+                print(
+                    f"[compute_onnx_discrepancies] flattened into "
+                    f"{string_type(inp, with_shape=True)}"
+                )
+            assert not inp[1], (
+                f"Flattened inputs {string_type(flattened_inputs[i], with_shape=True)}, "
+                f"are wrong, original inputs  "
+                f"{string_type(self.inputs[i], with_shape=True)}"
+            )
+            feeds = dict(
+                zip(
+                    input_names,
+                    [
+                        t.detach().cpu().numpy() if isinstance(t, torch.Tensor) else t
+                        for t in inp[0]
+                    ],
+                )
+            )
+            got = sess.run(None, feeds)
+            diff = max_diff(out, got)
+            assert (
+                atol is None or rtol is None or (diff["abs"] <= atol and diff["rel"] <= rtol)
+            ), f"{self.full_name}: discrepancies detected: {diff}"
+            diffs.append(diff)
+        return diffs
 
 
 def _rewrite_forward(

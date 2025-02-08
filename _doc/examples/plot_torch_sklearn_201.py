@@ -579,6 +579,10 @@ def onnx_topk_indices(
     return outputs[0]
 
 
+# %%
+# The dispatcher maps the custom ops calling topk to
+# the previous converter functions.
+
 dispatcher = Dispatcher(
     {
         (
@@ -590,9 +594,20 @@ dispatcher = Dispatcher(
     }
 )
 
-onx = trace.to_onnx_local(verbose=1, dispatcher=dispatcher)
+# %%
+# Let's run the conversion. We also check the conversion into ONNX
+# is accurate. It is doable because every intermediate results
+# were previously traced.
+onx = trace.to_onnx_local(
+    verbose=1, dispatcher=dispatcher, check_conversion_cls=ExtendedReferenceEvaluator
+)
 
+# %%
+# Let's save it.
 onnx.save(onx, "plot_torch_sklearn_201.onnx")
+
+# %%
+# We can also print it.
 print(pretty_onnx(onx))
 
 
@@ -676,5 +691,5 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
 
 
 # This does not work yet.
-# validate_onnx(5, 10, onx)
-# validate_onnx(50, 40, onx)
+validate_onnx(5, 10, onx)
+validate_onnx(50, 40, onx)

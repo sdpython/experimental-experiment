@@ -2049,6 +2049,102 @@ class TestPieceByPiece(ExtTestCase):
             )
             self.assertNotEmpty(ep)
 
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_to_onnx_local_check_reference_cls_level_1(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        onx = diag.to_onnx_local(
+            verbose=10,
+            check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+        )
+        self.assertNotEmpty(onx)
+        ref = ExtendedReferenceEvaluator(onx)
+        self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_to_onnx_local_check_reference_cls_level_2(self):
+        import torch
+
+        class SubSubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x * y
+
+        class SubModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subsub = SubSubModel()
+
+            def forward(self, x, y):
+                return self.subsub(x - y, y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        onx = diag.to_onnx_local(
+            verbose=10,
+            check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+        )
+        self.assertNotEmpty(onx)
+        ref = ExtendedReferenceEvaluator(onx)
+        self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
