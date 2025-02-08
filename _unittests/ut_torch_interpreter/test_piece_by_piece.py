@@ -1875,7 +1875,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(ep)
 
     @requires_torch("2.6")
-    # @hide_stdout()
+    @hide_stdout()
     def test_trace_execution_recursive_functions(self):
         import torch
 

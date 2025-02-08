@@ -985,7 +985,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         )
 
     @requires_onnxscript("0.2.1")
-    # @hide_stdout()
+    @hide_stdout()
     def test_xt_reduced_prod_dtype(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
         self.assertONNX(
