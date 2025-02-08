@@ -1394,11 +1394,13 @@ class DynamoInterpreter:
                 f"Unable to interpret function {type(aten_name)}: "
                 f"{aten_name!r}, searched for "
                 f"{lookup} and attributes {lookup_names}, "
-                f"args={node.args}, kwargs={node.kwargs}"
-                f"{self.builder.get_debug_msg()}"
+                f"args={node.args}, kwargs={node.kwargs}, dispatcher="
+                f"{self.dispatcher.supported if self.dispatcher else None}"
+                f"{self.builder.get_debug_msg()}, "
             )
         if self.builder.verbose > 1:
-            print(f"[DynamoInterpreter-{self._hash()}.call_function][{fct.__name__}]")
+            name = fct.__class__.__name__ if isinstance(fct, GraphBuilder) else fct.__name__
+            print(f"[DynamoInterpreter-{self._hash()}.call_function][{name}]")
 
         args = [self._process_arg(node, aten_name, a) for a in fx_args]
         output_names = self._get_output_names(node)
@@ -1442,8 +1444,58 @@ class DynamoInterpreter:
             res = self.add_aten_as_function(
                 str(aten_name), fct, can_set, output_names, args=args, kwargs=fx_kwargs
             )
+            allow_new_dynamic_dimension = False
+        elif isinstance(fct, GraphBuilder):
+            # The function is already implemented in a graph builder, we
+            # add it as a local function.
+            fct_builder = fct
+            name_fct = str(aten_name).replace(".", "_")
+            domain = "local_domain"
+
+            inits, (fdomain, fname) = self.builder.make_local_function(
+                fct_builder,
+                FunctionOptions(
+                    export_as_function=True,
+                    name=name_fct.replace(".", "_"),
+                    domain=domain,
+                    inline=False,
+                    merge_allowed=True,
+                    rename_allowed=True,
+                    move_initializer_to_constant=True,
+                    return_initializer=True,
+                    external_threshold=2**8,
+                ),
+                optimize=False,
+            )
+            new_inits = []
+            for init in inits:
+                new_init = self.builder.make_initializer(
+                    init.name, init, source="add_aten_as_function"
+                )
+                new_inits.append(new_init)
+            n_outputs = len(fct_builder.output_names)
+            if len(output_names) == 1 and n_outputs > 1:
+                output_names = [f"{output_names[0]}#{i}" for i in range(n_outputs)]
+            else:
+                assert len(output_names) == n_outputs, (
+                    f"Unexpected output_names={output_names}, new functions:\n"
+                    f"{fct_builder.pretty_text()}\n{self.builder.get_debug_msg()}"
+                )
+            self.builder.make_node(
+                fname, [*args, *new_inits], output_names, domain=fdomain, name=name_fct
+            )
+            for bout, out in zip(fct_builder.output_names, output_names):
+                if fct_builder.has_type(bout):
+                    self.builder.set_type(out, fct_builder.get_type(bout))
+                if fct_builder.has_shape(bout):
+                    self.builder.set_shape(out, fct_builder.get_shape(bout))
+                elif fct_builder.has_rank(bout):
+                    self.builder.set_rank(out, fct_builder.get_rank(bout))
+            res = output_names[0] if len(output_names) == 1 else tuple(output_names)
+            allow_new_dynamic_dimension = True
         else:
             res = fct(self.builder, can_set, output_names, *args, **fx_kwargs)
+            allow_new_dynamic_dimension = False
 
         n_nodes_after = len(self.builder.nodes) + len(self.builder.initializers_dict)
         if res is None:
@@ -1460,7 +1512,13 @@ class DynamoInterpreter:
                 f"for node={node}{self.builder.get_debug_msg()}"
             )
 
-        self._set_shape_and_type(node, res, fct_name=aten_name)
+        self._set_shape_and_type(
+            node,
+            res,
+            fct_name=aten_name,
+            allow_new_dynamic_dimension=allow_new_dynamic_dimension
+            or (node.target == self.torch.ops.aten.nonzero_numpy.default),
+        )
         res = self._check_output_name(node, res, output_names)
         return res
 
@@ -1705,7 +1763,14 @@ class DynamoInterpreter:
         node: "torch.fx.Node",  # noqa: F821
         res: Union[str, List[str]],
         fct_name: Optional[str] = None,
+        allow_new_dynamic_dimension: bool = False,
     ):
+        """
+        Sets shape and type for a result.r
+        This information is coming from the torch exporter.
+        ``allow_new_dynamic_dimension`` can be use to bypass errors
+        related to new shape.
+        """
         val = node.meta.get("val", None)
         exa = node.meta.get("example_value", None)
         if val is not None and exa is not None:
@@ -1807,10 +1872,13 @@ class DynamoInterpreter:
                 elif isinstance(v, list) and len(v) > 0:
                     if len(v) == len(r) and r[0].endswith("#0"):
                         # Operator Split was used instead of SplitToSequence.
+                        # Or any other node producing multiple results.
                         for r_, v_ in zip(r, v):
                             self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
                             shape = tuple(v_.shape)
-                            if self.builder.is_dynamic_shape(shape):
+                            if self.builder.is_dynamic_shape(
+                                shape, allow_new_dynamic_dimension=allow_new_dynamic_dimension
+                            ):
                                 self.builder.set_shape(r_, shape, set_if_more_precise=False)
                             elif self.builder.has_rank(r_):
                                 assert len(shape) == self.builder.get_rank(r_), (
@@ -1826,7 +1894,8 @@ class DynamoInterpreter:
                         dtype = list(set(_.dtype for _ in v))
                         assert len(dtype) == 1, (
                             f"Only sequence of tensors of the same type are allowed "
-                            f"but dtype={dtype}{self.builder.get_debug_msg()}"
+                            f"but dtype={dtype}, node={node!r}, target={node.target!r}"
+                            f"{self.builder.get_debug_msg()}"
                         )
                         itype = torch_dtype_to_onnx_dtype(dtype[0])
                         self.builder.set_sequence(

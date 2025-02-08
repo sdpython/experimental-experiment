@@ -5,10 +5,12 @@ import inspect
 import os
 import sys
 import textwrap
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import torch
 from ..helpers import string_type, string_sig, max_diff
+from ..xbuilder import OptimizationOptions
+from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
 from .piece_by_piece_serialize import (
     choose_kwargs_for_dynamic_shapes,
     deserialize_args,
@@ -133,8 +135,8 @@ class StatusExport:
         if self.is_ok():
             return f"{self.status.name} -- {self.exported.__class__.__name__}"
         reason = self.reason.split("\n", maxsplit=1)[0]
-        if len(reason) > 40:
-            reason = reason[:40] + "..."
+        if len(reason) > 70:
+            reason = reason[:70] + "..."
         return f"{self.status.name} -- step={self.step}, reason={reason!r}"
 
 
@@ -333,6 +335,7 @@ class ModelDiagnoseOutput:
         return "\n".join(rows)
 
     def __str__(self) -> str:
+        "usual"
         return f"{self.__class__.__name__}(~{self.full_name}~)"
 
     @property
@@ -354,13 +357,17 @@ class ModelDiagnoseOutput:
     @property
     def custom_op_name(self):
         "Returns a name and class name."
+
+        def _clean_(s):
+            return s.replace("[", "_").replace("]", "_")
+
         if self.method_name == "forward":
             if self.parent is None:
-                return f"C_{self.true_model_name}"
-            return f"{self.parent.custom_op_name}_{self.name}"
+                return _clean_(f"C_{self.true_model_name}")
+            return _clean_(f"{self.parent.custom_op_name}_{self.name}")
         if self.parent is None:
-            return f"C_{self.true_model_name}_{self.method_name}"
-        return f"{self.parent.custom_op_name}_{self.name}_{self.method_name}"
+            return _clean_(f"C_{self.true_model_name}_{self.method_name}")
+        return _clean_(f"{self.parent.custom_op_name}_{self.name}_{self.method_name}")
 
     @property
     def dot_name(self):
@@ -423,9 +430,7 @@ class ModelDiagnoseOutput:
         return res
 
     def guess_dynamic_shape_object(self, *objs: Any, msg: Optional[Callable] = None) -> Any:
-        """
-        Guesses the dynamic shapes for one argument.
-        """
+        """Guesses the dynamic shapes for one argument."""
         assert (
             len(objs) > 1
         ), f"Unable to infer shapes with only one object {string_type(objs)}"
@@ -578,9 +583,7 @@ class ModelDiagnoseOutput:
     def _do_replace_by_custom_op(
         self, replace_by_custom_op: Union[bool, CustomOpStrategy, Dict[str, CustomOpStrategy]]
     ) -> CustomOpStrategy:
-        """
-        Tells if a module must be replaced by a custom op.
-        """
+        """Tells if a module must be replaced by a custom op."""
         if isinstance(replace_by_custom_op, bool):
             return (
                 CustomOpStrategy.ONLY_IF_FAILING
@@ -639,6 +642,11 @@ class ModelDiagnoseOutput:
             annotated = self._annotation_from_type(o)
         else:
             index = self.forward_ordered_parameter_names.index(name)
+            assert index < len(args), (
+                f"{self.full_name}: unexpected index={index} for name={name!r}, "
+                f"forward_ordered_parameter_names={self.forward_ordered_parameter_names}, "
+                f"args={string_type(args, with_shape=True)}"
+            )
             o = args[index]
             annotated = self._annotation_from_type(o)
         if isinstance(annotated, str):
@@ -837,9 +845,7 @@ class ModelDiagnoseOutput:
         verbose: int = 0,
         shape_functions: Optional[Dict[str, Callable]] = None,
     ) -> Callable:
-        """
-        Determines a function producing an output shape based in this inputs.
-        """
+        """Determines a function producing an output shape based in this inputs."""
         assert (
             isinstance(flattened_inputs, list)
             and isinstance(flattened_outputs, list)
@@ -872,7 +878,9 @@ class ModelDiagnoseOutput:
                     assert shape_o == expected_shape_o, (
                         f"Custom shape function {fct} for output_index={output_index} "
                         f"for class {self.true_model_name} is failing. "
-                        f"It returns {shape_o} when the expected shape is {expected_shape_o}."
+                        f"It returns {shape_o} when the expected shape is {expected_shape_o}, "
+                        f"inputs={string_type(fin, with_shape=True)}, "
+                        f"outputs={string_type(fout, with_shape=True)}."
                     )
 
                 return fct
@@ -969,10 +977,13 @@ class ModelDiagnoseOutput:
             out = self.outputs[0]
             input_shape = inp_args[0].shape
             unique_output_shape = set(t.shape for t in out)
+            unique_output_dtype = set(t.dtype for t in out)
             if (
                 not inp_kwargs
                 and len(unique_output_shape) == 1
+                and len(unique_output_dtype) == 1
                 and unique_output_shape.pop() == input_shape
+                and unique_output_dtype.pop() == inp_args[0].dtype
             ):
                 n_outputs = len(out)
 
@@ -1373,23 +1384,7 @@ class ModelDiagnoseOutput:
             and getattr(self.model, self.method_name) == self.forward_calling_custom_op
         )
 
-    def _try_export_no_bypass_export(
-        self,
-        export_inputs,
-        exporter_kwargs: Optional[Dict[str, Any]] = None,
-        verbose: int = 0,
-        quiet: bool = True,
-        use_dynamic_shapes: Optional[bool] = None,
-        shape_functions: Optional[Dict[str, Callable]] = None,
-    ) -> Tuple[Optional[Any], Optional[Callable]]:
-        if quiet:
-            quiet = self._debug_noquiet_name != self.name
-            debug = not quiet
-        else:
-            debug = False
-
-        args, kwargs = export_inputs
-        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+    def _post_process_dynamic_shapes(self, args, kwargs, dynamic_shapes, debug, verbose):
         if dynamic_shapes and (self.forward_kwargs or self.forward_args):
             # The export should change dynamic shapes to have only named arguments.
             if debug or verbose > 1:
@@ -1411,6 +1406,28 @@ class ModelDiagnoseOutput:
             )
             if dynamic_shapes[0] and dynamic_shapes[1]
             else (dynamic_shapes[0] or dynamic_shapes[1])
+        )
+        return args, kwargs, ds
+
+    def _try_export_no_bypass_export(
+        self,
+        export_inputs,
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        quiet: bool = True,
+        use_dynamic_shapes: Optional[bool] = None,
+        shape_functions: Optional[Dict[str, Callable]] = None,
+    ) -> Tuple[Optional[Any], Optional[Callable]]:
+        if quiet:
+            quiet = self._debug_noquiet_name != self.name
+            debug = not quiet
+        else:
+            debug = False
+
+        args, kwargs = export_inputs
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        args, kwargs, ds = self._post_process_dynamic_shapes(
+            args, kwargs, dynamic_shapes, debug, verbose
         )
         if debug or verbose > 1:
             sds = str(ds).replace("<_DimHint.DYNAMIC: 3>", "DYN")
@@ -2122,6 +2139,281 @@ class ModelDiagnoseOutput:
                     srows.append(f"{indent}fx: -")
 
         return "\n".join(srows)
+
+    def draft_export_local(
+        self,
+        use_dynamic_shapes: Optional[bool] = None,
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        shape_functions: Optional[Dict[str, Callable]] = None,
+    ):
+        """
+        Draft Exports with every submodule converted into a submodule.
+        This can be used to understand where the conversion is failing.
+
+        :param exporter_kwargs: argument for the export function
+        :param verbose: verbosity, to see what the function is doing
+        :param use_dynamic_shapes: use dynamic shapes
+        :param shape_functions: dictionary of functions to compute the shape of the output,
+            the signature should be the following
+            ``fct(_output_index:i, *args, **kwargs) -> Optional[Any]``.
+            If it returns None, the shape is automacally computed.
+            The key of the dictionary is a class name, the class of the submodule
+            to handle with this function.
+        :return: result of the export function
+        """
+        if use_dynamic_shapes is None:
+            use_dynamic_shapes = len(self.inputs) > 1
+        args, kwargs = self.inputs[0]
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        args, kwargs, ds = self._post_process_dynamic_shapes(
+            args, kwargs, dynamic_shapes, False, verbose
+        )
+
+        import torch.export._draft_export
+
+        for child in self.children:
+            if verbose >= 10:
+                print(f"[try_export-FX]     child {child.full_name} as custom op")
+                print(
+                    f"[try_export-FX]           "
+                    f"args={string_type(child.inputs[0][0], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]         "
+                    f"kwargs={string_type(child.inputs[0][1], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]        "
+                    f"outputs={string_type(child.outputs[0], with_shape=True)}"
+                )
+            child.put_custom_op_inplace(verbose=verbose, shape_functions=shape_functions)
+        ep_report = torch.export._draft_export.draft_export(
+            self.model,
+            args,
+            kwargs=kwargs,
+            dynamic_shapes=ds,
+            **(exporter_kwargs or {}),
+        )
+        assert ep_report is not None, f"No result for {self.full_name}"
+        # We restore the initial state.
+        for child in self.children:
+            child.remove_custom_op_inplace(verbose=verbose)
+        return ep_report
+
+    def export_local(
+        self,
+        use_dynamic_shapes: Optional[bool] = None,
+        exporter_kwargs: Optional[Dict[str, Any]] = None,
+        verbose: int = 0,
+        shape_functions: Optional[Dict[str, Callable]] = None,
+    ):
+        """
+        Exports with every submodule converted into a submodule.
+
+        :param exporter_kwargs: argument for the export function
+        :param verbose: verbosity, to see what the function is doing
+        :param use_dynamic_shapes: use dynamic shapes
+        :param shape_functions: dictionary of functions to compute the shape of the output,
+            the signature should be the following
+            ``fct(_output_index:i, *args, **kwargs) -> Optional[Any]``.
+            If it returns None, the shape is automacally computed.
+            The key of the dictionary is a class name, the class of the submodule
+            to handle with this function.
+        :return: result of the export function
+        """
+        if use_dynamic_shapes is None:
+            use_dynamic_shapes = len(self.inputs) > 1
+        args, kwargs = self.inputs[0]
+        dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        args, kwargs, ds = self._post_process_dynamic_shapes(
+            args, kwargs, dynamic_shapes, False, verbose
+        )
+
+        for child in self.children:
+            if verbose >= 10:
+                print(f"[try_export-FX]     child {child.full_name} as custom op")
+                print(
+                    f"[try_export-FX]           "
+                    f"args={string_type(child.inputs[0][0], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]         "
+                    f"kwargs={string_type(child.inputs[0][1], with_shape=True)}"
+                )
+                print(
+                    f"[try_export-FX]        "
+                    f"outputs={string_type(child.outputs[0], with_shape=True)}"
+                )
+            child.put_custom_op_inplace(verbose=verbose, shape_functions=shape_functions)
+        ep_report = torch.export.export(
+            self.model,
+            args,
+            kwargs=kwargs,
+            dynamic_shapes=ds,
+            **(exporter_kwargs or {}),
+        )
+        assert ep_report is not None, f"No result for {self.full_name}"
+        # We restore the initial state.
+        for child in self.children:
+            child.remove_custom_op_inplace(verbose=verbose)
+        return ep_report
+
+    def to_onnx_local(
+        self,
+        target_opset: Optional[Union[int, Dict[str, int]]] = None,
+        as_function: bool = False,
+        options: Optional[OptimizationOptions] = None,
+        optimize: bool = True,
+        filename: Optional[str] = None,
+        inline: bool = False,
+        input_names: Optional[Sequence[str]] = None,
+        output_names: Optional[List[str]] = None,
+        large_model: bool = False,
+        verbose: int = 0,
+        return_builder: bool = False,
+        raise_list: Optional[Set[str]] = None,
+        external_threshold: int = 1024,
+        return_optimize_report: bool = False,
+        function_options: Optional[FunctionOptions] = None,
+        dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
+        output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+        export_options: Optional[Union[str, ExportOptions]] = None,
+    ):
+        """
+        Exports into ONNX with submodule as local functions.
+
+        :param input_names: input names
+        :param target_opset: targeted opset or targeted opsets as a dictionary
+        :param as_function: export as a ModelProto or a FunctionProto
+        :param options: optimization options
+        :param verbose: verbosity level
+        :param return_builder: returns the builder as well
+        :param raise_list: the builder stops any time a name falls into that list,
+            this is a debbuging tool
+        :param optimize: optimize the model before exporting into onnx
+        :param large_model: if True returns a :class:`onnx.model_container.ModelContainer`,
+            it lets the user to decide later if the weights should be part of the model
+            or saved as external weights
+        :param external_threshold: if large_model is True, every tensor above this limit
+            is stored as external
+        :param return_optimize_report: returns statistics on the optimization as well
+        :param filename: if specified, stores the model into that file
+        :param inline: inline the model before converting to onnx, this is done before
+                any optimization takes place
+        :param export_options: to apply differents options before to get the exported program
+        :param function_options: to specify what to do
+            with the initializers in local functions,
+            add them as constants or inputs
+        :param dispatcher: see :class:`experimental_experiment.torch_interpreter.Dispatcher`
+        :param output_names: to rename the output names
+        :param output_dynamic_shapes: same as *dynamic_shapes* but for the output
+        :param export_options: to apply differents options before to get the exported program
+        :return: onnx model
+        """
+        # First export the submodule.
+        assert hasattr(self, "exporter_status"), (
+            f"{self.full_name}: run 'try_export' to get an "
+            f"exported program for this instance, existing attributes {dir(self)}"
+        )
+        assert self.exporter_status.status in (
+            StatusExportCode.OK,
+            StatusExportCode.OK_CHILDC,
+        ), (
+            f"{self.full_name}: exporter failed, "
+            f"status={self.exporter_status.status!r}, "
+            f"a custom onnx converter must be provided for "
+            f"'diag_lib::{self.custom_op_name}', "
+            f"args={string_type(self.inputs[0][0], with_shape=True)}, "
+            f"kwargs={string_type(self.inputs[0][1], with_shape=True)}, outputs="
+            f"{string_type(self.outputs[0], with_shape=True)}"
+        )
+        all_stats = {}
+        dispatched = {}
+        local_functions = []
+        if verbose:
+            print(f"[to_onnx_local] {self.dot_name} - to_onnx_local ")
+
+        if self.children:
+            stats = []
+            for child in self.children:
+                if dispatcher and dispatcher.find_function(
+                    f"diag_lib::{child.custom_op_name}"
+                ):
+                    # No need to export.
+                    if verbose:
+                        print(
+                            f"[to_onnx_local] {self.dot_name} - "
+                            f"skip child {child.custom_op_name!r}"
+                        )
+                    continue
+                if verbose:
+                    print(
+                        f"[to_onnx_local] {self.dot_name} - "
+                        f"export child {child.custom_op_name!r}"
+                    )
+                res = child.to_onnx_local(
+                    target_opset=target_opset,
+                    as_function=False,
+                    options=options,
+                    optimize=optimize,
+                    filename=None,
+                    inline=inline,
+                    input_names=None,
+                    output_names=None,
+                    large_model=False,
+                    verbose=max(verbose - 2, 0),
+                    return_builder=True,
+                    raise_list=raise_list,
+                    return_optimize_report=return_optimize_report,
+                    function_options=function_options,
+                    dispatcher=dispatcher,
+                    export_options=export_options,
+                )
+                if return_optimize_report:
+                    _, builder, st = res
+                    stats.append(st)
+                else:
+                    _, builder = res
+
+                local_functions.append(builder)
+                dispatched[f"diag_lib::{child.custom_op_name}"] = builder
+            all_stats["children"] = stats
+
+        if verbose:
+            print(f"[to_onnx_local] {self.dot_name!r} - export starts {self.custom_op_name}")
+        if dispatched:
+            new_dispatcher = Dispatcher(dispatched)
+            if dispatcher:
+                new_dispatcher.merge(dispatcher)
+        else:
+            new_dispatcher = dispatcher
+
+        res = to_onnx(
+            self.exporter_status.exported,
+            as_function=False,
+            options=options,
+            optimize=optimize,
+            filename=filename,
+            inline=inline,
+            input_names=input_names,
+            large_model=large_model,
+            verbose=max(verbose - 2, 0),
+            return_builder=return_builder,
+            raise_list=raise_list,
+            return_optimize_report=return_optimize_report,
+            function_options=function_options,
+            dispatcher=new_dispatcher,
+            output_names=output_names,
+            output_dynamic_shapes=output_dynamic_shapes,
+            export_options=export_options,
+        )
+        if verbose:
+            print(f"[to_onnx_local] {self.dot_name!r} - export done")
+
+        if return_optimize_report:
+            res[-1].update(all_stats)
+        return res
 
 
 def _rewrite_forward(

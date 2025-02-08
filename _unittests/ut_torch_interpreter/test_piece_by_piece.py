@@ -2,6 +2,7 @@ import ast
 import unittest
 import inspect
 from typing import List, Optional
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
@@ -943,6 +944,132 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(diag.children[0].forward_custom_op_schema)
 
     @requires_torch("2.6")
+    @hide_stdout()
+    def test_trace_execution_piece_by_piece_piece_local_local(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        ep = diag.export_local(use_dynamic_shapes=True, exporter_kwargs=dict(strict=False))
+        self.assertNotEmpty(ep)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_to_onnx_local(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        onx = diag.to_onnx_local(verbose=10)
+        self.assertNotEmpty(onx)
+        self.dump_onnx("test_to_onnx_local.onnx", onx)
+        ref = ExtendedReferenceEvaluator(onx)
+        self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_to_onnx_local_2s(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y, x.to(torch.int64)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                a, b = self.sub(x, x * x)
+                return a + b.to(a.dtype) * 2
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        onx = diag.to_onnx_local(verbose=10, optimize=True)
+        self.dump_onnx("test_to_onnx_local_2s.onnx", onx)
+        self.assertNotIn("SequenceAt", str(onx))
+        self.assertNotEmpty(onx)
+        ref = ExtendedReferenceEvaluator(onx, verbose=10)
+        g = ref.run(None, {ref.input_names[0]: x.numpy()})
+        self.assertEqualArray(y, g[0])
+
+    @requires_torch("2.6")
     def test_piece_by_piece_piece_exporter_report(self):
         import torch
 
@@ -1748,7 +1875,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(ep)
 
     @requires_torch("2.6")
-    # @hide_stdout()
+    @hide_stdout()
     def test_trace_execution_recursive_functions(self):
         import torch
 

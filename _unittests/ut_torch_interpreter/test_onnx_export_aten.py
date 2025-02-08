@@ -1,3 +1,4 @@
+import os
 import unittest
 from typing import Any, List, Optional
 import numpy as np
@@ -33,11 +34,17 @@ class TestOnnxExportAten(ExtTestCase):
     ) -> str:
         import torch
 
-        filename = f"{test_name}_{exporter}_{'dec' if decomposition else ''}.onnx"
+        if not os.path.exists("dump_test"):
+            os.mkdir("dump_test")
+        filename = os.path.join(
+            "dump_test", f"{test_name}_{exporter}_{'dec' if decomposition else ''}.onnx"
+        )
         if exporter == "script":
             torch.onnx.export(model, inputs, filename, opset_version=18)
         elif exporter == "dynamo":
-            torch.onnx.export(model, inputs, filename, dynamo=True)
+            torch.onnx.export(
+                model, inputs, filename, dynamo=True, dynamic_shapes=dynamic_shapes
+            )
         else:
             export_options = ExportOptions(
                 decomposition_table="all" if decomposition else None, strict=strict
@@ -211,9 +218,65 @@ class TestOnnxExportAten(ExtTestCase):
                 return y
 
         model = Model()
-        x = torch.randn(3, 4, requires_grad=False)
+        x = (torch.randn(3, 4, requires_grad=False) < 0.4).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_nonzeros", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_nonzeros_1", "custom", model, (x,))
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_nonzero_1_d3(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                y = torch.nonzero(x)
+                return y
+
+        model = Model()
+        x = (torch.randn(3, 4, 5, requires_grad=False) < 0.4).to(torch.float32)
+        expected = model(x)
+        model_path = self._call_exporter("test_aten_nonzeros_1_d3", "custom", model, (x,))
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_nonzero_1_d1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                y = torch.nonzero(x)
+                return y
+
+        model = Model()
+        x = (torch.randn(20, requires_grad=False) < 0.4).to(torch.float32)
+        expected = model(x)
+        model_path = self._call_exporter("test_aten_nonzeros_1_d1", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -239,9 +302,9 @@ class TestOnnxExportAten(ExtTestCase):
                 return y
 
         model = Model()
-        x = torch.randn(3, 4, requires_grad=False)
+        x = (torch.randn(3, 4, requires_grad=False) < 0.4).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_nonzeros", "custom", model, (x,))
+        model_path = self._call_exporter("test_aten_nonzeros_tuple", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -254,6 +317,68 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)
         self.assertEqual(len(expected), 2)
         self.assertEqual(len(got), 2)
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_nonzero_tuple_d3(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                y = torch.nonzero(x, as_tuple=True)
+                return y
+
+        model = Model()
+        x = (torch.randn(3, 4, 5, requires_grad=False) < 0.4).to(torch.float32)
+        expected = model(x)
+        model_path = self._call_exporter("test_aten_nonzeros_tuple_d3", "custom", model, (x,))
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqual(len(expected), 3)
+        self.assertEqual(len(got), 3)
+        for a, b in zip(expected, got):
+            self.assertEqualArray(a, b, atol=1e-5)
+
+    @skipif_ci_windows("not working on windows")
+    def test_aten_nonzero_tuple_d1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, x):
+                y = torch.nonzero(x, as_tuple=True)
+                return y
+
+        model = Model()
+        x = (torch.randn(34, requires_grad=False) < 0.4).to(torch.float32)
+        expected = model(x)
+        model_path = self._call_exporter("test_aten_nonzeros_tuple_d1", "custom", model, (x,))
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.detach().numpy()]))
+        got = sess.run(None, feeds)
+        self.assertEqual(len(expected), 1)
+        self.assertEqual(len(got), 1)
         for a, b in zip(expected, got):
             self.assertEqualArray(a, b, atol=1e-5)
 
@@ -969,6 +1094,114 @@ class TestOnnxExportAten(ExtTestCase):
             "test_aten_index_put_mask_bool_fixed_broadcast_3d", "custom", model, xs
         )
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_take(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind):
+                return x.take(ind)
+
+        model = Model()
+        xs = (
+            torch.arange(2 * 3).reshape((2, 3)).to(torch.float32),
+            torch.tensor([0, 2, 5], dtype=torch.int64),
+        )
+        expected = model(*xs)
+        model_path = self._call_exporter("test_aten_take", "custom", model, xs)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_index_tensor_2_1_2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind1, ind2):
+                return x[ind1, ind2]
+
+        model = Model()
+        xs = (
+            torch.arange(4 * 5).reshape((4, -1)).to(torch.float32),
+            torch.tensor([1, 2], dtype=torch.int64).reshape((-1, 1)),
+            torch.tensor([[0, 1], [2, 3]], dtype=torch.int64),
+        )
+        expected = model(*xs)
+        model_path = self._call_exporter("test_aten_index_tensor_2_1_2", "custom", model, xs)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=10)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_index_put_inplace_column(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind, vals):
+                x = x.clone()
+                col = x[:, 0]
+                col[ind] = vals
+                return x
+
+        model = Model()
+        xs = (
+            torch.arange(4 * 5).reshape((4, -1)).to(torch.float32),
+            torch.tensor([1, 2], dtype=torch.int64),
+            torch.tensor([100, 101], dtype=torch.float32),
+        )
+        expected = model(*xs)
+
+        DYNAMIC = torch.export.Dim.DYNAMIC
+        ds = ({0: DYNAMIC, 1: DYNAMIC}, {0: DYNAMIC}, {0: DYNAMIC})
+        ep1 = torch.export.export(model, xs, dynamic_shapes=ds, strict=False)
+        s1 = str(ep1)
+        ep1 = ep1.run_decompositions()
+        s2 = str(ep1)
+        self.assertNotEqual(s1, s2)
+
+        model_path = self._call_exporter(
+            "test_aten_index_put_inplace_column",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes=ds,
+            decomposition=True,
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=10)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)

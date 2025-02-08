@@ -125,8 +125,8 @@ try:
         ),
     )
     print(exported_program.graph)
-except torch._dynamo.exc.Unsupported as e:
-    print("-- an error occured:")
+except (torch._dynamo.exc.Unsupported, RuntimeError) as e:
+    print(f"-- an error {type(e)} occured:")
     print(e)
 
 

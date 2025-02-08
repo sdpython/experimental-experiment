@@ -2085,10 +2085,7 @@ def aten_div__Tensor(
     name: str = "div__Tensor",
 ) -> T:
     "div"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_div__Tensor)."
-    )
+    return aten_div_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_div_Tensor_mode(
@@ -3753,14 +3750,30 @@ def aten_index_Tensor(
         # shape(A) = (4,)
         # shape(B) = (B,)
         # X[A, B] = ...
+        ranks = [g.get_rank(i) for i in indices]
+        set_ranks = set(ranks)
+        if len(set_ranks) == 1 and set_ranks.pop() == 2 and len(indices) == 2:
+            name = f"{name}_rk2"
+            ind1, ind2 = indices
+            t1 = g.op.GatherND(x, ind1, batch_dims=0, name=name)
+            res = g.op.GatherElements(t1, ind2, axis=1, outputs=outputs, name=name)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+            return res
+
+        name = f"{name}_rk1"
         shapes = [g.get_shape(i) for i in indices]
-        assert (
-            len(set(shapes)) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (1){g.get_debug_msg()}"
+        assert len(set(shapes)) == 1, (
+            f"aten_index is not implemented for shapes={shapes} (1), x={x!r}, "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}"
+            f"{g.get_debug_msg()}"
+        )
         same_shape = shapes[0]
-        assert (
-            len(same_shape) == 1
-        ), f"aten_index is not implemented for shapes={shapes} (2){g.get_debug_msg()}"
+        assert len(same_shape) == 1, (
+            f"aten_index is not implemented for shapes={shapes} (2), x={x!r}, "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}"
+            f"{g.get_debug_msg()}"
+        )
         reshaped = [
             g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name) for i in indices
         ]
@@ -4869,9 +4882,7 @@ def aten_item(
         f"{g.get_shape(x) if g.has_shape(x) else 'missing'}{g.get_debug_msg()}"
     )
     if g.get_shape(x) == (1,):
-        return g.op.SqueezeAnyOpset(
-            x, np.array([0], dtype=np.int64), outputs=outputs, name=name
-        )
+        return g.op.SqueezeAnyOpset(x, g.ZERO, outputs=outputs, name=name)
     return g.op.Identity(x, outputs=outputs, name=name)
 
 
@@ -5442,6 +5453,9 @@ def aten_maximum(
     ):
         # unexpected case: Max(x, y=a float)
         y = g.op.Cast(y, to=g.get_type(x), name=name)
+    assert (
+        not g.has_type(x) or not g.has_type(y) or g.get_type(x) == g.get_type(y)
+    ), f"Type mismatch for {x!r} and {y!r}{g.get_debug_msg()}"
     res = g.op.Max(x, y, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, x, y)
@@ -6792,11 +6806,23 @@ def aten_nonzero_numpy(
         if not sts:
             g.set_type(res, TensorProto.INT64)
         return res
-    res = g.op.NonZero(x, name=name)
+    assert g.has_rank(x), f"Rank of {x!r} must known for nonzero{g.get_debug_msg()}"
+    rk = g.get_rank(x)
+    nz = g.op.NonZero(x, name=name)
+    g.set_type(nz, TensorProto.INT64)
+    if rk > 1:
+        split_names = g.op.Split(nz, num_outputs=rk, name=name)
+        new_names = [f"{outputs[0]}#{i}" for i in range(rk)]
+        for spl, out in zip(split_names, new_names):
+            g.set_type(spl, TensorProto.INT64)
+            g.op.Reshape(spl, g.MINUS_ONE, name=name, outputs=[out])
+            g.set_type(out, TensorProto.INT64)
+        return new_names
+
+    new_names = [f"{outputs[0]}#0"]
+    res = g.op.Reshape(nz, g.MINUS_ONE, name=name, outputs=new_names)
     g.set_type(res, TensorProto.INT64)
-    seq = g.op.SplitToSequence(res, axis=0, keepdims=0, outputs=outputs)
-    g.set_sequence(seq, TensorProto.INT64, ranks=1)
-    return seq
+    return res
 
 
 def aten_not(
@@ -9103,10 +9129,7 @@ def aten_sub__Tensor(
     name: str = "sub__Tensor",
 ) -> T:
     "sub"
-    raise RuntimeError(
-        "These calls should be removed from the fx graph as it is inplace modification "
-        "(aten_sub__Tensor)."
-    )
+    return aten_sub_Tensor(g, sts, outputs, x, y, alpha, name=name)
 
 
 def aten_sum(
@@ -9250,6 +9273,33 @@ def aten_t(
             g.set_shape(res, tuple(shape))
         else:
             g.set_rank(res, g.get_rank(x))
+    return res
+
+
+def aten_take(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    indices: T,
+    name: str = "take",
+) -> T:
+    """take"""
+    res = g.op.Gather(
+        g.op.Reshape(x, np.array([-1], dtype=np.int64), name=name),
+        indices,
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = g.get_shape(x)
+            g.set_shape(
+                x, (int(np.prod(shape)),) if all_int(shape) else ("x".join(map(str, shape)),)
+            )
+        else:
+            g.set_rank(res, 1)
     return res
 
 
@@ -10208,6 +10258,17 @@ def aten_view(
     "slice"
     if isinstance(size, (int, tuple, list)):
         asize = [size] if isinstance(size, int) else list(size)
+        if len(asize) == 0:
+            # Squeeze?
+            assert g.has_shape(x) and g.get_shape(x) in (tuple(), (1,)), (
+                f"Cannot reshape {x!r} if its shape is "
+                f"{g.get_shape(x) if g.has_shape(x) else '?'}"
+                f"{g.get_debug_msg()}"
+            )
+            if g.get_shape(x) == tuple():
+                return g.op.Identity(x, name=node_name, outputs=outputs)
+            return g.op.SqueezeAnyOpset(x, g.ZERO, name=node_name, outputs=outputs)
+
         if is_static_shape(asize):
             asize = np.array(asize, dtype=np.int64)
             assert (
@@ -10293,6 +10354,19 @@ def aten_where_Scalar(
         f"x={x}, other={other}{g.get_debug_msg()}"
     )
     return aten_where(g, sts, outputs, condition, x, other, name=name)
+
+
+def aten_where_ScalarOther(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
+    name: str = "where_ScalarOther",
+) -> T:
+    "where"
+    return aten_where_Scalar(g, sts, outputs, condition, x, other, name=name)
 
 
 def aten_where_self(
