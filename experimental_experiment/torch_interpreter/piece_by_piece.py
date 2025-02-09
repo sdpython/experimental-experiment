@@ -3,6 +3,7 @@ import contextlib
 import enum
 import inspect
 import os
+import pickle
 import sys
 import textwrap
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
@@ -2467,7 +2468,10 @@ class ModelDiagnoseOutput:
             else (check_conversion_cls, None, None)
         )
         if verbose:
-            print(f"[onnx_run_disc] {self.dot_name} run with cls={cls.__name__}")
+            print(
+                f"[onnx_run_disc] {self.dot_name} run with "
+                f"cls={cls.__name__} on {onx.__class__.__name__}"
+            )
 
         sess = cls(onx)
         diffs = []
@@ -2519,16 +2523,28 @@ class ModelDiagnoseOutput:
                 if verbose:
                     name = self.full_name.replace(":", "_")
                     name = f"{name}.onnx"
+                    ep_txt_name = f"{name}.ep.txt"
                     ep_name = f"{name}.ep"
+                    pkl_name = f"{name}.pkl"
                     with open(name, "wb") as f:
                         f.write(onx.SerializeToString())
-                    with open(ep_name, "w") as f:
+                    with open(ep_txt_name, "w") as f:
                         f.write(str(self.exporter_status.exported))
                         if hasattr(self.exporter_status.exported, "graph"):
                             f.write("\n----------------------\n")
                             f.write(str(self.exporter_status.exported.graph))
+                    torch.export.save(self.exporter_status.exported, ep_name)
+                    with open(pkl_name, "wb") as f:
+                        pickle.dump(
+                            dict(feeds=feeds, inputs=self.inputs[i], outputs=self.outputs[i]),
+                            f,
+                        )
                     print(
                         f"[onnx_run_disc] {self.dot_name} saving failing model into {name!r}"
+                    )
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} saving "
+                        f"exported program into {ep_name!r}"
                     )
                     raise ValueError(
                         f"{self.full_name}: discrepancies detected: "
