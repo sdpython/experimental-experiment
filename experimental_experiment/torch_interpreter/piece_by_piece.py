@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set,
 import numpy as np
 import onnx
 import torch
-from ..helpers import string_type, string_sig, max_diff
+from ..helpers import string_type, string_sig, max_diff, string_diff
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
 from .piece_by_piece_serialize import (
@@ -2425,7 +2425,9 @@ class ModelDiagnoseOutput:
             onx = res[0] if isinstance(res, tuple) else res
             diff = self.compute_onnx_discrepancies(onx, check_conversion_cls, verbose=verbose)
             if verbose:
-                print(f"[to_onnx_local] {self.dot_name} - done with {diff}")
+                print(f"[to_onnx_local] {self.dot_name} - done")
+                for d in diff:
+                    print(f"[to_onnx_local] {self.dot_name} - discrepancies: {string_diff(d)}")
             self.onnx_discrepancies = diff
 
         if return_optimize_report:
@@ -2548,12 +2550,14 @@ class ModelDiagnoseOutput:
                     )
                     raise ValueError(
                         f"{self.full_name}: discrepancies detected: "
-                        f"{diff}, model saved into {name!r} and {ep_name!r}"
+                        f"{string_diff(diff)}, model saved into {name!r} and {ep_name!r}"
                     )
-                raise ValueError(f"{self.full_name}: discrepancies detected: {diff}")
+                raise ValueError(
+                    f"{self.full_name}: discrepancies detected: {string_diff(diff)}"
+                )
             diffs.append(diff)
             if verbose:
-                print(f"[onnx_run_disc] {self.dot_name} diff={diff}")
+                print(f"[onnx_run_disc] {self.dot_name} diff={string_diff(diff)}")
         if verbose:
             print(f"[onnx_run_disc] {self.dot_name} validation done")
         return diffs

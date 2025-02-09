@@ -874,6 +874,8 @@ def max_diff(
         output, this number will be the number of elements
         of this output
     * dnan: difference in the number of nan
+
+    You may use :func:`string_diff` to display the discrepancies in one string.
     """
     if expected is None and got is None:
         return dict(abs=0, rel=0, sum=0, n=0, dnan=0)
@@ -1370,3 +1372,15 @@ def max_diff(
         f"{string_type(expected)}, got={string_type(got)},\n"
         f"level={level}"
     )
+
+
+def string_diff(diff: Dict[str, Any]) -> str:
+    """Renders discrepancies return by :func:`max_diff` into one string."""
+    # dict(abs=, rel=, sum=, n=n_diff, dnan=)
+    if diff.get("dnan", None):
+        if diff["abs"] == 0 or diff["rel"] == 0:
+            return f"abs={diff['abs']}, rel={diff['rel']}, dnan={diff['dnan']}"
+        return f"abs={diff['abs']}, rel={diff['rel']}, n={diff['n']}, dnan={diff['dnan']}"
+    if diff["abs"] == 0 or diff["rel"] == 0:
+        return f"abs={diff['abs']}, rel={diff['rel']}"
+    return f"abs={diff['abs']}, rel={diff['rel']}, n={diff['n']}"

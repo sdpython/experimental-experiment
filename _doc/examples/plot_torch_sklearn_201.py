@@ -26,7 +26,9 @@ import io
 import logging
 import warnings
 from typing import Any, Dict, List, Optional
+import numpy as np
 import onnx
+from onnx.reference.ops.op_topk import TopK_11 as TopK
 import sklearn
 import torch
 import onnxruntime
@@ -574,13 +576,21 @@ def onnx_topk_indices(
     k: T,
     name: str = "topk",
 ):
+    assert len(outputs) == 1, f"Only one output is expected but outputs={outputs}"
     unique_name = g.unique_name("unused_topk_values")
     g.op.TopK(x, k, name=name, outputs=[unique_name, *outputs])
     return outputs[0]
 
 
 # %%
-# The dispatcher maps the custom ops calling topk to
+# Let's check it is working somehow.
+
+x = torch.tensor([[0, 1, 2], [6, 5, 4]], dtype=torch.float32)
+print("torch.topk", torch.topk(x, k=2).indices)
+print("onnx.topk", TopK.eval(x.numpy(), np.array([2], dtype=np.int64))[1])
+
+# %%
+# That works. Then the dispatcher maps the custom ops calling topk to
 # the previous converter functions.
 
 dispatcher = Dispatcher(

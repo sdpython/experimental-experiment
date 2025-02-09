@@ -19,6 +19,7 @@
     eval/index
     export_options
     interpreter
+    investigate_helper
     onnx_export
     onnx_export_errors
     onnx_export_serialization
