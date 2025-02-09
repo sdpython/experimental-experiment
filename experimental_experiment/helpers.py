@@ -228,7 +228,9 @@ def string_type(
                 return f"{s}[empty]"
             n_nan = np.isnan(obj.reshape((-1,))).astype(int).sum()
             if n_nan > 0:
-                return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}N{n_nan}nans]"
+                nob = obj.ravel()
+                nob = nob[~np.isnan(nob)]
+                return f"{s}[{nob.min()},{nob.max()}:A{nob.astype(float).mean()}N{n_nan}nans]"
             return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}]"
         i = np_dtype_to_tensor_dtype(obj.dtype)
         if not with_shape:
@@ -260,9 +262,11 @@ def string_type(
                 return f"{s}[empty]"
             n_nan = obj.reshape((-1,)).isnan().to(int).sum()
             if n_nan > 0:
+                nob = obj.reshape((-1,))
+                nob = nob[~nob.isnan()]
                 if obj.dtype in {torch.complex64, torch.complex128}:
                     return (
-                        f"{s}[{obj.abs().min()},{obj.abs().max():A{obj.mean()}N{n_nan}nans}]"
+                        f"{s}[{nob.abs().min()},{nob.abs().max():A{nob.mean()}N{n_nan}nans}]"
                     )
                 return f"{s}[{obj.min()},{obj.max()}:A{obj.to(float).mean()}N{n_nan}nans]"
             if obj.dtype in {torch.complex64, torch.complex128}:
@@ -1165,13 +1169,20 @@ def max_diff(
         diff = np.abs(got_cpu - exp_cpu)
         ndiff = np.abs(np.isnan(expected).astype(int) - np.isnan(got).astype(int))
         rdiff = diff / (np.abs(exp_cpu) + 1e-3)
-        abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
-            float(diff.max()),
-            float(rdiff.max()),
-            float(diff.sum()),
-            float(diff.size),
-            float(ndiff.sum()),
-        )
+        if diff.size == 0:
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+                (0, 0, 0, 0, 0)
+                if exp_cpu.size == got_cpu.size
+                else (np.inf, np.inf, np.inf, 0, np.inf)
+            )
+        else:
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+                float(diff.max()),
+                float(rdiff.max()),
+                float(diff.sum()),
+                float(diff.size),
+                float(ndiff.sum()),
+            )
         if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
             # To understand the value it comes from.
             if debug_info:

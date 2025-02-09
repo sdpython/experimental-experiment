@@ -2368,7 +2368,7 @@ class ModelDiagnoseOutput:
                     input_names=None,
                     output_names=None,
                     large_model=False,
-                    verbose=max(verbose - 2, 0),
+                    verbose=verbose,
                     return_builder=True,
                     raise_list=raise_list,
                     return_optimize_report=return_optimize_report,
@@ -2388,7 +2388,7 @@ class ModelDiagnoseOutput:
             all_stats["children"] = stats
 
         if verbose:
-            print(f"[to_onnx_local] {self.dot_name!r} - export starts {self.custom_op_name}")
+            print(f"[to_onnx_local] {self.dot_name} - export starts {self.custom_op_name}")
         if dispatched:
             new_dispatcher = Dispatcher(dispatched)
             if dispatcher:
@@ -2416,20 +2416,15 @@ class ModelDiagnoseOutput:
             export_options=export_options,
         )
         if verbose:
-            print(f"[to_onnx_local] {self.dot_name!r} - export done")
+            print(f"[to_onnx_local] {self.dot_name} - export done")
 
         if check_conversion_cls:
             if verbose:
-                print(
-                    f"[to_onnx_local] {self.dot_name!r} - "
-                    f"run validation with {check_conversion_cls}"
-                )
+                print(f"[to_onnx_local] {self.dot_name} - run validation")
             onx = res[0] if isinstance(res, tuple) else res
-            diff = self.compute_onnx_discrepancies(
-                onx, check_conversion_cls, verbose=max(verbose - 1, 0)
-            )
+            diff = self.compute_onnx_discrepancies(onx, check_conversion_cls, verbose=verbose)
             if verbose:
-                print(f"[to_onnx_local] {self.dot_name!r} - done with {diff}")
+                print(f"[to_onnx_local] {self.dot_name} - done with {diff}")
             self.onnx_discrepancies = diff
 
         if return_optimize_report:
@@ -2471,6 +2466,8 @@ class ModelDiagnoseOutput:
             if isinstance(check_conversion_cls, dict)
             else (check_conversion_cls, None, None)
         )
+        if verbose:
+            print(f"[onnx_run_disc] {self.dot_name} run with cls={cls.__name__}")
 
         sess = cls(onx)
         diffs = []
@@ -2478,12 +2475,16 @@ class ModelDiagnoseOutput:
             inp, out = flattened_inputs[i], flattened_outputs[i]
             if verbose:
                 print(
-                    f"[compute_onnx_discrepancies] run with "
+                    f"[onnx_run_disc] {self.dot_name} run with "
                     f"{string_type(self.inputs[i], with_shape=True)}"
                 )
                 print(
-                    f"[compute_onnx_discrepancies] flattened into "
-                    f"{string_type(inp, with_shape=True)}"
+                    f"[onnx_run_disc] {self.dot_name} flattened into "
+                    f"{string_type(inp, with_shape=True, with_min_max=True)}"
+                )
+                print(
+                    f"[onnx_run_disc] {self.dot_name} expecting "
+                    f"{string_type(out, with_shape=True, with_min_max=True)}"
                 )
             assert not inp[1], (
                 f"Flattened inputs {string_type(flattened_inputs[i], with_shape=True)}, "
@@ -2500,11 +2501,45 @@ class ModelDiagnoseOutput:
                 )
             )
             got = sess.run(None, feeds)
+            if verbose:
+                if len(got) == 1:
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} computing "
+                        f"{string_type(got[0], with_shape=True, with_min_max=True)}"
+                    )
+                else:
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} computing "
+                        f"{string_type(tuple(got), with_shape=True, with_min_max=True)}"
+                    )
             diff = max_diff(out, got)
-            assert (
+            if not (
                 atol is None or rtol is None or (diff["abs"] <= atol and diff["rel"] <= rtol)
-            ), f"{self.full_name}: discrepancies detected: {diff}"
+            ):
+                if verbose:
+                    name = self.full_name.replace(":", "_")
+                    name = f"{name}.onnx"
+                    ep_name = f"{name}.ep"
+                    with open(name, "wb") as f:
+                        f.write(onx.SerializeToString())
+                    with open(ep_name, "w") as f:
+                        f.write(str(self.exporter_status.exported))
+                        if hasattr(self.exporter_status.exported, "graph"):
+                            f.write("\n----------------------\n")
+                            f.write(str(self.exporter_status.exported.graph))
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} saving failing model into {name!r}"
+                    )
+                    raise ValueError(
+                        f"{self.full_name}: discrepancies detected: "
+                        f"{diff}, model saved into {name!r} and {ep_name!r}"
+                    )
+                raise ValueError(f"{self.full_name}: discrepancies detected: {diff}")
             diffs.append(diff)
+            if verbose:
+                print(f"[onnx_run_disc] {self.dot_name} diff={diff}")
+        if verbose:
+            print(f"[onnx_run_disc] {self.dot_name} validation done")
         return diffs
 
 

@@ -599,7 +599,9 @@ dispatcher = Dispatcher(
 # is accurate. It is doable because every intermediate results
 # were previously traced.
 onx = trace.to_onnx_local(
-    verbose=1, dispatcher=dispatcher, check_conversion_cls=ExtendedReferenceEvaluator
+    verbose=1,
+    dispatcher=dispatcher,
+    check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
 )
 
 # %%
