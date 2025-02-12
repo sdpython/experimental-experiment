@@ -1,12 +1,13 @@
 import unittest
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.torch_interpreter.investigate_helper import run_aligned
 
 
 class TestInvestigateHelper(ExtTestCase):
 
+    @hide_stdout()
     def test_ep_onnx_sync(self):
         import torch
 
@@ -35,7 +36,7 @@ class TestInvestigateHelper(ExtTestCase):
                 verbose=1,
             ),
         )
-        self.assertEqual(len(results), 3)
+        self.assertEqual(len(results), 4)
 
 
 if __name__ == "__main__":

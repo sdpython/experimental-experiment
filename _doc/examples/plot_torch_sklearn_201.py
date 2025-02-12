@@ -475,6 +475,11 @@ pretty = trace.get_export_report()
 print(pretty)
 
 # %%
+# The dynamic shapes for the whole model:
+print("dynamic shapes:")
+print(trace.guess_dynamic_shapes())
+
+# %%
 # The method ``try_export`` cannot infer all links between input shapes and output shapes
 # for every submodule. The following function fills this gap.
 

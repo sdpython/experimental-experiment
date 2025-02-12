@@ -971,6 +971,35 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @skipif_ci_windows("not working on windows")
+    def test_aten_clone_index_Tensor_0_2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind1, ind2):
+                return x[ind1, ind2]
+
+        model = Model()
+        xs = (
+            (torch.arange(2) + 10).reshape((1, 2)).to(torch.float32),
+            torch.zeros((1, 1), dtype=torch.int64),
+            torch.zeros((1, 2), dtype=torch.int64),
+        )
+        xsf = (
+            torch.zeros((0, 2)),
+            torch.zeros((0, 1), dtype=torch.int64),
+            torch.zeros((0, 2), dtype=torch.int64),
+        )
+        expected = model(*xsf)
+        model_path = self._call_exporter(
+            "test_aten_clone_index_Tensor_0_2", "custom", model, xs
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xsf]))
+        # feeds = dict(x=np.zeros((0, 2), dtype=np.float32), ind1 = np.zeros((0, 1), dtype=np.int64), ind2=np.zeros((0, 2), dtype=np.int64))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("not working on windows")
     def test_aten_index_put_mask_bool_fixed_size(self):
         import torch
 

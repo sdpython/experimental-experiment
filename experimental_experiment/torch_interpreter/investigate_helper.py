@@ -215,9 +215,9 @@ def run_aligned(
                     d = max_diff(torch_results[to], r)
                     if verbose:
                         if o == to:
-                            print(f"[run_aligned] common results {to}: {string_diff(d)}")
+                            print(f"[run_aligned] =common results {to}: {string_diff(d)}")
                         else:
-                            print(f"[run_aligned] common results {to}/{o}: {string_diff(d)}")
+                            print(f"[run_aligned] =common results {to}/{o}: {string_diff(d)}")
                         if not (
                             atol is None
                             or rtol is None
@@ -259,9 +259,9 @@ def run_aligned(
                 d = max_diff(torch_results[to], r)
                 if verbose:
                     if o == to:
-                        print(f"[run_aligned] common results* {to}: {string_diff(d)}")
+                        print(f"[run_aligned] =common results* {to}: {string_diff(d)}")
                     else:
-                        print(f"[run_aligned] common results* {to}/{o}: {string_diff(d)}")
+                        print(f"[run_aligned] =common results* {to}/{o}: {string_diff(d)}")
                     if not (
                         atol is None or rtol is None or (d["abs"] <= atol and d["rel"] <= rtol)
                     ):

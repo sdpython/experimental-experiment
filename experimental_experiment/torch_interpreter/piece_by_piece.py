@@ -2507,7 +2507,11 @@ class ModelDiagnoseOutput:
                     ],
                 )
             )
-            got = sess.run(None, feeds)
+            try:
+                got = sess.run(None, feeds)
+            except (TypeError, RuntimeError, ValueError, IndexError):
+                # Error no output
+                got = []
             if verbose:
                 if len(got) == 1:
                     print(
@@ -2519,7 +2523,7 @@ class ModelDiagnoseOutput:
                         f"[onnx_run_disc] {self.dot_name} computing "
                         f"{string_type(tuple(got), with_shape=True, with_min_max=True)}"
                     )
-            diff = max_diff(out, got)
+            diff = dict(abs=np.inf, rel=np.inf) if len(got) == 0 else max_diff(out, got)
             if not (
                 atol is None or rtol is None or (diff["abs"] <= atol and diff["rel"] <= rtol)
             ):
