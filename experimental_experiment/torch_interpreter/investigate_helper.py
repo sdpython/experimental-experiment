@@ -5,6 +5,86 @@ import torch
 from ..helpers import string_type, string_diff, max_diff
 
 
+def validate_fx_tensor(
+    node: torch.fx.Node, tensor: torch.Tensor, expected_shape: Tuple[Any, ...]
+) -> None:
+    """
+    Validates the shape of tensor is expected.
+
+    :param node: node
+    :param tensor: tensor
+    :param expected_shape: expected shape
+    """
+    assert len(tensor.shape) == len(expected_shape), (
+        f"Shape mismatch, got {tensor.shape} expected {expected_shape}, "
+        f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
+        f"node.args={node.args}, node.kwargs={node.kwargs}, "
+        f"node.meta={node.meta}"
+    )
+    for a, b in zip(tensor.shape, expected_shape):
+        assert not isinstance(b, int) or a == b, (
+            f"Dimension mismatch, got {tensor.shape} expected {expected_shape}, "
+            f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
+            f"node.args={node.args}, node.kwargs={node.kwargs}, "
+            f"node.meta={node.meta}"
+        )
+
+
+def validate_fx_outputs(node: torch.fx.Node, outputs: Tuple[Any, ...]) -> None:
+    """
+    Validates the outputs of a node using metadata stored in the node.
+
+    :param node: node
+    :param outputs: outputs
+    """
+    if "val" not in node.meta:
+        return
+    if isinstance(outputs, torch.Tensor):
+        validate_fx_tensor(node, outputs, node.meta["val"].shape)
+        return
+    if isinstance(outputs, (tuple, list)):
+        assert isinstance(node.meta["val"], (list, tuple)), (
+            f"Unexpected type {string_type(node.meta['val'])} for node.meta['val'], "
+            f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
+            f"node.args={node.args}, node.kwargs={node.kwargs}, "
+            f"node.meta={node.meta}"
+        )
+        assert len(outputs) == len(node.meta["val"]), (
+            f"Length mismatch, got {len(outputs)} expected {len(node.meta['val'])}, "
+            f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
+            f"node.args={node.args}, node.kwargs={node.kwargs}, "
+            f"node.meta={node.meta}"
+        )
+        for a, b in zip(outputs, node.meta["val"]):
+            validate_fx_tensor(node, a, b.shape)
+        return
+    if isinstance(outputs, int):
+        assert (
+            isinstance(node.meta["val"], (torch.SymInt, torch.SymBool, torch.SymFloat))
+            or outputs == node.meta["val"]
+        ), (
+            f"Int mismatch, got {outputs} expected {node.meta['val']}, "
+            f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
+            f"node.args={node.args}, node.kwargs={node.kwargs}, "
+            f"node.meta={node.meta}"
+        )
+        return
+    if outputs is None:
+        assert node.meta["val"] is None, (
+            f"None mismatch, got {outputs} expected {node.meta['val']}, "
+            f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
+            f"node.args={node.args}, node.kwargs={node.kwargs}, "
+            f"node.meta={node.meta}"
+        )
+        return
+    raise NotImplementedError(
+        f"Validation for output type {type(outputs)} is not implemented, "
+        f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
+        f"node.args={node.args}, node.kwargs={node.kwargs}, "
+        f"node.meta={node.meta}"
+    )
+
+
 def run_fx_node(
     node: torch.fx.Node, args: Tuple[Any, ...], kwargs: Optional[Dict[str, Any]] = None
 ) -> Tuple[Any, ...]:
@@ -22,7 +102,9 @@ def run_fx_node(
         ), f"Unexpected inputs: args={string_type(args)} kwargs={string_type(kwargs)}"
         return args
     if node.op == "call_function":
-        return node.target(*args, **kwargs)
+        outputs = node.target(*args, **kwargs)
+        validate_fx_outputs(node, outputs)
+        return outputs
     raise NotImplementedError(
         f"node.op={node.op!r} is not implemented, node.name={node.name!r}"
     )
@@ -39,6 +121,8 @@ def _pick_result(torch_results: Dict[str, Any], ref: Any) -> Any:
         return {k: _pick_result(torch_results, v) for k, v in ref.items()}
     if isinstance(ref, (bool, int, float, str, torch.device, torch.dtype)):
         return ref
+    if ref is None:
+        return None
     raise NotImplementedError(f"Unable to process args type {type(ref)}")
 
 
@@ -109,7 +193,9 @@ def run_aligned(
         onnx_results[init.name] = onh.to_array(init)
 
     torch_results = {
-        k: torch.from_numpy(v) for k, v in onnx_results.items() if not k.startswith("init")
+        k: torch.from_numpy(v.copy())
+        for k, v in onnx_results.items()
+        if not k.startswith("init")
     }
     last_position = 0
     torch_output_names = None
@@ -155,7 +241,7 @@ def run_aligned(
 
         if node.op == "placeholder":
             if node.name in onnx_results:
-                torch_results[node.name] = torch.from_numpy(onnx_results[node.name])
+                torch_results[node.name] = torch.from_numpy(onnx_results[node.name].copy())
                 if verbose:
                     t = torch_results[node.name]
                     print(
@@ -168,7 +254,7 @@ def run_aligned(
         outputs = [node.name] if isinstance(node.name, str) else list(node.name)
         args, kwargs = prepare_args_kwargs(torch_results, node)
         new_outputs = run_fx_node(node, args, kwargs)
-        if isinstance(new_outputs, (torch.Tensor, int, float)):
+        if isinstance(new_outputs, (torch.Tensor, int, float, list)):
             new_outputs = (new_outputs,)
 
         if new_outputs is None:

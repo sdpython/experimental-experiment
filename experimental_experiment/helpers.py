@@ -230,6 +230,8 @@ def string_type(
             if n_nan > 0:
                 nob = obj.ravel()
                 nob = nob[~np.isnan(nob)]
+                if nob.size == 0:
+                    return f"{s}[N{n_nan}nans]"
                 return f"{s}[{nob.min()},{nob.max()}:A{nob.astype(float).mean()}N{n_nan}nans]"
             return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}]"
         i = np_dtype_to_tensor_dtype(obj.dtype)

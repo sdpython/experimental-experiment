@@ -24,6 +24,8 @@ Module
 import contextlib
 import io
 import logging
+import math
+import numbers
 import warnings
 from typing import Any, Dict, List, Optional
 import numpy as np
@@ -122,7 +124,11 @@ print(f"discrepancies: {max_diff(d1, d2)}")
 def _get_mask(X, value_to_mask):
     return (
         torch.isnan(X)
-        if sklearn.utils._missing.is_scalar_nan(value_to_mask)
+        if (  # sklearn.utils._missing.is_scalar_nan(value_to_mask)
+            not isinstance(value_to_mask, numbers.Integral)
+            and isinstance(value_to_mask, numbers.Real)
+            and math.isnan(value_to_mask)
+        )
         else (value_to_mask == X)
     )
 
@@ -674,9 +680,9 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
 
     if verbose:
         print("python: loading the model...")
-    sess = ExtendedReferenceEvaluator(onx, verbose=10)
+    sess = ExtendedReferenceEvaluator(onx, verbose=0)
     if verbose:
-        print("onnxruntime: running the model...")
+        print("python: running the model...")
     got = sess.run(None, feeds)
     d = max_diff(p1, got[0])
     assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
@@ -685,8 +691,10 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
 
     if verbose:
         print("onnxruntime: loading the model...")
+    opts = onnxruntime.SessionOptions()
+    opts.optimized_model_filepath = "plot_torch_sklearn_201.ort.onnx"
     sess = onnxruntime.InferenceSession(
-        onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        onx.SerializeToString(), opts, providers=["CPUExecutionProvider"]
     )
     if verbose:
         print("onnxruntime: running the model...")
