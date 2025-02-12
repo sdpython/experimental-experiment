@@ -995,7 +995,6 @@ class TestOnnxExportAten(ExtTestCase):
         )
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xsf]))
-        # feeds = dict(x=np.zeros((0, 2), dtype=np.float32), ind1 = np.zeros((0, 1), dtype=np.int64), ind2=np.zeros((0, 2), dtype=np.int64))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
