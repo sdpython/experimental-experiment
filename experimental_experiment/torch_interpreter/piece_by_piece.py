@@ -4,6 +4,7 @@ import enum
 import inspect
 import os
 import pickle
+import pprint
 import sys
 import textwrap
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
@@ -2548,9 +2549,32 @@ class ModelDiagnoseOutput:
                         f"[onnx_run_disc] {self.dot_name} saving "
                         f"exported program into {ep_name!r}"
                     )
+
+                    # exported program can be saved but not necessarily restored without
+                    # the custom ops registered so run some verification here.
+                    print(f"[onnx_run_disc] {self.dot_name} run_aligned")
+                    from experimental_experiment.torch_interpreter.investigate_helper import (
+                        run_aligned,
+                    )
+                    from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+                    diffs = []
+                    for di in run_aligned(
+                        self.exporter_status.exported,
+                        onx,
+                        self.inputs[i][0],
+                        kwargs=self.inputs[i][1],
+                        check_conversion_cls=dict(
+                            cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5
+                        ),
+                        verbose=verbose,
+                    ):
+                        diffs.append(di)
+
                     raise ValueError(
                         f"{self.full_name}: discrepancies detected: "
                         f"{string_diff(diff)}, model saved into {name!r} and {ep_name!r}"
+                        f"\n-- intermediate differences --\n{pprint.pformat(diffs)}"
                     )
                 raise ValueError(
                     f"{self.full_name}: discrepancies detected: {string_diff(diff)}"

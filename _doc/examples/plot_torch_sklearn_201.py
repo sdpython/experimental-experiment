@@ -129,7 +129,9 @@ def _get_mask(X, value_to_mask):
 
 class SubTopKIndices(torch.nn.Module):
     def forward(self, x, k):
-        return torch.topk(x, k, dim=1, largest=False, sorted=True).indices
+        # torch does not like nans
+        xn = torch.nan_to_num(x, nan=1.0e10)
+        return torch.topk(xn, k, dim=1, largest=False, sorted=True).indices
 
 
 class SubWeightMatrix(torch.nn.Module):
@@ -578,7 +580,7 @@ def onnx_topk_indices(
 ):
     assert len(outputs) == 1, f"Only one output is expected but outputs={outputs}"
     unique_name = g.unique_name("unused_topk_values")
-    g.op.TopK(x, k, name=name, outputs=[unique_name, *outputs])
+    g.op.TopK(x, k, name=name, outputs=[unique_name, *outputs], largest=False, sorted=True)
     return outputs[0]
 
 
@@ -588,6 +590,13 @@ def onnx_topk_indices(
 x = torch.tensor([[0, 1, 2], [6, 5, 4]], dtype=torch.float32)
 print("torch.topk", torch.topk(x, k=2).indices)
 print("onnx.topk", TopK.eval(x.numpy(), np.array([2], dtype=np.int64))[1])
+
+# %%
+# And with nan values
+x = torch.tensor([[0, np.nan, 2], [6, np.nan, 4]], dtype=torch.float32)
+print("torch.topk", torch.topk(torch.nan_to_num(x, nan=-1.0e10), k=2).indices)
+print("onnx.topk", TopK.eval(x.numpy(), np.array([2], dtype=np.int64))[1])
+
 
 # %%
 # That works. Then the dispatcher maps the custom ops calling topk to

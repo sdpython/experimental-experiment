@@ -1142,6 +1142,21 @@ def max_diff(
         if _index < begin or (end != -1 and _index >= end):
             # out of boundary
             return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
+        if isinstance(expected, (int, float)):
+            if isinstance(got, np.ndarray) and len(got.shape) == 0:
+                got = float(got)
+            if isinstance(got, (int, float)):
+                if expected == got:
+                    return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
+                return dict(
+                    abs=abs(expected - got),
+                    rel=abs(expected - got) / (abs(expected) + 1e-5),
+                    sum=abs(expected - got),
+                    n=1,
+                    dnan=0,
+                )
+            print("****", type(expected), type(got))
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
         if expected.dtype in (np.complex64, np.complex128):
             if got.dtype == expected.dtype:
                 got = np.real(got)
