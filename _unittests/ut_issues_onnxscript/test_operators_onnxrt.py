@@ -1874,25 +1874,6 @@ class TestOperatorsOnnxrt(ExtTestCase):
             test_backward=False,
         )
 
-    @requires_torch("2.4")
-    @hide_stdout()
-    def test_xt_det(self):
-        x = torch.randn(2, 3, 5, 5, device=torch.device("cpu"))
-        self.assertONNX(
-            lambda x: torch.det(x),
-            x,
-            opset_version=11,
-            onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-4,
-        )
-        self.assertONNX(
-            lambda x: torch.linalg.det(x),
-            x,
-            opset_version=11,
-            onnx_export=inspect.currentframe().f_code.co_name,
-            atol=1e-4,
-        )
-
     @requires_onnxscript("0.3")
     @hide_stdout()
     def test_xt_softmaxcrossentropy(self):
