@@ -2151,6 +2151,52 @@ class TestPieceByPiece(ExtTestCase):
         ref = ExtendedReferenceEvaluator(onx)
         self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
 
+    def test_controlflow_cond_submodule(self):
+        import torch
+
+        class SubThen(torch.nn.Module):
+            def forward(self, x):
+                return x * x
+
+        class SubElse(torch.nn.Module):
+            def forward(self, x):
+                return torch.abs(x)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub_then = SubThen()
+                self.sub_else = SubElse()
+
+            def forward(self, x):
+                return torch.cond(x.sum() > 0, self.sub_then, self.sub_else, [x])
+
+        model = Model()
+        inputs = [
+            ((torch.rand((5, 4)),), {}),
+            ((torch.rand((6, 7)),), {}),
+        ]
+        model(*inputs[0][0])
+
+        print("******TRACE")
+        diag = trace_execution_piece_by_piece(model, inputs, verbose=1)
+        print("******EXPORT")
+        return
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        print("******ONNX")
+        onx = diag.to_onnx_local(
+            verbose=10,
+            check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+        )
+        print(onx)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
