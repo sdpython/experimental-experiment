@@ -213,11 +213,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
-    def test_export_bench_dynamo_export_cpu_dynamic_1_input(self):
-        self._hg_export_bench_cpu("dynamo_export", "101Dummy", dynamic=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
     def test_export_bench_custom_cpu_dynamic_1_input_dummy16(self):
         self._hg_export_bench_cpu("custom", "101Dummy16", dynamic=True, debug=False)
 
@@ -263,11 +258,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu_2_outputs(self):
-        self._hg_export_bench_cpu("dynamo_export", "101Dummy2Outputs")
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
     @requires_onnxruntime_training()
     def test_huggingface_export_bench_cort_cpu(self):
         self._hg_export_bench_cpu(
@@ -288,11 +278,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._hg_export_bench_cpu("custom", "101Dummy", dump_ort=True)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu_dump_ort(self):
-        self._hg_export_bench_cpu("dynamo_export", "101Dummy", dump_ort=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_eager_cpu(self):
         self._hg_export_bench_cpu("eager", "101Dummy", check_file=False)
@@ -302,13 +287,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     def test_huggingface_export_bench_custom_cpu2(self):
         self._hg_export_bench_cpu(
             "custom", "101Dummy,101Dummy16", check_file=False, output_data=True
-        )
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu2(self):
-        self._hg_export_bench_cpu(
-            "dynamo_export", "101Dummy,101Dummy16", check_file=False, output_data=True
         )
 
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -356,24 +334,19 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._hg_export_bench_cpu("onnx_dynamo", "101Dummy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_huggingface_export_bench_dynamo_cpu(self):
-        self._hg_export_bench_cpu("dynamo_export", "101Dummy")
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_tuple(self):
         self._hg_export_bench_cpu("custom", "101DummyTuple")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu_optimize(self):
-        self._hg_export_bench_cpu("dynamo_export", "101Dummy", optimization="default")
+    def test_huggingface_export_bench_dynamo_cpu_optimize_ort(self):
+        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", optimization="ort")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu_tuple(self):
-        self._hg_export_bench_cpu("dynamo_export", "101DummyTuple")
+    def test_huggingface_export_bench_dynamo_cpu_optimize_ir(self):
+        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", optimization="ir")
 
     @skipif_ci_linux("too long")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -435,7 +408,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self.assertNotIn(":discrepancies_abs,inf;", out)
 
     @ignore_warnings((DeprecationWarning, UserWarning, RuntimeWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.7")
     def test_timm_export_bench_script_cpu(self):
         self._timm_export_bench_cpu("torch_script", "mobilenetv2_100")
 

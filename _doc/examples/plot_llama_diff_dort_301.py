@@ -88,7 +88,7 @@ from experimental_experiment.torch_dynamo import (
     get_decomposition_table,
 )
 
-has_cuda = has_cuda and torch.cuda.is_available()
+has_cuda = has_cuda and torch.cuda.device_count() > 0
 logging.disable(logging.ERROR)
 provider = "cuda" if has_cuda else "cpu"
 
