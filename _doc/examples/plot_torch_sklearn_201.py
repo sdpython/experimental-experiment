@@ -649,7 +649,7 @@ print(pretty_onnx(onx))
 # ==========
 
 
-def validate_onnx(size, sizey, onx, verbose: int = 1):
+def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
     X = torch.randn((size, 2))
     Y = torch.randn((sizey, 2))
     for i in range(5):
@@ -690,22 +690,23 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
     if verbose:
         print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
 
-    if verbose:
-        print("onnxruntime: loading the model...")
-    opts = onnxruntime.SessionOptions()
-    opts.optimized_model_filepath = "plot_torch_sklearn_201.ort.onnx"
-    opts.log_severity_level = 0
-    opts.log_verbosity_level = 0
-    sess = onnxruntime.InferenceSession(
-        onx.SerializeToString(), opts, providers=["CPUExecutionProvider"]
-    )
-    if verbose:
-        print("onnxruntime: running the model...")
-    got = sess.run(None, feeds)
-    d = max_diff(p1, got[0])
-    assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
-    if verbose:
-        print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
+    if use_ort:
+        if verbose:
+            print("onnxruntime: loading the model...")
+        opts = onnxruntime.SessionOptions()
+        opts.optimized_model_filepath = "plot_torch_sklearn_201.ort.onnx"
+        opts.log_severity_level = 0
+        opts.log_verbosity_level = 0
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), opts, providers=["CPUExecutionProvider"]
+        )
+        if verbose:
+            print("onnxruntime: running the model...")
+        got = sess.run(None, feeds)
+        d = max_diff(p1, got[0])
+        assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
+        if verbose:
+            print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
 
     model_inputs = (
         torch.from_numpy(knn_imputer._mask_fit_X),

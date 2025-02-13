@@ -2330,6 +2330,7 @@ class ModelDiagnoseOutput:
         ), (
             f"{self.full_name}: exporter failed, "
             f"status={self.exporter_status.status!r}, "
+            f"reason={self.exporter_status.reason!r}, "
             f"a custom onnx converter must be provided for "
             f"'diag_lib::{self.custom_op_name}', "
             f"args={string_type(self.inputs[0][0], with_shape=True)}, "
