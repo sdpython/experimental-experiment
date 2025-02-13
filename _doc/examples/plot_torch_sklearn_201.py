@@ -632,6 +632,7 @@ onx = trace.to_onnx_local(
     verbose=1,
     dispatcher=dispatcher,
     check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+    inline=False,
 )
 
 # %%
@@ -693,6 +694,8 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
         print("onnxruntime: loading the model...")
     opts = onnxruntime.SessionOptions()
     opts.optimized_model_filepath = "plot_torch_sklearn_201.ort.onnx"
+    opts.log_severity_level = 0
+    opts.log_verbosity_level = 0
     sess = onnxruntime.InferenceSession(
         onx.SerializeToString(), opts, providers=["CPUExecutionProvider"]
     )
