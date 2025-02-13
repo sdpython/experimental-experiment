@@ -33,7 +33,7 @@ usage() {
     echo "  --tag                   tag"
     echo
     echo "Example: $0 --transformers-version 4.37.2 --pytorch-version nightly --ort-version nightly --onnxscript-version nightly --cuda-version 11.8 --mamba 3.11 \\"
-    echo "         -m experimental_experiment.torch_bench.bash_bench_huggingface --device cuda --dtype float16 --quiet 1 --memory_peak 1 --exporter script,dynamo_export,custom --model All -r 30 -w 10 --verbose 1 --dump_ort 1"
+    echo "         -m experimental_experiment.torch_bench.bash_bench_huggingface --device cuda --dtype float16 --quiet 1 --memory_peak 1 --exporter script,onnx_dynamo,custom --model All -r 30 -w 10 --verbose 1 --dump_ort 1"
     echo
     echo "Once the installation is done, you can skip the installation by adding --skip-install to the command line."
     exit 1

@@ -188,12 +188,12 @@ class ModelRunner:
             return True
         if exporter.startswith("custom"):
             # custom exporter is not limited by optimization methods
-            return optimization not in {"ir"}
-        if exporter in {"torch_script", "dynamo_export"}:
-            # torch_script and dynamo_export only allow default optimization
+            return optimization not in {"ir", "ort"}
+        if exporter in {"torch_script"}:
+            # torch_script only allow default optimization
             return optimization in {"default"}
         if exporter in {"onnx_dynamo", "onnx_dynamo-fallback", "onnx_dynamo-detailed"}:
-            return optimization in {"ir"}
+            return optimization in {"ir", "ort"}
         return False
 
     @classmethod
@@ -689,20 +689,6 @@ class ModelRunner:
                 target_opset=target_opset,
                 detailed=strategy == "detailed",
                 fallback=strategy == "fallback",
-            )
-        if exporter == "dynamo_export":
-            assert strategy in (
-                None,
-                "none",
-            ), f"strategy={strategy!r} not implemented for {exporter!r}"
-            return self._to_dynamo_export(
-                name,
-                dynamic=dynamic,
-                fake_tensor=fake_tensor,
-                no_grad=no_grad,
-                optimization=optimization,
-                verbose=verbose,
-                target_opset=target_opset,
             )
         if exporter == "eager":
             assert strategy in (
@@ -1261,6 +1247,16 @@ class ModelRunner:
                     onnx_program.optimize()
                     stats["time_export_optimization"] = time.perf_counter() - begin
                     continue
+                if opt == "ort":
+                    from onnxscript.rewriter.ort_fusions import optimize_for_ort
+
+                    if stats is None:
+                        stats = {}
+                    begin = time.perf_counter()
+                    onnx_program.optimize()
+                    optimize_for_ort(onnx_program.model)
+                    stats["time_export_optimization"] = time.perf_counter() - begin
+                    continue
                 assert opt in (
                     "",
                     "none",
@@ -1270,52 +1266,6 @@ class ModelRunner:
         elif not fallback:
             # The model was not save in that case.
             onnx_program.save(name, external_data=True)
-        return onnx.load(name, load_external_data=False), stats
-
-    def _to_dynamo_export(
-        self,
-        name: str,
-        dynamic: bool,
-        fake_tensor: bool,
-        no_grad: bool,
-        optimization: str,
-        verbose: int,
-        target_opset: int,
-    ):
-        assert not fake_tensor, "fake_tensor not implemented."
-        assert no_grad, "no_grad false not implemented yet"
-        stats = {}
-
-        if self.autocast:
-            with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
-                exported = torch.onnx.dynamo_export(
-                    self.model,
-                    *self.get_inputs_with_copied_dynamic_cache(),
-                    export_options=torch.onnx.ExportOptions(
-                        dynamic_shapes=dynamic,
-                        # registry=torch.onnx.OnnxRegistry()
-                    ),
-                )
-        else:
-            with torch.no_grad():
-                exported = torch.onnx.dynamo_export(
-                    self.model,
-                    *self.get_inputs_with_copied_dynamic_cache(),
-                    export_options=torch.onnx.ExportOptions(
-                        dynamic_shapes=dynamic,
-                        # registry=torch.onnx.OnnxRegistry()
-                    ),
-                )
-
-        begin = time.perf_counter()
-        exported.save(name)
-        stats["time_export_save"] = time.perf_counter() - begin
-
-        onx = onnx.load(name, load_external_data=True)
-        onnx.save(onx, name, save_as_external_data=True)
-
-        if optimization:
-            return self._optimize_rewrite(name, optimization)
         return onnx.load(name, load_external_data=False), stats
 
     def _to_export(

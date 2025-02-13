@@ -176,7 +176,7 @@ def common_export(
     Exports a model into a folder.
 
     :param model: model
-    :param exporter: torchscript, onnx_dynamo, dynamo_export, custom, ...
+    :param exporter: torchscript, onnx_dynamo, custom, ...
     :param folder: folder to export into
     :param filename: onnx filename
     :param inputs: inputs
@@ -233,10 +233,6 @@ def common_export(
             dynamic_axes=dynamic_shapes,
             dynamo=True,
         )
-    elif exporter == "dynamo_export":
-        with torch.no_grad():
-            prog = torch.onnx.dynamo_export(model, *inputs)
-        onnx.save(prog.model_proto, filename)
     elif exporter in ("custom", "custom-fallback"):
         from ..torch_interpreter import to_onnx
         from ..xbuilder import OptimizationOptions

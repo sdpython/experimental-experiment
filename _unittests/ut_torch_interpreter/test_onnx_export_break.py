@@ -74,9 +74,7 @@ def return_module_cls_explicit_break():
     return ModelWithBreaks(), input_tensor
 
 
-def export_utils(
-    prefix, model, *args, remove_unused=False, constant_folding=True, xscript=False
-):
+def export_utils(prefix, model, *args, remove_unused=False, constant_folding=True):
     import torch
 
     names = []
@@ -85,14 +83,6 @@ def export_utils(
         os.remove(name)
     torch.onnx.export(model, *args, name, input_names=["input"])
     names.append(name)
-
-    if xscript:
-        name = f"{prefix}_onnx_script.onnx"
-        try:
-            export_output = torch.onnx.dynamo_export(model, *args)
-            export_output.save(name)
-        except Exception as e:
-            print("dynamo failed: ", e)
 
     name = f"{prefix}_simple.onnx"
     if os.path.exists(name):
@@ -128,23 +118,6 @@ class TestOnnxExportBreak(ExtTestCase):
 
         model, input_tensor = return_module_cls_pool()
         names = export_utils("test_simple_export_break", model, input_tensor)
-        x = input_tensor.numpy()
-        results = []
-        for name in names:
-            ref = InferenceSession(name, providers=["CPUExecutionProvider"])
-            results.append(ref.run(None, {"input": x})[0])
-        self.assertEqualArray(results[0], results[1])
-
-    @skipif_ci_windows("not supported yet on Windows")
-    @unittest.skip(reason="graph break not supported")
-    def test_simple_export_explicit_break(self):
-        from onnxruntime import InferenceSession
-
-        model, input_tensor = return_module_cls_explicit_break()
-        model(input_tensor)
-        names = export_utils(
-            "test_simple_export_explicit_break", model, input_tensor, xscript=True
-        )
         x = input_tensor.numpy()
         results = []
         for name in names:

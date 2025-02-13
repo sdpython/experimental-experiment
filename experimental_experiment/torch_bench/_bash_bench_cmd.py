@@ -23,8 +23,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
             "export, export-nostrict, export-default, "
             "inductor, "
             "custom, custom-fallback, custom-nostrict, custom-tracing, "
-            "onnx_dynamo, onnx_dynamo-fallback, "
-            "dynamo_export, torch_script",
+            "onnx_dynamo, onnx_dynamo-fallback, torch_script",
         ),
         process=("0", "run every run in a separate process"),
         device=("cpu", "'cpu' or 'cuda'"),
