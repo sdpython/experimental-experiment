@@ -2151,8 +2151,19 @@ class TestPieceByPiece(ExtTestCase):
         ref = ExtendedReferenceEvaluator(onx)
         self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
 
+    @hide_stdout()
     def test_controlflow_cond_submodule(self):
         import torch
+
+        class Buffering:
+            def __init__(self):
+                self.stored = dict(inputs=[], outputs=[])
+
+            def add_inputs(self, a):
+                self.stored["inputs"].append(a)
+
+            def add_outputs(self, a):
+                self.stored["outputs"].append(a)
 
         class SubThen(torch.nn.Module):
             def forward(self, x):
@@ -2175,13 +2186,44 @@ class TestPieceByPiece(ExtTestCase):
         inputs = [
             ((torch.rand((5, 4)),), {}),
             ((torch.rand((6, 7)),), {}),
+            # We need to add inputs so that the condition goes into both branches.
+            ((-torch.rand((5, 4)),), {}),
+            ((-torch.rand((6, 7)),), {}),
         ]
-        model(*inputs[0][0])
+        expected = model(*inputs[0][0])
 
-        print("******TRACE")
-        diag = trace_execution_piece_by_piece(model, inputs, verbose=1)
-        print("******EXPORT")
-        return
+        # steal
+        def _forward_(
+            *args,
+            _f=None,
+            verbose=10,
+            buffer_add_inputs=None,
+            buffer_add_outputs=None,
+            **kwargs,
+        ):
+            if not torch.compiler.is_compiling() and buffer_add_inputs:
+                buffer_add_inputs(*args, **kwargs)
+            res = _f(*args, **kwargs)
+            if not torch.compiler.is_compiling() and buffer_add_outputs:
+                buffer_add_outputs(res)
+            return res
+
+        verbose = 5
+        buffer = Buffering()
+        memo1 = SubThen.forward
+        memo2 = SubElse.forward
+        SubThen.forward = lambda *args, _f=memo1, verbose=verbose, **kwargs: _forward_(
+            *args, _f=_f, buffer_add_inputs=buffer.add_inputs, verbose=verbose, **kwargs
+        )
+        SubElse.forward = lambda *args, _f=memo2, verbose=verbose, **kwargs: _forward_(
+            *args, _f=_f, buffer_add_outputs=buffer.add_outputs, verbose=verbose, **kwargs
+        )
+        got = model(*inputs[0][0])
+        SubThen.forward = memo1
+        SubElse.forward = memo2
+        self.assertEqualArray(expected, got)
+        diag = trace_execution_piece_by_piece(model, inputs, verbose=10)
+
         diag.try_export(
             exporter="fx",
             use_dynamic_shapes=True,
@@ -2190,12 +2232,15 @@ class TestPieceByPiece(ExtTestCase):
             replace_by_custom_op=CustomOpStrategy.LOCAL,
             quiet=0,
         )
-        print("******ONNX")
         onx = diag.to_onnx_local(
             verbose=10,
             check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
         )
-        print(onx)
+        ref = ExtendedReferenceEvaluator(onx)
+        for inp in inputs:
+            expected = model(*inp[0])
+            got = ref.run(None, {ref.input_names[0]: inp[0][0].numpy()})
+            self.assertEqualArray(expected, got[0])
 
 
 if __name__ == "__main__":

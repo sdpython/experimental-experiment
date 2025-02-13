@@ -1065,14 +1065,14 @@ class ModelDiagnoseOutput:
         """
 
         def _rewrite_forward_tensor_(*args, _diag=self, **kwargs):
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_rewrite_forward_tensor_] {_diag.full_name}: IN: "
                     f"args={string_type(args, with_shape=True)}, "
                     f"kwargs={string_type(kwargs, with_shape=True)}"
                 )
             res = _diag.forward(*args, **kwargs)
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_rewrite_forward_tensor_] {_diag.full_name}: "
                     f"OUT: args={string_type(res, with_shape=True)}"
@@ -1126,7 +1126,7 @@ class ModelDiagnoseOutput:
         # Apparently, we need a function with the exact same signature.
         def _replaced_forward_tensor_(*args, **kwargs):
             fct = getattr(torch.ops.diag_lib, name_fct)
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_replaced_forward_tensor_] {name_fct}-IN: "
                     f"args={string_type(args, with_shape=True)}, "
@@ -1136,7 +1136,7 @@ class ModelDiagnoseOutput:
                 sfct = str(fct).replace("\n", " ")
                 print(f"[_replaced_forward_tensor_] {name_fct}-CALL: {sfct}")
             res = fct(*args, **kwargs)
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_replaced_forward_tensor_] {name_fct}-OUT: "
                     f"des={string_type(res, with_shape=True)}"
@@ -1161,7 +1161,7 @@ class ModelDiagnoseOutput:
         """
 
         def _rewrite_forward_(*args, _diag=self, **kwargs):
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE_IN: "
                     f"args={string_type(args, with_shape=True, limit=20)}, "
@@ -1178,7 +1178,7 @@ class ModelDiagnoseOutput:
                 ordered_names=_diag.forward_ordered_parameter_names,
                 fill_kwargs=_diag.forward_fill_kwargs,
             )
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-IN: "
                     f"args={string_type(new_args, with_shape=True)}, "
@@ -1187,7 +1187,7 @@ class ModelDiagnoseOutput:
                 sfct = str(_diag.forward).replace("\n", " ")
                 print(f"[_rewrite_forward_] {_diag.full_name}-CALL: {sfct}")
             res = _diag.forward(*new_args, **new_kwargs)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-OUT: "
                     f"res={string_type(res, with_shape=True)}"
@@ -1196,7 +1196,7 @@ class ModelDiagnoseOutput:
                     print(f"[_rewrite_forward_] schema={_diag.forward_custom_op_schema}")
             # And we need to serialize before before returning the output.
             serialized_res = serialize_args(res, None, _diag.forward_custom_op_schema)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE-OUT: "
                     f"args={string_type(serialized_res, with_shape=True)}"
@@ -1275,7 +1275,7 @@ class ModelDiagnoseOutput:
         # Apparently, we need a function with the exact same signature.
         def _replaced_forward_(*args, **kwargs):
             fct = getattr(torch.ops.diag_lib, name_fct)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-IN: "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
@@ -1303,27 +1303,27 @@ class ModelDiagnoseOutput:
 
             if self.forward_fill_kwargs:
                 args = (*args, [])
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-SERIALIZED_IN: "
                     f"args={string_type(args, with_shape=True)}, "
                     f"kwargs={string_type(kwargs, with_shape=True)}"
                 )
                 print(f"[_replaced_forward_] {name_fct}-CALL: {fct}")
-            if self._debug_print_export:
+            if not torch.compiler.is_compiling() and self._debug_print_export:
                 print(f"-- CALL custom op {self.custom_op_name} - {self.full_name}")
                 print(f"   args={string_type(args, limit=20)}")
                 print(f"   kwargs={string_type(kwargs, limit=20)}")
                 print(f"   schema_str={schema_str}")
             res = fct(*args, **kwargs)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-SERIALIZED_OUT: "
                     f"res={string_type(res, with_shape=True)}, "
                     f"expected_output_type={expected_output_type}"
                 )
             des = deserialize_args(res, expected_output_type)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-OUT: "
                     f"des={string_type(des, with_shape=True)}"
@@ -2595,8 +2595,8 @@ class ModelDiagnoseOutput:
 def _rewrite_forward(
     *args, _diag: Optional[ModelDiagnoseOutput] = None, verbose: int = 0, **kwargs
 ):
-    assert _diag is not None, "_diag cannot be None"
-    if verbose:
+    if not torch.compiler.is_compiling() and verbose:
+        assert _diag is not None, "_diag cannot be None"
         indent = "  " * _diag.level
         if not args:
             print(
@@ -2619,10 +2619,13 @@ def _rewrite_forward(
                     f"[{_diag.name}:{_diag.model.__class__.__name__}] "
                     f"{indent}> *{string_type(args)}"
                 )
-    _diag.add_inputs(args, kwargs)
+    if not torch.compiler.is_compiling():
+        assert _diag is not None, "_diag cannot be None"
+        _diag.add_inputs(args, kwargs)
     res = _diag.forward(*args, **kwargs)
-    _diag.add_outputs(res)
-    if verbose:
+    if not torch.compiler.is_compiling():
+        _diag.add_outputs(res)
+    if not torch.compiler.is_compiling() and verbose:
         if isinstance(res, torch.Tensor):
             print(
                 f"[{_diag.name}:{_diag.model.__class__.__name__}] "
@@ -2789,6 +2792,25 @@ def _untrace_forward_execution(diag: ModelDiagnoseOutput, verbose: int = 0):
         _untrace_forward_execution(child, verbose=verbose)
 
 
+def traced_cond(
+    pred: Union[bool, int, float, torch.Tensor],
+    true_fn: Callable,
+    false_fn: Callable,
+    operands: Union[tuple, list] = (),
+) -> Any:
+    """
+    :func:`torch.cond` relies on :func:`torch.compile` and this does not
+    work well with tracing. Before tracing, the function is replaced
+    by another one. Every piece of code such as ``print`` must be avoided
+    while the code is begin compiled with
+    ``if not torch.compiler.is_compiling(): ...``.
+    See :func:`torch.compiler.is_compiling`.
+    """
+    if pred:
+        return true_fn(*operands)
+    return false_fn(*operands)
+
+
 @contextlib.contextmanager
 def trace_forward_execution(
     model: torch.nn.Module,
@@ -2801,7 +2823,12 @@ def trace_forward_execution(
     Replaces all forward to store the inputs and outputs of the module
     and every submodules.
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
+
+    :func:`torch.cond` is replaced by :func:`traced_cond` when tracing
+    otherwise no branch receive any input.
     """
+    torch_cond = torch.cond
+    torch.cond = traced_cond
     diag = _trace_forward_execution(
         None,
         model,
@@ -2817,6 +2844,7 @@ def trace_forward_execution(
         yield diag
     finally:
         _untrace_forward_execution(diag, verbose=verbose)
+        torch.cond = torch_cond
 
 
 def trace_execution_piece_by_piece(
