@@ -116,7 +116,7 @@ class TestBashBenchRunnerCmdBig(ExtTestCase):
                 self.assertEqual(input_values[0], value[0])
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
+    @requires_torch("2.7")
     def test_huggingface_export_bench_custom_cpu(self):
         self._hg_big_export_bench_big_cpu("custom", "all_MiniLM_L6_v1", verbose=0, debug=False)
 

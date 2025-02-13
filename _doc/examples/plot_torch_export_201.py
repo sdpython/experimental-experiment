@@ -98,7 +98,7 @@ from experimental_experiment.ext_test_case import unit_test_going
 from experimental_experiment.helpers import pretty_onnx
 from tqdm import tqdm
 
-has_cuda = has_cuda and torch.cuda.is_available()
+has_cuda = has_cuda and torch.cuda.device_count() > 0
 logging.disable(logging.ERROR)
 
 
@@ -107,7 +107,7 @@ def system_info():
     obs["processor"] = platform.processor()
     obs["cores"] = multiprocessing.cpu_count()
     try:
-        obs["cuda"] = 1 if torch.cuda.is_available() else 0
+        obs["cuda"] = 1 if torch.cuda.device_count() > 0 else 0
         obs["cuda_count"] = torch.cuda.device_count()
         obs["cuda_name"] = torch.cuda.get_device_name()
         obs["cuda_capa"] = torch.cuda.get_device_capability()

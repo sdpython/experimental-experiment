@@ -54,7 +54,7 @@ from experimental_experiment.torch_dynamo import onnx_custom_backend
 from experimental_experiment.bench_run import get_machine
 from experimental_experiment.ext_test_case import unit_test_going
 
-has_cuda = torch.cuda.is_available()
+has_cuda = torch.cuda.device_count() > 0
 machine = get_machine()
 print(f"has_cuda={has_cuda}")
 print(f"processor: {machine['processor_name']}")

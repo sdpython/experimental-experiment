@@ -65,7 +65,7 @@ def get_machine(
     except ImportError:
         return config
 
-    config["has_cuda"] = bool(torch.cuda.is_available())
+    config["has_cuda"] = bool(torch.cuda.device_count() > 0)
     if config["has_cuda"]:
         config["capability"] = (
             ".".join(map(str, torch.cuda.get_device_capability(0)))

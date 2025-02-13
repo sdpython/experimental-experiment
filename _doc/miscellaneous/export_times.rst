@@ -201,11 +201,11 @@ Dynamo Exporter
         warnings.simplefilter("ignore")
 
         begin = time.perf_counter()
-        onx = torch.onnx.dynamo_export(model, x)
+        onx = torch.onnx.export(model, x, dynamo=True)
         print(f"time to export 1x --- {time.perf_counter() - begin}")
 
         begin = time.perf_counter()
-        onx = torch.onnx.dynamo_export(model, x)
+        onx = torch.onnx.export(model, x, dynamo=True)
         print(f"time to export 2x --- {time.perf_counter() - begin}")
 
 With a bigger model:
@@ -246,9 +246,9 @@ With a bigger model:
         warnings.simplefilter("ignore")
         
         begin = time.perf_counter()
-        onx = torch.onnx.dynamo_export(model, *example_args_collection[0])
+        onx = torch.onnx.export(model, *example_args_collection[0], dynamo=True)
         print(f"time to export 1x --- {time.perf_counter() - begin}")
 
         begin = time.perf_counter()
-        onx = torch.onnx.dynamo_export(model, *example_args_collection[0])
+        onx = torch.onnx.export(model, *example_args_collection[0], dynamo=True)
         print(f"time to export 2x --- {time.perf_counter() - begin}")

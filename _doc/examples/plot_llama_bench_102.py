@@ -243,7 +243,7 @@ if parsed_args.check not in (1, "1") and not unit_test_going():
         )
 else:
     verbose = 5
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if torch.cuda.device_count() > 0 else "cpu"
     configs = [
         dict(
             model=parsed_args.model,

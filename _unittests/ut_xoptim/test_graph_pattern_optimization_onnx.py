@@ -2849,7 +2849,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
             import torch
 
-            if torch.cuda.is_available():
+            if torch.cuda.device_count() > 0:
                 opt_ref = InferenceSession(
                     opt_onx.SerializeToString(),
                     providers=["CUDAExecutionProvider"],
@@ -2945,7 +2945,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
             import torch
 
-            if torch.cuda.is_available():
+            if torch.cuda.device_count() > 0:
                 opt_ref = InferenceSession(
                     opt_onx.SerializeToString(),
                     providers=["CUDAExecutionProvider"],
@@ -3033,7 +3033,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
                 import torch
 
-                if torch.cuda.is_available():
+                if torch.cuda.device_count() > 0:
                     opt_ref = InferenceSession(
                         opt_onx.SerializeToString(),
                         providers=["CUDAExecutionProvider"],

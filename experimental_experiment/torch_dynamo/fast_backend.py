@@ -154,7 +154,7 @@ class OrtBackend:
                 -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
             }
 
-            if torch.cuda.is_available():
+            if torch.cuda.device_count() > 0:
                 for i in range(torch.cuda.device_count()):
                     DEVICES[i] = ORTC.OrtDevice(
                         ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
@@ -388,10 +388,10 @@ class OrtBackend:
         if providers is None:
             providers = (
                 [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]
-                if torch.cuda.is_available()
+                if torch.cuda.device_count() > 0
                 else ["CPUExecutionProvider"]
             )
-            device = 0 if torch.cuda.is_available() else -1
+            device = 0 if torch.cuda.device_count() > 0 else -1
         else:
             device = 0 if "CUDAExecutionProvider" in providers else -1
 
@@ -605,7 +605,7 @@ def onnx_custom_backend(
     DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 
     providers = ["CPUExecutionProvider"]
-    if torch.cuda.is_available():
+    if torch.cuda.device_count() > 0:
         for i in range(torch.cuda.device_count()):
             DEVICES[i] = ORTC.OrtDevice(
                 ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i

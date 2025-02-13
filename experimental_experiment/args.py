@@ -11,7 +11,7 @@ def check_cuda_availability():
     try:
         import torch
 
-        return torch.cuda.is_available()
+        return torch.cuda.device_count() > 0
     except ImportError:
         pass
     try:
