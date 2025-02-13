@@ -828,6 +828,35 @@ class TestOnnxExportControlFlow(ExtTestCase):
                 self.assertEqualArray(exp[1], got[1])
                 self.assertEqualArray(exp[0], got[0])
 
+    # @requires_torch("2.8", "export of torch.cond")
+    def test_controlflow_cond_submodule(self):
+        import torch
+
+        class SubThen(torch.nn.Module):
+            def forward(self, x):
+                return x * x
+
+        class SubElse(torch.nn.Module):
+            def forward(self, x):
+                return torch.abs(x)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub_then = SubThen()
+                self.sub_else = SubElse()
+
+            def forward(self, x):
+                return torch.cond(x.sum() > 0, self.sub_then, self.sub_else, [x])
+
+        model = Model()
+        x = torch.rand((5, 4))
+        torch.export.export(
+            model,
+            (x,),
+            dynamic_shapes=({0: torch.export.Dim.DYNAMIC, 1: torch.export.Dim.DYNAMIC},),
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

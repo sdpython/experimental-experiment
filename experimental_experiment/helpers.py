@@ -1157,7 +1157,6 @@ def max_diff(
                     n=1,
                     dnan=0,
                 )
-            print("****", type(expected), type(got))
             return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
         if expected.dtype in (np.complex64, np.complex128):
             if got.dtype == expected.dtype:

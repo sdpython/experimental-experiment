@@ -296,7 +296,6 @@ class ComputationCastOpCastPattern(PatternOptimization):
 
         node_left = g.node_before(node.input[0])
         node_right = g.node_before(node.input[1])
-        print("*****", node_left, node_right)
         type_left = "" if node_left is None else node_left.op_type
         type_right = "" if node_right is None else node_right.op_type
         if not ((type_left == "Cast") ^ (type_right == "Cast")):
@@ -308,9 +307,6 @@ class ComputationCastOpCastPattern(PatternOptimization):
         else:
             node_left = None
         node_before = node_left or node_right
-        print("-------", type_left)
-        print("*****", node)
-        print("*****", node_before)
         if not g.has_type(node.output[0]) or not g.has_type(node_before.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         output_type = g.get_type(node.output[0])
