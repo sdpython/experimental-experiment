@@ -68,7 +68,7 @@ from experimental_experiment.convert.convert_helper import ort_optimize
 from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.dump_helper import reorder_functions_in_proto
 
-has_cuda = has_cuda and torch.cuda.is_available()
+has_cuda = has_cuda and torch.cuda.device_count() > 0
 logging.disable(logging.ERROR)
 provider = "cuda" if has_cuda else "cpu"
 

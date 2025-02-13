@@ -495,7 +495,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 ),
                 verbose=0,
                 verifies=False,
-                processor="CPU,CUDA" if torch.cuda.is_available() else "CPU",
+                processor="CPU,CUDA" if torch.cuda.device_count() > 0 else "CPU",
             )
             options.patterns = [
                 p for p in options.patterns if p.__class__.__name__ not in disabled
@@ -525,7 +525,7 @@ class TestGraphPatternCombination(ExtTestCase):
             op_types = [n.op_type for n in new_onx.graph.node]
             if experimental and "ScatterND" in op_types:
                 if (
-                    torch.cuda.is_available()
+                    torch.cuda.device_count() > 0
                     or len([n for n in op_types if n == "ScatterND"]) > 1
                 ):
                     self.dump_onnx(f"dump_{model}", new_onx)

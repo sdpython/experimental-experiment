@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_apple,
     ignore_warnings,
+    requires_cuda,
 )
 from experimental_experiment.memory_peak import get_memory_rss, start_spying_on
 import torch
@@ -47,7 +48,7 @@ class TestMemoryPeak(ExtTestCase):
         self.assertIsInstance(pres["cpu"].to_dict(), dict)
 
     @skipif_ci_apple("stuck")
-    @unittest.skipIf(not torch.cuda.is_available(), reason="CUDA not here")
+    @requires_cuda()
     def test_spy_cuda(self):
         p = start_spying_on(cuda=True)
         n_elements = 0

@@ -333,7 +333,7 @@ echo "[$0] python version"
 python --version || exit 1
 
 echo "[$0] CUDA AVAILABLE?"
-python -c "import torch;print(torch.cuda.is_available())"
+python -c "import torch;print(torch.cuda.device_count() > 0)"
 echo "[$0] NVIDIA-SMI"
 nvidia-smi
 

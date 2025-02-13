@@ -215,7 +215,27 @@ class ModelRunner:
                 torch.float16,
                 torch.bfloat16,
             }:
-                return o.to(dtype_or_device)
+                try:
+                    return o.to(dtype_or_device)
+                except RuntimeError as e:
+                    msg = (
+                        (
+                            f"CUDA: is_available={torch.cuda.device_count() > 0}, "
+                            f"device_count={torch.cuda.device_count()}, "
+                            f"device_memory_used(0)="
+                            f"{torch.cuda.device_memory_used(0) // 2**20}, "
+                            f"get_device_capability(0)={torch.cuda.get_device_capability(0)}, "
+                            f"current_device={torch.cuda.current_device()}, "
+                        )
+                        if dtype_or_device == "cuda"
+                        else ""
+                    )
+                    raise RuntimeError(
+                        f"Unable to convert a tensor with dtype {o.dtype} "
+                        f"and shape={o.shape} to {dtype_or_device!r}.\n"
+                        f"This error may be solved by setting PYTORCH_NVML_BASED_CUDA_CHECK=1."
+                        f"\n{msg}"
+                    ) from e
             return o
 
         if isinstance(o, bool):

@@ -635,10 +635,10 @@ def dump_dort_onnx(fn):
 
 
 def has_cuda() -> bool:
-    """Returns ``torch.cuda.is_available()``."""
+    """Returns ``torch.cuda.device_count() > 0``."""
     import torch
 
-    return torch.cuda.is_available()
+    return torch.cuda.device_count() > 0
 
 
 def requires_cuda(msg: str = "", version: str = "", memory: int = 0):
@@ -651,7 +651,7 @@ def requires_cuda(msg: str = "", version: str = "", memory: int = 0):
     """
     import torch
 
-    if not torch.cuda.is_available():
+    if torch.cuda.device_count() == 0:
         msg = msg or "only runs on CUDA but torch does not have it"
         return unittest.skip(msg or "cuda not installed")
     if version:
