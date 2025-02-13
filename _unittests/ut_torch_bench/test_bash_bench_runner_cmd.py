@@ -408,7 +408,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self.assertNotIn(":discrepancies_abs,inf;", out)
 
     @ignore_warnings((DeprecationWarning, UserWarning, RuntimeWarning))
-    @requires_torch("2.4")
+    @requires_torch("2.7")
     def test_timm_export_bench_script_cpu(self):
         self._timm_export_bench_cpu("torch_script", "mobilenetv2_100")
 
