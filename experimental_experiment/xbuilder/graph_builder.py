@@ -1691,8 +1691,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape = self.verify_shape(shape, 0, name=name)
         assert allow_zero or 0 not in shape or shape == (0,), (
             f"Unexpected null shape {shape!r} (or {shape0!r}) for name={name!r}, "
-            f"this case usually happens before a concatenation"
-            f"{self.get_debug_msg()}"
+            f"this case usually happens before a concatenation, "
+            f"allow_zero={allow_zero}{self.get_debug_msg()}"
         )
 
         # costly
@@ -3434,7 +3434,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{name}[{elem_type}: {dyn_shape}]"
             )
         if dyn_shape:
-            self.set_shape(name, dyn_shape)
+            self.set_shape(name, dyn_shape, allow_zero=True)
             if old_name:
                 self.set_shape(old_name, dyn_shape)
         if elem_type:
@@ -3930,7 +3930,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     node.doc_string += ":constant-9:"
         elif node.op_type == "Identity":
             if self.has_shape(node.input[0]):
-                self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                # allow_zero is True but if it fails here, it means it did not fail
+                # before when it should be.
+                self.set_shape(node.output[0], self.get_shape(node.input[0]), allow_zero=True)
             elif self.has_rank(node.input[0]):
                 self.set_rank(node.output[0], self.get_rank(node.input[0]))
             if self.has_type(node.input[0]):

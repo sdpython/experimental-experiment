@@ -1832,7 +1832,7 @@ class DynamoInterpreter:
                             r,
                             shape,
                             set_if_more_precise=False,
-                            allow_zero=all_int(shape) and 0 in shape,
+                            allow_zero=any(isinstance(s, int) and s == 0 for s in shape),
                         )
                     elif self.builder.has_rank(r):
                         assert len(shape) == self.builder.get_rank(r), (
