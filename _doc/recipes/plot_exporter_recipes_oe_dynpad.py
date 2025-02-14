@@ -34,8 +34,8 @@ class PadToMultiple(torch.nn.Module):
     def forward(self, x):
         shape = x.shape
         dim = x.shape[self.dim_to_pad]
-        next_dim = ((dim - 1) // self.multiple) * self.multiple
-        to_pad = self.multiple - (dim - next_dim)
+        next_dim = ((dim + self.multiple - 1) // self.multiple) * self.multiple
+        to_pad = next_dim - dim
         pad = torch.zeros(
             (*shape[: self.dim_to_pad], to_pad, *shape[self.dim_to_pad + 1 :]), dtype=x.dtype
         )
