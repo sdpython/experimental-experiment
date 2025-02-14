@@ -92,6 +92,7 @@ on how to define them, as their definition aligns with those used
 in :func:`torch.export.export`.
 
 * :ref:`l-plot-exporter-recipes-onnx-exporter-modules`
+* :ref:`l-plot-exporter-recipes-onnx-exporter-dynpad`
 
 **Control Flow**
 
@@ -255,6 +256,7 @@ on how to define them, as their definition aligns with those used
 in :func:`torch.export.export`.
 
 * :ref:`l-plot-exporter-recipes-custom-named-dynamic-shapes`
+* :ref:`l-plot-exporter-recipes-custom-dynpad`
 
 **Control Flow**
 
