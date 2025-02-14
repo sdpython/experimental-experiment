@@ -2053,12 +2053,13 @@ class ModelDiagnoseOutput:
                     f"{self.exporter_status.short_reason}"
                 )
 
-        assert exported is not None, (
+        assert exported is not None or not self.inputs, (
             f"Something went wrong, custom_op_strat={custom_op_strat}, "
             f"#children={len(self.children)}, inputs={string_type(self.inputs)}"
         )
         if not self.children or (
-            custom_op_strat == CustomOpStrategy.NONE and exported.is_ok()
+            custom_op_strat == CustomOpStrategy.NONE
+            and (exported is not None and exported.is_ok())
         ):
             # We don't want to return if custom ops were applied,
             # we need to look into every of them.
