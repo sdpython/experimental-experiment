@@ -61,6 +61,7 @@ class StatusExportCode(enum.IntEnum):
     CHILDC = 4
     CUSTOM = 8
     DISC = 16
+    NOINPUT = 32
 
     # combinations
     OK_CHILDC = 5
@@ -68,6 +69,7 @@ class StatusExportCode(enum.IntEnum):
     FAIL_CHILDC = 6
     FAIL_CUSTOM = 10
     FAIL_DISC = 18
+    FAIL_NOINPUT = 34
 
     def __not__(self) -> int:
         "Compose.."
@@ -138,8 +140,8 @@ class StatusExport:
         if self.is_ok():
             return f"{self.status.name} -- {self.exported.__class__.__name__}"
         reason = self.reason.split("\n", maxsplit=1)[0]
-        if len(reason) > 70:
-            reason = reason[:70] + "..."
+        if len(reason) > 100:
+            reason = reason[:100] + "..."
         return f"{self.status.name} -- step={self.step}, reason={reason!r}"
 
 
@@ -321,8 +323,11 @@ class ModelDiagnoseOutput:
             )
         rows = [f"{indent}>>> {self.name}: {self.true_model_name}"]
         if with_dynamic_shape:
-            ds = self.guess_dynamic_shapes()
-            rows.append(f"{indent}  DS={ds}")
+            if len(self.inputs) == 0:
+                rows.append(f"{indent}  DS=? (no inputs)")
+            else:
+                ds = self.guess_dynamic_shapes()
+                rows.append(f"{indent}  DS={ds}")
         if with_inputs:
             for i in self.inputs:
                 rows.append(f"{indent}  > {string_type(i, **kws)}")
@@ -500,6 +505,9 @@ class ModelDiagnoseOutput:
         Guesses the dynamic shapes for that module from two execution.
         If there is only one execution, then that would be static dimensions.
         """
+        if len(self.inputs) == 0:
+            # No inputs, unable to guess.
+            return None
         if len(self.inputs) == 1:
             # No dynamic shapes.
             args = tuple({} for _ in self.inputs[0])
@@ -1794,7 +1802,7 @@ class ModelDiagnoseOutput:
             )
         return exported, fct
 
-    def verifies(self, verbose: int = 0):
+    def verifies(self, verbose: int = 0, quiet: bool = False):
         """Does some verifications. Raises an exception if it fails."""
         assert (
             isinstance(self.inputs, list)
@@ -1815,11 +1823,12 @@ class ModelDiagnoseOutput:
             f"{self.full_name}: input and outputs mismatch: "
             f"{len(self.inputs)} != {len(self.outputs)}{self.get_debug_msg()}"
         )
-        assert (
-            len(self.inputs) > 0
-        ), f"{self.full_name}: expecting at least one input{self.get_debug_msg()}"
+        assert quiet or len(self.inputs) > 0, (
+            f"{self.full_name}: expecting at least one input "
+            f"(it has {len(self.children)} children).{self.get_debug_msg()}"
+        )
         for child in self.children:
-            child.verifies()
+            child.verifies(verbose=verbose, quiet=quiet)
 
     def try_export(
         self,
@@ -1873,16 +1882,34 @@ class ModelDiagnoseOutput:
             f"{self.full_name}: unexpected value for exporter={exporter!r} "
             f"not in {allowed}"
         )
-        self.verifies()
+        self.verifies(quiet=quiet)
         custom_op_strat = self._do_replace_by_custom_op(replace_by_custom_op)
         if verbose and self.level == 0:
             print()
 
-        if custom_op_strat in (
-            CustomOpStrategy.ONLY_IF_FAILING,
-            CustomOpStrategy.ALWAYS,
-            CustomOpStrategy.NONE,
-        ) or (custom_op_strat == CustomOpStrategy.LOCAL and not self.children):
+        assert (
+            quiet or self.inputs
+        ), f"{self.full_name}: unable to export because inputs are empty."
+        if not self.inputs:
+            # No inputs, unable to export.
+            if verbose > 1:
+                print(
+                    f"[try-export-{exporter.upper()}] {'.' * self.level * 2} "
+                    f"no input for {self.full_name}"
+                )
+            self.exporter_status = StatusExport(StatusExportCode.FAIL_NOINPUT)
+            if not self.children:
+                return None
+
+        if self.inputs and (
+            custom_op_strat
+            in (
+                CustomOpStrategy.ONLY_IF_FAILING,
+                CustomOpStrategy.ALWAYS,
+                CustomOpStrategy.NONE,
+            )
+            or (custom_op_strat == CustomOpStrategy.LOCAL and not self.children)
+        ):
             if verbose > 1:
                 print(
                     f"[try-export-{exporter.upper()}] {'.' * self.level * 2} START "
@@ -1922,7 +1949,8 @@ class ModelDiagnoseOutput:
             exported = None
 
         if (
-            (exported is None or not exported.is_ok())
+            self.inputs
+            and (exported is None or not exported.is_ok())
             and custom_op_strat
             in (
                 CustomOpStrategy.ONLY_IF_FAILING,
@@ -2027,7 +2055,7 @@ class ModelDiagnoseOutput:
 
         assert exported is not None, (
             f"Something went wrong, custom_op_strat={custom_op_strat}, "
-            f"#children={len(self.children)}"
+            f"#children={len(self.children)}, inputs={string_type(self.inputs)}"
         )
         if not self.children or (
             custom_op_strat == CustomOpStrategy.NONE and exported.is_ok()
@@ -2106,7 +2134,11 @@ class ModelDiagnoseOutput:
                     if isinstance(r.model, torch.nn.Module)
                     else f"mod::{r.model.__name__}"
                 ),
-                (r.exporter_status.pretty_text() if hasattr(r, "exporter_status") else "<OK>"),
+                (
+                    r.exporter_status.pretty_text()
+                    if hasattr(r, "exporter_status")
+                    else (f"<OK-{len(self.inputs)}i>" if self.inputs else "<OK-no-inputs>")
+                ),
                 r,
             )
             for r in rows
@@ -2128,18 +2160,18 @@ class ModelDiagnoseOutput:
                     indent = " " * (mc1 + mc2)
                     prefix = f"{indent}ep: "
                     srows.append(textwrap.indent(eps, prefix))
-                else:
-                    indent = " " * (mc1 + mc2)
-                    srows.append(f"{indent}ep: -")
+                # else:
+                #    indent = " " * (mc1 + mc2)
+                #     srows.append(f"{indent}ep: -")
             if fx:
                 if hasattr(diag, "fx") and diag.fx is not None:
                     eps = str(diag.fx.graph)
                     indent = " " * (mc1 + mc2)
                     prefix = f"{indent}fx: "
                     srows.append(textwrap.indent(eps, prefix))
-                else:
-                    indent = " " * (mc1 + mc2)
-                    srows.append(f"{indent}fx: -")
+                # else:
+                #    indent = " " * (mc1 + mc2)
+                #     srows.append(f"{indent}fx: -")
 
         return "\n".join(srows)
 
