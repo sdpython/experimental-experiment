@@ -278,11 +278,13 @@ in :func:`torch.export.export`.
 
 * :ref:`l-plot-optimize-101`
 
-Dockers
-=======
+Weird Errors and Dockers
+========================
 
+Next sections mentions some weird errors and the way it was solved.
 Old work used to play with :func:`torch.compile` on a docker.
 
 .. toctree::
 
+    errors
     docker

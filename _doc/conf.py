@@ -156,7 +156,7 @@ if int(os.environ.get("UNITTEST_GOING", "0")):
     )
     # it fails if not run in standalone mode
     sphinx_gallery_conf["ignore_pattern"] = (
-        f"{sphinx_gallery_conf['ignore_pattern'][:-3]}(torch_sklearn_201)).*"
+        f"{sphinx_gallery_conf['ignore_pattern'][:-3]}|(torch_sklearn_201)).*"
     )
 elif pv.Version(torch.__version__) < pv.Version("2.8"):
     sphinx_gallery_conf["ignore_pattern"] = (
