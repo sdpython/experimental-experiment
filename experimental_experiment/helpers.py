@@ -228,7 +228,11 @@ def string_type(
                 return f"{s}[empty]"
             n_nan = np.isnan(obj.reshape((-1,))).astype(int).sum()
             if n_nan > 0:
-                return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}N{n_nan}nans]"
+                nob = obj.ravel()
+                nob = nob[~np.isnan(nob)]
+                if nob.size == 0:
+                    return f"{s}[N{n_nan}nans]"
+                return f"{s}[{nob.min()},{nob.max()}:A{nob.astype(float).mean()}N{n_nan}nans]"
             return f"{s}[{obj.min()},{obj.max()}:A{obj.astype(float).mean()}]"
         i = np_dtype_to_tensor_dtype(obj.dtype)
         if not with_shape:
@@ -260,9 +264,11 @@ def string_type(
                 return f"{s}[empty]"
             n_nan = obj.reshape((-1,)).isnan().to(int).sum()
             if n_nan > 0:
+                nob = obj.reshape((-1,))
+                nob = nob[~nob.isnan()]
                 if obj.dtype in {torch.complex64, torch.complex128}:
                     return (
-                        f"{s}[{obj.abs().min()},{obj.abs().max():A{obj.mean()}N{n_nan}nans}]"
+                        f"{s}[{nob.abs().min()},{nob.abs().max():A{nob.mean()}N{n_nan}nans}]"
                     )
                 return f"{s}[{obj.min()},{obj.max()}:A{obj.to(float).mean()}N{n_nan}nans]"
             if obj.dtype in {torch.complex64, torch.complex128}:
@@ -870,6 +876,8 @@ def max_diff(
         output, this number will be the number of elements
         of this output
     * dnan: difference in the number of nan
+
+    You may use :func:`string_diff` to display the discrepancies in one string.
     """
     if expected is None and got is None:
         return dict(abs=0, rel=0, sum=0, n=0, dnan=0)
@@ -1136,6 +1144,20 @@ def max_diff(
         if _index < begin or (end != -1 and _index >= end):
             # out of boundary
             return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
+        if isinstance(expected, (int, float)):
+            if isinstance(got, np.ndarray) and len(got.shape) == 0:
+                got = float(got)
+            if isinstance(got, (int, float)):
+                if expected == got:
+                    return dict(abs=0.0, rel=0.0, sum=0.0, n=0.0, dnan=0)
+                return dict(
+                    abs=abs(expected - got),
+                    rel=abs(expected - got) / (abs(expected) + 1e-5),
+                    sum=abs(expected - got),
+                    n=1,
+                    dnan=0,
+                )
+            return dict(abs=np.inf, rel=np.inf, sum=np.inf, n=np.inf, dnan=np.inf)
         if expected.dtype in (np.complex64, np.complex128):
             if got.dtype == expected.dtype:
                 got = np.real(got)
@@ -1165,13 +1187,20 @@ def max_diff(
         diff = np.abs(got_cpu - exp_cpu)
         ndiff = np.abs(np.isnan(expected).astype(int) - np.isnan(got).astype(int))
         rdiff = diff / (np.abs(exp_cpu) + 1e-3)
-        abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
-            float(diff.max()),
-            float(rdiff.max()),
-            float(diff.sum()),
-            float(diff.size),
-            float(ndiff.sum()),
-        )
+        if diff.size == 0:
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+                (0, 0, 0, 0, 0)
+                if exp_cpu.size == got_cpu.size
+                else (np.inf, np.inf, np.inf, 0, np.inf)
+            )
+        else:
+            abs_diff, rel_diff, sum_diff, n_diff, nan_diff = (
+                float(diff.max()),
+                float(rdiff.max()),
+                float(diff.sum()),
+                float(diff.size),
+                float(ndiff.sum()),
+            )
         if verbose >= 10 and (abs_diff >= 10 or rel_diff >= 10):
             # To understand the value it comes from.
             if debug_info:
@@ -1359,3 +1388,15 @@ def max_diff(
         f"{string_type(expected)}, got={string_type(got)},\n"
         f"level={level}"
     )
+
+
+def string_diff(diff: Dict[str, Any]) -> str:
+    """Renders discrepancies return by :func:`max_diff` into one string."""
+    # dict(abs=, rel=, sum=, n=n_diff, dnan=)
+    if diff.get("dnan", None):
+        if diff["abs"] == 0 or diff["rel"] == 0:
+            return f"abs={diff['abs']}, rel={diff['rel']}, dnan={diff['dnan']}"
+        return f"abs={diff['abs']}, rel={diff['rel']}, n={diff['n']}, dnan={diff['dnan']}"
+    if diff["abs"] == 0 or diff["rel"] == 0:
+        return f"abs={diff['abs']}, rel={diff['rel']}"
+    return f"abs={diff['abs']}, rel={diff['rel']}, n={diff['n']}"

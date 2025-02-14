@@ -20,6 +20,8 @@ from .ops.op_cast_like import CastLike_15, CastLike_19
 from .ops.op_concat import Concat
 from .ops.op_constant_of_shape import ConstantOfShape
 from .ops.op_fused_matmul import FusedMatMul
+from .ops.op_gather import Gather
+from .ops.op_gather_elements import GatherElements
 from .ops.op_gather_grad import GatherGrad
 from .ops.op_memcpy_host import MemcpyFromHost, MemcpyToHost
 from .ops.op_mul_sigmoid import MulSigmoid
@@ -75,6 +77,8 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         CastLike_19,
         ConstantOfShape,
         FusedMatMul,
+        Gather,
+        GatherElements,
         GatherGrad,
         MaskedScatterNDOfShape,
         MemcpyFromHost,

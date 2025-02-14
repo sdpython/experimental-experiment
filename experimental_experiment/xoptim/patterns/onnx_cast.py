@@ -302,7 +302,7 @@ class ComputationCastOpCastPattern(PatternOptimization):
             # only one cast allowed
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if type_left:
+        if type_left == "Cast":
             node_right = None
         else:
             node_left = None

@@ -5,11 +5,15 @@ rm *.csv
 rm *.nsys-rep
 rm *.sqlite
 rm *.pte
+rm *.ep
+rm *.ep.txt
+rm *.pkl
 rm tt_*
 rm plot*
 rm test* -rf
 rm temp* -rf
 rm dump* -rf
+rm *.onnx.data
 rm .olive-cache -rf
 rm onnx_export*.md
 rm *.xlsx

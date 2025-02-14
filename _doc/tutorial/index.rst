@@ -60,6 +60,18 @@ which converts the graph into another, usually longer but using
 a reduced set of functions or primitive. The converter to ONNX
 has less functions to support to convert this second graph.
 
+**Issues**
+
+Some issues worth looking at in case something fails.
+
+* `Unable to print in a branch run by torch.cond <https://github.com/pytorch/pytorch/issues/147115>`_
+* `How to export a model using topk with a variable number of neighbour? <https://github.com/pytorch/pytorch/issues/146990>`_
+* `Dynamic_shapes with Dim fails when DYNAMIC succeeds <https://github.com/pytorch/pytorch/issues/146315>`_
+* `torch.cond + torch.non_zero does not work with torch.export.export <https://github.com/pytorch/pytorch/issues/144691>`_
+* `infer_size(a, b) fails when it could return a value <https://github.com/pytorch/pytorch/issues/143495>`_
+* `sympy.C.ConstantInteger has no method name <https://github.com/pytorch/pytorch/issues/143494>`_
+* `torch.export.export fails to export a model with dynamic shapes for a custom type <https://github.com/pytorch/pytorch/issues/142161>`_
+
 .. _l-exporter-recipes:
 
 torch.onnx.export: export to ONNX
@@ -266,11 +278,13 @@ in :func:`torch.export.export`.
 
 * :ref:`l-plot-optimize-101`
 
-Dockers
-=======
+Weird Errors and Dockers
+========================
 
+Next sections mentions some weird errors and the way it was solved.
 Old work used to play with :func:`torch.compile` on a docker.
 
 .. toctree::
 
+    errors
     docker

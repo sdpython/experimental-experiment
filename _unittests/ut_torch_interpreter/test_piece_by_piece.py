@@ -2,8 +2,12 @@ import ast
 import unittest
 import inspect
 from typing import List, Optional
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    hide_stdout,
+    requires_torch,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, requires_torch
 from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
@@ -2048,6 +2052,195 @@ class TestPieceByPiece(ExtTestCase):
                 },
             )
             self.assertNotEmpty(ep)
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_to_onnx_local_check_reference_cls_level_1(self):
+        import torch
+
+        class SubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x - y
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        onx = diag.to_onnx_local(
+            verbose=10,
+            check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+        )
+        self.assertLess(diag.onnx_discrepancies[0]["abs"], 1e-5)
+        self.assertNotEmpty(onx)
+        ref = ExtendedReferenceEvaluator(onx)
+        self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
+
+    @requires_torch("2.6")
+    @hide_stdout()
+    def test_to_onnx_local_check_reference_cls_level_2(self):
+        import torch
+
+        class SubSubModel(torch.nn.Module):
+            def forward(self, x, y):
+                return x * y
+
+        class SubModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.subsub = SubSubModel()
+
+            def forward(self, x, y):
+                return self.subsub(x - y, y)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub = SubModel()
+
+            def forward(self, x):
+                return self.sub(x, x * x)
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = model(x)
+        self.assertNotEmpty(y)
+
+        inputs = [
+            ((torch.randn((5, 6)),), {}),
+            ((torch.randn((6, 6)),), {}),
+        ]
+
+        diag = trace_execution_piece_by_piece(model, inputs)
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        onx = diag.to_onnx_local(
+            verbose=10,
+            check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+        )
+        self.assertLess(diag.onnx_discrepancies[0]["abs"], 1e-5)
+        self.assertNotEmpty(onx)
+        ref = ExtendedReferenceEvaluator(onx)
+        self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
+
+    @hide_stdout()
+    def test_controlflow_cond_submodule(self):
+        import torch
+
+        class Buffering:
+            def __init__(self):
+                self.stored = dict(inputs=[], outputs=[])
+
+            def add_inputs(self, a):
+                self.stored["inputs"].append(a)
+
+            def add_outputs(self, a):
+                self.stored["outputs"].append(a)
+
+        class SubThen(torch.nn.Module):
+            def forward(self, x):
+                return x * x
+
+        class SubElse(torch.nn.Module):
+            def forward(self, x):
+                return torch.abs(x)
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.sub_then = SubThen()
+                self.sub_else = SubElse()
+
+            def forward(self, x):
+                return torch.cond(x.sum() > 0, self.sub_then, self.sub_else, [x])
+
+        model = Model()
+        inputs = [
+            ((torch.rand((5, 4)),), {}),
+            ((torch.rand((6, 7)),), {}),
+            # We need to add inputs so that the condition goes into both branches.
+            ((-torch.rand((5, 4)),), {}),
+            ((-torch.rand((6, 7)),), {}),
+        ]
+        expected = model(*inputs[0][0])
+
+        # steal
+        def _forward_(
+            *args,
+            _f=None,
+            verbose=10,
+            buffer_add_inputs=None,
+            buffer_add_outputs=None,
+            **kwargs,
+        ):
+            if not torch.compiler.is_compiling() and buffer_add_inputs:
+                buffer_add_inputs(*args, **kwargs)
+            res = _f(*args, **kwargs)
+            if not torch.compiler.is_compiling() and buffer_add_outputs:
+                buffer_add_outputs(res)
+            return res
+
+        verbose = 5
+        buffer = Buffering()
+        memo1 = SubThen.forward
+        memo2 = SubElse.forward
+        SubThen.forward = lambda *args, _f=memo1, verbose=verbose, **kwargs: _forward_(
+            *args, _f=_f, buffer_add_inputs=buffer.add_inputs, verbose=verbose, **kwargs
+        )
+        SubElse.forward = lambda *args, _f=memo2, verbose=verbose, **kwargs: _forward_(
+            *args, _f=_f, buffer_add_outputs=buffer.add_outputs, verbose=verbose, **kwargs
+        )
+        got = model(*inputs[0][0])
+        SubThen.forward = memo1
+        SubElse.forward = memo2
+        self.assertEqualArray(expected, got)
+        diag = trace_execution_piece_by_piece(model, inputs, verbose=10)
+
+        diag.try_export(
+            exporter="fx",
+            use_dynamic_shapes=True,
+            exporter_kwargs=dict(strict=False),
+            verbose=10,
+            replace_by_custom_op=CustomOpStrategy.LOCAL,
+            quiet=0,
+        )
+        onx = diag.to_onnx_local(
+            verbose=10,
+            check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+        )
+        ref = ExtendedReferenceEvaluator(onx)
+        for inp in inputs:
+            expected = model(*inp[0])
+            got = ref.run(None, {ref.input_names[0]: inp[0][0].numpy()})
+            self.assertEqualArray(expected, got[0])
 
 
 if __name__ == "__main__":

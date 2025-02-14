@@ -4007,6 +4007,10 @@ def aten_index_put(
 
         new_index = g.op.UnsqueezeAnyOpset(index, g.MINUS_ONE, name=name)
         g.set_type(new_index, index_dtype)
+        assert g.has_rank(values), f"Missing shape for {values!r}{g.get_debug_msg()}"
+        if g.get_rank(values) == 0:
+            # A scalar, let's expand
+            values = g.op.Expand(values, g.op.Shape(index, name=name), name=name)
         if g.has_shape(index):
             # index_put1s_ or index_put_1s_
             name += "s_"

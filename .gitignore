@@ -9,6 +9,8 @@
 *.png
 *.csv
 *.pte
+*.ep
+*.ep.txt
 *.weight
 *.nsys-rep
 *.pkl

@@ -1,4 +1,3 @@
-import inspect
 import os
 from typing import Callable, List, Optional, Tuple, Union
 from onnx.inliner import inline_local_functions
@@ -115,13 +114,6 @@ def make_aot_ort(
         if verbose:
             print(f"[make_aot_ort] enable {onnx_registry!r}")
         export_options = ExportOptions(dynamic_shapes=dynamic, onnx_registry=onnx_registry)
-
-    from torch.onnx._internal import onnxruntime
-
-    code = inspect.getsource(onnxruntime)
-    assert (
-        "optimizer.optimize" in code
-    ), f"torch is not recent enough, file {onnxruntime.__file__!r} is not recent enough."
 
     if rewrite_more:
 

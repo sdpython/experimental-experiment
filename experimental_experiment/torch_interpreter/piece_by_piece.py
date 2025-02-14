@@ -3,12 +3,15 @@ import contextlib
 import enum
 import inspect
 import os
+import pickle
+import pprint
 import sys
 import textwrap
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
+import onnx
 import torch
-from ..helpers import string_type, string_sig, max_diff
+from ..helpers import string_type, string_sig, max_diff, string_diff
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
 from .piece_by_piece_serialize import (
@@ -1062,14 +1065,14 @@ class ModelDiagnoseOutput:
         """
 
         def _rewrite_forward_tensor_(*args, _diag=self, **kwargs):
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_rewrite_forward_tensor_] {_diag.full_name}: IN: "
                     f"args={string_type(args, with_shape=True)}, "
                     f"kwargs={string_type(kwargs, with_shape=True)}"
                 )
             res = _diag.forward(*args, **kwargs)
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_rewrite_forward_tensor_] {_diag.full_name}: "
                     f"OUT: args={string_type(res, with_shape=True)}"
@@ -1123,7 +1126,7 @@ class ModelDiagnoseOutput:
         # Apparently, we need a function with the exact same signature.
         def _replaced_forward_tensor_(*args, **kwargs):
             fct = getattr(torch.ops.diag_lib, name_fct)
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_replaced_forward_tensor_] {name_fct}-IN: "
                     f"args={string_type(args, with_shape=True)}, "
@@ -1133,7 +1136,7 @@ class ModelDiagnoseOutput:
                 sfct = str(fct).replace("\n", " ")
                 print(f"[_replaced_forward_tensor_] {name_fct}-CALL: {sfct}")
             res = fct(*args, **kwargs)
-            if verbose > 1:
+            if not torch.compiler.is_compiling() and verbose > 1:
                 print(
                     f"[_replaced_forward_tensor_] {name_fct}-OUT: "
                     f"des={string_type(res, with_shape=True)}"
@@ -1158,7 +1161,7 @@ class ModelDiagnoseOutput:
         """
 
         def _rewrite_forward_(*args, _diag=self, **kwargs):
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE_IN: "
                     f"args={string_type(args, with_shape=True, limit=20)}, "
@@ -1175,7 +1178,7 @@ class ModelDiagnoseOutput:
                 ordered_names=_diag.forward_ordered_parameter_names,
                 fill_kwargs=_diag.forward_fill_kwargs,
             )
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-IN: "
                     f"args={string_type(new_args, with_shape=True)}, "
@@ -1184,7 +1187,7 @@ class ModelDiagnoseOutput:
                 sfct = str(_diag.forward).replace("\n", " ")
                 print(f"[_rewrite_forward_] {_diag.full_name}-CALL: {sfct}")
             res = _diag.forward(*new_args, **new_kwargs)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-OUT: "
                     f"res={string_type(res, with_shape=True)}"
@@ -1193,7 +1196,7 @@ class ModelDiagnoseOutput:
                     print(f"[_rewrite_forward_] schema={_diag.forward_custom_op_schema}")
             # And we need to serialize before before returning the output.
             serialized_res = serialize_args(res, None, _diag.forward_custom_op_schema)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_rewrite_forward_] {_diag.full_name}-SERIALIZE-OUT: "
                     f"args={string_type(serialized_res, with_shape=True)}"
@@ -1272,7 +1275,7 @@ class ModelDiagnoseOutput:
         # Apparently, we need a function with the exact same signature.
         def _replaced_forward_(*args, **kwargs):
             fct = getattr(torch.ops.diag_lib, name_fct)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-IN: "
                     f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
@@ -1300,27 +1303,27 @@ class ModelDiagnoseOutput:
 
             if self.forward_fill_kwargs:
                 args = (*args, [])
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-SERIALIZED_IN: "
                     f"args={string_type(args, with_shape=True)}, "
                     f"kwargs={string_type(kwargs, with_shape=True)}"
                 )
                 print(f"[_replaced_forward_] {name_fct}-CALL: {fct}")
-            if self._debug_print_export:
+            if not torch.compiler.is_compiling() and self._debug_print_export:
                 print(f"-- CALL custom op {self.custom_op_name} - {self.full_name}")
                 print(f"   args={string_type(args, limit=20)}")
                 print(f"   kwargs={string_type(kwargs, limit=20)}")
                 print(f"   schema_str={schema_str}")
             res = fct(*args, **kwargs)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-SERIALIZED_OUT: "
                     f"res={string_type(res, with_shape=True)}, "
                     f"expected_output_type={expected_output_type}"
                 )
             des = deserialize_args(res, expected_output_type)
-            if verbose > 2:
+            if not torch.compiler.is_compiling() and verbose > 2:
                 print(
                     f"[_replaced_forward_] {name_fct}-OUT: "
                     f"des={string_type(des, with_shape=True)}"
@@ -2279,6 +2282,7 @@ class ModelDiagnoseOutput:
         dispatcher: Optional["Dispatcher"] = None,  # noqa: F821
         output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         export_options: Optional[Union[str, ExportOptions]] = None,
+        check_conversion_cls: Optional[Union[Dict[str, Any], type]] = None,
     ):
         """
         Exports into ONNX with submodule as local functions.
@@ -2309,6 +2313,10 @@ class ModelDiagnoseOutput:
         :param output_names: to rename the output names
         :param output_dynamic_shapes: same as *dynamic_shapes* but for the output
         :param export_options: to apply differents options before to get the exported program
+        :param check_conversion_cls: a runtime with the same API than
+            :class:`onnx.reference.ReferenceEvaluator` than can be used to check that the
+            onnx models produce the same outputs,
+            it can be also a dictionary to specify atol, rtol to be used after it runs
         :return: onnx model
         """
         # First export the submodule.
@@ -2322,6 +2330,7 @@ class ModelDiagnoseOutput:
         ), (
             f"{self.full_name}: exporter failed, "
             f"status={self.exporter_status.status!r}, "
+            f"reason={self.exporter_status.reason!r}, "
             f"a custom onnx converter must be provided for "
             f"'diag_lib::{self.custom_op_name}', "
             f"args={string_type(self.inputs[0][0], with_shape=True)}, "
@@ -2362,13 +2371,14 @@ class ModelDiagnoseOutput:
                     input_names=None,
                     output_names=None,
                     large_model=False,
-                    verbose=max(verbose - 2, 0),
+                    verbose=verbose,
                     return_builder=True,
                     raise_list=raise_list,
                     return_optimize_report=return_optimize_report,
                     function_options=function_options,
                     dispatcher=dispatcher,
                     export_options=export_options,
+                    check_conversion_cls=check_conversion_cls,
                 )
                 if return_optimize_report:
                     _, builder, st = res
@@ -2381,7 +2391,7 @@ class ModelDiagnoseOutput:
             all_stats["children"] = stats
 
         if verbose:
-            print(f"[to_onnx_local] {self.dot_name!r} - export starts {self.custom_op_name}")
+            print(f"[to_onnx_local] {self.dot_name} - export starts {self.custom_op_name}")
         if dispatched:
             new_dispatcher = Dispatcher(dispatched)
             if dispatcher:
@@ -2409,18 +2419,184 @@ class ModelDiagnoseOutput:
             export_options=export_options,
         )
         if verbose:
-            print(f"[to_onnx_local] {self.dot_name!r} - export done")
+            print(f"[to_onnx_local] {self.dot_name} - export done")
+
+        if check_conversion_cls:
+            if verbose:
+                print(f"[to_onnx_local] {self.dot_name} - run validation")
+            onx = res[0] if isinstance(res, tuple) else res
+            diff = self.compute_onnx_discrepancies(onx, check_conversion_cls, verbose=verbose)
+            if verbose:
+                print(f"[to_onnx_local] {self.dot_name} - done")
+                for d in diff:
+                    print(f"[to_onnx_local] {self.dot_name} - discrepancies: {string_diff(d)}")
+            self.onnx_discrepancies = diff
 
         if return_optimize_report:
             res[-1].update(all_stats)
         return res
 
+    def compute_onnx_discrepancies(
+        self,
+        onx: Union[onnx.FunctionProto, onnx.ModelProto],
+        check_conversion_cls: Union[Dict[str, Any], type],
+        verbose: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Computes the discrepancies by using the intermediate inputs and outputs.
+
+        :param onx: proto
+        :param check_conversion_cls: class to use to compute the discrepancies,
+            it should follow the same API as :class:`onnx.reference.ReferenceEvaluator`,
+            it can be also a dictionary to specify atol, rtol to be used after it runs
+        :param verbose: verbosity
+        :return: discrepancies for each set of inputs
+        """
+        flattened_inputs = [
+            serialize_args(*i, schema=None, args_names=self.forward_ordered_parameter_names)
+            for i in self.inputs
+        ]
+        flattened_outputs = [serialize_args(i, None, schema=None) for i in self.outputs]
+        input_names = (
+            list(onx.input)
+            if isinstance(onx, onnx.FunctionProto)
+            else [i.name for i in onx.graph.input]
+        )
+        cls, atol, rtol = (
+            (
+                check_conversion_cls["cls"],
+                check_conversion_cls["atol"],
+                check_conversion_cls["rtol"],
+            )
+            if isinstance(check_conversion_cls, dict)
+            else (check_conversion_cls, None, None)
+        )
+        if verbose:
+            print(
+                f"[onnx_run_disc] {self.dot_name} run with "
+                f"cls={cls.__name__} on {onx.__class__.__name__}"
+            )
+
+        sess = cls(onx)
+        diffs = []
+        for i in range(len(flattened_inputs)):
+            inp, out = flattened_inputs[i], flattened_outputs[i]
+            if verbose:
+                print(
+                    f"[onnx_run_disc] {self.dot_name} run with "
+                    f"{string_type(self.inputs[i], with_shape=True)}"
+                )
+                print(
+                    f"[onnx_run_disc] {self.dot_name} flattened into "
+                    f"{string_type(inp, with_shape=True, with_min_max=True)}"
+                )
+                print(
+                    f"[onnx_run_disc] {self.dot_name} expecting "
+                    f"{string_type(out, with_shape=True, with_min_max=True)}"
+                )
+            assert not inp[1], (
+                f"Flattened inputs {string_type(flattened_inputs[i], with_shape=True)}, "
+                f"are wrong, original inputs  "
+                f"{string_type(self.inputs[i], with_shape=True)}"
+            )
+            feeds = dict(
+                zip(
+                    input_names,
+                    [
+                        t.detach().cpu().numpy() if isinstance(t, torch.Tensor) else t
+                        for t in inp[0]
+                    ],
+                )
+            )
+            try:
+                got = sess.run(None, feeds)
+            except (TypeError, RuntimeError, ValueError, IndexError):
+                # Error no output
+                got = []
+            if verbose:
+                if len(got) == 1:
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} computing "
+                        f"{string_type(got[0], with_shape=True, with_min_max=True)}"
+                    )
+                else:
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} computing "
+                        f"{string_type(tuple(got), with_shape=True, with_min_max=True)}"
+                    )
+            diff = dict(abs=np.inf, rel=np.inf) if len(got) == 0 else max_diff(out, got)
+            if not (
+                atol is None or rtol is None or (diff["abs"] <= atol and diff["rel"] <= rtol)
+            ):
+                if verbose:
+                    name = self.full_name.replace(":", "_")
+                    name = f"{name}.onnx"
+                    ep_txt_name = f"{name}.ep.txt"
+                    ep_name = f"{name}.ep"
+                    pkl_name = f"{name}.pkl"
+                    with open(name, "wb") as f:
+                        f.write(onx.SerializeToString())
+                    with open(ep_txt_name, "w") as f:
+                        f.write(str(self.exporter_status.exported))
+                        if hasattr(self.exporter_status.exported, "graph"):
+                            f.write("\n----------------------\n")
+                            f.write(str(self.exporter_status.exported.graph))
+                    torch.export.save(self.exporter_status.exported, ep_name)
+                    with open(pkl_name, "wb") as f:
+                        pickle.dump(
+                            dict(feeds=feeds, inputs=self.inputs[i], outputs=self.outputs[i]),
+                            f,
+                        )
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} saving failing model into {name!r}"
+                    )
+                    print(
+                        f"[onnx_run_disc] {self.dot_name} saving "
+                        f"exported program into {ep_name!r}"
+                    )
+
+                    # exported program can be saved but not necessarily restored without
+                    # the custom ops registered so run some verification here.
+                    print(f"[onnx_run_disc] {self.dot_name} run_aligned")
+                    from experimental_experiment.torch_interpreter.investigate_helper import (
+                        run_aligned,
+                    )
+                    from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+                    diffs = []
+                    for di in run_aligned(
+                        self.exporter_status.exported,
+                        onx,
+                        self.inputs[i][0],
+                        kwargs=self.inputs[i][1],
+                        check_conversion_cls=dict(
+                            cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5
+                        ),
+                        verbose=verbose,
+                    ):
+                        diffs.append(di)
+
+                    raise ValueError(
+                        f"{self.full_name}: discrepancies detected: "
+                        f"{string_diff(diff)}, model saved into {name!r} and {ep_name!r}"
+                        f"\n-- intermediate differences --\n{pprint.pformat(diffs)}"
+                    )
+                raise ValueError(
+                    f"{self.full_name}: discrepancies detected: {string_diff(diff)}"
+                )
+            diffs.append(diff)
+            if verbose:
+                print(f"[onnx_run_disc] {self.dot_name} diff={string_diff(diff)}")
+        if verbose:
+            print(f"[onnx_run_disc] {self.dot_name} validation done")
+        return diffs
+
 
 def _rewrite_forward(
     *args, _diag: Optional[ModelDiagnoseOutput] = None, verbose: int = 0, **kwargs
 ):
-    assert _diag is not None, "_diag cannot be None"
-    if verbose:
+    if not torch.compiler.is_compiling() and verbose:
+        assert _diag is not None, "_diag cannot be None"
         indent = "  " * _diag.level
         if not args:
             print(
@@ -2443,10 +2619,13 @@ def _rewrite_forward(
                     f"[{_diag.name}:{_diag.model.__class__.__name__}] "
                     f"{indent}> *{string_type(args)}"
                 )
-    _diag.add_inputs(args, kwargs)
+    if not torch.compiler.is_compiling():
+        assert _diag is not None, "_diag cannot be None"
+        _diag.add_inputs(args, kwargs)
     res = _diag.forward(*args, **kwargs)
-    _diag.add_outputs(res)
-    if verbose:
+    if not torch.compiler.is_compiling():
+        _diag.add_outputs(res)
+    if not torch.compiler.is_compiling() and verbose:
         if isinstance(res, torch.Tensor):
             print(
                 f"[{_diag.name}:{_diag.model.__class__.__name__}] "
@@ -2613,6 +2792,25 @@ def _untrace_forward_execution(diag: ModelDiagnoseOutput, verbose: int = 0):
         _untrace_forward_execution(child, verbose=verbose)
 
 
+def traced_cond(
+    pred: Union[bool, int, float, torch.Tensor],
+    true_fn: Callable,
+    false_fn: Callable,
+    operands: Union[tuple, list] = (),
+) -> Any:
+    """
+    :func:`torch.cond` relies on :func:`torch.compile` and this does not
+    work well with tracing. Before tracing, the function is replaced
+    by another one. Every piece of code such as ``print`` must be avoided
+    while the code is begin compiled with
+    ``if not torch.compiler.is_compiling(): ...``.
+    See :func:`torch.compiler.is_compiling`.
+    """
+    if pred:
+        return true_fn(*operands)
+    return false_fn(*operands)
+
+
 @contextlib.contextmanager
 def trace_forward_execution(
     model: torch.nn.Module,
@@ -2625,7 +2823,12 @@ def trace_forward_execution(
     Replaces all forward to store the inputs and outputs of the module
     and every submodules.
     See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
+
+    :func:`torch.cond` is replaced by :func:`traced_cond` when tracing
+    otherwise no branch receive any input.
     """
+    torch_cond = torch.cond
+    torch.cond = traced_cond
     diag = _trace_forward_execution(
         None,
         model,
@@ -2641,6 +2844,7 @@ def trace_forward_execution(
         yield diag
     finally:
         _untrace_forward_execution(diag, verbose=verbose)
+        torch.cond = torch_cond
 
 
 def trace_execution_piece_by_piece(

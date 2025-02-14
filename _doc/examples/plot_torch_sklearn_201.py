@@ -24,9 +24,13 @@ Module
 import contextlib
 import io
 import logging
+import math
+import numbers
 import warnings
 from typing import Any, Dict, List, Optional
+import numpy as np
 import onnx
+from onnx.reference.ops.op_topk import TopK_11 as TopK
 import sklearn
 import torch
 import onnxruntime
@@ -120,14 +124,20 @@ print(f"discrepancies: {max_diff(d1, d2)}")
 def _get_mask(X, value_to_mask):
     return (
         torch.isnan(X)
-        if sklearn.utils._missing.is_scalar_nan(value_to_mask)
+        if (  # sklearn.utils._missing.is_scalar_nan(value_to_mask)
+            not isinstance(value_to_mask, numbers.Integral)
+            and isinstance(value_to_mask, numbers.Real)
+            and math.isnan(value_to_mask)
+        )
         else (value_to_mask == X)
     )
 
 
 class SubTopKIndices(torch.nn.Module):
     def forward(self, x, k):
-        return torch.topk(x, k, dim=1, largest=False, sorted=True).indices
+        # torch does not like nans
+        xn = torch.nan_to_num(x, nan=1.0e10)
+        return torch.topk(xn, k, dim=1, largest=False, sorted=True).indices
 
 
 class SubWeightMatrix(torch.nn.Module):
@@ -471,6 +481,11 @@ pretty = trace.get_export_report()
 print(pretty)
 
 # %%
+# The dynamic shapes for the whole model:
+print("dynamic shapes:")
+print(trace.guess_dynamic_shapes())
+
+# %%
 # The method ``try_export`` cannot infer all links between input shapes and output shapes
 # for every submodule. The following function fills this gap.
 
@@ -574,10 +589,29 @@ def onnx_topk_indices(
     k: T,
     name: str = "topk",
 ):
+    assert len(outputs) == 1, f"Only one output is expected but outputs={outputs}"
     unique_name = g.unique_name("unused_topk_values")
-    g.op.TopK(x, k, name=name, outputs=[unique_name, *outputs])
+    g.op.TopK(x, k, name=name, outputs=[unique_name, *outputs], largest=False, sorted=True)
     return outputs[0]
 
+
+# %%
+# Let's check it is working somehow.
+
+x = torch.tensor([[0, 1, 2], [6, 5, 4]], dtype=torch.float32)
+print("torch.topk", torch.topk(x, k=2).indices)
+print("onnx.topk", TopK.eval(x.numpy(), np.array([2], dtype=np.int64))[1])
+
+# %%
+# And with nan values
+x = torch.tensor([[0, np.nan, 2], [6, np.nan, 4]], dtype=torch.float32)
+print("torch.topk", torch.topk(torch.nan_to_num(x, nan=-1.0e10), k=2).indices)
+print("onnx.topk", TopK.eval(x.numpy(), np.array([2], dtype=np.int64))[1])
+
+
+# %%
+# That works. Then the dispatcher maps the custom ops calling topk to
+# the previous converter functions.
 
 dispatcher = Dispatcher(
     {
@@ -590,9 +624,23 @@ dispatcher = Dispatcher(
     }
 )
 
-onx = trace.to_onnx_local(verbose=1, dispatcher=dispatcher)
+# %%
+# Let's run the conversion. We also check the conversion into ONNX
+# is accurate. It is doable because every intermediate results
+# were previously traced.
+onx = trace.to_onnx_local(
+    verbose=1,
+    dispatcher=dispatcher,
+    check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+    inline=False,
+)
 
+# %%
+# Let's save it.
 onnx.save(onx, "plot_torch_sklearn_201.onnx")
+
+# %%
+# We can also print it.
 print(pretty_onnx(onx))
 
 
@@ -601,7 +649,7 @@ print(pretty_onnx(onx))
 # ==========
 
 
-def validate_onnx(size, sizey, onx, verbose: int = 1):
+def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
     X = torch.randn((size, 2))
     Y = torch.randn((sizey, 2))
     for i in range(5):
@@ -633,27 +681,32 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
 
     if verbose:
         print("python: loading the model...")
-    sess = ExtendedReferenceEvaluator(onx, verbose=10)
+    sess = ExtendedReferenceEvaluator(onx, verbose=0)
     if verbose:
-        print("onnxruntime: running the model...")
+        print("python: running the model...")
     got = sess.run(None, feeds)
     d = max_diff(p1, got[0])
     assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
     if verbose:
         print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
 
-    if verbose:
-        print("onnxruntime: loading the model...")
-    sess = onnxruntime.InferenceSession(
-        onx.SerializeToString(), providers=["CPUExecutionProvider"]
-    )
-    if verbose:
-        print("onnxruntime: running the model...")
-    got = sess.run(None, feeds)
-    d = max_diff(p1, got[0])
-    assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
-    if verbose:
-        print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
+    if use_ort:
+        if verbose:
+            print("onnxruntime: loading the model...")
+        opts = onnxruntime.SessionOptions()
+        opts.optimized_model_filepath = "plot_torch_sklearn_201.ort.onnx"
+        opts.log_severity_level = 0
+        opts.log_verbosity_level = 0
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), opts, providers=["CPUExecutionProvider"]
+        )
+        if verbose:
+            print("onnxruntime: running the model...")
+        got = sess.run(None, feeds)
+        d = max_diff(p1, got[0])
+        assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
+        if verbose:
+            print(f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}")
 
     model_inputs = (
         torch.from_numpy(knn_imputer._mask_fit_X),
@@ -676,5 +729,5 @@ def validate_onnx(size, sizey, onx, verbose: int = 1):
 
 
 # This does not work yet.
-# validate_onnx(5, 10, onx)
-# validate_onnx(50, 40, onx)
+validate_onnx(5, 10, onx)
+validate_onnx(50, 40, onx)
