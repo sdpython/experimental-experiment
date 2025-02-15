@@ -84,7 +84,7 @@ jobs:
           pip install pytest
           pip install pytest-cov
           export PYTHONPATH=.
-          UNITTEST_GOING=1 pytest --cov=./experimental_experiment/ --cov-report=xml --durations=10 --ignore-glob=**LONG*.py --ignore-glob=**notebook*.py _unittests/ut_torch_models/test_piece_by_piece_big.py _unittests
+          UNITTEST_GOING=1 pytest --cov=./experimental_experiment/ --cov-report=xml --durations=10 --ignore-glob=**LONG*.py --ignore-glob=**notebook*.py --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py _unittests
           export PYTHONPATH=
 
       - name: Generate coverage report
