@@ -127,6 +127,7 @@ nitpick_ignore_regex = [
     ("py:class", ".*onnxruntime[.].*"),
 ]
 
+
 sphinx_gallery_conf = {
     # path to your examples scripts
     "examples_dirs": [
@@ -150,7 +151,7 @@ sphinx_gallery_conf = {
     "ignore_repr_types": "matplotlib\\.(text|axes)",
     # robubstness
     "reset_modules_order": "both",
-    "reset_modules": ("matplotlib", "torch", "transformers"),
+    "reset_modules": ("matplotlib", "experimental_experiment.reset_torch_transformers"),
 }
 
 if int(os.environ.get("UNITTEST_GOING", "0")):
