@@ -138,22 +138,25 @@ sphinx_gallery_conf = {
         "auto_examples",
         "auto_recipes",
     ],
+    # no parallelization to avoid conflict with environment variables
+    "parallel": 1,
     # sorting
     "within_subsection_order": "ExampleTitleSortKey",
     # errors
     "abort_on_example_error": True,
     # recommendation
-    "recommender": {"enable": True, "n_examples": 3, "min_df": 3, "max_df": 0.9},
+    "recommender": {"enable": True, "n_examples": 5, "min_df": 3, "max_df": 0.9},
     # ignore capture for matplotib axes
     "ignore_repr_types": "matplotlib\\.(text|axes)",
     # robubstness
     "reset_modules_order": "both",
+    "reset_modules": ("matplotlib", "torch", "transformers"),
 }
 
 if int(os.environ.get("UNITTEST_GOING", "0")):
     sphinx_gallery_conf["ignore_pattern"] = (
         ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)|(export_201)|"
-        f"(c_phi2)|(oe_custom_ops_inplace)|(oe_scan)|(draft_mode)).*"
+        "(c_phi2)|(oe_custom_ops_inplace)|(oe_scan)|(draft_mode)).*"
     )
     # it fails if not run in standalone mode
     sphinx_gallery_conf["ignore_pattern"] = (
