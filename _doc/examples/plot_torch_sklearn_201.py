@@ -3,7 +3,7 @@
 
 =======================================================
 201: Use torch to export a scikit-learn model into ONNX
-=======================================================>>>>>>
+=======================================================
 
 When :epkg:`sklearn-onnx` is missing a converter, :epkg:`torch` can be used
 to write it. We use :class:`sklearn.impute.KNNImputer` as an example.

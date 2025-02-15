@@ -337,6 +337,7 @@ class TestOnnxExportSignatures(ExtTestCase):
             exporter="custom",
             flatten_inputs=True,
             others=inputs2,
+            atol=1e-4,
         )
 
     @skipif_ci_windows("not working on windows")

@@ -11,6 +11,7 @@ to the original model. The tested scenarios are described at
     :showcode:
     :rst:
     :toggle: code
+    :warningout: UserWarning
 
     import inspect
     import textwrap

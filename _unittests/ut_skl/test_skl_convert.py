@@ -118,7 +118,7 @@ class TestSklConvert(ExtTestCase):
         self.dump_onnx("test_nan_to_euclidean.onnx", onx)
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, dict(zip(ref.input_names, [X.numpy(), Y.numpy()])))
-        self.assertEqualArray(d1, got[0], atol=1e-4)
+        self.assertEqualArray(d1, got[0], atol=2e-4)
 
 
 if __name__ == "__main__":

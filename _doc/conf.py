@@ -127,6 +127,7 @@ nitpick_ignore_regex = [
     ("py:class", ".*onnxruntime[.].*"),
 ]
 
+
 sphinx_gallery_conf = {
     # path to your examples scripts
     "examples_dirs": [
@@ -138,25 +139,30 @@ sphinx_gallery_conf = {
         "auto_examples",
         "auto_recipes",
     ],
+    # no parallelization to avoid conflict with environment variables
+    "parallel": 1,
     # sorting
     "within_subsection_order": "ExampleTitleSortKey",
     # errors
     "abort_on_example_error": True,
     # recommendation
-    "recommender": {"enable": True, "n_examples": 3, "min_df": 3, "max_df": 0.9},
+    "recommender": {"enable": True, "n_examples": 5, "min_df": 3, "max_df": 0.9},
     # ignore capture for matplotib axes
     "ignore_repr_types": "matplotlib\\.(text|axes)",
     # robubstness
     "reset_modules_order": "both",
+    "reset_modules": ("matplotlib", "experimental_experiment.reset_torch_transformers"),
 }
 
 if int(os.environ.get("UNITTEST_GOING", "0")):
     sphinx_gallery_conf["ignore_pattern"] = (
-        ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)|(export_201)|(c_phi2)|(oe_custom_ops_inplace)|(oe_scan)|(draft_mode)).*"
+        ".*((_oe_)|(dort)|(diff)|(exe)|(llama)|(aot)|(compile)|(export_201)|"
+        "(c_phi2)|(oe_custom_ops_inplace)|(oe_scan)|(draft_mode)).*"
     )
     # it fails if not run in standalone mode
     sphinx_gallery_conf["ignore_pattern"] = (
-        f"{sphinx_gallery_conf['ignore_pattern'][:-3]}|(torch_sklearn_201)).*"
+        f"{sphinx_gallery_conf['ignore_pattern'][:-3]}|"
+        f"(torch_sklearn_201)|(plot_exporter_exporter_with_dynamic_cache)).*"
     )
 elif pv.Version(torch.__version__) < pv.Version("2.8"):
     sphinx_gallery_conf["ignore_pattern"] = (
