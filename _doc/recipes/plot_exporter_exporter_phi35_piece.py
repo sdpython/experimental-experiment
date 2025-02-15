@@ -273,6 +273,9 @@ ep = diag.try_export(
     exporter_kwargs=dict(strict=False),
     verbose=1,
 )
+
+# %%
+# Let's display a report.
 print(f"success: {ep.status}")
 print(diag.get_export_report())
 

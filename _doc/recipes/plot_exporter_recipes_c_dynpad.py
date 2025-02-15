@@ -101,4 +101,4 @@ for inp in inputs:
 # %%
 # And visually.
 
-plot_dot(onx)
+plot_dot(onx, figsize=(10, 12))

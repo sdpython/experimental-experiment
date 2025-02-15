@@ -150,7 +150,7 @@ class ModelDiagnoseOutput:
     Contains inputs and outputs, traced results when tracing
     intermediate results. An instance of this class is produced
     by :func:`trace_execution_piece_by_piece`.
-    Example :ref:`l-plot-exporter-recipes-custom-phi35` tells you
+    Example :ref:`l-plot-exporter-exporter-phi35-piece` tells you
     more about how to use this class.
 
     * ``parent``: parent owning this instance
@@ -1873,7 +1873,7 @@ class ModelDiagnoseOutput:
             to handle with this function.
         :return: result of the export function
 
-        See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
+        See :ref:`l-plot-exporter-exporter-phi35-piece` for an example.
         Environment variable ``DIAGNAME=<name>`` can be set to increase the verbosity
         on a particular op and avoid catching the exception if any.
         """
@@ -2855,7 +2855,7 @@ def trace_forward_execution(
     """
     Replaces all forward to store the inputs and outputs of the module
     and every submodules.
-    See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
+    See :ref:`l-plot-exporter-exporter-phi35-piece` for an example.
 
     :func:`torch.cond` is replaced by :func:`traced_cond` when tracing
     otherwise no branch receive any input.
@@ -2904,7 +2904,7 @@ def trace_execution_piece_by_piece(
         can be used to avoid tracing some functions
     :return: see :class:`ModelDiagnoseOutput`
 
-    See :ref:`l-plot-exporter-recipes-custom-phi35` for an example.
+    See :ref:`l-plot-exporter-exporter-phi35-piece` for an example.
     """
     if traced_method is None:
         traced_method = {}
