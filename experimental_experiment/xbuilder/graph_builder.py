@@ -6310,7 +6310,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             len(cst.shape) == 0
             or min(cst.shape) > 0
-            or (cst.shape == (0,) and v.op_type in {"ConstantOfShape", "Cast", "Identity"})
+            or (
+                cst.shape == (0,)
+                and v.op_type in {"ConstantOfShape", "Cast", "Identity", "Constant"}
+            )
         ), (
             f"Output has empty shape {cst.shape}, name={name!r} "
             f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"

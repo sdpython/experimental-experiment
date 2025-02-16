@@ -28,4 +28,7 @@ def unfused_nodes(
         if so & needed:
             nodes.append(node)
             needed |= set(i for i in node.input if i not in in_names)
+            needed -= needed & set(node.output)
+        if not needed:
+            break
     return list(reversed(nodes))

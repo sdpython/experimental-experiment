@@ -6,9 +6,11 @@ import sys
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import (
+    AttributeProto,
     FunctionProto,
     GraphProto,
     ModelProto,
+    NodeProto,
     TensorProto,
     ValueInfoProto,
     load as onnx_load,
@@ -457,9 +459,13 @@ def onnx_dtype_name(itype: int) -> str:
 
 def pretty_onnx(
     onx: Union[FunctionProto, GraphProto, ModelProto, ValueInfoProto, str],
+    with_attributes: bool = False,
 ) -> str:
     """
     Displays an onnx prot in a better way.
+
+    :param with_attributes: displays attributes as well, if only a node is printed
+    :return: text
     """
     assert onx is not None, "onx cannot be None"
     if isinstance(onx, str):
@@ -472,6 +478,48 @@ def pretty_onnx(
         shape = tuple((d.dim_param or d.dim_value) for d in onx.type.tensor_type.shape.dim)
         shape_str = ",".join(map(str, shape))
         return f"{onnx_dtype_name(itype)}[{shape_str}] {name}"
+
+    if isinstance(onx, AttributeProto):
+        att = onx
+        if att.type == AttributeProto.INT:
+            return f"{att.name}={att.i}"
+        if att.type == AttributeProto.INTS:
+            return f"{att.name}={att.ints}"
+        if att.type == AttributeProto.FLOAT:
+            return f"{att.name}={att.f}"
+        if att.type == AttributeProto.FLOATS:
+            return f"{att.name}={att.floats}"
+        if att.type == AttributeProto.STRING:
+            return f"{att.name}={att.s!r}"
+        if att.type == AttributeProto.TENSOR:
+            from .reference import to_array_extended
+
+            v = to_array_extended(att.t)
+            vf = v.reshape((-1,))
+            if vf.size < 10:
+                tt = f"[{', '.join(map(str, vf))}]"
+            else:
+                tt = f"[{', '.join(map(str, vf[:10]))}, ...]"
+            if len(v.shape) != 1:
+                return f"{att.name}=tensor({tt}, dtype={v.dtype}).reshape({v.shape})"
+            return f"{att.name}=tensor({tt}, dtype={v.dtype})"
+        raise NotImplementedError(
+            f"pretty_onnx not implemented yet for AttributeProto={att!r}"
+        )
+
+    if isinstance(onx, NodeProto):
+        text = f"{onx.op_type}({', '.join(onx.input)}) -> {', '.join(onx.output)}"
+        if onx.domain:
+            text = f"{onx.domain}.{text}"
+        if not with_attributes or not onx.attribute:
+            return text
+        rows = []
+        for att in onx.attribute:
+            rows.append(pretty_onnx(att))
+        if len(rows) > 1:
+            suffix = "\n".join(f"    {s}" for s in rows)
+            return f"{text}\n{suffix}"
+        return f"{text}  ---  {rows[0]}"
 
     try:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
