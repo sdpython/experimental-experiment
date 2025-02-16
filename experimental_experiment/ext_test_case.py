@@ -379,6 +379,13 @@ class ExtTestCase(unittest.TestCase):
             msg or f"Unable to find the list of strings {tofind!r} in\n--\n{text}"
         )
 
+    def assertSetContained(self, set1, set2):
+        "Checks that ``set1`` is contained in ``set2``."
+        set1 = set(set1)
+        set2 = set(set2)
+        if set1 & set2 != set1:
+            raise AssertionError(f"Set {set2} does not contain set {set1}.")
+
     def assertEqualArrays(
         self,
         expected: Sequence[numpy.ndarray],
