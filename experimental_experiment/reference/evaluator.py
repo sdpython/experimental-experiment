@@ -34,6 +34,7 @@ from .ops.op_rotary import Rotary
 from .ops.op_scatter_elements import ScatterElements
 from .ops.op_scatternd_of_shape import MaskedScatterNDOfShape, ScatterNDOfShape
 from .ops.op_simplified_layer_normalization import SimplifiedLayerNormalization
+from .ops.op_skip_layer_normalization import SkipLayerNormalization
 from .ops.op_slice import Slice_1, Slice_10
 from .ops.op_transpose_cast import Transpose2DCastFP16, Transpose2DCastFP32
 from .ops.op_tri_matrix import TriMatrix
@@ -97,6 +98,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         ScatterElements,
         ScatterNDOfShape,
         SimplifiedLayerNormalization,
+        SkipLayerNormalization,
         Slice_1,
         Slice_10,
         SubMul,

@@ -1,4 +1,5 @@
 import unittest
+from typing import Optional
 import numpy as np
 from onnx import TensorProto
 from onnx.helper import (
@@ -13,6 +14,13 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestReferenceOps(ExtTestCase):
+    def _range(self, *shape, bias: Optional[float] = None):
+        n = np.prod(shape)
+        x = np.arange(n).astype(np.float32) / n
+        if bias:
+            x = x + bias
+        return x.reshape(tuple(shape)).astype(np.float32)
+
     def test_fused_matmul(self):
         model = make_model(
             make_graph(
@@ -139,6 +147,90 @@ class TestReferenceOps(ExtTestCase):
         ref = ExtendedReferenceEvaluator(model)
         got = ref.run(None, {"data": data, "indices": indices, "updates": updates})
         self.assertEqualArray(y, got[0])
+
+    def test_skip_layer_normalization_nobias(self):
+        import onnxruntime
+
+        model = make_model(
+            make_graph(
+                [
+                    make_node(
+                        "SkipLayerNormalization",
+                        ["x", "skip", "beta", "gamma"],
+                        ["Z"],
+                        epsilon=1.0e-5,
+                        domain="com.microsoft",
+                    )
+                ],
+                "name",
+                [
+                    make_tensor_value_info("x", TensorProto.FLOAT, ["a", "b", "c"]),
+                    make_tensor_value_info("skip", TensorProto.FLOAT, ["a", "b", "c"]),
+                    make_tensor_value_info("beta", TensorProto.FLOAT, ["c"]),
+                    make_tensor_value_info("gamma", TensorProto.FLOAT, ["c"]),
+                ],
+                [make_tensor_value_info("Z", TensorProto.FLOAT, None)],
+            ),
+            opset_imports=[make_opsetid("", 18), make_opsetid("com.microsoft", 1)],
+            ir_version=10,
+        )
+        feeds = dict(
+            x=self._range(2, 3, 8),
+            skip=self._range(2, 3, 8, bias=3),
+            beta=self._range(8, bias=1),
+            gamma=self._range(8, bias=2),
+        )
+        ref = ExtendedReferenceEvaluator(model)
+        got = ref.run(None, feeds)
+        sess = onnxruntime.InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = sess.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
+        self.assertEqualArrayAny(expected, got, atol=1e-3)
+
+    def test_skip_layer_normalization_bias(self):
+        import onnxruntime
+
+        model = make_model(
+            make_graph(
+                [
+                    make_node(
+                        "SkipLayerNormalization",
+                        ["x", "skip", "beta", "gamma", "bias"],
+                        ["Z"],
+                        epsilon=1.0e-5,
+                        domain="com.microsoft",
+                    )
+                ],
+                "name",
+                [
+                    make_tensor_value_info("x", TensorProto.FLOAT, ["a", "b", "c"]),
+                    make_tensor_value_info("skip", TensorProto.FLOAT, ["a", "b", "c"]),
+                    make_tensor_value_info("beta", TensorProto.FLOAT, ["c"]),
+                    make_tensor_value_info("gamma", TensorProto.FLOAT, ["c"]),
+                    make_tensor_value_info("bias", TensorProto.FLOAT, ["c"]),
+                ],
+                [make_tensor_value_info("Z", TensorProto.FLOAT, None)],
+            ),
+            opset_imports=[make_opsetid("", 18), make_opsetid("com.microsoft", 1)],
+            ir_version=10,
+        )
+        feeds = dict(
+            x=self._range(2, 3, 8),
+            skip=self._range(2, 3, 8, bias=3),
+            beta=self._range(8, bias=1),
+            gamma=self._range(8, bias=2),
+            bias=self._range(8, bias=0.1),
+        )
+        ref = ExtendedReferenceEvaluator(model)
+        got = ref.run(None, feeds)
+        sess = onnxruntime.InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        expected = sess.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
+        self.assertEqualArrayAny(expected, got, atol=1e-3)
 
 
 if __name__ == "__main__":
