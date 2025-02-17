@@ -38,7 +38,10 @@ def get_onnxruntime_patterns(
     # from .llm_optim import RotaryEmbeddingPattern
 
     # from .gather_grad import GatherGradPattern
-    from .simplified_layer_normalization import SimplifiedLayerNormalizationPattern
+    from .simplified_layer_normalization import (
+        SimplifiedLayerNormalizationPattern,
+        SkipLayerNormalizationPattern,
+    )
 
     return [
         BiasGeluPattern(verbose=verbose),
@@ -56,5 +59,6 @@ def get_onnxruntime_patterns(
         # RotaryEmbeddingPattern(verbose=verbose),
         # GatherGradPattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),
+        SkipLayerNormalizationPattern(verbose=verbose),
         SoftmaxGradPattern(verbose=verbose),
     ]

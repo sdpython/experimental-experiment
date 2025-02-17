@@ -460,11 +460,13 @@ def onnx_dtype_name(itype: int) -> str:
 def pretty_onnx(
     onx: Union[FunctionProto, GraphProto, ModelProto, ValueInfoProto, str],
     with_attributes: bool = False,
+    highlight: Optional[Set[str]] = None,
 ) -> str:
     """
     Displays an onnx prot in a better way.
 
     :param with_attributes: displays attributes as well, if only a node is printed
+    :param highlight: to highlight some names
     :return: text
     """
     assert onx is not None, "onx cannot be None"
@@ -508,7 +510,16 @@ def pretty_onnx(
         )
 
     if isinstance(onx, NodeProto):
-        text = f"{onx.op_type}({', '.join(onx.input)}) -> {', '.join(onx.output)}"
+
+        def _high(n):
+            if highlight and n in highlight:
+                return f"**{n}**"
+            return n
+
+        text = (
+            f"{onx.op_type}({', '.join(map(_high, onx.input))})"
+            f" -> {', '.join(map(_high, onx.output))}"
+        )
         if onx.domain:
             text = f"{onx.domain}.{text}"
         if not with_attributes or not onx.attribute:

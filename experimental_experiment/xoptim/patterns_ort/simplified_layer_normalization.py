@@ -7,9 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SimplifiedLayerNormalizationPattern(PatternOptimization):
-    """
-    Replaces the sequence Transpose, Matmul into FusedMatMul.
-    """
+    """Replaces the sequence Transpose, Matmul into FusedMatMul."""
 
     def match(
         self,
@@ -152,3 +150,50 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
 
         nodes.append(layer)
         return nodes
+
+
+class SkipLayerNormalizationPattern(PatternOptimization):
+    """Replaces the sequence Add + LayerNormalization into SkipLayerNormalization."""
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "LayerNormalization" or node.domain != "":
+            return self.none()
+        if not g.has_rank(node.input[0]) and g.get_rank(node.input[0]) not in (2, 3):
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis = g.get_attribute(node, "axis", exc=False)
+        axis = 0 if axis is None else axis.i
+        if axis != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        before = g.node_before(node.input[0])
+        if before is None or before.op_type != "Add":
+            return self.none(node, inspect.currentframe().f_lineno)
+        nodes = [before, node]
+        return MatchResult(self, nodes, self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        add_node: NodeProto,
+        norm_node: NodeProto,
+    ) -> List[NodeProto]:
+        atts = []
+        epsilon = g.get_attribute(norm_node, "epsilon", exc=False)
+        if epsilon:
+            atts.append(epsilon)
+        u1 = g.unique_name("unused")
+        u2 = g.unique_name("unused")
+        layer = g.make_node(
+            "SkipLayerNormalization",
+            [*add_node.input, *norm_node.input[1:]],
+            [norm_node.output[0], u1, u2, add_node.output[0]],
+            name=f"{self.__class__.__name__}--{norm_node.name}",
+            domain="com.microsoft",
+        )
+        if atts:
+            layer.attribute.extend(atts)
+        return [layer]

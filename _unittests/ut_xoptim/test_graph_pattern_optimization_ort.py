@@ -1114,6 +1114,61 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualArray(expected[0], got[0])
 
+    def test_skip_layer_noramlization(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X1", "X2"], ["add"]),
+                    oh.make_node(
+                        "LayerNormalization",
+                        ["add", "scale", "bias"],
+                        ["Y"],
+                        axis=-1,
+                    ),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X1", TFLOAT, ["a", "b", "c"]),
+                    oh.make_tensor_value_info("X2", TFLOAT, ["a", "b", "c"]),
+                    oh.make_tensor_value_info("scale", TFLOAT, ["c"]),
+                    oh.make_tensor_value_info("bias", TFLOAT, ["c"]),
+                ],
+                [
+                    oh.make_tensor_value_info("add", TFLOAT, ["a", "b", "c"]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c"]),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        feeds = {
+            "X1": self._range(8, 3, 32),
+            "X2": self._range(8, 3, 32),
+            "scale": self._range(32),
+            "bias": self._range(32),
+        }
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SkipLayerNormalization"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertIn("SkipLayerNormalization", [n.op_type for n in opt_onx.graph.node])
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0].ravel(), got[0].ravel())
+        self.assertEqualArray(expected[0], got[0])
+
     @unittest.skip("optimizer not ready")
     def test_rotary_embedding(self):
         from onnxruntime import InferenceSession
