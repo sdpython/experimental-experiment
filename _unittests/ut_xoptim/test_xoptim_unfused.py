@@ -1,7 +1,7 @@
 import unittest
 from typing import Optional
 import numpy as np
-from onnx import TensorProto, helper as oh, numpy_helper as onh
+from onnx import ModelProto, TensorProto, helper as oh, numpy_helper as onh
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xbuilder.graph_builder import GraphBuilder, OptimizationOptions
@@ -84,6 +84,50 @@ class TestXoptimUnfused(ExtTestCase):
         set_types = set(n.op_type for n in nodes)
         self.assertNotIn("LayerNormalization", set_types)
         self.assertEqual(set_types, {"Div", "ReduceMean", "Sub", "Pow", "Sqrt"})
+
+    def test_layer_normalization_simple_as_proto(self):
+        dtype = np.float32
+        model = self._get_model_redln(dtype=dtype, axis=0, fixed=False)
+        set_types0 = set(n.op_type for n in model.graph.node)
+        self.assertEqual(set_types0, {"Pow", "Sub", "Sqrt", "Div", "ReduceMean"})
+
+        feeds = {"X": (self._range(2, 3) + np.array([1, 2, 3])).astype(dtype)}
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["LayerNormalization"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        set_types = set(n.op_type for n in opt_onx.graph.node)
+        self.assertEqual(set_types, {"LayerNormalization", "Shape", "ConstantOfShape"})
+
+        ref1 = ExtendedReferenceEvaluator(model)
+        refo = ExtendedReferenceEvaluator(opt_onx)
+        self.assertEqualArray(ref1.run(None, feeds)[0], refo.run(None, feeds)[0], atol=1e-6)
+
+        for node in opt_onx.graph.node:
+            if node.op_type == "LayerNormalization":
+                input_names = list(node.input)
+                output_names = list(node.output)
+
+        nodes_model = unfused_nodes(model, input_names, output_names, as_proto=True)
+        self.assertIsInstance(nodes_model, ModelProto)
+
+        all_in, all_out = set(), set()
+        for node in opt_onx.graph.node:
+            all_in |= set(node.input)
+            all_out |= set(node.output)
+        self.assertSetContained(set(input_names), all_in)
+        self.assertSetContained(set(output_names), all_out)
+        set_types = set(n.op_type for n in nodes_model.graph.node)
+        self.assertNotIn("LayerNormalization", set_types)
+        self.assertEqual(set_types, {"Div", "ReduceMean", "Sub", "Pow", "Sqrt"})
+
+        final = ExtendedReferenceEvaluator(nodes_model)
+        self.assertEqualArray(ref1.run(None, feeds)[0], final.run(None, feeds)[0], atol=1e-6)
 
 
 if __name__ == "__main__":

@@ -532,6 +532,10 @@ def pretty_onnx(
             return f"{text}\n{suffix}"
         return f"{text}  ---  {rows[0]}"
 
+    if isinstance(onx, TensorProto):
+        shape = "x".join(map(str, onx.dims))
+        return f"TensorProto:{onx.data_type}:{shape}:{onx.name}"
+
     try:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot
 

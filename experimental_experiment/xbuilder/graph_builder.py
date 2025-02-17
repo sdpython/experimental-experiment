@@ -3443,6 +3443,36 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.set_type(old_name, elem_type)
         return name
 
+    def make_tensor_value_info_from_name(self, name: str, verbose: int = 0) -> ValueInfoProto:
+        """
+        Creates a ValueInfoProto based on the information available on
+        the graph.
+        """
+        if self.has_type(name) and self.has_rank(name):
+            if self.has_shape(name):
+                out = oh.make_tensor_value_info(
+                    name, self.get_type(name), self.get_shape(name)
+                )
+                if verbose > 1:
+                    print(
+                        f"[GraphBuilder-{self._hash()}.make_tensor_output] "
+                        f"{name}[{self.get_type(name)}:R{self.get_shape(name)}]"
+                    )
+            else:
+                out = oh.make_tensor_value_info(
+                    name, self.get_type(name), [None] * self.get_rank(name)
+                )
+                if verbose > 1:
+                    print(
+                        f"[GraphBuilder-{self._hash()}.make_tensor_output] "
+                        f"{name}[{self.get_type(name)}:R{self.get_rank(name)}]"
+                    )
+        else:
+            out = oh.make_value_info(name, TypeProto())
+            if verbose > 1:
+                print(f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}")
+        return out
+
     def select_outputs(self, output_names: List[str]):
         """
         Selects new outputs. The type is assumed to be unknown.
@@ -3453,29 +3483,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         new_outputs = []
         for name in output_names:
-            if self.has_type(name) and self.has_rank(name):
-                if self.has_shape(name):
-                    out = oh.make_tensor_value_info(
-                        name, self.get_type(name), self.get_shape(name)
-                    )
-                    if self.verbose > 1:
-                        print(
-                            f"[GraphBuilder-{self._hash()}.make_tensor_output] "
-                            f"{name}[{self.get_type(name)}:R{self.get_shape(name)}]"
-                        )
-                else:
-                    out = oh.make_tensor_value_info(
-                        name, self.get_type(name), [None] * self.get_rank(name)
-                    )
-                    if self.verbose > 1:
-                        print(
-                            f"[GraphBuilder-{self._hash()}.make_tensor_output] "
-                            f"{name}[{self.get_type(name)}:R{self.get_rank(name)}]"
-                        )
-            else:
-                out = oh.make_value_info(name, TypeProto())
-                if self.verbose > 1:
-                    print(f"[GraphBuilder-{self._hash()}.make_tensor_output] {name}")
+            out = self.make_tensor_value_info_from_name(name, verbose=self.verbose)
             new_outputs.append(out)
 
         self.outputs = new_outputs
@@ -4307,7 +4315,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         return output_names
 
     def _build_large_initializers(
-        self, external_threshold: int, full_parameter_name: bool = True
+        self,
+        external_threshold: int,
+        full_parameter_name: bool = True,
+        subset: Optional[Set[str]] = None,
     ):
         assert isinstance(
             external_threshold, int
@@ -4315,6 +4326,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         new_inits = {}
         large_inits = {}
         for k, v in self.initializers_dict.items():
+            if subset and k not in subset:
+                continue
             if self._parameter_renaming and (
                 (full_parameter_name and k in self._parameter_renaming)
             ):
@@ -4345,6 +4358,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         switch_low_high: bool,
         external_threshold: Union[bool, int],
         full_parameter_name: bool = True,
+        subset: Optional[Set[str]] = None,
     ) -> Tuple[List[TensorProto], Dict[str, TensorProto]]:
         """
         Builds initializers.
@@ -4356,6 +4370,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             or a number, if the threshold is specified and large_model is False,
             then all tensors above this threshold are ignored
         :param full_parameter_name: keeps the full name for the parameters or not
+        :param subset: only consider a subset of the initializers
         :return: a list of tensors to stored in the model,
             another list to tensors stored outside the model
         """
@@ -4369,7 +4384,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         init_dict, large_inits = (
             self._build_large_initializers(
-                external_threshold, full_parameter_name=full_parameter_name
+                external_threshold, full_parameter_name=full_parameter_name, subset=subset
             )
             if large_model
             else (self.initializers_dict, {})
@@ -4384,6 +4399,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             initializer = []
             for k, v in init_dict.items():
+                if subset and k not in subset:
+                    continue
                 if self._parameter_renaming and (
                     (full_parameter_name and k in self._parameter_renaming)
                 ):
@@ -4479,6 +4496,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         large_inits = {}
         res = []
         for k, v in init_dict.items():
+            if subset and k not in subset:
+                continue
             if self._parameter_renaming and (
                 (full_parameter_name and k in self._parameter_renaming)
             ):
