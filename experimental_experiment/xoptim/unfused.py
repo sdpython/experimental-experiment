@@ -3,6 +3,7 @@ from typing import List, Union
 import onnx
 import onnx.helper as oh
 from ..xbuilder import GraphBuilder
+from ..helpers import from_array_extended
 
 
 def unfused_nodes(
@@ -121,7 +122,10 @@ def unfused_nodes(
     # For a whole model, let's consider the missing inputs.
     input_names_all = input_names.copy()
     known = set(input_names)
+    all_names = set()
     for node in keep:
+        all_names |= set(node.input)
+        all_names |= set(node.output)
         for i in node.input:
             if i not in known:
                 known.add(i)
@@ -145,6 +149,16 @@ def unfused_nodes(
     assert (
         not large_inits
     ), f"Not yet implemeted with large initializers large_inits={set(large_inits)}"
+
+    # We convert constants to initializers.
+    init_names = set(i.name for i in inits)
+    for name in init:
+        if name in init_names:
+            continue
+        # A constant.
+        cst = onx.get_constant(name, computed_value=True)
+        inits.append(from_array_extended(cst, name=name))
+
     model = oh.make_model(
         oh.make_graph(
             keep,
@@ -156,4 +170,7 @@ def unfused_nodes(
         opset_imports=[oh.make_opsetid(*o) for o in onx.opsets.items()],
     )
     model.graph.initializer.extend(inits)
+    model.graph.value_info.extend(
+        onx.make_tensor_value_info_from_name(n) for n in all_names if onx.has_shape(n)
+    )
     return model
