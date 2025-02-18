@@ -46,6 +46,7 @@ from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
 )
+from experimental_experiment.xbuilder.reverse_graph_builder import to_graph_builder_code
 
 
 class NanEuclidean(torch.nn.Module):
@@ -731,3 +732,14 @@ def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
 # This does not work yet.
 validate_onnx(5, 10, onx)
 validate_onnx(50, 40, onx)
+
+# %%
+# ModelProto to python Code
+# +++++++++++++++++++++++++
+#
+# We finally call function :func:`to_graph_builder_code
+# <experimental_experiment.xbuilder.reverse_graph_builder.to_graph_builder_code>`
+# to convert the onnx model into pseudo code if that helps moving that code
+# to a converter library (:epkg:`sklearn-onnx`).
+
+print(to_graph_builder_code(onnx.inliner.inline_local_functions(onx)))

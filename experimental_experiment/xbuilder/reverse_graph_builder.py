@@ -16,6 +16,9 @@ class CustomBuilderEmitter(BuilderEmitter):
             return f"{op_type}AnyOpset"
         return op_type
 
+    def _clean_result_name(self, name):
+        return name.replace("#", "__")
+
 
 def to_graph_builder_code(proto: onnx.ModelProto, function_name: str = "build_model") -> str:
     """
