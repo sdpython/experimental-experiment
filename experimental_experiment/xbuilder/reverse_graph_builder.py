@@ -18,7 +18,7 @@ class CustomBuilderEmitter(BuilderEmitter):
         return op_type
 
     def _clean_result_name(self, name):
-        return name.replace("#", "__")
+        return name.replace("#", "__").replace("-", "_")
 
     def _emit_end_function(self, **kwargs: Dict[str, Any]) -> List[str]:
         rows = super()._emit_end_function(**kwargs)
