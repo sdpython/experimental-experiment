@@ -742,4 +742,4 @@ validate_onnx(50, 40, onx)
 # to convert the onnx model into pseudo code if that helps moving that code
 # to a converter library (:epkg:`sklearn-onnx`).
 
-print(to_graph_builder_code(onnx.inliner.inline_local_functions(onx)))
+print(to_graph_builder_code(onx))

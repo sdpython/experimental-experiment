@@ -1,3 +1,4 @@
+from typing import Any, Dict, List
 import onnx
 from onnx_array_api.translate_api.translate import Translater
 from onnx_array_api.translate_api.builder_emitter import BuilderEmitter
@@ -18,6 +19,14 @@ class CustomBuilderEmitter(BuilderEmitter):
 
     def _clean_result_name(self, name):
         return name.replace("#", "__")
+
+    def _emit_end_function(self, **kwargs: Dict[str, Any]) -> List[str]:
+        rows = super()._emit_end_function(**kwargs)
+        return [
+            *rows[:-1],
+            f"    opts = FunctionOptions(name={self.f_name!r}, domain={self.f_domain!r})",
+            "    g.make_local_function(gr, opts, optimize=False)",
+        ]
 
 
 def to_graph_builder_code(proto: onnx.ModelProto, function_name: str = "build_model") -> str:

@@ -74,6 +74,7 @@ class Opset:
         "Squeeze": 1,
         "Sub": 1,
         "Tile": 1,
+        "TopK": 2,
         "Transpose": 1,
         "Trilu": 1,
         "Unsqueeze": 1,
@@ -205,6 +206,16 @@ class Opset:
             return self.ReduceMax(*args, name=name, **kwargs)
         return self.ReduceMax(
             args[0], axes=self._iaxes("ReduceMax", args[1]), name=name, **kwargs
+        )
+
+    def ReduceMinAnyOpset(self, *args, name: str = "ReduceMinAnyOpset", **kwargs):
+        if len(args) == 1:
+            return self.ReduceMin(*args, name=name, **kwargs)
+        assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
+        if self.container.main_opset >= 18:
+            return self.ReduceMin(*args, name=name, **kwargs)
+        return self.ReduceMin(
+            args[0], axes=self._iaxes("ReduceMin", args[1]), name=name, **kwargs
         )
 
     def ReduceMeanAnyOpset(self, *args, name: str = "ReduceMeanAnyOpset", **kwargs):

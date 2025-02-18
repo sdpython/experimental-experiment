@@ -3065,6 +3065,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             # dynamic shapes were defined as tuple,
             # we need to propagate the information to the names
             # dynamic_dimensions_source={'dim': [{'axis': 1, 'input_name': 0}]}
+            # Let's replace None by strings.
+            #
             for dim_name, v in self.dynamic_dimensions_source.items():
                 for d in v:
                     if isinstance(d["input_name"], int) and d["input_name"] == len(
@@ -3099,6 +3101,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                                 dim_name if i == axis else shape[i] for i in range(len(shape))
                             )
 
+        if shape is not None:
+            shape = tuple(
+                (sh if sh is not None else self.unique_dimension_name(input_name))
+                for sh in shape
+            )
         dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
         self._fill_dynamic_alias(shape, name)
         new_dyn_shape = self._fill_dynamic_alias(dyn_shape, name)
@@ -3391,6 +3398,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         elem_type = _get_type(elem_type, False)
         if not self.as_function and not allow_untyped_output and elem_type == 0:
             raise RuntimeError(f"Undefined element type for {name!r}.")
+        if shape is not None:
+            shape = tuple(
+                (sh if sh is not None else self.unique_dimension_name(name)) for sh in shape
+            )
         dyn_shape = self.verify_shape(shape, name=name, elem_type=elem_type)
 
         index_output = len(self.outputs)

@@ -136,6 +136,7 @@ class OxsOpset:
         "Squeeze": 1,
         "Sub": 1,
         "Tile": 1,
+        "TopK": 2,
         "Transpose": 1,
         "Unsqueeze": 1,
         "Where": 1,
