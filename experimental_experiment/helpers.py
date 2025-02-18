@@ -169,10 +169,18 @@ def string_type(
                 for o in obj
             )
             return f"({js})"
+        tt = string_type(
+            obj[0],
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+            ignore=ignore,
+            limit=limit,
+        )
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
             mini, maxi, avg = min(obj), max(obj), sum(float(_) for _ in obj) / len(obj)
-            return f"(...)#{len(obj)}[{mini},{maxi}:A[{avg}]]"
-        return f"(...)#{len(obj)}" if with_shape else "(...)"
+            return f"({tt},...)#{len(obj)}[{mini},{maxi}:A[{avg}]]"
+        return f"({tt},...)#{len(obj)}" if with_shape else f"({tt},...)"
     if isinstance(obj, list):
         if len(obj) < 10:
             js = ",".join(
@@ -187,10 +195,18 @@ def string_type(
                 for o in obj
             )
             return f"#{len(obj)}[{js}]"
+        tt = string_type(
+            obj[0],
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+            ignore=ignore,
+            limit=limit,
+        )
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
             mini, maxi, avg = min(obj), max(obj), sum(float(_) for _ in obj) / len(obj)
-            return f"[...]#{len(obj)}[{mini},{maxi}:{avg}]"
-        return f"[...]#{len(obj)}" if with_shape else "[...]"
+            return f"[{tt},...]#{len(obj)}[{mini},{maxi}:{avg}]"
+        return f"[{tt},...]#{len(obj)}" if with_shape else f"[{tt},...]"
     if isinstance(obj, set):
         if len(obj) < 10:
             js = ",".join(

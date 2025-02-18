@@ -285,11 +285,15 @@ class NeuronMambaCache(torch.nn.Module):
                 self.num_hidden_layers = 64
                 self.dtype = torch.float32
 
-        cache = transformers.cache_utils.MambaCache(_config(), batch_size=1)
+        cache = transformers.cache_utils.MambaCache(_config(), max_batch_size=1)
         cache.conv_states += 1
         cache.ssm_states += 2
-        cache.conv_states = cache.conv_states.to(device).to(torch.float32)
-        cache.ssm_states = cache.ssm_states.to(device).to(torch.float32)
+        if isinstance(cache.conv_states, list):
+            cache.conv_states = [t.to(device).to(torch.float32) for t in cache.conv_states]
+            cache.ssm_states = [t.to(device).to(torch.float32) for t in cache.ssm_states]
+        else:
+            cache.conv_states = cache.conv_states.to(device).to(torch.float32)
+            cache.ssm_states = cache.ssm_states.to(device).to(torch.float32)
         return {"x": torch.randn(1, 1, 3, 8).to(device), "dc": cache}
 
     config = MakeConfig(download=False, to_tuple=False)

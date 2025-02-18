@@ -7,12 +7,13 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
+from experimental_experiment.helpers import string_type
 
 
 class TestOnnxExportErrors(ExtTestCase):
     @requires_transformers("4.43")
     @skipif_ci_windows("not working on Windows")
-    def test_pytree_flatten(self):
+    def test_pytree_flatten_mamba_cache(self):
         import torch
         import torch.utils._pytree as py_pytree
         from transformers.cache_utils import MambaCache
@@ -25,18 +26,18 @@ class TestOnnxExportErrors(ExtTestCase):
                 self.num_hidden_layers = 64
                 self.dtype = torch.float16
 
-        cache = MambaCache(_config(), batch_size=1)
+        cache = MambaCache(_config(), max_batch_size=1)
 
         with bypass_export_some_errors():
             values, spec = py_pytree.tree_flatten(cache)
             cache2 = py_pytree.tree_unflatten(values, spec)
             self.assertEqual(cache.dtype, cache2.dtype)
-            self.assertEqual(cache.batch_size, cache2.batch_size)
+            self.assertEqual(cache.max_batch_size, cache2.max_batch_size)
             self.assertEqual(cache.intermediate_size, cache2.intermediate_size)
             self.assertEqual(cache.ssm_state_size, cache2.ssm_state_size)
             self.assertEqual(cache.conv_kernel_size, cache2.conv_kernel_size)
-            self.assertEqualArray(cache.conv_states, cache2.conv_states)
-            self.assertEqualArray(cache.ssm_states, cache2.ssm_states)
+            self.assertEqualArrayAny(cache.conv_states, cache2.conv_states)
+            self.assertEqualArrayAny(cache.ssm_states, cache2.ssm_states)
 
     @requires_transformers("4.43")
     @skipif_ci_windows("not working on Windows")
@@ -53,12 +54,22 @@ class TestOnnxExportErrors(ExtTestCase):
                 self.dtype = torch.float16
 
         class Model(torch.nn.Module):
-            def forward(self, x, cache: MambaCache):
-                return cache.conv_states + x
+            def forward(self, x: torch.Tensor, cache: MambaCache):
+                x1 = cache.ssm_states[0] + x
+                x2 = cache.conv_states[0][:, :, ::2] + x1
+                return x2
+
+        cache = MambaCache(_config(), max_batch_size=1, device="cpu")
+        self.assertEqual(
+            string_type(cache), "MambaCache(conv_states=[T10r3,...], ssm_states=[T10r3,...])"
+        )
+        x = torch.ones(2, 8, 16).to(torch.float16)
+        model = Model()
+        model(x, cache)
 
         with bypass_export_some_errors():
-            cache = MambaCache(_config(), batch_size=1)
-            torch.export.export(Model(), (torch.ones(8, 32), cache))
+            cache = MambaCache(_config(), max_batch_size=1, device="cpu")
+            torch.export.export(Model(), (x, cache))
 
 
 if __name__ == "__main__":

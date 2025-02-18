@@ -14,8 +14,12 @@ def flatten_outputs(output: Any) -> Iterator[Any]:
     elif hasattr(output, "shape"):
         yield output
     elif output.__class__.__name__ == "MambaCache":
-        yield output.conv_states
-        yield output.ssm_states
+        if isinstance(output.conv_states, list):
+            yield from flatten_outputs(output.conv_states)
+            yield from flatten_outputs(output.ssm_states)
+        else:
+            yield output.conv_states
+            yield output.ssm_states
     elif output.__class__.__name__ == "DynamicCache":
         yield output.key_cache
         yield output.value_cache

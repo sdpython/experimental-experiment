@@ -300,8 +300,12 @@ class ModelRunner:
 
         if o.__class__.__name__ == "MambaCache":
             cp = copy.deepcopy(o)
-            cp.conv_states = o.conv_states.to(dtype_or_device)
-            cp.ssm_states = o.ssm_states.to(dtype_or_device)
+            if isinstance(o.conv_states, list):
+                cp.conv_states = [t.to(dtype_or_device) for t in o.conv_states]
+                cp.ssm_states = [t.to(dtype_or_device) for t in o.ssm_states]
+            else:
+                cp.conv_states = o.conv_states.to(dtype_or_device)
+                cp.ssm_states = o.ssm_states.to(dtype_or_device)
             return cp
 
         try:
@@ -474,7 +478,11 @@ class ModelRunner:
             elif i.__class__.__name__ == "DynamicCache" and hasattr(i, "key_cache"):
                 devices.append(i.key_cache[0].get_device() if i.key_cache else None)
             elif i.__class__.__name__ == "MambaCache" and hasattr(i, "conv_states"):
-                devices.append(i.conv_states.get_device())
+                devices.append(
+                    i.conv_states[0].get_device()
+                    if isinstance(i.conv_stats, list)
+                    else i.conv_states.get_device()
+                )
             elif (
                 isinstance(i, list) and i and isinstance(i[0], tuple)
             ):  # a flattened cache (Bert)
