@@ -92,7 +92,9 @@ def get_input_cache(
         #     dtype=dtype,
         # )
 
-        cache = transformers.cache_utils.MambaCache(_config(), max_batch_size=batch_size)
+        cache = transformers.cache_utils.MambaCache(
+            _config(), max_batch_size=batch_size, device=device
+        )
         if isinstance(cache.conv_states, list):
             cache.conv_states = [
                 torch.randn(t.shape).to(torch.float32) for t in cache.conv_states

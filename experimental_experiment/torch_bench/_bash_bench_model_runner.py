@@ -480,7 +480,7 @@ class ModelRunner:
             elif i.__class__.__name__ == "MambaCache" and hasattr(i, "conv_states"):
                 devices.append(
                     i.conv_states[0].get_device()
-                    if isinstance(i.conv_stats, list)
+                    if isinstance(i.conv_states, list)
                     else i.conv_states.get_device()
                 )
             elif (
@@ -2308,8 +2308,12 @@ class ModelRunner:
                 assert isinstance(
                     i, transformers.cache_utils.MambaCache
                 ), f"unexpected type {type(i)}"
-                new_inputs.append(i.conv_states)
-                new_inputs.append(i.ssm_states)
+                if isinstance(i.conv_states, list):
+                    new_inputs.extend(i.conv_states)
+                    new_inputs.extend(i.ssm_states)
+                else:
+                    new_inputs.append(i.conv_states)
+                    new_inputs.append(i.ssm_states)
                 continue
             raise AssertionError(f"Unable to process input type {type(i)}")
 
@@ -2324,7 +2328,8 @@ class ModelRunner:
             new_inputs = new_inputs[: len(names)]
 
         assert len(names) == len(new_inputs), (
-            f"Mismatch number of inputs, {len(inputs)} ({len(new_inputs)}) "
+            f"Mismatch number of inputs, len(inputs)={len(inputs)} "
+            f"len(names)={len(names)}, len(new_inputs)={len(new_inputs)}, "
             f"inputs, there are {len(new_inputs)} flattened inputs.\n----\n"
             f"names={names}\n----\ninput types={string_type(inputs)}\n----\n"
             f"new input types={string_type(new_inputs)}\n----\n"

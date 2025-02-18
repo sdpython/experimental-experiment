@@ -7,8 +7,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
-class TestTools(ExtTestCase):
-
+class TestGraphBuilder(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     @hide_stdout
     def test_inline_1_function(self):

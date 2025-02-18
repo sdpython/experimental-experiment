@@ -1007,8 +1007,8 @@ def requires_onnx_array_api(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import onnx_array_api
 
-    if pv.Version(".".join(onnx_array_api.__version__.split(".")[:2])) < pv.Version(version):
-        msg = f"onnx version {onnx_array_api.__version__} < {version}: {msg}"
+    if pv.Version(".".join(onnx_array_api.__version__.split(".")[:3])) < pv.Version(version):
+        msg = f"onnx-array-api version {onnx_array_api.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 

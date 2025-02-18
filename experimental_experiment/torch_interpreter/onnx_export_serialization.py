@@ -63,7 +63,12 @@ def unflatten_mamba_cache(
 
     from transformers.cache_utils import MambaCache
 
-    cache = MambaCache(_config(), max_batch_size=1, dtype=values[-1][0].dtype)
+    cache = MambaCache(
+        _config(),
+        max_batch_size=1,
+        dtype=values[-1][0].dtype,
+        device="cpu" if values[-1][0].get_device() < 0 else "cuda",
+    )
     values = dict(zip(context, values))
     for k, v in values.items():
         setattr(cache, k, v)
