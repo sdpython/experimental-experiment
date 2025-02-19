@@ -7431,18 +7431,27 @@ class GraphBuilder(_GraphBuilderRuntime):
                 # This cannot be a shape anymore.
                 node.doc_string += "#SV-Unsq/2"
                 return False
-            cst = (
-                self.get_constant(node.input[1], exc=False, computed_value=True)
-                if len(node.input) > 1
-                else tuple(self.get_attribute(node, "axes").ints)
+            if not self.has_rank(node.input[0]) and values_0 is None:
+                node.doc_string += "#SV-Unsq/3"
+                return False
+            assert self.has_rank(node.input[0]), (
+                f"Rank of {node.input[0]!r} is unknown but "
+                f"its value is {values_0!r}{self.get_debug_msg()}"
             )
-            assert cst is None or len(cst.shape) > 0, (
-                f"Issue with name={node.input[1]!r}, cst={cst}, values_0={values_0}"
-                f"{self.get_debug_msg()}"
-            )
-            if cst is not None and tuple(cst) == (0,) and isinstance(values_0, (int, str)):
-                node.doc_string += "#SV-Unsq3"
-                self.set_value_shape(node.output[0], (values_0,))
+            if len(node.input) > 1:
+                cst = self.get_constant(node.input[1], exc=False, computed_value=True)
+                assert (
+                    cst.shape
+                ), f"Value={cst!r} is wrong for {node.input[0]}{self.get_debug_msg()}"
+                cst = tuple(cst)
+            else:
+                cst = tuple(self.get_attribute(node, "axes").ints)
+                assert cst, f"Value={cst!r} is wrong for {node.input[0]}{self.get_debug_msg()}"
+            if cst is not None and len(cst) == 1 and self.get_rank(node.input[0]) == 0:
+                node.doc_string += "#SV-Unsq4"
+                self.set_value_shape(
+                    node.output[0], (node.input[0],) if values_0 is None else (values_0,)
+                )
                 return True
 
         # after this point, it is all about operator between shapes.
@@ -8060,10 +8069,17 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 self._check_constants("after-inline_functions")
 
-        assert not builder.initializers_dict or function_options.return_initializer, (
-            f"incompatible options, return_initializer must be True "
+        assert (
+            not builder.initializers_dict
+            or function_options.return_initializer
+            or function_options.move_initializer_to_constant
+        ), (
+            f"incompatible options, return_initializer or "
+            f"move_initializer_to_constant must be True, "
+            f"move_initializer_to_constant={function_options.move_initializer_to_constant}, "
+            f"function_options.inline={function_options.inline}, "
             f"but function_options={function_options!r} with {len(self.initializers_dict)} "
-            f"initiliazers"
+            f"initializers"
         )
         fct = builder.to_onnx(
             function_options=function_options,

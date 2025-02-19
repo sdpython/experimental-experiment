@@ -26,6 +26,8 @@ import io
 import logging
 import math
 import numbers
+import subprocess
+import sys
 import warnings
 from typing import Any, Dict, List, Optional
 import numpy as np
@@ -101,12 +103,12 @@ class NanEuclidean(torch.nn.Module):
 # ++++++++++
 
 model = NanEuclidean()
-X = torch.randn((5, 2))
-Y = torch.randn((5, 2))
+X = torch.randn((5, 3))
+Y = torch.randn((5, 3))
 for i in range(5):
-    X[i, i % 2] = torch.nan
+    X[i, i % X.shape[1]] = torch.nan
 for i in range(4):
-    Y[i + 1, i % 2] = torch.nan
+    Y[i + 1, i % X.shape[1]] = torch.nan
 
 d1 = sklearn.metrics.nan_euclidean_distances(X.numpy(), Y.numpy())
 d2 = model(X, Y)
@@ -164,7 +166,9 @@ class SubDonorsIdx(torch.nn.Module):
 
     def forward(self, dist_pot_donors, n_neighbors):
         donors_idx = self._topk(dist_pot_donors, n_neighbors)
-        donors_dist = dist_pot_donors[torch.arange(donors_idx.shape[0])[:, None], donors_idx]
+        indices = torch.arange(donors_idx.shape[0])
+        indices_extended = indices[:, None]
+        donors_dist = dist_pot_donors[indices_extended, donors_idx]
         return donors_idx, donors_dist
 
 
@@ -324,7 +328,7 @@ class TorchKNNImputer(torch.nn.Module):
         # results of fitting
         self.indicator_ = knn_imputer.indicator_
         # The training results.
-        # self._fit_X = torch.from_numpy(knn_imputer._fit_X)
+        # self._fit_X = torch.from_numpy(knn_imputer._fit_X.astype(np.float32))
         # self._mask_fit_X = torch.from_numpy(knn_imputer._mask_fit_X)
         # self._valid_mask = torch.from_numpy(knn_imputer._valid_mask)
 
@@ -398,12 +402,12 @@ class TorchKNNImputer(torch.nn.Module):
 
 
 def validate(size, sizey):
-    X = torch.randn((size, 2))
-    Y = torch.randn((sizey, 2))
-    for i in range(5):
-        X[i, i % 2] = torch.nan
-    for i in range(4):
-        Y[i + 1, i % 2] = torch.nan
+    X = torch.randn((size, 3))
+    Y = torch.randn((sizey, 3))
+    for i in range(X.shape[0]):
+        X[i, i % X.shape[1]] = torch.nan
+    for i in range(Y.shape[0] - 1):
+        Y[i + 1, i % X.shape[1]] = torch.nan
 
     knn_imputer = sklearn.impute.KNNImputer(n_neighbors=3)
     knn_imputer.fit(X)
@@ -414,7 +418,7 @@ def validate(size, sizey):
     p2 = model.transform(
         torch.from_numpy(knn_imputer._mask_fit_X),
         torch.from_numpy(knn_imputer._valid_mask),
-        torch.from_numpy(knn_imputer._fit_X),
+        torch.from_numpy(knn_imputer._fit_X.astype(np.float32)),
         Y,
     )
     d = max_diff(p1, p2)
@@ -425,7 +429,7 @@ def validate(size, sizey):
     p2 = model.transform(
         torch.from_numpy(knn_imputer._mask_fit_X),
         torch.from_numpy(knn_imputer._valid_mask),
-        torch.from_numpy(knn_imputer._fit_X),
+        torch.from_numpy(knn_imputer._fit_X.astype(np.float32)),
         Y[1:2],
     )
     d = max_diff(p1, p2)
@@ -456,7 +460,7 @@ inputs = [
         (
             torch.from_numpy(knn50._mask_fit_X),
             torch.from_numpy(knn50._valid_mask),
-            torch.from_numpy(knn50._fit_X),
+            torch.from_numpy(knn50._fit_X.astype(np.float32)),
             Y40,
         ),
         {},
@@ -465,7 +469,7 @@ inputs = [
         (
             torch.from_numpy(knn5._mask_fit_X),
             torch.from_numpy(knn5._valid_mask),
-            torch.from_numpy(knn5._fit_X),
+            torch.from_numpy(knn5._fit_X.astype(np.float32)),
             Y10,
         ),
         {},
@@ -622,6 +626,9 @@ dispatcher = Dispatcher(
         (
             "diag_lib::C_TorchKNNImputer_columns_1___calc_impute__donors_idx__topk"
         ): onnx_topk_indices,
+        (
+            "diag_lib::C_TorchKNNImputer_columns_2___calc_impute__donors_idx__topk"
+        ): onnx_topk_indices,
     }
 )
 
@@ -651,24 +658,24 @@ print(pretty_onnx(onx))
 
 
 def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
-    X = torch.randn((size, 2))
-    Y = torch.randn((sizey, 2))
-    for i in range(5):
-        X[i, i % 2] = torch.nan
-    for i in range(4):
-        Y[i + 1, i % 2] = torch.nan
+    X = torch.randn((size, 3))
+    Y = torch.randn((sizey, 3))
+    for i in range(X.shape[0]):
+        X[i, i % X.shape[1]] = torch.nan
+    for i in range(Y.shape[0] - 1):
+        Y[i + 1, i % X.shape[1]] = torch.nan
 
     knn_imputer = sklearn.impute.KNNImputer(n_neighbors=3)
     knn_imputer.fit(X)
 
     model = TorchKNNImputer(knn_imputer)
 
-    p1 = knn_imputer.transform(Y)
+    expected = p1 = knn_imputer.transform(Y)
 
     model_inputs = (
         torch.from_numpy(knn_imputer._mask_fit_X),
         torch.from_numpy(knn_imputer._valid_mask),
-        torch.from_numpy(knn_imputer._fit_X),
+        torch.from_numpy(knn_imputer._fit_X.astype(np.float32)),
         Y,
     )
     p2 = model.transform(*model_inputs)
@@ -678,7 +685,7 @@ def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
         print(f"Torch Discrepancies for size={size} and sizey={sizey}, d={d}")
 
     input_names = [i.name for i in onx.graph.input]
-    feeds = dict(zip(input_names, [t.numpy() for t in model_inputs]))
+    feeds = feeds0 = dict(zip(input_names, [t.numpy() for t in model_inputs]))
 
     if verbose:
         print("python: loading the model...")
@@ -712,7 +719,7 @@ def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
     model_inputs = (
         torch.from_numpy(knn_imputer._mask_fit_X),
         torch.from_numpy(knn_imputer._valid_mask),
-        torch.from_numpy(knn_imputer._fit_X),
+        torch.from_numpy(knn_imputer._fit_X.astype(np.float32)),
         Y[1:2],
     )
     p1 = knn_imputer.transform(Y[1:2])
@@ -721,16 +728,17 @@ def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
     assert d["abs"] < 1e-5, f"Discrepancies for size={size} and sizey={sizey}, d={d}"
     feeds = dict(zip(input_names, [t.numpy() for t in model_inputs]))
     if verbose:
-        print("onnxruntime: running the model...")
+        print("ReferenceEvaluator: running the model...")
     got = sess.run(None, feeds)
     d = max_diff(p1, got[0])
     assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
     if verbose:
         print("done")
+    return feeds0, expected
 
 
 # This does not work yet.
-validate_onnx(5, 10, onx)
+feeds, expected = validate_onnx(5, 10, onx)
 validate_onnx(50, 40, onx)
 
 # %%
@@ -743,6 +751,26 @@ validate_onnx(50, 40, onx)
 # to a converter library (:epkg:`sklearn-onnx`).
 
 code = to_graph_builder_code(onx)
+addition = (
+    f"""
+
+feeds = {feeds!r}
+expected = {expected!r}
+ref = ExtendedReferenceEvaluator(model)
+got = ref.run(None, feeds)
+print("disrepancies:", max_diff(expected, got[0]))
+""".replace(
+        "nan", "np.nan"
+    )
+    .replace("array", "np.array")
+    .replace("float32", "np.float32")
+)
+code = f"""
+from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.helpers import max_diff
+{code}
+{addition}
+"""
 print(code)
 
 
@@ -750,3 +778,7 @@ print(code)
 # Let's finally check it produces the same results.
 with open("plot_torch_sklearn_201_knnpy.py", "w") as f:
     f.write(code)
+
+# %%
+# Let's run it...
+subprocess.run([sys.executable, "plot_torch_sklearn_201_knnpy.py"])

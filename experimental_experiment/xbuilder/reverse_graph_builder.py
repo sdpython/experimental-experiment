@@ -24,7 +24,11 @@ class CustomBuilderEmitter(BuilderEmitter):
         rows = super()._emit_end_function(**kwargs)
         return [
             *rows[:-1],
-            f"    opts = FunctionOptions(name={self.f_name!r}, domain={self.f_domain!r})",
+            f"    opts = FunctionOptions("
+            f"        name={self.f_name!r},"
+            f"        domain={self.f_domain!r},"
+            f"        move_initializer_to_constant=True,"
+            f"    )",
             "    g.make_local_function(gr, opts, optimize=False)",
         ]
 
