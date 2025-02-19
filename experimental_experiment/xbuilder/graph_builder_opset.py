@@ -212,7 +212,7 @@ class Opset:
         if len(args) == 1:
             return self.ReduceMin(*args, name=name, **kwargs)
         assert len(args) == 2, f"ReduceMaxAnyOpset expects 2 arguments not {len(args)}"
-        if self.container.main_opset >= 18:
+        if self.builder.main_opset >= 18:
             return self.ReduceMin(*args, name=name, **kwargs)
         return self.ReduceMin(
             args[0], axes=self._iaxes("ReduceMin", args[1]), name=name, **kwargs
@@ -239,7 +239,8 @@ class Opset:
         )
 
     def SqueezeAnyOpset(self, *args, name: str = "SqueezeAnyOpset", **kwargs):
-        if len(args) == 1 and len(kwargs) == 0:
+        named_kwargs = set(k for k in kwargs if k != "outputs")
+        if len(args) == 1 and len(named_kwargs) == 0:
             return self.Squeeze(*args, name=name)
         assert len(args) == 2, f"SqueezeAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
@@ -247,8 +248,6 @@ class Opset:
         return self.Squeeze(args[0], axes=self._iaxes("Squeeze", args[1]), name=name, **kwargs)
 
     def UnsqueezeAnyOpset(self, *args, name: str = "UnsqueezeAnyOpset", **kwargs):
-        if len(args) == 1 and len(kwargs) == 0:
-            return self.Unsqueeze(*args, name=name)
         assert len(args) == 2, f"UnsqueezeAnyOpset expects 2 arguments not {len(args)}"
         if self.builder.main_opset >= 13:
             return self.Unsqueeze(*args, name=name, **kwargs)

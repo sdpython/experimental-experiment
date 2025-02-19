@@ -742,4 +742,11 @@ validate_onnx(50, 40, onx)
 # to convert the onnx model into pseudo code if that helps moving that code
 # to a converter library (:epkg:`sklearn-onnx`).
 
-print(to_graph_builder_code(onx))
+code = to_graph_builder_code(onx)
+print(code)
+
+
+# %%
+# Let's finally check it produces the same results.
+with open("plot_torch_sklearn_201_knnpy.py", "w") as f:
+    f.write(code)

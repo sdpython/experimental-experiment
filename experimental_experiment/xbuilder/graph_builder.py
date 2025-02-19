@@ -1912,8 +1912,10 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         :param name: name
         :param value: it cannot be empty
-        :param equal_to: if specified, the value is also
-            equal to this value
+        :param equal_to: if specified, the value is also equal to this value
+
+        A value can be a string (for an unknwon shape, a tuple for a shape,
+        an integer for a single scalar.
         """
         if self._debug_value_shape and name == self._debug_value_shape:
             raise AssertionError(
@@ -1926,6 +1928,24 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert not isinstance(value, tuple) or all(isinstance(d, (str, int)) for d in value), (
             f"Unexpected value for shape {name!r}, value={value!r}, "
             f"types={string_type(value)}{self.get_debug_msg()}"
+        )
+        if not self.has_rank(name):
+            if isinstance(value, tuple):
+                self.set_shape(name, (len(value),))
+            else:
+                self.set_shape(name, tuple())
+        assert self.has_rank(name), (
+            f"name={name!r}, has no rank, but it should, value={value!r}"
+            f"{self.get_debug_msg()}"
+        )
+        assert self.get_rank(name) in (0, 1), (
+            f"name={name!r} is not a shape, its rank is {self.get_rank(name)}"
+            f"{self.get_debug_msg()}"
+        )
+        assert not isinstance(value, (int, float)) or self.get_rank(name) == 0, (
+            f"Mismatch between value={value!r} and rank="
+            f"{self.get_rank(name)} for name={name!r}"
+            f"{self.get_debug_msg()}"
         )
         if equal_to is None:
             if name in self._known_value_shape:
@@ -3714,6 +3734,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{op_type}: {inputs}->{outputs}"
             )
 
+        if op_type == "Identity" and inputs == output_names:
+            # No need.
+            return output_names[0]
+
         if check is not False:
             for i in inputs:
                 assert isinstance(i, str), (
@@ -3737,7 +3761,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     continue
                 assert not self.has_name(i), (
                     f"Output {i!r} already exists for operator {op_type!r} "
-                    f"({self._hash()}){self.get_debug_msg()}"
+                    f"({self._hash()}), output_names={output_names}, inputs={inputs}"
+                    f"{self.get_debug_msg()}"
                 )
         if check is True:
             for i in inputs:
@@ -7212,7 +7237,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if cst is None or len(cst.shape) > 1:
                 continue
             with self.maybe_disable_fake_tensor_mode():
-                tu = tuple(map(int, cst)) if len(cst.shape) > 0 else (int(cst),)
+                tu = tuple(map(int, cst)) if len(cst.shape) > 0 else int(cst)
             self.set_value_shape(i, tu)
 
         if node.op_type in {"Identity", "Abs"}:
@@ -7277,11 +7302,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.doc_string += "#SV-Sh/6"
                 return False
 
-            self.set_value_shape(
-                node.output[0],
-                f"{node.input[0]}[{start.i}:{getattr(end, 'i', end)}]",
-            )
-            node.doc_string += "#SV-Sh7"
+            start = start.i
+            end = getattr(end, "i", end)
+            if isinstance(start, int) and isinstance(end, int):
+                self.set_value_shape(
+                    node.output[0], tuple(f"{node.input[0]}[{i}]" for i in range(start, end))
+                )
+                node.doc_string += "#SV-Sh7"
+            else:
+                self.set_value_shape(node.output[0], f"{node.input[0]}[{start}:{end}]")
+                node.doc_string += "#SV-Sh7"
             return True
 
         if node.op_type == "Gather":
@@ -7406,6 +7436,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if len(node.input) > 1
                 else tuple(self.get_attribute(node, "axes").ints)
             )
+            assert cst is None or len(cst.shape) > 0, (
+                f"Issue with name={node.input[1]!r}, cst={cst}, values_0={values_0}"
+                f"{self.get_debug_msg()}"
+            )
             if cst is not None and tuple(cst) == (0,) and isinstance(values_0, (int, str)):
                 node.doc_string += "#SV-Unsq3"
                 self.set_value_shape(node.output[0], (values_0,))
@@ -7430,7 +7464,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             if len(values) == 3:
                 args = []
                 for v in values:
-                    if len(v) == 1:
+                    if isinstance(v, int):
+                        args.append(v)
+                    elif len(v) == 1:
+                        # Should not happen.
                         args.append(v[0])
                     else:
                         node.doc_string += "#SV-Ra/1"

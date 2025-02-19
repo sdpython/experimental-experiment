@@ -45,9 +45,9 @@ def to_graph_builder_code(proto: onnx.ModelProto, function_name: str = "build_mo
             "import numpy as np",
             "from onnx import TensorProto",
             "from onnx.numpy_helper import from_array",
-            "from experimental_experiment.xbuilder import GraphBuilder",
+            "from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions",
             "",
             "",
-            code,
+            code.replace("array(nan", "array(np.nan"),
         ]
     )
