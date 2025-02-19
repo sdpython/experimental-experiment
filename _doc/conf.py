@@ -162,11 +162,11 @@ if int(os.environ.get("UNITTEST_GOING", "0")):
     # it fails if not run in standalone mode
     sphinx_gallery_conf["ignore_pattern"] = (
         f"{sphinx_gallery_conf['ignore_pattern'][:-3]}|"
-        f"(torch_sklearn_201)|(plot_exporter_exporter_with_dynamic_cache)).*"
+        f"(torch_sklearn_201)|(plot_exporter_exporter_with_dynamic_cache)|(_plot_torch_sklearn_201_knnpy).*"
     )
 elif pv.Version(torch.__version__) < pv.Version("2.8"):
     sphinx_gallery_conf["ignore_pattern"] = (
-        ".*((_oe_((modules)|(custom)))|(_executorch_)|(oe_scan)).*"
+        ".*((_oe_((modules)|(custom)))|(_executorch_)|(oe_scan)|(_plot_torch_sklearn_201_knnpy)).*"
     )
 
 

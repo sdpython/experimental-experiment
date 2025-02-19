@@ -776,9 +776,9 @@ print(code)
 
 # %%
 # Let's finally check it produces the same results.
-with open("plot_torch_sklearn_201_knnpy.py", "w") as f:
+with open("_plot_torch_sklearn_201_knnpy.py", "w") as f:
     f.write(code)
 
 # %%
 # Let's run it...
-subprocess.run([sys.executable, "plot_torch_sklearn_201_knnpy.py"])
+subprocess.run([sys.executable, "_plot_torch_sklearn_201_knnpy.py"])

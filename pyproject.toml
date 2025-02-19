@@ -52,6 +52,7 @@ select = [
     "SIM102", "SIM103", "SIM108", "SIM114", "SIM910",
     "UP006", "UP015", "UP027", "UP031", "UP032", "UP034", "UP035"
 ]
+"_plot_torch_sklearn_201_knnpy.py" = ["F821"]
 "_doc/examples/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
 "_doc/notebooks/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
 "_doc/recipes/plot_*.py" = ["E402", "B018", "PIE808", "SIM105", "SIM117"]
