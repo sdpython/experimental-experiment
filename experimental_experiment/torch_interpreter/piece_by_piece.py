@@ -433,8 +433,14 @@ class ModelDiagnoseOutput:
         rk = set_length.pop()
         res = {}
         for i in range(rk):
-            if len(set(s[i] for s in shapes)) > 1:
+            set_dim = set(s[i] for s in shapes)
+            if len(set_dim) > 1:
                 res[i] = dynamic
+                continue
+            if set_dim == {0}:
+                # It is unexpected to find a null dimension. Let's replace it by a dynamic one.
+                res[i] = dynamic
+                continue
         return res
 
     def guess_dynamic_shape_object(self, *objs: Any, msg: Optional[Callable] = None) -> Any:
@@ -1361,6 +1367,9 @@ class ModelDiagnoseOutput:
             setattr(self.model, self.method_name, self.forward_calling_custom_op)
             return self.forward_custom_op_schema
 
+        assert (
+            self.inputs
+        ), f"{self.full_name}: no input found, other inputs should be provided."
         if all(isinstance(t, torch.Tensor) for t in self.inputs[0]) and all(
             isinstance(t, torch.Tensor) for t in self.outputs[0]
         ):
