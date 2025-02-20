@@ -11,11 +11,11 @@ The first step is to rewrite the scikit-learn model with torch functions.
 The code is then refactored and split into submodules to be able
 to bypass some pieces :func:`torch.export.export` cannot process.
 
-torch implementation of nan_euclidean
-=====================================
+torch implementation of nan_euclidean_distances
+===============================================
 
 Let's start with a simple case, a pairwise distance.
-See :func:`sklearn.metrics.nan_euclidean`.
+See :func:`sklearn.metrics.nan_euclidean_distances`.
 
 Module
 ++++++
@@ -50,7 +50,7 @@ from experimental_experiment.xbuilder.reverse_graph_builder import to_graph_buil
 
 
 class NanEuclidean(torch.nn.Module):
-    """Implements :func:`sklearn.metrics.nan_euclidean`."""
+    """Implements :func:`sklearn.metrics.nan_euclidean_distances`."""
 
     def __init__(self, squared=False, copy=True):
         super().__init__()
@@ -129,6 +129,9 @@ print(f"discrepancies: {max_diff(d1, d2)}")
 # See :class:`sklearn.impute.KNNImputer`.
 # The code is split into several :class:`torch.nn.Module`
 # and refactored to avoid control flow.
+#
+# Module and sub modules
+# ++++++++++++++++++++++
 
 
 def _get_mask(X, value_to_mask):
@@ -550,6 +553,9 @@ knn50, Y40 = validate(50, 40)
 #
 # First step, we create two sets of inputs. A function will use this
 # to infer the dynamic shapes.
+#
+# First step: tracing intermediate outputs
+# ++++++++++++++++++++++++++++++++++++++++
 
 inputs = [
     (
@@ -744,8 +750,8 @@ print(pretty_onnx(onx))
 
 
 # %%
-# Validation
-# ==========
+# Validation again
+# ++++++++++++++++
 
 
 def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False, col: int = 3):
@@ -829,7 +835,7 @@ validate_onnx(50, 40, onx)
 
 # %%
 # ModelProto to python Code
-# +++++++++++++++++++++++++
+# =========================
 #
 # We finally call function :func:`to_graph_builder_code
 # <experimental_experiment.xbuilder.reverse_graph_builder.to_graph_builder_code>`
