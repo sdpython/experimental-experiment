@@ -379,6 +379,13 @@ class ExtTestCase(unittest.TestCase):
             msg or f"Unable to find the list of strings {tofind!r} in\n--\n{text}"
         )
 
+    def assertSetContained(self, set1, set2):
+        "Checks that ``set1`` is contained in ``set2``."
+        set1 = set(set1)
+        set2 = set(set2)
+        if set1 & set2 != set1:
+            raise AssertionError(f"Set {set2} does not contain set {set1}.")
+
     def assertEqualArrays(
         self,
         expected: Sequence[numpy.ndarray],
@@ -492,6 +499,47 @@ class ExtTestCase(unittest.TestCase):
         elif expected.__class__.__name__ == "DynamicCache":
             atts = {"key_cache", "value_cache"}
             self.assertEqualAny(
+                {k: expected.__dict__.get(k, None) for k in atts},
+                {k: value.__dict__.get(k, None) for k in atts},
+                atol=atol,
+                rtol=rtol,
+            )
+        elif isinstance(expected, (int, float, str)):
+            self.assertEqual(expected, value, msg=msg)
+        elif hasattr(expected, "shape"):
+            self.assertEqual(type(expected), type(value), msg=msg)
+            self.assertEqualArray(expected, value, msg=msg, atol=atol, rtol=rtol)
+        else:
+            raise AssertionError(
+                f"Comparison not implemented for types {type(expected)} and {type(value)}"
+            )
+
+    def assertEqualArrayAny(
+        self, expected: Any, value: Any, atol: float = 0, rtol: float = 0, msg: str = ""
+    ):
+        if isinstance(expected, (tuple, list, dict)):
+            self.assertIsInstance(value, type(expected), msg=msg)
+            self.assertEqual(len(expected), len(value), msg=msg)
+            if isinstance(expected, dict):
+                for k in expected:
+                    self.assertIn(k, value, msg=msg)
+                    self.assertEqualArrayAny(
+                        expected[k], value[k], msg=msg, atol=atol, rtol=rtol
+                    )
+            else:
+                excs = []
+                for i, (e, g) in enumerate(zip(expected, value)):
+                    try:
+                        self.assertEqualArrayAny(e, g, msg=msg, atol=atol, rtol=rtol)
+                    except AssertionError as e:
+                        excs.append(f"Error at position {i} due to {e}")
+                if excs:
+                    msg_ = "\n".join(excs)
+                    msg = f"{msg}\n{msg_}" if msg else msg_
+                    raise AssertionError(f"Found {len(excs)} discrepancies\n{msg}")
+        elif expected.__class__.__name__ == "DynamicCache":
+            atts = {"key_cache", "value_cache"}
+            self.assertEqualArrayAny(
                 {k: expected.__dict__.get(k, None) for k in atts},
                 {k: value.__dict__.get(k, None) for k in atts},
                 atol=atol,
@@ -959,8 +1007,8 @@ def requires_onnx_array_api(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import onnx_array_api
 
-    if pv.Version(".".join(onnx_array_api.__version__.split(".")[:2])) < pv.Version(version):
-        msg = f"onnx version {onnx_array_api.__version__} < {version}: {msg}"
+    if pv.Version(".".join(onnx_array_api.__version__.split(".")[:3])) < pv.Version(version):
+        msg = f"onnx-array-api version {onnx_array_api.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
 

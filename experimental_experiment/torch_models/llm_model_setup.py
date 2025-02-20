@@ -92,9 +92,19 @@ def get_input_cache(
         #     dtype=dtype,
         # )
 
-        cache = transformers.cache_utils.MambaCache(_config(), batch_size=batch_size)
-        cache.conv_states = torch.randn(cache.conv_states.shape).to(torch.float32)
-        cache.ssm_states = torch.randn(cache.ssm_states.shape).to(torch.float32)
+        cache = transformers.cache_utils.MambaCache(
+            _config(), max_batch_size=batch_size, device=device
+        )
+        if isinstance(cache.conv_states, list):
+            cache.conv_states = [
+                torch.randn(t.shape).to(torch.float32) for t in cache.conv_states
+            ]
+            cache.ssm_states = [
+                torch.randn(t.shape).to(torch.float32) for t in cache.ssm_states
+            ]
+        else:
+            cache.conv_states = torch.randn(cache.conv_states.shape).to(torch.float32)
+            cache.ssm_states = torch.randn(cache.ssm_states.shape).to(torch.float32)
         return cache
 
     raise NotImplementedError(
@@ -220,7 +230,14 @@ def finalize_llm_setup(
             inputs["past_key_values"] = cache
             inputs2["past_key_values"] = cache2
         elif input_cache_class.__name__ == "MambaCache":
-            shapes.update({"cache_params": [{1: batch}, {1: batch}]})
+            shapes.update(
+                {
+                    "cache_params": [
+                        [{1: batch} for _ in range(n)],
+                        [{1: batch} for _ in range(n)],
+                    ]
+                }
+            )
             inputs["cache_params"] = cache
             inputs2["cache_params"] = cache2
         else:

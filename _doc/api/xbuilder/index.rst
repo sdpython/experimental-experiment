@@ -13,6 +13,7 @@
     graph_builder_opset
     model_container
     optimization_options
+    reverse_graph_builder
     shape_type_compute
     type_inference
 

@@ -27,6 +27,7 @@
     op_scatter_elements
     op_scatternd_of_shape
     op_simplified_layer_normalization
+    op_skip_layer_normalization
     op_slice
     op_transpose_cast
     op_tri_matrix

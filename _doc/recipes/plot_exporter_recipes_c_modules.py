@@ -23,6 +23,7 @@ from onnx_array_api.plotting.graphviz_helper import plot_dot
 from onnx_array_api.reference import compare_onnx_execution
 import torch
 from onnxruntime import InferenceSession
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.helpers import pretty_onnx, max_diff
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -308,7 +309,9 @@ print(pretty_onnx(onx_cuda_optimized))
 # which operators were fused into bigger ones only implemented by
 # :epkg:`onnxruntime`.
 
-res1, res2, align, dc = compare_onnx_execution(onx, onx_optimized, verbose=1)
+res1, res2, align, dc = compare_onnx_execution(
+    onx, onx_optimized, verbose=1, cls=ExtendedReferenceEvaluator
+)
 print("------------")
 text = dc.to_str(res1, res2, align)
 print(text)

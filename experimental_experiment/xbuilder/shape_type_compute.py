@@ -258,7 +258,7 @@ def set_type_shape_gemm(
         ), f"not implemented when shapes are {sh1} and {sh2}{g.get_debug_msg()}"
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
         g.set_shape(name, new_shape)
-    else:
+    elif g.has_rank(x) and g.has_rank(y):
         g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
 
 

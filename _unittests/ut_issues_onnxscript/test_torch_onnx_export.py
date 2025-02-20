@@ -67,12 +67,12 @@ class TestTorchOnnxExport(ExtTestCase):
             d.dim_param if d.dim_param else d.dim_value
             for d in onx.graph.input[0].type.tensor_type.shape.dim
         )
-        self.assertEqual(("2*s1", 3), shape)
+        self.assertIn(shape, [("2*s1", 3), ("2*batch", 3)])
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
             for d in onx.graph.output[0].type.tensor_type.shape.dim
         )
-        self.assertEqual(("2*s1", 1), shape)
+        self.assertIn(shape, [("2*s1", 1), ("2*batch", 1)])
 
         ref = ReferenceEvaluator(onx)
         got = ref.run(None, {"x": x.detach().cpu().numpy()})

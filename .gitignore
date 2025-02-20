@@ -33,6 +33,7 @@ dump*.onnx*
 tt_*.txt
 tt_*.py
 tt.py
+_plot_torch_sklearn_201_knnpy.py
 temp_dump/*
 temp_data/*
 debug_data/*

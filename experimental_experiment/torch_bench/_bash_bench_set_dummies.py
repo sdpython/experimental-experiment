@@ -272,7 +272,7 @@ class NeuronMambaCache(torch.nn.Module):
     "Dummy module with a :class:`transformers.cache_utils.MambaCache`."
 
     def forward(self, x, dc):
-        return x @ (torch.cat([dc.conv_states, dc.ssm_states], axis=-1))
+        return x @ (torch.cat([*dc.conv_states, *dc.ssm_states], axis=-1))
 
     def _get_random_inputs(self, device: str):
         import transformers
@@ -285,11 +285,15 @@ class NeuronMambaCache(torch.nn.Module):
                 self.num_hidden_layers = 64
                 self.dtype = torch.float32
 
-        cache = transformers.cache_utils.MambaCache(_config(), batch_size=1)
-        cache.conv_states += 1
-        cache.ssm_states += 2
-        cache.conv_states = cache.conv_states.to(device).to(torch.float32)
-        cache.ssm_states = cache.ssm_states.to(device).to(torch.float32)
+        cache = transformers.cache_utils.MambaCache(_config(), max_batch_size=1, device="cpu")
+        cache.conv_states[0] += 1
+        cache.ssm_states[0] += 2
+        if isinstance(cache.conv_states, list):
+            cache.conv_states = [t.to(device).to(torch.float32) for t in cache.conv_states]
+            cache.ssm_states = [t.to(device).to(torch.float32) for t in cache.ssm_states]
+        else:
+            cache.conv_states = cache.conv_states.to(device).to(torch.float32)
+            cache.ssm_states = cache.ssm_states.to(device).to(torch.float32)
         return {"x": torch.randn(1, 1, 3, 8).to(device), "dc": cache}
 
     config = MakeConfig(download=False, to_tuple=False)

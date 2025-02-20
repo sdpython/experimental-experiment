@@ -6,9 +6,11 @@ import sys
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import (
+    AttributeProto,
     FunctionProto,
     GraphProto,
     ModelProto,
+    NodeProto,
     TensorProto,
     ValueInfoProto,
     load as onnx_load,
@@ -167,10 +169,18 @@ def string_type(
                 for o in obj
             )
             return f"({js})"
+        tt = string_type(
+            obj[0],
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+            ignore=ignore,
+            limit=limit,
+        )
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
             mini, maxi, avg = min(obj), max(obj), sum(float(_) for _ in obj) / len(obj)
-            return f"(...)#{len(obj)}[{mini},{maxi}:A[{avg}]]"
-        return f"(...)#{len(obj)}" if with_shape else "(...)"
+            return f"({tt},...)#{len(obj)}[{mini},{maxi}:A[{avg}]]"
+        return f"({tt},...)#{len(obj)}" if with_shape else f"({tt},...)"
     if isinstance(obj, list):
         if len(obj) < 10:
             js = ",".join(
@@ -185,10 +195,18 @@ def string_type(
                 for o in obj
             )
             return f"#{len(obj)}[{js}]"
+        tt = string_type(
+            obj[0],
+            with_shape=with_shape,
+            with_min_max=with_min_max,
+            with_device=with_device,
+            ignore=ignore,
+            limit=limit,
+        )
         if with_min_max and all(isinstance(_, (int, float, bool)) for _ in obj):
             mini, maxi, avg = min(obj), max(obj), sum(float(_) for _ in obj) / len(obj)
-            return f"[...]#{len(obj)}[{mini},{maxi}:{avg}]"
-        return f"[...]#{len(obj)}" if with_shape else "[...]"
+            return f"[{tt},...]#{len(obj)}[{mini},{maxi}:{avg}]"
+        return f"[{tt},...]#{len(obj)}" if with_shape else f"[{tt},...]"
     if isinstance(obj, set):
         if len(obj) < 10:
             js = ",".join(
@@ -457,9 +475,15 @@ def onnx_dtype_name(itype: int) -> str:
 
 def pretty_onnx(
     onx: Union[FunctionProto, GraphProto, ModelProto, ValueInfoProto, str],
+    with_attributes: bool = False,
+    highlight: Optional[Set[str]] = None,
 ) -> str:
     """
     Displays an onnx prot in a better way.
+
+    :param with_attributes: displays attributes as well, if only a node is printed
+    :param highlight: to highlight some names
+    :return: text
     """
     assert onx is not None, "onx cannot be None"
     if isinstance(onx, str):
@@ -472,6 +496,61 @@ def pretty_onnx(
         shape = tuple((d.dim_param or d.dim_value) for d in onx.type.tensor_type.shape.dim)
         shape_str = ",".join(map(str, shape))
         return f"{onnx_dtype_name(itype)}[{shape_str}] {name}"
+
+    if isinstance(onx, AttributeProto):
+        att = onx
+        if att.type == AttributeProto.INT:
+            return f"{att.name}={att.i}"
+        if att.type == AttributeProto.INTS:
+            return f"{att.name}={att.ints}"
+        if att.type == AttributeProto.FLOAT:
+            return f"{att.name}={att.f}"
+        if att.type == AttributeProto.FLOATS:
+            return f"{att.name}={att.floats}"
+        if att.type == AttributeProto.STRING:
+            return f"{att.name}={att.s!r}"
+        if att.type == AttributeProto.TENSOR:
+            from .reference import to_array_extended
+
+            v = to_array_extended(att.t)
+            vf = v.reshape((-1,))
+            if vf.size < 10:
+                tt = f"[{', '.join(map(str, vf))}]"
+            else:
+                tt = f"[{', '.join(map(str, vf[:10]))}, ...]"
+            if len(v.shape) != 1:
+                return f"{att.name}=tensor({tt}, dtype={v.dtype}).reshape({v.shape})"
+            return f"{att.name}=tensor({tt}, dtype={v.dtype})"
+        raise NotImplementedError(
+            f"pretty_onnx not implemented yet for AttributeProto={att!r}"
+        )
+
+    if isinstance(onx, NodeProto):
+
+        def _high(n):
+            if highlight and n in highlight:
+                return f"**{n}**"
+            return n
+
+        text = (
+            f"{onx.op_type}({', '.join(map(_high, onx.input))})"
+            f" -> {', '.join(map(_high, onx.output))}"
+        )
+        if onx.domain:
+            text = f"{onx.domain}.{text}"
+        if not with_attributes or not onx.attribute:
+            return text
+        rows = []
+        for att in onx.attribute:
+            rows.append(pretty_onnx(att))
+        if len(rows) > 1:
+            suffix = "\n".join(f"    {s}" for s in rows)
+            return f"{text}\n{suffix}"
+        return f"{text}  ---  {rows[0]}"
+
+    if isinstance(onx, TensorProto):
+        shape = "x".join(map(str, onx.dims))
+        return f"TensorProto:{onx.data_type}:{shape}:{onx.name}"
 
     try:
         from onnx_array_api.plotting.text_plot import onnx_simple_text_plot

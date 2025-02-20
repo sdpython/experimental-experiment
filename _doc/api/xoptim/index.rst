@@ -24,6 +24,7 @@
     graph_builder_optim
     order_optim
     patterns_api
+    unfused
 
 
 GraphBuilderPatternOptimization

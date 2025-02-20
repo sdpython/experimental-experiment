@@ -50,14 +50,25 @@ def unflatten_mamba_cache(
 
     class _config:
         def __init__(self):
-            self.intermediate_size = conv_states.shape[2]
-            self.state_size = ssm_states.shape[3]
-            self.conv_kernel = conv_states.shape[3]
-            self.num_hidden_layers = conv_states.shape[0]
+            if isinstance(conv_states, list):
+                self.intermediate_size = conv_states[0].shape[1]
+                self.state_size = ssm_states[0].shape[2]
+                self.conv_kernel = conv_states[0].shape[2]
+                self.num_hidden_layers = len(conv_states)
+            else:
+                self.intermediate_size = conv_states.shape[2]
+                self.state_size = ssm_states.shape[3]
+                self.conv_kernel = conv_states.shape[3]
+                self.num_hidden_layers = conv_states.shape[0]
 
     from transformers.cache_utils import MambaCache
 
-    cache = MambaCache(_config(), batch_size=1, dtype=values[-1].dtype)
+    cache = MambaCache(
+        _config(),
+        max_batch_size=1,
+        dtype=values[-1][0].dtype,
+        device="cpu" if values[-1][0].get_device() < 0 else "cuda",
+    )
     values = dict(zip(context, values))
     for k, v in values.items():
         setattr(cache, k, v)

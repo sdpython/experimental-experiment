@@ -289,8 +289,12 @@ class BenchmarkRunner:
                     dtype=obj.conv_states.dtype,
                     device=device,
                 )
-                new_cache.conv_states[:, :, :, :] = obj.conv_states.to(device)[:, :, :, :]
-                new_cache.ssm_states[:, :, :, :] = obj.ssm_states.to(device)[:, :, :, :]
+                if isinstance(obj.conv_states, list):
+                    new_cache.conv_states = [t.to(device) for t in obj.conv_states]
+                    new_cache.ssm_states = [t.to(device) for t in obj.ssm_states]
+                else:
+                    new_cache.conv_states[:, :, :, :] = obj.conv_states.to(device)[:, :, :, :]
+                    new_cache.ssm_states[:, :, :, :] = obj.ssm_states.to(device)[:, :, :, :]
                 # AssertionError(
                 #    f"Moving class {obj.__class__.__name__!r} from device "
                 #    f"{obj.conv_states.get_device()} to {device!r} is not implemented yet,

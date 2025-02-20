@@ -9,6 +9,7 @@ Issues with torch.export.export
 
 Posted on github.
 
+* `torch.export.export fails when one input is a class inheriting from torch.nn.Module <https://github.com/pytorch/pytorch/issues/147326>`_
 * `Unable to print in a branch run by torch.cond <https://github.com/pytorch/pytorch/issues/147115>`_
 * `How to export a model using topk with a variable number of neighbour? <https://github.com/pytorch/pytorch/issues/146990>`_
 * `Dynamic_shapes with Dim fails when DYNAMIC succeeds <https://github.com/pytorch/pytorch/issues/146315>`_
