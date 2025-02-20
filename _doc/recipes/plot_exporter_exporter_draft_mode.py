@@ -216,3 +216,5 @@ with register_additional_serialization_functions():
 # %%
 # Let's print the report.
 print(report)
+
+print(ep)
