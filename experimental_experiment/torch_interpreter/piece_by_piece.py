@@ -433,8 +433,14 @@ class ModelDiagnoseOutput:
         rk = set_length.pop()
         res = {}
         for i in range(rk):
-            if len(set(s[i] for s in shapes)) > 1:
+            set_dim = set(s[i] for s in shapes)
+            if len(set_dim) > 1:
                 res[i] = dynamic
+                continue
+            if set_dim == {0}:
+                # It is unexpected to find a null dimension. Let's replace it by a dynamic one.
+                res[i] = dynamic
+                continue
         return res
 
     def guess_dynamic_shape_object(self, *objs: Any, msg: Optional[Callable] = None) -> Any:
@@ -510,9 +516,9 @@ class ModelDiagnoseOutput:
             return None
         if len(self.inputs) == 1:
             # No dynamic shapes.
-            args = tuple({} for _ in self.inputs[0])
-            kwargs = {k: {} for k, v in self.inputs[1]}
-            return args, kwargs
+            return tuple(self.guess_dynamic_shape_object(a) for a in self.inputs[0][0]), {
+                k: self.guess_dynamic_shape_object(v) for k, v in self.inputs[0][1]
+            }
 
         # Otherwise.
         s1 = set(len(i[0]) for i in self.inputs)
@@ -1361,6 +1367,9 @@ class ModelDiagnoseOutput:
             setattr(self.model, self.method_name, self.forward_calling_custom_op)
             return self.forward_custom_op_schema
 
+        assert (
+            self.inputs
+        ), f"{self.full_name}: no input found, other inputs should be provided."
         if all(isinstance(t, torch.Tensor) for t in self.inputs[0]) and all(
             isinstance(t, torch.Tensor) for t in self.outputs[0]
         ):
@@ -1419,6 +1428,25 @@ class ModelDiagnoseOutput:
             else (dynamic_shapes[0] or dynamic_shapes[1])
         )
         return args, kwargs, ds
+
+    def _index_best_input_to_export(self, exc: bool = True) -> int:
+        """Selects the best input to export with. 0-shape should be excluded."""
+        for i in range(len(self.inputs)):
+            flat, _spec = torch.utils._pytree.tree_flatten(self.inputs[i])
+            shapes = [0 in t.shape for t in flat if isinstance(t, torch.Tensor)]
+            if len(shapes) == 0:
+                # No tensor, unexpected.
+                continue
+            has_zero = any(shapes)
+            if not has_zero:
+                return i
+        if not exc:
+            return -1
+        msg = "\n".join(string_type(i, with_shape=True) for i in self.inputs)
+        raise AssertionError(
+            f"{self.full_name}: unable to find suitable inputs as all of them include 0 "
+            f"shapes. This might be on purpose but the export may fail in that case.\n{msg}"
+        )
 
     def _try_export_no_bypass_export(
         self,
@@ -1620,7 +1648,8 @@ class ModelDiagnoseOutput:
         assert isinstance(
             replace_by_custom_op, bool
         ), f"Not implemented yet for replace_by_custom_op={replace_by_custom_op!r}"
-        export_inputs = modificator(self.inputs[0]) if modificator else self.inputs[0]
+        index = self._index_best_input_to_export()
+        export_inputs = modificator(self.inputs[index]) if modificator else self.inputs[index]
         export_inputs = make_copy(export_inputs)
         if use_dynamic_shapes is None:
             use_dynamic_shapes = len(self.inputs) > 1
@@ -2138,7 +2167,11 @@ class ModelDiagnoseOutput:
                 (
                     r.exporter_status.pretty_text()
                     if hasattr(r, "exporter_status")
-                    else (f"<OK-{len(self.inputs)}i>" if self.inputs else "<OK-no-inputs>")
+                    else (
+                        f"<OK-{len(r.inputs)}i-{r._index_best_input_to_export(False)}>"
+                        if self.inputs
+                        else "<OK-no-inputs>"
+                    )
                 ),
                 r,
             )
@@ -2260,8 +2293,8 @@ class ModelDiagnoseOutput:
         """
         if use_dynamic_shapes is None:
             use_dynamic_shapes = len(self.inputs) > 1
-        args, kwargs = self.inputs[0]
         dynamic_shapes = self.guess_dynamic_shapes() if use_dynamic_shapes else None
+        args, kwargs = self.inputs[self._index_best_input_to_export()]
         args, kwargs, ds = self._post_process_dynamic_shapes(
             args, kwargs, dynamic_shapes, False, verbose
         )
