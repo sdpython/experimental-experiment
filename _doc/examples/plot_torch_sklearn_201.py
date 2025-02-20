@@ -26,8 +26,6 @@ import io
 import logging
 import math
 import numbers
-import subprocess
-import sys
 import warnings
 from typing import Any, Dict, List, Optional
 import numpy as np
@@ -781,4 +779,6 @@ with open("_plot_torch_sklearn_201_knnpy.py", "w") as f:
 
 # %%
 # Let's run it...
-subprocess.run([sys.executable, "_plot_torch_sklearn_201_knnpy.py"])
+# It can be run this way.
+#
+# ``subprocess.run([sys.executable, "_plot_torch_sklearn_201_knnpy.py"])``

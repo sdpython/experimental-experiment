@@ -1874,7 +1874,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             test_backward=False,
         )
 
-    @requires_onnxscript("0.3")
+    @requires_onnxscript("0.4")
     @hide_stdout()
     def test_xt_softmaxcrossentropy(self):
         x = torch.randn(3, 5)
@@ -1886,7 +1886,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @requires_onnxscript("0.3")
+    @requires_onnxscript("0.4")
     @hide_stdout()
     def test_xt_softmaxcrossentropy_ignore_index(self):
         x = torch.randn(3, 5)
@@ -1898,7 +1898,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
-    @requires_onnxscript("0.3")
+    @requires_onnxscript("0.4")
     @hide_stdout()
     def test_xt_softmaxcrossentropy_weights(self):
         x = torch.randn(3, 5)
