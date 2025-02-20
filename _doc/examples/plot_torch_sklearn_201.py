@@ -781,4 +781,6 @@ with open("_plot_torch_sklearn_201_knnpy.py", "w") as f:
 
 # %%
 # Let's run it...
-subprocess.run([sys.executable, "_plot_torch_sklearn_201_knnpy.py"])
+# It can be run this way.
+#
+# ``subprocess.run([sys.executable, "_plot_torch_sklearn_201_knnpy.py"])``
