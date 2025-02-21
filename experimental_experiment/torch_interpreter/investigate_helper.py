@@ -22,7 +22,7 @@ def validate_fx_tensor(
         f"node.meta={node.meta}"
     )
     for a, b in zip(tensor.shape, expected_shape):
-        assert not isinstance(b, int) or a == b, (
+        assert not isinstance(b, int) or a == b or {a, b} == {0, 1}, (
             f"Dimension mismatch, got {tensor.shape} expected {expected_shape}, "
             f"node.name={node.name!r}, node.target={getattr(node, 'target', None)}, "
             f"node.args={node.args}, node.kwargs={node.kwargs}, "

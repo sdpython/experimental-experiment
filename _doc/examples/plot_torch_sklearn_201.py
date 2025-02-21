@@ -101,15 +101,29 @@ class NanEuclidean(torch.nn.Module):
 # ++++++++++
 
 
-def get_xy(sizex=5, sizey=3, col=3):
+def get_xy(sizex=5, sizey=3, col=3, n_nans=None):
     X = torch.randn((sizex, col))
     Y = torch.randn((sizey, col))
+    i_nans = 0
     for i in range(sizex):
         X[i, i % X.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
         X[i, (i + 1) % X.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
+    i_nans = 0
     for i in range(sizey):
         Y[(i + 1) % sizey, i % Y.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
         Y[(i + 1) % sizey, (i + 1) % Y.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
     return X, Y
 
 
@@ -146,13 +160,6 @@ def _get_mask(X, value_to_mask):
     )
 
 
-class SubTopKIndices(torch.nn.Module):
-    def forward(self, x, k):
-        # torch does not like nans
-        xn = torch.nan_to_num(x, nan=1.0e10)
-        return torch.topk(xn, k, dim=1, largest=False, sorted=True).indices
-
-
 class SubWeightMatrix(torch.nn.Module):
     def __init__(self, weights):
         super().__init__()
@@ -170,16 +177,10 @@ class SubWeightMatrix(torch.nn.Module):
 
 
 class SubDonorsIdx(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self._topk = SubTopKIndices()
-
     def forward(self, dist_pot_donors, n_neighbors):
-        donors_idx = self._topk(dist_pot_donors, n_neighbors)
-        indices = torch.arange(donors_idx.shape[0])
-        indices_extended = indices[:, None]
-        donors_dist = dist_pot_donors[indices_extended, donors_idx]
-        return donors_idx, donors_dist
+        xn = torch.nan_to_num(dist_pot_donors, nan=1.0e10)
+        tk = torch.topk(xn, n_neighbors, dim=1, largest=False, sorted=True)
+        return tk.indices, tk.values
 
 
 class MakeNewWeights(torch.nn.Module):
@@ -251,11 +252,33 @@ class ColProcessorAllNan(torch.nn.Module):
         return X, dist_subset, receivers_idx
 
 
+class ColProcessorIdentity(torch.nn.Module):
+    def forward(
+        self,
+        X,
+        dist_subset,
+        mask_fit_X,
+        _fit_X,
+        receivers_idx,
+        all_nan_receivers_idx,
+        all_nan_dist_mask,
+        dist_chunk,
+        dist_idx_map,
+        potential_donors_idx,
+    ):
+        return (
+            X,
+            dist_subset,
+            receivers_idx,
+        )
+
+
 class ColProcessorCond(torch.nn.Module):
     def __init__(self, col: int):
         super().__init__()
         self.col = col
         self._all_nan = ColProcessorAllNan(col)
+        self._identity = ColProcessorIdentity()
 
     def forward(
         self,
@@ -273,13 +296,7 @@ class ColProcessorCond(torch.nn.Module):
         X, dist_subset, receivers_idx = torch.cond(
             all_nan_receivers_idx.numel() > 0,
             self._all_nan,
-            (
-                lambda _X, _dist_subset, _m, _f, _receivers_idx, _anm, _anddm, _dc, _di, _pi: (
-                    _X,
-                    _dist_subset,
-                    _receivers_idx,
-                )
-            ),
+            self._identity,
             [
                 X,
                 dist_subset,
@@ -506,8 +523,8 @@ class TorchKNNImputer(torch.nn.Module):
 # We need to do that with different sizes of training set.
 
 
-def validate(size, sizey, col=3):
-    X, Y = get_xy(size, sizey, col)
+def validate(size, sizey, col=3, n_nans=None):
+    X, Y = get_xy(size, sizey, col, n_nans)
     knn_imputer = sklearn.impute.KNNImputer(n_neighbors=3)
     knn_imputer.fit(X)
 
@@ -539,6 +556,8 @@ def validate(size, sizey, col=3):
 
 knn5, Y10 = validate(5, 10)
 knn50, Y40 = validate(50, 40)
+knn1, Y1 = validate(10, 10, n_nans=1)
+knn11, Y11 = validate(11, 11, n_nans=1)
 
 # %%
 # Export to ONNX
@@ -557,32 +576,60 @@ knn50, Y40 = validate(50, 40)
 # First step: tracing intermediate outputs
 # ++++++++++++++++++++++++++++++++++++++++
 
+used = [(knn50, Y40), (knn5, Y10), (knn1, Y1), (knn11, Y11)]
 inputs = [
     (
         (
-            torch.from_numpy(knn50._mask_fit_X),
-            torch.from_numpy(knn50._valid_mask),
-            torch.from_numpy(knn50._fit_X.astype(np.float32)),
-            Y40,
+            torch.from_numpy(knn._mask_fit_X),
+            torch.from_numpy(knn._valid_mask),
+            torch.from_numpy(knn._fit_X.astype(np.float32)),
+            y,
         ),
         {},
-    ),
-    (
-        (
-            torch.from_numpy(knn5._mask_fit_X),
-            torch.from_numpy(knn5._valid_mask),
-            torch.from_numpy(knn5._fit_X.astype(np.float32)),
-            Y10,
-        ),
-        {},
-    ),
+    )
+    for knn, y in used
 ]
 
 # %%
 # Then we trace the execution to capture every input and output of every submodule.
 # The model implementation was refactored to introduce many tiny one and get
 # a fine-grained evaluation of the exportability.
+# We track messages such as ``-needs-more-inputs`` or ``-no-input``.
+# If any, we must provide the tracer more input to make sure
+# every submodule receives enough data to guess dynamic shapes and export.
+# When the model has control flow, we need more data to make sure every
+# piece is used.
 
+trace = trace_execution_piece_by_piece(TorchKNNImputer(knn5), inputs, verbose=0)
+pretty = trace.get_export_report()
+print(pretty)
+
+# %%
+# We need more so let's add more.
+
+
+def rotate(inputs, col=3):
+    if isinstance(inputs, torch.Tensor):
+        if len(inputs.shape) == 2 and inputs.shape[1] == 3:
+            return torch.cat([inputs[:, 1:], inputs[:, :1]], axis=1)
+        if len(inputs.shape) == 1 and inputs.shape[0] == 3:
+            return torch.cat([inputs[1:], inputs[:1]], axis=0)
+        return inputs
+    if isinstance(inputs, tuple):
+        return tuple(rotate(i, col=col) for i in inputs)
+    if isinstance(inputs, list):
+        return [rotate(i, col=col) for i in inputs]
+    if isinstance(inputs, dict):
+        return {k: rotate(v, col=col) for k, v in inputs.items()}
+    raise TypeError(f"Unexpected type {type(inputs)}")
+
+
+inputs = [*inputs, *rotate(inputs), *rotate(rotate(inputs))]
+
+# %%
+# Let's try again.
+
+print("---------")
 trace = trace_execution_piece_by_piece(TorchKNNImputer(knn5), inputs, verbose=0)
 pretty = trace.get_export_report()
 print(pretty)
@@ -605,26 +652,17 @@ shape_functions = {
     "CalcImpute": {
         0: lambda *args, **kwargs: torch.empty((args[0].shape[0],), dtype=args[0].dtype)
     },
-    "SubTopKIndices": {
-        0: lambda *args, **kwargs: torch.empty(
-            (
-                args[0].shape[0],
-                make_undefined_dimension(min(args[0].shape[1], knn5.n_neighbors)),
-            ),
-            dtype=args[0].dtype,
-        )
-    },
     "SubDonorsIdx": {
         0: lambda *args, **kwargs: torch.empty(
             (
-                args[0].shape[0],
+                make_undefined_dimension(111111),  # args[0].shape[0]),
                 make_undefined_dimension(min(args[0].shape[1], knn5.n_neighbors)),
             ),
             dtype=args[0].dtype,
         ),
         1: lambda *args, **kwargs: torch.empty(
             (
-                args[0].shape[0],
+                make_undefined_dimension(111111),  # args[0].shape[0]),
                 make_undefined_dimension(min(args[0].shape[1], knn5.n_neighbors)),
             ),
             dtype=torch.float32,
@@ -632,6 +670,15 @@ shape_functions = {
     },
     "MakeDictIdxMap": {
         0: lambda *args, **kwargs: torch.empty((args[0].shape[0],), dtype=args[1].dtype),
+    },
+    "ColProcessorCond": {
+        0: lambda *args, **kwargs: torch.empty(args[0], dtype=args[0].dtype),
+        1: lambda *args, **kwargs: torch.empty(
+            make_undefined_dimension(0), args[1].shape[1], dtype=args[0].dtype
+        ),
+        2: lambda *args, **kwargs: torch.empty(
+            (make_undefined_dimension(0),), dtype=args[0].dtype
+        ),
     },
 }
 

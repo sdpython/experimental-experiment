@@ -10,6 +10,8 @@ Model
 +++++
 """
 
+from contextlib import redirect_stderr
+from io import StringIO
 from typing import Any, Dict
 import torch
 import torch.export._draft_export
@@ -208,13 +210,21 @@ print(string_type(inputs, with_shape=True))
 #
 # The function we want to try.
 
-with register_additional_serialization_functions():
+err = StringIO()
+with redirect_stderr(err), register_additional_serialization_functions():
     ep, report = torch.export._draft_export.draft_export(
         model, tuple(), kwargs=inputs, strict=False
     )
 
 # %%
+# Errors if any.
+print(err.getvalue())
+
+# %%
 # Let's print the report.
 print(report)
+
+# %%
+# And the exported program.
 
 print(ep)

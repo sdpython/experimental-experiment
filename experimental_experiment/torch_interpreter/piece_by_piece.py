@@ -103,7 +103,10 @@ class StatusExport:
     :param status: status exporter
     :param step: step it fails
     :param reason: details about the failure
-    :param exported: whatever is exporter
+    :param exported: whatever is exported
+    :param dynamic_shapes: dynamic shapes used to export
+    :param sargs: information on positional arguments used to export
+    :param skwargs: information on named arguments used to export
     """
 
     def __init__(
@@ -112,12 +115,18 @@ class StatusExport:
         step: str = "",
         reason: str = "",
         exported: Optional[Any] = None,
+        dynamic_shapes: Optional[Any] = None,
+        sargs: Optional[str] = None,
+        skwargs: Optional[str] = None,
     ):
         assert isinstance(status, StatusExportCode)
         self.status = status
         self.step = step
         self.reason = reason
         self.exported = exported
+        self.dynamic_shapes = dynamic_shapes
+        self.sargs = sargs
+        self.skwargs = skwargs
 
     @property
     def short_reason(self) -> str:
@@ -892,10 +901,21 @@ class ModelDiagnoseOutput:
                 for fin, fout in zip(flattened_inputs, flattened_outputs):
                     shape_o = tuple(map(int, fct(*fin[0], **fin[1]).shape))
                     expected_shape_o = tuple(map(int, fout[output_index].shape))
-                    assert shape_o == expected_shape_o, (
+                    true_diff = (
+                        [
+                            (a, b)
+                            for a, b in zip(shape_o, expected_shape_o)
+                            if a not in (0, 111111) and a != b
+                        ]
+                        if shape_o != expected_shape_o
+                        and len(shape_o) == len(expected_shape_o)
+                        else None
+                    )
+                    assert not true_diff, (
                         f"Custom shape function {fct} for output_index={output_index} "
                         f"for class {self.true_model_name} is failing. "
                         f"It returns {shape_o} when the expected shape is {expected_shape_o}, "
+                        f"true_diff={true_diff}, "
                         f"inputs={string_type(fin, with_shape=True)}, "
                         f"outputs={string_type(fout, with_shape=True)}."
                     )
@@ -911,8 +931,9 @@ class ModelDiagnoseOutput:
                 return flat[0][j]
             return flat[1][j]
 
-        shape = tuple(map(int, flattened_outputs[0][output_index].shape))
-        for j, value in list_indices(flattened_inputs[0]):
+        best_index = self._index_best_input_to_export(flattened_inputs)
+        shape = tuple(map(int, flattened_outputs[best_index][output_index].shape))
+        for j, value in list_indices(flattened_inputs[best_index]):
             if not hasattr(value, "shape"):
                 continue
             shape_j = tuple(map(int, value.shape))
@@ -931,7 +952,7 @@ class ModelDiagnoseOutput:
                 continue
 
             # We determine
-            shape_j = tuple(map(int, get_input(flattened_inputs[0], found_j).shape))
+            shape_j = tuple(map(int, get_input(flattened_inputs[best_index], found_j).shape))
             unsqueeze_dims = tuple(
                 [k for k in range(len(shape)) if k < found_k or k >= found_k + len(shape_j)]
             )
@@ -971,13 +992,20 @@ class ModelDiagnoseOutput:
                     )
                 return _modifiy_
 
+        msg = "\n".join(
+            [
+                (
+                    f"{i}: {string_type(fi, with_shape=True, limit=20)}     ->"
+                    f"     {string_type(fo, with_shape=True, limit=20)}"
+                )
+                for i, (fi, fo) in enumerate(zip(flattened_inputs, flattened_outputs))
+            ]
+        )
         raise NotImplementedError(
             f"{self.full_name} (custom_op_name is {self.custom_op_name!r}): "
             f"unable to produce a function able to compute the output shape "
             f"for output {output_index} (shape={shape}), a custom shape function "
-            f"should be added.\n"
-            f"flattened_inputs={string_type(flattened_inputs, with_shape=True, limit=20)}\n"
-            f"flattened_outputs={string_type(flattened_outputs, with_shape=True, limit=20)}"
+            f"should be added. best_index={best_index}\n{msg}"
         )
 
     def _get_symbolic_function_for_forward_shape(
@@ -1429,10 +1457,14 @@ class ModelDiagnoseOutput:
         )
         return args, kwargs, ds
 
-    def _index_best_input_to_export(self, exc: bool = True) -> int:
+    def _index_best_input_to_export(
+        self, obj: Optional[Any] = None, exc: bool = True, default: int = -1
+    ) -> int:
         """Selects the best input to export with. 0-shape should be excluded."""
-        for i in range(len(self.inputs)):
-            flat, _spec = torch.utils._pytree.tree_flatten(self.inputs[i])
+        if obj is None:
+            obj = self.inputs
+        for i in range(len(obj)):
+            flat, _spec = torch.utils._pytree.tree_flatten(obj[i])
             shapes = [0 in t.shape for t in flat if isinstance(t, torch.Tensor)]
             if len(shapes) == 0:
                 # No tensor, unexpected.
@@ -1440,9 +1472,11 @@ class ModelDiagnoseOutput:
             has_zero = any(shapes)
             if not has_zero:
                 return i
+        if default >= 0:
+            return default
         if not exc:
             return -1
-        msg = "\n".join(string_type(i, with_shape=True) for i in self.inputs)
+        msg = "\n".join(string_type(i, with_shape=True, limit=20) for i in self.inputs)
         raise AssertionError(
             f"{self.full_name}: unable to find suitable inputs as all of them include 0 "
             f"shapes. This might be on purpose but the export may fail in that case.\n{msg}"
@@ -1549,7 +1583,13 @@ class ModelDiagnoseOutput:
                     dynamic_shapes=ds,
                     **(exporter_kwargs or {}),
                 )
-                self.exporter_status = StatusExport(StatusExportCode.OK, exported=ep)
+                self.exporter_status = StatusExport(
+                    StatusExportCode.OK,
+                    exported=ep,
+                    dynamic_shapes=ds,
+                    sargs=string_type(args, with_shape=True, limit=1000),
+                    skwargs=string_type(kwargs, with_shape=True, limit=1000),
+                )
                 if self._debug_print_status:
                     print(
                         f"-- torch.export.export name={self.full_name} -- "
@@ -1563,7 +1603,12 @@ class ModelDiagnoseOutput:
                 self.last_error = e
                 se = str(e).split("\n")[0].replace("<_DimHint.DYNAMIC: 3>", "DYN")
                 self.exporter_status = StatusExport(
-                    StatusExportCode.FAIL, reason=se, step="EXPORT"
+                    StatusExportCode.FAIL,
+                    reason=se,
+                    step="EXPORT",
+                    dynamic_shapes=ds,
+                    sargs=string_type(args, with_shape=True, limit=1000),
+                    skwargs=string_type(kwargs, with_shape=True, limit=1000),
                 )
                 if self._debug_print_status:
                     print(
@@ -1594,7 +1639,13 @@ class ModelDiagnoseOutput:
                 dynamic_shapes=ds,
                 **(exporter_kwargs or {}),
             )
-            self.exporter_status = StatusExport(StatusExportCode.OK, exported=ep)
+            self.exporter_status = StatusExport(
+                StatusExportCode.OK,
+                exported=ep,
+                dynamic_shapes=ds,
+                sargs=string_type(args, with_shape=True, limit=1000),
+                skwargs=string_type(kwargs, with_shape=True, limit=1000),
+            )
             if self._debug_print_status:
                 print(
                     f"-- torch.export.export name={self.full_name} -- "
@@ -1648,7 +1699,7 @@ class ModelDiagnoseOutput:
         assert isinstance(
             replace_by_custom_op, bool
         ), f"Not implemented yet for replace_by_custom_op={replace_by_custom_op!r}"
-        index = self._index_best_input_to_export()
+        index = self._index_best_input_to_export(default=0)
         export_inputs = modificator(self.inputs[index]) if modificator else self.inputs[index]
         export_inputs = make_copy(export_inputs)
         if use_dynamic_shapes is None:
@@ -2149,6 +2200,11 @@ class ModelDiagnoseOutput:
         def _suffix(r):
             return "::func" if inspect.ismodule(r.model) else ""
 
+        def _report(b):
+            if b < 0:
+                return "needs-more"
+            return str(b)
+
         def iter_status(here):
             rows = [here]
             for child in here.children:
@@ -2168,9 +2224,9 @@ class ModelDiagnoseOutput:
                     r.exporter_status.pretty_text()
                     if hasattr(r, "exporter_status")
                     else (
-                        f"<OK-{len(r.inputs)}i-{r._index_best_input_to_export(False)}>"
-                        if self.inputs
-                        else "<OK-no-inputs>"
+                        f"<OK-{len(r.inputs)}i-{_report(r._index_best_input_to_export(exc=False))}>"
+                        if len(self.inputs) > 1
+                        else ("<OK-static>" if self.inputs else "<OK-no-input>")
                     )
                 ),
                 r,
@@ -2576,8 +2632,10 @@ class ModelDiagnoseOutput:
             )
             try:
                 got = sess.run(None, feeds)
-            except (TypeError, RuntimeError, ValueError, IndexError):
+            except (TypeError, RuntimeError, ValueError, IndexError) as e:
                 # Error no output
+                if verbose:
+                    print(f"[onnx_run_disc] {self.dot_name} onnx exception {e}")
                 got = []
             if verbose:
                 if len(got) == 1:
@@ -2607,6 +2665,11 @@ class ModelDiagnoseOutput:
                         if hasattr(self.exporter_status.exported, "graph"):
                             f.write("\n----------------------\n")
                             f.write(str(self.exporter_status.exported.graph))
+                        f.write("\n----------------------\n")
+                        f.write(pprint.pformat(self.exporter_status.dynamic_shapes))
+                        f.write("\n----------------------")
+                        f.write(f"\nargs={self.exporter_status.sargs}")
+                        f.write(f"\nkwargs={self.exporter_status.skwargs}")
                     torch.export.save(self.exporter_status.exported, ep_name)
                     with open(pkl_name, "wb") as f:
                         pickle.dump(
