@@ -26,6 +26,7 @@ rm dump_models -rf
 rm dump_test_models -rf
 rm neural_coder_workspace -rf
 rm output_data*
+rm _plot_torch_sklearn_201_knnpy.py
 
 rm _doc/sg_execution_times.rst
 

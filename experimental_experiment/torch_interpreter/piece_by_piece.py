@@ -2202,7 +2202,7 @@ class ModelDiagnoseOutput:
 
         def _report(b):
             if b < 0:
-                return "needs-more"
+                return "may-need-more"
             return str(b)
 
         def iter_status(here):
