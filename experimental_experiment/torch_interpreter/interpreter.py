@@ -1129,9 +1129,13 @@ class DynamoInterpreter:
                 # depending on the result values
                 t_shape = tuple(shape)
                 self._verify_new_shape(shape, node)
-                self.builder.set_shape(
-                    node.name, t_shape, allow_zero=all_int(t_shape) and t_shape == (0,)
-                )
+                # Let's set the shape if not null shape
+                if len(t_shape) > 1 and not any(i == 0 for i in t_shape if isinstance(i, int)):
+                    self.builder.set_shape(
+                        node.name, t_shape, allow_zero=all_int(t_shape) and t_shape == (0,)
+                    )
+                else:
+                    self.builder.set_rank(node.name, len(t_shape))
                 self.builder.set_type(node.name, dtype)
                 sts = {"dtype": val.dtype}
             elif isinstance(val, self.torch.SymInt):
@@ -1876,7 +1880,9 @@ class DynamoInterpreter:
                         for r_, v_ in zip(r, v):
                             self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
                             shape = tuple(v_.shape)
-                            if self.builder.is_dynamic_shape(
+                            if not any(
+                                i == 0 for i in shape if isinstance(i, int)
+                            ) and self.builder.is_dynamic_shape(
                                 shape, allow_new_dynamic_dimension=allow_new_dynamic_dimension
                             ):
                                 self.builder.set_shape(r_, shape, set_if_more_precise=False)

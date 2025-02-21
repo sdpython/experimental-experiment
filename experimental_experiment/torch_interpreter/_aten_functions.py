@@ -6059,6 +6059,32 @@ def aten_multiply_Tensor(
     return aten_mul(g, sts, outputs, x, y, name=name)
 
 
+def aten_nan_to_num(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    value: float = 0.0,
+    posinf=None,
+    neginf=None,
+    name: str = "nan_to_num",
+):
+    "nan_to_num"
+    res = g.op.Where(
+        g.op.IsNaN(x, name=name),
+        np.array([float(value)], dtype=tensor_dtype_to_np_dtype(g.get_type(x))),
+        x,
+        name=name,
+        outputs=outputs,
+    )
+    assert (
+        not posinf and not neginf
+    ), f"nan_to_num not implemented with posinf={posinf} or neginf={neginf}{g.get_debug_msg()}"
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_native_dropout(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -9554,6 +9580,39 @@ def aten_to_dtype_layout(
     from ._aten_methods import aten_meth_to
 
     return aten_meth_to(g, sts, outputs, input_name, *args, name=name, **kwargs)
+
+
+def aten_topk(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    k: T,
+    dim: int = -1,
+    largest: bool = True,
+    sorted: bool = True,
+    name="topk",
+) -> Tuple[T, T]:
+    """topk"""
+    assert len(outputs) == 2, f"topk not implemented for outputs={outputs}{g.get_debug_msg()}"
+    res = g.op.TopK(
+        x,
+        (
+            np.array([k], dtype=np.int64)
+            if isinstance(k, int)
+            else g.op.Reshape(k, g.MINUS_ONE, name=name)
+        ),
+        axis=dim,
+        largest=1 if largest else 0,
+        sorted=1 if sorted else 0,
+        outputs=outputs,
+    )
+    if not res:
+        g.set_type(res[0], g.get_type(x))
+        g.set_type(res[1], TensorProto.INT64)
+        g.get_rank(res[0], g.get_rank(x))
+        g.get_rank(res[1], g.get_rank(x))
+    return res
 
 
 def aten_tril(

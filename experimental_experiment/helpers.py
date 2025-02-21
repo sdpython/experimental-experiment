@@ -182,7 +182,7 @@ def string_type(
             return f"({tt},...)#{len(obj)}[{mini},{maxi}:A[{avg}]]"
         return f"({tt},...)#{len(obj)}" if with_shape else f"({tt},...)"
     if isinstance(obj, list):
-        if len(obj) < 10:
+        if len(obj) < limit:
             js = ",".join(
                 string_type(
                     o,
