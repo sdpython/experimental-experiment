@@ -5,7 +5,10 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 import numpy as np
 from experimental_experiment.ext_test_case import ExtTestCase, requires_onnx_array_api
-from experimental_experiment.xbuilder.reverse_graph_builder import to_graph_builder_code
+from experimental_experiment.xbuilder.reverse_graph_builder import (
+    to_graph_builder_code,
+    to_graph_pattern_matching,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
@@ -306,6 +309,70 @@ class TestReverseGraphBuilder(ExtTestCase):
                 "B": np.random.randn(1, 3),
             },
         )
+
+    def test_to_graph_pattern_matching(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "ConstantOfShape",
+                        ["shape"],
+                        ["cst"],
+                        value=onh.from_array(np.array([0], dtype=np.float32)),
+                    ),
+                    oh.make_node(
+                        "ScatterND",
+                        ["cst", "indices", "updates"],
+                        ["Z"],
+                        reduction="add",
+                    ),
+                ],
+                "create_graph",
+                [
+                    oh.make_tensor_value_info("shape", TINT64, [None]),
+                    oh.make_tensor_value_info("indices", TINT64, [None, None]),
+                    oh.make_tensor_value_info("updates", TFLOAT, [None, None, None]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [None, None, None])],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+            ],
+            ir_version=9,
+        )
+        code = to_graph_pattern_matching(model)
+        self.assertIn("return self.none()", code)
+
+    def test_to_graph_pattern_matching_6(self):
+        _mkv_ = oh.make_tensor_value_info
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "zero"], ["xu1"]),
+                    oh.make_node("Unsqueeze", ["xu1", "un"], ["xu2"]),
+                    oh.make_node("Reshape", ["xu2", "shape1"], ["xm1"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["xm2c"]),
+                    oh.make_node("Cast", ["xm2c"], ["xm2"], to=1),
+                    oh.make_node("MatMul", ["xm1", "xm2"], ["xm"]),
+                    oh.make_node("Reshape", ["xm", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("X", TFLOAT, ["D32", "D128"]),
+                    _mkv_("Y", TFLOAT, ["batch", "channel", "D128", "D64"]),
+                ],
+                [_mkv_("Z", TFLOAT, ["batch", "channel", "D32", "64"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="un"),
+                    onh.from_array(np.array([1, 32, 128], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 128, 64], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"),
+                ],
+            )
+        )
+        code = to_graph_pattern_matching(model)
+        print(code)
 
 
 if __name__ == "__main__":
