@@ -198,6 +198,7 @@ def to_graph_pattern_matching(
     first_node = True
     rows = []
     stack_names = [*output_names]
+    nodes_names = []
     while stack_names:
         rows.append("")
         name = stack_names.pop()
@@ -209,7 +210,7 @@ def to_graph_pattern_matching(
         if name not in outside and name in successors and len(successors[name]) == 1:
             rows.extend(
                 [
-                    f"if g.used_more_than_once({name}):",
+                    f"if g.is_used_more_than_once({name}):",
                     "    return self.none(node, inspect.currentframe().f_lineno)",
                 ]
             )
@@ -225,6 +226,7 @@ def to_graph_pattern_matching(
             rows.append(f"# {name} is already processed.")
             continue
         node_name = f"node_{position[key]}_{node.op_type}"
+        nodes_names.append(node_name)
         if first_node:
             first_node = False
             assert not matched, f"Algorithm issues, matches={matches}, key={key}"
@@ -241,7 +243,7 @@ def to_graph_pattern_matching(
             matches[key] = True
             stack_names.extend(node.input)
             for i_, n_ in enumerate(node.input):
-                rows.append(f"{n_} = {name}.input[{i_}]")
+                rows.append(f"{n_} = {node_name}.input[{i_}]")
             continue
 
         # Another node
@@ -259,7 +261,14 @@ def to_graph_pattern_matching(
         matches[key] = True
         stack_names.extend(node.input)
         for i_, n_ in enumerate(node.input):
-            rows.append(f"{n_} = {name}.input[{i_}]")
+            rows.append(f"{n_} = {node_name}.input[{i_}]")
         continue
 
+    rows.extend(
+        [
+            "",
+            "# list of nodes",
+            f"nodes = [{', '.join(nodes_names)}]",
+        ]
+    )
     return "\n".join(rows)

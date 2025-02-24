@@ -1,5 +1,7 @@
+import inspect
 import textwrap
 import unittest
+from typing import List, Optional
 import onnx
 import onnx.helper as oh
 import onnx.numpy_helper as onh
@@ -10,7 +12,8 @@ from experimental_experiment.xbuilder.reverse_graph_builder import (
     to_graph_pattern_matching,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
+from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions, OptimizationOptions
+from experimental_experiment.xoptim.patterns_api import MatchResult, PatternOptimization
 
 TFLOAT = onnx.TensorProto.FLOAT
 TINT64 = onnx.TensorProto.INT64
@@ -344,6 +347,132 @@ class TestReverseGraphBuilder(ExtTestCase):
         self.assertIn("return self.none()", code)
 
     def test_to_graph_pattern_matching_6(self):
+
+        class DummyPatternMatching(PatternOptimization):
+            def match(
+                self,
+                g: "GraphBuilderPatternOptimization",  # noqa: F821
+                node: onnx.NodeProto,
+                matched: List[MatchResult],
+            ) -> Optional[MatchResult]:
+                node_6_Reshape = node
+                if node_6_Reshape.op_type != "Reshape" or node_6_Reshape.domain != "":
+                    return self.none()
+                xm = node_6_Reshape.input[0]
+                # shape3 = node_6_Reshape.input[1]
+
+                # shape3 has no predecessor.
+
+                if g.is_used_more_than_once(xm):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                node_5_MatMul = g.node_before(xm)
+                if (
+                    node_5_MatMul is None
+                    or node_5_MatMul.op_type != "MatMul"
+                    or node_5_MatMul.domain != ""
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                xm1 = node_5_MatMul.input[0]
+                xm2 = node_5_MatMul.input[1]
+
+                if g.is_used_more_than_once(xm2):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                node_4_Cast = g.node_before(xm2)
+                if (
+                    node_4_Cast is None
+                    or node_4_Cast.op_type != "Cast"
+                    or node_4_Cast.domain != ""
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                xm2c = node_4_Cast.input[0]
+
+                if g.is_used_more_than_once(xm2c):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                node_3_Reshape = g.node_before(xm2c)
+                if (
+                    node_3_Reshape is None
+                    or node_3_Reshape.op_type != "Reshape"
+                    or node_3_Reshape.domain != ""
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                # Y = node_3_Reshape.input[0]
+                # shape2 = node_3_Reshape.input[1]
+
+                # shape2 has no predecessor.
+
+                # Y has no predecessor.
+
+                if g.is_used_more_than_once(xm1):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                node_2_Reshape = g.node_before(xm1)
+                if (
+                    node_2_Reshape is None
+                    or node_2_Reshape.op_type != "Reshape"
+                    or node_2_Reshape.domain != ""
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                xu2 = node_2_Reshape.input[0]
+                # shape1 = node_2_Reshape.input[1]
+
+                # shape1 has no predecessor.
+
+                if g.is_used_more_than_once(xu2):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                node_1_Unsqueeze = g.node_before(xu2)
+                if (
+                    node_1_Unsqueeze is None
+                    or node_1_Unsqueeze.op_type != "Unsqueeze"
+                    or node_1_Unsqueeze.domain != ""
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                xu1 = node_1_Unsqueeze.input[0]
+                # un = node_1_Unsqueeze.input[1]
+
+                # un has no predecessor.
+
+                if g.is_used_more_than_once(xu1):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                node_0_Unsqueeze = g.node_before(xu1)
+                if (
+                    node_0_Unsqueeze is None
+                    or node_0_Unsqueeze.op_type != "Unsqueeze"
+                    or node_0_Unsqueeze.domain != ""
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                # X = node_0_Unsqueeze.input[0]
+                # zero = node_0_Unsqueeze.input[1]
+
+                # zero has no predecessor.
+
+                # X has no predecessor.
+
+                # list of nodes
+                nodes = [
+                    node_6_Reshape,
+                    node_5_MatMul,
+                    node_4_Cast,
+                    node_3_Reshape,
+                    node_2_Reshape,
+                    node_1_Unsqueeze,
+                    node_0_Unsqueeze,
+                ]
+                return MatchResult(self, nodes, self.apply)
+
+            def apply(
+                self,
+                g: "GraphBuilder",  # noqa: F821
+                *nodes: onnx.NodeProto,
+            ) -> List[onnx.NodeProto]:
+                new_node = g.make_node(
+                    "Dummy",
+                    nodes[-1].input[0],
+                    nodes[0].output,
+                    name=f"{self.__class__.__name__}--{nodes[0].name}",
+                    doc_string=nodes[0].doc_string,
+                    domain="dummy",
+                )
+                return [new_node]
+
         _mkv_ = oh.make_tensor_value_info
         model = oh.make_model(
             oh.make_graph(
@@ -372,7 +501,17 @@ class TestReverseGraphBuilder(ExtTestCase):
             )
         )
         code = to_graph_pattern_matching(model)
-        print(code)
+        self.assertIn("nodes = [", code)
+        # print(code)
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=[DummyPatternMatching(verbose=10)], verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(len(opt_onx.graph.node), 1)
 
 
 if __name__ == "__main__":
