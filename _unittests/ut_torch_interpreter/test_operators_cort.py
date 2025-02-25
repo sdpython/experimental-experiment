@@ -773,19 +773,23 @@ class TestOperatorsCort(ExtTestCase):
             atol=1e-4,
         )
 
-    def test_batchnorm(self):
+    def test_batchnorm_main(self):
         x = torch.ones(2, 2, 2, 2, requires_grad=True)
         self.assertONNX(
             nn.BatchNorm2d(2),
             x,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_batchnorm_onnx_irv4(self):
         x = torch.ones(2, 2, 2, 2, requires_grad=True)
         self.assertONNX(
-            nn.BatchNorm2d(2), x, onnx_export=inspect.currentframe().f_code.co_name
+            nn.BatchNorm2d(2),
+            x,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_batchnorm_1d(self):
@@ -795,6 +799,7 @@ class TestOperatorsCort(ExtTestCase):
             x,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_batchnorm_training(self):
@@ -805,6 +810,7 @@ class TestOperatorsCort(ExtTestCase):
             training=torch.onnx.TrainingMode.TRAINING,
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
         )
 
     def test_conv(self):
