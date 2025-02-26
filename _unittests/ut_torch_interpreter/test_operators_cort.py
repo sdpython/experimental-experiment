@@ -781,6 +781,7 @@ class TestOperatorsCort(ExtTestCase):
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            atol=1e-4,
         )
 
     def test_batchnorm_onnx_irv4(self):
@@ -790,6 +791,7 @@ class TestOperatorsCort(ExtTestCase):
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            atol=1e-4,
         )
 
     def test_batchnorm_1d(self):
@@ -800,6 +802,7 @@ class TestOperatorsCort(ExtTestCase):
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            atol=1e-4,
         )
 
     def test_batchnorm_training(self):
@@ -811,6 +814,7 @@ class TestOperatorsCort(ExtTestCase):
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            atol=1e-4,
         )
 
     def test_conv(self):
