@@ -6334,7 +6334,9 @@ def aten__native_batch_norm(
         mean = g.op.ReduceMeanAnyOpset(x, axes_np, name=name, keepdims=1)
         input_sub_mean = g.op.Sub(x, mean, name=name)
         sqr_input_sub_mean = g.op.Pow(input_sub_mean, np.array([2], dtype=np.int64), name=name)
-        running_var = g.op.ReduceMean(sqr_input_sub_mean, axes_np, name=name, keepdims=0)
+        running_var = g.op.ReduceMeanAnyOpset(
+            sqr_input_sub_mean, axes_np, name=name, keepdims=0
+        )
 
     assert len(outputs) == 3, (
         f"Unexpected number of outputs {outputs!r}, "

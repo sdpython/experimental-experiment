@@ -1125,7 +1125,7 @@ class DynamoInterpreter:
             if isinstance(val, self.torch.Tensor):
                 shape = val.shape
                 dtype = _get_type(val.dtype)
-                # the shaphe could be new if a function produces a results
+                # the graph could be new if a function produces a results
                 # depending on the result values
                 t_shape = tuple(shape)
                 self._verify_new_shape(shape, node)

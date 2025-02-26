@@ -104,7 +104,7 @@ op = onnxscript.opset18
 
 
 @onnxscript.script()
-def numpy_sin_to_onnx(x):
+def numpy_sin_to_onnx(x) -> onnxscript.onnx_types.TensorType:
     return op.Sin(x)
 
 
@@ -117,4 +117,5 @@ ep = torch.onnx.export(
     custom_translation_table={torch.ops.mylib.numpy_sin.default: numpy_sin_to_onnx},
     dynamo=True,
 )
+
 print(to_text(ep.model_proto))
