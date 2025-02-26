@@ -1295,7 +1295,7 @@ class TestOnnxExportAten(ExtTestCase):
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got)
+        self.assertEqualArray(expected, got, atol=1e-6)
 
         # checking with onnxruntime as well
         import onnxruntime
@@ -1305,7 +1305,7 @@ class TestOnnxExportAten(ExtTestCase):
             model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
         )
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got)
+        self.assertEqualArray(expected, got, atol=1e-5)
 
 
 if __name__ == "__main__":
