@@ -1678,7 +1678,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._debug_stop_shape,
         ):
             # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
-            raise AssertionError(f"Requested stop, name={name!r}, shape={shape}")
+            raise AssertionError(
+                f"Requested stop, name={name!r}, shape={shape}{self.get_debug_msg()}"
+            )
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
         assert not shape or not isinstance(shape[0], tuple), f"Unexpected shape {shape}"

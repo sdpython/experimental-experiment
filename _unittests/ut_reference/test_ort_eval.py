@@ -186,6 +186,53 @@ class TestOrtEval(ExtTestCase):
         # )
         ort_eval.run_dlpack(None, dict(zip(input_names, values)))
 
+    def test_local_function(self):
+        new_domain = "custom"
+
+        linear_regression = oh.make_function(
+            new_domain,
+            "LinearRegression",
+            ["x", "a", "b"],
+            ["y"],
+            [
+                oh.make_node("MatMul", ["x", "a"], ["xa"]),
+                oh.make_node("Add", ["xa", "b"], ["y"]),
+            ],
+            [oh.make_opsetid("", 14)],
+            [],
+        )
+
+        graph = oh.make_graph(
+            [
+                oh.make_node("LinearRegression", ["X", "A", "B"], ["Y1"], domain=new_domain),
+                oh.make_node("Abs", ["Y1"], ["Y"]),
+            ],
+            "example",
+            [
+                oh.make_tensor_value_info("X", TFLOAT, [None, None]),
+                oh.make_tensor_value_info("A", TFLOAT, [None, None]),
+                oh.make_tensor_value_info("B", TFLOAT, [None, None]),
+            ],
+            [oh.make_tensor_value_info("Y", TFLOAT, None)],
+        )
+
+        onnx_model = oh.make_model(
+            graph,
+            opset_imports=[oh.make_opsetid("", 14), oh.make_opsetid(new_domain, 1)],
+            functions=[linear_regression],
+            ir_version=10,
+        )
+        feeds = {
+            "X": np.random.randn(3, 3).astype(np.float32),
+            "A": np.random.randn(3, 3).astype(np.float32),
+            "B": np.random.randn(3, 3).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(onnx_model)
+        ort_eval = OrtEval(onnx_model)
+        expected = ref.run(None, feeds)
+        got = ort_eval.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

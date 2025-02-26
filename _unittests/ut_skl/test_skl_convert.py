@@ -32,8 +32,8 @@ class TestSklConvert(ExtTestCase):
     @hide_stdout()
     @skipif_ci_windows("not working")
     def test_logistic_regression(self):
-        X = np.random.randn(10, 3)
-        y = (np.random.randn(10, 1) >= 0.5).astype(int)
+        X = np.random.randn(20, 3)
+        y = (np.random.randn(20, 1) >= 0.5).astype(int)
         lr = sklearn.linear_model.LogisticRegression()
         lr.fit(X, y)
         onx = to_onnx(lr, verbose=10)

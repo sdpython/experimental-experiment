@@ -96,7 +96,7 @@ op = onnxscript.opset18
 
 
 @onnxscript.script()
-def numpy_sin_to_onnx(x):
+def numpy_sin_to_onnx(x) -> onnxscript.onnx_types.TensorType:
     return op.Sin(x)
 
 

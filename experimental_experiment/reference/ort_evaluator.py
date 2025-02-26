@@ -1,6 +1,15 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
-from onnx import ModelProto, NodeProto, TensorProto, TypeProto, helper as oh, load
+from onnx import (
+    GraphProto,
+    FunctionProto,
+    ModelProto,
+    NodeProto,
+    TensorProto,
+    TypeProto,
+    helper as oh,
+    load,
+)
 from onnx.numpy_helper import to_array
 from ..helpers import pretty_onnx, np_dtype_to_tensor_dtype
 
@@ -19,17 +28,19 @@ class OrtEval:
     :param incremental: run the model node by node, but for every node,
         executes the graph up to that node
     :param optimized_model_filepath: export the optimized graph
+    :param local_functions: additional local functions
     """
 
     def __init__(
         self,
-        proto: Union[str, ModelProto],
+        proto: Union[str, ModelProto, FunctionProto, GraphProto],
         providers: Optional[Union[str, List[str]]] = None,
         options: Optional["onnxruntime.SessionOptions"] = None,  # noqa: F821
         verbose: int = 0,
         whole: bool = False,
         incremental: bool = False,
         optimized_model_filepath: Optional[str] = None,
+        local_functions: Optional[Dict[Tuple[str, str], FunctionProto]] = None,
     ):
         self.session_options = options
         if self.session_options is None:
@@ -66,14 +77,29 @@ class OrtEval:
         self._cache = {}
         if isinstance(proto, str):
             proto = load(proto)
-        assert isinstance(proto, ModelProto), f"Unexpected type {type(proto)}"
+        if isinstance(proto, OrtEval):
+            proto = proto.proto
+        assert isinstance(
+            proto, (FunctionProto, ModelProto, GraphProto)
+        ), f"Unexpected type {type(proto)}"
         self.proto = proto
-        self.nodes = list(proto.graph.node)
-        self.rt_inits_ = {init.name: to_array(init) for init in proto.graph.initializer}
-        self.rt_nodes_ = list(self.proto.graph.node)
+        self.nodes = list(proto.graph.node if hasattr(proto, "graph") else proto.node)
+        self.rt_inits_ = (
+            {init.name: to_array(init) for init in proto.graph.initializer}
+            if hasattr(proto, "graph")
+            else {}
+        )
+        self.rt_nodes_ = list(self.proto.graph.node if hasattr(proto, "graph") else proto.node)
         self.verbose = verbose
         self.whole = whole
         self.incremental = incremental
+        self.local_functions = (
+            {(f.domain, f.name): self.__class__(f) for f in proto.functions}
+            if isinstance(proto, ModelProto)
+            else {}
+        )
+        if local_functions:
+            self.local_functions.update(local_functions)
         assert not whole or not incremental, (
             f"whole={whole} and incremental={incremental} "
             f"cannot be both True at the same time."
@@ -109,6 +135,26 @@ class OrtEval:
             torch.int64: TensorProto.INT64,
             torch.bool: TensorProto.BOOL,
         }
+
+    @property
+    def input_names(self) -> List[str]:
+        "Returns input names."
+        return [
+            getattr(o, "name", o)
+            for o in (
+                self.proto.graph.input if hasattr(self.proto, "graph") else self.proto.input
+            )
+        ]
+
+    @property
+    def output_names(self) -> List[str]:
+        "Returns output names."
+        return [
+            getattr(o, "name", o)
+            for o in (
+                self.proto.graph.output if hasattr(self.proto, "graph") else self.proto.output
+            )
+        ]
 
     def _get_torch_dtype(self, dt: Any) -> "torch.dtype":  # noqa: F821
         if dt == np.bool_:
@@ -150,13 +196,13 @@ class OrtEval:
             device = f"D{a.get_device()}:"
             a = a.detach().cpu().numpy()
         else:
-            device = -1
+            device = ""
         if isinstance(a, np.ndarray):
             if self.verbose < 4:  # noqa: PLR2004
                 return f"{device}{a.dtype}:{a.shape} in [{a.min()}, {a.max()}]"
             elements = a.ravel().tolist()
-            if len(elements) > 5:  # noqa: PLR2004
-                elements = elements[:5]
+            if len(elements) > 10:  # noqa: PLR2004
+                elements = elements[:10]
                 return f"{device}{a.dtype}:{a.shape}:{','.join(map(str, elements))}..."
             return f"{device}{a.dtype}:{a.shape}:{elements}"
         if hasattr(a, "append"):
@@ -167,6 +213,9 @@ class OrtEval:
         if level < self.verbose:
             new_args = [self._log_arg(a) for a in args]
             print(pattern % tuple(new_args))
+
+    def _is_local_function(self, node: NodeProto) -> bool:
+        return (node.domain, node.op_type) in self.local_functions
 
     def run(
         self,
@@ -199,7 +248,7 @@ class OrtEval:
             return sess.run(outputs, feed_inputs, run_options=self.run_options)
 
         if outputs is None:
-            outputs = [o.name for o in self.proto.graph.output]
+            outputs = self.output_names
         results = self.rt_inits_.copy()
 
         for k, v in self.rt_inits_.items():
@@ -218,7 +267,12 @@ class OrtEval:
                         f"feed_inputs has {sorted(feed_inputs)}."
                     )
             inputs = [(results[i] if i != "" else None) for i in node.input]
-            outputs = self._run(node, inputs, results)
+            if node.op_type == "If" and node.domain == "":
+                outputs = self._run_if(node, inputs, results)
+            elif self._is_local_function(node):
+                outputs = self._run_local(node, inputs, results)
+            else:
+                outputs = self._run(node, inputs, results)
             for name, value in zip(node.output, outputs):
                 if name == "":
                     continue
@@ -227,7 +281,7 @@ class OrtEval:
 
         if intermediate:
             return results
-        output_names = [o.name for o in self.proto.graph.output]
+        output_names = self.output_names
         for name in output_names:
             if name == "":
                 continue
@@ -280,8 +334,8 @@ class OrtEval:
 
         onx = oh.make_model(
             oh.make_graph([node], "node", vinputs, voutputs),
-            ir_version=self.proto.ir_version,
-            functions=self.proto.functions,
+            ir_version=getattr(self.proto, "ir_version", 10),
+            functions=getattr(self.proto, "functions", None),
         )
         del onx.opset_import[:]
         onx.opset_import.extend(self.proto.opset_import)
@@ -290,16 +344,77 @@ class OrtEval:
             sess = onnxruntime.InferenceSession(
                 onx.SerializeToString(), self.session_options, self.providers
             )
-        except onnxruntime.capi.onnxruntime_pybind11_state.Fail as e:
+        except (
+            onnxruntime.capi.onnxruntime_pybind11_state.Fail,
+            onnxruntime.capi.onnxruntime_pybind11_state.InvalidGraph,
+        ) as e:
             raise RuntimeError(
                 f"Unable to infer a session due to {e}\n{pretty_onnx(onx)}"
             ) from e
         return onx, sess
 
+    def _get_sess_if(
+        self, node: NodeProto, branch: str, inputs: List[Any], context: Dict[str, Any]
+    ) -> Tuple[ModelProto, "onnxruntime.InferenceSession"]:  # noqa: F821
+        assert (
+            not self.incremental
+        ), f"get_sess_if not implemented with incremental={self.incremental}"
+        unique_names = set()
+        vinputs = []
+        for i, it in zip(node.input, inputs):
+            if i == "" or i in unique_names:
+                continue
+            unique_names.add(i)
+            value = oh.make_tensor_value_info(i, self._get_itype(it.dtype), it.shape)
+            vinputs.append(value)
+
+        for i, v in context.items():
+            if i not in unique_names:
+                unique_names.add(i)
+                value = oh.make_tensor_value_info(i, self._get_itype(v.dtype), v.shape)
+                vinputs.append(value)
+
+        for att in node.attribute:
+            if att.name == branch:
+                g = att.g
+
+        voutputs = g.output
+
+        onx = oh.make_model(
+            oh.make_graph(g.node, "node", vinputs, voutputs),
+            ir_version=getattr(self.proto, "ir_version", 10),
+            functions=getattr(self.proto, "functions", None),
+        )
+        del onx.opset_import[:]
+        onx.opset_import.extend(self.proto.opset_import)
+
+        sess = OrtEval(
+            onx,
+            local_functions=self.local_functions,
+            verbose=self.verbose,
+            options=self.session_options,
+            whole=self.whole,
+            incremental=self.incremental,
+        )
+        return onx, sess
+
+    def _get_sess_local(
+        self, node: NodeProto, inputs: List[Any]
+    ) -> Tuple[ModelProto, "onnxruntime.InferenceSession"]:  # noqa: F821
+        assert not self.incremental, f"incremental={self.incremental} not yet implemented"
+        onx = self.local_functions[node.domain, node.op_type]
+        sess = OrtEval(
+            onx,
+            local_functions=self.local_functions,
+            verbose=self.verbose,
+            options=self.session_options,
+            whole=self.whole,
+            incremental=self.incremental,
+        )
+        return onx, sess
+
     def _run(self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]) -> List[Any]:
-        """
-        Runs a node.
-        """
+        """Runs a node."""
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
         key = (id(node), *types)
         if key in self._cache:
@@ -310,14 +425,67 @@ class OrtEval:
         if self.incremental:
             # Inputs are the inputs of the model not the node.
             feeds = {}
-            for i in self.proto.graph.input:
-                feeds[i.name] = results[i.name]
+            for i in self.input_names:
+                feeds[i] = results[i]
         else:
             feeds = dict(zip(node.input, inputs))
             if "" in feeds:
                 feeds[""] = np.array([0], dtype=np.float32)
 
         outputs = sess.run(None, feeds, run_options=self.run_options)
+        return outputs
+
+    def _run_if(
+        self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]
+    ) -> List[Any]:
+        """Runs a node if."""
+        assert (
+            not self.incremental
+        ), f"run_if not implemented when incremental={self.incremental}"
+        feeds = dict(zip(node.input, inputs))
+        feeds.update(results)
+        if feeds[node.input[0]]:
+            name = "then_branch"
+        else:
+            name = "else_branch"
+
+        key = (id(node), name)
+        if key in self._cache:
+            sess = self._cache[key][1]
+        else:
+            self._cache[key] = onx, sess = self._get_sess_if(node, name, inputs, results)
+
+        outputs = sess.run(None, feeds)
+        return outputs
+
+    def _run_local(
+        self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]
+    ) -> List[Any]:
+        """Runs a node."""
+        types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
+        key = (id(node), *types)
+        if key in self._cache:
+            sess = self._cache[key][1]
+        else:
+            self._cache[key] = onx, sess = self._get_sess_local(node, inputs)
+
+        replace = dict(zip(node.input, sess.input_names))
+        if self.incremental:
+            # Inputs are the inputs of the model not the node.
+            feeds = {}
+            for i in self.input_names:
+                feeds[i] = results[i]
+        else:
+            assert len(node.input) == len(sess.input_names), (
+                f"Input mismatch: input_names={sess.input_names}, "
+                f"replace={replace}, "
+                f"type(self.proto)={type(self.proto)}, and node=\n{node}"
+            )
+            feeds = {replace[i]: v for i, v in zip(node.input, inputs)}
+            if "" in feeds:
+                feeds[""] = np.array([0], dtype=np.float32)
+
+        outputs = sess.run(None, feeds)
         return outputs
 
     def run_dlpack(
@@ -346,11 +514,12 @@ class OrtEval:
                 )
                 self._cache[""] = sess
 
-            input_names = [i.name for i in self.proto.graph.input]
-            output_names = [i.name for i in self.proto.graph.output]
+            input_names = self.input_names
+            output_names = self.output_names
+
             inputs = [feed_inputs[i] for i in input_names]
             ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
-                inputs, len(self.proto.graph.output)
+                inputs, len(output_names)
             )
 
             ort_outputs = ORTC.OrtValueVector()
@@ -366,7 +535,7 @@ class OrtEval:
             return pth_outputs
 
         if outputs is None:
-            outputs = [o.name for o in self.proto.graph.output]
+            outputs = self.output_names
         if not hasattr(self, "rt_inits_torch_"):
             import torch
 
@@ -420,7 +589,7 @@ class OrtEval:
                 self._log(2, " + %s: %s", name, value)  # type: ignore[arg-type]
                 results[name] = value
 
-        output_names = [o.name for o in self.proto.graph.output]
+        output_names = self.output_names
         for name in output_names:
             if name not in results:
                 raise RuntimeError(
@@ -535,11 +704,11 @@ class OrtEval:
             former_inputs = inputs
             inputs = []
             input_names = []
-            for i in self.proto.graph.input:
-                if i.name == "":
+            for i in self.input_names:
+                if i == "":
                     continue
-                inputs.append(results[i.name])
-                input_names.append(i.name)
+                inputs.append(results[i])
+                input_names.append(i)
 
             ortvalues, output_devices = self._get_ortvalues_from_torch_tensors(
                 inputs, len(onames), log_set=former_inputs

@@ -959,6 +959,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                     exporter=exporter, d3=d3, decomposition=decomposition, dynamic=dynamic
                 )
 
+    @hide_stdout()
     def test_sequence_ops_embedding_bag(self):
         # https://github.com/pytorch/pytorch/issues/138485
         import torch
