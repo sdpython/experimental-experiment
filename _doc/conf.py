@@ -166,7 +166,7 @@ if int(os.environ.get("UNITTEST_GOING", "0")):
     )
 elif pv.Version(torch.__version__) < pv.Version("2.8"):
     sphinx_gallery_conf["ignore_pattern"] = (
-        ".*((_oe_((modules)|(custom)))|(_executorch_)|(oe_scan)|(_plot_torch_sklearn_201_knnpy)).*"
+        ".*((_oe_((modules)|(inplace)))|(_executorch_)|(oe_scan)|(_plot_torch_sklearn_201_knnpy)).*"
     )
 
 

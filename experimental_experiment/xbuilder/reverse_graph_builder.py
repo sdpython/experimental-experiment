@@ -42,7 +42,7 @@ def to_graph_builder_code(proto: onnx.ModelProto, function_name: str = "build_mo
     :param function_name: function name
     :return: str
 
-    Example:
+    Example (see also :ref:`l-plot-model-to-code`):
 
     .. runpython::
         :showcode:
@@ -109,7 +109,7 @@ def to_graph_pattern_matching(
     :param proto: model to convert into a code
     :return: str
 
-    Example:
+    Example (see also :ref:`l-plot-model-to-code`):
 
     .. runpython::
         :showcode:
