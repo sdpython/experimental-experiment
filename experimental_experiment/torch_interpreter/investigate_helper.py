@@ -150,7 +150,11 @@ def run_aligned(
     verbose: int = 0,
 ) -> Iterator[Tuple[Any, ...]]:
     """
-    Runs both the exported program and the onnx proto and looks for discrepancies.
+    Runs in parallel both the exported program
+    and the onnx proto and looks for discrepancies.
+    The function does match on result names so it assumes
+    the exported program and the onnx model have the same names
+    fro equivalent results.
 
     :param ep: exported program
     :param onx: model or function proto
@@ -158,7 +162,65 @@ def run_aligned(
     :param check_conversion_cls: defines the runtime to use for this task
     :param kwargs: input kwargs
     :param verbose: verbosity level
-    :return: a list of tuples containing the results.
+    :return: a list of tuples containing the results, they come in tuple,
+
+    Example:
+
+    .. runpython::
+        :showcode:
+        :warningout: UserWarning
+
+        import pprint
+        import pandas
+        import torch
+        from experimental_experiment.reference import (
+            # This can be replace by any runtime taking NodeProto as an input.
+            ExtendedReferenceEvaluator as ReferenceEvaluator
+        )
+        from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.torch_interpreter.investigate_helper import run_aligned
+
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                ry = x.abs()
+                rz = ry.exp()
+                rw = rz + 1
+                ru = rw.log() + rw
+                return ru
+
+
+        def post_process(obs):
+            dobs = dict(zip(["ep_id_node", "onnx_id_node", "ep_name", "onnx_name"], obs))
+            dobs["err_abs"] = obs[-1]["abs"]
+            dobs["err_rel"] = obs[-1]["rel"]
+            return dobs
+
+
+        x = torch.randn((5, 4))
+        Model()(x)  # to make sure the model is running
+        ep = torch.export.export(
+            Model(), (x,), dynamic_shapes=({0: torch.export.Dim("batch")},)
+        )
+        onx = to_onnx(ep)
+        results = list(
+            map(
+                post_process,
+                run_aligned(
+                    ep,
+                    onx,
+                    (x,),
+                    check_conversion_cls=dict(
+                        cls=ReferenceEvaluator, atol=1e-5, rtol=1e-5
+                    ),
+                    verbose=1,
+                ),
+            ),
+        )
+        print("------------")
+        print("final results")
+        df = pandas.DataFrame(results)
+        print(df)
     """
     assert not kwargs, f"Not implemented when kwargs={string_type(kwargs,with_shape=True)}"
     cls, atol, rtol = (
