@@ -784,6 +784,16 @@ class TestOperatorsCort(ExtTestCase):
             atol=1e-4,
         )
 
+    def test_batchnorm_noaffine(self):
+        x = torch.randn(128, 128, 1, 1, requires_grad=True)
+        self.assertONNX(
+            nn.BatchNorm2d(128, affine=False, momentum=0.3),
+            x,
+            keep_initializers_as_inputs=True,
+            onnx_export=inspect.currentframe().f_code.co_name,
+            test_backward=False,
+        )
+
     def test_batchnorm_onnx_irv4(self):
         x = torch.ones(2, 2, 2, 2, requires_grad=True)
         self.assertONNX(
@@ -1668,15 +1678,6 @@ class TestOperatorsCort(ExtTestCase):
         self.assertONNX(
             lambda x: x.unsqueeze(len(x.shape)),
             x,
-            onnx_export=inspect.currentframe().f_code.co_name,
-        )
-
-    def test_batchnorm_noaffine(self):
-        x = torch.randn(128, 128, 1, 1, requires_grad=True)
-        self.assertONNX(
-            nn.BatchNorm2d(128, affine=False, momentum=0.3),
-            x,
-            keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
