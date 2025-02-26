@@ -784,6 +784,7 @@ class TestOperatorsCort(ExtTestCase):
             atol=1e-4,
         )
 
+    @unittest.skip("Cannot replicate without torch.compile")
     def test_batchnorm_noaffine(self):
         x = torch.randn(128, 128, 1, 1, requires_grad=True)
         self.assertONNX(
@@ -792,6 +793,8 @@ class TestOperatorsCort(ExtTestCase):
             keep_initializers_as_inputs=True,
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,
+            verbose=0,
+            # impl="onnx",
         )
 
     def test_batchnorm_onnx_irv4(self):

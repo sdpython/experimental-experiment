@@ -83,7 +83,7 @@ def assert_all_close(
         assert isinstance(v2, np.ndarray), f"v2 is not an array but {type(v2)}"
         try:
             # desired is the second input
-            np.testing.assert_allclose(v2, v1, atol=atol, rtol=rtol)
+            np.testing.assert_allclose(v2, v1, atol=atol, rtol=rtol, verbose=True)
         except AssertionError as e:
             if quantile is None:
                 if v1.size <= 10:
