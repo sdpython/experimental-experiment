@@ -7,6 +7,7 @@ Playground for big optimization pattern
 # Write the code produing the model
 # =================================
 """
+
 import numpy as np
 import onnx
 import onnx.helper as oh

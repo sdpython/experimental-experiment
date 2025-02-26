@@ -200,7 +200,7 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.7"):
                     reason = "requires torch 2.7"
 
-            if not reason and name == "plot_torch_sklearn_201.py":
+            if not reason and name in {"plot_torch_sklearn_201.py", "plot_model_to_python.py"}:
                 import onnx_array_api
 
                 if pv.Version(onnx_array_api.__version__) < pv.Version("0.3.1"):
