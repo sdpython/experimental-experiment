@@ -1109,6 +1109,24 @@ class CustomTracer(torch.fx.Tracer):
                             )
                         continue
 
+                    if (
+                        # y = add_(x, 1) but x is used once (here) and y is not used
+                        node.target.name() in {"aten::add_.Tensor", "aten::mul_.Tensor"}
+                        and isinstance(node.args[0], torch.fx.Node)
+                        and not isinstance(node.args[1], torch.fx.Node)
+                        and len(node.args[0].users) <= 1
+                    ):
+                        # This node cannot be one inplace modification.
+                        # The node is just not used.
+                        cls.graph_erase_node(graph, node)
+                        del existing_nodes[pos]
+                        if verbose > 2:
+                            print(
+                                f"[CustomTracer.remove_inplace] B2.remove "
+                                f"{pos}: {node.target}({node.args}) -> {node}"
+                            )
+                        continue
+
                     if len(node.args) == 1:
                         # We should be able to remove this inplace modification
                         # unless the predecessor is a Tensor.

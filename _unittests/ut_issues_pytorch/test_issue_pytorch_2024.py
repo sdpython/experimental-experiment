@@ -14,6 +14,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     has_torch,
 )
+from experimental_experiment.helpers import string_type
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.onnx_tools import onnx_find
@@ -960,14 +961,18 @@ class TestIssuesPytorch2024(ExtTestCase):
                 )
 
     @hide_stdout()
+    @ignore_warnings(UserWarning)
     def test_sequence_ops_embedding_bag(self):
         # https://github.com/pytorch/pytorch/issues/138485
         import torch
 
         model = torch.nn.EmbeddingBag(num_embeddings=49157, embedding_dim=32, mode="sum")
-        a = torch.tensor([[39906]]).long()
+        a = torch.tensor([[39906, 39906]]).long()
         example_args = (a,)
         model_eval = model.eval()
+        expected = model(*example_args)
+        print("expected", string_type(expected, with_shape=True, with_min_max=True))
+
         onx = to_onnx(model_eval, example_args, verbose=10, optimize=True)
         # self.print_model(onx)
         onnx_find(onx, watch={"_onx_gather__shape_slice_concat_arange00200"}, verbose=0)
@@ -975,8 +980,6 @@ class TestIssuesPytorch2024(ExtTestCase):
         # self.print_model(onx)
         with open("test_sequence_ops_embedding_bag_custom.onnx", "wb") as f:
             f.write(onx.SerializeToString())
-
-        expected = model(*example_args)
 
         from onnxruntime import InferenceSession
 

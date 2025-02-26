@@ -24,11 +24,11 @@ class CustomBuilderEmitter(BuilderEmitter):
         rows = super()._emit_end_function(**kwargs)
         return [
             *rows[:-1],
-            f"    opts = FunctionOptions("
-            f"        name={self.f_name!r},"
-            f"        domain={self.f_domain!r},"
-            f"        move_initializer_to_constant=True,"
-            f"    )",
+            "    opts = FunctionOptions(",
+            f"        name={self.f_name!r},",
+            f"        domain={self.f_domain!r},",
+            "        move_initializer_to_constant=True,",
+            "    )",
             "    g.make_local_function(gr, opts, optimize=False)",
         ]
 
@@ -42,7 +42,7 @@ def to_graph_builder_code(proto: onnx.ModelProto, function_name: str = "build_mo
     :param function_name: function name
     :return: str
 
-    Example:
+    Example (see also :ref:`l-plot-model-to-code`):
 
     .. runpython::
         :showcode:
@@ -109,7 +109,7 @@ def to_graph_pattern_matching(
     :param proto: model to convert into a code
     :return: str
 
-    Example:
+    Example (see also :ref:`l-plot-model-to-code`):
 
     .. runpython::
         :showcode:

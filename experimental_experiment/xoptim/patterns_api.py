@@ -103,6 +103,9 @@ class PatternOptimization:
         all patterns whose priority is below one threshold
         are executed, if none of them matches, the priority is increase
     :param min_opset: can be applied if main opset is > min_opset
+
+    Example :ref:`l-plot-model-to-code` shows a way to find or build a skeleton
+    for a pattern.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 1, min_opset: int = 1):

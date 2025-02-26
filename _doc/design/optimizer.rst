@@ -457,3 +457,10 @@ Nodes
 * :meth:`make_node_check_opset <experimental_experiment.xoptim.GraphBuilderPatternOptimization.make_node_check_opset>`:
   creates a node without adding it to the graph, deals with some constraints
   related to opset version
+
+Examples or Tools
+=================
+
+* :ref:`l-plot-rewrite-101`
+* :ref:`l-plot-optimize-101`
+* :ref:`l-plot-model-to-code`

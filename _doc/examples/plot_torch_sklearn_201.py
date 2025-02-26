@@ -11,11 +11,11 @@ The first step is to rewrite the scikit-learn model with torch functions.
 The code is then refactored and split into submodules to be able
 to bypass some pieces :func:`torch.export.export` cannot process.
 
-torch implementation of nan_euclidean
-=====================================
+torch implementation of nan_euclidean_distances
+===============================================
 
 Let's start with a simple case, a pairwise distance.
-See :func:`sklearn.metrics.nan_euclidean`.
+See :func:`sklearn.metrics.nan_euclidean_distances`.
 
 Module
 ++++++
@@ -27,18 +27,15 @@ import logging
 import math
 import numbers
 import warnings
-from typing import Any, Dict, List, Optional
 import numpy as np
 import onnx
-from onnx.reference.ops.op_topk import TopK_11 as TopK
 import sklearn
 import torch
 import onnxruntime
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.xbuilder import GraphBuilder
 from experimental_experiment.helpers import max_diff, pretty_onnx
 from experimental_experiment.skl.helpers import flatnonzero, _get_weights
-from experimental_experiment.torch_interpreter import make_undefined_dimension, Dispatcher
+from experimental_experiment.torch_interpreter import make_undefined_dimension
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
 )
@@ -50,7 +47,7 @@ from experimental_experiment.xbuilder.reverse_graph_builder import to_graph_buil
 
 
 class NanEuclidean(torch.nn.Module):
-    """Implements :func:`sklearn.metrics.nan_euclidean`."""
+    """Implements :func:`sklearn.metrics.nan_euclidean_distances`."""
 
     def __init__(self, squared=False, copy=True):
         super().__init__()
@@ -100,13 +97,36 @@ class NanEuclidean(torch.nn.Module):
 # Validation
 # ++++++++++
 
+
+def get_xy(sizex=5, sizey=3, col=3, n_nans=None):
+    X = torch.randn((sizex, col))
+    Y = torch.randn((sizey, col))
+    i_nans = 0
+    for i in range(sizex):
+        X[i, i % X.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
+        X[i, (i + 1) % X.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
+    i_nans = 0
+    for i in range(sizey):
+        Y[(i + 1) % sizey, i % Y.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
+        Y[(i + 1) % sizey, (i + 1) % Y.shape[1]] = torch.nan
+        i_nans += 1
+        if n_nans and n_nans >= i_nans:
+            break
+    return X, Y
+
+
+X, Y = get_xy()
 model = NanEuclidean()
-X = torch.randn((5, 3))
-Y = torch.randn((5, 3))
-for i in range(5):
-    X[i, i % X.shape[1]] = torch.nan
-for i in range(4):
-    Y[i + 1, i % X.shape[1]] = torch.nan
+
 
 d1 = sklearn.metrics.nan_euclidean_distances(X.numpy(), Y.numpy())
 d2 = model(X, Y)
@@ -120,6 +140,9 @@ print(f"discrepancies: {max_diff(d1, d2)}")
 # See :class:`sklearn.impute.KNNImputer`.
 # The code is split into several :class:`torch.nn.Module`
 # and refactored to avoid control flow.
+#
+# Module and sub modules
+# ++++++++++++++++++++++
 
 
 def _get_mask(X, value_to_mask):
@@ -132,13 +155,6 @@ def _get_mask(X, value_to_mask):
         )
         else (value_to_mask == X)
     )
-
-
-class SubTopKIndices(torch.nn.Module):
-    def forward(self, x, k):
-        # torch does not like nans
-        xn = torch.nan_to_num(x, nan=1.0e10)
-        return torch.topk(xn, k, dim=1, largest=False, sorted=True).indices
 
 
 class SubWeightMatrix(torch.nn.Module):
@@ -158,16 +174,10 @@ class SubWeightMatrix(torch.nn.Module):
 
 
 class SubDonorsIdx(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self._topk = SubTopKIndices()
-
     def forward(self, dist_pot_donors, n_neighbors):
-        donors_idx = self._topk(dist_pot_donors, n_neighbors)
-        indices = torch.arange(donors_idx.shape[0])
-        indices_extended = indices[:, None]
-        donors_dist = dist_pot_donors[indices_extended, donors_idx]
-        return donors_idx, donors_dist
+        xn = torch.nan_to_num(dist_pot_donors, nan=1.0e10)
+        tk = torch.topk(xn, n_neighbors, dim=1, largest=False, sorted=True)
+        return tk.indices, tk.values
 
 
 class MakeNewWeights(torch.nn.Module):
@@ -206,12 +216,107 @@ class CalcImpute(torch.nn.Module):
         return self._calc_impute(dist_pot_donors, n_neighbors, fit_X_col, mask_fit_X_col)
 
 
+class ColProcessorAllNan(torch.nn.Module):
+    def __init__(self, col: int):
+        super().__init__()
+        self.col = col
+
+    def forward(
+        self,
+        X,
+        dist_subset,
+        mask_fit_X,
+        _fit_X,
+        receivers_idx,
+        all_nan_receivers_idx,
+        all_nan_dist_mask,
+        dist_chunk,
+        dist_idx_map,
+        potential_donors_idx,
+    ):
+        col = self.col
+        X = X.clone()
+        mask_ = (~mask_fit_X[:, col]).to(_fit_X.dtype)
+        mask_sum = mask_.to(X.dtype).sum()
+
+        col_sum = (_fit_X[mask_ == 1, col]).sum().to(X.dtype)
+        div = torch.where(mask_sum > 0, mask_sum, torch.tensor([1], dtype=mask_sum.dtype))
+        X[all_nan_receivers_idx, col] = col_sum / div
+
+        # receivers with at least one defined distance
+        receivers_idx = receivers_idx[~all_nan_dist_mask]
+        dist_subset = dist_chunk[dist_idx_map[receivers_idx]][:, potential_donors_idx]
+        return X, dist_subset, receivers_idx
+
+
+class ColProcessorIdentity(torch.nn.Module):
+    def forward(
+        self,
+        X,
+        dist_subset,
+        mask_fit_X,
+        _fit_X,
+        receivers_idx,
+        all_nan_receivers_idx,
+        all_nan_dist_mask,
+        dist_chunk,
+        dist_idx_map,
+        potential_donors_idx,
+    ):
+        return (
+            X,
+            dist_subset,
+            receivers_idx,
+        )
+
+
+class ColProcessorCond(torch.nn.Module):
+    def __init__(self, col: int):
+        super().__init__()
+        self.col = col
+        self._all_nan = ColProcessorAllNan(col)
+        self._identity = ColProcessorIdentity()
+
+    def forward(
+        self,
+        X,
+        dist_subset,
+        mask_fit_X,
+        _fit_X,
+        receivers_idx,
+        all_nan_receivers_idx,
+        all_nan_dist_mask,
+        dist_chunk,
+        dist_idx_map,
+        potential_donors_idx,
+    ):
+        X, dist_subset, receivers_idx = torch.cond(
+            all_nan_receivers_idx.numel() > 0,
+            self._all_nan,
+            self._identity,
+            [
+                X,
+                dist_subset,
+                mask_fit_X,
+                _fit_X,
+                receivers_idx,
+                all_nan_receivers_idx,
+                all_nan_dist_mask,
+                dist_chunk,
+                dist_idx_map,
+                potential_donors_idx,
+            ],
+        )
+        return X, dist_subset, receivers_idx
+
+
 class ColProcessor(torch.nn.Module):
     """Processes one column (= one feature)."""
 
     def __init__(self, col, n_neighbors, weights):
         super().__init__()
         self._calc_impute = CalcImpute(weights)
+        self._col_cond = ColProcessorCond(col)
         self.col = col
         self.n_neighbors = n_neighbors
 
@@ -244,16 +349,32 @@ class ColProcessor(torch.nn.Module):
         all_nan_receivers_idx = receivers_idx[all_nan_dist_mask]
 
         # when all_nan_receivers_idx is not empty (training set is small)
-        mask_ = (~mask_fit_X[:, col]).to(_fit_X.dtype)
-        mask_sum = mask_.to(X.dtype).sum()
-
-        col_sum = (_fit_X[mask_ == 1, col]).sum().to(X.dtype)
-        div = torch.where(mask_sum > 0, mask_sum, torch.tensor([1], dtype=mask_sum.dtype))
-        X[all_nan_receivers_idx, col] = col_sum / div
-
-        # receivers with at least one defined distance
-        receivers_idx = receivers_idx[~all_nan_dist_mask]
-        dist_subset = dist_chunk[dist_idx_map[receivers_idx]][:, potential_donors_idx]
+        # ... if all_nan_receivers_idx.size > 0:
+        #    # onnxruntime does not like this part when it is empty
+        #    mask_ = (~mask_fit_X[:, col]).to(_fit_X.dtype)
+        #    mask_sum = mask_.to(X.dtype).sum()
+        #
+        #    col_sum = (_fit_X[mask_ == 1, col]).sum().to(X.dtype)
+        #    div = torch.where(mask_sum > 0, mask_sum, torch.tensor([1], dtype=mask_sum.dtype))
+        #    X[all_nan_receivers_idx, col] = col_sum / div
+        #
+        #     # receivers with at least one defined distance
+        #     receivers_idx = receivers_idx[~all_nan_dist_mask]
+        #     dist_subset = dist_chunk[dist_idx_map[receivers_idx]][:, potential_donors_idx]
+        # else
+        #     ... identity
+        X, dist_subset, receivers_idx = self._col_cond(
+            X,
+            dist_subset,
+            mask_fit_X,
+            _fit_X,
+            receivers_idx,
+            all_nan_receivers_idx,
+            all_nan_dist_mask,
+            dist_chunk,
+            dist_idx_map,
+            potential_donors_idx,
+        )
 
         # when all_nan_receivers_idx is not empty (training set is big)
         tn = torch.tensor(self.n_neighbors)
@@ -399,14 +520,8 @@ class TorchKNNImputer(torch.nn.Module):
 # We need to do that with different sizes of training set.
 
 
-def validate(size, sizey):
-    X = torch.randn((size, 3))
-    Y = torch.randn((sizey, 3))
-    for i in range(X.shape[0]):
-        X[i, i % X.shape[1]] = torch.nan
-    for i in range(Y.shape[0] - 1):
-        Y[i + 1, i % X.shape[1]] = torch.nan
-
+def validate(size, sizey, col=3, n_nans=None):
+    X, Y = get_xy(size, sizey, col, n_nans)
     knn_imputer = sklearn.impute.KNNImputer(n_neighbors=3)
     knn_imputer.fit(X)
 
@@ -438,6 +553,8 @@ def validate(size, sizey):
 
 knn5, Y10 = validate(5, 10)
 knn50, Y40 = validate(50, 40)
+knn1, Y1 = validate(10, 10, n_nans=1)
+knn11, Y11 = validate(11, 11, n_nans=1)
 
 # %%
 # Export to ONNX
@@ -452,33 +569,64 @@ knn50, Y40 = validate(50, 40)
 #
 # First step, we create two sets of inputs. A function will use this
 # to infer the dynamic shapes.
+#
+# First step: tracing intermediate outputs
+# ++++++++++++++++++++++++++++++++++++++++
 
+used = [(knn50, Y40), (knn5, Y10), (knn1, Y1), (knn11, Y11)]
 inputs = [
     (
         (
-            torch.from_numpy(knn50._mask_fit_X),
-            torch.from_numpy(knn50._valid_mask),
-            torch.from_numpy(knn50._fit_X.astype(np.float32)),
-            Y40,
+            torch.from_numpy(knn._mask_fit_X),
+            torch.from_numpy(knn._valid_mask),
+            torch.from_numpy(knn._fit_X.astype(np.float32)),
+            y,
         ),
         {},
-    ),
-    (
-        (
-            torch.from_numpy(knn5._mask_fit_X),
-            torch.from_numpy(knn5._valid_mask),
-            torch.from_numpy(knn5._fit_X.astype(np.float32)),
-            Y10,
-        ),
-        {},
-    ),
+    )
+    for knn, y in used
 ]
 
 # %%
 # Then we trace the execution to capture every input and output of every submodule.
 # The model implementation was refactored to introduce many tiny one and get
 # a fine-grained evaluation of the exportability.
+# We track messages such as ``-needs-more-inputs`` or ``-no-input``.
+# If any, we must provide the tracer more input to make sure
+# every submodule receives enough data to guess dynamic shapes and export.
+# When the model has control flow, we need more data to make sure every
+# piece is used.
 
+trace = trace_execution_piece_by_piece(TorchKNNImputer(knn5), inputs, verbose=0)
+pretty = trace.get_export_report()
+print(pretty)
+
+# %%
+# We need more so let's add more.
+
+
+def rotate(inputs, col=3):
+    if isinstance(inputs, torch.Tensor):
+        if len(inputs.shape) == 2 and inputs.shape[1] == 3:
+            return torch.cat([inputs[:, 1:], inputs[:, :1]], axis=1)
+        if len(inputs.shape) == 1 and inputs.shape[0] == 3:
+            return torch.cat([inputs[1:], inputs[:1]], axis=0)
+        return inputs
+    if isinstance(inputs, tuple):
+        return tuple(rotate(i, col=col) for i in inputs)
+    if isinstance(inputs, list):
+        return [rotate(i, col=col) for i in inputs]
+    if isinstance(inputs, dict):
+        return {k: rotate(v, col=col) for k, v in inputs.items()}
+    raise TypeError(f"Unexpected type {type(inputs)}")
+
+
+inputs = [*inputs, *rotate(inputs), *rotate(rotate(inputs))]
+
+# %%
+# Let's try again.
+
+print("---------")
 trace = trace_execution_piece_by_piece(TorchKNNImputer(knn5), inputs, verbose=0)
 pretty = trace.get_export_report()
 print(pretty)
@@ -501,26 +649,17 @@ shape_functions = {
     "CalcImpute": {
         0: lambda *args, **kwargs: torch.empty((args[0].shape[0],), dtype=args[0].dtype)
     },
-    "SubTopKIndices": {
-        0: lambda *args, **kwargs: torch.empty(
-            (
-                args[0].shape[0],
-                make_undefined_dimension(min(args[0].shape[1], knn5.n_neighbors)),
-            ),
-            dtype=args[0].dtype,
-        )
-    },
     "SubDonorsIdx": {
         0: lambda *args, **kwargs: torch.empty(
             (
-                args[0].shape[0],
+                make_undefined_dimension(111111),  # args[0].shape[0]),
                 make_undefined_dimension(min(args[0].shape[1], knn5.n_neighbors)),
             ),
             dtype=args[0].dtype,
         ),
         1: lambda *args, **kwargs: torch.empty(
             (
-                args[0].shape[0],
+                make_undefined_dimension(111111),  # args[0].shape[0]),
                 make_undefined_dimension(min(args[0].shape[1], knn5.n_neighbors)),
             ),
             dtype=torch.float32,
@@ -528,6 +667,15 @@ shape_functions = {
     },
     "MakeDictIdxMap": {
         0: lambda *args, **kwargs: torch.empty((args[0].shape[0],), dtype=args[1].dtype),
+    },
+    "ColProcessorCond": {
+        0: lambda *args, **kwargs: torch.empty(args[0], dtype=args[0].dtype),
+        1: lambda *args, **kwargs: torch.empty(
+            make_undefined_dimension(0), args[1].shape[1], dtype=args[0].dtype
+        ),
+        2: lambda *args, **kwargs: torch.empty(
+            (make_undefined_dimension(0),), dtype=args[0].dtype
+        ),
     },
 }
 
@@ -547,6 +695,7 @@ with contextlib.redirect_stderr(io.StringIO()), bypass_export_some_errors():
         replace_by_custom_op=CustomOpStrategy.LOCAL,
         verbose=0,
         shape_functions=shape_functions,
+        quiet=1,
     )
 
 assert ep.status in (
@@ -579,64 +728,11 @@ with warnings.catch_warnings():
         t.exporter_status.exported = t.exporter_status.exported.run_decompositions({})
 
 # %%
-# Let's export everything. Every submodule is exported as a local function
-# except topk for which we must provide an ONNX conversion.
-T = str
-
-
-def onnx_topk_indices(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    k: T,
-    name: str = "topk",
-):
-    assert len(outputs) == 1, f"Only one output is expected but outputs={outputs}"
-    unique_name = g.unique_name("unused_topk_values")
-    g.op.TopK(x, k, name=name, outputs=[unique_name, *outputs], largest=False, sorted=True)
-    return outputs[0]
-
-
-# %%
-# Let's check it is working somehow.
-
-x = torch.tensor([[0, 1, 2], [6, 5, 4]], dtype=torch.float32)
-print("torch.topk", torch.topk(x, k=2).indices)
-print("onnx.topk", TopK.eval(x.numpy(), np.array([2], dtype=np.int64))[1])
-
-# %%
-# And with nan values
-x = torch.tensor([[0, np.nan, 2], [6, np.nan, 4]], dtype=torch.float32)
-print("torch.topk", torch.topk(torch.nan_to_num(x, nan=-1.0e10), k=2).indices)
-print("onnx.topk", TopK.eval(x.numpy(), np.array([2], dtype=np.int64))[1])
-
-
-# %%
-# That works. Then the dispatcher maps the custom ops calling topk to
-# the previous converter functions.
-
-dispatcher = Dispatcher(
-    {
-        (
-            "diag_lib::C_TorchKNNImputer_columns_0___calc_impute__donors_idx__topk"
-        ): onnx_topk_indices,
-        (
-            "diag_lib::C_TorchKNNImputer_columns_1___calc_impute__donors_idx__topk"
-        ): onnx_topk_indices,
-        (
-            "diag_lib::C_TorchKNNImputer_columns_2___calc_impute__donors_idx__topk"
-        ): onnx_topk_indices,
-    }
-)
-
-# %%
 # Let's run the conversion. We also check the conversion into ONNX
 # is accurate. It is doable because every intermediate results
 # were previously traced.
 onx = trace.to_onnx_local(
     verbose=1,
-    dispatcher=dispatcher,
     check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
     inline=False,
 )
@@ -651,17 +747,12 @@ print(pretty_onnx(onx))
 
 
 # %%
-# Validation
-# ==========
+# Validation again
+# ++++++++++++++++
 
 
-def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False):
-    X = torch.randn((size, 3))
-    Y = torch.randn((sizey, 3))
-    for i in range(X.shape[0]):
-        X[i, i % X.shape[1]] = torch.nan
-    for i in range(Y.shape[0] - 1):
-        Y[i + 1, i % X.shape[1]] = torch.nan
+def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False, col: int = 3):
+    X, Y = get_xy(size, sizey, col=col)
 
     knn_imputer = sklearn.impute.KNNImputer(n_neighbors=3)
     knn_imputer.fit(X)
@@ -741,7 +832,7 @@ validate_onnx(50, 40, onx)
 
 # %%
 # ModelProto to python Code
-# +++++++++++++++++++++++++
+# =========================
 #
 # We finally call function :func:`to_graph_builder_code
 # <experimental_experiment.xbuilder.reverse_graph_builder.to_graph_builder_code>`

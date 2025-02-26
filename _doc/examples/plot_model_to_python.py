@@ -1,11 +1,13 @@
 """
+.. _l-plot-model-to-code:
+
 =======================================
 Playground for big optimization pattern
 =======================================
 
 # %%
-# Write the code produing the model
-# =================================
+# Write the code producing the model
+# ==================================
 """
 
 import numpy as np

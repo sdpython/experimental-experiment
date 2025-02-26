@@ -1277,6 +1277,36 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_aten_batch_norm_momentum(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.bn = torch.nn.BatchNorm2d(128, affine=False, momentum=0.3)
+
+            def forward(self, x):
+                return self.bn(x)
+
+        model = Model()
+        xs = (torch.randn(128, 128, 1, 1),)
+        expected = model(*xs)
+        model_path = self._call_exporter("test_aten_batch_node", "custom", model, xs)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-6)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
