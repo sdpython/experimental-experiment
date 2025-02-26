@@ -2385,6 +2385,7 @@ def aten_embedding_bag_padding_idx(
         f"scale_grad_by_freq is True{g.get_debug_msg()}"
     )
     itype = g.get_type(weight)
+    name = f"{name}M{mode}"
 
     # Change padding_idx to positive value, -1 means the last index
     if padding_idx is not None and padding_idx < 0:

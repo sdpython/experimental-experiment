@@ -254,7 +254,8 @@ class DynamoInterpreter:
                     f"onnx {ttype} != expected torch "
                     f"{exp_dtype}{self.builder.get_debug_msg()}"
                 )
-            if self.builder.has_shape(name):
+            if len(node.users) > 0 and self.builder.has_shape(name):
+                # We should not raise an exception if the result is not used.
                 shape = self.builder.get_shape(name)
                 self.builder._check_two_shapes_are_compatible(
                     shape,  # new_shape (or shape infered with onnx node)
