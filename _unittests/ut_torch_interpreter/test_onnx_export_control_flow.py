@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     skipif_ci_windows,
     hide_stdout,
+    ignore_warnings,
 )
 from experimental_experiment.helpers import string_type
 from experimental_experiment.reference import ExtendedReferenceEvaluator
@@ -367,6 +368,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     def test_scan_1(self):
         import torch
 
@@ -378,7 +380,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
             def forward(self, x):
                 init = torch.zeros_like(x[0])
                 carry, out = torch.ops.higher_order.scan(  # dim=0 fails
-                    add, [init], [x], reverse=False, additional_inputs=[]
+                    add, [init], [x], additional_inputs=[]
                 )
                 return carry
 
@@ -419,6 +421,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     def test_scan_2(self):
         import torch
 
@@ -438,7 +441,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     [init1, init2],
                     [x, x * 2],
                     # dim=0,  # it fails
-                    reverse=False,
                     additional_inputs=[],
                 )
                 return carry1, carry2, out1, out2
@@ -482,6 +484,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                         self.assertEqualArray(e, g, atol=1e-5)
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     def test_scan_cdist_carry(self):
         import torch
 
@@ -500,7 +503,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     [x],
                     [x],
                     # dim=0,  # it fails
-                    reverse=False,
                     additional_inputs=[],
                 )
                 return out
@@ -543,6 +545,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     def test_scan_cdist_add(self):
         import torch
 
@@ -563,7 +566,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     [z],
                     [x],
                     # dim=0,  # it fails
-                    reverse=False,
                     additional_inputs=[y],
                 )
                 return out[1]
@@ -601,6 +603,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     def test_scan_cdist_dynamic(self):
         import torch
 
@@ -620,7 +623,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     [y],
                     [x],
                     # dim=0,  # it fails
-                    reverse=False,
                     additional_inputs=[],
                 )
                 return out

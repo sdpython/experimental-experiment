@@ -7447,7 +7447,7 @@ def aten_scan(
     scan_inits: List[str],
     scan_inputs: List[str],
     reverse: bool,
-    additional_inputs: List[str],
+    additional_inputs: Optional[List[str]] = None,
     dim: int = 0,
     name="scan",
 ) -> T:
@@ -7481,6 +7481,8 @@ def aten_scan(
             )
             for i, a in enumerate(additional_inputs)
         ]
+    else:
+        additional_inputs = []
 
     full_inputs = [*scan_inits, *scan_inputs]
     full_inputs_graph = []
