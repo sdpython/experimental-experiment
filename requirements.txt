@@ -4,4 +4,6 @@ onnx>=1.16.0
 # onnxruntime; sys_platform != 'linux' or python_version >= "3.12"
 onnxruntime
 optree
-torch>=2.6
+torch>=2.7
+torch_geometric
+
