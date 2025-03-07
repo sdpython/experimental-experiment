@@ -7447,7 +7447,7 @@ def aten_scan(
     scan_inits: List[str],
     scan_inputs: List[str],
     reverse: bool,
-    additional_inputs: List[str],
+    additional_inputs: Optional[List[str]] = None,
     dim: int = 0,
     name="scan",
 ) -> T:
@@ -7481,6 +7481,8 @@ def aten_scan(
             )
             for i, a in enumerate(additional_inputs)
         ]
+    else:
+        additional_inputs = []
 
     full_inputs = [*scan_inits, *scan_inputs]
     full_inputs_graph = []
@@ -7581,22 +7583,50 @@ def aten_scatter_reduce_two(
         reduce != "mean"
     ), f"scatter_reduce_two not implemented for reduce={reduce!r}{g.get_debug_msg()}"
     assert g.has_rank(x), f"rank of {x!r} is expected{g.get_debug_msg()}"
-    assert not include_self, f"not implemented if include_self is True{g.get_debug_msg()}"
-    reduce_mode = {"mean": "none", "sum": "add", "prod": "mul", "amin": "min", "amax": "max"}
+    reduce_mode = {"sum": "add", "prod": "mul", "amin": "min", "amax": "max"}
     onnx_reduce = reduce_mode[reduce]
     is_scalar = g.get_rank(x) == 0
+    outputs_scatter = None if is_scalar else outputs
+
     if is_scalar:
         x = g.op.Reshape(x, g.MINUS_ONE, name=name)
-        index = g.op.Reshape(x, g.MINUS_ONE, name=name)
+        index = g.op.Reshape(index, g.MINUS_ONE, name=name)
         src = g.op.Reshape(src, g.MINUS_ONE, name=name)
-        result = g.op.ScatterElements(
-            x, index, src, axis=dim, reduction=onnx_reduce, name=name
-        )
+
+    if not include_self:
+        # onnx does not support this case so we need to modify x first.
+        assert g.has_type(src), f"Missing type for {src!r}{g.get_debug_msg()}"
+        itype = g.get_type(src)
+        dtype = tensor_dtype_to_np_dtype(itype)
+        if onnx_reduce == "max":
+            value = from_array_extended(np.array([np.finfo(dtype).min], dtype=dtype))
+            reduction_init = "min"
+        elif onnx_reduce == "min":
+            value = from_array_extended(np.array([np.finfo(dtype).max], dtype=dtype))
+            reduction_init = "max"
+        elif onnx_reduce == "add":
+            value = from_array_extended(np.array([0], dtype=dtype))
+            reduction_init = "none"
+        elif onnx_reduce == "mul":
+            value = from_array_extended(np.array([1], dtype=dtype))
+            reduction_init = "none"
+        else:
+            raise AssertionError(
+                f"onnx_reduce={onnx_reduce!r} not implemented yet{g.get_debug_msg()}"
+            )
+
+        cst = g.op.ConstantOfShape(g.op.Shape(src, name=name), value=value, name=name)
+        x = g.op.ScatterElements(x, index, cst, axis=dim, reduction=reduction_init, name=name)
+
+    result = g.op.ScatterElements(
+        x, index, src, axis=dim, reduction=onnx_reduce, name=name, outputs=outputs_scatter
+    )
+
+    if is_scalar:
         result = g.op.Squeeze(result, name=name, outputs=outputs)
-    else:
-        result = g.op.ScatterElements(
-            x, index, src, axis=dim, reduction=onnx_reduce, name=name, outputs=outputs
-        )
+    if not sts:
+        if not is_scalar:
+            set_type_shape_unary_op(g, result, x)
     return result
 
 

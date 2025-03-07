@@ -10,7 +10,7 @@ from experimental_experiment.ext_test_case import (
 )
 
 
-class TestTorchOnnxExport(ExtTestCase):
+class TestTorchOnnxExport2024(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((UserWarning, DeprecationWarning))

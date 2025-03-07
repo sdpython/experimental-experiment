@@ -908,6 +908,9 @@ def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:
         res = flatten_object(x.key_cache) + flatten_object(x.value_cache)
         return tuple(res)
     if x.__class__.__name__ == "MambaCache":
+        if isinstance(x.conv_states, list):
+            res = flatten_object(x.conv_states) + flatten_object(x.ssm_states)
+            return tuple(res)
         return tuple(x.conv_states, x.ssm_states)
     if hasattr(x, "to_tuple"):
         return flatten_object(x.to_tuple(), drop_keys=drop_keys)

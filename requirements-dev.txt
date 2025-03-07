@@ -21,8 +21,7 @@ sphinx-issues
 sphinx-runpython
 tabulate
 timm
-# torch-ort; sys_platform == 'linux'
-transformers!=4.38.0,!=4.38.1,>=4.37.2
+transformers>=4.40
 tqdm
 wheel
 xlsxwriter

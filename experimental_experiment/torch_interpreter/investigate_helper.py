@@ -253,6 +253,14 @@ def run_aligned(
     for init in onx.graph.initializer:
         positions[init.name] = -1
         onnx_results[init.name] = onh.to_array(init)
+        param_name = f"p_{init.name.replace('.', '_')}"
+        if param_name == init.name:
+            continue
+        assert param_name not in onnx_results, (
+            f"Some confusion may happen because {init.name!r} -> {param_name!r} "
+            f"and onnx_results has {sorted(onnx_results)}"
+        )
+        onnx_results[param_name] = onnx_results[init.name]
 
     torch_results = {
         k: torch.from_numpy(v.copy())
@@ -311,7 +319,11 @@ def run_aligned(
                         f"{string_type(t, with_shape=True, with_min_max=True)}"
                     )
                 continue
-            raise AssertionError(f"unable to process node {node.op} -> {node.name!r}")
+            raise AssertionError(
+                f"unable to process node {node.op} -> {node.name!r} "
+                f"not in {sorted(onnx_results)}, len(args)={len(args)}, "
+                f"onx.graph.input={[i.name for i in onx.graph.input]}"
+            )
 
         outputs = [node.name] if isinstance(node.name, str) else list(node.name)
         args, kwargs = prepare_args_kwargs(torch_results, node)

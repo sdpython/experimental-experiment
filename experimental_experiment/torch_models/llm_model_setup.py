@@ -93,7 +93,7 @@ def get_input_cache(
         # )
 
         cache = transformers.cache_utils.MambaCache(
-            _config(), max_batch_size=batch_size, device=device
+            _config(), batch_size=batch_size, device=device
         )
         if isinstance(cache.conv_states, list):
             cache.conv_states = [
@@ -230,6 +230,7 @@ def finalize_llm_setup(
             inputs["past_key_values"] = cache
             inputs2["past_key_values"] = cache2
         elif input_cache_class.__name__ == "MambaCache":
+            n = len(cache.conv_states)
             shapes.update(
                 {
                     "cache_params": [

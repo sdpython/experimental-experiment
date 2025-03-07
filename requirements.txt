@@ -5,3 +5,5 @@ onnx>=1.16.0
 onnxruntime
 optree
 torch>=2.6
+torch_geometric
+

@@ -272,8 +272,13 @@ class BenchmarkRunner:
         if hasattr(obj, "conv_states") and obj.__class__.__name__ == "MambaCache":
             # class MambaCache
             # see https://github.com/huggingface/transformers/blob/main/src/transformers/cache_utils.py
-            if ("cuda" in device and obj.conv_states.get_device() < 0) or (
-                "cpu" in device and obj.conv_states.get_device() >= 0
+            cache_device = (
+                obj.conv_states[0].get_device()
+                if isinstance(obj.conv_states, list)
+                else obj.conv_states.get_device()
+            )
+            if ("cuda" in device and cache_device < 0) or (
+                "cpu" in device and cache_device >= 0
             ):
                 from transformers.configuration_utils import PretrainedConfig
 

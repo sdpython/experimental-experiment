@@ -375,7 +375,7 @@ if pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.7"):
         def forward(self, x):
             init = torch.zeros_like(x[0])
             carry, out = torch.ops.higher_order.scan(
-                ControlFlowScan.add, [init], [x], reverse=False, additional_inputs=[]
+                ControlFlowScan.add, [init], [x], additional_inputs=[]
             )
             return carry
 
@@ -399,7 +399,6 @@ if pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.7"):
                 [init1, init2],
                 [x, x * 2],
                 # dim=0,  # 01/31/2025, not supported anymore
-                reverse=False,
                 additional_inputs=[],
             )
             return carry1, carry2, out1, out2
@@ -425,7 +424,6 @@ if pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.7"):
                 [x],
                 [x],
                 # dim=0,  # 01/31/2025, not supported anymore
-                reverse=False,
                 additional_inputs=[],
             )
             return out
@@ -453,7 +451,6 @@ if pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.7"):
                 [z],
                 [x],
                 # dim=0,  # 01/31/2025, not supported anymore
-                reverse=False,
                 additional_inputs=[y],
             )
             return out[1]
@@ -480,7 +477,6 @@ if pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.7"):
                 [y],
                 [x],
                 # dim=0,  # 01/31/2025, not supported anymore
-                reverse=False,
                 additional_inputs=[],
             )
             return out
@@ -506,7 +502,7 @@ else:
         def forward(self, x):
             init = torch.zeros_like(x[0])
             carry, out = torch.ops.higher_order.scan(
-                ControlFlowScan.add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+                ControlFlowScan.add, [init], [x], dim=0, additional_inputs=[]
             )
             return carry
 
@@ -530,7 +526,6 @@ else:
                 [init1, init2],
                 [x, x * 2],
                 dim=0,
-                reverse=False,
                 additional_inputs=[],
             )
             return carry1, carry2, out1, out2
@@ -556,7 +551,6 @@ else:
                 [x],
                 [x],
                 dim=0,
-                reverse=False,
                 additional_inputs=[],
             )
             return out
@@ -584,7 +578,6 @@ else:
                 [z],
                 [x],
                 dim=0,
-                reverse=False,
                 additional_inputs=[y],
             )
             return out[1]
@@ -611,7 +604,6 @@ else:
                 [y],
                 [x],
                 dim=0,
-                reverse=False,
                 additional_inputs=[],
             )
             return out
