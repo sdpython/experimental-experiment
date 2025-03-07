@@ -77,14 +77,7 @@ def dist(y: torch.Tensor, scanned_x: torch.Tensor):
 class ModuleWithControlFlowLoopScan(torch.nn.Module):
 
     def forward(self, x, y):
-        carry, out = torch.ops.higher_order.scan(
-            dist,
-            [y],
-            [x],
-            # dim=0,
-            reverse=False,
-            additional_inputs=[],
-        )
+        carry, out = torch.ops.higher_order.scan(dist, [y], [x], additional_inputs=[])
         return out
 
 

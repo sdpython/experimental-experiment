@@ -502,7 +502,7 @@ else:
         def forward(self, x):
             init = torch.zeros_like(x[0])
             carry, out = torch.ops.higher_order.scan(
-                ControlFlowScan.add, [init], [x], dim=0, reverse=False, additional_inputs=[]
+                ControlFlowScan.add, [init], [x], dim=0, additional_inputs=[]
             )
             return carry
 
