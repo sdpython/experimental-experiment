@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_torch,
     skipif_ci_windows,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
@@ -397,6 +398,7 @@ class TestOnnxExportCustomCode(ExtTestCase):
         expected = (x + x + x) * x
         self.assertEqualArray(expected, got)
 
+    @ignore_warnings(UserWarning)
     def test_custom_graph_break(self):
         import torch
 
@@ -419,7 +421,10 @@ class TestOnnxExportCustomCode(ExtTestCase):
         expected = model(x)
 
         # export
-        self.assertRaise(lambda: torch.export.export(model, (x,)), torch._dynamo.exc.UserError)
+        self.assertRaise(
+            lambda: torch.export.export(model, (x,)),
+            (torch._dynamo.exc.UserError, torch._dynamo.exc.Unsupported),
+        )
 
         # register a custom op
         def replace_fn(x: torch.Tensor) -> torch.Tensor:
