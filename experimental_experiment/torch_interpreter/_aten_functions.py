@@ -7599,37 +7599,24 @@ def aten_scatter_reduce_two(
         itype = g.get_type(src)
         dtype = tensor_dtype_to_np_dtype(itype)
         if onnx_reduce == "max":
-            cst = g.op.ConstantOfShape(
-                g.op.Shape(src, name=name),
-                value=from_array_extended(np.array([np.finfo(dtype).min], dtype=dtype)),
-                name=name,
-            )
-            x = g.op.ScatterElements(x, index, cst, axis=dim, reduction="min", name=name)
+            value = from_array_extended(np.array([np.finfo(dtype).min], dtype=dtype))
+            reduction_init = "min"
         elif onnx_reduce == "min":
-            cst = g.op.ConstantOfShape(
-                g.op.Shape(src, name=name),
-                value=from_array_extended(np.array([np.finfo(dtype).max], dtype=dtype)),
-                name=name,
-            )
-            x = g.op.ScatterElements(x, index, cst, axis=dim, reduction="max", name=name)
+            value = from_array_extended(np.array([np.finfo(dtype).max], dtype=dtype))
+            reduction_init = "max"
         elif onnx_reduce == "add":
-            cst = g.op.ConstantOfShape(
-                g.op.Shape(src, name=name),
-                value=from_array_extended(np.array([0], dtype=dtype)),
-                name=name,
-            )
-            x = g.op.ScatterElements(x, index, cst, axis=dim, reduction="none", name=name)
+            value = from_array_extended(np.array([0], dtype=dtype))
+            reduction_init = "none"
         elif onnx_reduce == "mul":
-            cst = g.op.ConstantOfShape(
-                g.op.Shape(src, name=name),
-                value=from_array_extended(np.array([1], dtype=dtype)),
-                name=name,
-            )
-            x = g.op.ScatterElements(x, index, cst, axis=dim, reduction="none", name=name)
+            value = from_array_extended(np.array([1], dtype=dtype))
+            reduction_init = "none"
         else:
             raise AssertionError(
                 f"onnx_reduce={onnx_reduce!r} not implemented yet{g.get_debug_msg()}"
             )
+
+        cst = g.op.ConstantOfShape(g.op.Shape(src, name=name), value=value, name=name)
+        x = g.op.ScatterElements(x, index, cst, axis=dim, reduction=reduction_init, name=name)
 
     result = g.op.ScatterElements(
         x, index, src, axis=dim, reduction=onnx_reduce, name=name, outputs=outputs_scatter
