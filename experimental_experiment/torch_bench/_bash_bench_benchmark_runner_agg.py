@@ -1280,10 +1280,11 @@ def _build_aggregated_document(
 
         data_csv = pandas.concat([flat_piv, data_append], axis=0)
         dates = data_csv[data_csv.METRIC == "date"][list(exporters)]
-        dates_max = dates.astype(str).values.max()
         data_csv = data_csv[data_csv.METRIC != "date"]
         nodata_data = data_csv.copy()
-        data_csv["DATE"] = dates_max
+        dates_max = dates.astype(str).values.max() if dates.astype(str).shape[0] > 0 else None
+        if dates_max is not None:
+            data_csv["DATE"] = dates_max
         data_csv.columns = [
             "-".join(str(_).replace(".0", "") for _ in c if _ and _ != "none")
             for c in data_csv.columns
@@ -1300,7 +1301,8 @@ def _build_aggregated_document(
             reindexed = reindexed.to_frame()
         reindexed.columns = ["value"]
         reindexed = reindexed.reset_index(drop=False)
-        reindexed["DATE"] = dates_max
+        if dates_max is not None:
+            reindexed["DATE"] = dates_max
         reindexed.columns = ["".join(map(str, c)) for c in reindexed.columns]
         reindexed.to_csv(export_simple, index=False)
 
