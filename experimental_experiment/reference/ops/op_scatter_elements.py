@@ -19,6 +19,11 @@ def scatter_elements(data, indices, updates, axis=0, reduction=None):  # type: i
         def f(x, y):
             return max(x, y)
 
+    elif reduction == "mul":
+
+        def f(x, y):
+            return x * y
+
     else:
 
         def f(x, y):

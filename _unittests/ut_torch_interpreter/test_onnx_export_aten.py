@@ -1,3 +1,4 @@
+import itertools
 import os
 import unittest
 from typing import Any, List, Optional
@@ -9,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_cuda,
     requires_torch,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -1306,6 +1308,55 @@ class TestOnnxExportAten(ExtTestCase):
         )
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
+
+    @ignore_warnings(UserWarning)
+    def test_aten_scatter_max_include_self(self):
+        import torch
+
+        for red, include in itertools.product(["amin", "amax", "sum", "prod"], [False, True]):
+            with self.subTest(reduce=red, include=include):
+
+                class Model(torch.nn.Module):
+                    def __init__(self, include, red):
+                        super().__init__()
+                        self.include = include
+                        self.red = red
+
+                    def forward(self, x, indices, updates):
+                        x = x.clone()
+                        return x.scatter_reduce(
+                            0, indices, updates, self.red, include_self=self.include
+                        )
+
+                model = Model(include, red)
+                xs = (
+                    torch.tensor([[-1, 0, 1], [1, -1, 0]], dtype=torch.float32),
+                    torch.tensor([[0, 0, 0], [1, 1, 1]], dtype=torch.int64),
+                    torch.tensor(
+                        [[-0.5, -0.5, -0.5], [-0.5, -0.5, -0.5]], dtype=torch.float32
+                    ),
+                )
+                expected = model(*xs)
+                model_path = self._call_exporter(
+                    f"test_aten_scatter_{red}_{'include' if include else 'exclude'}",
+                    "custom",
+                    model,
+                    xs,
+                )
+                sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+                feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-6)
+
+                # checking with onnxruntime as well
+                import onnxruntime
+
+                sess_options = onnxruntime.SessionOptions()
+                sess = onnxruntime.InferenceSession(
+                    model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-5)
 
 
 if __name__ == "__main__":
