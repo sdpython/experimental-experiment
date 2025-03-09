@@ -83,6 +83,9 @@ class MatMulAddPattern(PatternOptimization):
             elif min(shape_bias[:-1]) <= 1:
                 return self.none(node, inspect.currentframe().f_lineno)
 
+        if add_node.input[0] == add_node.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         if node.op_type == "MatMul" or len(node.input) == 2:
             return MatchResult(self, [node, add_node], self.apply, insert_at=add_node)
 
@@ -258,7 +261,6 @@ class MatMulAddPattern(PatternOptimization):
         matmul_node: NodeProto,
         add_node: NodeProto,
     ) -> List[NodeProto]:
-
         if matmul_node.op_type == "MatMul" or len(matmul_node.input) == 2:
             return self._apply_matmmul(g, matmul_node, add_node)
 

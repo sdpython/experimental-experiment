@@ -1037,7 +1037,8 @@ class GraphBuilderPatternOptimization:
                         f"Unknown input {i!r}, step {step!r} at position {p} "
                         f"in node {node.op_type!r} "
                         f"[{node.name}]: {node.input} -> {node.output}, "
-                        f"found after = {i in after}"
+                        f"found after = {i in after}\n------\n"
+                        f"{self.builder.pretty_text()}"
                     )
             known |= set(node.output)
 
