@@ -33,6 +33,8 @@ def get_onnxruntime_patterns(
         FusedMatMulPattern,
         FusedMatMulx2Pattern,
         FusedMatMulTransposePattern,
+        ReshapeGemmPattern,
+        TransposeFusedMatMulBPattern,
     )
 
     # from .llm_optim import RotaryEmbeddingPattern
@@ -58,7 +60,9 @@ def get_onnxruntime_patterns(
         QuickGeluPattern(verbose=verbose),
         # RotaryEmbeddingPattern(verbose=verbose),
         # GatherGradPattern(verbose=verbose),
+        ReshapeGemmPattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),
         SkipLayerNormalizationPattern(verbose=verbose),
         SoftmaxGradPattern(verbose=verbose),
+        TransposeFusedMatMulBPattern(verbose=verbose),
     ]

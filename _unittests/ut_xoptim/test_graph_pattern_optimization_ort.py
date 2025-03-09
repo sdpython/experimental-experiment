@@ -1169,6 +1169,100 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(expected[0].ravel(), got[0].ravel())
         self.assertEqualArray(expected[0], got[0])
 
+    def test_reshape_gemm(self):
+        from onnxruntime import InferenceSession
+
+        for transB in [0, 1]:
+            with self.subTest(transB=transB):
+
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("Reshape", ["A", "shape"], ["xr"]),
+                            oh.make_node("Gemm", ["xr", "B"], ["Y"], transB=transB),
+                        ],
+                        "dummy",
+                        [
+                            oh.make_tensor_value_info("A", TFLOAT, ["a", "b", 8]),
+                            oh.make_tensor_value_info(
+                                "B", TFLOAT, [4, 8] if transB else [8, 4]
+                            ),
+                        ],
+                        [oh.make_tensor_value_info("Y", TFLOAT, ["f", "g"])],
+                        [onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape")],
+                    ),
+                    opset_imports=[oh.make_opsetid("", 18)],
+                    ir_version=9,
+                )
+                feeds = {
+                    "A": self._range(2, 3, 8),
+                    "B": self._range(*([4, 8] if transB else [8, 4])),
+                }
+                ref = InferenceSession(
+                    model.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                expected = ref.run(None, feeds)
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["ReshapeGemm"], verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertIn("FusedMatMul", [n.op_type for n in opt_onx.graph.node])
+
+                opt_ref = InferenceSession(
+                    opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                got = opt_ref.run(None, feeds)
+                self.assertEqualArray(expected[0].ravel(), got[0].ravel())
+                self.assertEqualArray(expected[0], got[0])
+
+    def test_transpose_matmul_b(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["B"], ["xr"], perm=[0, 2, 3, 1]),
+                    oh.make_node("MatMul", ["A", "xr"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("A", TFLOAT, ["a", "b", "c", "d"]),
+                    oh.make_tensor_value_info("B", TFLOAT, ["i", "j", "k", "l"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["m", "n", "o", "p"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        feeds = {
+            "A": self._range(2, 3, 8, 7),
+            "B": self._range(2, 8, 3, 7),
+        }
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["TransposeFusedMatMulB"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertIn("FusedMatMul", [n.op_type for n in opt_onx.graph.node])
+
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0].ravel(), got[0].ravel())
+        self.assertEqualArray(expected[0], got[0])
+
     @unittest.skip("optimizer not ready")
     def test_rotary_embedding(self):
         from onnxruntime import InferenceSession
