@@ -13,8 +13,13 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 class MatMulAddPattern(PatternOptimization):
     """
-    Replaces the sequence MatMul, Add into Gemm
+    Replaces the sequence MatMul, Add into Gemm.
+    By default, no reshape is allowed this happens only it is two dimensions.
     """
+
+    def __init__(self, verbose: int = 0, priority: int = 3, allow_reshape: bool = False):
+        super().__init__(verbose, priority)
+        self.allow_reshape = allow_reshape
 
     def match(
         self,
@@ -32,6 +37,9 @@ class MatMulAddPattern(PatternOptimization):
             # it the rank is > 2 and the last dimension known,
             # but then no bias should be allowed a Gemm does not support
             # broadcast.
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not self.allow_reshape and g.get_rank(node.input[0]) != 2:
+            # No reshape is allowed.
             return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(node.input[0]) > 2:
             sh1 = g.get_shape(node.input[0]) if g.has_shape(node.input[0]) else None
@@ -74,6 +82,9 @@ class MatMulAddPattern(PatternOptimization):
                     return self.none(node, inspect.currentframe().f_lineno)
             elif min(shape_bias[:-1]) <= 1:
                 return self.none(node, inspect.currentframe().f_lineno)
+
+        if add_node.input[0] == add_node.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
 
         if node.op_type == "MatMul" or len(node.input) == 2:
             return MatchResult(self, [node, add_node], self.apply, insert_at=add_node)
@@ -250,7 +261,6 @@ class MatMulAddPattern(PatternOptimization):
         matmul_node: NodeProto,
         add_node: NodeProto,
     ) -> List[NodeProto]:
-
         if matmul_node.op_type == "MatMul" or len(matmul_node.input) == 2:
             return self._apply_matmmul(g, matmul_node, add_node)
 

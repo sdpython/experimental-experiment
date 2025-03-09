@@ -176,6 +176,9 @@ def to_graph_pattern_matching(
         f"input_names={input_names!r} and output_names={output_names!r}"
     )
 
+    def _clean(s: str) -> str:
+        return s.replace(".", "_").replace("-", "_")
+
     matches = {
         (node.op_type, node.domain, tuple(node.input), tuple(node.output)): False
         for node in nodes
@@ -204,13 +207,13 @@ def to_graph_pattern_matching(
         name = stack_names.pop()
         if name not in predecessors:
             # stop here
-            rows.append(f"# {name} has no predecessor.")
+            rows.append(f"# {_clean(name)} has no predecessor.")
             continue
 
         if name not in outside and name in successors and len(successors[name]) == 1:
             rows.extend(
                 [
-                    f"if g.is_used_more_than_once({name}):",
+                    f"if g.is_used_more_than_once({_clean(name)}):",
                     "    return self.none(node, inspect.currentframe().f_lineno)",
                 ]
             )
@@ -223,7 +226,7 @@ def to_graph_pattern_matching(
         matched = matches[key]
         if matched:
             # We skip for the time being but we should do extract verification.
-            rows.append(f"# {name} is already processed.")
+            rows.append(f"# {_clean(name)} is already processed.")
             continue
         node_name = f"node_{position[key]}_{node.op_type}"
         nodes_names.append(node_name)
@@ -234,8 +237,8 @@ def to_graph_pattern_matching(
                 [
                     f"{node_name} = node",
                     (
-                        f"if {node_name}.op_type != {node.op_type!r} or "
-                        f"{node_name}.domain != {node.domain!r}:"
+                        f"if {_clean(node_name)}.op_type != {node.op_type!r} or "
+                        f"{_clean(node_name)}.domain != {node.domain!r}:"
                     ),
                     "    return self.none()",
                 ]
@@ -243,17 +246,17 @@ def to_graph_pattern_matching(
             matches[key] = True
             stack_names.extend(node.input)
             for i_, n_ in enumerate(node.input):
-                rows.append(f"{n_} = {node_name}.input[{i_}]")
+                rows.append(f"{_clean(n_)} = {_clean(node_name)}.input[{i_}]")
             continue
 
         # Another node
 
         rows.extend(
             [
-                f"{node_name} = g.node_before({name})",
+                f"{_clean(node_name)} = g.node_before({_clean(name)})",
                 (
-                    f"if {node_name} is None or {node_name}.op_type != "
-                    f"{node.op_type!r} or {node_name}.domain != {node.domain!r}:"
+                    f"if {_clean(node_name)} is None or {_clean(node_name)}.op_type != "
+                    f"{node.op_type!r} or {_clean(node_name)}.domain != {node.domain!r}:"
                 ),
                 ("    return self.none(node, inspect.currentframe().f_lineno)"),
             ]
@@ -261,14 +264,14 @@ def to_graph_pattern_matching(
         matches[key] = True
         stack_names.extend(node.input)
         for i_, n_ in enumerate(node.input):
-            rows.append(f"{n_} = {node_name}.input[{i_}]")
+            rows.append(f"{_clean(n_)} = {_clean(node_name)}.input[{i_}]")
         continue
 
     rows.extend(
         [
             "",
             "# list of nodes",
-            f"nodes = [{', '.join(nodes_names)}]",
+            f"nodes = [{', '.join(map(_clean,nodes_names[::-1]))}]",
         ]
     )
     return "\n".join(rows)
