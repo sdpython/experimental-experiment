@@ -26,6 +26,7 @@ def get_onnxruntime_patterns(
         QuickGeluPattern,
     )
     from .activation_grad import SoftmaxGradPattern
+    from .attention_patterns import AttentionPattern
     from .batch_normalization import OrtBatchNormalizationTrainingPattern
     from .fused_conv import FusedConvPattern
     from .fused_matmul import (
@@ -46,6 +47,7 @@ def get_onnxruntime_patterns(
     )
 
     return [
+        AttentionPattern(verbose=verbose),
         BiasGeluPattern(verbose=verbose),
         BiasSoftmaxPattern(verbose=verbose),
         GeluOrtPattern(verbose=verbose),

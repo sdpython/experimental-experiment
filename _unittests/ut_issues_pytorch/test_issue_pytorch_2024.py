@@ -726,7 +726,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_dyn_slice_4d_script(self):
         self._slice_4d("script")
 
-    @requires_onnxscript("0.2")
+    @requires_onnxscript("0.4")
     @hide_stdout()
     def test_dyn_slice_4d_dynamo(self):
         self._slice_4d("dynamo")
