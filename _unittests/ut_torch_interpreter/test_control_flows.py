@@ -6,8 +6,6 @@ from experimental_experiment.torch_interpreter.control_flows import refactor_if_
 
 class TestControlFlows(ExtTestCase):
     def test_rewrite_code_if(self):
-
-        # Example Python code
         original_code = textwrap.dedent(
             """
         def compute():
@@ -48,6 +46,7 @@ class TestControlFlows(ExtTestCase):
 
         # Extract if-else branches
         new_code = refactor_if_else_functions(original_code)
+        self.maxDiff = None
         self.assertEqual(expected, new_code)
 
 
