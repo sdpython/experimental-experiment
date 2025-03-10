@@ -13,6 +13,7 @@ from experimental_experiment.xbuilder.reverse_graph_builder import (
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions, OptimizationOptions
+from experimental_experiment.xbuilder._internal.onnx_export import export2numpy
 from experimental_experiment.xoptim.patterns_api import MatchResult, PatternOptimization
 
 TFLOAT = onnx.TensorProto.FLOAT
@@ -512,6 +513,39 @@ class TestReverseGraphBuilder(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(len(opt_onx.graph.node), 1)
+
+    def test_export2numpy(self):
+        _mkv_ = oh.make_tensor_value_info
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "zero"], ["xu1"]),
+                    oh.make_node("Unsqueeze", ["xu1", "un"], ["xu2"]),
+                    oh.make_node("Reshape", ["xu2", "shape1"], ["xm1"]),
+                    oh.make_node("Reshape", ["Y", "shape2"], ["xm2c"]),
+                    oh.make_node("Cast", ["xm2c"], ["xm2"], to=1),
+                    oh.make_node("MatMul", ["xm1", "xm2"], ["xm"]),
+                    oh.make_node("Reshape", ["xm", "shape3"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("X", TFLOAT, ["D32", "D128"]),
+                    _mkv_("Y", TFLOAT, ["batch", "channel", "D128", "D64"]),
+                ],
+                [_mkv_("Z", TFLOAT, ["batch", "channel", "D32", "64"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="un"),
+                    onh.from_array(np.array([1, 32, 128], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([15, 128, 64], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="shape3"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+        )
+
+        code = export2numpy(model)
+        self.assertIn("xm = xm1 @ xm2", code)
 
 
 if __name__ == "__main__":

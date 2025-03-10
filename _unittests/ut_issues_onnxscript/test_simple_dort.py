@@ -13,6 +13,7 @@ from torch.nn import Module, Parameter
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_torch,
+    has_onnxruntime_training,
     hide_stdout,
 )
 
@@ -131,6 +132,11 @@ class TestSimpleDort(ExtTestCase):
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
+        if not has_onnxruntime_training():
+            raise unittest.SkipTest(
+                "onnxruntime is needed because of "
+                "onnxruntime.training.ortmodule._utils._ortvalues_to_torch_tensor"
+            )
         assert isinstance(onnx_export, str), f"Export onnx is wrong for f={f}"
         if isinstance(args, torch.Tensor):
             args = [args]

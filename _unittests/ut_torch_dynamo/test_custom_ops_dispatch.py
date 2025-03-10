@@ -1,9 +1,14 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, requires_cuda
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    requires_cuda,
+    requires_onnxruntime_training,
+)
 
 
 class TestCustomOpsDispatch(ExtTestCase):
     @requires_cuda()
+    @requires_onnxruntime_training()
     def test_llama_sdpa_model_efficient(self):
         # see https://pytorch.org/tutorials/beginner/onnx/onnx_registry_tutorial.html
         # python -m pip install torch_ort

@@ -1037,7 +1037,8 @@ class GraphBuilderPatternOptimization:
                         f"Unknown input {i!r}, step {step!r} at position {p} "
                         f"in node {node.op_type!r} "
                         f"[{node.name}]: {node.input} -> {node.output}, "
-                        f"found after = {i in after}"
+                        f"found after = {i in after}\n------\n"
+                        f"{self.builder.pretty_text()}"
                     )
             known |= set(node.output)
 
@@ -1158,10 +1159,10 @@ class GraphBuilderPatternOptimization:
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"use pattern {i+1:3d}/{len(self.patterns)} - P{pp} - {pattern!r}"
                     )
-            if self.verbose >= 10:
-                print("--")
+            if self.verbose >= 11:
+                print("-- optimize starts with...")
                 print(self.builder.pretty_text())
-                print("--")
+                print("-- starts optimization")
 
         begin_all = time.perf_counter()
         statistics = []

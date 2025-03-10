@@ -158,7 +158,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             optimize=False,
             export_options=ExportOptions(decomposition_table="default"),
         )
-        onnx.save(onx, "test_export_set_custom.onnx")
+        onnx.save(onx, self.get_dump_file("test_export_set_custom.onnx"))
         session = rt.InferenceSession(
             onx.SerializeToString(),
             providers=["CPUExecutionProvider"],
@@ -726,7 +726,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_dyn_slice_4d_script(self):
         self._slice_4d("script")
 
-    @requires_onnxscript("0.2")
+    @requires_onnxscript("0.4")
     @hide_stdout()
     def test_dyn_slice_4d_dynamo(self):
         self._slice_4d("dynamo")

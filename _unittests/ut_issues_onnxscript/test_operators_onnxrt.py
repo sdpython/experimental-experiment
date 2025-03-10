@@ -15,6 +15,7 @@ from torch.autograd import Function
 from torch.nn import functional, Module, Parameter
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    has_onnxruntime_training,
     ignore_warnings,
     requires_torch,
     hide_stdout,
@@ -122,6 +123,8 @@ class TestOperatorsOnnxrt(ExtTestCase):
     ):
         if sys.platform == "win32":
             raise unittest.SkipTest("Windows not supported yet.")
+        if not has_onnxruntime_training():
+            raise unittest.SkipTest("onnxruntime-training not available")
         assert isinstance(onnx_export, str), f"Export onnx is wrong for f={f}"
         if isinstance(args, torch.Tensor):
             args = [args]

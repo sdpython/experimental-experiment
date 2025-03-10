@@ -1,6 +1,5 @@
 import itertools
 import json
-import os
 import unittest
 import packaging.version as pv
 import numpy as np
@@ -50,12 +49,7 @@ class TestCheckOrtFloat16(ExtTestCase):
             ir_version=8 if opset <= 18 else 9,
         )
 
-        if not os.path.exists("temp_dump"):
-            os.mkdir("temp_dump")
-        for name in os.listdir("temp_dump"):
-            os.remove(os.path.join("temp_dump", name))
-
-        filename = f"temp_dump/{op_type}_{providers[0]}_{itype}.onnx"
+        filename = self.get_dump_file(f"{op_type}_{providers[0]}_{itype}.onnx")
         opts = SessionOptions()
         opts.optimized_model_filepath = filename
         sess = InferenceSession(model.SerializeToString(), opts, providers=providers)
@@ -100,7 +94,9 @@ class TestCheckOrtFloat16(ExtTestCase):
             )
         opts = SessionOptions()
         opts.enable_profiling = True
-        opts.optimized_model_filepath = filename
+        opts.optimized_model_filepath = self.get_dump_file(
+            f"{op_type}_{providers[0]}_{itype}.2.onnx"
+        )
         sess = InferenceSession(model.SerializeToString(), opts, providers=providers)
         got = sess.run(None, {"X": data, "indices": indices, "updates": updates})[0]
         self.assertEqual(got.dtype, updates.dtype)

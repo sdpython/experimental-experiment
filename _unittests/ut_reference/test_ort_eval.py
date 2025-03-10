@@ -154,6 +154,7 @@ class TestOrtEval(ExtTestCase):
         self.assertIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
+    @requires_onnxruntime_training()
     def test_debug_pkl(self):
         model = "dump_sdpa_dis_llama/dort-llama-sdpa-custom-no__1.onnx"
         inputs = "dump_sdpa_dis_llama/dort-llama-sdpa-custom-no__1.txt.pkl"

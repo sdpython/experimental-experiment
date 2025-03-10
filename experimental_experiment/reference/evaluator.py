@@ -14,6 +14,7 @@ from .ops.op_add_add_mul_mul import (
     MulSub,
     SubMul,
 )
+from .ops.op_attention import Attention
 from .ops.op_average_pool_grad import AveragePoolGrad
 from .ops.op_bias_softmax import BiasSoftmax
 from .ops.op_cast_like import CastLike_15, CastLike_19
@@ -71,6 +72,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         AddAdd,
         AddMul,
         AddSharedInput,
+        Attention,
         AveragePoolGrad,
         BiasSoftmax,
         Concat,

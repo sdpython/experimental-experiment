@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
     requires_cuda,
+    requires_onnxruntime_training,
     requires_onnxscript,
     hide_stdout,
 )
@@ -89,6 +90,7 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.4")
+    @requires_onnxruntime_training()
     @hide_stdout()
     def test_ort_mlp(self):
         import torch
@@ -122,6 +124,7 @@ class TestLlama(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.4")
     @requires_onnxscript("0.3")  # type promotion
+    @requires_onnxruntime_training()
     @hide_stdout()
     def test_ort_mlp_backward(self):
         import torch
@@ -166,6 +169,7 @@ class TestLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.4")
+    @requires_onnxruntime_training()
     @hide_stdout()
     def test_ort_llama_model(self):
         from experimental_experiment.torch_models.llama_helper import (

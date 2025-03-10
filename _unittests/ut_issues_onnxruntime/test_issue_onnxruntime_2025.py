@@ -5,14 +5,14 @@ from experimental_experiment.ext_test_case import ExtTestCase, requires_onnxrunt
 
 class TestIssuesOnnxruntime2025(ExtTestCase):
 
-    @requires_onnxruntime("1.21")
+    @requires_onnxruntime("1.22")
     def test_ort_optimization_23199(self):
         # issue https://github.com/microsoft/onnxruntime/issues/23199
 
         import onnx
         import onnxruntime as ort
         import numpy as np
-        from experimental_experiment.reference import ExtendedReferenceEvaluator
+        from experimental_experiment.reference import ExtendedReferenceEvaluator, OrtEval
 
         # not optimized
         input_data = {"v5_0": np.random.rand(55, 7, 1, 40).astype(np.float32)}
@@ -22,12 +22,10 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
         for i, proto in enumerate([proto_issue]):
             sessopts = ort.SessionOptions()
             sessopts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
-            sessopts.optimized_model_filepath = file_model1 = (
+            sessopts.optimized_model_filepath = file_model1 = self.get_dump_file(
                 f"test_ort_optimization_23199_disabled_{i}.onnx"
             )
-            providers = [
-                "CPUExecutionProvider"
-            ]  # ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            providers = ["CPUExecutionProvider"]
             original_session = ort.InferenceSession(
                 proto.SerializeToString(), sessopts, providers=providers
             )
@@ -37,7 +35,7 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
             # optimized
             sessopts2 = ort.SessionOptions()
             sessopts2.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            sessopts2.optimized_model_filepath = file_model2 = (
+            sessopts2.optimized_model_filepath = file_model2 = self.get_dump_file(
                 f"test_ort_optimization_23199_enabled_{i}.onnx"
             )
             original_session2 = ort.InferenceSession(
@@ -59,7 +57,7 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
                 inputs=[input_data[k.name] for k in model1.graph.input],
                 verbose=1,
                 raise_exc=True,
-                cls=ExtendedReferenceEvaluator,
+                cls=OrtEval,
             )
             # for r in res2:
             #    r.name = clean_name(r.name)

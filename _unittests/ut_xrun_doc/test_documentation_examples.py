@@ -206,6 +206,13 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(onnx_array_api.__version__) < pv.Version("0.3.1"):
                     reason = "requires onnx_array_api>=0.3.1"
 
+            if (
+                not reason
+                and not has_onnxruntime_training()
+                and name in {"plot_llama_diff_dort_301.py"}
+            ):
+                reason = "onnxruntime-training is missing"
+
             if reason:
 
                 @unittest.skip(reason)
