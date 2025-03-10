@@ -1226,6 +1226,6 @@ def get_tiny_llm(
         common_dynamic_shapes=common_dynamic_shapes,
         inputs_as_tuple=inputs_as_tuple,
         input_cache=input_cache,
-        cache_last_dim=32,
-        num_key_value_heads=2,
+        cache_last_dim=96,
+        num_key_value_heads=1,
     )

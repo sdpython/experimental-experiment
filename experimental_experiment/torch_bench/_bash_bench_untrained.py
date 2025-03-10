@@ -307,6 +307,16 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(replace_dynamic_cache=False),
                     )
                 ),
+                "TinyLLM": (
+                    lambda: (
+                        get_tiny_llm(
+                            input_cache=True,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(replace_dynamic_cache=False),
+                    )
+                ),
             }
         )
 

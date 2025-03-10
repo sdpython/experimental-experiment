@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     skipif_ci_windows,
     long_test,
+    never_test,
     requires_torch,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -664,6 +665,59 @@ class TestLlmModelHelper(ExtTestCase):
                 export_options=ExportOptions(strict=False),
                 large_model=True,
             )
+
+    @never_test()
+    def test_spy_tiny_llm(self):
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        MODEL_NAME = "arnir0/Tiny-LLM"
+
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+        inputs_iteration = []
+
+        def rewrite_forward(f, *args, **kwargs):
+            print(f"------------- iteration {len(inputs_iteration)}")
+            print(f"args: {string_type(args, with_shape=True, with_min_max=True)}")
+            print(f"kwargs: {string_type(kwargs, with_shape=True, with_min_max=True)}")
+            print(kwargs["input_ids"])
+            inputs_iteration.append((args, kwargs))
+            if len(inputs_iteration) > 5:
+                raise unittest.SkipTest(
+                    f"Not necessary to go beyond {len(inputs_iteration)} iterations."
+                )
+            return f(*args, **kwargs)
+
+        model_forward = model.forward
+        model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(
+            f, *args, **kwargs
+        )
+
+        def generate_text(
+            prompt, model, tokenizer, max_length=512, temperature=1, top_k=50, top_p=0.95
+        ):
+            inputs = tokenizer.encode(prompt, return_tensors="pt")
+
+            outputs = model.generate(
+                inputs,
+                max_length=max_length,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                do_sample=True,
+            )
+
+            generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            return generated_text
+
+        prompt = (
+            "According to all known laws of aviation, "
+            "there is no way a bee should be able to fly."
+        )
+
+        generated_text = generate_text(prompt, model, tokenizer)
+        print(generated_text)
+        model.forward = model_forward
 
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
