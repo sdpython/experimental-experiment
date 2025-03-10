@@ -123,7 +123,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
                 optimize=False,
             )
 
-        onnx.save(onx, "test_mistral_nousers_aten.onnx")
+        onnx.save(onx, self.get_dump_file("test_mistral_nousers_aten.onnx"))
         sess = ort.InferenceSession(
             "test_mistral_nousers_aten.onnx", providers=["CPUExecutionProvider"]
         )

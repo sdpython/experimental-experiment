@@ -6940,6 +6940,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         n_existing = []
         for node in new_nodes:
             for i in self._enumerate_inputs_with_subgraph(node):
+                if not i:
+                    # optional input
+                    continue
                 assert self.has_name(i), (
                     f"Input {i!r} does not exist for node {node.op_type!r}, "
                     f"debug={debug}{self.get_debug_msg()}"

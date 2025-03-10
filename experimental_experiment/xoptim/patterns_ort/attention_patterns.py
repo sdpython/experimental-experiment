@@ -1,6 +1,6 @@
 import inspect
 from typing import List, Optional
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -18,6 +18,7 @@ class AttentionPattern(PatternOptimization):
         from experimental_experiment.xbuilder.reverse_graph_builder import (
             to_graph_pattern_matching,
         )
+        from experimental_experiment.xbuilder._internal.onnx_export import export2numpy
 
         filename = "unfused_Attention.onnx"
         onx = onnx.load(filename)
@@ -30,10 +31,16 @@ class AttentionPattern(PatternOptimization):
         print(to_graph_pattern_matching(new_onx))
 
         print("---------------------------------")
-        print("---------------------------------")
+        print("---------- for unit test --------")
         print("---------------------------------")
 
-        print(translate(onx, api="onnx-short"))
+        print(translate(new_onx, api="onnx-short"))
+
+        print("---------------------------------")
+        print("----------- for the python kernel")
+        print("---------------------------------")
+
+        print(export2numpy(new_onx))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3):
@@ -177,11 +184,10 @@ class AttentionPattern(PatternOptimization):
         if g.is_used_more_than_once(matmul):
             return self.none(node, inspect.currentframe().f_lineno)
         node_14_FusedMatMul = g.node_before(matmul)
-        if (
-            node_14_FusedMatMul is None
-            or node_14_FusedMatMul.op_type != "FusedMatMul"
-            or node_14_FusedMatMul.domain != "com.microsoft"
-        ):
+        if node_14_FusedMatMul is None or (
+            node_14_FusedMatMul.op_type,
+            node_14_FusedMatMul.domain,
+        ) not in (("FusedMatMul", "com.microsoft"), ("MatMul", "")):
             return self.none(node, inspect.currentframe().f_lineno)
         transpose_1 = node_14_FusedMatMul.input[0]
         TransposeFusedMatMulBPattern__transpose_4 = node_14_FusedMatMul.input[1]
@@ -304,20 +310,7 @@ class AttentionPattern(PatternOptimization):
 
         if g.is_used_more_than_once(convert_element_type_default):
             return self.none(node, inspect.currentframe().f_lineno)
-        node_1_Cast = g.node_before(convert_element_type_default)
-        if node_1_Cast is None or node_1_Cast.op_type != "Cast" or node_1_Cast.domain != "":
-            return self.none(node, inspect.currentframe().f_lineno)
-        unsqueeze_6 = node_1_Cast.input[0]
 
-        if g.is_used_more_than_once(unsqueeze_6):
-            return self.none(node, inspect.currentframe().f_lineno)
-        node_0_Unsqueeze = g.node_before(unsqueeze_6)
-        if (
-            node_0_Unsqueeze is None
-            or node_0_Unsqueeze.op_type != "Unsqueeze"
-            or node_0_Unsqueeze.domain != ""
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
         ### expand_1 = node_0_Unsqueeze.input[0]
         ### dim_0_7 = node_0_Unsqueeze.input[1]
 
@@ -331,8 +324,8 @@ class AttentionPattern(PatternOptimization):
 
         # list of nodes
         nodes = [
-            node_0_Unsqueeze,
-            node_1_Cast,
+            # node_0_Unsqueeze,
+            # node_1_Cast,
             node_2_Equal,
             node_3_MatMul,
             node_4_Add,
@@ -355,7 +348,49 @@ class AttentionPattern(PatternOptimization):
             node_21_Transpose,
             node_22_Reshape,
         ]
-        return self.none()
+
+        # num_heads
+        if not g.has_shape(node_16_Add.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = g.get_shape(node_16_Add.input[1])
+        if len(shape) < 2 or not isinstance(shape[1], int) or shape[1] <= 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # Last verifications, if this point is reached, there is already a good
+        # probability that the pattern is matched.
+        matmuls = [node_3_MatMul, node_6_MatMul, node_9_MatMul]
+        weights = [n.input[1] for n in matmuls]
+        if not all(g.is_constant(i) for i in weights):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shapes = [g.get_shape(i) for i in weights]
+        unique_shape = set(shapes)
+        if len(unique_shape) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = unique_shape.pop()
+        if len(shape) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # biases
+        adds = [node_4_Add, node_7_Add, node_10_Add]
+        weights = [n.input[1] for n in adds]
+        if not all(g.is_constant(i) for i in weights):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shapes = [g.get_shape(i) for i in weights]
+        unique_shape = set(shapes)
+        if len(unique_shape) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = unique_shape.pop()
+        if len(shape) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # last verification, shape, unlikely to happen but still...
+        if not g.has_shape(node_22_Reshape.output[0]) or not g.has_shape(
+            node_3_MatMul.input[0]
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_shape(node_3_MatMul.input[0]) != g.get_shape(node_22_Reshape.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
         return MatchResult(self, nodes, self.apply, insert_at=nodes[-1])
 
     def apply(
@@ -364,17 +399,86 @@ class AttentionPattern(PatternOptimization):
         *nodes: NodeProto,
     ) -> List[NodeProto]:
         #
-        raise NotImplementedError("not yet")
-        """
-        node = nodes[0]
-        fc = g.make_node(
-            "FusedConv",
-            node.input,
-            node_act.output,
-            domain="com.microsoft",
-            activation=node_act.op_type,
-            name=f"{self.__class__.__name__}--{node.name}",
+        (
+            # node_0_Unsqueeze,
+            # node_1_Cast,
+            node_2_Equal,
+            node_3_MatMul,
+            node_4_Add,
+            node_5_Reshape,
+            node_12_Transpose,
+            node_6_MatMul,
+            node_7_Add,
+            node_8_Reshape,
+            node_13_Transpose,
+            node_14_FusedMatMul,
+            node_16_Add,
+            node_17_Where,
+            node_18_Softmax,
+            node_19_Where,
+            node_9_MatMul,
+            node_10_Add,
+            node_11_Reshape,
+            node_15_Transpose,
+            node_20_MatMul,
+            node_21_Transpose,
+            node_22_Reshape,
+        ) = nodes
+
+        new_nodes = []
+
+        # qkv
+        qkv = [n.input[1] for n in (node_3_MatMul, node_6_MatMul, node_9_MatMul)]
+        qkv_merged = g.unique_name(f"{qkv[0]}_qkv")
+        new_nodes.append(
+            g.make_node(
+                "Concat", qkv, [qkv_merged], axis=1, name=f"{self.__class__.__name__}--qkv"
+            )
         )
-        #fc.attribute.extend(node.attribute)
-        return [fc]
-        """
+
+        # biases
+        bias = [n.input[1] for n in (node_4_Add, node_7_Add, node_10_Add)]
+        bias_merged = g.unique_name(f"{bias[0]}_bias")
+        new_nodes.append(
+            g.make_node(
+                "Concat", bias, [bias_merged], axis=0, name=f"{self.__class__.__name__}--bias"
+            )
+        )
+
+        # attention bias
+        attention_bias = node_16_Add.input[1]
+
+        # mask, this must be int32
+        mask = node_2_Equal.input[0]
+        if not g.has_type(mask) or g.get_type(mask) != TensorProto.INT32:
+            cast_mask = g.unique_name(f"{mask}_int32")
+            new_nodes.append(
+                g.make_node(
+                    "Cast",
+                    [mask],
+                    [cast_mask],
+                    to=TensorProto.INT32,
+                    name=f"{self.__class__.__name__}--mask",
+                )
+            )
+            mask = cast_mask
+
+        # input
+        input_name = node_3_MatMul.input[0]
+
+        # num_heads
+        shape = g.get_shape(attention_bias)
+        num_heads = shape[1]
+
+        # Attention
+        new_nodes.append(
+            g.make_node(
+                "Attention",
+                [input_name, qkv_merged, bias_merged, mask, "", attention_bias],
+                node_22_Reshape.output,
+                domain="com.microsoft",
+                name=f"{self.__class__.__name__}--attention",
+                num_heads=num_heads,
+            )
+        )
+        return new_nodes

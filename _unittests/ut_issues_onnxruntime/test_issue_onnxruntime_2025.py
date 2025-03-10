@@ -22,7 +22,7 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
         for i, proto in enumerate([proto_issue]):
             sessopts = ort.SessionOptions()
             sessopts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
-            sessopts.optimized_model_filepath = file_model1 = (
+            sessopts.optimized_model_filepath = file_model1 = self.get_dump_file(
                 f"test_ort_optimization_23199_disabled_{i}.onnx"
             )
             providers = ["CPUExecutionProvider"]
@@ -35,7 +35,7 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
             # optimized
             sessopts2 = ort.SessionOptions()
             sessopts2.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            sessopts2.optimized_model_filepath = file_model2 = (
+            sessopts2.optimized_model_filepath = file_model2 = self.get_dump_file(
                 f"test_ort_optimization_23199_enabled_{i}.onnx"
             )
             original_session2 = ort.InferenceSession(

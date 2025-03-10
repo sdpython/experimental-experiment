@@ -483,7 +483,7 @@ class TestPieceByPieceBig(ExtTestCase):
             check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
         )
 
-        onnx.save(onx, "test_e2e_knn_imputer.onnx")
+        onnx.save(onx, self.get_dump_file("test_e2e_knn_imputer.onnx"))
 
         def validate_onnx(size, sizey, onx, verbose: int = 1):
             X = torch.randn((size, 2))
