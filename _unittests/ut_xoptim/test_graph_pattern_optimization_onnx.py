@@ -46,6 +46,7 @@ from experimental_experiment.xbuilder._shape_helper import (
 )
 from experimental_experiment.xoptim import get_pattern_list, remove_constants_for_initializers
 from experimental_experiment.helpers import pretty_onnx
+from experimental_experiment.xoptim.patterns import MatMulAddPattern
 
 TFLOAT = TensorProto.FLOAT
 TFLOAT16 = TensorProto.FLOAT16
@@ -3885,7 +3886,9 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["MatMulAdd"], verbose=0, constant_folding=True
+                patterns=[MatMulAddPattern(allow_reshape=True)],
+                verbose=0,
+                constant_folding=True,
             ),
             verbose=0,
         )
@@ -3934,7 +3937,9 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["MatMulAdd"], verbose=0, constant_folding=True
+                patterns=[MatMulAddPattern(allow_reshape=True)],
+                verbose=0,
+                constant_folding=True,
             ),
             verbose=0,
         )
@@ -3984,7 +3989,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["MatMulAdd"],
+                patterns=[MatMulAddPattern(allow_reshape=True)],
                 verbose=10,
                 constant_folding=True,
             ),

@@ -4,6 +4,7 @@ from onnx.reference import ReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
+    requires_onnxruntime_training,
     requires_torch,
     skipif_ci_windows,
 )
@@ -88,6 +89,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.2", "export fails")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_onnxruntime_training()
     def test_simple_dort_0(self):
         import torch
 

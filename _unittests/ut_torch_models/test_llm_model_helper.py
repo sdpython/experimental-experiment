@@ -214,7 +214,9 @@ class TestLlmModelHelper(ExtTestCase):
         new_onx = onnx.load(filename, load_external_data=True)
         del new_onx.graph.value_info[:]
         new_onx = onnx.shape_inference.infer_shapes(new_onx)
-        filename = "test_phi35_mistruct_custom_cuda_mod_dynshapes.inline.reshaped.onnx"
+        filename = self.get_dump_file(
+            "test_phi35_mistruct_custom_cuda_mod_dynshapes.inline.reshaped.onnx"
+        )
         onnx.save(new_onx, filename, save_as_external_data=True, all_tensors_to_one_file=True)
 
         import onnxruntime
@@ -455,7 +457,7 @@ class TestLlmModelHelper(ExtTestCase):
         ) as modificator:
             exported_program = torch.export.export(model, tuple(), model_inputs, strict=True)
             onx = to_onnx(model, tuple(), modificator(model_inputs))
-            onnx.save(onx, "test_get_phi35_vision_instruct.onnx")
+            onnx.save(onx, self.get_dump_file("test_get_phi35_vision_instruct.onnx"))
         self.assertNotEmpty(exported_program)
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")

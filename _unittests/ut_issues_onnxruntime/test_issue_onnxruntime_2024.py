@@ -57,7 +57,9 @@ class TestIssuesOnnxruntime2024(ExtTestCase):
         for i, proto in enumerate([proto_simple, proto_issue]):
             sessopts = ort.SessionOptions()
             sessopts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
-            sessopts.optimized_model_filepath = f"test_ort_optimization_disabled_{i}.onnx"
+            sessopts.optimized_model_filepath = self.get_dump_file(
+                f"test_ort_optimization_disabled_{i}.onnx"
+            )
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
             original_session = ort.InferenceSession(
                 proto.SerializeToString(), sessopts, providers=providers
@@ -68,7 +70,9 @@ class TestIssuesOnnxruntime2024(ExtTestCase):
             # optimized
             sessopts2 = ort.SessionOptions()
             sessopts2.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            sessopts2.optimized_model_filepath = f"test_ort_optimization_enabled_{i}.onnx"
+            sessopts2.optimized_model_filepath = self.get_dump_file(
+                f"test_ort_optimization_enabled_{i}.onnx"
+            )
             original_session2 = ort.InferenceSession(
                 proto.SerializeToString(), sessopts2, providers=providers
             )

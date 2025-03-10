@@ -35,7 +35,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
         epo.optimize()
         epo.save("test_pads_with_constant_1.onnx")
         onx = to_onnx(ep)
-        onnx.save(onx, "test_pads_with_constant_1.custom.onnx")
+        onnx.save(onx, self.get_dump_file("test_pads_with_constant_1.custom.onnx"))
         onnx.checker.check_model(onx)
 
     @requires_torch("2.6")
@@ -68,9 +68,9 @@ class TestIssuesPytorch2025Export(ExtTestCase):
 
         epo = torch.onnx.export(ep, dynamo=True)
         epo.optimize()
-        epo.save("test_pads_with_constant_2.onnx")
+        epo.save(self.get_dump_file("test_pads_with_constant_2.onnx"))
         onx = to_onnx(ep)
-        onnx.save(onx, "test_pads_with_constant_2.custom.onnx")
+        onnx.save(onx, self.get_dump_file("test_pads_with_constant_2.custom.onnx"))
         onnx.checker.check_model(onx)
 
 

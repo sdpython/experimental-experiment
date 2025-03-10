@@ -1,6 +1,8 @@
 import inspect
 from typing import List, Optional
+import numpy as np
 from onnx import NodeProto
+from ...xbuilder._shape_helper import all_int
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -387,3 +389,139 @@ class FusedMatMulTransposePattern(PatternOptimization):
             **kwargs,
         )
         return [new_node]
+
+
+class ReshapeGemmPattern(PatternOptimization):
+    """
+    Replaces the sequence Reshape(-1, ...) + Gemm
+    into FusedMatMul().
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 3):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in "Gemm" or node.domain != "" or len(node.input) == 3:
+            return self.none()
+
+        transA = g.get_attributes_with_default(node, transA=0)["transA"]
+        if transA != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+        node_before = g.node_before(node.input[0])
+        if node_before is None or node_before.op_type != "Reshape" or node_before.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = g.get_shape(node.input[1])
+        if not all_int(shape):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        shape = g.get_computed_constant(node_before.input[1])
+        if shape.shape != (2,) or shape[0] != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node_before, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        reshape_node: NodeProto,
+        gemm_node: NodeProto,
+    ) -> List[NodeProto]:
+        kwargs = {}
+        transB = g.get_attributes_with_default(gemm_node, transB=0)["transB"]
+        if transB:
+            kwargs["transB"] = transB
+        gemm_output = g.unique_name(f"{self.__class__.__name__}--{gemm_node.output[0]}")
+        new_node = g.make_node(
+            "FusedMatMul",
+            [reshape_node.input[0], *gemm_node.input[1:]],
+            [gemm_output],
+            domain="com.microsoft",
+            name=f"{self.__class__.__name__}--{gemm_node.name}",
+            **kwargs,
+        )
+        shape = g.get_shape(gemm_node.input[1])
+        new_shape = g.make_initializer(
+            "",
+            np.array([-1, shape[1 - transB]], dtype=np.int64),
+            source=f"ReshapeGemm.shape({gemm_node.name})",
+        )
+        reshape_node = g.make_node(
+            "Reshape",
+            [gemm_output, new_shape],
+            gemm_node.output,
+            name=f"{self.__class__.__name__}--{gemm_node.name}",
+        )
+        return [new_node, reshape_node]
+
+
+class TransposeFusedMatMulBPattern(PatternOptimization):
+    """
+    Replaces the sequence Transpose(B, [0, 2, 3, 1] + (Fused)Matmul(A,B)
+    into Tranpose(A, [0, 2, 1, 3]) + FusedMatMul(A, B, transB=1).
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 3):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (node.op_type not in "MatMul" or node.domain != "") and (
+            node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
+        ):
+            return self.none()
+        if g.is_used_more_than_once(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        transB = g.get_attributes_with_default(node, transB=0)["transB"]
+        if transB != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        transpose_node = g.node_before(node.input[1])
+        if (
+            transpose_node is None
+            or transpose_node.op_type != "Transpose"
+            or transpose_node.domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        perm = list(g.get_attribute(transpose_node, "perm").ints)
+        if perm != [0, 2, 3, 1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [transpose_node, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        transpose_node: NodeProto,
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        tout = g.unique_name(f"{self.__class__.__name__}--{node.input[1]}")
+        nodes = [
+            g.make_node(
+                "Transpose",
+                transpose_node.input,
+                [tout],
+                name=f"{self.__class__.__name__}--{node.name}",
+                perm=[0, 2, 1, 3],
+            ),
+            g.make_node(
+                "FusedMatMul",
+                [node.input[0], tout],
+                node.output,
+                domain="com.microsoft",
+                name=f"{self.__class__.__name__}--{node.name}",
+                transB=1,
+            ),
+        ]
+        for att in node.attribute:
+            if att.name != "transB":
+                nodes[-1].attribute.append(att)
+        return nodes
