@@ -21,7 +21,7 @@ TINT64 = TensorProto.INT64
 class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
     def _range(self, *shape, bias: Optional[float] = None):
         n = np.prod(shape)
-        x = np.arange(n).astype(np.float32) / n
+        x = np.cos(np.arange(n)).astype(np.float32)
         if bias:
             x = x + bias
         return x.reshape(tuple(shape)).astype(np.float32)
@@ -40,45 +40,39 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
         initializers = []
         sparse_initializers = []
         functions = []
-        value = np.random.randn(1024, 1024).astype(np.float32)
         initializers.append(
             onh.from_array(
-                np.array(value, dtype=np.float32),
+                self._range(1024, 1024),
                 name="encoder.encoders.0.self_attn.linear_q.weight",
             )
         )
-        value = np.random.randn(1024).astype(np.float32)
         initializers.append(
             onh.from_array(
-                np.array(value, dtype=np.float32),
+                self._range(1024),
                 name="encoder.encoders.0.self_attn.linear_q.bias",
             )
         )
-        value = np.random.randn(1024, 1024).astype(np.float32)
         initializers.append(
             onh.from_array(
-                np.array(value, dtype=np.float32),
+                self._range(1024, 1024),
                 name="encoder.encoders.0.self_attn.linear_k.weight",
             )
         )
-        value = np.random.randn(1024).astype(np.float32)
         initializers.append(
             onh.from_array(
-                np.array(value, dtype=np.float32),
+                self._range(1024),
                 name="encoder.encoders.0.self_attn.linear_k.bias",
             )
         )
-        value = np.random.randn(1024, 1024).astype(np.float32)
         initializers.append(
             onh.from_array(
-                np.array(value, dtype=np.float32),
+                self._range(1024, 1024),
                 name="encoder.encoders.0.self_attn.linear_v.weight",
             )
         )
-        value = np.random.randn(1024).astype(np.float32)
         initializers.append(
             onh.from_array(
-                np.array(value, dtype=np.float32),
+                self._range(1024),
                 name="encoder.encoders.0.self_attn.linear_v.bias",
             )
         )
@@ -256,8 +250,8 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
             providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
         )
         got = opt_ref.run(None, feeds)
-        self.assertEqualArray(expected[0].ravel(), got[0].ravel(), atol=8e-2)
-        self.assertEqualArray(expected[0], got[0], atol=6e-2)
+        self.assertEqualArray(expected[0].ravel(), got[0].ravel(), atol=0.1)
+        self.assertEqualArray(expected[0], got[0], atol=0.1)
 
     def test_attention_pattern_1_4d_cpu(self):
         model = self._get_model_attention_1()

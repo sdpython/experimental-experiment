@@ -356,6 +356,13 @@ class AttentionPattern(PatternOptimization):
         if len(shape) < 2 or not isinstance(shape[1], int) or shape[1] <= 0:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        # tranposition
+        tr = [node_12_Transpose, node_13_Transpose, node_15_Transpose, node_21_Transpose]
+        perms = [tuple(g.get_attribute(n, "perm").ints) for n in tr]
+        unique = set(perms)
+        if len(unique) != 1 or unique.pop() != (0, 2, 1, 3):
+            return self.none(node, inspect.currentframe().f_lineno)
+
         # Last verifications, if this point is reached, there is already a good
         # probability that the pattern is matched.
         matmuls = [node_3_MatMul, node_6_MatMul, node_9_MatMul]
