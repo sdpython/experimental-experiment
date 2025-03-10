@@ -215,11 +215,19 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
 
     def test_attention_pattern_1(self):
         model = self._get_model_attention_1()
-        print("*******", [i.name for i in model.graph.input])
         feeds = {
-            "X": self._range(2, 8, 3, 32),
-            "cos": self._range(1, 3, 1, 32),
-            "sin": self._range(1, 3, 1, 32),
+            "layer_norm_1": self._range(2, 8, 1024),  # s0,(((s1 - 1)//8)) + 1,1024
+            "expand_1": np.random.randint(0, 2, size=(2, 8, 8))
+            > 0,  # s0,CeilToInt(IntTrueDiv(s1, 8)),CeilToInt(IntTrueDiv(s1, 8))
+            "unsqueeze_9": self._range(
+                1, 16, 8, 8
+            ),  # 1,16,(((s1 - 1)//8)) + 1,(((s1 - 1)//8)) + 1
+            "val_104": np.array([2, 8, 16, 64], dtype=np.int64),  # s0,(((s1 - 1)//8)) + 1,16,6
+            "val_112": np.array([2, 8, 16, 64], dtype=np.int64),  # s0,(((s1 - 1)//8)) + 1,16,6
+            "val_120": np.array([2, 8, 16, 64], dtype=np.int64),  # s0,(((s1 - 1)//8)) + 1,16,6
+            "val_132": np.array(
+                [2, 8, 1024], dtype=np.int64
+            ),  # s0,CeilToInt(IntTrueDiv(s1, 8)),1024
         }
         # cap = ExtendedReferenceEvaluator(model, verbose=10)
         # cap.run(None, feeds)
