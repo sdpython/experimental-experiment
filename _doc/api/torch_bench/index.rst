@@ -21,7 +21,7 @@
     _bash_bench_set_timm
     _bash_bench_set_torchbench
     _bash_bench_set_torchbench_ado
-    _bash_bench_suites
+    _bash_bench_untrained
     _dort_cmd_common
     _dort_cmd_common_models
     bash_bench_agg

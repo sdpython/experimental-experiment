@@ -18,6 +18,7 @@ from ..torch_models.llm_model_helper import (
     get_phi35_vision_instruct,
     get_phi4,
     get_smollm_1_7b,
+    get_tiny_llm,
 )
 
 
@@ -294,6 +295,16 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                         ),
                         dict(replace_dynamic_cache=True, strict=False),
+                    )
+                ),
+                "TinyLLM_NoCache": (
+                    lambda: (
+                        get_tiny_llm(
+                            input_cache=False,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(replace_dynamic_cache=False),
                     )
                 ),
             }

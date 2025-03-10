@@ -665,6 +665,27 @@ class TestLlmModelHelper(ExtTestCase):
                 large_model=True,
             )
 
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    def test_get_tiny_llm(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_tiny_llm,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        data = get_tiny_llm(
+            batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
+        )
+        model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+        with bypass_export_some_errors(replace_dynamic_cache=False):
+            torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
