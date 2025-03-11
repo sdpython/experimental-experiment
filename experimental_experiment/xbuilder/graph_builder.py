@@ -4042,7 +4042,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if 0 in shape_cst:
                         if self.has_shape(node.input[0]):
                             sh = self.get_shape(node.input[0])
-                            assert len(sh) == len(shape_cst), (
+                            assert len(sh) >= len(shape_cst), (
                                 f"Shape discrepancies for name={node.input[0]!r} "
                                 f"node.name={node.name!r} "
                                 f"between sh={sh} and shape_cst={shape_cst}"
