@@ -271,6 +271,7 @@ jobs:
   #  displayName: 'Install onnxscript'
   - script: |
       pip install -r requirements-dev.txt
+      pip install chronos-forecasting --no-deps  # because it enforces transformers to a wrong version
     displayName: 'Install Requirements dev'
   - script: |
       python -c "import torch;print('torch', torch.__version__)"

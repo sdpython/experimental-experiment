@@ -1,5 +1,4 @@
 black
-chronos-forecasting --no-deps  # enforce transformers to a wrong version
 diffusers>=0.30.0
 furo
 matplotlib
