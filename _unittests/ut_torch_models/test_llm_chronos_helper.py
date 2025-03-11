@@ -39,7 +39,12 @@ class TestChronosModelHelper(ExtTestCase):
             torch_dtype=torch.bfloat16,
         )
         inputs_iteration = []
-        print("test_spy_chronos_t5_tiny", type(pipeline), type(pipeline.model), type(pipeline.model.model))
+        print(
+            "test_spy_chronos_t5_tiny",
+            type(pipeline),
+            type(pipeline.model),
+            type(pipeline.model.model),
+        )
         pprint.pprint(pipeline.model.config)
 
         def rewrite_forward(f, *args, **kwargs):

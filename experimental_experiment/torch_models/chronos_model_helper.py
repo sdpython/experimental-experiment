@@ -121,9 +121,9 @@ def get_chronos_t5_tiny(
                 torch.tensor(16, dtype=torch.int64),
             ),
             dynamic_shapes={
-                "input_ids":{0: dbatch_size, 1: dseq_length},
-                "attention_mask":{0: dbatch_size, 1: dseq_length},
-                "prediction_length":{}
+                "input_ids": {0: dbatch_size, 1: dseq_length},
+                "attention_mask": {0: dbatch_size, 1: dseq_length},
+                "prediction_length": {},
             },
         )
     else:
