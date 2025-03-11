@@ -18,6 +18,18 @@ from experimental_experiment.helpers import string_type
 
 
 class TestLlmModelHelper(ExtTestCase):
+    def setUp(self):
+        import torch
+
+        super().setUp()
+        torch._dynamo.reset()
+
+    def tearDown(self):
+        import torch
+
+        super().tearDown()
+        torch._dynamo.reset()
+
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
@@ -611,7 +623,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
     # @long_test(): let's keep this test to avoid any regression.
-    def test_get_phi4_export(self):
+    def test_b_get_phi4_export(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi4,
@@ -722,7 +734,10 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
-    def test_get_tiny_llm_default_rope(self):
+    def test_a_get_tiny_llm_default_rope(self):
+        """
+        Somehow putting this test after test_get_phi4_export makes it fail.
+        """
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_tiny_llm,
@@ -743,7 +758,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.8")  # handle dynamic rope
-    def test_get_tiny_llm_dynamic_rope(self):
+    def test_a_get_tiny_llm_dynamic_rope(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_tiny_llm,
