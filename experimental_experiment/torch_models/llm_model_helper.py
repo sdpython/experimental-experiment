@@ -1173,6 +1173,7 @@ def get_tiny_llm(
     input_cache: bool = True,
     inputs_as_tuple: bool = False,
     common_dynamic_shapes: bool = False,
+    dynamic_rope: bool = False,
     **kwargs,
 ) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
     """
@@ -1183,6 +1184,7 @@ def get_tiny_llm(
     :param input_cache: generate data for this iteration with or without cache
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :param dynamic_rope: use dynamic rope (see :class:`transformers.LlamaConfig`)
     :return: dictionary
 
     See `arnir0/Tiny-LLM
@@ -1205,7 +1207,7 @@ def get_tiny_llm(
         "num_key_value_heads": 1,
         "pretraining_tp": 1,
         "rms_norm_eps": 1e-05,
-        "rope_scaling": None,
+        "rope_scaling": {"rope_type": "dynamic", "factor": 10.0} if dynamic_rope else None,
         "tie_word_embeddings": False,
         "torch_dtype": "float32",
         "transformers_version": "4.31.0.dev0",
