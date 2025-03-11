@@ -1,11 +1,9 @@
 import base64
-import copy
 import io
 import pickle
 import re
 import zlib
 from typing import Any, Dict, List, Optional, Tuple, Union
-import numpy as np
 import torch
 from ..helpers import string_type
 
@@ -409,33 +407,6 @@ def deserialize_args_kwargs(
 
     new_args = deserialize_args(args, expected_types[0], clone=clone)
     return new_args, {}
-
-
-def make_copy(obj: Any) -> Any:
-    """Makes a copy of the objects."""
-    if isinstance(obj, np.ndarray):
-        return obj.copy()
-    if isinstance(obj, tuple):
-        return tuple(make_copy(_) for _ in obj)
-    if isinstance(obj, list):
-        return [make_copy(_) for _ in obj]
-    if isinstance(obj, dict):
-        return {k: make_copy(v) for k, v in obj.items()}
-    if hasattr(obj, "clone"):
-        return obj.clone()
-    if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
-        cache = obj.__class__()
-        if hasattr(obj, "_seen_tokens"):
-            cache._seen_tokens = obj._seen_tokens
-        cache.key_cache = make_copy(obj.key_cache)
-        cache.value_cache = make_copy(obj.value_cache)
-        return cache
-    try:
-        return copy.deepcopy(obj)
-    except RuntimeError as e:
-        raise RuntimeError(
-            f"deepcopy did not work on type {type(obj)}: {string_type(obj)}"
-        ) from e
 
 
 def tree_spec_as_name(tree_spec: torch.utils._pytree.TreeSpec, n_elements: int) -> str:

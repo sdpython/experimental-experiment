@@ -4,6 +4,7 @@ import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from ..helpers import string_type, string_sig
+from ._torch_helper import make_copy
 from ._doc_ import TorchOpOverload
 
 
@@ -387,6 +388,12 @@ class ExportOptions:
             print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
             print(f"[ExportOptions.export] args={string_type(args)}")
             print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
+        if self.strict:
+            # torch.export.export may turn Tensor into FakeTensor.
+            # We need to make a copy to avoid getting FakeTensor instead
+            args0, kwargs0 = args, kwargs
+            args = make_copy(args)
+            kwargs = make_copy(kwargs)
         if exc:
             exported_program = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
@@ -428,6 +435,10 @@ class ExportOptions:
                     f"\n---exported-program---\n{exported_program}"
                 ) from e
 
+        if self.strict:
+            # torch.export.export may turn Tensor into FakeTensor.
+            # We need to make a copy to avoid getting FakeTensor instead
+            args, kwargs = args0, kwargs0
         if exported_program is None:
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")

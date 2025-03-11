@@ -887,16 +887,20 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
             print(
+                f"[ModelRunner._to_onnx_custom] self.inputs="
+                f"{string_type(self.inputs, with_shape=True, limit=20)!r}"
+            )
+            print(
                 f"[ModelRunner._to_onnx_custom] sig_input_names="
                 f"{', '.join(self.sig_input_names)}"
             )
             print(
                 f"[ModelRunner._to_onnx_custom] export_inputs="
-                f"{string_type(export_inputs, with_shape=True)!r}"
+                f"{string_type(export_inputs, with_shape=True, limit=20)!r}"
             )
             print(
                 f"[ModelRunner._to_onnx_custom] export_kw_inputs="
-                f"{string_type(export_kw_inputs, with_shape=True)!r}"
+                f"{string_type(export_kw_inputs, with_shape=True, limit=20)!r}"
             )
             print(f"[ModelRunner._to_onnx_custom] self.export_options={self.export_options!r}")
             print(f"[ModelRunner._to_onnx_custom] export_options={export_options!r}")
@@ -926,10 +930,12 @@ class ModelRunner:
             with torch.no_grad(), bypass_export_some_errors(
                 **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
             ) as modificator:
+                modified_inputs = modificator(export_inputs)
+                modified_kw_inputs = modificator(export_kw_inputs)
                 onx, builder, stats = to_onnx(
                     self.model,
-                    modificator(export_inputs),
-                    modificator(export_kw_inputs),
+                    modified_inputs,
+                    modified_kw_inputs,
                     optimize=bool(optimization),
                     large_model=True,
                     verbose=max(verbose - 2, 0),
@@ -952,6 +958,14 @@ class ModelRunner:
         for k, v in onx._stats.items():
             if v > 0:
                 stats[k] = v
+
+        if verbose:
+            print("[ModelRunner._to_onnx_custom] done")
+            print(
+                f"[ModelRunner._to_onnx_custom] self.inputs="
+                f"{string_type(self.inputs, with_shape=True, limit=20)!r}"
+            )
+
         return onx.model_proto, stats
 
     def _to_cort(
@@ -2316,6 +2330,16 @@ class ModelRunner:
                     new_inputs.append(i.ssm_states)
                 continue
             raise AssertionError(f"Unable to process input type {type(i)}")
+
+        assert not any(
+            isinstance(i, torch._subclasses.fake_tensor.FakeTensor) for i in new_inputs
+        ), (
+            f"One input is a FakeTensor in\nnew_inputs={string_type(new_inputs, limit=20)},"
+            f"\ninputs={string_type(inputs, limit=20)},"
+            f"\nuse_inputs={string_type(use_inputs, limit=20)},"
+            f"\nraw_use_defaults={string_type(raw_use_defaults, limit=20)},"
+            f"\nself.inputs={string_type(self.inputs, limit=20)},\nnames={names}"
+        )
 
         if len(names) < len(new_inputs) and all(
             (

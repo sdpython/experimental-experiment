@@ -2991,7 +2991,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Issue with shape={new_shape}, types={[type(d) for d in new_shape]}"
             f"{self.get_debug_msg()}"
         )
-        return tuple(new_shape)
+        new_new_shape = []
+        for dim in new_shape:
+            if isinstance(dim, int):
+                new_new_shape.append(dim)
+                continue
+            dim = dim.replace(" ", "")
+            while dim[0] == "(" and dim[-1] == ")":
+                dim = dim[1:-1]
+            new_new_shape.append(dim)
+        return tuple(new_new_shape)
 
     def register_users(self, name: str, users: Iterable[str]):
         """
@@ -4033,6 +4042,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if 0 in shape_cst:
                         if self.has_shape(node.input[0]):
                             sh = self.get_shape(node.input[0])
+                            assert len(sh) == len(shape_cst), (
+                                f"Shape discrepancies for name={node.input[0]!r} "
+                                f"node.name={node.name!r} "
+                                f"between sh={sh} and shape_cst={shape_cst}"
+                                f"\ncst={cst}{self.get_debug_msg()}"
+                            )
                             shape_cst = tuple(
                                 [
                                     shape_cst[i] if shape_cst[i] != 0 else sh[i]

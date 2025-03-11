@@ -14,11 +14,11 @@ import torch
 from ..helpers import string_type, string_sig, max_diff, string_diff
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
+from ._torch_helper import make_copy
 from .piece_by_piece_serialize import (
     choose_kwargs_for_dynamic_shapes,
     deserialize_args,
     deserialize_args_kwargs,
-    make_copy,
     serialize_args,
     type_as_str_with_info,
 )

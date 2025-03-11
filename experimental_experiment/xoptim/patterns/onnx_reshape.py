@@ -176,7 +176,15 @@ class ReshapeReshapePattern(PatternOptimization):
                 cst = g.get_computed_constant(next_node.input[1])
                 if cst.min() <= 0:
                     return self.none(node, inspect.currentframe().f_lineno)
-
+        if not g.has_rank(node.input[0]) or not g.has_rank(next_node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(node.input[0]) != g.get_rank(next_node.output[0]):
+            if not g.is_constant(next_node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            cst = g.get_computed_constant(next_node.input[1])
+            if 0 in cst:
+                # TODO avoid this
+                return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
     def apply(
@@ -185,6 +193,9 @@ class ReshapeReshapePattern(PatternOptimization):
         node: NodeProto,
         next_node: NodeProto,
     ) -> List[NodeProto]:
+        if g.get_rank(node.input[0]) != g.get_rank(next_node.output[0]):
+            cst = g.get_computed_constant(next_node.input[1])
+            assert 0 not in cst, f"Not yet implemented for cst={cst}"
         new_node = g.make_node(
             "Reshape",
             [node.input[0], next_node.input[1]],

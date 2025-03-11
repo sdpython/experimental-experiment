@@ -557,8 +557,10 @@ def _make_builder_interpreter(
             exe_path = "export"
             if verbose > 0:
                 print(f"[_make_builder_interpreter] export_options={export_options!r}")
-                print(f"[_make_builder_interpreter] input args={string_type(args)}")
-                print(f"[_make_builder_interpreter] input kwargs={string_type(kwargs)}")
+                print(f"[_make_builder_interpreter] input args={string_type(args, limit=20)}")
+                print(
+                    f"[_make_builder_interpreter] input kwargs={string_type(kwargs, limit=20)}"
+                )
                 print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
                 print(
                     f"[_make_builder_interpreter] same_signature={same_signature}, "
