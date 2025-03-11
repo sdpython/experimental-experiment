@@ -20,6 +20,7 @@ from ..torch_models.llm_model_helper import (
     get_smollm_1_7b,
     get_tiny_llm,
 )
+from ..torch_models.chronos_model_helper import get_chronos_t5_tiny
 
 
 class UntrainedRunner(BenchmarkRunner):
@@ -335,6 +336,13 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             dynamic_rope=True,
                         ),
+                        dict(replace_dynamic_cache=False),
+                    )
+                ),
+                # Chronos
+                "ChronosT5Tiny": (
+                    lambda: (
+                        get_chronos_t5_tiny(batch_size=2, common_dynamic_shapes=True),
                         dict(replace_dynamic_cache=False),
                     )
                 ),
