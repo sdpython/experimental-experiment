@@ -91,7 +91,7 @@ class TestChronosModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
-    def test_a_get_chronos_t5_tiny(self):
+    def test_a_get_chronos_t5_tiny_nospy(self):
         import torch
         from experimental_experiment.torch_models.chronos_model_helper import (
             get_chronos_t5_tiny,
@@ -107,9 +107,14 @@ class TestChronosModelHelper(ExtTestCase):
         ds["prediction_length"] = None
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
+        # import torch.export._draft_export
+        # print("--------------")
+        # ep = torch.export._draft_export.draft_export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
+        # print(ep)
+        # print("--------------")
         with bypass_export_some_errors(replace_dynamic_cache=False):
             ep = torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
-            # print(ep)
+            print(ep)
             assert ep
 
 
