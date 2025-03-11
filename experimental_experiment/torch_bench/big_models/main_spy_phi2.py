@@ -39,7 +39,7 @@ print("-- intercept forward")
 print(f"-- inputs type: {string_type(inputs, with_shape=True)}")
 
 model_forward = model.forward
-model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(f, *args, **kwargs)
+model.forward = lambda *args, f=model_forward, **kwargs: rewrite_forward(f, *args, **kwargs)
 
 inputs = {k: v.expand((v.shape[0] * 2, *v.shape[1:])) for k, v in inputs.items()}
 print(f"-- inputs type: {string_type(inputs, with_shape=True)}")

@@ -689,10 +689,9 @@ class TestLlmModelHelper(ExtTestCase):
         inputs_iteration = []
 
         def rewrite_forward(f, *args, **kwargs):
-            print(f"------------- iteration {len(inputs_iteration)}")
+            print(f"------------- test_spy_tiny_llm -- iteration {len(inputs_iteration)}")
             print(f"args: {string_type(args, with_shape=True, with_min_max=True)}")
             print(f"kwargs: {string_type(kwargs, with_shape=True, with_min_max=True)}")
-            print(kwargs["input_ids"])
             inputs_iteration.append((args, kwargs))
             if len(inputs_iteration) > 5:
                 raise unittest.SkipTest(
@@ -701,7 +700,7 @@ class TestLlmModelHelper(ExtTestCase):
             return f(*args, **kwargs)
 
         model_forward = model.forward
-        model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(
+        model.forward = lambda *args, f=model_forward, **kwargs: rewrite_forward(
             f, *args, **kwargs
         )
 
@@ -728,7 +727,8 @@ class TestLlmModelHelper(ExtTestCase):
         )
 
         generated_text = generate_text(prompt, model, tokenizer)
-        print(generated_text)
+        if __name__ == "__main__":
+            print(f"test_spy_tiny_llm={generated_text}")
         model.forward = model_forward
 
     @ignore_warnings("TracerWarning")

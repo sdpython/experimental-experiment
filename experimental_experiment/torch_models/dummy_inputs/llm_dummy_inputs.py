@@ -102,7 +102,7 @@ def create_dummy_inputs_for_phi35_vision_instruct(
         return f(*args, **kwargs)
 
     model_forward = model.forward
-    model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(
+    model.forward = lambda *args, f=model_forward, **kwargs: rewrite_forward(
         f, *args, **kwargs
     )
 

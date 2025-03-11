@@ -74,7 +74,7 @@ def rewrite_forward(f, *args, **kwargs):
 
 print("-- intercept forward")
 model_forward = model.forward
-model.forward = lambda f=model_forward, *args, **kwargs: rewrite_forward(f, *args, **kwargs)
+model.forward = lambda *args, f=model_forward, **kwargs: rewrite_forward(f, *args, **kwargs)
 
 generate_ids = model.generate(
     **inputs, eos_token_id=processor.tokenizer.eos_token_id, **generation_args

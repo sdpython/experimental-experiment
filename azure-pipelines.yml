@@ -61,7 +61,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_models --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_models --ignore=_unittests/ut_torch_bench --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -131,14 +131,20 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_gradient _unittests/ut_reference _unittests/ut_torch_interpreter _unittests/ut_torch_models --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --ignore _unittests/ut_torch_models/test_llm_model_helper.py --durations=20
-    displayName: 'Partial Runs Unit Tests'
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_gradient _unittests/ut_reference _unittests/ut_torch_interpreter _unittests/ut_torch_models --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --ignore _unittests/ut_torch_models/test_llm_model_helper.py --ignore _unittests/ut_torch_models/test_chronos_model_helper.py --durations=20
+    displayName: 'Test Interpreter'
+  - script: |
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench --durations=20
+    displayName: 'Test Bench'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_llm_model_helper.py --durations=20
-    displayName: 'Partial Runs Unit Tests'
+    displayName: 'Test Llm'
+  - script: |
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_chronos_model_helper.py --durations=20
+    displayName: 'Test Chronos'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_piece_by_piece_big.py --durations=20
-    displayName: 'Big Unit Tests'
+    displayName: 'Test PieceByPiece'
   - task: PublishPipelineArtifact@0
     inputs:
       artifactName: 'wheel-linux-wheel-$(python.version)-training'
@@ -209,7 +215,7 @@ jobs:
     displayName: 'install wheel'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
-    displayName: 'Partial Runs Unit Tests'
+    displayName: 'Test Scan'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_piece_by_piece_big.py --durations=20
     displayName: 'Big Unit Tests'
