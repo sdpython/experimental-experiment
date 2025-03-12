@@ -307,10 +307,10 @@ def aten_and(
 ) -> T:
     "and"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
+        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts, force_type=TensorProto.BOOL
     )
     if not sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
+        set_type_shape_binary_op(g, outputs[0], x, y, itype=TensorProto.BOOL)
     return res
 
 
@@ -348,10 +348,10 @@ def aten_or(
 ) -> T:
     "or"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Or, name=name, outputs=outputs, sts=sts
+        g, x, y, f=g.op.Or, name=name, outputs=outputs, sts=sts, force_type=TensorProto.BOOL
     )
     if not sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
+        set_type_shape_binary_op(g, outputs[0], x, y, itype=TensorProto.BOOL)
     return res
 
 
@@ -6136,11 +6136,26 @@ def aten_multinomial(
     assert (
         not generator
     ), f"multinomial not implemented with generator={generator}{g.get_debug_msg()}"
-    res = g.op.Multinomial(
-        x, sample_size=num_samples, name=name, outputs=outputs, dtype=TensorProto.INT32
-    )
+    assert g.has_rank(x), f"Missing rank for {x!r}{g.get_debug_msg()}"
+    rk = g.get_rank(x)
+    if rk == 1:
+        res = g.op.SqueezeAnyOpset(
+            g.op.Multinomial(
+                g.op.UnsqueezeAnyOpset(x, g.ZERO, name=name),
+                sample_size=num_samples,
+                name=name,
+                dtype=TensorProto.INT64,
+            ),
+            g.ZERO,
+            name=name,
+            outputs=outputs,
+        )
+    else:
+        res = g.op.Multinomial(
+            x, sample_size=num_samples, name=name, outputs=outputs, dtype=TensorProto.INT64
+        )
     if not sts:
-        g.set_type(res, TensorProto.INT32)
+        g.set_type(res, TensorProto.INT64)
     return res
 
 
