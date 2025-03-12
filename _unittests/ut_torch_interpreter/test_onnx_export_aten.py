@@ -3,6 +3,7 @@ import os
 import unittest
 from typing import Any, List, Optional
 import numpy as np
+import onnx
 import onnx.helper as oh
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import (
@@ -1357,6 +1358,74 @@ class TestOnnxExportAten(ExtTestCase):
                 )
                 got = sess.run(None, feeds)[0]
                 self.assertEqualArray(expected, got, atol=1e-5)
+
+    @ignore_warnings(UserWarning)
+    def test_aten_isin(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, elements, test_elements):
+                return torch.isin(elements, test_elements)
+
+        model = Model()
+
+        for rk in (1, 2, 3):
+            with self.subTest(rank=rk):
+                xs = (
+                    torch.arange(2 * 3 * 5)
+                    .to(torch.int64)
+                    .reshape(
+                        (2 * 3 * 5,) if rk == 1 else ((2 * 3, 5) if rk == 2 else (2, 3, 5))
+                    ),
+                    torch.arange(2 * 3 * 5)[::2].to(torch.int64),
+                )
+                expected = model(*xs)
+                model_path = self._call_exporter("test_aten_isin", "custom", model, xs)
+                sess = ExtendedReferenceEvaluator(model_path)
+                feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got)
+
+                # checking with onnxruntime as well
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    model_path, providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got)
+
+    @ignore_warnings(UserWarning)
+    def test_aten_multinomial(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, elements):
+                return torch.multinomial(elements, 5)
+
+        model = Model()
+
+        for rk in (1, 2):
+            with self.subTest(rank=rk):
+                xs = (
+                    (torch.arange(2 * 3 * 5) / (2 * 3 * 5))
+                    .to(torch.float32)
+                    .reshape(
+                        (2 * 3 * 5,) if rk == 1 else ((2 * 3, 5) if rk == 2 else (2, 3, 5))
+                    ),
+                )
+                expected = model(*xs)
+                model_path = self._call_exporter("test_aten_multinomial", "custom", model, xs)
+                onx = onnx.load(model_path)
+                feeds = dict(zip([i.name for i in onx.graph.input], [x.numpy() for x in xs]))
+
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    model_path, providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
