@@ -7,6 +7,8 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     never_test,
     requires_torch,
+    requires_transformers,
+    long_test,
 )
 from experimental_experiment.torch_models import flatten_outputs
 from experimental_experiment.helpers import string_type
@@ -91,7 +93,9 @@ class TestChronosModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
-    def test_a_get_chronos_t5_tiny_nospy(self):
+    @requires_transformers("4.50")
+    @long_test()
+    def test_a_get_chronos_t5_tiny_fixed_nospy(self):
         import torch
         from experimental_experiment.torch_models.chronos_model_helper import (
             get_chronos_t5_tiny,
@@ -100,21 +104,26 @@ class TestChronosModelHelper(ExtTestCase):
             bypass_export_some_errors,
         )
 
-        data = get_chronos_t5_tiny(batch_size=2, common_dynamic_shapes=True)
+        data = get_chronos_t5_tiny(
+            batch_size=2, common_dynamic_shapes=True, fixed_prediction_length=17
+        )
         model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
         # Does not work with something elkse than a constant.
-        model_inputs["prediction_length"] = 17
-        ds["prediction_length"] = None
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
         # import torch.export._draft_export
+        # draft_export fails at line: transformers/generation/utils.py", line 3336
+        # next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+        # RuntimeError: probability tensor contains either `inf`, `nan` or element < 0
         # print("--------------")
-        # ep = torch.export._draft_export.draft_export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
+        # ep, report = torch.export._draft_export.draft_export(
+        #   model, (), model_inputs, dynamic_shapes=ds, strict=False)
+        # )
+        # print(report)
         # print(ep)
         # print("--------------")
-        with bypass_export_some_errors(replace_dynamic_cache=False):
+        with bypass_export_some_errors(replace_dynamic_cache=True):
             ep = torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
-            print(ep)
             assert ep
 
 

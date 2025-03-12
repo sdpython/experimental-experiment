@@ -340,10 +340,20 @@ class UntrainedRunner(BenchmarkRunner):
                     )
                 ),
                 # Chronos
+                "ChronosT5Tiny_Fixed": (
+                    lambda: (
+                        get_chronos_t5_tiny(
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                            fixed_prediction_length=17,
+                        ),
+                        dict(replace_dynamic_cache=True, strict=False),
+                    )
+                ),
                 "ChronosT5Tiny": (
                     lambda: (
                         get_chronos_t5_tiny(batch_size=2, common_dynamic_shapes=True),
-                        dict(replace_dynamic_cache=False),
+                        dict(replace_dynamic_cache=True, strict=False),
                     )
                 ),
             }

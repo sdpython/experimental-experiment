@@ -312,6 +312,7 @@ def bypass_export_some_errors(
         keep_DynamicCache_init = keep_DynamicCache.__init__
         keep_DynamicCache.__init__ = lambda *args, **kwargs: raise_assert()
         transformers.cache_utils.DynamicCache = patched_DynamicCache
+        transformers.generation.utils.DynamicCache = patched_DynamicCache
 
         transformers.models.llama.modeling_llama.DynamicCache = patched_DynamicCache
         transformers.models.phi.modeling_phi.DynamicCache = patched_DynamicCache
@@ -379,6 +380,7 @@ def bypass_export_some_errors(
         if replace_dynamic_cache:
             keep_DynamicCache.__init__ = keep_DynamicCache_init
             transformers.cache_utils.DynamicCache = keep_DynamicCache
+            transformers.generation.utils.DynamicCache = keep_DynamicCache
             transformers.models.llama.modeling_llama.DynamicCache = keep_DynamicCache
             transformers.models.phi.modeling_phi.DynamicCache = keep_DynamicCache
             transformers.models.phi3.modeling_phi3.DynamicCache = keep_DynamicCache

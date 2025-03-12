@@ -12,6 +12,7 @@ def get_chronos_t5_tiny(
     input_cache: bool = True,
     batch_size: int = 1,
     common_dynamic_shapes: bool = False,
+    fixed_prediction_length: int = -1,
     **kwargs,
 ) -> Dict[str, Any]:
     """
@@ -21,32 +22,16 @@ def get_chronos_t5_tiny(
     :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
     :param batch_size: batch size
     :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :param fixed_prediction_length: freeze the number of predictions in the model,
+        it is no longer an input
     :return: dicionary
 
-    See `chronos_t5_tiny
-    <https://huggingface.co/amazon/chronos-t5-tiny>`_.
+    See `chronos_t5_tiny <https://huggingface.co/amazon/chronos-t5-tiny>`_.
 
-    Model forward signature:
-
-    ::
-
-        def forward(
-            self,
-            input_ids: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            token_type_ids: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.Tensor] = None,
-            head_mask: Optional[torch.Tensor] = None,
-            inputs_embeds: Optional[torch.Tensor] = None,
-            encoder_hidden_states: Optional[torch.Tensor] = None,
-            encoder_attention_mask: Optional[torch.Tensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-        ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-
+    If the model is run with a fixed prediction length (``fixed_prediction_length > 0``),
+    the model is wrapped to hide that parameter. It would not be exported by the exporter,
+    and the benchmark is rewriting every integer parameter to avoid any parameter
+    to be hidden.
     """
     import torch
     import transformers
@@ -105,6 +90,19 @@ def get_chronos_t5_tiny(
     model = chronos.ChronosModel(conf, inner_model)
     model.eval()
 
+    if fixed_prediction_length > 0:
+
+        class ChronosModelWrapped(torch.nn.Module):
+            def __init__(self, model, fixed_prediction_length):
+                super().__init__()
+                self.model = model
+                self.fixed_prediction_length = fixed_prediction_length
+
+            def forward(self, input_ids, attention_mask):
+                return self.model(input_ids, attention_mask, self.fixed_prediction_length)
+
+        model = ChronosModelWrapped(model, fixed_prediction_length)
+
     if common_dynamic_shapes:
         dbatch_size = torch.export.Dim("batch_size", min=1, max=1024)
         dseq_length = torch.export.Dim("seq_length", min=1, max=128)
@@ -113,17 +111,25 @@ def get_chronos_t5_tiny(
             inputs=(
                 torch.randint(low=1, high=2352, size=(batch_size, 50), dtype=torch.int64),
                 torch.full((batch_size, 50), fill_value=True),
-                torch.tensor(12, dtype=torch.int64),
+                (
+                    fixed_prediction_length
+                    if fixed_prediction_length > 0
+                    else torch.tensor(17, dtype=torch.int64)
+                ),
             ),
             inputs2=(
                 torch.randint(low=1, high=2352, size=(batch_size + 1, 55), dtype=torch.int64),
                 torch.full((batch_size + 1, 55), fill_value=True),
-                torch.tensor(16, dtype=torch.int64),
+                (
+                    (fixed_prediction_length + 1)
+                    if fixed_prediction_length > 0
+                    else torch.tensor(18, dtype=torch.int64)
+                ),
             ),
             dynamic_shapes={
                 "input_ids": {0: dbatch_size, 1: dseq_length},
                 "attention_mask": {0: dbatch_size, 1: dseq_length},
-                "prediction_length": {},
+                "prediction_length": None if fixed_prediction_length > 0 else {},
             },
         )
     else:
@@ -132,9 +138,19 @@ def get_chronos_t5_tiny(
             inputs=(
                 torch.randint(low=1, high=2352, size=(batch_size, 50), dtype=torch.int64),
                 torch.full((batch_size, 50), fill_value=True),
-                torch.tensor(12, dtype=torch.int64),
+                (
+                    fixed_prediction_length
+                    if fixed_prediction_length > 0
+                    else torch.tensor(17, dtype=torch.int64)
+                ),
             ),
         )
+    if fixed_prediction_length > 0:
+        for k in ["inputs", "inputs2", "dynamic_shapes"]:
+            if isinstance(res[k], dict):
+                del res[k]["prediction_length"]
+            else:
+                res[k] = res[k][:-1]
     if not inputs_as_tuple:
         for k in ["inputs", "inputs2"]:
             if k not in res:

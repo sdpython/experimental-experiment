@@ -569,6 +569,7 @@ class ModelRunner:
             return res
         if self.nvtx:
             torch.cuda.nvtx.range_push("ModelRunner.Eager")
+
         res = self.model(*inputs)
         if self.nvtx:
             torch.cuda.nvtx.range_pop()
