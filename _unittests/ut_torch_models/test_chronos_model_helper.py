@@ -100,9 +100,6 @@ class TestChronosModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.chronos_model_helper import (
             get_chronos_t5_tiny,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
 
         data = get_chronos_t5_tiny(
             batch_size=2, common_dynamic_shapes=True, fixed_prediction_length=17
@@ -122,9 +119,10 @@ class TestChronosModelHelper(ExtTestCase):
         # print(report)
         # print(ep)
         # print("--------------")
-        with bypass_export_some_errors(replace_dynamic_cache=True):
-            ep = torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
-            assert ep
+        # patches should not be needed after this PR:
+        # https://github.com/huggingface/transformers/pull/36652
+        ep = torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
+        assert ep
 
 
 if __name__ == "__main__":
