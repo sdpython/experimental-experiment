@@ -18,7 +18,9 @@ from ..torch_models.llm_model_helper import (
     get_phi35_vision_instruct,
     get_phi4,
     get_smollm_1_7b,
+    get_tiny_llm,
 )
+from ..torch_models.chronos_model_helper import get_chronos_t5_tiny
 
 
 class UntrainedRunner(BenchmarkRunner):
@@ -293,6 +295,64 @@ class UntrainedRunner(BenchmarkRunner):
                             batch_size=2,
                             common_dynamic_shapes=True,
                         ),
+                        dict(replace_dynamic_cache=True, strict=False),
+                    )
+                ),
+                "TinyLLM_NoCache": (
+                    lambda: (
+                        get_tiny_llm(
+                            input_cache=False,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(replace_dynamic_cache=False),
+                    )
+                ),
+                "TinyLLM": (
+                    lambda: (
+                        get_tiny_llm(
+                            input_cache=True,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(replace_dynamic_cache=False),
+                    )
+                ),
+                "TinyLLM_DynRopeNoCache": (
+                    lambda: (
+                        get_tiny_llm(
+                            input_cache=False,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                        ),
+                        dict(replace_dynamic_cache=False),
+                    )
+                ),
+                "TinyLLM_DynRope": (
+                    lambda: (
+                        get_tiny_llm(
+                            input_cache=True,
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                            dynamic_rope=True,
+                        ),
+                        dict(replace_dynamic_cache=False),
+                    )
+                ),
+                # Chronos
+                "ChronosT5Tiny_Fixed": (
+                    lambda: (
+                        get_chronos_t5_tiny(
+                            batch_size=2,
+                            common_dynamic_shapes=True,
+                            fixed_prediction_length=17,
+                        ),
+                        dict(replace_dynamic_cache=True, strict=False),
+                    )
+                ),
+                "ChronosT5Tiny": (
+                    lambda: (
+                        get_chronos_t5_tiny(batch_size=2, common_dynamic_shapes=True),
                         dict(replace_dynamic_cache=True, strict=False),
                     )
                 ),

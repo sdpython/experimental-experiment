@@ -152,7 +152,7 @@ class _GraphBuilderRuntime:
             if dt == ttt
             else (
                 f"{'*'.join(st)}*{dt // ttt}"
-                if dt % ttt == 0
+                if isinstance(dt, int) and isinstance(ttt, int) and dt % ttt == 0
                 else f"{'*'.join(st)}*{dt}/{ttt}"
             )
         )

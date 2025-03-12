@@ -125,6 +125,9 @@ def finalize_llm_setup(
     device: str = "cpu",
     seq_length_multiple: int = 1,
     input_cache_class: Optional[type] = None,
+    sequence_length: int = 30,
+    sequence_inc: int = 1,
+    sequence_length2: int = 3,
 ) -> Dict[str, Any]:
     """
     Creates dummy inputs for a model ran as if it were the second iteration.
@@ -139,9 +142,6 @@ def finalize_llm_setup(
 
     shapes = {}
 
-    sequence_length = 30
-    sequence_inc = 1
-    sequence_length2 = 3
     if seq_length_multiple > 1:
         sequence_length = (
             (sequence_length + seq_length_multiple)

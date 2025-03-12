@@ -124,6 +124,11 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    def test_untrained_export_bench_custom_tiny_llm_cpu(self):
+        self._untrained_export("custom", "TinyLLM", verbose=1, debug=False)
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.6")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_export_cpu(self):
         self._untrained_export(

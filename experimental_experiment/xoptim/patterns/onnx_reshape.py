@@ -1,5 +1,6 @@
 import inspect
 from typing import List, Optional
+import numpy as np
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types
 from ...xbuilder._shape_helper import all_int
@@ -176,7 +177,18 @@ class ReshapeReshapePattern(PatternOptimization):
                 cst = g.get_computed_constant(next_node.input[1])
                 if cst.min() <= 0:
                     return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            not g.has_rank(node.input[0])
+            or not g.has_rank(next_node.output[0])
+            or not g.has_rank(node.output[0])
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
 
+        # If g.get_rank(node.input[0]) != g.get_rank(next_node.output[0]),
+        # the bet is, when the shape is not a constant, then using 0 is not really
+        # useful. Since 0 is only valid for ONNX, 0 should not be found
+        # in a non constant shape used to reshape.
+        # If it is a constant that should be ok too.
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
     def apply(
@@ -185,14 +197,78 @@ class ReshapeReshapePattern(PatternOptimization):
         node: NodeProto,
         next_node: NodeProto,
     ) -> List[NodeProto]:
+        second_input = next_node.input[1]
+        pre_nodes = []
+        if (
+            g.get_rank(node.input[0]) != g.get_rank(next_node.output[0])
+            and g.get_rank(node.output[0]) == g.get_rank(next_node.output[0])
+            and g.is_constant(next_node.input[1])
+        ):
+            cst = tuple(g.get_computed_constant(next_node.input[1]))
+            if 0 in cst:
+                if g.is_constant(node.input[1]):
+                    shape0 = tuple(g.get_computed_constant(node.input[1]))
+                    assert len(shape0) == len(cst), (
+                        f"This should be true due to the first test but cst={cst}, "
+                        f"shape0={shape0}"
+                    )
+                    new_shape = [(s if s != 0 else s0) for s, s0 in zip(cst, shape0)]
+                    assert (
+                        len(new_shape) >= len([s for s in new_shape if s != 0]) - 1
+                    ), f"new_shape={new_shape} has two -1. This is not possible."
+                    second_input = g.make_initializer(
+                        "",
+                        np.array(new_shape, dtype=np.int64),
+                        source="ReshapeReshapePattern.new_shape.1",
+                    )
+                else:
+                    # This code has one loop hole. It could produce shapes with two -1.
+                    # Let's extract the missing information.
+                    names = []
+                    for axis, dim in enumerate(cst):
+                        if dim == 0:
+                            d_name = g.unique_name(f"{next_node.input[0]}--dim{axis}")
+                            d_init = g.make_initializer(
+                                "",
+                                np.array([axis], dtype=np.int64),
+                                source=f"ReshapeReshapePattern.axis.{axis}.1",
+                            )
+                            pre_nodes.append(
+                                g.make_node(
+                                    "Gather",
+                                    [node.input[1], d_init],
+                                    [d_name],
+                                    axis=0,
+                                    name=f"{next_node.name}--axis{axis}",
+                                )
+                            )
+                            names.append(d_name)
+                        else:
+                            d_init = g.make_initializer(
+                                "",
+                                np.array([dim], dtype=np.int64),
+                                source=f"ReshapeReshapePattern.axis.{axis}.2",
+                            )
+                            names.append(d_init)
+                    second_input = g.unique_name(f"{next_node.input[0]}--concat")
+                    pre_nodes.append(
+                        g.make_node(
+                            "Concat",
+                            names,
+                            [second_input],
+                            axis=0,
+                            name=f"{next_node.name}--concat",
+                        )
+                    )
+
         new_node = g.make_node(
             "Reshape",
-            [node.input[0], next_node.input[1]],
+            [node.input[0], second_input],
             next_node.output,
             name=f"{self.__class__.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
-        return [new_node]
+        return [*pre_nodes, new_node]
 
 
 class Reshape2Of3Pattern(PatternOptimization):

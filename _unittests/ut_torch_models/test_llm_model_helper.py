@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     skipif_ci_windows,
     long_test,
+    never_test,
     requires_torch,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
@@ -17,6 +18,18 @@ from experimental_experiment.helpers import string_type
 
 
 class TestLlmModelHelper(ExtTestCase):
+    def setUp(self):
+        import torch
+
+        super().setUp()
+        torch._dynamo.reset()
+
+    def tearDown(self):
+        import torch
+
+        super().tearDown()
+        torch._dynamo.reset()
+
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
@@ -610,7 +623,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
     # @long_test(): let's keep this test to avoid any regression.
-    def test_get_phi4_export(self):
+    def test_b_get_phi4_export(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi4,
@@ -664,6 +677,108 @@ class TestLlmModelHelper(ExtTestCase):
                 export_options=ExportOptions(strict=False),
                 large_model=True,
             )
+
+    @never_test()
+    def test_spy_tiny_llm(self):
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        MODEL_NAME = "arnir0/Tiny-LLM"
+
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+        inputs_iteration = []
+
+        def rewrite_forward(f, *args, **kwargs):
+            print(f"------------- test_spy_tiny_llm -- iteration {len(inputs_iteration)}")
+            print(f"args: {string_type(args, with_shape=True, with_min_max=True)}")
+            print(f"kwargs: {string_type(kwargs, with_shape=True, with_min_max=True)}")
+            inputs_iteration.append((args, kwargs))
+            if len(inputs_iteration) > 5:
+                raise unittest.SkipTest(
+                    f"Not necessary to go beyond {len(inputs_iteration)} iterations."
+                )
+            return f(*args, **kwargs)
+
+        model_forward = model.forward
+        model.forward = lambda *args, f=model_forward, **kwargs: rewrite_forward(
+            f, *args, **kwargs
+        )
+
+        def generate_text(
+            prompt, model, tokenizer, max_length=512, temperature=1, top_k=50, top_p=0.95
+        ):
+            inputs = tokenizer.encode(prompt, return_tensors="pt")
+
+            outputs = model.generate(
+                inputs,
+                max_length=max_length,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                do_sample=True,
+            )
+
+            generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            return generated_text
+
+        prompt = (
+            "According to all known laws of aviation, "
+            "there is no way a bee should be able to fly."
+        )
+
+        generated_text = generate_text(prompt, model, tokenizer)
+        if __name__ == "__main__":
+            print(f"test_spy_tiny_llm={generated_text}")
+        model.forward = model_forward
+
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    def test_a_get_tiny_llm_default_rope(self):
+        """
+        Somehow putting this test after test_get_phi4_export makes it fail.
+        """
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_tiny_llm,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        data = get_tiny_llm(
+            batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
+        )
+        model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+        with bypass_export_some_errors(replace_dynamic_cache=False):
+            torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
+
+    @ignore_warnings("TracerWarning")
+    @ignore_warnings(UserWarning)
+    @requires_torch("2.8")  # handle dynamic rope
+    def test_a_get_tiny_llm_dynamic_rope(self):
+        import torch
+        from experimental_experiment.torch_models.llm_model_helper import (
+            get_tiny_llm,
+        )
+        from experimental_experiment.torch_interpreter.onnx_export_errors import (
+            bypass_export_some_errors,
+        )
+
+        data = get_tiny_llm(
+            batch_size=2,
+            num_hidden_layers=1,
+            input_cache=True,
+            common_dynamic_shapes=True,
+            dynamic_rope=True,
+        )
+        model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = list(flatten_outputs(model(**model_inputs)))
+        self.assertNotEmpty(expected)
+        with bypass_export_some_errors(replace_dynamic_cache=False):
+            torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
 
 
 if __name__ == "__main__":

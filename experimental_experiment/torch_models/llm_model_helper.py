@@ -1166,3 +1166,68 @@ def get_llama32_9b_vision(
         inputs = tuple(inputs.values())
 
     return model, inputs
+
+
+def get_tiny_llm(
+    batch_size: int = 2,
+    input_cache: bool = True,
+    inputs_as_tuple: bool = False,
+    common_dynamic_shapes: bool = False,
+    dynamic_rope: bool = False,
+    **kwargs,
+) -> Tuple[Any, Union[Tuple[Any, ...], Dict[str, Any]]]:
+    """
+    Gets a non initialized model.
+
+    :param inputs_as_tuple: returns dummy inputs as a dictionary or not
+    :param batch_size: batch size
+    :param input_cache: generate data for this iteration with or without cache
+    :param kwargs: to overwrite the configuration, example ``num_hidden_layers=1``
+    :param common_dynamic_shapes: if True returns dynamic shapes as well
+    :param dynamic_rope: use dynamic rope (see :class:`transformers.LlamaConfig`)
+    :return: dictionary
+
+    See `arnir0/Tiny-LLM
+    <https://huggingface.co/arnir0/Tiny-LLM>`_.
+    """
+    import transformers
+
+    config = {
+        "architectures": ["LlamaForCausalLM"],
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "hidden_act": "silu",
+        "hidden_size": 192,
+        "initializer_range": 0.02,
+        "intermediate_size": 1024,
+        "max_position_embeddings": 1024,
+        "model_type": "llama",
+        "num_attention_heads": 2,
+        "num_hidden_layers": 1,
+        "num_key_value_heads": 1,
+        "pretraining_tp": 1,
+        "rms_norm_eps": 1e-05,
+        "rope_scaling": {"rope_type": "dynamic", "factor": 10.0} if dynamic_rope else None,
+        "tie_word_embeddings": False,
+        "torch_dtype": "float32",
+        "transformers_version": "4.31.0.dev0",
+        "use_cache": True,
+        "vocab_size": 32000,
+    }
+
+    assert_found(kwargs, config)
+    config.update(**kwargs)
+    conf = transformers.LlamaConfig(**config)
+    model = transformers.LlamaForCausalLM(conf)
+    model.eval()
+
+    return finalize_llm_setup(
+        model,
+        batch_size,
+        max_token_id=31999,
+        common_dynamic_shapes=common_dynamic_shapes,
+        inputs_as_tuple=inputs_as_tuple,
+        input_cache=input_cache,
+        cache_last_dim=96,
+        num_key_value_heads=1,
+    )

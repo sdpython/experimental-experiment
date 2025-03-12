@@ -1190,7 +1190,6 @@ class BenchmarkRunner:
                 if self.verbose:
                     print(f"[benchmarkrunner.benchmark] err_feeds {e}")
                 return stats, context
-
         else:
             feeds = model_runner.make_feeds(
                 exporter, filename, remove_int=exporter in {"onnx_dynamo"}
