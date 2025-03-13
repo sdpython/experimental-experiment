@@ -423,7 +423,11 @@ class TestOnnxExportCustomCode(ExtTestCase):
         # export
         self.assertRaise(
             lambda: torch.export.export(model, (x,)),
-            (torch._dynamo.exc.UserError, torch._dynamo.exc.Unsupported),
+            (
+                torch._dynamo.exc.UserError,
+                torch._dynamo.exc.Unsupported,
+                torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode,
+            ),
         )
 
         # register a custom op
