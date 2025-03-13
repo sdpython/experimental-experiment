@@ -50,19 +50,22 @@ def get_input_cache(
     """
     import torch
     import transformers
+    from ..cache_helpers import make_dynamic_cache
 
     if input_cache_class is None or input_cache_class is transformers.cache_utils.DynamicCache:
-        cache = transformers.cache_utils.DynamicCache(num_hidden_layers)
-        for i in range(num_hidden_layers):
-            cache.update(
-                torch.randn(
-                    batch_size, num_key_value_heads, sequence_length, cache_last_dim
-                ).to(device),
-                torch.randn(
-                    batch_size, num_key_value_heads, sequence_length, cache_last_dim
-                ).to(device),
-                i,
-            )
+        cache = make_dynamic_cache(
+            [
+                (
+                    torch.randn(
+                        batch_size, num_key_value_heads, sequence_length, cache_last_dim
+                    ).to(device),
+                    torch.randn(
+                        batch_size, num_key_value_heads, sequence_length, cache_last_dim
+                    ).to(device),
+                )
+                for i in range(num_hidden_layers)
+            ]
+        )
         return cache
 
     if input_cache_class is transformers.cache_utils.MambaCache:

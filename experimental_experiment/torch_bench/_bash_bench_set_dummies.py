@@ -1,4 +1,5 @@
 import torch
+from ..cache_helpers import make_dynamic_cache
 from ._bash_bench_model_runner import MakeConfig
 
 
@@ -259,10 +260,9 @@ class NeuronDynamicCache(torch.nn.Module):
         ).transpose(1, 0)
 
     def _get_random_inputs(self, device: str):
-        import transformers
-
-        cache = transformers.cache_utils.DynamicCache(1)
-        cache.update(torch.ones((3, 8)).to(device), (torch.ones((3, 8)) * 2).to(device), 0)
+        cache = make_dynamic_cache(
+            [(torch.ones((3, 8)).to(device), (torch.ones((3, 8)) * 2).to(device))]
+        )
         return {"x": torch.randn(3, 8).to(device), "dc": cache}
 
     config = MakeConfig(download=False, to_tuple=False)

@@ -3,16 +3,20 @@ import unittest
 from typing import Any, Dict, List, Optional, Tuple
 import onnx
 import numpy as np
+import torch
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.helpers import make_dynamic_cache
 from experimental_experiment.helpers import get_onnx_signature, string_type
+from experimental_experiment.torch_interpreter.onnx_export_errors import (
+    bypass_export_some_errors,
+)
+from experimental_experiment.torch_test_helper import dummy_llm
 
 
 class TestOnnxExportSignatures(ExtTestCase):
 
     def _flatten_inputs(self, inputs):
-        import torch
-
         flattened_inputs = []
         for inp in inputs:
             if isinstance(inp, torch.Tensor):
@@ -34,8 +38,6 @@ class TestOnnxExportSignatures(ExtTestCase):
         exporter: str = "",
         flatten_inputs: bool = False,
     ):
-        import torch
-
         new_inputs = self._flatten_inputs(inputs) if flatten_inputs else inputs
 
         if len(names) == len(new_inputs):
@@ -96,7 +98,6 @@ class TestOnnxExportSignatures(ExtTestCase):
                         feeds=feeds,
                     )
             return
-        import torch
 
         expected = model(*inputs)
 
@@ -160,8 +161,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_s1s_r(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -178,8 +177,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_s1d_r(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -198,8 +195,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_s2d_r(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -227,8 +222,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_s1d_i_r_v1(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -262,8 +255,6 @@ class TestOnnxExportSignatures(ExtTestCase):
     @skipif_ci_windows("not working on windows")
     @unittest.skip("Something like [a:b, i] is not implemented yet.")
     def test_signature_s1d_i_r_v2(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -289,8 +280,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_s1d_ls_r_custom(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -342,8 +331,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_s1d_ls_r_tracing(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -389,8 +376,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_index_s_r(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -411,8 +396,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_index_d_r(self):
-        import torch
-
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
                 super(Neuron, self).__init__()
@@ -444,8 +427,6 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_llm_s_tracing(self):
-        from experimental_experiment.torch_test_helper import dummy_llm
-
         if False:
             for cls_name in ["AttentionBlock", "MultiAttentionBlock", "DecoderLayer"]:
                 model, inputs = dummy_llm(cls_name)
@@ -568,21 +549,17 @@ class TestOnnxExportSignatures(ExtTestCase):
 
     @skipif_ci_windows("not working on windows")
     def test_signature_dc_none(self):
-        import torch
-        import transformers
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
-
         class Neuron(torch.nn.Module):
             def forward(self, x=None, y=None, z=None, w=None, ww=None):
                 return x * (z.key_cache[0] + z.value_cache[0]) + ww
 
-        cache = transformers.cache_utils.DynamicCache(1)
-        cache.update(
-            (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
-            (torch.arange(4 * 3) + 5).reshape((-1, 3)).to(torch.float32),
-            0,
+        cache = make_dynamic_cache(
+            [
+                (
+                    (torch.arange(4 * 3) + 10).reshape((-1, 3)).to(torch.float32),
+                    (torch.arange(4 * 3) + 5).reshape((-1, 3)).to(torch.float32),
+                )
+            ]
         )
 
         inputs = (

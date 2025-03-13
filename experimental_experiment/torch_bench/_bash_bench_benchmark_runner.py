@@ -24,6 +24,7 @@ from .export_model_helper import (
 )
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
+from ..cache_helpers import make_dynamic_cache
 from ..helpers import (
     string_type,
     tensor_dtype_to_np_dtype,
@@ -307,14 +308,23 @@ class BenchmarkRunner:
                 # )
                 return new_cache
             return obj
-        if hasattr(obj, "key_cache") and obj.__class__.__name__ in (
-            "DynamicCache",
-            "patched_DynamicCache",
-        ):
+        if hasattr(obj, "key_cache") and obj.__class__.__name__ in ("patched_DynamicCache",):
             cache = copy.deepcopy(obj)
             cache.key_value = [self.move_to(device, _) for _ in obj.key_cache]
             cache.value_value = [self.move_to(device, _) for _ in obj.value_cache]
             return cache
+
+        if hasattr(obj, "key_cache") and obj.__class__.__name__ in ("DynamicCache",):
+            cache = make_dynamic_cache(
+                list(
+                    zip(
+                        [self.move_to(device, t) for t in obj.key_cache],
+                        [self.move_to(device, t) for t in obj.value_cache],
+                    )
+                )
+            )
+            return cache
+
         raise AssertionError(f"move_to not implemented for type {type(obj)}, dir={dir(obj)}")
 
     @classmethod
@@ -602,6 +612,7 @@ class BenchmarkRunner:
         pickled_name: Optional[str] = None,
         rtopt: bool = True,
         shape_again: bool = False,
+        apply_patches: bool = True,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -620,6 +631,7 @@ class BenchmarkRunner:
         :param rtopt: disable onnxruntime optimization
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
+        :param apply_patches: apply patches before exporting
         """
         assert not process, "process=True not implemented."
 
@@ -661,6 +673,7 @@ class BenchmarkRunner:
                     initial_no_grad=initial_no_grad,
                     rtopt=rtopt,
                     shape_again=shape_again,
+                    apply_patches=apply_patches,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -730,6 +743,7 @@ class BenchmarkRunner:
         autocast=None,
         rtopt=None,
         shape_again=None,
+        apply_patches=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -740,6 +754,7 @@ class BenchmarkRunner:
         assert machine_specs is not None
         assert initial_no_grad is not None
         assert shape_again is not None
+        assert apply_patches is not None
 
         import onnxruntime
         import onnxscript
@@ -1128,6 +1143,7 @@ class BenchmarkRunner:
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
+                patch=apply_patches,
             )
             stats["time_export"] = time.perf_counter() - begin
             stats["time_export_2"] = stats["time_export"]

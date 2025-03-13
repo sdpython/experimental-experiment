@@ -13,6 +13,7 @@ First try: it fails
 from typing import Any, Dict, List, Tuple
 import torch
 import transformers
+from experimental_experiment.cache_helpers import make_dynamic_cache
 
 
 class ModelTakingDynamicCacheAsInput(torch.nn.Module):
@@ -27,8 +28,7 @@ class ModelTakingDynamicCacheAsInput(torch.nn.Module):
 # Let's check the model runs.
 
 x = torch.randn(3, 8, 7, 1)
-cache = transformers.cache_utils.DynamicCache(1)
-cache.update(torch.ones((3, 8, 5, 6)), (torch.ones((3, 8, 5, 6)) * 2), 0)
+cache = make_dynamic_cache([(torch.ones((3, 8, 5, 6)), (torch.ones((3, 8, 5, 6)) * 2))])
 
 model = ModelTakingDynamicCacheAsInput()
 expected = model(x, cache)
@@ -39,8 +39,7 @@ print(expected.shape)
 # Let's check it works with other shapes.
 
 x = torch.randn(4, 8, 7, 1)
-cache = transformers.cache_utils.DynamicCache(1)
-cache.update(torch.ones((4, 8, 11, 6)), (torch.ones((4, 8, 11, 6)) * 2), 0)
+cache = make_dynamic_cache([(torch.ones((4, 8, 11, 6)), (torch.ones((4, 8, 11, 6)) * 2))])
 
 model = ModelTakingDynamicCacheAsInput()
 expected = model(x, cache)

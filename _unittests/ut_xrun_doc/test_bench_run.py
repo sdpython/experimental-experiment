@@ -1,4 +1,6 @@
 import unittest
+import torch
+from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import max_diff
 from experimental_experiment.bench_run import (
     BenchmarkError,
@@ -101,8 +103,6 @@ class TestBenchRun(ExtTestCase):
         )
 
     def test_max_diff(self):
-        import torch
-
         self.assertEqual(
             max_diff(torch.Tensor([1, 2]), torch.Tensor([1, 2])),
             {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
@@ -151,12 +151,8 @@ class TestBenchRun(ExtTestCase):
 
     @hide_stdout()
     def test_max_diff_dynamic_cache(self):
-        import torch
-        import transformers
-
         t1 = torch.tensor([0, 1], dtype=torch.float32)
-        cache = transformers.cache_utils.DynamicCache(1)
-        cache.update(torch.ones((2, 2)), (torch.ones((2, 2)) * 2), 0)
+        cache = make_dynamic_cache([(torch.ones((2, 2)), (torch.ones((2, 2)) * 2))])
         md = max_diff(
             (t1, cache),
             (t1, cache.key_cache[0], cache.value_cache[0]),

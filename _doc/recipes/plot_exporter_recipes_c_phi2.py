@@ -33,6 +33,7 @@ import onnx
 import torch
 import transformers
 from onnx_array_api.plotting.graphviz_helper import plot_dot
+from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 from experimental_experiment.xbuilder import GraphBuilder, InferShapesOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -86,18 +87,18 @@ def get_phi2_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
     seq_length = torch.export.Dim("seq_length", min=1, max=4096)
     shapes = {}
 
-    cache = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
-    for i in range(config["num_hidden_layers"]):
-        cache.update(
-            torch.randn(batch_size, 32, 30, 80), torch.randn(batch_size, 32, 30, 80), i
-        )
-    cache2 = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
-    for i in range(config["num_hidden_layers"]):
-        cache2.update(
-            torch.randn(batch_size + 1, 32, 31, 80),
-            torch.randn(batch_size + 1, 32, 31, 80),
-            i,
-        )
+    cache = make_dynamic_cache(
+        [
+            (torch.randn(batch_size, 32, 30, 80), torch.randn(batch_size, 32, 30, 80))
+            for i in range(config["num_hidden_layers"])
+        ]
+    )
+    cache2 = make_dynamic_cache(
+        [
+            (torch.randn(batch_size + 1, 32, 31, 80), torch.randn(batch_size + 1, 32, 31, 80))
+            for i in range(config["num_hidden_layers"])
+        ]
+    )
 
     inputs = dict(
         input_ids=torch.randint(0, 50285, (batch_size, 3)).to(torch.int64),

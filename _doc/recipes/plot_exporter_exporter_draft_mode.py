@@ -17,6 +17,7 @@ import torch
 import torch.export._draft_export
 import transformers
 from experimental_experiment.helpers import string_type
+from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     register_additional_serialization_functions,
 )
@@ -173,18 +174,18 @@ def get_phi35_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:
     model = transformers.Phi3ForCausalLM(conf)
     model.eval()
 
-    cache = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
-    for i in range(config["num_hidden_layers"]):
-        cache.update(
-            torch.randn(batch_size, 32, 30, 96), torch.randn(batch_size, 32, 30, 96), i
-        )
-    cache2 = transformers.cache_utils.DynamicCache(config["num_hidden_layers"])
-    for i in range(config["num_hidden_layers"]):
-        cache2.update(
-            torch.randn(batch_size + 1, 32, 31, 96),
-            torch.randn(batch_size + 1, 32, 31, 96),
-            i,
-        )
+    cache = make_dynamic_cache(
+        [
+            (torch.randn(batch_size, 32, 30, 96), torch.randn(batch_size, 32, 30, 96))
+            for i in range(config["num_hidden_layers"])
+        ]
+    )
+    cache2 = make_dynamic_cache(
+        [
+            (torch.randn(batch_size + 1, 32, 31, 96), torch.randn(batch_size + 1, 32, 31, 96))
+            for i in range(config["num_hidden_layers"])
+        ]
+    )
 
     inputs = dict(
         input_ids=torch.randint(0, 32064, (batch_size, 3)).to(torch.int64),

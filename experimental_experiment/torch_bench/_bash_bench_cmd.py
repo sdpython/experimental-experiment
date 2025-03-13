@@ -60,6 +60,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         tag=("", "add a version tag when everything else did not change"),
         timeout=("600", "timeout for subprocesses"),
         shape2=("0", "redo the shape inference"),
+        patch=("1", "patches torch and transformers before exporting"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -312,6 +313,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
                     rtopt=args.rtopt in BOOLEAN_VALUES,
                     shape_again=args.shape2 in BOOLEAN_VALUES,
+                    apply_patches=args.patch in BOOLEAN_VALUES,
                 )
             )
             duration = time.perf_counter() - begin
