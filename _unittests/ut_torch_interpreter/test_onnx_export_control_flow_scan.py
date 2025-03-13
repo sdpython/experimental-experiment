@@ -27,7 +27,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         return Bad1Fixed, torch.rand(5, 3)
 
-    @requires_torch("2.8")
+    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_1(self):
         import torch
@@ -78,7 +78,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.8")
+    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_2(self):
         import torch
@@ -137,7 +137,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     for e, g in zip(expected, got):
                         self.assertEqualArray(e, g, atol=1e-5)
 
-    @requires_torch("2.8")
+    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_cdist_carry(self):
         import torch
@@ -192,7 +192,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.8")
+    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_cdist_add(self):
         import torch
@@ -244,7 +244,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.8")
+    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_cdist_dynamic(self):
         import torch
