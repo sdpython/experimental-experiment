@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-from experimental_experiment.helpers import make_dynamic_cache
+from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import get_onnx_signature, string_type
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
