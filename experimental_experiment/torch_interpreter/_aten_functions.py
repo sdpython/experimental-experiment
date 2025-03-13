@@ -307,10 +307,10 @@ def aten_and(
 ) -> T:
     "and"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts
+        g, x, y, f=g.op.And, name=name, outputs=outputs, sts=sts, force_type=TensorProto.BOOL
     )
     if not sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
+        set_type_shape_binary_op(g, outputs[0], x, y, itype=TensorProto.BOOL)
     return res
 
 
@@ -348,10 +348,10 @@ def aten_or(
 ) -> T:
     "or"
     res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Or, name=name, outputs=outputs, sts=sts
+        g, x, y, f=g.op.Or, name=name, outputs=outputs, sts=sts, force_type=TensorProto.BOOL
     )
     if not sts:
-        set_type_shape_binary_op(g, outputs[0], x, y)
+        set_type_shape_binary_op(g, outputs[0], x, y, itype=TensorProto.BOOL)
     return res
 
 
@@ -4834,6 +4834,67 @@ def aten_instance_norm(
     return g.op.Reshape(bi_name, shape_x, name=name, outputs=outputs)
 
 
+def aten_isin(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    elements: T,
+    test_elements: T,
+    assume_unique: bool = False,
+    invert: bool = False,
+    name: str = "isin",
+) -> T:
+    "isin"
+    assert g.has_rank(elements), f"Rank is missing for {elements!r}{g.get_debug_msg()}"
+    rk = g.get_rank(elements)
+    test_elements_reshaped = g.op.Unsqueeze(
+        test_elements, np.arange(rk).astype(np.int64), name=name
+    )
+    eq = g.op.Equal(
+        g.op.UnsqueezeAnyOpset(elements, np.array([rk], dtype=np.int64), name=name),
+        test_elements_reshaped,
+        name=name,
+    )
+    rm = g.op.ReduceMax(
+        g.op.Cast(eq, to=TensorProto.INT32, name=name),
+        np.array([-1], dtype=np.int64),
+        keepdims=0,
+        name=name,
+    )
+    if invert:
+        res = g.op.Not(
+            g.op.Cast(rm, to=TensorProto.BOOL, name=name), name=name, outputs=outputs
+        )
+    else:
+        res = g.op.Cast(rm, to=TensorProto.BOOL, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, elements, itype=TensorProto.BOOL)
+    return res
+
+
+def aten_isin_Tensor_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    elements: T,
+    test_elements: T,
+    assume_unique: bool = False,
+    invert: bool = False,
+    name: str = "isin_Tensor_Tensor",
+) -> T:
+    "isin_Tensor_Tensor"
+    return aten_isin(
+        g,
+        sts,
+        outputs,
+        elements,
+        test_elements,
+        assume_unique=assume_unique,
+        invert=invert,
+        name=name,
+    )
+
+
 def aten_isinf(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4909,38 +4970,6 @@ def aten_l1_loss(
         res = g.op.ReduceSumAnyOpset(diff_abs, name=name, outputs=outputs, keepdims=0)
     elif reduction == "none":
         res = g.op.Identity(diff_abs, name=name, outputs=outputs)
-    else:
-        raise NotImplementedError(
-            f"l1_loss with reduction={reduction!r} is not implemented{g.get_debug_msg()}"
-        )
-    if not sts:
-        if reduction == "none":
-            set_type_shape_unary_op(res, x)
-        else:
-            g.set_type(res, g.get_type(x))
-            g.get_shape(res, tuple())
-    return res
-
-
-def aten_mse_loss(
-    g: GraphBuilder,
-    sts: Optional[Dict[str, Any]],
-    outputs: List[str],
-    x: T,
-    target: T,
-    reduction: str = "mean",
-    name: str = "mse_loss",
-) -> T:
-    "mse_loss"
-
-    diff = g.op.Sub(x, target, name=name)
-    diff_mul = g.op.Mul(diff, diff, name=name)
-    if reduction in (1, "mean"):
-        res = g.op.ReduceMeanAnyOpset(diff_mul, name=name, outputs=outputs, keepdims=0)
-    elif reduction == "sum":
-        res = g.op.ReduceSumAnyOpset(diff_mul, name=name, outputs=outputs, keepdims=0)
-    elif reduction == "none":
-        res = g.op.Identity(diff_mul, name=name, outputs=outputs)
     else:
         raise NotImplementedError(
             f"l1_loss with reduction={reduction!r} is not implemented{g.get_debug_msg()}"
@@ -5979,6 +6008,38 @@ def aten_fmod_Scalar(
     return res
 
 
+def aten_mse_loss(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    target: T,
+    reduction: str = "mean",
+    name: str = "mse_loss",
+) -> T:
+    "mse_loss"
+
+    diff = g.op.Sub(x, target, name=name)
+    diff_mul = g.op.Mul(diff, diff, name=name)
+    if reduction in (1, "mean"):
+        res = g.op.ReduceMeanAnyOpset(diff_mul, name=name, outputs=outputs, keepdims=0)
+    elif reduction == "sum":
+        res = g.op.ReduceSumAnyOpset(diff_mul, name=name, outputs=outputs, keepdims=0)
+    elif reduction == "none":
+        res = g.op.Identity(diff_mul, name=name, outputs=outputs)
+    else:
+        raise NotImplementedError(
+            f"l1_loss with reduction={reduction!r} is not implemented{g.get_debug_msg()}"
+        )
+    if not sts:
+        if reduction == "none":
+            set_type_shape_unary_op(res, x)
+        else:
+            g.set_type(res, g.get_type(x))
+            g.get_shape(res, tuple())
+    return res
+
+
 def aten_mul(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -6058,6 +6119,44 @@ def aten_multiply_Tensor(
 ) -> T:
     "mul"
     return aten_mul(g, sts, outputs, x, y, name=name)
+
+
+def aten_multinomial(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    num_samples: int,
+    replacement: bool = False,
+    generator: Optional[Any] = None,
+    name: str = "multinomial",
+) -> T:
+    "multinomial"
+    assert not replacement, f"multinomial not implemented with replacement{g.get_debug_msg()}"
+    assert (
+        not generator
+    ), f"multinomial not implemented with generator={generator}{g.get_debug_msg()}"
+    assert g.has_rank(x), f"Missing rank for {x!r}{g.get_debug_msg()}"
+    rk = g.get_rank(x)
+    if rk == 1:
+        res = g.op.SqueezeAnyOpset(
+            g.op.Multinomial(
+                g.op.UnsqueezeAnyOpset(x, g.ZERO, name=name),
+                sample_size=num_samples,
+                name=name,
+                dtype=TensorProto.INT64,
+            ),
+            g.ZERO,
+            name=name,
+            outputs=outputs,
+        )
+    else:
+        res = g.op.Multinomial(
+            x, sample_size=num_samples, name=name, outputs=outputs, dtype=TensorProto.INT64
+        )
+    if not sts:
+        g.set_type(res, TensorProto.INT64)
+    return res
 
 
 def aten_nan_to_num(
@@ -10445,6 +10544,11 @@ def aten_where_Scalar(
                 g.set_rank(res, g.get_rank(condition))
         return res
 
+    if isinstance(x, float) and isinstance(other, str):
+        assert g.has_type(other), f"Type is missing for {other!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(other))
+        x = np.array([x], dtype=dtype)
+
     assert isinstance(x, str) or isinstance(other, str), (
         f"aten_where not implemented when both constants are float, "
         f"x={x}, other={other}{g.get_debug_msg()}"
@@ -10465,6 +10569,19 @@ def aten_where_ScalarOther(
     return aten_where_Scalar(g, sts, outputs, condition, x, other, name=name)
 
 
+def aten_where_ScalarSelf(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    condition: T,
+    x: T,
+    other: T,
+    name: str = "where_ScalarSelf",
+) -> T:
+    """where"""
+    return aten_where_Scalar(g, sts, outputs, condition, x, other, name=name)
+
+
 def aten_where_self(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -10472,9 +10589,10 @@ def aten_where_self(
     condition: T,
     x: T,
     other: T,
+    name: str = "where_self",
 ) -> T:
     """where"""
-    return aten_where(g, sts, outputs, condition, x, other, name="where_self")
+    return aten_where(g, sts, outputs, condition, x, other, name=name)
 
 
 def aten_wrap_with_autocast(
