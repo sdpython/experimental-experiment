@@ -232,4 +232,7 @@ try:
     print("It worked:")
     print(ep)
 except Exception as e:
+    # To work, it needs at least PRs:
+    # * https://github.com/huggingface/transformers/pull/36311
+    # * https://github.com/huggingface/transformers/pull/36652
     print("It failed:", e)

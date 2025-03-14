@@ -75,6 +75,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
 
     @requires_torch("2.9")
     def test_multinomial(self):
+        # https://github.com/pytorch/pytorch/issues/149048
         import torch
 
         class Model(torch.nn.Module):
@@ -98,6 +99,34 @@ class TestIssuesPytorch2025Export(ExtTestCase):
         onx = to_onnx(ep)
         onnx.save(onx, self.get_dump_file("test_multinomial.custom.onnx"))
         onnx.checker.check_model(onx)
+
+    # @requires_torch("2.9")
+    def test_infer_size_no11_check(self):
+        # related to https://github.com/pytorch/pytorch/issues/143495
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, y):
+                i = torch.nonzero(x)
+                j = torch.nonzero(y)
+                torch._check(i.shape[0] == j.shape[0])
+                je = j.expand(i.shape)
+                return i + je
+
+        model = Model()
+        inputs = (
+            torch.tensor([[0, 5], [6, 7], [8, 0]], dtype=torch.float32),
+            torch.tensor([[5, 0], [6, 7], [0, 8]], dtype=torch.float32),
+        )
+        model(*inputs)
+
+        DYNAMIC = torch.export.Dim.DYNAMIC
+        ep = torch.export.export(
+            model,
+            inputs,
+            dynamic_shapes={"x": {0: DYNAMIC, 1: DYNAMIC}, "y": {0: DYNAMIC, 1: DYNAMIC}},
+        )
+        assert ep
 
 
 if __name__ == "__main__":
