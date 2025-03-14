@@ -113,7 +113,7 @@ class TestTorchExportExport(ExtTestCase):
 
     @skipif_ci_windows("not available on Windows")
     @skipif_ci_apple("not able to fix it")
-    @requires_torch("2.5")
+    @requires_torch("2.7")
     def test_jit_isinstance(self):
 
         class DummyModel(torch.nn.Module):

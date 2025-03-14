@@ -706,7 +706,7 @@ class TestPieceByPiece(ExtTestCase):
         report = diag.get_export_report()
         self.assertIn("OK_CHILDC", report)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout()
     def test_export_piece_dynamic_cache(self):
         def memo(
