@@ -104,7 +104,9 @@ def _unregister(cls: type, verbose: int = 0):
         del torch.fx._pytree.SUPPORTED_NODES[cls]
     if cls in torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH:
         del torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH[cls]
-    torch.utils._pytree._deregister_pytree_node(cls)
+    if hasattr(torch.utils._pytree, "_deregister_pytree_node"):
+        # torch >= 2.7
+        torch.utils._pytree._deregister_pytree_node(cls)
     optree.unregister_pytree_node(cls, namespace="torch")
     assert cls not in torch.utils._pytree.SUPPORTED_NODES, (
         f"{cls} was not successfull unregistered "

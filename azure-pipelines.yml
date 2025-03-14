@@ -1,5 +1,5 @@
 jobs:
-- job: 'L_all_torch_transformers_nightly'
+- job: 'L1_all_torch_transformers_nightly'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -78,7 +78,7 @@ jobs:
       artifactName: 'wheel-linux-wheel-$(python.version)'
       targetPath: 'dist'
 
-- job: 'L_all_torch_nightly'
+- job: 'L2_all_torch_nightly'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -143,7 +143,7 @@ jobs:
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_models --ignore=_unittests/ut_torch_bench --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
     displayName: 'Runs Unit Tests'
 
-- job: 'L_training_and_models_torch_nightly'
+- job: 'L3_training_and_models_torch_nightly'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -209,8 +209,11 @@ jobs:
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_gradient _unittests/ut_reference _unittests/ut_torch_interpreter --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
     displayName: 'Test Interpreter'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench --durations=20
-    displayName: 'Test Bench'
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench --ignore _unittests/ut_torch_bench/test_bash_bench_runner_cmd_options.py --durations=20
+    displayName: 'Test Bench 1'
+  - script: |
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench/test_bash_bench_runner_cmd_options.py --durations=20
+    displayName: 'Test Bench 2'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models --ignore=_unittests/ut_torch_models/test_llm_model_helper.py --ignore=_unittests/ut_torch_models/test_chronos_model_helper.py --durations=20
     displayName: 'Test Models'
@@ -228,7 +231,7 @@ jobs:
       artifactName: 'wheel-linux-wheel-$(python.version)-training'
       targetPath: 'dist'
 
-- job: 'L_scan_torch_nightly'
+- job: 'L4_scan_torch_nightly'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -301,7 +304,7 @@ jobs:
       artifactName: 'wheel-linux-wheel-$(python.version)-training'
       targetPath: 'dist'
 
-- job: 'L'
+- job: 'L5'
   pool:
     vmImage: 'ubuntu-latest'
   strategy:
@@ -379,7 +382,7 @@ jobs:
       artifactName: 'wheel-linux-wheel-$(python.version)'
       targetPath: 'dist'
 
-- job: 'W'
+- job: 'W6'
   pool:
     vmImage: 'windows-latest'
   strategy:
