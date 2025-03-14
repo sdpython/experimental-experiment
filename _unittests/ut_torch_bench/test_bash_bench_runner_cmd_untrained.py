@@ -101,7 +101,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 filename = line.replace(":filename,", "").strip(";")
         if check_file:
             self.assertExists(filename)
-        if dynamic:
+        if dynamic and exporter.startswith(("custom", "onnx", "torch")):
             onx = onnx.load(filename)
             input_values = []
             for i in onx.graph.input:
@@ -133,6 +133,19 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     def test_untrained_export_bench_export_cpu(self):
         self._untrained_export(
             "export-nostrict", "Phi2LM_1Layer", verbose=1, debug=False, check_file=False
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.6")
+    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    def test_untrained_export_bench_export_cpu_dynamic(self):
+        self._untrained_export(
+            "export-nostrict",
+            "Phi2LM_1Layer",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
         )
 
 

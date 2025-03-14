@@ -736,9 +736,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
     def test_a_get_tiny_llm_default_rope(self):
-        """
-        Somehow putting this test after test_get_phi4_export makes it fail.
-        """
+        """Somehow putting this test after test_get_phi4_export makes it fail."""
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_tiny_llm,

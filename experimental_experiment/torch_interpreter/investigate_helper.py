@@ -97,9 +97,10 @@ def run_fx_node(
     :return: results
     """
     if node.op == "output":
-        assert (
-            len(args) == 1 and not kwargs
-        ), f"Unexpected inputs: args={string_type(args)} kwargs={string_type(kwargs)}"
+        assert len(args) == 1 and not kwargs, (
+            f"Unexpected inputs: args={string_type(args, limit=20)} "
+            f"kwargs={string_type(kwargs, limit=20)}"
+        )
         return args
     if node.op == "call_function":
         outputs = node.target(*args, **kwargs)

@@ -1248,11 +1248,12 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_dynamo] additional_kwargs={additional_kwargs}")
             print(f"[ModelRunner._to_onnx_dynamo] dynamic_shapes={dyn_shapes!r}")
             print(
-                f"[ModelRunner._to_onnx_dynamo] export_inputs={string_type(export_inputs)!r}"
+                f"[ModelRunner._to_onnx_dynamo] export_inputs="
+                f"{string_type(export_inputs, limit=20)!r}"
             )
             print(
                 f"[ModelRunner._to_onnx_dynamo] export_kw_inputs="
-                f"{string_type(export_kw_inputs)!r}"
+                f"{string_type(export_kw_inputs, limit=20)!r}"
             )
             print(f"[ModelRunner._to_onnx_dynamo] type(model)={type(self.model)!r}")
 
@@ -1350,9 +1351,13 @@ class ModelRunner:
         export_options = ExportOptions(strategy=strategy or "strict", **opts)
         if verbose:
             print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
-            print(f"[ModelRunner._to_export] export_inputs={string_type(export_inputs)!r}")
             print(
-                f"[ModelRunner._to_export] export_kw_inputs={string_type(export_kw_inputs)!r}"
+                f"[ModelRunner._to_export] export_inputs="
+                f"{string_type(export_inputs, limit=20)!r}"
+            )
+            print(
+                f"[ModelRunner._to_export] export_kw_inputs="
+                f"{string_type(export_kw_inputs, limit=20)!r}"
             )
             print(f"[ModelRunner._to_export] strategy={strategy!r}")
             print(f"[ModelRunner._to_export] self.export_options={self.export_options!r}")
@@ -1362,10 +1367,12 @@ class ModelRunner:
         with bypass_export_some_errors(
             **self._patch_patch_options(verbose=verbose, dynamic=dynamic, patch=patch)
         ) as modificator:
+            modified_inputs = modificator(export_inputs)
+            modified_kw_inputs = modificator(export_kw_inputs)
             exported_mod = export_options.export(
                 self.model,
-                modificator(export_inputs),
-                modificator(export_kw_inputs),
+                modified_inputs,
+                modified_kw_inputs,
                 dynamic_shapes=dynamic_shapes,
                 tracing_mode=False,
                 same_signature=False,
@@ -1415,10 +1422,13 @@ class ModelRunner:
         export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         if verbose:
             print(f"[ModelRunner._to_executorch] dynamic_shapes={dynamic_shapes!r}")
-            print(f"[ModelRunner._to_executorch] export_inputs={string_type(export_inputs)!r}")
+            print(
+                f"[ModelRunner._to_executorch] export_inputs="
+                f"{string_type(export_inputs, limit=20)!r}"
+            )
             print(
                 f"[ModelRunner._to_executorch] export_kw_inputs="
-                f"{string_type(export_kw_inputs)!r}"
+                f"{string_type(export_kw_inputs, limit=20)!r}"
             )
             print(f"[ModelRunner._to_executorch] strategy={strategy!r}")
             print(f"[ModelRunner._to_executorch] self.export_options={self.export_options!r}")
@@ -1789,9 +1799,10 @@ class ModelRunner:
         if kw_inputs is None:
             kw_inputs = self.kw_inputs
 
-        assert (
-            not kw_inputs
-        ), f"Keyword attribute are not implemented yet but kw_inputs={string_type(kw_inputs)}"
+        assert not kw_inputs, (
+            f"Keyword attribute are not implemented yet but "
+            f"kw_inputs={string_type(kw_inputs, limit=20)}"
+        )
 
         assert isinstance(
             inputs, tuple
@@ -2322,7 +2333,7 @@ class ModelRunner:
                         f"Unable to process input type {type(u)} in input list"
                     )
                 continue
-            if i.__class__.__name__ == "DynamicCache":
+            if i.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
                 import transformers
 
                 assert isinstance(
@@ -2378,4 +2389,7 @@ class ModelRunner:
             f"raw_use_defaults={raw_use_defaults}\n----\n"
             f"initializer_names={sorted(initializer_names)}\n----\n"
         )
+        assert all(
+            isinstance(i, (None, int, float, torch.Tensor)) for i in new_inputs
+        ), f"Unexpected type in feeds: {string_type(dict(zip(names, new_inputs)), limit=20)}"
         return dict(zip(names, new_inputs))

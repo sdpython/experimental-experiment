@@ -304,8 +304,8 @@ class ExportOptions:
 
             if exc:
                 raise RuntimeError(
-                    f"None of the following options {tries} worked, "
-                    f"args={string_type(args)}, kwargs={string_type(kwargs)}, "
+                    f"None of the following options {tries} worked, args="
+                    f"{string_type(args, limit=20)}, kwargs={string_type(kwargs, limit=20)}, "
                     f"exception=\n-----\n{pprint.pformat(excs)}"
                 )
             return None
@@ -370,9 +370,12 @@ class ExportOptions:
             if verbose:
                 print(f"[ExportOptions.export] CustomTracer().trace, verbose={verbose}")
                 print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
-                print(f"[ExportOptions.export] args={string_type(args)}")
-                print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
-                print(f"[ExportOptions.export] concrete_args={string_type(concrete_args)}")
+                print(f"[ExportOptions.export] args={string_type(args, limit=20)}")
+                print(f"[ExportOptions.export] kwargs={string_type(kwargs, limit=20)}")
+                print(
+                    f"[ExportOptions.export] concrete_args="
+                    f"{string_type(concrete_args, limit=20)}"
+                )
 
             graph = CustomTracer().trace(mod, concrete_args=concrete_args)
             if self.remove_inplace:
@@ -386,8 +389,8 @@ class ExportOptions:
                 f"strict={self.strict}, verbose={verbose}"
             )
             print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
-            print(f"[ExportOptions.export] args={string_type(args)}")
-            print(f"[ExportOptions.export] kwargs={string_type(kwargs)}")
+            print(f"[ExportOptions.export] args={string_type(args, limit=20)}")
+            print(f"[ExportOptions.export] kwargs={string_type(kwargs, limit=20)}")
         if self.strict:
             # torch.export.export may turn Tensor into FakeTensor.
             # We need to make a copy to avoid getting FakeTensor instead

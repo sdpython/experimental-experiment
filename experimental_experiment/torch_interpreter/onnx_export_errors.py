@@ -1,4 +1,5 @@
 import contextlib
+import pprint
 from typing import Any, Callable, Dict
 from .onnx_export_serialization import (
     flatten_with_keys_dynamic_cache,
@@ -28,6 +29,8 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
     # MambaCache
     unregistered_mamba_cache = True
     if MambaCache is not None and MambaCache in torch.utils._pytree.SUPPORTED_NODES:
+        if verbose > 1:
+            print(f"[_register_cache_serialization] {MambaCache} already registered")
         # It is already registered because bypass_export_some_errors was called
         # within a section already calling bypass_export_some_errors or transformers
         # has updated its code to do it.
@@ -35,7 +38,7 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
         unregistered_mamba_cache = False
     else:
         if verbose:
-            print("[bypass_export_some_errors] register MambaCache")
+            print("[_register_cache_serialization] register MambaCache")
         torch.utils._pytree.register_pytree_node(
             MambaCache,
             flatten_mamba_cache,
@@ -47,12 +50,14 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
     # DynamicCache
     unregistered_dynamic_cache = True
     if DynamicCache is not None and DynamicCache in torch.utils._pytree.SUPPORTED_NODES:
+        if verbose > 1:
+            print(f"[_register_cache_serialization] {DynamicCache} already registered")
         unregistered_dynamic_cache = False
     else:
         from .patches.patch_transformers import patched_DynamicCache
 
         if verbose:
-            print("[bypass_export_some_errors] register DynamicCache")
+            print("[_register_cache_serialization] register DynamicCache")
         torch.utils._pytree.register_pytree_node(
             DynamicCache,
             flatten_dynamic_cache,
@@ -65,7 +70,7 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
         )
 
         if verbose:
-            print("[bypass_export_some_errors] register patched_DynamicCache")
+            print("[_register_cache_serialization] register patched_DynamicCache")
 
         torch.utils._pytree.register_pytree_node(
             patched_DynamicCache,
@@ -78,38 +83,66 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
             patched_DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
         )
 
+        # check
+        from ..cache_helpers import make_dynamic_cache
+
+        cache = make_dynamic_cache([(torch.rand((4, 4, 4)), torch.rand((4, 4, 4)))])
+        values, spec = torch.utils._pytree.tree_flatten(cache)
+        cache2 = torch.utils._pytree.tree_unflatten(values, spec)
+        torch.fx._pytree.tree_flatten(cache)
+        assert len(cache2.key_cache) == 1
+
     return dict(DynamicCache=unregistered_dynamic_cache, MambaCache=unregistered_mamba_cache)
 
 
-def _unregister_cache_serialization(undo: Dict[str, bool], verbose: int = 0):
+def _unregister(cls: type, verbose: int = 0):
     import optree
+    import torch
+
+    # torch.fx._pytree._deregister_pytree_flatten_spec(cls)
+    if cls in torch.fx._pytree.SUPPORTED_NODES:
+        del torch.fx._pytree.SUPPORTED_NODES[cls]
+    if cls in torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH:
+        del torch.fx._pytree.SUPPORTED_NODES_EXACT_MATCH[cls]
+    torch.utils._pytree._deregister_pytree_node(cls)
+    optree.unregister_pytree_node(cls, namespace="torch")
+    assert cls not in torch.utils._pytree.SUPPORTED_NODES, (
+        f"{cls} was not successfull unregistered "
+        f"from torch.utils._pytree.SUPPORTED_NODES="
+        f"{pprint.pformat(list(torch.utils._pytree.SUPPORTED_NODES))}"
+    )
+    if verbose:
+        print(f"[_unregister_cache_serialization] unregistered {cls.__name__}")
+
+
+def _unregister_cache_serialization(undo: Dict[str, bool], verbose: int = 0):
 
     if undo.get("MambaCache", False):
         from transformers.cache_utils import MambaCache
 
-        optree.unregister_pytree_node(MambaCache, namespace="torch")
-        if verbose:
-            print("[bypass_export_some_errors] unregistered MambaCache")
+        _unregister(MambaCache, verbose)
+    elif verbose > 1:
+        print("[_unregister_cache_serialization] do not unregistered MambaCache")
 
     if undo.get("DynamicCache", False):
         from transformers.cache_utils import DynamicCache
         from .patches.patch_transformers import patched_DynamicCache
 
-        optree.unregister_pytree_node(DynamicCache, namespace="torch")
-        if verbose:
-            print("[bypass_export_some_errors] unregistered DynamicCache")
-
-        optree.unregister_pytree_node(patched_DynamicCache, namespace="torch")
-        if verbose:
-            print("[bypass_export_some_errors] unregistered patched_DynamicCache")
+        _unregister(DynamicCache, verbose)
+        _unregister(patched_DynamicCache, verbose)
+    elif verbose > 1:
+        print("[_unregister_cache_serialization] do not unregistered DynamicCache")
 
 
 @contextlib.contextmanager
-def register_additional_serialization_functions(verbose: int = 0) -> Callable:
+def register_additional_serialization_functions(
+    verbose: int = 0, replace_dynamic_cache: bool = False
+) -> Callable:
     """The necessary modification to run the fx Graph."""
+    fct_callable = replacement_before_exporting if replace_dynamic_cache else (lambda x: x)
     done = _register_cache_serialization(verbose=verbose)
     try:
-        yield (lambda args: args)
+        yield fct_callable
     finally:
         _unregister_cache_serialization(done, verbose=verbose)
 
@@ -202,9 +235,10 @@ def bypass_export_some_errors(
     It can be avoided by setting ``strict=False`` when call :func:`torch.export.export`.
     """
     if not patch:
+        fct_callable = replacement_before_exporting if replace_dynamic_cache else (lambda x: x)
         done = _register_cache_serialization(verbose=verbose)
         try:
-            yield (lambda args: args)
+            yield fct_callable
         finally:
             _unregister_cache_serialization(done, verbose=verbose)
     else:
@@ -335,8 +369,10 @@ def bypass_export_some_errors(
         # export
         ########
 
+        fct_callable = replacement_before_exporting if replace_dynamic_cache else (lambda x: x)
+
         try:
-            yield replacement_before_exporting
+            yield fct_callable
         finally:
             #######
             # sympy

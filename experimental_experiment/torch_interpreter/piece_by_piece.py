@@ -776,8 +776,10 @@ class ModelDiagnoseOutput:
             return (
                 f"Module {self.full_name}: shape inconsistencies for output i={i}, "
                 f"the new shape cannot be automatically determined."
-                f"\nflattened_inputs={string_type(flattened_inputs, with_shape=True)}, "
-                f"\nflattened_outputs={string_type(flattened_outputs, with_shape=True)}, "
+                f"\nflattened_inputs="
+                f"{string_type(flattened_inputs, with_shape=True, limit=20)}, "
+                f"\nflattened_outputs="
+                f"{string_type(flattened_outputs, with_shape=True, limit=20)}, "
                 f"\nshaped_mapped={shaped_mapped}, "
                 f"\nindices_map={indices_map}"
             )
@@ -916,8 +918,8 @@ class ModelDiagnoseOutput:
                         f"for class {self.true_model_name} is failing. "
                         f"It returns {shape_o} when the expected shape is {expected_shape_o}, "
                         f"true_diff={true_diff}, "
-                        f"inputs={string_type(fin, with_shape=True)}, "
-                        f"outputs={string_type(fout, with_shape=True)}."
+                        f"inputs={string_type(fin, with_shape=True, limit=20)}, "
+                        f"outputs={string_type(fout, with_shape=True, limit=20)}."
                     )
 
                 return fct
@@ -1539,9 +1541,14 @@ class ModelDiagnoseOutput:
         if debug or self._debug_print_export:
             print("-- DEBUG")
             print(f"[try_export-FX] {self.dot_name}")
-            print(f"inputs={string_type(self.inputs[0], with_shape=True, with_min_max=True)}")
-            print(f"  args={string_type(args, with_shape=True, with_min_max=True)}")
-            print(f"kwargs={string_type(kwargs, with_shape=True, with_min_max=True)}")
+            print(
+                f"inputs="
+                f"{string_type(self.inputs[0], with_shape=True, with_min_max=True, limit=20)}"
+            )
+            print(f"  args={string_type(args, with_shape=True, with_min_max=True, limit=20)}")
+            print(
+                f"kwargs={string_type(kwargs, with_shape=True, with_min_max=True, limit=20)}"
+            )
             if dynamic_shapes:
                 print(f"   ds0={dynamic_shapes}")
             if ds:
@@ -2135,7 +2142,8 @@ class ModelDiagnoseOutput:
 
         assert exported is not None or not self.inputs, (
             f"Something went wrong, custom_op_strat={custom_op_strat}, "
-            f"#children={len(self.children)}, inputs={string_type(self.inputs)}"
+            f"#children={len(self.children)}, "
+            f"inputs={string_type(self.inputs, limit=20)}"
         )
         if not self.children or (
             custom_op_strat == CustomOpStrategy.NONE

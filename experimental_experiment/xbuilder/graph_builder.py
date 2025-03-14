@@ -6355,7 +6355,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 assert not self._debug_constant_folding, (
                     f"Unable to compute constant for node {self.pretty_node(v)}, "
-                    f"feeds={string_type(feeds, with_shape=True, with_min_max=True)}"
+                    f"feeds={string_type(feeds, with_shape=True, with_min_max=True, limit=20)}"
                     f"{self.get_debug_msg()}"
                 )
                 return None, None
