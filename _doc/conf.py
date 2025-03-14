@@ -184,6 +184,7 @@ epkg_dictionary = {
     "FunctionProto": "https://onnx.ai/onnx/api/classes.html#functionproto",
     "graph break": "https://pytorch.org/docs/stable/torch.compiler_faq.html#graph-breaks",
     "GraphModule": "https://pytorch.org/docs/stable/fx.html#torch.fx.GraphModule",
+    "HuggingFace": "https://huggingface.co/docs/hub/en/index",
     "Linux": "https://www.linux.org/",
     "monai": "https://monai.io/",
     "numpy": "https://numpy.org/",

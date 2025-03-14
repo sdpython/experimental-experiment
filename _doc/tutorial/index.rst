@@ -44,6 +44,10 @@ already has many examples about it. Here are some corner cases.
 * :ref:`l-plot-exporter-exporter-draft_export`
 * :ref:`l-plot-exporter-exporter-phi35-piece`
 
+**Guidelines to build a Benchmark**
+
+* :ref:`l-plot-torch-export-untrained-tinyllm`
+
 **strict = ?**
 
 The exporter relies on :func:`torch.export.export`. It exposes a parameter called

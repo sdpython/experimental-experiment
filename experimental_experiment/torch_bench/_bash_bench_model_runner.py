@@ -2390,6 +2390,6 @@ class ModelRunner:
             f"initializer_names={sorted(initializer_names)}\n----\n"
         )
         assert all(
-            isinstance(i, (None, int, float, torch.Tensor)) for i in new_inputs
+            i is None or isinstance(i, (int, float, torch.Tensor)) for i in new_inputs
         ), f"Unexpected type in feeds: {string_type(dict(zip(names, new_inputs)), limit=20)}"
         return dict(zip(names, new_inputs))
