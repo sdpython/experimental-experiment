@@ -149,7 +149,7 @@ class TestTorchExportExport(ExtTestCase):
 
     @skipif_ci_windows("not available on Windows")
     @skipif_ci_apple("not able to fix it")
-    @requires_torch("2.5")
+    @requires_torch("2.7")
     def test_mark_static_address(self):
 
         class Model(torch.nn.Module):

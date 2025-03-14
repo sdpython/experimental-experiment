@@ -795,7 +795,7 @@ class TestPieceByPiece(ExtTestCase):
             ep = obj.fx
             self.assertIn(esch, str(ep))
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout()
     def test_export_piece_dynamic_cache_io(self):
         class SubModelCacheIn(torch.nn.Module):
