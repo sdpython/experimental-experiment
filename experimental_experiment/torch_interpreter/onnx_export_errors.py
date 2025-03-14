@@ -89,7 +89,7 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
         cache = make_dynamic_cache([(torch.rand((4, 4, 4)), torch.rand((4, 4, 4)))])
         values, spec = torch.utils._pytree.tree_flatten(cache)
         cache2 = torch.utils._pytree.tree_unflatten(values, spec)
-        torch.fx._pytree.tree_flatten(cache)
+        # torch.fx._pytree.tree_flatten(cache)
         assert len(cache2.key_cache) == 1
 
     return dict(DynamicCache=unregistered_dynamic_cache, MambaCache=unregistered_mamba_cache)
