@@ -138,7 +138,10 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
                 warnings.simplefilter("ignore", warns)
                 return fct(self)
 
-        call_f.__name__ = fct.__name__
+        try:
+            call_f.__name__ = fct.__name__
+        except AttributeError:
+            pass
         return call_f
 
     return wrapper
@@ -171,7 +174,10 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
                 f(st.getvalue())
             return None
 
-        call_f.__name__ = fct.__name__
+        try:
+            call_f.__name__ = fct.__name__
+        except AttributeError:
+            pass
         return call_f
 
     return wrapper
