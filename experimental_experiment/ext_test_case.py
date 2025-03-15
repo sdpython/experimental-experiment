@@ -138,7 +138,7 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
                 warnings.simplefilter("ignore", warns)
                 return fct(self)
 
-        try:
+        try:  # noqa: SIM105
             call_f.__name__ = fct.__name__
         except AttributeError:
             pass
@@ -174,7 +174,7 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
                 f(st.getvalue())
             return None
 
-        try:
+        try:  # noqa: SIM105
             call_f.__name__ = fct.__name__
         except AttributeError:
             pass
