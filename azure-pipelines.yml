@@ -209,11 +209,14 @@ jobs:
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_gradient _unittests/ut_reference _unittests/ut_torch_interpreter --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
     displayName: 'Test Interpreter'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench --ignore _unittests/ut_torch_bench/test_bash_bench_runner_cmd_options.py --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench --ignore _unittests/ut_torch_bench/test_bash_bench_runner_cmd_options.py --ignore _unittests/ut_torch_bench/test_bash_bench_runner_cmd_untrained.py --durations=20
     displayName: 'Test Bench 1'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench/test_bash_bench_runner_cmd_options.py --durations=20
-    displayName: 'Test Bench 2'
+    displayName: 'Test Bench 2 - options'
+  - script: |
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench/test_bash_bench_runner_cmd_untrained.py --durations=20
+    displayName: 'Test Bench 2 - untrained'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models --ignore=_unittests/ut_torch_models/test_llm_model_helper.py --ignore=_unittests/ut_torch_models/test_chronos_model_helper.py --durations=20
     displayName: 'Test Models'
