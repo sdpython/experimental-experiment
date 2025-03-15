@@ -1358,6 +1358,7 @@ class TestPieceByPiece(ExtTestCase):
         unflatten = torch.utils._pytree.tree_unflatten(flat_list, new_spec)
         self.assertEqualAny(nested, unflatten)
 
+    @requires_transformers("4.49.999")
     def test_serialize_dynamic_cache(self):
         cache = make_dynamic_cache([(torch.randn((19, 5)), torch.randn((21, 5)))])
 

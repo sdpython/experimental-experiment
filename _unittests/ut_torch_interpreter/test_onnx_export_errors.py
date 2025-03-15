@@ -12,7 +12,7 @@ from experimental_experiment.helpers import string_type
 
 
 class TestOnnxExportErrors(ExtTestCase):
-    @requires_transformers("4.43")
+    @requires_transformers("4.49.999")
     @skipif_ci_windows("not working on Windows")
     def test_pytree_flatten_mamba_cache(self):
         import torch
