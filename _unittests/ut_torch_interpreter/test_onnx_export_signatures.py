@@ -4,7 +4,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import onnx
 import numpy as np
 import torch
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_torch,
+)
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import get_onnx_signature, string_type
@@ -548,6 +552,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
+    @requires_torch("2.7")
     def test_signature_dc_none(self):
         class Neuron(torch.nn.Module):
             def forward(self, x=None, y=None, z=None, w=None, ww=None):
