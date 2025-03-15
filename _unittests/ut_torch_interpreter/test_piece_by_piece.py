@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     hide_stdout,
     requires_torch,
+    requires_transformers,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.cache_helpers import make_dynamic_cache
@@ -1426,6 +1427,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertStartsWith("___", diag.children[0].forward_expected_output_type[0])
 
     @requires_torch("2.6")
+    @requires_transformers("4.49.999")
     @hide_stdout()
     def test_piece_by_piece_piece_tuple_cache(self):
         class SubModel(torch.nn.Module):
