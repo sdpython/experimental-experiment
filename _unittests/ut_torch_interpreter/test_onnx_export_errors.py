@@ -1,6 +1,7 @@
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    requires_torch,
     requires_transformers,
     skipif_ci_windows,
 )
@@ -40,6 +41,7 @@ class TestOnnxExportErrors(ExtTestCase):
             self.assertEqualArrayAny(cache.ssm_states, cache2.ssm_states)
 
     @requires_transformers("4.43")
+    @requires_torch("2.7")
     @skipif_ci_windows("not working on Windows")
     def test_exportable_mamba_cache(self):
         import torch

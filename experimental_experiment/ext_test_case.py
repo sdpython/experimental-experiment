@@ -138,6 +138,7 @@ def ignore_warnings(warns: List[Warning]) -> Callable:
                 warnings.simplefilter("ignore", warns)
                 return fct(self)
 
+        call_f.__name__ = fct.__name__
         return call_f
 
     return wrapper
@@ -170,6 +171,7 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
                 f(st.getvalue())
             return None
 
+        call_f.__name__ = fct.__name__
         return call_f
 
     return wrapper
@@ -317,12 +319,27 @@ class ExtTestCase(unittest.TestCase):
     """
 
     _warns: List[Tuple[str, int, Warning]] = []
+    _todos: List[Tuple[Callable, str]] = []
 
     @classmethod
     def setUpClass(cls):
         logger = logging.getLogger("onnxscript.optimizer.constant_folding")
         logger.setLevel(logging.ERROR)
         unittest.TestCase.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        for name, line, w in cls._warns:
+            warnings.warn(f"\n{name}:{line}: {type(w)}\n  {w!s}", stacklevel=2)
+        if not cls._todos:
+            return
+        for f, msg in cls._todos:
+            sys.stderr.write(f"TODO {cls.__name__}::{f.__name__}: {msg}\n")
+
+    @classmethod
+    def todo(cls, f: Callable, msg: str):
+        "Adds a todo printed when all test are run."
+        cls._todos.append((f, msg))
 
     def print_model(self, model: "ModelProto"):  # noqa: F821
         "Prints a ModelProto"
@@ -608,11 +625,6 @@ class ExtTestCase(unittest.TestCase):
         """In the name"""
         if not full.startswith(prefix):
             raise AssertionError(f"prefix={prefix!r} does not start string  {full!r}.")
-
-    @classmethod
-    def tearDownClass(cls):
-        for name, line, w in cls._warns:
-            warnings.warn(f"\n{name}:{line}: {type(w)}\n  {w!s}", stacklevel=2)
 
     def capture(self, fct: Callable):
         """

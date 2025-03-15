@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    requires_transformers,
     requires_pyinstrument,
     is_windows,
 )
@@ -222,6 +223,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7")
+    @requires_transformers("4.49.9999")
     def test_eager_none_int(self):
         for exporter in ["eager", "export"]:
             with self.subTest(exporter=exporter):
@@ -266,6 +268,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7")
+    @requires_transformers("4.49.9999")
     def test_dynamic_cache_eager(self):
         for exporter in ["export", "eager"]:
             with self.subTest(exporter=exporter):

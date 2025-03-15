@@ -1683,7 +1683,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEqual(shape, (6, 16))
         self.assertEqual(str(shape), "(s0, 6)")
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout()
     def test_piece_by_piece_piece_kwargs_local(self):
         import torch

@@ -1311,11 +1311,30 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-4)
 
     @ignore_warnings(UserWarning)
-    def test_aten_scatter_max_include_self(self):
+    def test_aten_scatter_reduce_include_self(self):
         import torch
 
-        for red, include in itertools.product(["amin", "amax", "sum", "prod"], [False, True]):
-            with self.subTest(reduce=red, include=include):
+        skip_ort = {
+            ("sum", False, "float16"),
+            ("sum", True, "float16"),
+            ("prod", False, "float16"),
+            ("prod", True, "float16"),
+        }
+
+        for red, include, stype in itertools.product(
+            ["amin", "amax", "sum", "prod"],
+            [False, True],
+            ["float32", "float16", "int32", "int64", "float64"],
+        ):
+            with self.subTest(reduce=red, include=include, type=stype):
+                key = red, include, stype
+                if key in skip_ort:
+                    self.todo(
+                        self.test_aten_scatter_reduce_include_self,
+                        f"case {key} not supported by onnxruntime",
+                    )
+                    continue
+                dtype = getattr(torch, stype)
 
                 class Model(torch.nn.Module):
                     def __init__(self, include, red):
@@ -1331,15 +1350,13 @@ class TestOnnxExportAten(ExtTestCase):
 
                 model = Model(include, red)
                 xs = (
-                    torch.tensor([[-1, 0, 1], [1, -1, 0]], dtype=torch.float32),
+                    torch.tensor([[-2, 0, 2], [2, -2, 0]], dtype=dtype),
                     torch.tensor([[0, 0, 0], [1, 1, 1]], dtype=torch.int64),
-                    torch.tensor(
-                        [[-0.5, -0.5, -0.5], [-0.5, -0.5, -0.5]], dtype=torch.float32
-                    ),
+                    torch.tensor([[-1, -1, -1], [-1, -1, -1]], dtype=dtype),
                 )
                 expected = model(*xs)
                 model_path = self._call_exporter(
-                    f"test_aten_scatter_{red}_{'include' if include else 'exclude'}",
+                    f"test_aten_scatter_{red}_{'include' if include else 'exclude'}_{stype}",
                     "custom",
                     model,
                     xs,
