@@ -452,7 +452,7 @@ def merge_benchmark_reports(
         if len(u) == 1:
             unique[c] = u.tolist()[0]
     if "exporter" in unique:
-        del unique["exporter"]
+        del unique["exporter"]  # noqa: RUF051
 
     # replace nan values in key columns
     # groupby do not like nan values

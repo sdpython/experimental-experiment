@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import torch
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.mini_onnx_builder import (
@@ -7,6 +8,7 @@ from experimental_experiment.mini_onnx_builder import (
     create_input_tensors_from_onnx_model,
     MiniOnnxBuilder,
 )
+from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 
 
@@ -30,8 +32,6 @@ class TestMiniOnnxBuilder(ExtTestCase):
         self.assertEqualAny([np.array([6, 7])], got[0])
 
     def test_mini_onnx_builder(self):
-        import torch
-
         data = [
             (
                 np.array([1, 2], dtype=np.int64),
@@ -126,11 +126,7 @@ class TestMiniOnnxBuilder(ExtTestCase):
                 self.assertEqualAny(inputs, restored)
 
     def test_mini_onnx_builder_transformers(self):
-        import torch
-        import transformers
-
-        cache = transformers.cache_utils.DynamicCache(1)
-        cache.update(torch.ones((3, 3)), torch.ones((3, 3)) * 2, 0)
+        cache = make_dynamic_cache([(torch.ones((3, 3)), torch.ones((3, 3)) * 2)])
         self.assertEqual(len(cache.key_cache), 1)
         self.assertEqual(len(cache.value_cache), 1)
 
@@ -143,11 +139,7 @@ class TestMiniOnnxBuilder(ExtTestCase):
                 self.assertEqualAny(inputs, restored)
 
     def test_mini_onnx_builder_transformers_sep(self):
-        import torch
-        import transformers
-
-        cache = transformers.cache_utils.DynamicCache(1)
-        cache.update(torch.ones((3, 3)), torch.ones((3, 3)) * 2, 0)
+        cache = make_dynamic_cache([(torch.ones((3, 3)), torch.ones((3, 3)) * 2)])
         self.assertEqual(len(cache.key_cache), 1)
         self.assertEqual(len(cache.value_cache), 1)
 

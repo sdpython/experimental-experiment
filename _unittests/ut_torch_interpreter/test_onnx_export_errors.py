@@ -1,6 +1,7 @@
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    requires_torch,
     requires_transformers,
     skipif_ci_windows,
 )
@@ -11,7 +12,7 @@ from experimental_experiment.helpers import string_type
 
 
 class TestOnnxExportErrors(ExtTestCase):
-    @requires_transformers("4.43")
+    @requires_transformers("4.49.999")
     @skipif_ci_windows("not working on Windows")
     def test_pytree_flatten_mamba_cache(self):
         import torch
@@ -40,6 +41,7 @@ class TestOnnxExportErrors(ExtTestCase):
             self.assertEqualArrayAny(cache.ssm_states, cache2.ssm_states)
 
     @requires_transformers("4.43")
+    @requires_torch("2.7")
     @skipif_ci_windows("not working on Windows")
     def test_exportable_mamba_cache(self):
         import torch
@@ -71,7 +73,7 @@ class TestOnnxExportErrors(ExtTestCase):
             cache = MambaCache(_config(), max_batch_size=1, device="cpu")
             torch.export.export(Model(), (x, cache))
 
-    @requires_transformers("4.43")
+    @requires_transformers("4.49.999")
     @skipif_ci_windows("not working on Windows")
     def test_exportable_mamba_cache_dynamic(self):
         import torch

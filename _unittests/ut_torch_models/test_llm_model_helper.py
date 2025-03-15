@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     long_test,
     never_test,
     requires_torch,
+    requires_transformers,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_models import flatten_outputs
@@ -735,9 +736,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
     def test_a_get_tiny_llm_default_rope(self):
-        """
-        Somehow putting this test after test_get_phi4_export makes it fail.
-        """
+        """Somehow putting this test after test_get_phi4_export makes it fail."""
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_tiny_llm,
@@ -757,7 +756,7 @@ class TestLlmModelHelper(ExtTestCase):
 
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
-    @requires_torch("2.8")  # handle dynamic rope
+    @requires_transformers("4.51")  # handle dynamic rope
     def test_a_get_tiny_llm_dynamic_rope(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (

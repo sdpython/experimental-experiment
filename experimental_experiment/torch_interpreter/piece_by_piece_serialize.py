@@ -117,8 +117,8 @@ def serialize_args(
 
     assert args_names is not None or schema, (
         f"Not implemented when args_names={args_names}, "
-        f"args={string_type(args, with_shape=True)}, "
-        f"kwargs={string_type(kwargs, with_shape=True)}, "
+        f"args={string_type(args, with_shape=True, limit=20)}, "
+        f"kwargs={string_type(kwargs, with_shape=True, limit=20)}, "
         f"schema={schema!r}"
     )
     if args_names is None:
@@ -127,9 +127,9 @@ def serialize_args(
     new_args = [new_args] if is_tensor else list(new_args)
     args_names = args_names[n_args:]
     assert args_names, (
-        f"kwargs={string_type(kwargs, with_shape=True)} is specified "
+        f"kwargs={string_type(kwargs, with_shape=True, limit=20)} is specified "
         f"then args_names should be as well, schema={schema!r}, "
-        f"args={string_type(args, with_shape=True)}"
+        f"args={string_type(args, with_shape=True, limit=20)}"
     )
     # handling arguments
     for name in args_names:

@@ -163,7 +163,9 @@ def _make_feeds(names, args):
         return {k: _to_numpy(v) for k, v in zip(names, flats)}
     from ...helpers import string_type
 
-    raise RuntimeError(f"Unable to handle names={names!r} and args={string_type(args)}")
+    raise RuntimeError(
+        f"Unable to handle names={names!r} and args={string_type(args, limit=20)}"
+    )
 
 
 def _clone(x):
@@ -527,7 +529,7 @@ def run_exporter(
     if verbose > 0:
         print(
             f"[run_exporter] exporter={exporter}, model={cls_model.__name__}, "
-            f"dynamic={dynamic}, inputs={string_type(inputs,with_shape=True)}"
+            f"dynamic={dynamic}, inputs={string_type(inputs, with_shape=True)}"
         )
 
     builder = None
@@ -626,14 +628,20 @@ def run_exporter(
 
     if verbose >= 5 and np.isinf(disc["abs"]):
         print("[run_exporter] comparison issues with")
-        print(f"--   inputs={string_type(inputs[0], with_shape=True)}")
-        print(f"-- expected={string_type(expected, with_shape=True)}")
-        print(f"--      got={string_type(got, with_shape=True)}")
+        print(f"--   inputs={string_type(inputs[0], with_shape=True, limit=20)}")
+        print(f"-- expected={string_type(expected, with_shape=True, limit=20)}")
+        print(f"--      got={string_type(got, with_shape=True, limit=20)}")
     elif verbose >= 9:
         print("[run_exporter] inputs and outputs")
-        print(f"--   inputs={string_type(inputs[0], with_shape=True, with_min_max=True)}")
-        print(f"-- expected={string_type(expected, with_shape=True, with_min_max=True)}")
-        print(f"--      got={string_type(got, with_shape=True, with_min_max=True)}")
+        print(
+            f"--   inputs="
+            f"{string_type(inputs[0], with_shape=True, with_min_max=True, limit=20)}"
+        )
+        print(
+            f"-- expected="
+            f"{string_type(expected, with_shape=True, with_min_max=True, limit=20)}"
+        )
+        print(f"--      got={string_type(got, with_shape=True, with_min_max=True, limit=20)}")
     del disc["n"]
     del disc["sum"]
     disc.update(

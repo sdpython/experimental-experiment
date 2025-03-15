@@ -93,7 +93,7 @@ class TestChronosModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
-    @requires_transformers("4.50")
+    @requires_transformers("4.49.9999")
     @long_test()
     def test_a_get_chronos_t5_tiny_fixed_nospy(self):
         import torch

@@ -28,6 +28,7 @@ API
     _command_lines_parser
     args
     bench_run
+    cache_helpers
     checks
     ext_test_case
     helpers

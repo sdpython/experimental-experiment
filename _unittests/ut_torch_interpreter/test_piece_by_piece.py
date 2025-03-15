@@ -2,12 +2,15 @@ import ast
 import unittest
 import inspect
 from typing import List, Optional
+import torch
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     hide_stdout,
     requires_torch,
+    requires_transformers,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 from experimental_experiment.torch_interpreter.onnx_export_errors import (
     bypass_export_some_errors,
@@ -27,6 +30,7 @@ from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
     tree_spec_from_name,
 )
 from experimental_experiment.torch_models.llm_model_helper import (
+    get_phi2,
     get_phi35_mini_instruct,
 )
 
@@ -162,8 +166,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_phi2(self):
-        from experimental_experiment.torch_models.llm_model_helper import get_phi2
-
         res = get_phi2(
             num_hidden_layers=2,
             input_cache=True,
@@ -205,8 +207,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_export(self):
-        import torch
-
         class MA(torch.nn.Module):
             def forward(self, x, y):
                 return x + y
@@ -258,8 +258,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_to_kwargs(self):
-        import torch
-
         class Model(torch.nn.Module):
             def forward(self, **kwargs):
                 return kwargs["x"].abs()
@@ -294,8 +292,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_not_to_kwargs(self):
-        import torch
-
         class Model(torch.nn.Module):
             def forward(self, x=None, **kwargs):
                 return x.abs()
@@ -330,8 +326,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_or_not_to_kwargs(self):
-        import torch
-
         class Model(torch.nn.Module):
             def forward(self, x, y=None, **kwargs):
                 return x.abs() + torch.exp(y) + torch.cos(kwargs["z"])
@@ -383,8 +377,6 @@ class TestPieceByPiece(ExtTestCase):
 
     @requires_torch("2.6")
     def test_trace_execution_piece_by_piece_piece_try_no_weight(self):
-        import torch
-
         class SubModel(torch.nn.Module):
             def forward(self, x, y):
                 return x - y
@@ -428,8 +420,6 @@ class TestPieceByPiece(ExtTestCase):
 
     @requires_torch("2.6")
     def test_trace_execution_piece_by_piece_piece_try_no_weight_args(self):
-        import torch
-
         class SubModel(torch.nn.Module):
             def forward(self, x, y):
                 return x - y
@@ -474,8 +464,6 @@ class TestPieceByPiece(ExtTestCase):
 
     @requires_torch("2.6")
     def test_trace_execution_piece_by_piece_piece_try_weight(self):
-        import torch
-
         class SubModel(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -524,8 +512,6 @@ class TestPieceByPiece(ExtTestCase):
 
     @requires_torch("2.6")
     def test_trace_execution_piece_by_piece_piece_try_weight_args(self):
-        import torch
-
         class SubModel(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -576,8 +562,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_piece_all(self):
-        import torch
-
         class SubModel(torch.nn.Module):
             def forward(self, x, y):
                 return x - y
@@ -620,8 +604,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_export_piece_auto(self):
-        import torch
-
         class SubModelFail(torch.nn.Module):
             def forward(self, x):
                 if x.sum() > 0:
@@ -674,8 +656,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_export_piece_none(self):
-        import torch
-
         def memo(x: torch.Tensor, y: Optional[torch.Tensor], z: torch.Tensor) -> torch.Tensor:
             pass
 
@@ -727,12 +707,9 @@ class TestPieceByPiece(ExtTestCase):
         report = diag.get_export_report()
         self.assertIn("OK_CHILDC", report)
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout()
     def test_export_piece_dynamic_cache(self):
-        import torch
-        import transformers
-
         def memo(
             x: torch.Tensor, y: List[torch.Tensor], z: List[torch.Tensor]
         ) -> List[torch.Tensor]:
@@ -760,15 +737,13 @@ class TestPieceByPiece(ExtTestCase):
             def forward(self, x, cache):
                 return self.sub(x, self.subcache(cache))
 
-        cache = transformers.cache_utils.DynamicCache()
-        cache.update(torch.ones((5, 6)), torch.ones((5, 6)) + 2, 0)
+        cache = make_dynamic_cache([(torch.ones((5, 6)), torch.ones((5, 6)) + 2)])
         model = Model()
         x = torch.randn((5, 6))
         y = model(x, cache)
         self.assertNotEmpty(y)
 
-        cache2 = transformers.cache_utils.DynamicCache()
-        cache2.update(torch.ones((6, 6)), torch.ones((6, 6)) + 2, 0)
+        cache2 = make_dynamic_cache([(torch.ones((6, 6)), torch.ones((6, 6)) + 2)])
 
         inputs = [
             ((torch.randn((5, 6)), cache), {}),
@@ -821,12 +796,9 @@ class TestPieceByPiece(ExtTestCase):
             ep = obj.fx
             self.assertIn(esch, str(ep))
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout()
     def test_export_piece_dynamic_cache_io(self):
-        import torch
-        import transformers
-
         class SubModelCacheIn(torch.nn.Module):
             def forward(self, cache):
                 return cache.key_cache[0] * cache.value_cache[0]
@@ -847,8 +819,7 @@ class TestPieceByPiece(ExtTestCase):
                 cache = self.subout(x, y)
                 return self.subin(cache)
 
-        cache = transformers.cache_utils.DynamicCache()
-        cache.update(torch.ones((5, 6)), torch.ones((5, 6)) + 2, 0)
+        cache = make_dynamic_cache([(torch.ones((5, 6)), torch.ones((5, 6)) + 2)])
         model = Model()
         x = torch.randn((5, 6))
         y = torch.randn((5, 6))
@@ -1366,8 +1337,6 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqual(diag.children[0].forward_expected_output_type, ["dict__2_da__dm"])
 
     def test_serialize_any(self):
-        import torch
-
         nested = [
             torch.randn((4, 5)),
             [torch.randn((7, 5)), torch.randn((8, 5))],
@@ -1389,12 +1358,9 @@ class TestPieceByPiece(ExtTestCase):
         unflatten = torch.utils._pytree.tree_unflatten(flat_list, new_spec)
         self.assertEqualAny(nested, unflatten)
 
+    @requires_transformers("4.49.999")
     def test_serialize_dynamic_cache(self):
-        import torch
-        import transformers
-
-        cache = transformers.cache_utils.DynamicCache()
-        cache.update(torch.randn((19, 5)), torch.randn((21, 5)), 0)
+        cache = make_dynamic_cache([(torch.randn((19, 5)), torch.randn((21, 5)))])
 
         nested = [
             torch.randn((4, 5)),
@@ -1422,8 +1388,6 @@ class TestPieceByPiece(ExtTestCase):
     @requires_torch("2.6")
     @hide_stdout()
     def test_piece_by_piece_piece_dict_list(self):
-        import torch
-
         class SubModel(torch.nn.Module):
             def forward(self, x, y):
                 return dict(dm=x - y, da=[x + y, x * y])
@@ -1464,15 +1428,12 @@ class TestPieceByPiece(ExtTestCase):
         self.assertStartsWith("___", diag.children[0].forward_expected_output_type[0])
 
     @requires_torch("2.6")
+    @requires_transformers("4.49.999")
     @hide_stdout()
     def test_piece_by_piece_piece_tuple_cache(self):
-        import torch
-        import transformers
-
         class SubModel(torch.nn.Module):
             def forward(self, x, y):
-                cache = transformers.cache_utils.DynamicCache()
-                cache.update(x + 1, y + 2, 0)
+                cache = make_dynamic_cache([(x + 1, y + 2)])
                 return x + y, cache
 
         class Model(torch.nn.Module):
@@ -1662,7 +1623,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEqual(shape, (6, 16))
         self.assertEqual(str(shape), "(s1, s0)")
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout()
     def test_piece_by_piece_piece_dict_dict(self):
         import torch
@@ -1674,8 +1635,9 @@ class TestPieceByPiece(ExtTestCase):
                 x: Optional[torch.Tensor] = None,
                 cache: Optional[transformers.cache_utils.DynamicCache] = None,
             ):
-                new_cache = transformers.cache_utils.DynamicCache()
-                new_cache.update(cache.key_cache[0] + x, cache.value_cache[0] + x, 0)
+                new_cache = make_dynamic_cache(
+                    [(cache.key_cache[0] + x, cache.value_cache[0] + x)]
+                )
                 return dict(past_key_value=new_cache, mask=torch.ones_like(x))
 
         class Model(torch.nn.Module):
@@ -1693,13 +1655,11 @@ class TestPieceByPiece(ExtTestCase):
 
         model = Model()
         x = torch.randn((5, 6))
-        cache = transformers.cache_utils.DynamicCache()
-        cache.update(torch.randn((5, 6)), torch.randn((5, 6)), 0)
+        cache = make_dynamic_cache([(torch.randn((5, 6)), torch.randn((5, 6)))])
         z = model(x, cache)
         self.assertNotEmpty(z)
 
-        cache2 = transformers.cache_utils.DynamicCache()
-        cache2.update(torch.randn((6, 6)), torch.randn((6, 6)), 0)
+        cache2 = make_dynamic_cache([(torch.randn((6, 6)), torch.randn((6, 6)))])
         inputs = [
             (tuple(), dict(x=x, cache=cache)),
             (tuple(), dict(x=torch.randn((6, 6)), cache=cache2)),
@@ -1726,7 +1686,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEqual(shape, (6, 16))
         self.assertEqual(str(shape), "(s0, 6)")
 
-    @requires_torch("2.6")
+    @requires_torch("2.7")
     @hide_stdout()
     def test_piece_by_piece_piece_kwargs_local(self):
         import torch

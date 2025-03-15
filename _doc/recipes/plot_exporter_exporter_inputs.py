@@ -71,6 +71,21 @@ class DynamicCache:
         return layer_seq_length
 
 
+def make_dynamic_cache(
+    key_value_pairs: List[Tuple[torch.Tensor, torch.Tensor]],
+) -> DynamicCache:
+    """
+    Creates an instance of DynamicCache.
+
+    :param key_value_pairs: list of pairs of (key, values)
+    :return: :class:`transformers.cache_utils.DynamicCache`
+    """
+    cache = DynamicCache(len(key_value_pairs))
+    for i, (key, value) in enumerate(key_value_pairs):
+        cache.update(key, value, i)
+    return cache
+
+
 # %%
 # A model uses the class we introduced.
 
@@ -97,8 +112,7 @@ class ModelTakingDynamicCacheAsInput(torch.nn.Module):
 # Let's check the model runs.
 
 x = torch.randn(3, 8, 7, 1)
-cache = DynamicCache(1)
-cache.update(torch.ones((3, 8, 5, 6)), (torch.ones((3, 8, 5, 6)) * 2), 0)
+cache = make_dynamic_cache([(torch.ones((3, 8, 5, 6)), (torch.ones((3, 8, 5, 6)) * 2))])
 
 model = ModelTakingDynamicCacheAsInput()
 expected = model(x, cache)
@@ -109,8 +123,7 @@ print(expected.shape)
 # Let's check it works with other shapes.
 
 x = torch.randn(4, 8, 7, 1)
-cache = DynamicCache(1)
-cache.update(torch.ones((4, 8, 11, 6)), (torch.ones((4, 8, 11, 6)) * 2), 0)
+cache = make_dynamic_cache([(torch.ones((4, 8, 11, 6)), (torch.ones((4, 8, 11, 6)) * 2))])
 
 model = ModelTakingDynamicCacheAsInput()
 expected = model(x, cache)

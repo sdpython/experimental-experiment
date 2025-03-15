@@ -38,7 +38,7 @@ script_args = get_parsed_args(
 )
 
 
-for att in "filename,repeat".split(","):
+for att in ("filename", "repeat"):
     print(f"{att}={getattr(script_args, att)}")
 
 # %%

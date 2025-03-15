@@ -7,8 +7,9 @@ import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
-    requires_torch,
     is_windows,
+    requires_torch,
+    requires_transformers,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 
@@ -101,7 +102,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 filename = line.replace(":filename,", "").strip(";")
         if check_file:
             self.assertExists(filename)
-        if dynamic:
+        if dynamic and exporter.startswith(("custom", "onnx", "torch")):
             onx = onnx.load(filename)
             input_values = []
             for i in onx.graph.input:
@@ -129,10 +130,23 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
+    @requires_transformers("4.49.9999")
     def test_untrained_export_bench_export_cpu(self):
         self._untrained_export(
             "export-nostrict", "Phi2LM_1Layer", verbose=1, debug=False, check_file=False
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.6")
+    @requires_transformers("4.49.9999")
+    def test_untrained_export_bench_export_cpu_dynamic(self):
+        self._untrained_export(
+            "export-nostrict",
+            "Phi2LM_1Layer",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
         )
 
 

@@ -623,6 +623,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         target_opset: int,
+        patch: bool,
     ) -> Tuple[onnx.ModelProto, Optional[Dict[str, Any]]]:
         """
         Converts a model into onnx.
@@ -635,6 +636,8 @@ class ModelRunner:
         :param optimization: defines the optimizations
         :param verbose: verbosity
         :param target_opset: target opset
+        :param patch: apply patches before exporting,
+            not a valid option for all exporters
         :return: the model proto with or without weights, statistics
         """
         assert not fake_tensor, "fake_tensor not implemented."
@@ -671,6 +674,7 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
                 strategy=strategy,
+                patch=patch,
             )
         if exporter in ("cort", "cortgrad"):
             assert strategy in (
@@ -718,6 +722,7 @@ class ModelRunner:
                 target_opset=target_opset,
                 detailed=strategy == "detailed",
                 fallback=strategy == "fallback",
+                patch=patch,
             )
         if exporter == "eager":
             assert strategy in (
@@ -778,6 +783,7 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 strategy=strategy,
+                patch=patch,
             )
         if exporter == "executorch":
             assert strategy in {
@@ -797,6 +803,7 @@ class ModelRunner:
                 optimization=optimization,
                 verbose=verbose,
                 strategy=strategy,
+                patch=patch,
             )
         if exporter == "inductor":
             assert strategy in (
@@ -843,7 +850,9 @@ class ModelRunner:
             )
         raise AssertionError(f"Exporter {exporter!r} is not implemented.")
 
-    def _patch_patch_options(self, verbose: int = 0, dynamic: int = 0) -> Dict[str, Any]:
+    def _patch_patch_options(
+        self, verbose: int = 0, dynamic: int = 0, patch: int = 1
+    ) -> Dict[str, Any]:
         """Updates the patch options.
         DynamicCache does not need to be replaced if there is no dynamic shapes involved.
         """
@@ -851,6 +860,7 @@ class ModelRunner:
         if not dynamic:
             options["replace_dynamic_cache"] = False
         options["verbose"] = max(verbose - 2, 0)
+        options["patch"] = patch != 0
         return options
 
     def _to_onnx_custom(
@@ -863,6 +873,7 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         strategy: Optional[str] = None,
+        patch: bool = True,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -910,7 +921,7 @@ class ModelRunner:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad(), bypass_export_some_errors(
-                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic, patch=patch)
             ) as modificator:
                 onx, builder, stats = to_onnx(
                     self.model,
@@ -929,7 +940,7 @@ class ModelRunner:
                 )
         else:
             with torch.no_grad(), bypass_export_some_errors(
-                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic, patch=patch)
             ) as modificator:
                 modified_inputs = modificator(export_inputs)
                 modified_kw_inputs = modificator(export_kw_inputs)
@@ -1212,6 +1223,7 @@ class ModelRunner:
         target_opset: int,
         detailed: bool = False,
         fallback: bool = False,
+        patch: bool = True,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -1236,11 +1248,12 @@ class ModelRunner:
             print(f"[ModelRunner._to_onnx_dynamo] additional_kwargs={additional_kwargs}")
             print(f"[ModelRunner._to_onnx_dynamo] dynamic_shapes={dyn_shapes!r}")
             print(
-                f"[ModelRunner._to_onnx_dynamo] export_inputs={string_type(export_inputs)!r}"
+                f"[ModelRunner._to_onnx_dynamo] export_inputs="
+                f"{string_type(export_inputs, limit=20)!r}"
             )
             print(
                 f"[ModelRunner._to_onnx_dynamo] export_kw_inputs="
-                f"{string_type(export_kw_inputs)!r}"
+                f"{string_type(export_kw_inputs, limit=20)!r}"
             )
             print(f"[ModelRunner._to_onnx_dynamo] type(model)={type(self.model)!r}")
 
@@ -1248,7 +1261,7 @@ class ModelRunner:
             with torch.autocast(
                 device_type=self.device, dtype=self.dtype
             ), torch.no_grad(), bypass_export_some_errors(
-                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic, patch=patch)
             ):
                 onnx_program = torch.onnx.export(
                     self.model,
@@ -1264,7 +1277,7 @@ class ModelRunner:
                 )
         else:
             with torch.no_grad(), bypass_export_some_errors(
-                **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
+                **self._patch_patch_options(verbose=verbose, dynamic=dynamic, patch=patch)
             ):
                 onnx_program = torch.onnx.export(
                     self.model,
@@ -1320,6 +1333,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         strategy: Optional[str] = None,
+        patch: bool = True,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
@@ -1337,9 +1351,13 @@ class ModelRunner:
         export_options = ExportOptions(strategy=strategy or "strict", **opts)
         if verbose:
             print(f"[ModelRunner._to_export] dynamic_shapes={dynamic_shapes!r}")
-            print(f"[ModelRunner._to_export] export_inputs={string_type(export_inputs)!r}")
             print(
-                f"[ModelRunner._to_export] export_kw_inputs={string_type(export_kw_inputs)!r}"
+                f"[ModelRunner._to_export] export_inputs="
+                f"{string_type(export_inputs, limit=20)!r}"
+            )
+            print(
+                f"[ModelRunner._to_export] export_kw_inputs="
+                f"{string_type(export_kw_inputs, limit=20)!r}"
             )
             print(f"[ModelRunner._to_export] strategy={strategy!r}")
             print(f"[ModelRunner._to_export] self.export_options={self.export_options!r}")
@@ -1347,12 +1365,14 @@ class ModelRunner:
             print(f"[ModelRunner._to_export] type(model)={type(self.model)!r}")
 
         with bypass_export_some_errors(
-            **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
+            **self._patch_patch_options(verbose=verbose, dynamic=dynamic, patch=patch)
         ) as modificator:
+            modified_inputs = modificator(export_inputs)
+            modified_kw_inputs = modificator(export_kw_inputs)
             exported_mod = export_options.export(
                 self.model,
-                modificator(export_inputs),
-                modificator(export_kw_inputs),
+                modified_inputs,
+                modified_kw_inputs,
                 dynamic_shapes=dynamic_shapes,
                 tracing_mode=False,
                 same_signature=False,
@@ -1383,6 +1403,7 @@ class ModelRunner:
         optimization: str,
         verbose: int,
         strategy: Optional[str] = None,
+        patch: bool = True,
     ):
         assert self.device == "cpu", f"executorch only works with CPU not {self.device!r}"
         assert not fake_tensor, "fake_tensor not implemented."
@@ -1401,10 +1422,13 @@ class ModelRunner:
         export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
         if verbose:
             print(f"[ModelRunner._to_executorch] dynamic_shapes={dynamic_shapes!r}")
-            print(f"[ModelRunner._to_executorch] export_inputs={string_type(export_inputs)!r}")
+            print(
+                f"[ModelRunner._to_executorch] export_inputs="
+                f"{string_type(export_inputs, limit=20)!r}"
+            )
             print(
                 f"[ModelRunner._to_executorch] export_kw_inputs="
-                f"{string_type(export_kw_inputs)!r}"
+                f"{string_type(export_kw_inputs, limit=20)!r}"
             )
             print(f"[ModelRunner._to_executorch] strategy={strategy!r}")
             print(f"[ModelRunner._to_executorch] self.export_options={self.export_options!r}")
@@ -1413,7 +1437,7 @@ class ModelRunner:
             print("[ModelRunner._to_executorch] run torch.export.export")
 
         with bypass_export_some_errors(
-            **self._patch_patch_options(verbose=verbose, dynamic=dynamic)
+            **self._patch_patch_options(verbose=verbose, dynamic=dynamic, patch=patch)
         ) as modificator:
             exported_mod = export_options.export(
                 self.model,
@@ -1775,9 +1799,10 @@ class ModelRunner:
         if kw_inputs is None:
             kw_inputs = self.kw_inputs
 
-        assert (
-            not kw_inputs
-        ), f"Keyword attribute are not implemented yet but kw_inputs={string_type(kw_inputs)}"
+        assert not kw_inputs, (
+            f"Keyword attribute are not implemented yet but "
+            f"kw_inputs={string_type(kw_inputs, limit=20)}"
+        )
 
         assert isinstance(
             inputs, tuple
@@ -2308,7 +2333,7 @@ class ModelRunner:
                         f"Unable to process input type {type(u)} in input list"
                     )
                 continue
-            if i.__class__.__name__ == "DynamicCache":
+            if i.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
                 import transformers
 
                 assert isinstance(
@@ -2364,4 +2389,7 @@ class ModelRunner:
             f"raw_use_defaults={raw_use_defaults}\n----\n"
             f"initializer_names={sorted(initializer_names)}\n----\n"
         )
+        assert all(
+            i is None or isinstance(i, (int, float, torch.Tensor)) for i in new_inputs
+        ), f"Unexpected type in feeds: {string_type(dict(zip(names, new_inputs)), limit=20)}"
         return dict(zip(names, new_inputs))

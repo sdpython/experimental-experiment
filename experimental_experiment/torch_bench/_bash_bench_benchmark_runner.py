@@ -24,6 +24,7 @@ from .export_model_helper import (
 )
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
+from ..cache_helpers import make_dynamic_cache
 from ..helpers import (
     string_type,
     tensor_dtype_to_np_dtype,
@@ -307,14 +308,23 @@ class BenchmarkRunner:
                 # )
                 return new_cache
             return obj
-        if hasattr(obj, "key_cache") and obj.__class__.__name__ in (
-            "DynamicCache",
-            "patched_DynamicCache",
-        ):
+        if hasattr(obj, "key_cache") and obj.__class__.__name__ in ("patched_DynamicCache",):
             cache = copy.deepcopy(obj)
             cache.key_value = [self.move_to(device, _) for _ in obj.key_cache]
             cache.value_value = [self.move_to(device, _) for _ in obj.value_cache]
             return cache
+
+        if hasattr(obj, "key_cache") and obj.__class__.__name__ in ("DynamicCache",):
+            cache = make_dynamic_cache(
+                list(
+                    zip(
+                        [self.move_to(device, t) for t in obj.key_cache],
+                        [self.move_to(device, t) for t in obj.value_cache],
+                    )
+                )
+            )
+            return cache
+
         raise AssertionError(f"move_to not implemented for type {type(obj)}, dir={dir(obj)}")
 
     @classmethod
@@ -602,6 +612,7 @@ class BenchmarkRunner:
         pickled_name: Optional[str] = None,
         rtopt: bool = True,
         shape_again: bool = False,
+        apply_patches: bool = True,
     ) -> Iterator[Dict[Any, Any]]:
         """
         Runs the benchmarks, run, export, run in onnx, measure the speedup.
@@ -620,6 +631,7 @@ class BenchmarkRunner:
         :param rtopt: disable onnxruntime optimization
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
+        :param apply_patches: apply patches before exporting
         """
         assert not process, "process=True not implemented."
 
@@ -661,6 +673,7 @@ class BenchmarkRunner:
                     initial_no_grad=initial_no_grad,
                     rtopt=rtopt,
                     shape_again=shape_again,
+                    apply_patches=apply_patches,
                 )
                 if part == 0:
                     stats["STEP"] = "export"
@@ -730,6 +743,7 @@ class BenchmarkRunner:
         autocast=None,
         rtopt=None,
         shape_again=None,
+        apply_patches=None,
     ):
         assert quiet is not None
         assert exporter is not None
@@ -740,6 +754,7 @@ class BenchmarkRunner:
         assert machine_specs is not None
         assert initial_no_grad is not None
         assert shape_again is not None
+        assert apply_patches is not None
 
         import onnxruntime
         import onnxscript
@@ -1099,6 +1114,7 @@ class BenchmarkRunner:
                     fake_tensor=self.fake_tensor,
                     no_grad=self.no_grad,
                     target_opset=self.target_opset,
+                    patch=apply_patches,
                 )
             except Exception as e:
                 stats["time_export"] = time.perf_counter() - begin
@@ -1128,6 +1144,7 @@ class BenchmarkRunner:
                 fake_tensor=self.fake_tensor,
                 no_grad=self.no_grad,
                 target_opset=self.target_opset,
+                patch=apply_patches,
             )
             stats["time_export"] = time.perf_counter() - begin
             stats["time_export_2"] = stats["time_export"]
@@ -1262,6 +1279,7 @@ class BenchmarkRunner:
         context["warmup"] = warmup
         context["repeat"] = repeat
         context["rtopt"] = rtopt
+        context["apply_patches"] = apply_patches
 
         assert (feeds_dynamic is not None and expected_dynamic is not None) or (
             feeds_dynamic is None and expected_dynamic is None
@@ -1289,6 +1307,7 @@ class BenchmarkRunner:
         repeat=None,
         part1=None,
         rtopt=None,
+        apply_patches=None,
     ):
         assert expected is not None
         assert feeds is not None
@@ -1299,6 +1318,7 @@ class BenchmarkRunner:
         assert exported_model is not None
         assert filename is not None
         assert part1 is not None
+        assert apply_patches is not None
         assert part1, "Part 1 was not sucessful"
         assert (feeds_dynamic is not None and expected_dynamic is not None) or (
             feeds_dynamic is None and expected_dynamic is None
@@ -1481,7 +1501,7 @@ class BenchmarkRunner:
             if self.verbose > 1:
                 print(
                     f"[BenchmarkRunner.benchmark] feeds_dynamic="
-                    f"{string_type(feeds_dynamic, with_shape=True)}"
+                    f"{string_type(feeds_dynamic, with_shape=True, limit=20)}"
                 )
             if self.verbose:
                 print("[benchmarkrunner.benchmark] check dynamic")
@@ -1625,7 +1645,7 @@ class BenchmarkRunner:
             if self.verbose > 1:
                 print(
                     f"[BenchmarkRunner.benchmark] feeds="
-                    f"{string_type(feeds, with_shape=True, with_min_max=True)}"
+                    f"{string_type(feeds, with_shape=True, with_min_max=True, limit=20)}"
                 )
             # This part is not about ONNX.
             # warmup session
@@ -1709,17 +1729,23 @@ class BenchmarkRunner:
                 time_first_iter = None
                 if quiet:
                     try:
-                        for _ in range(warmup):
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_push("CPL-WARMUP")
-                            if _ == warmup - 1:
-                                got = sess.run(feeds)
-                            else:
-                                sess.run(feeds)
-                            if time_first_iter is None:
-                                time_first_iter = time.perf_counter() - begin
-                            if self.nvtx:
-                                torch.cuda.nvtx.range_pop()
+                        with register_additional_serialization_functions(
+                            replace_dynamic_cache=apply_patches
+                            and expected_dynamic is not None,
+                            verbose=max(self.verbose - 5, 0),
+                        ) as modificator:
+                            new_feeds = modificator(feeds)
+                            for _ in range(warmup):
+                                if self.nvtx:
+                                    torch.cuda.nvtx.range_push("CPL-WARMUP")
+                                if _ == warmup - 1:
+                                    got = sess.run(new_feeds)
+                                else:
+                                    sess.run(new_feeds)
+                                if time_first_iter is None:
+                                    time_first_iter = time.perf_counter() - begin
+                                if self.nvtx:
+                                    torch.cuda.nvtx.range_pop()
                     except Exception as e:
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_warmup {e}")
@@ -1729,9 +1755,21 @@ class BenchmarkRunner:
                         return stats
                 else:
                     with register_additional_serialization_functions(
-                        verbose=max(self.verbose - 5, 0)
+                        replace_dynamic_cache=apply_patches and expected_dynamic is not None,
+                        verbose=max(self.verbose - 5, 0),
                     ) as modificator:
                         new_feeds = modificator(feeds)
+                        assert (
+                            not apply_patches
+                            or expected_dynamic is None
+                            or "DynamicCache"
+                            not in set(
+                                c.__class__.__name__ for c in new_feeds if c is not None
+                            )
+                        ), (
+                            f"Unexpected type found new modified feeds "
+                            f"{string_type(new_feeds, limit=20)}"
+                        )
                         for _ in range(warmup):
                             if self.nvtx:
                                 torch.cuda.nvtx.range_push("CPL-WARMUP")
@@ -1809,7 +1847,8 @@ class BenchmarkRunner:
                     # flattened classes needs to be registered again to be able to
                     # execute the fx graph.
                     with register_additional_serialization_functions(
-                        verbose=max(self.verbose - 5, 0)
+                        verbose=max(self.verbose - 5, 0),
+                        replace_dynamic_cache=apply_patches and expected_dynamic is not None,
                     ) as modificator:
                         new_feeds = modificator(feeds)
                         for _ in range(repeat):
