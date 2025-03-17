@@ -12,6 +12,7 @@
     op_add_add_mul_mul
     op_average_pool_grad
     op_cast_like
+    op_complex
     op_concat
     op_constant_of_shape
     op_fused_matmul

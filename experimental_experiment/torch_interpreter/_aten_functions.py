@@ -85,9 +85,21 @@ def aten__log_api_usage_once(
     return g.make_node("Constant", [], value_ints=[1], name="_log_api_usage_once")
 
 
-def aten_abs(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
+def aten_abs(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name: str = "abs"
+) -> T:
     "abs"
-    res = g.make_node("Abs", [x], outputs, name="abs")
+    assert g.has_type(x), f"missing type for x={x!r}{g.get_debug_msg()}"
+    itype = g.get_type(x)
+    if itype in {TensorProto.COMPLEX64, TensorProto.COMPLEX128}:
+        res = g.anyop.ComplexModule(x, name=name, domain="ai.onnx.complex")
+        if not sts:
+            rtype = (
+                TensorProto.FLOAT32 if itype == TensorProto.COMPLEX64 else TensorProto.DOUBLE
+            )
+            set_type_shape_unary_op(g, res, x, itype=rtype)
+        return res
+    res = g.make_node("Abs", [x], outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
@@ -2859,6 +2871,150 @@ def aten_expand_as(
     if not sts:
         set_type_shape_unary_op(g, res, like, itype=g.get_type(x))
     return res
+
+
+def aten__fftn_onnx(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    n: Optional[int],
+    dim: List[int],
+    norm: Union[str, int],
+    inverse: bool,
+    onesided: bool,
+    name: str = "_fft_r2c",
+) -> T:
+    """_fftn_onnx"""
+    assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+    assert (
+        dim is None or len(dim) == 1
+    ), f"FFT Not implemented yet when dim={dim}{g.get_debug_msg()}"
+    float_types = {
+        TensorProto.FLOAT,
+        TensorProto.DOUBLE,
+        TensorProto.BFLOAT16,
+        TensorProto.FLOAT16,
+    }
+    itype = g.get_type(x)
+    ritype = itype
+    assert itype in float_types, f"Unexpected type {itype} for x={x!r}{g.get_debug_msg()}"
+
+    nsq = g.op.UnsqueezeAnyOpset(x, np.array([-1], dtype=np.int64), name=name)
+
+    res = g.op.DFTAnyOpset(
+        nsq,
+        None if n is None else np.array(n, dtype=np.int64),
+        None if dim is None else np.array(dim[0] + (-1 if dim[0] < 0 else 0), dtype=np.int64),
+        inverse=inverse,
+        onesided=onesided,
+        name=name,
+    )
+
+    # Normalization constant
+    sample = None
+    if norm in (1, "forward", 2, "ortho"):
+        if n is None:
+            if g.has_shape(x):
+                shape = g.get_shape(x)
+                d = shape[-1 if dim is None else dim[0]]
+                if isinstance(d, int):
+                    dtype = tensor_dtype_to_np_dtype(ritype)
+                    sample = np.array([d], dtype=dtype)
+            if sample is None:
+                i = -1 if dim is None else dim[0]
+                sample = g.op.Cast(
+                    (
+                        g.op.Shape(x, start=i, name=name)
+                        if i == -1
+                        else g.op.Shape(x, start=i, end=i + 1, name=name)
+                    ),
+                    to=itype,
+                    name=name,
+                )
+        else:
+            dtype = tensor_dtype_to_np_dtype(itype)
+            sample = np.array([n], dtype=dtype)
+
+    # Normalization
+    if norm in (1, "forward"):
+        normalized = g.op.Div(res, sample, name=name)
+    elif norm in (0, "backward", None):
+        normalized = res
+    elif norm in (2, "ortho"):
+        normalized = g.op.Div(res, g.op.Sqrt(sample, name=name), name=name)
+    else:
+        raise AssertionError(f"Unexpected value for norm={norm!r}{g.get_debug_msg()}")
+
+    # At this stage, the result form ONNX is real, we create a complex number.
+    if itype in float_types:
+        if itype == TensorProto.FLOAT:
+            fitype = TensorProto.COMPLEX64
+        elif itype == TensorProto.DOUBLE:
+            fitype = TensorProto.COMPLEX128
+        else:
+            raise AssertionError(
+                f"Not implemented at this stage with itype={itype} "
+                f"for x={x!r}{g.get_debug_msg()}"
+            )
+    else:
+        # Already complex
+        fitype = itype
+
+    final = g.anyop.ToComplex(normalized, name=name, outputs=outputs, domain="ai.onnx.complex")
+    if not sts:
+        g.set_type(final, fitype)
+    return final
+
+
+def aten__fft_r2c(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    n: Optional[int],
+    dim: List[int],
+    norm: Union[str, int],
+    onesided: bool,
+    name: str = "_fft_r2c",
+) -> T:
+    """_fft_r2c"""
+    return aten__fftn_onnx(
+        g,
+        sts,
+        outputs,
+        x,
+        n=n,
+        dim=dim,
+        norm=norm,
+        inverse=False,
+        onesided=onesided,
+        name=name,
+    )
+
+
+def aten_fft_fft(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    n: Optional[int] = None,
+    dim: int = -1,
+    norm: Optional[str] = None,
+    name: str = "fft_fft",
+) -> T:
+    """fft_fft"""
+    return aten__fft_r2c(
+        g,
+        sts,
+        outputs,
+        x,
+        n=n,
+        dim=[dim] if isinstance(dim, int) else dim,
+        norm=norm,
+        name=name,
+        onesided=False,
+    )
 
 
 def aten_fill_Scalar(

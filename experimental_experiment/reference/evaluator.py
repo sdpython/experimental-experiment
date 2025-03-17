@@ -18,6 +18,7 @@ from .ops.op_attention import Attention
 from .ops.op_average_pool_grad import AveragePoolGrad
 from .ops.op_bias_softmax import BiasSoftmax
 from .ops.op_cast_like import CastLike_15, CastLike_19
+from .ops.op_complex import ComplexModule, ToComplex
 from .ops.op_concat import Concat
 from .ops.op_constant_of_shape import ConstantOfShape
 from .ops.op_fused_matmul import FusedMatMul
@@ -78,6 +79,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         Concat,
         CastLike_15,
         CastLike_19,
+        ComplexModule,
         ConstantOfShape,
         FusedMatMul,
         Gather,
@@ -104,6 +106,7 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
         Slice_1,
         Slice_10,
         SubMul,
+        ToComplex,
         Transpose2DCastFP16,
         Transpose2DCastFP32,
         TriMatrix,
