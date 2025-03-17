@@ -12,12 +12,12 @@ def scatter_elements(data, indices, updates, axis=0, reduction=None):  # type: i
     elif reduction == "min":
 
         def f(x, y):
-            return min(x, y)
+            return np.minimum(x, y)
 
     elif reduction == "max":
 
         def f(x, y):
-            return max(x, y)
+            return np.maximum(x, y)
 
     elif reduction == "mul":
 

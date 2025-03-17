@@ -1,10 +1,17 @@
 import numpy as np
 from onnx.reference.op_run import OpRun
 
+try:
+    import ml_dtypes
+except ImportError:
+    ml_dtypes = None
+
 
 class ConstantOfShape(OpRun):
     @staticmethod
     def _process(value):
+        if ml_dtypes is not None and value.dtype == (np.uint16, [("bfloat16", "<u2")]):
+            value = value.view(ml_dtypes.bfloat16)
         cst = value[0] if isinstance(value, np.ndarray) and value.size > 0 else value
         if isinstance(value, np.ndarray):
             if not value.shape:
@@ -21,6 +28,8 @@ class ConstantOfShape(OpRun):
             cst = np.float64(cst)
         elif cst is None:
             cst = np.float32(0)
+        if ml_dtypes is not None and isinstance(cst, ml_dtypes.bfloat16):
+            return cst
         if not isinstance(
             cst,
             (

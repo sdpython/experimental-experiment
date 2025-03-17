@@ -11,6 +11,24 @@ from onnx import ModelProto, save
 from .helpers import pretty_onnx
 
 
+def to_numpy(tensor: "torch.Tensor"):  # noqa: F821
+    """
+    Convets a torch tensor to numy.
+    """
+    try:
+        return tensor.numpy()
+    except TypeError:
+        # We try with ml_dtypes
+        pass
+
+    import ml_dtypes
+    import torch
+
+    conv = {torch.bfloat16: ml_dtypes.bfloat16}
+    assert tensor.dtype in conv, f"Unsupported type {tensor.dtype}, not in {conv}"
+    return tensor.to(torch.float32).numpy().astype(conv[tensor.dtype])
+
+
 def check_model_ort(
     onx: ModelProto,
     providers: Optional[Union[str, List[str]]] = None,
