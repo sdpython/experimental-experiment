@@ -4,7 +4,12 @@ from typing import Optional
 import numpy as np
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings, requires_cuda
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_cuda,
+    requires_torch,
+)
 
 
 class TestOnnxExportComplex(ExtTestCase):
@@ -34,6 +39,7 @@ class TestOnnxExportComplex(ExtTestCase):
         return x.reshape(tuple(shape)).to(torch.float32)
 
     @ignore_warnings(UserWarning)
+    @requires_torch("2.7")
     def test_fft_simple(self):
         import torch
 
