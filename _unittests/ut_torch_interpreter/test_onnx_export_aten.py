@@ -17,6 +17,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.helpers import torch_dtype_to_onnx_dtype
+from experimental_experiment.torch_test_helper import to_numpy
 
 
 class TestOnnxExportAten(ExtTestCase):
@@ -1322,18 +1323,11 @@ class TestOnnxExportAten(ExtTestCase):
         }
 
         for red, include, stype in itertools.product(
-            ["amin", "amax", "sum", "prod"],
+            ["prod", "sum", "amin", "amax"],
             [False, True],
-            ["float32", "float16", "int32", "int64", "float64"],
+            ["bfloat16", "float32", "float16", "int32", "int64", "float64"],
         ):
             with self.subTest(reduce=red, include=include, type=stype):
-                key = red, include, stype
-                if key in skip_ort:
-                    self.todo(
-                        self.test_aten_scatter_reduce_include_self,
-                        f"case {key} not supported by onnxruntime",
-                    )
-                    continue
                 dtype = getattr(torch, stype)
 
                 class Model(torch.nn.Module):
@@ -1362,11 +1356,21 @@ class TestOnnxExportAten(ExtTestCase):
                     xs,
                 )
                 sess = ExtendedReferenceEvaluator(model_path, verbose=0)
-                feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+                feeds = dict(zip(sess.input_names, [to_numpy(x) for x in xs]))
                 got = sess.run(None, feeds)[0]
                 self.assertEqualArray(expected, got, atol=1e-6)
 
                 # checking with onnxruntime as well
+                if stype == "bfloat16":
+                    # not supported
+                    continue
+                key = red, include, stype
+                if key in skip_ort:
+                    self.todo(
+                        self.test_aten_scatter_reduce_include_self,
+                        f"case {key} not supported by onnxruntime",
+                    )
+                    continue
                 import onnxruntime
 
                 sess_options = onnxruntime.SessionOptions()

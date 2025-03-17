@@ -462,10 +462,12 @@ class ExtTestCase(unittest.TestCase):
                 raise AssertionError("\n".join(rows))  # noqa: B904
             return
 
+        from .torch_test_helper import to_numpy
+
         if hasattr(expected, "detach"):
-            expected = expected.detach().cpu().numpy()
+            expected = to_numpy(expected.detach().cpu())
         if hasattr(value, "detach"):
-            value = value.detach().cpu().numpy()
+            value = to_numpy(value.detach().cpu())
         if msg:
             try:
                 self.assertEqual(expected.dtype, value.dtype)
