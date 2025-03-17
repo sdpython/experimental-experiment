@@ -37,8 +37,8 @@ class TestOnnxExportComplex(ExtTestCase):
     def test_fft_simple(self):
         import torch
 
-        for n, dim, norm in itertools.product(
-            [None, 3, 8], [-1, 0], [None, "forward", "ortho"]
+        for n, dim, norm, opset in itertools.product(
+            [None, 3, 8], [-1, 0], [None, "forward", "ortho"], [20, 17]
         ):
             with self.subTest(n=n, dim=dim, norm=norm):
 
@@ -76,6 +76,7 @@ class TestOnnxExportComplex(ExtTestCase):
                     (x,),
                     dynamic_shapes=({0: "batch", 1: "length"},),
                     export_options=ExportOptions("all"),
+                    target_opset=opset,
                 )
                 # self.print_model(onx)
                 ref = ExtendedReferenceEvaluator(onx)
