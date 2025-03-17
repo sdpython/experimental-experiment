@@ -1482,3 +1482,29 @@ def string_diff(diff: Dict[str, Any]) -> str:
     if diff["abs"] == 0 or diff["rel"] == 0:
         return f"abs={diff['abs']}, rel={diff['rel']}"
     return f"abs={diff['abs']}, rel={diff['rel']}, n={diff['n']}"
+
+
+def type_info(itype: int, att: str):
+    """
+    Returns the minimum or maximum value for a type.
+
+    :param itype: onnx type
+    :param att: 'min' or 'max'
+    :return: value
+    """
+    if itype in {TensorProto.FLOAT, TensorProto.FLOAT16, TensorProto.DOUBLE}:
+        dtype = tensor_dtype_to_np_dtype(itype)
+        fi = np.finfo(dtype)
+    elif itype == TensorProto.BFLOAT16:
+        import ml_dtypes
+
+        dtype = tensor_dtype_to_np_dtype(itype)
+        fi = ml_dtypes.finfo(dtype)
+    else:
+        dtype = tensor_dtype_to_np_dtype(itype)
+        fi = np.iinfo(dtype)
+    if att == "min":
+        return fi.min
+    if att == "max":
+        return fi.max
+    raise ValueError(f"Unexpected value {att!r}")

@@ -19,6 +19,7 @@ from ..helpers import (
     from_array_extended,
     onnx_dtype_to_torch_dtype,
     torch_dtype_to_onnx_dtype,
+    type_info,
 )
 from ..xbuilder._shape_helper import (
     all_float,
@@ -7698,41 +7699,12 @@ def aten_scatter_reduce_two(
         itype = g.get_type(src)
         dtype = tensor_dtype_to_np_dtype(itype)
         if onnx_reduce == "max":
-            value = from_array_extended(
-                np.array(
-                    [
-                        (
-                            np.finfo(dtype).min
-                            if itype
-                            in {
-                                TensorProto.FLOAT,
-                                TensorProto.FLOAT16,
-                                TensorProto.DOUBLE,
-                                TensorProto.BFLOAT16,
-                            }
-                            else np.iinfo(dtype).min
-                        )
-                    ],
-                    dtype=dtype,
-                )
-            )
+            value = from_array_extended(np.array([type_info(itype, "min")], dtype=dtype))
             reduction_init = "min"
         elif onnx_reduce == "min":
             value = from_array_extended(
                 np.array(
-                    [
-                        (
-                            np.finfo(dtype).max
-                            if itype
-                            in {
-                                TensorProto.FLOAT,
-                                TensorProto.FLOAT16,
-                                TensorProto.DOUBLE,
-                                TensorProto.BFLOAT16,
-                            }
-                            else np.iinfo(dtype).max
-                        )
-                    ],
+                    [type_info(itype, "max")],
                     dtype=dtype,
                 )
             )
