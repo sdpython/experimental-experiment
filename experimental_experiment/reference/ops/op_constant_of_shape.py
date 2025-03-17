@@ -10,7 +10,11 @@ except ImportError:
 class ConstantOfShape(OpRun):
     @staticmethod
     def _process(value):
-        if ml_dtypes is not None and value.dtype == (np.uint16, [("bfloat16", "<u2")]):
+        if (
+            value is not None
+            and ml_dtypes is not None
+            and value.dtype == (np.uint16, [("bfloat16", "<u2")])
+        ):
             value = value.view(ml_dtypes.bfloat16)
         cst = value[0] if isinstance(value, np.ndarray) and value.size > 0 else value
         if isinstance(value, np.ndarray):
