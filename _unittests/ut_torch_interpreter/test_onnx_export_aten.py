@@ -16,7 +16,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.xbuilder import OptimizationOptions
-from experimental_experiment.helpers import torch_dtype_to_onnx_dtype
+from experimental_experiment.helpers import torch_dtype_to_onnx_dtype, string_type
 from experimental_experiment.torch_test_helper import to_numpy
 
 
@@ -1436,7 +1436,43 @@ class TestOnnxExportAten(ExtTestCase):
                     ),
                 )
                 expected = model(*xs)
-                model_path = self._call_exporter("test_aten_multinomial", "custom", model, xs)
+                model_path = self._call_exporter(
+                    f"test_aten_multinomial{rk}", "custom", model, xs
+                )
+                onx = onnx.load(model_path)
+                feeds = dict(zip([i.name for i in onx.graph.input], [x.numpy() for x in xs]))
+
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    model_path, providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqual(expected.shape, got.shape)
+                self.assertEqual(expected.numpy().dtype, got.dtype)
+
+    @ignore_warnings(UserWarning)
+    def test_aten_masked_scatter(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, mask, updates):
+                return x.masked_scatter(mask, updates)
+
+        model = Model()
+
+        for rk in (1, 2):
+            with self.subTest(rank=rk):
+                xs = (
+                    torch.tensor([0, 1, 0] if rk == 1 else [[0, 1, 0]], dtype=torch.float32),
+                    torch.tensor([[0, 1, 0], [1, 1, 0]], dtype=torch.bool),
+                    torch.tensor([[-10, -11, -12], [-13, -14, -15]], dtype=torch.float32),
+                )
+                self.assertIn("x", string_type(xs, with_shape=True))
+                expected = model(*xs)
+                model_path = self._call_exporter(
+                    f"test_aten_masked_scatter{rk}", "custom", model, xs
+                )
                 onx = onnx.load(model_path)
                 feeds = dict(zip([i.name for i in onx.graph.input], [x.numpy() for x in xs]))
 
