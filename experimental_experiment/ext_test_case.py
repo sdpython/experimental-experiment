@@ -758,7 +758,7 @@ def has_executorch(version: str = "", msg: str = "") -> Callable:
     import packaging.version as pv
     import executorch
 
-    return pv.Version(".".join(executorch.__version__.split(".")[:2])) < pv.Version(version)
+    return pv.Version(executorch.__version__) < pv.Version(version)
 
 
 def requires_sklearn(version: str, msg: str = "") -> Callable:
@@ -766,7 +766,7 @@ def requires_sklearn(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import sklearn
 
-    if pv.Version(".".join(sklearn.__version__.split(".")[:2])) < pv.Version(version):
+    if pv.Version(sklearn.__version__) < pv.Version(version):
         msg = f"scikit-learn version {sklearn.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -777,7 +777,7 @@ def has_torch(version: str) -> bool:
     import packaging.version as pv
     import torch
 
-    return pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version(version)
+    return pv.Version(torch.__version__) >= pv.Version(version)
 
 
 def requires_torch(version: str, msg: str = "") -> Callable:
@@ -785,7 +785,7 @@ def requires_torch(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import torch
 
-    if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version(version):
+    if pv.Version(torch.__version__) < pv.Version(version):
         msg = f"torch version {torch.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -800,9 +800,9 @@ def requires_executorch(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import executorch
 
-    if hasattr(executorch, "__version__") and pv.Version(
-        ".".join(executorch.__version__.split(".")[:2])
-    ) < pv.Version(version):
+    if hasattr(executorch, "__version__") and pv.Version(executorch.__version__) < pv.Version(
+        version
+    ):
         msg = f"torch version {executorch.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -817,9 +817,7 @@ def requires_monai(version: str = "", msg: str = "") -> Callable:
     except ImportError:
         return unittest.skip(msg or "monai is not installed")
 
-    if version and pv.Version(".".join(monai.__version__.split(".")[:2])) < pv.Version(
-        version
-    ):
+    if version and pv.Version(monai.__version__) < pv.Version(version):
         return unittest.skip(f"monai version {monai.__version__} < {version}: {msg}")
     return lambda x: x
 
@@ -833,9 +831,7 @@ def requires_vocos(version: str = "", msg: str = "") -> Callable:
     except ImportError:
         return unittest.skip(msg or "vocos not installed")
 
-    if version and pv.Version(".".join(vocos.__version__.split(".")[:2])) < pv.Version(
-        version
-    ):
+    if version and pv.Version(vocos.__version__) < pv.Version(version):
         msg = f"vocos version {vocos.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -850,9 +846,7 @@ def requires_pyinstrument(version: str = "", msg: str = "") -> Callable:
     except ImportError:
         return unittest.skip(msg or "pyinstrument is not installed")
 
-    if version and pv.Version(".".join(pyinstrument.__version__.split(".")[:2])) < pv.Version(
-        version
-    ):
+    if version and pv.Version(pyinstrument.__version__) < pv.Version(version):
         msg = f"torch version {pyinstrument.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -863,7 +857,7 @@ def requires_numpy(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import numpy
 
-    if pv.Version(".".join(numpy.__version__.split(".")[:2])) < pv.Version(version):
+    if pv.Version(numpy.__version__) < pv.Version(version):
         msg = f"numpy version {numpy.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -881,7 +875,7 @@ def requires_transformers(
         msg = f"diffusers not installed {msg}"
         return unittest.skip(msg)
 
-    v = pv.Version(".".join(transformers.__version__.split(".")[:2]))
+    v = pv.Version(transformers.__version__)
     if v < pv.Version(version):
         msg = f"transformers version {transformers.__version__} < {version}: {msg}"
         return unittest.skip(msg)
@@ -906,7 +900,7 @@ def requires_diffusers(
         msg = f"diffusers not installed {msg}"
         return unittest.skip(msg)
 
-    v = pv.Version(".".join(diffusers.__version__.split(".")[:2]))
+    v = pv.Version(diffusers.__version__)
     if v < pv.Version(version):
         msg = f"diffusers version {diffusers.__version__} < {version} {msg}"
         return unittest.skip(msg)
@@ -928,7 +922,7 @@ def requires_onnxscript(version: str, msg: str = "") -> Callable:
         # development version
         return lambda x: x
 
-    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(version):
+    if pv.Version(onnxscript.__version__) < pv.Version(version):
         msg = f"onnxscript version {onnxscript.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -943,7 +937,7 @@ def has_onnxscript(version: str, msg: str = "") -> Callable:
         # development version
         return True
 
-    if pv.Version(".".join(onnxscript.__version__.split(".")[:2])) < pv.Version(version):
+    if pv.Version(onnxscript.__version__) < pv.Version(version):
         msg = f"onnxscript version {onnxscript.__version__} < {version}: {msg}"
         return False
     return True
@@ -954,7 +948,7 @@ def requires_onnxruntime(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import onnxruntime
 
-    if pv.Version(".".join(onnxruntime.__version__.split(".")[:2])) < pv.Version(version):
+    if pv.Version(onnxruntime.__version__) < pv.Version(version):
         msg = f"onnxruntime version {onnxruntime.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -1018,7 +1012,7 @@ def requires_onnx(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import onnx
 
-    if pv.Version(".".join(onnx.__version__.split(".")[:2])) < pv.Version(version):
+    if pv.Version(onnx.__version__) < pv.Version(version):
         msg = f"onnx version {onnx.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x
@@ -1029,7 +1023,7 @@ def requires_onnx_array_api(version: str, msg: str = "") -> Callable:
     import packaging.version as pv
     import onnx_array_api
 
-    if pv.Version(".".join(onnx_array_api.__version__.split(".")[:3])) < pv.Version(version):
+    if pv.Version(onnx_array_api.__version__) < pv.Version(version):
         msg = f"onnx-array-api version {onnx_array_api.__version__} < {version}: {msg}"
         return unittest.skip(msg)
     return lambda x: x

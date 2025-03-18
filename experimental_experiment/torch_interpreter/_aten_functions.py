@@ -7781,6 +7781,31 @@ def aten_scan(
     return outputs
 
 
+def aten_masked_scatter(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    mask: T,
+    updates: T,
+    name: str = "masked_scatter",
+) -> T:
+    """masked_scatter"""
+    assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    imask = g.op.Cast(mask, to=itype, name=name)
+    res = g.op.Add(
+        g.op.Mul(x, g.op.Sub(np.array([1], dtype=dtype), imask, name=name), name=name),
+        g.op.Mul(updates, imask, name=name),
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        set_type_shape_binary_op(g, res, x, updates)
+    return res
+
+
 def aten_scatter_add(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

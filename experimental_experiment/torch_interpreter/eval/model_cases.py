@@ -363,7 +363,7 @@ class ControlFlowCondNonZero(torch.nn.Module):
     )
 
 
-if pv.Version(".".join(torch.__version__.split(".")[:2])) >= pv.Version("2.7"):
+if pv.Version(torch.__version__) >= pv.Version("2.7"):
 
     class ControlFlowScan(torch.nn.Module):
 
