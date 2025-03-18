@@ -162,7 +162,7 @@ class TestDocumentationExamples(ExtTestCase):
 
             # version
 
-            if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.5"):
+            if pv.Version(torch.__version__) < pv.Version("2.5"):
                 reason = "too long, pytorch < 2.5"
 
             if not reason and name in {
@@ -186,18 +186,18 @@ class TestDocumentationExamples(ExtTestCase):
                     "plot_llama_diff_export_301.py",
                 }
             ):
-                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
+                if pv.Version(torch.__version__) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 
             if name in {"plot_torch_linreg_101.py"}:
-                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.6"):
+                if pv.Version(torch.__version__) < pv.Version("2.6"):
                     reason = "requires torch 2.6"
 
             if not reason and (
                 name.startswith("plot_exporter_recipes_oe_")
                 or name == "plot_torch_export_with_dyamic_cache_201.py"
             ):
-                if pv.Version(".".join(torch.__version__.split(".")[:2])) < pv.Version("2.7"):
+                if pv.Version(torch.__version__) < pv.Version("2.7"):
                     reason = "requires torch 2.7"
 
             if not reason and name in {"plot_torch_sklearn_201.py", "plot_model_to_python.py"}:
