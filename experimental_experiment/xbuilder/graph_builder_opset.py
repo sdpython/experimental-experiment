@@ -254,3 +254,17 @@ class Opset:
         return self.Unsqueeze(
             args[0], axes=self._iaxes("Unsqueeze", args[1]), name=name, **kwargs
         )
+
+    def DFTAnyOpset(self, *args, name: str = "DFTAnyOpset", **kwargs):
+        if self.builder.main_opset < 20 or len(args) == 3:
+            axes = self._iaxes("DFT", args[2])
+            assert isinstance(axes, int), f"Unexpected value for axes={axes}"
+            if self.builder.main_opset < 20:
+                return self.DFT(*args[:2], name=name, axis=axes, **kwargs)
+            return self.DFT(*args, name=name, **kwargs)
+        if self.builder.main_opset >= 20:
+            if "axis" in kwargs:
+                axes = np.array(kwargs.pop("axis"), dtype=np.int64)
+                return self.DFT(*args, axes, name=name, **kwargs)
+            return self.DFT(*args, name=name, **kwargs)
+        return self.DFT(*args, name=name, **kwargs)

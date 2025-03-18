@@ -128,6 +128,47 @@ def set_type_shape_unary_op(
     return False
 
 
+def set_type_shape_unary_op_abs(
+    g: "GraphBuilder",  # noqa: F821
+    name: str,
+    input_name: str,
+    itype: Optional[int] = None,
+) -> bool:
+    """Sets the shape and type for an unary operator (abs, exp, ...)."""
+    if not itype and not g.has_type(input_name):
+        return False
+    if not itype:
+        itype = g.get_type(input_name)
+    if itype in (TensorProto.COMPLEX64, TensorProto.COMPLEX128):
+        if itype == TensorProto.COMPLEX64:
+            rtype = TensorProto.FLOAT
+        elif itype == TensorProto.COMPLEX128:
+            rtype = TensorProto.DOUBLE
+        else:
+            raise AssertionError(
+                f"Unexpected type {itype} for {input_name!r}{g.get_debug_msg()}"
+            )
+
+        g.set_type(name, rtype)
+        if g.has_shape(input_name):
+            shape = g.get_shape(input_name)
+            g.set_shape(name, shape)
+            return True
+        if g.has_rank(input_name):
+            g.set_rank(name, g.get_rank(input_name))
+            return True
+        return False
+
+    g.set_type(name, itype)
+    if g.has_shape(input_name):
+        g.set_shape(name, g.get_shape(input_name))
+        return True
+    if g.has_rank(input_name):
+        g.set_rank(name, g.get_rank(input_name))
+        return True
+    return False
+
+
 def set_type_shape_binary_op(
     g: "GraphBuilder",  # noqa: F821
     name: str,
@@ -1363,7 +1404,10 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
     elif node.op_type in self._op_type_unary_like:
-        r = set_type_shape_unary_op(self, node.output[0], node.input[0])
+        if node.op_type == "Abs":
+            r = set_type_shape_unary_op_abs(self, node.output[0], node.input[0])
+        else:
+            r = set_type_shape_unary_op(self, node.output[0], node.input[0])
         assert r or not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
