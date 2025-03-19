@@ -39,7 +39,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class ScanModel(torch.nn.Module):
             def forward(self, x):
                 init = torch.zeros_like(x[0])
-                carry, out = torch._higher_order_ops.scan.scan(add, [init], [x], dim=0)
+                carry, out = torch.ops.higher_order.scan(add, [init], [x], dim=0)
                 return carry
 
         x = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32)
