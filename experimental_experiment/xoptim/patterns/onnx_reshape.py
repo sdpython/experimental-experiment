@@ -83,6 +83,8 @@ class ReduceReshapePattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             axes = tuple(g.get_computed_constant(node.input[1]))
         else:
+            if not g.has_rank(node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
             att = g.get_attribute(node, "axes", exc=False)
             axes = tuple(range(g.get_rank(node.input[0]))) if att is None else tuple(att.ints)
 

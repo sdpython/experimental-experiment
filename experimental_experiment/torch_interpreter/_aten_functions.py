@@ -2879,7 +2879,7 @@ def aten__fftn_onnx(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    n: Optional[int],
+    n: Optional[Union[int, Tuple[int, ...]]],
     dim: List[int],
     norm: Union[str, int],
     inverse: bool,
@@ -2889,8 +2889,15 @@ def aten__fftn_onnx(
     """_fftn_onnx"""
     assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
     assert (
-        dim is None or len(dim) == 1
-    ), f"FFT Not implemented yet when dim={dim}{g.get_debug_msg()}"
+        n is not None or dim is not None
+    ), f"FFT Not implemented yet when dim={dim} and n={n}{g.get_debug_msg()}"
+    if n is None:
+        n = [None for _ in range(len(dim))]
+    assert (
+        dim is not None and n is not None and all_int(dim) and len(dim) == len(n)
+    ), f"FFT Not implemented yet when dim={dim} and n={n}{g.get_debug_msg()}"
+    n_fft = len(dim)
+
     float_types = {
         TensorProto.FLOAT,
         TensorProto.DOUBLE,
@@ -2903,39 +2910,61 @@ def aten__fftn_onnx(
 
     nsq = g.op.UnsqueezeAnyOpset(x, np.array([-1], dtype=np.int64), name=name)
 
-    res = g.op.DFTAnyOpset(
-        nsq,
-        None if n is None else np.array(n, dtype=np.int64),
-        None if dim is None else np.array(dim[0] + (-1 if dim[0] < 0 else 0), dtype=np.int64),
-        inverse=inverse,
-        onesided=onesided,
-        name=name,
-    )
+    dims, ns = [], []
+    if n_fft == 1:
+        d_ = dim[0] + (-1 if dim[0] < 0 else 0)
+        res = g.op.DFTAnyOpset(
+            nsq,
+            None if n[0] is None else np.array(n[0], dtype=np.int64),
+            np.array(d_, dtype=np.int64),
+            inverse=inverse,
+            onesided=onesided,
+            name=name,
+        )
+        dims.append(d_)
+        ns.append(n)
+    else:
+        res = nsq
+        dims, ns = [], []
+        for axis, lth in zip(dim, n):
+            d_ = axis + (-1 if axis < 0 else 0)
+            res = g.op.DFTAnyOpset(
+                res,
+                None if lth is None else np.array(lth, dtype=np.int64),
+                np.array(d_, dtype=np.int64),
+                inverse=inverse,
+                onesided=onesided,
+                name=name,
+            )
+            ns.append(lth)
+            dims.append(d_)
 
     # Normalization constant
     sample = None
     if norm in (1, "forward", 2, "ortho"):
-        if n is None:
-            if g.has_shape(x):
-                shape = g.get_shape(x)
-                d = shape[-1 if dim is None else dim[0]]
-                if isinstance(d, int):
-                    dtype = tensor_dtype_to_np_dtype(ritype)
-                    sample = np.array([d], dtype=dtype)
-            if sample is None:
-                i = -1 if dim is None else dim[0]
-                sample = g.op.Cast(
-                    (
-                        g.op.Shape(x, start=i, name=name)
-                        if i == -1
-                        else g.op.Shape(x, start=i, end=i + 1, name=name)
-                    ),
-                    to=itype,
-                    name=name,
+        # rk = g.get_rank(x)
+        ones = []
+        for axis, lth in zip(dim, n):
+            if lth is None:
+                s = (
+                    g.op.Shape(x, start=axis, name=name)
+                    if axis == -1
+                    else g.op.Shape(x, start=axis, end=axis + 1, name=name)
                 )
+                ones.append(s)
+            else:
+                ones.append(lth)
+
+        conc = [(np.array(i, dtype=np.int64) if isinstance(i, int) else i) for i in ones]
+        if len(conc) == 1:
+            sample = g.op.Cast(conc[0], to=ritype, name=name)
         else:
-            dtype = tensor_dtype_to_np_dtype(itype)
-            sample = np.array([n], dtype=dtype)
+            sample = g.op.ReduceProdAnyOpset(
+                g.op.Cast(g.op.Concat(*conc, axis=0, name=name), to=ritype, name=name),
+                g.ZERO,
+                name=name,
+                keepdims=1,
+            )
 
     # Normalization
     if norm in (1, "forward"):
@@ -3010,8 +3039,32 @@ def aten_fft_fft(
         sts,
         outputs,
         x,
-        n=n,
+        n=[n] if isinstance(n, int) else n,
         dim=[dim] if isinstance(dim, int) else dim,
+        norm=norm,
+        name=name,
+        onesided=False,
+    )
+
+
+def aten_fft_fft2(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    s: Optional[Tuple[int, int]] = None,
+    dim: Tuple[int, int] = -1,
+    norm: Optional[str] = None,
+    name: str = "fft_fft",
+) -> T:
+    """fft_fft2"""
+    return aten__fft_r2c(
+        g,
+        sts,
+        outputs,
+        x,
+        n=s,
+        dim=dim,
         norm=norm,
         name=name,
         onesided=False,
