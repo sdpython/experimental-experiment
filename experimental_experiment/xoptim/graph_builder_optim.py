@@ -256,6 +256,9 @@ class GraphBuilderPatternOptimization:
         elif cst_shape not in (tuple(), (1,)):
             return False
         cst = self.get_computed_constant(name)
+        if cst is None:
+            # Cannot determine if it is a constant.
+            return False
         assert hasattr(cst, "numpy") or isinstance(
             cst, np.ndarray
         ), f"Unexpected type for constant {name}!r, type is {type(cst)}"

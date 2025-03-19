@@ -228,6 +228,16 @@ class Opset:
             args[0], axes=self._iaxes("ReduceMean", args[1]), name=name, **kwargs
         )
 
+    def ReduceProdAnyOpset(self, *args, name: str = "ReduceProdAnyOpset", **kwargs):
+        if len(args) == 1:
+            return self.ReduceProd(*args, name=name, **kwargs)
+        assert len(args) == 2, f"ReduceProdAnyOpset expects 2 arguments not {len(args)}"
+        if self.builder.main_opset >= 18:
+            return self.ReduceProd(*args, name=name, **kwargs)
+        return self.ReduceProd(
+            args[0], axes=self._iaxes("ReduceProd", args[1]), name=name, **kwargs
+        )
+
     def ReduceSumAnyOpset(self, *args, name: str = "ReduceSumAnyOpset", **kwargs):
         if len(args) == 1:
             return self.ReduceSum(*args, name=name, **kwargs)
