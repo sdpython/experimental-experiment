@@ -416,7 +416,7 @@ def investigate_onnxruntime_issue(
     disable_aot_function_inlining: Optional[bool] = None,
     use_training_api: Optional[bool] = None,
     onnx_to_session: Optional[
-        Callable[onnx.ModelProto, "onnxruntime.InferenceSession"]  # noqa: F821
+        Union[str, Callable[onnx.ModelProto, "onnxruntime.InferenceSession"]]  # noqa: F821
     ] = None,
     # if model needs to be run.
     feeds: Optional[Union[Dict[str, torch.Tensor], Dict[str, np.ndarray]]] = None,
@@ -440,13 +440,28 @@ def investigate_onnxruntime_issue(
     :param disable_aot_function_inlining:  see :class:`onnxruntime.SessionOptions`
     :param use_training_api: use onnxruntime-traning API
     :param onnx_to_session: function to load a model into an inference session if
-        automated way implemented in this function is not enough
+        automated way implemented in this function is not enough,
+        if it is equal ``cpu_session``, the callable becomes:
+        ``lambda model: onnxruntime.InferenceSession(
+        model.SerializeToString(), providers=["CPUExecutionProvider"])``
     :param feeds: run onnxruntime as well
     :param verbosity: verbosity level
     :param dump_filename: if not None, the function dumps the last model run
     :param infer_shapes: run shape inference
 
-    Example:
+    The most simple use:
+
+    .. code-block:: python
+
+        investigate_onnxruntime_issue(
+            model,
+            feeds=feeds,
+            verbose=10,
+            dump_filename="test_investigate_onnxruntime_issue_callable.onnx",
+            onnx_to_session="cpu_session",
+        )
+
+    Full example:
 
     .. runpython::
         :showcode:
@@ -504,11 +519,21 @@ def investigate_onnxruntime_issue(
             print("[investigate_onnxruntime_issue] run shape inference")
         onx = onnx.shape_inference.infer_shapes(onx)
 
-    cls = (
-        InferenceSessionForNumpy
-        if feeds is None or any(isinstance(v, np.ndarray) for v in feeds.values())
-        else InferenceSessionForTorch
-    )
+    if isinstance(onnx_to_session, str):
+        if onnx_to_session == "cpu_session":
+            import onnxruntime
+
+            onnx_to_session = lambda model: onnxruntime.InferenceSession(  # noqa: E731
+                model.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+        else:
+            raise ValueError(f"Unexpected value onnx_to_session={onnx_to_session!r}")
+    else:
+        cls = (
+            InferenceSessionForNumpy
+            if feeds is None or any(isinstance(v, np.ndarray) for v in feeds.values())
+            else InferenceSessionForTorch
+        )
     if verbose and not onnx_to_session:
         print(f"[investigate_onnxruntime_issue] cls={cls}")
 

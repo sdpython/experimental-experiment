@@ -193,6 +193,34 @@ class TestOrtSession(ExtTestCase):
             dump_filename="test_investigate_onnxruntime_issue_numpy.onnx",
         )
 
+    @hide_stdout()
+    def test_investigate_onnxruntime_issue_callable(self):
+        import onnxruntime
+
+        model, feeds, _expected = self._get_model()
+        feeds = {k: v.numpy() for k, v in feeds.items()}
+        investigate_onnxruntime_issue(
+            model,
+            feeds=feeds,
+            verbose=10,
+            dump_filename="test_investigate_onnxruntime_issue_callable.onnx",
+            onnx_to_session=lambda model: onnxruntime.InferenceSession(
+                model.SerializeToString(), providers=["CPUExecutionProvider"]
+            ),
+        )
+
+    @hide_stdout()
+    def test_investigate_onnxruntime_issue_callable_str(self):
+        model, feeds, _expected = self._get_model()
+        feeds = {k: v.numpy() for k, v in feeds.items()}
+        investigate_onnxruntime_issue(
+            model,
+            feeds=feeds,
+            verbose=10,
+            dump_filename="test_investigate_onnxruntime_issue_callable.onnx",
+            onnx_to_session="cpu_session",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
