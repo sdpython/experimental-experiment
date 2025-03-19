@@ -1,27 +1,11 @@
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import numpy as np
 import torch
 from torch._C import _from_dlpack
 
 
-class InferenceSessionForTorch:
-    """
-    Wraps an `onnxruntime.InferenceSession` to overload method `run`
-    to support :class:`torch.Tensor`.
-
-    :param sess: model or inference session
-    :param session_options: options
-    :param providers: providers
-    :param nvtx: enable nvidia events
-    :param providers: `None`, `"CPU"`, `"CUDA"` or a list of providers
-    :param graph_optimization_level: see :class:`onnxruntime.SessionOptions`
-    :param log_severity_level: see :class:`onnxruntime.SessionOptions`
-    :param log_verbosity_level: see :class:`onnxruntime.SessionOptions`
-    :param optimized_model_filepath:  see :class:`onnxruntime.SessionOptions`
-    :param disable_aot_function_inlining:  see :class:`onnxruntime.SessionOptions`
-    :param use_training_api: use onnxruntime-traning API
-    """
+class _InferenceSession:
 
     @classmethod
     def has_onnxruntime_training(cls):
@@ -45,7 +29,7 @@ class InferenceSessionForTorch:
 
     def __init__(
         self,
-        sess: Union[onnx.ModelProto, "onnxruntime.InferenceSession"],  # noqa: F821
+        sess: Union[onnx.ModelProto, str, "onnxruntime.InferenceSession"],  # noqa: F821
         session_options: Optional["onnxruntime.SessionOptions"] = None,  # noqa: F821
         providers: Optional[Union[str, List[str]]] = None,
         nvtx: bool = False,
@@ -124,6 +108,121 @@ class InferenceSessionForTorch:
             self.has_onnxruntime_training() if use_training_api is None else use_training_api
         )
 
+        DEVICES = {
+            -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
+        }
+
+        if torch.cuda.device_count() > 0:
+            for i in range(torch.cuda.device_count()):
+                DEVICES[i] = ORTC.OrtDevice(
+                    ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
+                )
+
+        self.DEVICES = DEVICES
+        self._torch_from_dlpack = _from_dlpack
+
+
+class InferenceSessionForNumpy(_InferenceSession):
+    """
+    Wraps an `onnxruntime.InferenceSession` to overload method `run`
+    to support :class:`np.ndarray`.
+
+    :param sess: model or inference session
+    :param session_options: options
+    :param providers: providers
+    :param nvtx: enable nvidia events
+    :param providers: `None`, `"CPU"`, `"CUDA"` or a list of providers
+    :param graph_optimization_level: see :class:`onnxruntime.SessionOptions`
+    :param log_severity_level: see :class:`onnxruntime.SessionOptions`
+    :param log_verbosity_level: see :class:`onnxruntime.SessionOptions`
+    :param optimized_model_filepath:  see :class:`onnxruntime.SessionOptions`
+    :param disable_aot_function_inlining:  see :class:`onnxruntime.SessionOptions`
+    :param use_training_api: use onnxruntime-traning API
+    """
+
+    def __init__(
+        self,
+        sess: Union[onnx.ModelProto, str, "onnxruntime.InferenceSession"],  # noqa: F821
+        session_options: Optional["onnxruntime.SessionOptions"] = None,  # noqa: F821
+        providers: Optional[Union[str, List[str]]] = None,
+        nvtx: bool = False,
+        enable_profiling: bool = False,
+        graph_optimization_level: Optional[int] = None,
+        log_severity_level: Optional[int] = None,
+        log_verbosity_level: Optional[int] = None,
+        optimized_model_filepath: Optional[str] = None,
+        disable_aot_function_inlining: Optional[bool] = None,
+        use_training_api: Optional[bool] = None,
+    ):
+        super().__init__(
+            sess,
+            session_options=session_options,
+            providers=providers,
+            nvtx=nvtx,
+            enable_profiling=enable_profiling,
+            graph_optimization_level=graph_optimization_level,
+            log_severity_level=log_severity_level,
+            log_verbosity_level=log_verbosity_level,
+            optimized_model_filepath=optimized_model_filepath,
+            disable_aot_function_inlining=disable_aot_function_inlining,
+            use_training_api=use_training_api,
+        )
+
+    def run(
+        self, output_names: Optional[List[str]], feeds: Dict[str, np.ndarray]
+    ) -> List[np.ndarray]:
+        """
+        Calls :meth:`onnxruntime.InferenceSession.run`.
+        """
+        return self.sess.run(output_names, feeds)
+
+
+class InferenceSessionForTorch(_InferenceSession):
+    """
+    Wraps an `onnxruntime.InferenceSession` to overload method `run`
+    to support :class:`torch.Tensor`.
+
+    :param sess: model or inference session
+    :param session_options: options
+    :param providers: providers
+    :param nvtx: enable nvidia events
+    :param providers: `None`, `"CPU"`, `"CUDA"` or a list of providers
+    :param graph_optimization_level: see :class:`onnxruntime.SessionOptions`
+    :param log_severity_level: see :class:`onnxruntime.SessionOptions`
+    :param log_verbosity_level: see :class:`onnxruntime.SessionOptions`
+    :param optimized_model_filepath:  see :class:`onnxruntime.SessionOptions`
+    :param disable_aot_function_inlining:  see :class:`onnxruntime.SessionOptions`
+    :param use_training_api: use onnxruntime-traning API
+    """
+
+    def __init__(
+        self,
+        sess: Union[onnx.ModelProto, str, "onnxruntime.InferenceSession"],  # noqa: F821
+        session_options: Optional["onnxruntime.SessionOptions"] = None,  # noqa: F821
+        providers: Optional[Union[str, List[str]]] = None,
+        nvtx: bool = False,
+        enable_profiling: bool = False,
+        graph_optimization_level: Optional[int] = None,
+        log_severity_level: Optional[int] = None,
+        log_verbosity_level: Optional[int] = None,
+        optimized_model_filepath: Optional[str] = None,
+        disable_aot_function_inlining: Optional[bool] = None,
+        use_training_api: Optional[bool] = None,
+    ):
+        super().__init__(
+            sess,
+            session_options=session_options,
+            providers=providers,
+            nvtx=nvtx,
+            enable_profiling=enable_profiling,
+            graph_optimization_level=graph_optimization_level,
+            log_severity_level=log_severity_level,
+            log_verbosity_level=log_verbosity_level,
+            optimized_model_filepath=optimized_model_filepath,
+            disable_aot_function_inlining=disable_aot_function_inlining,
+            use_training_api=use_training_api,
+        )
+
         self.TORCH_DTYPE_TO_ONNX_DTYPE = {
             torch.float16: onnx.TensorProto.FLOAT16,
             torch.bfloat16: onnx.TensorProto.BFLOAT16,
@@ -150,19 +249,6 @@ class InferenceSessionForTorch:
             torch.int64: np.int64,
             torch.bool: np.bool_,
         }
-
-        DEVICES = {
-            -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
-        }
-
-        if torch.cuda.device_count() > 0:
-            for i in range(torch.cuda.device_count()):
-                DEVICES[i] = ORTC.OrtDevice(
-                    ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
-                )
-
-        self.DEVICES = DEVICES
-        self._torch_from_dlpack = _from_dlpack
 
     def _get_ortvalues_from_torch_tensors(
         self, tensors: Tuple[torch.Tensor, ...], n_outputs: int
@@ -300,3 +386,116 @@ class InferenceSessionForTorch:
             self.torch.cuda.nvtx.range_pop()
         pth_outputs = self._ortvalues_to_torch_tensor(ort_outputs)
         return pth_outputs
+
+
+def investigate_onnxruntime_issue(
+    proto: Union[onnx.ModelProto, str],  # noqa: F821
+    session_options: Optional["onnxruntime.SessionOptions"] = None,  # noqa: F821
+    providers: Optional[Union[str, List[str]]] = None,
+    nvtx: bool = False,
+    enable_profiling: bool = False,
+    graph_optimization_level: Optional[int] = None,
+    log_severity_level: Optional[int] = None,
+    log_verbosity_level: Optional[int] = None,
+    optimized_model_filepath: Optional[str] = None,
+    disable_aot_function_inlining: Optional[bool] = None,
+    use_training_api: Optional[bool] = None,
+    onnx_to_session: Optional[
+        Callable[onnx.ModelProto, "onnxruntime.InferenceSession"]  # noqa: F821
+    ] = None,
+    # if model needs to be run.
+    feeds: Optional[Union[Dict[str, torch.Tensor], Dict[str, np.ndarray]]] = None,
+    verbose: int = 0,
+    dump_filename: Optional[str] = None,
+    infer_shapes: bool = True,
+):
+    """
+    :param proto: model or inference session
+    :param session_options: options
+    :param providers: providers
+    :param nvtx: enable nvidia events
+    :param providers: `None`, `"CPU"`, `"CUDA"` or a list of providers
+    :param graph_optimization_level: see :class:`onnxruntime.SessionOptions`
+    :param log_severity_level: see :class:`onnxruntime.SessionOptions`
+    :param log_verbosity_level: see :class:`onnxruntime.SessionOptions`
+    :param optimized_model_filepath:  see :class:`onnxruntime.SessionOptions`
+    :param disable_aot_function_inlining:  see :class:`onnxruntime.SessionOptions`
+    :param use_training_api: use onnxruntime-traning API
+    :param onnx_to_session: function to load a model into an inference session if
+        automated way implemented in this function is not enough
+    :param feeds: run onnxruntime as well
+    :param verbosity: verbosity level
+    :param dump_filename: if not None, the function dumps the last model run
+    :param infer_shapes: run shape inference
+    """
+    onx = (
+        proto
+        if isinstance(proto, onnx.ModelProto)
+        else onnx.load(proto, load_external_data=False)
+    )
+    input_names = [i.name for i in onx.graph.input]
+    if verbose:
+        print(
+            f"[investigate_onnxruntime_issue] found "
+            f"{len(onx.graph.node)} nodes and {len(input_names)} inputs"
+        )
+    if infer_shapes:
+        if verbose:
+            print("[investigate_onnxruntime_issue] run shape inference")
+        onx = onnx.shape_inference.infer_shapes(onx)
+
+    cls = (
+        InferenceSessionForNumpy
+        if feeds is None or any(isinstance(v, np.ndarray) for v in feeds.values())
+        else InferenceSessionForTorch
+    )
+    if verbose and not onnx_to_session:
+        print(f"[investigate_onnxruntime_issue] cls={cls}")
+
+    for i in range(len(onx.graph.node)):
+        node = onx.graph.node[i]
+        if verbose:
+            print(
+                f"[investigate_onnxruntime_issue] + node {i}: "
+                f"{node.op_type}({', '.join(node.input)}) -> "
+                f"{', '.join(node.output)}"
+            )
+        e = onnx.utils.Extractor(onx)
+        extracted = e.extract_model(input_names, node.output)
+        if dump_filename:
+            if verbose > 1:
+                print(f"[investigate_onnxruntime_issue]   save into {dump_filename}")
+            onnx.save(extracted, dump_filename)
+
+        if verbose > 1:
+            print("[investigate_onnxruntime_issue]   create the session")
+
+        if onnx_to_session:
+            sess = onnx_to_session(onx)
+        else:
+            sess = cls(
+                extracted,
+                session_options=session_options,
+                providers=providers,
+                nvtx=nvtx,
+                enable_profiling=enable_profiling,
+                graph_optimization_level=graph_optimization_level,
+                log_severity_level=log_severity_level,
+                log_verbosity_level=log_verbosity_level,
+                optimized_model_filepath=optimized_model_filepath,
+                disable_aot_function_inlining=disable_aot_function_inlining,
+                use_training_api=use_training_api,
+            )
+
+        if not feeds:
+            if verbose > 1:
+                print("[investigate_onnxruntime_issue]   session created")
+            continue
+
+        if verbose > 1:
+            print("[investigate_onnxruntime_issue]   running session")
+
+        sess.run(None, feeds)
+
+    if verbose > 0:
+        print("[investigate_onnxruntime_issue] done.")

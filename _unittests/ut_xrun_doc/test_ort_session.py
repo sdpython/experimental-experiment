@@ -7,10 +7,15 @@ import torch
 from torch._C import _from_dlpack
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    hide_stdout,
     requires_onnxruntime_training,
     requires_cuda,
 )
-from experimental_experiment.ort_session import InferenceSessionForTorch
+from experimental_experiment.ort_session import (
+    InferenceSessionForNumpy,
+    InferenceSessionForTorch,
+    investigate_onnxruntime_issue,
+)
 
 TFLOAT = onnx.TensorProto.FLOAT
 
@@ -96,7 +101,14 @@ class TestOrtSession(ExtTestCase):
         ptr3 = tv.data_ptr()
         self.assertEqual(ptr, ptr3)
 
-    def test_torch_cpu_guess_cpu(self):
+    def test_numpy(self):
+        model, feeds, expected = self._get_model()
+        wrap = InferenceSessionForNumpy(model, providers="cpu")
+        got = wrap.run(None, {k: v.numpy() for k, v in feeds.items()})
+        self.assertIsInstance(got[0], np.ndarray)
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_torch_guess_cpu(self):
         model, feeds, expected = self._get_model()
         wrap = InferenceSessionForTorch(model, providers="cpu", use_training_api=True)
         got = wrap.run(None, feeds)
@@ -104,14 +116,14 @@ class TestOrtSession(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     @requires_onnxruntime_training(True)
-    def test_torch_cpu_training_cpu(self):
+    def test_torch_training_cpu(self):
         model, feeds, expected = self._get_model()
         wrap = InferenceSessionForTorch(model, providers="cpu", use_training_api=True)
         got = wrap.run(None, feeds)
         self.assertIsInstance(got[0], torch.Tensor)
         self.assertEqualArray(expected[0], got[0])
 
-    def test_torch_cpu_notraining_cpu(self):
+    def test_torch_notraining_cpu(self):
         model, feeds, expected = self._get_model()
         wrap = InferenceSessionForTorch(model, providers="cpu", use_training_api=False)
         got = wrap.run(None, feeds)
@@ -119,7 +131,7 @@ class TestOrtSession(ExtTestCase):
         self.assertEqualArray(expected[0], got[0])
 
     @requires_cuda()
-    def test_torch_cpu_guess_cuda(self):
+    def test_torch_guess_cuda(self):
         model, feeds, expected = self._get_model()
         feeds = {k: v.to("cuda") for k, v in feeds.items()}
         expected = tuple(t.to("cuda") for t in expected)
@@ -131,7 +143,7 @@ class TestOrtSession(ExtTestCase):
 
     @requires_cuda()
     @requires_onnxruntime_training(True)
-    def test_torch_cpu_training_cuda(self):
+    def test_torch_training_cuda(self):
         model, feeds, expected = self._get_model()
         feeds = {k: v.to("cuda") for k, v in feeds.items()}
         expected = tuple(t.to("cuda") for t in expected)
@@ -142,7 +154,7 @@ class TestOrtSession(ExtTestCase):
         self.assertEqual(got[0].get_device(), 0)
 
     @requires_cuda()
-    def test_torch_cpu_notraining_cuda(self):
+    def test_torch_notraining_cuda(self):
         model, feeds, expected = self._get_model()
         feeds = {k: v.to("cuda") for k, v in feeds.items()}
         expected = tuple(t.to("cuda") for t in expected)
@@ -152,6 +164,27 @@ class TestOrtSession(ExtTestCase):
         # The output is not necessarily on CUDA.
         self.assertEqualArray(expected[0].cpu(), got[0].cpu())
         # self.assertEqual(got[0].get_device(), 0)
+
+    @hide_stdout()
+    def test_investigate_onnxruntime_issue_torch(self):
+        model, feeds, _expected = self._get_model()
+        investigate_onnxruntime_issue(
+            model,
+            feeds=feeds,
+            verbose=10,
+            dump_filename="test_investigate_onnxruntime_issue_torch.onnx",
+        )
+
+    @hide_stdout()
+    def test_investigate_onnxruntime_issue_numpy(self):
+        model, feeds, _expected = self._get_model()
+        feeds = {k: v.numpy() for k, v in feeds.items()}
+        investigate_onnxruntime_issue(
+            model,
+            feeds=feeds,
+            verbose=10,
+            dump_filename="test_investigate_onnxruntime_issue_numpy.onnx",
+        )
 
 
 if __name__ == "__main__":
