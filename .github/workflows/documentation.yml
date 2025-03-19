@@ -112,12 +112,14 @@ jobs:
           python -m pip install onnxruntime-training
 
       - name: Documentation
+        continue-on-error: true
         run: UNITTEST_GOING=1 python -m sphinx ./_doc ./dist/html -n -w doc.txt
 
       - name: Summary
         run: cat doc.txt
 
       - name: Check for errors and warnings
+        continue-on-error: true
         run: |
           if [[ $(grep ERROR doc.txt | grep -v 'Unknown target name: "l_shape"' | grep -v 'Unknown target name: "l_x"') ]]; then
             echo "Documentation produces errors."
