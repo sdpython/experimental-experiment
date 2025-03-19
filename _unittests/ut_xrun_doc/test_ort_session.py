@@ -108,6 +108,13 @@ class TestOrtSession(ExtTestCase):
         self.assertIsInstance(got[0], np.ndarray)
         self.assertEqualArray(expected[0], got[0])
 
+    def test_numpy_no_optimization(self):
+        model, feeds, expected = self._get_model()
+        wrap = InferenceSessionForNumpy(model, providers="cpu", graph_optimization_level=False)
+        got = wrap.run(None, {k: v.numpy() for k, v in feeds.items()})
+        self.assertIsInstance(got[0], np.ndarray)
+        self.assertEqualArray(expected[0], got[0])
+
     def test_torch_guess_cpu(self):
         model, feeds, expected = self._get_model()
         wrap = InferenceSessionForTorch(model, providers="cpu", use_training_api=True)

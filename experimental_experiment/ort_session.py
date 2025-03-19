@@ -34,7 +34,9 @@ class _InferenceSession:
         providers: Optional[Union[str, List[str]]] = None,
         nvtx: bool = False,
         enable_profiling: bool = False,
-        graph_optimization_level: Optional[int] = None,
+        graph_optimization_level: Union[
+            "onnxruntime.GraphOptimizationLevel", bool  # noqa: F821
+        ] = None,
         log_severity_level: Optional[int] = None,
         log_verbosity_level: Optional[int] = None,
         optimized_model_filepath: Optional[str] = None,
@@ -64,7 +66,14 @@ class _InferenceSession:
                 if log_verbosity_level is not None:
                     session_options.log_verbosity_level = log_verbosity_level
                 if graph_optimization_level is not None:
-                    session_options.graph_optimization_level = graph_optimization_level
+                    if isinstance(graph_optimization_level, bool):
+                        session_options.graph_optimization_level = (
+                            onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+                            if graph_optimization_level
+                            else onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+                        )
+                    else:
+                        session_options.graph_optimization_level = graph_optimization_level
                 if disable_aot_function_inlining:
                     session_options.add_session_config_entry(
                         "session.disable_aot_function_inlining", "1"
@@ -147,7 +156,9 @@ class InferenceSessionForNumpy(_InferenceSession):
         providers: Optional[Union[str, List[str]]] = None,
         nvtx: bool = False,
         enable_profiling: bool = False,
-        graph_optimization_level: Optional[int] = None,
+        graph_optimization_level: Union[
+            "onnxruntime.GraphOptimizationLevel", bool  # noqa: F821
+        ] = None,
         log_severity_level: Optional[int] = None,
         log_verbosity_level: Optional[int] = None,
         optimized_model_filepath: Optional[str] = None,
@@ -202,7 +213,9 @@ class InferenceSessionForTorch(_InferenceSession):
         providers: Optional[Union[str, List[str]]] = None,
         nvtx: bool = False,
         enable_profiling: bool = False,
-        graph_optimization_level: Optional[int] = None,
+        graph_optimization_level: Union[
+            "onnxruntime.GraphOptimizationLevel", bool  # noqa: F821
+        ] = None,
         log_severity_level: Optional[int] = None,
         log_verbosity_level: Optional[int] = None,
         optimized_model_filepath: Optional[str] = None,
@@ -394,7 +407,9 @@ def investigate_onnxruntime_issue(
     providers: Optional[Union[str, List[str]]] = None,
     nvtx: bool = False,
     enable_profiling: bool = False,
-    graph_optimization_level: Optional[int] = None,
+    graph_optimization_level: Union[
+        "onnxruntime.GraphOptimizationLevel", bool  # noqa: F821
+    ] = None,
     log_severity_level: Optional[int] = None,
     log_verbosity_level: Optional[int] = None,
     optimized_model_filepath: Optional[str] = None,
@@ -410,6 +425,9 @@ def investigate_onnxruntime_issue(
     infer_shapes: bool = True,
 ):
     """
+    Invgestigates a crashing model. It tries every node until
+    it crashes by adding the ones one by one in the model.
+
     :param proto: model or inference session
     :param session_options: options
     :param providers: providers
@@ -427,6 +445,48 @@ def investigate_onnxruntime_issue(
     :param verbosity: verbosity level
     :param dump_filename: if not None, the function dumps the last model run
     :param infer_shapes: run shape inference
+
+    Example:
+
+    .. runpython::
+        :showcode:
+
+        import numpy as np
+        import onnx
+        import onnx.helper as oh
+        from experimental_experiment.ort_session import investigate_onnxruntime_issue
+
+        TFLOAT = onnx.TensorProto.FLOAT
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["x", "y"], ["gggg"]),
+                    oh.make_node("Add", ["gggg", "z"], ["final"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("x", TFLOAT, [None, None]),
+                    oh.make_tensor_value_info("y", TFLOAT, [None, None]),
+                    oh.make_tensor_value_info("z", TFLOAT, [None, None]),
+                ],
+                [oh.make_tensor_value_info("final", TFLOAT, [None, None])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        onnx.checker.check_model(model)
+        feeds = {
+            "x": np.random.rand(5, 6).astype(np.float32),
+            "y": np.random.rand(5, 6).astype(np.float32),
+            "z": np.random.rand(5, 6).astype(np.float32),
+        }
+        investigate_onnxruntime_issue(
+            model,
+            feeds=feeds,
+            verbose=1,
+            graph_optimization_level=False,
+            dump_filename="last_issue.onnx",
+        )
     """
     onx = (
         proto
