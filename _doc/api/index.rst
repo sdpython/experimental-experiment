@@ -36,6 +36,7 @@ API
     mini_onnx_builder
     model_run
     onnx_tools
+    ort_session
     torch_test_helper
 
 
