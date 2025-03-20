@@ -737,23 +737,27 @@ class TestPieceByPiece(ExtTestCase):
             def forward(self, x, cache):
                 return self.sub(x, self.subcache(cache))
 
-        cache = make_dynamic_cache([(torch.ones((5, 6)), torch.ones((5, 6)) + 2)])
+        cache = make_dynamic_cache([(torch.ones((5, 6, 2, 2)), torch.ones((5, 6, 2, 2)) + 2)])
         model = Model()
-        x = torch.randn((5, 6))
+        x = torch.randn((5, 6, 2, 2))
         y = model(x, cache)
         self.assertNotEmpty(y)
 
-        cache2 = make_dynamic_cache([(torch.ones((6, 6)), torch.ones((6, 6)) + 2)])
+        cache2 = make_dynamic_cache([(torch.ones((6, 6, 2, 2)), torch.ones((6, 6, 2, 2)) + 2)])
 
         inputs = [
-            ((torch.randn((5, 6)), cache), {}),
-            ((torch.randn((6, 6)), cache2), {}),
+            ((torch.randn((5, 6, 2, 2)), cache), {}),
+            ((torch.randn((6, 6, 2, 2)), cache2), {}),
         ]
 
         expected_dyn_shapes = "(({0: DYN}, [[{0: DYN}], [{0: DYN}]]), {})"
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
-        got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        got = (
+            str(dyn_shapes)
+            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
+            .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        )
         self.assertEqual(expected_dyn_shapes, got)
 
         expected = [
@@ -832,7 +836,11 @@ class TestPieceByPiece(ExtTestCase):
         expected_dyn_shapes = "(({0: DYN}, {0: DYN}), {})"
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
-        got = str(dyn_shapes).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        got = (
+            str(dyn_shapes)
+            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
+            .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        )
         self.assertEqual(expected_dyn_shapes, got)
 
         expected = [
@@ -1179,10 +1187,18 @@ class TestPieceByPiece(ExtTestCase):
 
         diag = trace_execution_piece_by_piece(model, inputs)
         ds = diag.guess_dynamic_shapes()
-        sds = str(ds).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        sds = (
+            str(ds)
+            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
+            .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        )
         self.assertEqual(sds, "(({0: DYN},), {'y': {0: DYN}})")
         choose = choose_kwargs_for_dynamic_shapes(*ds, diag.forward_positioned_parameter_names)
-        schoose = str(choose).replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        schoose = (
+            str(choose)
+            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
+            .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+        )
         self.assertEqual(schoose, "{'y': {0: DYN}, 'x': {0: DYN}}")
         ep = diag.try_export(
             exporter="fx",

@@ -2884,7 +2884,7 @@ def aten__fftn_onnx(
     norm: Union[str, int],
     inverse: bool,
     onesided: bool,
-    name: str = "_fft_r2c",
+    name: str = "_fftn_onnx",
 ) -> T:
     """_fftn_onnx"""
     assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
@@ -2917,8 +2917,8 @@ def aten__fftn_onnx(
             nsq,
             None if n[0] is None else np.array(n[0], dtype=np.int64),
             np.array(d_, dtype=np.int64),
-            inverse=inverse,
-            onesided=onesided,
+            inverse=1 if inverse else 0,
+            onesided=1 if onesided else 0,
             name=name,
         )
         dims.append(d_)
@@ -2932,8 +2932,8 @@ def aten__fftn_onnx(
                 res,
                 None if lth is None else np.array(lth, dtype=np.int64),
                 np.array(d_, dtype=np.int64),
-                inverse=inverse,
-                onesided=onesided,
+                inverse=1 if inverse else 0,
+                onesided=1 if onesided else 0,
                 name=name,
             )
             ns.append(lth)
@@ -2968,11 +2968,17 @@ def aten__fftn_onnx(
 
     # Normalization
     if norm in (1, "forward"):
-        normalized = g.op.Div(res, sample, name=name)
+        if inverse:
+            normalized = g.op.Mul(res, sample, name=name)
+        else:
+            normalized = g.op.Div(res, sample, name=name)
     elif norm in (0, "backward", None):
         normalized = res
     elif norm in (2, "ortho"):
-        normalized = g.op.Div(res, g.op.Sqrt(sample, name=name), name=name)
+        if inverse:
+            normalized = g.op.Mul(res, g.op.Sqrt(sample, name=name), name=name)
+        else:
+            normalized = g.op.Div(res, g.op.Sqrt(sample, name=name), name=name)
     else:
         raise AssertionError(f"Unexpected value for norm={norm!r}{g.get_debug_msg()}")
 
@@ -3006,6 +3012,7 @@ def aten__fft_r2c(
     dim: List[int],
     norm: Union[str, int],
     onesided: bool,
+    inverse: bool = False,
     name: str = "_fft_r2c",
 ) -> T:
     """_fft_r2c"""
@@ -3017,7 +3024,7 @@ def aten__fft_r2c(
         n=n,
         dim=dim,
         norm=norm,
-        inverse=False,
+        inverse=inverse,
         onesided=onesided,
         name=name,
     )
@@ -3047,6 +3054,31 @@ def aten_fft_fft(
     )
 
 
+def aten_fft_ifft(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    n: Optional[int] = None,
+    dim: int = -1,
+    norm: Optional[str] = None,
+    name: str = "fft_ifft",
+) -> T:
+    """fft_ifft"""
+    return aten__fft_r2c(
+        g,
+        sts,
+        outputs,
+        x,
+        n=[n] if isinstance(n, int) else n,
+        dim=[dim] if isinstance(dim, int) else dim,
+        norm=norm,
+        name=name,
+        onesided=False,
+        inverse=True,
+    )
+
+
 def aten_fft_fft2(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3067,6 +3099,31 @@ def aten_fft_fft2(
         dim=dim,
         norm=norm,
         name=name,
+        onesided=False,
+    )
+
+
+def aten_fft_ifft2(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    s: Optional[Tuple[int, int]] = None,
+    dim: Tuple[int, int] = -1,
+    norm: Optional[str] = None,
+    name: str = "fft_ifft2",
+) -> T:
+    """fft_fft2"""
+    return aten__fft_r2c(
+        g,
+        sts,
+        outputs,
+        x,
+        n=s,
+        dim=dim,
+        norm=norm,
+        name=name,
+        inverse=True,
         onesided=False,
     )
 
