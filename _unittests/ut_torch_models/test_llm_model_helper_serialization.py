@@ -8,7 +8,7 @@ from experimental_experiment.ext_test_case import (
     long_test,
 )
 from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.helpers import max_diff
+from experimental_experiment.helpers import max_diff, string_type
 
 
 class TestLlmModelHelperSerialization(ExtTestCase):
@@ -47,10 +47,13 @@ class TestLlmModelHelperSerialization(ExtTestCase):
             mod = ep.module()
             got = mod(**modified_inputs)
 
-        # We check that should be the same order.
-        self.assertEqualAny(expected, got)
+            # We check that should be the same order.
+            self.assertNotIn("patched_DynamicCache", string_type(expected, with_shape=True))
+            self.assertIn("patched_DynamicCache", string_type(got, with_shape=True))
+            self.assertEqualAny(expected, got)
+            flatten_got = torch.utils._pytree.tree_flatten(got)[0]
+
         flatten_expected = torch.utils._pytree.tree_flatten(expected)[0]
-        flatten_got = torch.utils._pytree.tree_flatten(got)[0]
         self.assertEqualAny(flatten_expected, flatten_got)
         diff = max_diff(expected, got)
         self.assertLess(diff["abs"], 1e-5)
