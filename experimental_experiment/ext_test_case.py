@@ -489,7 +489,8 @@ class ExtTestCase(unittest.TestCase):
             rows = [
                 f"{msg}\n{e}" if msg else str(e),
                 f"expected max value={expected_max}",
-                f"expected computed value={expected_value}",
+                f"expected computed value={expected_value}\n",
+                f"ratio={expected / value}\ndiff={expected - value}",
             ]
             raise AssertionError("\n".join(rows))  # noqa: B904
 
