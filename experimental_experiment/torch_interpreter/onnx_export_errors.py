@@ -54,8 +54,6 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
             print(f"[_register_cache_serialization] {DynamicCache} already registered")
         unregistered_dynamic_cache = False
     else:
-        from .patches.patch_transformers import patched_DynamicCache
-
         if verbose:
             print("[_register_cache_serialization] register DynamicCache")
         torch.utils._pytree.register_pytree_node(
@@ -69,6 +67,27 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
             DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
         )
 
+        # check
+        from ..cache_helpers import make_dynamic_cache
+
+        cache = make_dynamic_cache([(torch.rand((4, 4, 4)), torch.rand((4, 4, 4)))])
+        values, spec = torch.utils._pytree.tree_flatten(cache)
+        cache2 = torch.utils._pytree.tree_unflatten(values, spec)
+        # torch.fx._pytree.tree_flatten(cache)
+        assert len(cache2.key_cache) == 1
+
+    # patched_DynamicCache
+    from .patches.patch_transformers import patched_DynamicCache
+
+    unregistered_patched_dynamic_cache = True
+    if (
+        patched_DynamicCache is not None
+        and patched_DynamicCache in torch.utils._pytree.SUPPORTED_NODES
+    ):
+        if verbose > 1:
+            print(f"[_register_cache_serialization] {patched_DynamicCache} already registered")
+        unregistered_patched_dynamic_cache = False
+    else:
         if verbose:
             print("[_register_cache_serialization] register patched_DynamicCache")
 
@@ -83,16 +102,11 @@ def _register_cache_serialization(verbose: int = 0) -> Dict[str, bool]:
             patched_DynamicCache, lambda x, _: [x.key_cache, x.value_cache]
         )
 
-        # check
-        from ..cache_helpers import make_dynamic_cache
-
-        cache = make_dynamic_cache([(torch.rand((4, 4, 4)), torch.rand((4, 4, 4)))])
-        values, spec = torch.utils._pytree.tree_flatten(cache)
-        cache2 = torch.utils._pytree.tree_unflatten(values, spec)
-        # torch.fx._pytree.tree_flatten(cache)
-        assert len(cache2.key_cache) == 1
-
-    return dict(DynamicCache=unregistered_dynamic_cache, MambaCache=unregistered_mamba_cache)
+    return dict(
+        DynamicCache=unregistered_dynamic_cache,
+        MambaCache=unregistered_mamba_cache,
+        patched_DynamicCache=unregistered_patched_dynamic_cache,
+    )
 
 
 def _unregister(cls: type, verbose: int = 0):
@@ -124,16 +138,21 @@ def _unregister_cache_serialization(undo: Dict[str, bool], verbose: int = 0):
 
         _unregister(MambaCache, verbose)
     elif verbose > 1:
-        print("[_unregister_cache_serialization] do not unregistered MambaCache")
+        print("[_unregister_cache_serialization] skip unregister MambaCache")
 
     if undo.get("DynamicCache", False):
         from transformers.cache_utils import DynamicCache
-        from .patches.patch_transformers import patched_DynamicCache
 
         _unregister(DynamicCache, verbose)
+    elif verbose > 1:
+        print("[_unregister_cache_serialization] skip unregister DynamicCache")
+
+    if undo.get("patched_DynamicCache", False):
+        from .patches.patch_transformers import patched_DynamicCache
+
         _unregister(patched_DynamicCache, verbose)
     elif verbose > 1:
-        print("[_unregister_cache_serialization] do not unregistered DynamicCache")
+        print("[_unregister_cache_serialization] skip unregister patched_DynamicCache")
 
 
 @contextlib.contextmanager
@@ -359,9 +378,9 @@ def bypass_export_some_errors(
             keep_DynamicCache = transformers.cache_utils.DynamicCache
             keep_DynamicCache_init = keep_DynamicCache.__init__
             keep_DynamicCache.__init__ = lambda *args, **kwargs: raise_assert()
+
             transformers.cache_utils.DynamicCache = patched_DynamicCache
             transformers.generation.utils.DynamicCache = patched_DynamicCache
-
             transformers.models.llama.modeling_llama.DynamicCache = patched_DynamicCache
             transformers.models.phi.modeling_phi.DynamicCache = patched_DynamicCache
             transformers.models.phi3.modeling_phi3.DynamicCache = patched_DynamicCache
@@ -373,12 +392,18 @@ def bypass_export_some_errors(
 
         fct_callable = replacement_before_exporting if replace_dynamic_cache else (lambda x: x)
 
+        if verbose:
+            print("[bypass_export_some_errors] done patching")
+
         try:
             yield fct_callable
         finally:
             #######
             # sympy
             #######
+
+            if verbose:
+                print("[bypass_export_some_errors] remove patches")
 
             if patch_sympy:
 

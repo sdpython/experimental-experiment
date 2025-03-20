@@ -640,7 +640,7 @@ class TestLlmModelHelper(ExtTestCase):
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
         with bypass_export_some_errors(
-            replace_dynamic_cache=True, catch_constraints=False
+            replace_dynamic_cache=True, catch_constraints=False, verbose=0
         ) as modificator:
             model_inputs = modificator(model_inputs)
             torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)

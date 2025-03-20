@@ -390,6 +390,9 @@ def string_type(
     if isinstance(obj, torch.dtype):
         return f"{obj.__class__.__name__}({obj})"
 
+    if isinstance(obj, torch.memory_format):
+        return f"{obj.__class__.__name__}({obj})"
+
     if isinstance(obj, torch.utils._pytree.TreeSpec):
         return repr(obj).replace(" ", "").replace("\n", " ")
 
