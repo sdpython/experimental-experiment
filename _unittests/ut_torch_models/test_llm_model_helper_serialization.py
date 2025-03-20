@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     requires_torch,
+    requires_transformers,
     long_test,
 )
 from experimental_experiment.torch_interpreter import to_onnx
@@ -16,6 +17,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
     @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
+    @requires_transformers("4.49.9999")
     def test_phi2_output_order_export(self):
         import torch
         from experimental_experiment.torch_interpreter.onnx_export_errors import (
