@@ -34,7 +34,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         model, model_inputs, dyn_shapes = (res["model"], res["inputs"], res["dynamic_shapes"])
         expected = model(**copy.deepcopy(model_inputs))
         with bypass_export_some_errors(patch_transformers=True) as modificator:
-            modified_inputs = modificator(model_inputs)
+            modified_inputs = modificator(copy.deepcopy(model_inputs))
             ep = torch.export.export(
                 model,
                 (),
@@ -43,7 +43,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
                 strict=False,
             )
             mod = ep.module()
-            got = mod(**modified_inputs)
+            got = mod(**copy.deepcopy(model_inputs))
 
             # We check that should be the same order.
             self.assertNotIn("patched_DynamicCache", string_type(expected, with_shape=True))
