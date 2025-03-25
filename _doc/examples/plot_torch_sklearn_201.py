@@ -36,9 +36,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.helpers import max_diff, pretty_onnx
 from experimental_experiment.skl.helpers import flatnonzero, _get_weights
 from experimental_experiment.torch_interpreter import make_undefined_dimension
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
-    bypass_export_some_errors,
-)
+from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
@@ -682,8 +680,9 @@ shape_functions = {
 # %%
 # Then we we try to export piece by piece.
 # We capture the standard output to avoid being overwhelmed
-# and we use function :func:`bypass_export_some_errors` to skip some
-# errors with shape checking made by :mod:`torch`.
+# and we use function
+# :func:`onnx_diagnostic.torch_export_patches.bypass_export_some_errors`
+# to skip some errors with shape checking made by :mod:`torch`.
 
 logging.disable(logging.CRITICAL)
 

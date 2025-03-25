@@ -32,7 +32,7 @@ from ..helpers import (
     max_diff,
     flatten_object,
 )
-from ..torch_interpreter.onnx_export_errors import register_additional_serialization_functions
+from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
 
 
 class BenchmarkRunner:

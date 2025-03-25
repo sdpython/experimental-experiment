@@ -42,9 +42,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_phi35_mini_instruct(num_hidden_layers=1)
         model, model_inputs = data["model"], data["inputs"]
@@ -87,9 +85,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_phi35_mini_instruct(num_hidden_layers=1)
         model, model_inputs = data["model"], data["inputs"]
@@ -138,9 +134,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_phi35_mini_instruct(num_hidden_layers=1)
         model, model_inputs = data["model"], data["inputs"]
@@ -255,9 +249,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         with bypass_export_some_errors():
             data = get_phi35_mini_instruct(num_hidden_layers=1)
@@ -411,9 +403,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_mini_instruct,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_phi35_mini_instruct(num_hidden_layers=1)
         model, model_inputs = data["model"], data["inputs"]
@@ -432,9 +422,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_llama32_9b_vision,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         model, model_inputs = get_llama32_9b_vision(
             num_hidden_layers=1,
@@ -459,9 +447,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi35_vision_instruct,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_phi35_vision_instruct(num_hidden_layers=1)
         model, model_inputs = data["model"], data["inputs"]
@@ -542,9 +528,7 @@ class TestLlmModelHelper(ExtTestCase):
     @long_test()
     def test_get_phi2(self):
         import torch
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         for n_iter in [1, 0]:
@@ -605,9 +589,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_smollm_1_7b,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_smollm_1_7b(
             batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
@@ -629,9 +611,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi4,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_phi4(
             batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
@@ -655,9 +635,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_phi4,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_phi4(
             batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
@@ -742,9 +720,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_tiny_llm,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_tiny_llm(
             batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
@@ -763,9 +739,7 @@ class TestLlmModelHelper(ExtTestCase):
         from experimental_experiment.torch_models.llm_model_helper import (
             get_tiny_llm,
         )
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         data = get_tiny_llm(
             batch_size=2,

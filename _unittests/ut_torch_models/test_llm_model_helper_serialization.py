@@ -20,9 +20,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @requires_transformers("4.49.9999")
     def test_phi2_output_order_export(self):
         import torch
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         res = get_phi2(
@@ -69,9 +67,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @long_test()
     def test_phi2_output_order_onnx_dynamo(self):
         import torch
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         res = get_phi2(
@@ -123,9 +119,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @long_test()
     def test_phi2_output_order_custom(self):
         import torch
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         res = get_phi2(

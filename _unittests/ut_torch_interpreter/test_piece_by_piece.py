@@ -12,7 +12,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import string_type
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
+from onnx_diagnostic.torch_export_patches import (
     bypass_export_some_errors,
     register_additional_serialization_functions,
 )

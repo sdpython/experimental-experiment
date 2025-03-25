@@ -1,8 +1,6 @@
 import unittest
 import torch
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
-    bypass_export_some_errors,
-)
+from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,

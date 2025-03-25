@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from ..helpers import string_type
-from ..torch_interpreter.onnx_export_errors import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 from .export_model_helper import compute_weight_size
 
 
