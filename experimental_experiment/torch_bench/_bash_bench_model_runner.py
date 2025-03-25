@@ -455,7 +455,7 @@ class ModelRunner:
         self.model_name = model_name
         self.nvtx = nvtx
         self.export_options = export_options
-        self.patch_options = dict(patch_transformers=True, replace_dynamic_cache=True)
+        self.patch_options = dict(patch_transformers=True)
         if patch_options:
             self.patch_options.update(patch_options)
 

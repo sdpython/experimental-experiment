@@ -33,9 +33,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         )
         model, model_inputs, dyn_shapes = (res["model"], res["inputs"], res["dynamic_shapes"])
         expected = model(**copy.deepcopy(model_inputs))
-        with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True
-        ) as modificator:
+        with bypass_export_some_errors(patch_transformers=True) as modificator:
             modified_inputs = modificator(model_inputs)
             ep = torch.export.export(
                 model,
@@ -80,9 +78,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         )
         model, model_inputs, dyn_shapes = (res["model"], res["inputs"], res["dynamic_shapes"])
         expected = model(**copy.deepcopy(model_inputs))
-        with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True
-        ) as modificator:
+        with bypass_export_some_errors(patch_transformers=True) as modificator:
             modified_inputs = modificator(model_inputs)
             ep = torch.onnx.export(
                 model,
@@ -132,9 +128,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         )
         model, model_inputs, dyn_shapes = (res["model"], res["inputs"], res["dynamic_shapes"])
         expected = model(**copy.deepcopy(model_inputs))
-        with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True
-        ) as modificator:
+        with bypass_export_some_errors(patch_transformers=True) as modificator:
             flatten_inputs = torch.utils._pytree.tree_flatten(model_inputs)[0]
             modified_inputs = modificator(model_inputs)
             onx = to_onnx(

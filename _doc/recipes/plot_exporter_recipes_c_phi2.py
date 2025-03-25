@@ -172,9 +172,7 @@ except Exception as e:
 
 from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
-with bypass_export_some_errors(
-    patch_transformers=True, replace_dynamic_cache=True, verbose=1
-) as modificator:
+with bypass_export_some_errors(patch_transformers=True, verbose=1) as modificator:
     print("inputs before", string_type(inputs, with_shape=True))
     inputs = modificator(inputs)
     print("inputs after", string_type(inputs, with_shape=True))

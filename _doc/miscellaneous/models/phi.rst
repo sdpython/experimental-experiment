@@ -39,9 +39,7 @@ Phi
     )
     config._attn_implementation = "eager"
 
-    with torch.no_grad(), bypass_export_some_errors(
-        patch_transformers=True, replace_dynamic_cache=True,
-    ) as modificator: 
+    with torch.no_grad(), bypass_export_some_errors(patch_transformers=True) as modificator: 
 
         model = PhiModel(config)
 

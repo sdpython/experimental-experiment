@@ -1730,8 +1730,7 @@ class BenchmarkRunner:
                 if quiet:
                     try:
                         with register_additional_serialization_functions(
-                            replace_dynamic_cache=apply_patches
-                            and expected_dynamic is not None,
+                            patch_transformers=apply_patches and expected_dynamic is not None,
                             verbose=max(self.verbose - 5, 0),
                         ) as modificator:
                             new_feeds = modificator(feeds)
@@ -1755,7 +1754,7 @@ class BenchmarkRunner:
                         return stats
                 else:
                     with register_additional_serialization_functions(
-                        replace_dynamic_cache=apply_patches and expected_dynamic is not None,
+                        patch_transformers=apply_patches and expected_dynamic is not None,
                         verbose=max(self.verbose - 5, 0),
                     ) as modificator:
                         new_feeds = modificator(feeds)
@@ -1848,7 +1847,7 @@ class BenchmarkRunner:
                     # execute the fx graph.
                     with register_additional_serialization_functions(
                         verbose=max(self.verbose - 5, 0),
-                        replace_dynamic_cache=apply_patches and expected_dynamic is not None,
+                        patch_transformers=apply_patches and expected_dynamic is not None,
                     ) as modificator:
                         new_feeds = modificator(feeds)
                         for _ in range(repeat):
