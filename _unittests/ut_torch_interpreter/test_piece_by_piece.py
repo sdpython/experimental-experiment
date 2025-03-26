@@ -861,7 +861,7 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        with bypass_export_some_errors():
+        with bypass_export_some_errors(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
@@ -1678,6 +1678,19 @@ class TestPieceByPiece(ExtTestCase):
         cache = make_dynamic_cache([(torch.randn((5, 6)), torch.randn((5, 6)))])
         z = model(x, cache)
         self.assertNotEmpty(z)
+        with bypass_export_some_errors(patch_transformers=True):
+            z2 = model(x, cache)
+            self.assertEqual(
+                len(z["past_key_value"].key_cache), len(z2["past_key_value"].key_cache)
+            )
+            for i in range(len(z["past_key_value"].key_cache)):
+                self.assertEqualArray(
+                    z["past_key_value"].key_cache[i], z2["past_key_value"].key_cache[i]
+                )
+                self.assertEqualArray(
+                    z["past_key_value"].value_cache[i], z2["past_key_value"].value_cache[i]
+                )
+            self.assertEqualArray(z["mask"], z2["mask"])
 
         cache2 = make_dynamic_cache([(torch.randn((6, 6)), torch.randn((6, 6)))])
         inputs = [
@@ -1686,7 +1699,7 @@ class TestPieceByPiece(ExtTestCase):
         ]
 
         diag = trace_execution_piece_by_piece(model, inputs)
-        with register_additional_serialization_functions():
+        with bypass_export_some_errors(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
