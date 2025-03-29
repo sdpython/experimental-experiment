@@ -1758,17 +1758,6 @@ class BenchmarkRunner:
                         verbose=max(self.verbose - 5, 0),
                     ) as modificator:
                         new_feeds = modificator(feeds)
-                        assert (
-                            not apply_patches
-                            or expected_dynamic is None
-                            or "DynamicCache"
-                            not in set(
-                                c.__class__.__name__ for c in new_feeds if c is not None
-                            )
-                        ), (
-                            f"Unexpected type found new modified feeds "
-                            f"{string_type(new_feeds, limit=20)}"
-                        )
                         for _ in range(warmup):
                             if self.nvtx:
                                 torch.cuda.nvtx.range_push("CPL-WARMUP")

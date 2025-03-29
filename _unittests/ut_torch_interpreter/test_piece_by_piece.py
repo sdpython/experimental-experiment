@@ -737,20 +737,22 @@ class TestPieceByPiece(ExtTestCase):
             def forward(self, x, cache):
                 return self.sub(x, self.subcache(cache))
 
-        cache = make_dynamic_cache([(torch.ones((5, 6)), torch.ones((5, 6)) + 2)])
+        cache = make_dynamic_cache([(torch.ones((5, 6, 5, 6)), torch.ones((5, 6, 5, 6)) + 2)])
         model = Model()
-        x = torch.randn((5, 6))
+        x = torch.randn((5, 6, 5, 6))
         y = model(x, cache)
         self.assertNotEmpty(y)
 
-        cache2 = make_dynamic_cache([(torch.ones((6, 6)), torch.ones((6, 6)) + 2)])
+        cache2 = make_dynamic_cache([(torch.ones((6, 6, 6, 6)), torch.ones((6, 6, 6, 6)) + 2)])
 
         inputs = [
-            ((torch.randn((5, 6)), cache), {}),
-            ((torch.randn((6, 6)), cache2), {}),
+            ((torch.randn((5, 6, 5, 6)), cache), {}),
+            ((torch.randn((6, 6, 6, 6)), cache2), {}),
         ]
 
-        expected_dyn_shapes = "(({0: DYN}, [[{0: DYN}], [{0: DYN}]]), {})"
+        expected_dyn_shapes = (
+            "(({0: DYN, 2: DYN}, [[{0: DYN, 2: DYN}], [{0: DYN, 2: DYN}]]), {})"
+        )
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
         got = (
