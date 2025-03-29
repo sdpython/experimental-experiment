@@ -261,9 +261,9 @@ class NeuronDynamicCache(torch.nn.Module):
 
     def _get_random_inputs(self, device: str):
         cache = make_dynamic_cache(
-            [(torch.ones((3, 8)).to(device), (torch.ones((3, 8)) * 2).to(device))]
+            [(torch.ones((3, 8, 3, 8)).to(device), (torch.ones((3, 8, 3, 8)) * 2).to(device))]
         )
-        return {"x": torch.randn(3, 8).to(device), "dc": cache}
+        return {"x": torch.randn(3, 8, 3, 8).to(device), "dc": cache}
 
     config = MakeConfig(download=False, to_tuple=False)
 
