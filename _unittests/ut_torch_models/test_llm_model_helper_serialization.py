@@ -16,7 +16,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
-    @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
+    @requires_torch("2.9")  # for torch.export.Dim.DYNAMIC
     @requires_transformers("4.49.9999")
     def test_phi2_output_order_export(self):
         import torch
