@@ -1816,9 +1816,11 @@ class ModelDiagnoseOutput:
                             f"{string_type(args, with_shape=True, with_min_max=True)}, "
                             f"\nkwargs="
                             f"{string_type(kwargs, with_shape=True, with_min_max=True)}, "
-                            f"\nexpected="
+                            f"\nexp="
                             f"{string_type(out, with_shape=True, with_min_max=True)}, "
-                            f"\ngot={string_type(got, with_shape=True, with_min_max=True)}."
+                            f"\ngot={string_type(got, with_shape=True, with_min_max=True)}\n"
+                            f"-- exported program --\n"
+                            f"{getattr(self.exporter_status, "exported", "none")}"
                         )
                     break
 

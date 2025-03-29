@@ -136,6 +136,19 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             "export-nostrict", "Phi2LM_1Layer", verbose=1, debug=False, check_file=False
         )
 
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.9")
+    @requires_transformers("4.49.9999")
+    def test_untrained_export_bench_export_cpu_dynamic(self):
+        self._untrained_export(
+            "export-nostrict",
+            "Phi2LM_1Layer",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

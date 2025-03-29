@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
     requires_torch,
     requires_transformers,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.cache_helpers import make_dynamic_cache
@@ -708,6 +709,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     @hide_stdout()
     def test_export_piece_dynamic_cache(self):
         def memo(
@@ -762,6 +764,7 @@ class TestPieceByPiece(ExtTestCase):
             .replace("_DimHint(type=DYN)", "DYN")
         )
         self.assertEqual(expected_dyn_shapes, got)
+        print(diag.pretty_text(with_shape=True, with_min_max=False))
 
         expected = [
             ((0, torch.float32, None),),
@@ -780,12 +783,12 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        with register_additional_serialization_functions():
+        with bypass_export_some_errors(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
                 exporter_kwargs=dict(strict=False),
-                verbose=10,
+                verbose=0,
                 replace_by_custom_op=CustomOpStrategy.ALWAYS,
                 quiet=0,
             )
@@ -804,6 +807,7 @@ class TestPieceByPiece(ExtTestCase):
             self.assertIn(esch, str(ep))
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     @hide_stdout()
     def test_export_piece_dynamic_cache_io(self):
         class SubModelCacheIn(torch.nn.Module):
@@ -826,17 +830,17 @@ class TestPieceByPiece(ExtTestCase):
                 cache = self.subout(x, y)
                 return self.subin(cache)
 
-        cache = make_dynamic_cache([(torch.ones((5, 6)), torch.ones((5, 6)) + 2)])
+        cache = make_dynamic_cache([(torch.ones((5, 6, 5, 6)), torch.ones((5, 6, 5, 6)) + 2)])
         model = Model()
-        x = torch.randn((5, 6))
-        y = torch.randn((5, 6))
+        x = torch.randn((5, 6, 5, 6))
+        y = torch.randn((5, 6, 5, 6))
 
         inputs = [
             ((x, y), {}),
-            ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+            ((torch.randn((6, 6, 6, 6)), torch.randn((6, 6, 6, 6))), {}),
         ]
 
-        expected_dyn_shapes = "(({0: DYN}, {0: DYN}), {})"
+        expected_dyn_shapes = "(({0: DYN, 2: DYN}, {0: DYN, 2: DYN}), {})"
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
         got = (
