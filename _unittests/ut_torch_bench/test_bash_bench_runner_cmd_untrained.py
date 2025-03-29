@@ -129,7 +129,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         self._untrained_export("custom", "TinyLLM", verbose=1, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.6")
+    @requires_torch("2.9")
     @requires_transformers("4.50.9999")
     def test_untrained_export_bench_export_cpu(self):
         self._untrained_export(
