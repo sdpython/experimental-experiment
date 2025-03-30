@@ -256,7 +256,7 @@ class TestPieceByPiece(ExtTestCase):
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
 
-    @requires_torch("2.6")
+    @requires_torch("2.9", "https://github.com/pytorch/pytorch/issues/150022")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_to_kwargs(self):
         class Model(torch.nn.Module):
@@ -290,7 +290,7 @@ class TestPieceByPiece(ExtTestCase):
         _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
         self.assertEqual(ds, (tuple(), {"kwargs": {"x": {0: torch.export.Dim.DYNAMIC}}}))
 
-    @requires_torch("2.6")
+    @requires_torch("2.9", "https://github.com/pytorch/pytorch/issues/150022")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_not_to_kwargs(self):
         class Model(torch.nn.Module):
