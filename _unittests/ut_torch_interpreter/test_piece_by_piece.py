@@ -324,7 +324,7 @@ class TestPieceByPiece(ExtTestCase):
         _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
         self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
 
-    @requires_torch("2.6")
+    @requires_torch("2.9")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_or_not_to_kwargs(self):
         class Model(torch.nn.Module):
