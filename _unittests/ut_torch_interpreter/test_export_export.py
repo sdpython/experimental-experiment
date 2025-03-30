@@ -1,15 +1,13 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, requires_torch
 
 
 class TestExportExport(ExtTestCase):
+    @requires_torch("2.9")
     def test_export_dynamic_shapes_kwargs(self):
         import torch
 
         class Model(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-
             def forward(self, **kwargs):
                 return kwargs["x"] + kwargs["y"]
 

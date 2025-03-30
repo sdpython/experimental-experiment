@@ -49,7 +49,8 @@ def string_inputs(args, kwargs):
 
 def _forward_(*args, _f=None, **kwargs):
     assert _f is not None
-    if not torch.compiler.is_exporting():
+    if hasattr(torch.compiler, "is_exporting") and not torch.compiler.is_exporting():
+        # torch.compiler.is_exporting requires torch>=2.7
         print(string_inputs(args, kwargs))
     return _f(*args, **kwargs)
 

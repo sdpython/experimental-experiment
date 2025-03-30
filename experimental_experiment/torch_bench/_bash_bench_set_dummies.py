@@ -256,14 +256,16 @@ class NeuronDynamicCache(torch.nn.Module):
 
     def forward(self, x, dc):
         return x @ (
-            torch.cat(dc.key_cache, axis=1) + torch.cat(dc.value_cache, axis=1)
+            (torch.cat(dc.key_cache, axis=1) + torch.cat(dc.value_cache, axis=1)).reshape(
+                (-1, x.shape[1])
+            )
         ).transpose(1, 0)
 
     def _get_random_inputs(self, device: str):
         cache = make_dynamic_cache(
-            [(torch.ones((3, 8)).to(device), (torch.ones((3, 8)) * 2).to(device))]
+            [(torch.ones((3, 8, 3, 8)).to(device), (torch.ones((3, 8, 3, 8)) * 2).to(device))]
         )
-        return {"x": torch.randn(3, 8).to(device), "dc": cache}
+        return {"x": torch.randn(3, 8, 3, 8).to(device), "dc": cache}
 
     config = MakeConfig(download=False, to_tuple=False)
 
@@ -285,7 +287,7 @@ class NeuronMambaCache(torch.nn.Module):
                 self.num_hidden_layers = 64
                 self.dtype = torch.float32
 
-        cache = transformers.cache_utils.MambaCache(_config(), batch_size=1, device="cpu")
+        cache = transformers.cache_utils.MambaCache(_config(), max_batch_size=1, device="cpu")
         cache.conv_states[0] += 1
         cache.ssm_states[0] += 2
         if isinstance(cache.conv_states, list):

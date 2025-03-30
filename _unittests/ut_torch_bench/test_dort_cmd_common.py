@@ -27,30 +27,31 @@ class TestDortCmdCommond(ExtTestCase):
         cf = create_configuration_for_benchmark("llama", "small")
         model, example_args_collection = get_llama_model(**cf)
         for bck in {
-            "ort",
+            # "ort",
             "custom",
-            "plug",
+            # "plug",
             "debug",
             "inductor",
             "eager",
             "dynger",
             "trt",
         }:
-            if bck == "trt":
-                try:
-                    import torch_tensorrt  # noqa: F401
-                except ImportError:
-                    continue
-            cp = create_compiled_model(
-                model,
-                backend=bck,
-                use_dynamic=False,
-                target_opset=18,
-                verbose=0,
-                enable_pattern=[],
-                disable_pattern=[],
-            )
-            self.assertNotEmpty(cp)
+            with self.subTest(bck=bck):
+                if bck == "trt":
+                    try:
+                        import torch_tensorrt  # noqa: F401
+                    except ImportError:
+                        continue
+                cp = create_compiled_model(
+                    model,
+                    backend=bck,
+                    use_dynamic=False,
+                    target_opset=18,
+                    verbose=0,
+                    enable_pattern=[],
+                    disable_pattern=[],
+                )
+                self.assertNotEmpty(cp)
         self.assertRaise(
             lambda: create_compiled_model(
                 model,

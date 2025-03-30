@@ -714,14 +714,12 @@ bypass_export_some_errors
 +++++++++++++++++++++++++
 
 If the converter to onnx fails, function :func:`bypass_export_some_errors
-<experimental_experiment.torch_interpreter.onnx_export_errors.bypass_export_some_errors>`
+<onnx_diagnostic.torch_export_patches.bypass_export_some_errors>`
 may help solving some of them.
 
 ::
 
-    from experimental_experiment.torch_interpreter.onnx_export_errors import (
-        bypass_export_some_errors,
-    )
+    from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
     with bypass_export_some_errors():
         onx = to_onnx(...)
@@ -730,14 +728,9 @@ If the input contains a cache class, you may need to patch the inputs.
 
 ::
 
-    from experimental_experiment.torch_interpreter.onnx_export_errors import (
-        bypass_export_some_errors,
-    )
+    from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
-    with bypass_export_some_errors(
-        patch_transformers=True,
-        replace_dynamic_cache=True,
-    ) as modificator:
+    with bypass_export_some_errors(patch_transformers=True) as modificator:
         inputs = modificator(inputs)
         onx = to_onnx(..., inputs, ...)
 

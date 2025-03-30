@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from ..helpers import string_type
-from ..torch_interpreter.onnx_export_errors import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 from .export_model_helper import compute_weight_size
 
 
@@ -455,7 +455,7 @@ class ModelRunner:
         self.model_name = model_name
         self.nvtx = nvtx
         self.export_options = export_options
-        self.patch_options = dict(patch_transformers=True, replace_dynamic_cache=True)
+        self.patch_options = dict(patch_transformers=True)
         if patch_options:
             self.patch_options.update(patch_options)
 
@@ -857,8 +857,6 @@ class ModelRunner:
         DynamicCache does not need to be replaced if there is no dynamic shapes involved.
         """
         options = self.patch_options.copy()
-        if not dynamic:
-            options["replace_dynamic_cache"] = False
         options["verbose"] = max(verbose - 2, 0)
         options["patch"] = patch != 0
         return options

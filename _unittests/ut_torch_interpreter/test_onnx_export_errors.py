@@ -5,9 +5,7 @@ from experimental_experiment.ext_test_case import (
     requires_transformers,
     skipif_ci_windows,
 )
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
-    bypass_export_some_errors,
-)
+from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 from experimental_experiment.helpers import string_type
 
 

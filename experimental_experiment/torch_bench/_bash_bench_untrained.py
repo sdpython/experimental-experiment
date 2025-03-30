@@ -46,7 +46,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=True, replace_dynamic_cache=False),
+                        dict(strict=True),
                     )
                 ),
                 "AI21Jamba15MiniLM_1Layer": (
@@ -58,7 +58,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(replace_dynamic_cache=True, strict=False),
+                        dict(strict=False),
                     )
                 ),
                 "AI21Jamba15MiniLM_2Layer": (
@@ -70,7 +70,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(replace_dynamic_cache=True, strict=False),
+                        dict(strict=False),
                     )
                 ),
                 "AllMiniLML6v1_1Layer": (
@@ -82,7 +82,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=False),
+                        dict(strict=False),
                     )
                 ),
                 "AllMiniLML6v1_1LayerNoCache": (
@@ -94,7 +94,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=False),
+                        dict(strict=False),
                     )
                 ),
                 "AllMiniLML6v1_2Layer": (
@@ -106,7 +106,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=False),
+                        dict(strict=False),
                     )
                 ),
                 "AllMiniLML6v1_2LayerNoCache": (
@@ -118,7 +118,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=False),
+                        dict(strict=False),
                     )
                 ),
                 "FalconMamba7bLM_1LayerNoCache": (
@@ -178,7 +178,7 @@ class UntrainedRunner(BenchmarkRunner):
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi2LM_1Layer": (
@@ -190,7 +190,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi2LM_2LayerNoCache": (
@@ -201,7 +201,7 @@ class UntrainedRunner(BenchmarkRunner):
                             _attn_implementation="eager",
                             common_dynamic_shapes=True,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi2LM_2Layer": (
@@ -213,7 +213,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi35MiniInstructLM_2Layer": (
@@ -224,7 +224,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi35MiniInstructLMVision_2Layer": (
@@ -237,7 +237,7 @@ class UntrainedRunner(BenchmarkRunner):
                             | LLMInputKind.past_key_values,
                             common_dynamic_shapes=True,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi35MiniInstructLMVision_1Layer_Images": (
@@ -249,7 +249,7 @@ class UntrainedRunner(BenchmarkRunner):
                             input_kind=LLMInputKind.ALL,
                             common_dynamic_shapes=True,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi4LM_2LayerNoCache": (
@@ -261,7 +261,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "Phi4LM_2Layer": (
@@ -273,7 +273,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
-                        dict(strict=False, replace_dynamic_cache=True),
+                        dict(strict=False, patch_transformers=True),
                     )
                 ),
                 "SmolLM17b_2LayerNoCache": (
@@ -284,7 +284,7 @@ class UntrainedRunner(BenchmarkRunner):
                             batch_size=2,
                             common_dynamic_shapes=True,
                         ),
-                        dict(replace_dynamic_cache=False),
+                        dict(),
                     )
                 ),
                 "SmolLM17b_2Layer": (
@@ -295,7 +295,7 @@ class UntrainedRunner(BenchmarkRunner):
                             batch_size=2,
                             common_dynamic_shapes=True,
                         ),
-                        dict(replace_dynamic_cache=True, strict=False),
+                        dict(patch_transformers=True, strict=False),
                     )
                 ),
                 "TinyLLM_NoCache": (
@@ -305,7 +305,7 @@ class UntrainedRunner(BenchmarkRunner):
                             batch_size=2,
                             common_dynamic_shapes=True,
                         ),
-                        dict(replace_dynamic_cache=False),
+                        dict(),
                     )
                 ),
                 "TinyLLM": (
@@ -315,7 +315,7 @@ class UntrainedRunner(BenchmarkRunner):
                             batch_size=2,
                             common_dynamic_shapes=True,
                         ),
-                        dict(replace_dynamic_cache=False),
+                        dict(),
                     )
                 ),
                 "TinyLLM_DynRopeNoCache": (
@@ -325,7 +325,7 @@ class UntrainedRunner(BenchmarkRunner):
                             batch_size=2,
                             common_dynamic_shapes=True,
                         ),
-                        dict(replace_dynamic_cache=False),
+                        dict(),
                     )
                 ),
                 "TinyLLM_DynRope": (
@@ -336,7 +336,7 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             dynamic_rope=True,
                         ),
-                        dict(replace_dynamic_cache=False),
+                        dict(),
                     )
                 ),
                 # Chronos
@@ -347,13 +347,13 @@ class UntrainedRunner(BenchmarkRunner):
                             common_dynamic_shapes=True,
                             fixed_prediction_length=17,
                         ),
-                        dict(replace_dynamic_cache=True, strict=False),
+                        dict(patch_transformers=True, strict=False),
                     )
                 ),
                 "ChronosT5Tiny": (
                     lambda: (
                         get_chronos_t5_tiny(batch_size=2, common_dynamic_shapes=True),
-                        dict(replace_dynamic_cache=True, strict=False),
+                        dict(patch_transformers=True, strict=False),
                     )
                 ),
             }
@@ -445,10 +445,8 @@ class UntrainedRunner(BenchmarkRunner):
         else:
             model.eval()
 
-        if export_options and "replace_dynamic_cache" in export_options:
-            patch_options = dict(
-                replace_dynamic_cache=export_options.pop("replace_dynamic_cache")
-            )
+        if export_options and "patch_transformers" in export_options:
+            patch_options = dict(patch_transformers=export_options.pop("patch_transformers"))
         else:
             patch_options = None
 

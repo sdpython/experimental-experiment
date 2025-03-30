@@ -18,9 +18,7 @@ import torch.export._draft_export
 import transformers
 from experimental_experiment.helpers import string_type
 from experimental_experiment.cache_helpers import make_dynamic_cache
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
-    register_additional_serialization_functions,
-)
+from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
 
 
 def get_phi35_untrained(batch_size: int = 2, **kwargs) -> Dict[str, Any]:

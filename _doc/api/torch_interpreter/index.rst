@@ -21,8 +21,6 @@
     interpreter
     investigate_helper
     onnx_export
-    onnx_export_errors
-    onnx_export_serialization
     oxs_dispatcher
     oxs_opset
     piece_by_piece
