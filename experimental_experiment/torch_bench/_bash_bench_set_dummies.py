@@ -256,7 +256,9 @@ class NeuronDynamicCache(torch.nn.Module):
 
     def forward(self, x, dc):
         return x @ (
-            torch.cat(dc.key_cache, axis=1) + torch.cat(dc.value_cache, axis=1)
+            (torch.cat(dc.key_cache, axis=1) + torch.cat(dc.value_cache, axis=1)).reshape(
+                (-1, x.shape[1])
+            )
         ).transpose(1, 0)
 
     def _get_random_inputs(self, device: str):
