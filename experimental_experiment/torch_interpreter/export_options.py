@@ -403,6 +403,7 @@ class ExportOptions:
             args = make_copy(args)
             kwargs = make_copy(kwargs)
         if verbose:
+            t0 = time.perf_counter()
             print("[ExportOptions.export] export start...")
         if exc:
             exported_program = torch.export.export(
@@ -446,7 +447,8 @@ class ExportOptions:
                 ) from e
 
         if verbose:
-            print("[ExportOptions.export] export done.")
+            print(f"[ExportOptions.export] export done in {time.perf_counter() - t0}")
+
         if self.strict:
             # torch.export.export may turn Tensor into FakeTensor.
             # We need to make a copy to avoid getting FakeTensor instead
@@ -463,12 +465,17 @@ class ExportOptions:
 
         if self.decomposition_table:
             if verbose:
+                t0 = time.perf_counter()
                 print(
                     f"[ExportOptions.export] starts decomposition "
                     f"{self.decomposition_table!r}..."
                 )
             dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
+                print(
+                    f"[ExportOptions.export] decomposition done in "
+                    f"{time.perf_counter() - t0}"
+                )
                 print(
                     f"[ExportOptions.export] done after decomposition "
                     f"in {time.perf_counter() - begin}"
