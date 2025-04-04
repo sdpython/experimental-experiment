@@ -8953,7 +8953,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     # example_shape[k] is int but dynamic_shape says otherwise,
                     # we trust dynamic shape
-                    ret_shape[k] = v.__name__
+                    ret_shape[k] = v.name if isinstance(v, self.WrapDim) else v.__name__
             else:
                 for i, v in enumerate(info):
                     if i >= len(ret_shape):

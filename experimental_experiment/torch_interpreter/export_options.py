@@ -28,6 +28,7 @@ class ExportOptions:
     :param aten_as_function: keeps aten function as local function to keep a faithful
         translation of the fx graph.
     :param allow_untyped_output: allows output with no shape and/or no type
+    :param save_ep: to save the exported program
 
     The fallback strategy tries the following in order:
 
@@ -89,10 +90,12 @@ class ExportOptions:
         aten_as_function: bool = False,
         remove_inplace: bool = True,
         allow_untyped_output: bool = False,
+        save_ep: Optional[str] = None,
     ):
         self.strict = strict
         self.fallback = fallback
         self.tracing = tracing
+        self.save_ep = save_ep
         self.decomposition_table = (
             None if decomposition_table in ("none", None) else decomposition_table
         )
@@ -180,6 +183,8 @@ class ExportOptions:
         """
         if self.decomposition_table:
             begin = time.perf_counter()
+            if verbose:
+                print(f"[ExportOptions.export] run decomposition {self.decomposition_table!r}")
             dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
                 print(
@@ -397,6 +402,8 @@ class ExportOptions:
             args0, kwargs0 = args, kwargs
             args = make_copy(args)
             kwargs = make_copy(kwargs)
+        if verbose:
+            print("[ExportOptions.export] export start...")
         if exc:
             exported_program = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
@@ -438,6 +445,8 @@ class ExportOptions:
                     f"\n---exported-program---\n{exported_program}"
                 ) from e
 
+        if verbose:
+            print("[ExportOptions.export] export done.")
         if self.strict:
             # torch.export.export may turn Tensor into FakeTensor.
             # We need to make a copy to avoid getting FakeTensor instead
@@ -453,6 +462,11 @@ class ExportOptions:
             print("-- DONE -- ")
 
         if self.decomposition_table:
+            if verbose:
+                print(
+                    f"[ExportOptions.export] starts decomposition "
+                    f"{self.decomposition_table!r}..."
+                )
             dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
                 print(

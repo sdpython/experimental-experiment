@@ -1262,6 +1262,20 @@ def aten_cat(
     return res
 
 
+def aten_ceil(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "ceil",
+) -> T:
+    "ceil"
+    res = g.op.Ceil(x, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_chunk(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3383,26 +3397,22 @@ def aten_full_like(
         memory_format is None or memory_format == torch.preserve_format
     ), f"empty_like not implemented for memory_format={memory_format}"
 
+    if dtype is None:
+        assert g.has_type(x), f"missing type for {x!r}{g.get_debug_msg()}"
+        itype = g.get_type(x)
+    else:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+    fill = g.op.Cast(fill_value, to=itype, name=name)
     if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         # simple case
-        return aten_full(
-            g,
-            sts,
-            outputs,
-            g.get_shape(x),
-            fill_value,
-            dtype=dtype or g.get_type(x),
-            name=name,
+        res = g.op.Expand(
+            fill, np.array(g.get_shape(x), dtype=np.int64), name=name, outputs=outputs
         )
-    return aten_full(
-        g,
-        sts,
-        outputs,
-        g.op.Shape(x, name=name),
-        fill_value,
-        dtype=dtype or g.get_type(x),
-        name=name,
-    )
+    else:
+        res = g.op.Expand(fill, g.op.Shape(x, name=name), name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x, itype=itype)
+    return res
 
 
 def aten_FunctionCtx(
@@ -8612,12 +8622,16 @@ def aten_slice_Tensor(
 ) -> T:
     "slice"
     assert isinstance(dim, int), f"aten_slice_Tensor not implemented for dim={dim!r}"
-    assert g.is_dynamic_dimension(
-        start
-    ), f"aten_slice_Tensor not implemented for start={start!r}{g.get_debug_msg()}"
-    assert end is None or g.is_dynamic_dimension(
-        end
-    ), f"aten_slice_Tensor not implemented for end={end!r}{g.get_debug_msg()}"
+    if start is None:
+        start = 0
+    assert g.is_dynamic_dimension(start), (
+        f"aten_slice_Tensor not implemented for **start**={start!r}, "
+        f"end={end!r}, x={x!r}{g.get_debug_msg()}"
+    )
+    assert end is None or g.is_dynamic_dimension(end), (
+        f"aten_slice_Tensor not implemented for start={start!r}, "
+        f"**end**={end!r}, x={x!r}{g.get_debug_msg()}"
+    )
     assert step is None or isinstance(step, int), f"Not implemented for step={step!r}"
     if end is None:
         end = start

@@ -586,6 +586,11 @@ def _make_builder_interpreter(
             )
             exe_path = "exising-torch.export.ExportProgram"
 
+        if export_options and export_options.save_ep:
+            with open(export_options.save_ep, "w") as f:
+                f.write(str(exported_program))
+            with open(f"{export_options.save_ep}.graph", "w") as f:
+                f.write(str(exported_program.graph))
         debug_ep = os.environ.get("PRINT_EXPORTED_PROGRAM", "0")
         if debug_ep in (1, "1"):
             print("-- EXPORTED PROGRAM --")

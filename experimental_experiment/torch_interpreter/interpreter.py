@@ -1436,12 +1436,15 @@ class DynamoInterpreter:
                 aten_name == self.torch.ops.aten.native_dropout.default
                 and len(node.args[0].users) == 1
             )
+            # if an int, it cannot be modified inplace
+            or ("val" in node.meta and isinstance(node.meta["val"], (int, self.torch.SymInt)))
         ), (
             f"This is probably one inplace function node={node!r}, "
             f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
             f"aten_name._opname={getattr(aten_name, '_opname', '?')}, "
-            f"len(node.args[0].users)={len(node.args[0].users) if node.args else 0}"
-            f"output_names={output_names!r}, exe_path={self.exe_path!r}"
+            f"len(node.args[0].users)="
+            f"{len(node.args[0].users) if node.args and hasattr(node.args[0], 'users') else 0}"
+            f", output_names={output_names!r}, exe_path={self.exe_path!r}"
             f"{self.builder.get_debug_msg()}"
         )
 
