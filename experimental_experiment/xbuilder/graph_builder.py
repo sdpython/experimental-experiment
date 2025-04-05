@@ -338,7 +338,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         @property
         def name_as_string(self):
-            if isinstance(self.name):
+            if isinstance(self.name, str):
                 return self.name
             if self.name.__class__.__name__ == "Dim":
                 # It should be torch.export.dynamic_shapes.Dim
@@ -2771,7 +2771,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Source is available for {dim!r}, source={self.dynamic_dimensions_source[dim]}"
         )
 
-    def _get_dynamic_dimension(self, name: str, dim: int) -> Optional[str]:
+    def _get_dynamic_dimension(self, name: str, dim: int) -> Optional[Union[str, "WrapDim"]]:
         if self.dynamic_shapes is None:
             return None
         if not self.dynamic_shapes or name not in self.dynamic_shapes:
@@ -2786,9 +2786,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             if "_Dim" in st or "_DerivedDim" in st or "torch.export.dynamic_shapes.Dim" in st
             else v
         )
-        assert isinstance(
-            name, str
-        ), f"must return a string but name is {name!r}, type(name)={type(name)}"
+        assert isinstance(name, (str, self.WrapDim)), (
+            f"_get_dynamic_dimension must return a string but name is {name!r}, "
+            f"type(name)={type(name)}"
+        )
         return name
 
     def add_dynamic_object(
@@ -4703,7 +4704,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             for a, b in assert_sorted(self.constraints_.items()):
                 rows.append(f"    {a} = {b}")
         rows.append("--SHAPE--")
-        rows.append("dynamic_examples=")
+        rows.append("_dynamic_examples=")
         for i, (k, v) in enumerate(assert_sorted(self._dynamic_examples.items())):
             try:
                 rows.append(f"   {k} = {v!r}")
@@ -4784,7 +4785,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
 
         rows.append("--PARAMETERS--")
-        rows.append("dynamic_examples=")
+        rows.append("_parameter_renaming=")
         for i, (k, v) in enumerate(assert_sorted(self._parameter_renaming.items())):
             rows.append(f"   {k} = {v!r}")
             if i >= 10000:

@@ -3237,17 +3237,19 @@ def aten_floor_divide(
         itype = g.get_type(x)
         g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
     elif isinstance(x, str) and isinstance(y, int):
+        assert g.has_rank(x), f"missing rank for {x!r}{g.get_debug_msg()}"
         itype = g.get_type(x)
         dtype = tensor_dtype_to_np_dtype(itype)
-        div = g.op.Div(x, np.array([y], dtype=dtype), name=name)
+        div = g.op.Div(x, np.array([y] if g.get_rank(x) > 0 else y, dtype=dtype), name=name)
         if g.has_shape(x):
             g.set_shape(div, g.get_shape(x))
         else:
             g.set_rank(div, g.get_rank(x))
     elif isinstance(x, int) and isinstance(y, str):
+        assert g.has_rank(y), f"missing rank for {y!r}{g.get_debug_msg()}"
         itype = g.get_type(y)
         dtype = tensor_dtype_to_np_dtype(itype)
-        div = g.op.Div(np.array([x], dtype=dtype), y, name=name)
+        div = g.op.Div(np.array([x] if g.get_rank(x) > 0 else x, dtype=dtype), y, name=name)
         if g.has_shape(y):
             g.set_shape(div, g.get_shape(y))
         else:
@@ -3396,12 +3398,33 @@ def aten_full_like(
     assert (
         memory_format is None or memory_format == torch.preserve_format
     ), f"empty_like not implemented for memory_format={memory_format}"
+    if isinstance(fill_value, (int, float, bool)):
+        if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+            # simple case
+            return aten_full(
+                g,
+                sts,
+                outputs,
+                g.get_shape(x),
+                fill_value,
+                dtype=dtype or g.get_type(x),
+                name=name,
+            )
+        return aten_full(
+            g,
+            sts,
+            outputs,
+            g.op.Shape(x, name=name),
+            fill_value,
+            dtype=dtype or g.get_type(x),
+            name=name,
+        )
 
     if dtype is None:
         assert g.has_type(x), f"missing type for {x!r}{g.get_debug_msg()}"
         itype = g.get_type(x)
     else:
-        itype = torch_dtype_to_onnx_dtype(dtype)
+        itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
     fill = g.op.Cast(fill_value, to=itype, name=name)
     if g.has_shape(x) and is_static_shape(g.get_shape(x)):
         # simple case
