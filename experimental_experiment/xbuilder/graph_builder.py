@@ -336,6 +336,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         def __repr__(self) -> str:
             return f"WrapDim({self.name!r})"
 
+        @property
+        def name_as_string(self):
+            if isinstance(self.name):
+                return self.name
+            if self.name.__class__.__name__ == "Dim":
+                # It should be torch.export.dynamic_shapes.Dim
+                return self.name.__name__
+            raise AssertionError(
+                f"Unable to return the dimension as a string type is "
+                f"{type(self.name)}, name={self.name!r}"
+            )
+
     class InitializerInfo:
         """
         Tracks the location where the initializer was created.
@@ -2769,10 +2781,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             return None
         v = dyn[dim]
         st = str(type(v))
-        if "_Dim" in st or "_DerivedDim" in st:
-            name = v.__name__
-        else:
-            name = v
+        name = (
+            v.__name__
+            if "_Dim" in st or "_DerivedDim" in st or "torch.export.dynamic_shapes.Dim" in st
+            else v
+        )
+        assert isinstance(
+            name, str
+        ), f"must return a string but name is {name!r}, type(name)={type(name)}"
         return name
 
     def add_dynamic_object(
@@ -2795,9 +2811,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param check_token: check that the subtoken are
             registered prior to this addition
         """
-        assert not isinstance(
-            value, self.torch.export.dynamic_shapes._Dim
-        ), f"Unexpected dimension type {type(value)} for key={key!r}{self.get_debug_msg()}"
+        assert not isinstance(value, self.torch.export.dynamic_shapes._Dim), (
+            f"Unexpected dimension type {type(value)}:{value!r}, "
+            f"class is {value.__class__.__name__!r} for key={key!r}{self.get_debug_msg()}"
+        )
         keykey = key.name if isinstance(key, self.WrapDim) else key
         self.dynamic_objects[keykey] = (
             self.WrapSym(value)
@@ -2963,7 +2980,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if add:
                         self.add_dynamic_object(dyn_name, dyn_name, parse=True)
                     new_shape.append(
-                        dyn_name.name if isinstance(dyn_name, self.WrapDim) else dyn_name
+                        dyn_name.name_as_string
+                        if isinstance(dyn_name, self.WrapDim)
+                        else dyn_name
                     )
                     continue
 
