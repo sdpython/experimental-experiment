@@ -336,6 +336,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         def __repr__(self) -> str:
             return f"WrapDim({self.name!r})"
 
+        @property
+        def name_as_string(self):
+            if isinstance(self.name, str):
+                return self.name
+            if self.name.__class__.__name__ == "Dim":
+                # It should be torch.export.dynamic_shapes.Dim
+                return self.name.__name__
+            raise AssertionError(
+                f"Unable to return the dimension as a string type is "
+                f"{type(self.name)}, name={self.name!r}"
+            )
+
     class InitializerInfo:
         """
         Tracks the location where the initializer was created.
@@ -983,7 +995,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 )
         if add_fx_graph:
-            fx = self._debug_msg.get("process.graph_module")
+            fx = self._debug_msg.get("process.graph_module.graph")
             if fx:
                 rows.append("-- FX.GRAPH-- ")
                 rows.append(str(fx))
@@ -2759,7 +2771,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Source is available for {dim!r}, source={self.dynamic_dimensions_source[dim]}"
         )
 
-    def _get_dynamic_dimension(self, name: str, dim: int) -> Optional[str]:
+    def _get_dynamic_dimension(self, name: str, dim: int) -> Optional[Union[str, "WrapDim"]]:
         if self.dynamic_shapes is None:
             return None
         if not self.dynamic_shapes or name not in self.dynamic_shapes:
@@ -2769,10 +2781,15 @@ class GraphBuilder(_GraphBuilderRuntime):
             return None
         v = dyn[dim]
         st = str(type(v))
-        if "_Dim" in st or "_DerivedDim" in st:
-            name = v.__name__
-        else:
-            name = v
+        name = (
+            v.__name__
+            if "_Dim" in st or "_DerivedDim" in st or "torch.export.dynamic_shapes.Dim" in st
+            else v
+        )
+        assert isinstance(name, (str, self.WrapDim)), (
+            f"_get_dynamic_dimension must return a string but name is {name!r}, "
+            f"type(name)={type(name)}"
+        )
         return name
 
     def add_dynamic_object(
@@ -2795,9 +2812,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param check_token: check that the subtoken are
             registered prior to this addition
         """
-        assert not isinstance(
-            value, self.torch.export.dynamic_shapes._Dim
-        ), f"Unexpected dimension type {type(value)} for key={key!r}{self.get_debug_msg()}"
+        assert not isinstance(value, self.torch.export.dynamic_shapes._Dim), (
+            f"Unexpected dimension type {type(value)}:{value!r}, "
+            f"class is {value.__class__.__name__!r} for key={key!r}{self.get_debug_msg()}"
+        )
         keykey = key.name if isinstance(key, self.WrapDim) else key
         self.dynamic_objects[keykey] = (
             self.WrapSym(value)
@@ -2963,7 +2981,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if add:
                         self.add_dynamic_object(dyn_name, dyn_name, parse=True)
                     new_shape.append(
-                        dyn_name.name if isinstance(dyn_name, self.WrapDim) else dyn_name
+                        dyn_name.name_as_string
+                        if isinstance(dyn_name, self.WrapDim)
+                        else dyn_name
                     )
                     continue
 
@@ -3614,6 +3634,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             or (attributes is not None and "to" in set(att.name for att in attributes))
         ), (
             f"Operator Cast needs arguments to but kwargs={kwargs}, name={name!r}"
+            f"{self.get_debug_msg()}"
+        )
+        assert op_type != "Cast" or domain != "" or (len(inputs) == 1 and inputs[0]), (
+            f"Operator Cast has one empty input, name={name!r}, inputs={inputs}"
             f"{self.get_debug_msg()}"
         )
         assert op_type != "Concat" or domain != "" or len(inputs) > 1, (
@@ -4683,14 +4707,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             rows.append("--CONSTRAINTS--")
             for a, b in assert_sorted(self.constraints_.items()):
                 rows.append(f"    {a} = {b}")
-        rows.append("--PARAMETERS--")
-        rows.append("dynamic_examples=")
-        for i, (k, v) in enumerate(assert_sorted(self._parameter_renaming.items())):
-            rows.append(f"   {k} = {v!r}")
-            if i >= 10000:
-                break
         rows.append("--SHAPE--")
-        rows.append("dynamic_examples=")
+        rows.append("_dynamic_examples=")
         for i, (k, v) in enumerate(assert_sorted(self._dynamic_examples.items())):
             try:
                 rows.append(f"   {k} = {v!r}")
@@ -4751,8 +4769,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
-        rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
+        rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         short_sh = {
             k: (
                 v
@@ -4770,6 +4788,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         }
         rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
 
+        rows.append("--PARAMETERS--")
+        rows.append("_parameter_renaming=")
+        for i, (k, v) in enumerate(assert_sorted(self._parameter_renaming.items())):
+            rows.append(f"   {k} = {v!r}")
+            if i >= 10000:
+                break
         rows.append("--TORCH-USERS--")
         for k, v in assert_sorted(self._registered_users.items()):
             rows.append(f"    {k} -> {v}")
@@ -4858,7 +4882,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
         a progress bar on big models.
         """
-        self._debug_msg["process.graph_module"] = graph_module.graph
+        self._debug_msg["process.graph_module"] = graph_module
+        self._debug_msg["process.graph_module.graph"] = graph_module.graph
 
         # looks into output marked as "alias_of_input"
         # see https://pytorch.org/functorch/main/_modules/torch/_functorch/aot_autograd.html
@@ -8953,7 +8978,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     # example_shape[k] is int but dynamic_shape says otherwise,
                     # we trust dynamic shape
-                    ret_shape[k] = v.__name__
+                    ret_shape[k] = v.name if isinstance(v, self.WrapDim) else v.__name__
             else:
                 for i, v in enumerate(info):
                     if i >= len(ret_shape):

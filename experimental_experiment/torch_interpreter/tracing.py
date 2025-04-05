@@ -577,7 +577,11 @@ class CustomTracer(torch.fx.Tracer):
                 continue
             if node.target.name() != "aten::slice.Tensor":
                 continue
-            if len(node.args) != 4 or node.args[2] != 0 or node.args[3] != 9223372036854775807:
+            if (
+                len(node.args) != 4
+                or (node.args[2] != 0 and node.args[2] is not None)
+                or (node.args[3] != 9223372036854775807 and node.args[3] is not None)
+            ):
                 continue
 
             # The first argument is the node to keep.
@@ -767,13 +771,30 @@ class CustomTracer(torch.fx.Tracer):
         # Let's find the first clone node.
         given_node = node
         while (
-            node.target not in {"clone"}
+            hasattr(node, "target")
+            and node.target not in {"clone"}
             and (not hasattr(node.target, "name") or node.target.name() != "aten::clone")
             and node.args
         ):
-            node = node.args[0]
+            if isinstance(node.args[0], torch.fx.immutable_collections.immutable_list):
+                arg = node.args[0]
+                while isinstance(arg, torch.fx.immutable_collections.immutable_list):
+                    # something like
+                    # aten.zeros.default](args = ([%sym_size_int_18, %add_179, %add_179],)
+                    if len(arg) == 0:
+                        break
+                    node = arg[0]
+                    if not node.args:
+                        break
+                    arg = node.args[0]
+            else:
+                node = node.args[0]
         clone = node
-        target_name = node.target.name() if hasattr(node.target, "name") else node.target
+        target_name = (
+            (node.target.name() if hasattr(node.target, "name") else node.target)
+            if hasattr(node, "target")
+            else None
+        )
         assert target_name in {"aten::clone", "clone"}, (
             f"(inplace) Unexpected predecessor {node.target!r} "
             f"(target_name={target_name!r}) "

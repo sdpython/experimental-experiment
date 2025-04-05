@@ -224,7 +224,10 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             verbose=0,
             return_builder=True,
         )
-        self.assertIn("dynals: s0 -> 'batch'", _builder.pretty_text(add_fx_graph=True))
+        self.assertInOr(
+            ("dynals: s0 -> 'batch'", "dynals: s77 -> 'batch'"),
+            _builder.pretty_text(add_fx_graph=True),
+        )
 
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
