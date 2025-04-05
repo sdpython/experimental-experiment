@@ -4683,12 +4683,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             rows.append("--CONSTRAINTS--")
             for a, b in assert_sorted(self.constraints_.items()):
                 rows.append(f"    {a} = {b}")
-        rows.append("--PARAMETERS--")
-        rows.append("dynamic_examples=")
-        for i, (k, v) in enumerate(assert_sorted(self._parameter_renaming.items())):
-            rows.append(f"   {k} = {v!r}")
-            if i >= 10000:
-                break
         rows.append("--SHAPE--")
         rows.append("dynamic_examples=")
         for i, (k, v) in enumerate(assert_sorted(self._dynamic_examples.items())):
@@ -4751,8 +4745,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         rows.append(f"dynamic_alias={pprint.pformat(self._dynamic_alias)[:10000]}")
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
-        rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
+        rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         short_sh = {
             k: (
                 v
@@ -4770,6 +4764,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         }
         rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
 
+        rows.append("--PARAMETERS--")
+        rows.append("dynamic_examples=")
+        for i, (k, v) in enumerate(assert_sorted(self._parameter_renaming.items())):
+            rows.append(f"   {k} = {v!r}")
+            if i >= 10000:
+                break
         rows.append("--TORCH-USERS--")
         for k, v in assert_sorted(self._registered_users.items()):
             rows.append(f"    {k} -> {v}")
