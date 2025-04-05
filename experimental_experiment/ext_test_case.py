@@ -785,6 +785,22 @@ def has_torch(version: str) -> bool:
     return pv.Version(torch.__version__) >= pv.Version(version)
 
 
+def requires_onnx_diagnostic(version: str, msg: str = "") -> Callable:
+    """Skips a unit test if :epkg:`onnx-diagnostic` is not recent enough."""
+    import packaging.version as pv
+
+    try:
+        import onnx_diagnostic
+    except ImportError:
+        msg = f"onnx-diagnostic missing: {msg}"
+        return unittest.skip(msg)
+
+    if pv.Version(onnx_diagnostic.__version__) < pv.Version(version):
+        msg = f"onnx-diagnostic version {onnx_diagnostic.__version__} < {version}: {msg}"
+        return unittest.skip(msg)
+    return lambda x: x
+
+
 def requires_torch(version: str, msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`pytorch` is not recent enough."""
     import packaging.version as pv
