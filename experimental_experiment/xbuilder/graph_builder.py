@@ -995,7 +995,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 )
         if add_fx_graph:
-            fx = self._debug_msg.get("process.graph_module")
+            fx = self._debug_msg.get("process.graph_module.graph")
             if fx:
                 rows.append("-- FX.GRAPH-- ")
                 rows.append(str(fx))
@@ -4882,7 +4882,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
         a progress bar on big models.
         """
-        self._debug_msg["process.graph_module"] = graph_module.graph
+        self._debug_msg["process.graph_module"] = graph_module
+        self._debug_msg["process.graph_module.graph"] = graph_module.graph
 
         # looks into output marked as "alias_of_input"
         # see https://pytorch.org/functorch/main/_modules/torch/_functorch/aot_autograd.html

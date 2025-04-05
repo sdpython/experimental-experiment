@@ -813,11 +813,7 @@ class DynamoInterpreter:
         self,
         node: "torch.fx.Node",  # noqa: F821
     ) -> Tuple[List[Any], Dict[str, Any]]:
-        if hasattr(node.target, "_schema"):
-            node_schema = node.target._schema
-        else:
-            node_schema = None
-
+        node_schema = node.target._schema if hasattr(node.target, "_schema") else None
         complete_args = []
         complete_kwargs = {}
 

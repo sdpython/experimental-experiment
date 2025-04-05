@@ -8641,22 +8641,40 @@ def aten_slice_Tensor(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    dim: int = 0,
-    start: int = 0,
+    dim: Optional[int] = None,
+    start: Optional[int] = None,
     end: Optional[int] = None,
     step: Optional[int] = None,
+    name: str = "slide_Tensor",
 ) -> T:
     "slice"
     assert isinstance(dim, int), f"aten_slice_Tensor not implemented for dim={dim!r}"
-    if start is None:
-        start = 0
-    assert g.is_dynamic_dimension(start), (
+    if start is None and end is None and step in (None, 1) and dim in (None, 0):
+        # This is unexpected.
+        return g.op.Identity(x, outputs=outputs)
+
+    if start in (None, 0) and end == 9223372036854775807 and dim is not None and step == 1:
+        # One row or something like that.
+        res = g.op.Gather(
+            x, np.array(dim, dtype=np.int64), axis=dim, name=name, outputs=outputs
+        )
+        if not sts:
+            if g.has_type(x):
+                g.set_type(res, g.get_type(x))
+            if g.has_shape(x):
+                shape = g.get_shape(x)
+                g.set_shape(res, tuple(list(shape).pop(dim)))
+            elif g.has_rank(x):
+                g.get_rank(res, g.get_rank(x) - 1)
+        return res
+
+    assert start is not None and g.is_dynamic_dimension(start), (
         f"aten_slice_Tensor not implemented for **start**={start!r}, "
-        f"end={end!r}, x={x!r}{g.get_debug_msg()}"
+        f"end={end!r}, dim={dim!r}, step={step!r} x={x!r}{g.get_debug_msg()}"
     )
     assert end is None or g.is_dynamic_dimension(end), (
         f"aten_slice_Tensor not implemented for start={start!r}, "
-        f"**end**={end!r}, x={x!r}{g.get_debug_msg()}"
+        f"**end**={end!r}, dim={dim!r}, x={x!r}{g.get_debug_msg()}"
     )
     assert step is None or isinstance(step, int), f"Not implemented for step={step!r}"
     if end is None:
@@ -8672,7 +8690,7 @@ def aten_slice_Tensor(
     ]
     if step is not None and step != 1:
         inputs.append(np.array([step], dtype=np.int64))
-    res = g.op.Slice(x, *inputs, outputs=outputs, name="slice_Tensor")
+    res = g.op.Slice(x, *inputs, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if is_static_dimension(start) and is_static_dimension(end):
