@@ -8660,7 +8660,7 @@ def aten_slice_Tensor(
     if end is None:
         end = start
         start = 0
-    if start == 0 and end == 9223372036854775807 and step in {1, None}:
+    if start == 0 and (end is None or end == 9223372036854775807) and step in {1, None}:
         # nothing to do
         return g.op.Identity(x, outputs=outputs)
     inputs = [
@@ -8732,7 +8732,7 @@ def aten_slice_backward(
         inputs.append(grad_output)
 
         if isinstance(end, int):
-            if end < 9223372036854775807:
+            if end is not None and end < 9223372036854775807:
                 assert isinstance(input_sizes[dim], int), (
                     f"Not implemented for input_sizes={input_sizes}, "
                     f"end={end}{g.get_debug_msg()}"
@@ -8782,7 +8782,7 @@ def aten_slice_backward(
 
         inputs.append(grad_output)
 
-        if isinstance(end, str) or end < 9223372036854775807:
+        if isinstance(end, str) or (end is not None and end < 9223372036854775807):
             the_end = np.array([end], dtype=np.int64) if isinstance(end, int) else end
             new_dim = g.op.Sub(
                 (
@@ -8845,7 +8845,11 @@ def _aten_slice_scatter_static(
 
     if g.has_shape(src):
         shape_src = g.get_shape(src)
-        if shape_src == shape and start == 0 and end == 9223372036854775807:
+        if (
+            shape_src == shape
+            and (start is None or start == 0)
+            and (end is None or end == 9223372036854775807)
+        ):
             # It is identity.
             return g.op.Identity(src, outputs=outputs, name=name)
 
@@ -8910,26 +8914,26 @@ def _aten_slice_scatter_dynamic(
 ) -> T:
     "slice scatter"
     # step 1
-    assert start is None or g.is_dynamic_dimension(
-        start
-    ), f"slice_scatter not implemented for start={start}{g.get_debug_msg()}"
-    assert end is None or g.is_dynamic_dimension(
-        end
-    ), f"slice_scatter not implemented for end={end}{g.get_debug_msg()}"
-    assert step is None or is_static_dimension(
-        step
-    ), f"slice_scatter not implemented for step={step}{g.get_debug_msg()}"
+    assert start is None or g.is_dynamic_dimension(start), (
+        f"slice_scatter not implemented for **start**={start}, end={end}, x={x!r}"
+        f"{g.get_debug_msg()}"
+    )
+    assert end is None or g.is_dynamic_dimension(end), (
+        f"slice_scatter not implemented for start={start}, **end**={end}, x={x!r}"
+        f"{g.get_debug_msg()}"
+    )
+    assert step is None or is_static_dimension(step), (
+        f"slice_scatter not implemented for start={start}, **end**={end}, x={x!r}, "
+        f"**step**={step}={step}{g.get_debug_msg()}"
+    )
 
     if (
-        isinstance(start, int)
-        and not isinstance(start, g.torch.SymInt)
-        and start == 0
-        and isinstance(end, int)
+        not isinstance(start, g.torch.SymInt)
+        and ((isinstance(start, int) and start == 0) or start is None)
         and not isinstance(end, g.torch.SymInt)
-        and end == 9223372036854775807
-        and isinstance(step, int)
+        and ((isinstance(end, int) and end == 9223372036854775807) or end is None)
+        and (isinstance(step, int) and step == 1)
         and not isinstance(step, g.torch.SymInt)
-        and step == 1
     ):
         # slice scatter on dimension
         if g.has_shape(x) and g.has_shape(src) and g.get_shape(x) == g.get_shape(src):
@@ -8955,6 +8959,13 @@ def _aten_slice_scatter_dynamic(
     )
     g.set_type(index_1, TensorProto.INT64)
     g.set_rank(index_1, 1)
+    assert start is not None, (
+        f"not implemented with start={start!r}, end={end!r}, dim_shape={dim_shape}, "
+        f"index_1={index_1}, x={x}, src={src}, dim={dim!r}, "
+        f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
+        f"shape(src)={g.get_shape(src) if g.has_shape(src) else '?'}, "
+        f"{g.get_debug_msg()}"
+    )
     index_2 = g.op.Slice(
         index_1,
         g.get_dynamic_dimension(start),

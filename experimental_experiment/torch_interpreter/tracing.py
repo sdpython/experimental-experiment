@@ -577,7 +577,11 @@ class CustomTracer(torch.fx.Tracer):
                 continue
             if node.target.name() != "aten::slice.Tensor":
                 continue
-            if len(node.args) != 4 or node.args[2] != 0 or node.args[3] != 9223372036854775807:
+            if (
+                len(node.args) != 4
+                or (node.args[2] != 0 and node.args[2] is not None)
+                or (node.args[3] != 9223372036854775807 and node.args[3] is not None)
+            ):
                 continue
 
             # The first argument is the node to keep.
