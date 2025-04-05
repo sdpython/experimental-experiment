@@ -770,22 +770,31 @@ class CustomTracer(torch.fx.Tracer):
         """
         # Let's find the first clone node.
         given_node = node
-        assert hasattr(node, "target"), (
-            f"Unexpected case (1) node={node}, node.__dict__={node.__dict__}"
-            f"\n-----------\n{graph}"
-        )
         while (
-            node.target not in {"clone"}
+            hasattr(node, "target")
+            and node.target not in {"clone"}
             and (not hasattr(node.target, "name") or node.target.name() != "aten::clone")
             and node.args
         ):
-            node = node.args[0]
-            assert hasattr(node, "target"), (
-                f"Unexpected case (2) node={node}, node.__dict__={node.__dict__}"
-                f"\n-----------\n{graph}"
-            )
+            if isinstance(node.args[0], torch.fx.immutable_collections.immutable_list):
+                arg = node.args[0]
+                while isinstance(arg, torch.fx.immutable_collections.immutable_list):
+                    # something like
+                    # aten.zeros.default](args = ([%sym_size_int_18, %add_179, %add_179],)
+                    if len(arg) == 0:
+                        break
+                    node = arg[0]
+                    if not node.args:
+                        break
+                    arg = node.args[0]
+            else:
+                node = node.args[0]
         clone = node
-        target_name = node.target.name() if hasattr(node.target, "name") else node.target
+        target_name = (
+            (node.target.name() if hasattr(node.target, "name") else node.target)
+            if hasattr(node, "target")
+            else None
+        )
         assert target_name in {"aten::clone", "clone"}, (
             f"(inplace) Unexpected predecessor {node.target!r} "
             f"(target_name={target_name!r}) "
