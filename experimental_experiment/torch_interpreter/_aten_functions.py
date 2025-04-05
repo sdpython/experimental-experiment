@@ -8662,7 +8662,7 @@ def aten_slice_Tensor(
     if end is None:
         end = start
         start = 0
-    if start == 0 and (end is None or end == 9223372036854775807) and step in {1, None}:
+    if start == 0 and end == 9223372036854775807 and step in {1, None}:
         # nothing to do
         return g.op.Identity(x, outputs=outputs)
     inputs = [
@@ -8847,11 +8847,7 @@ def _aten_slice_scatter_static(
 
     if g.has_shape(src):
         shape_src = g.get_shape(src)
-        if (
-            shape_src == shape
-            and (start is None or start == 0)
-            and (end is None or end == 9223372036854775807)
-        ):
+        if shape_src == shape and start == 0 and end == 9223372036854775807:
             # It is identity.
             return g.op.Identity(src, outputs=outputs, name=name)
 
