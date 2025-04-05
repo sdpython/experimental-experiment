@@ -8655,18 +8655,7 @@ def aten_slice_Tensor(
 
     if start in (None, 0) and end == 9223372036854775807 and dim is not None and step == 1:
         # One row or something like that.
-        res = g.op.Gather(
-            x, np.array(dim, dtype=np.int64), axis=dim, name=name, outputs=outputs
-        )
-        if not sts:
-            if g.has_type(x):
-                g.set_type(res, g.get_type(x))
-            if g.has_shape(x):
-                shape = g.get_shape(x)
-                g.set_shape(res, tuple(list(shape).pop(dim)))
-            elif g.has_rank(x):
-                g.get_rank(res, g.get_rank(x) - 1)
-        return res
+        return g.op.Identity(x, outputs=outputs)
 
     assert start is not None and g.is_dynamic_dimension(start), (
         f"aten_slice_Tensor not implemented for **start**={start!r}, "

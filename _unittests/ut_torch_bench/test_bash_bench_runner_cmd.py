@@ -119,14 +119,14 @@ class TestBashBenchRunnerCmd(ExtTestCase):
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 if value not in ((1,), tuple()):
-                    self.assertIn(value[0], ("batch", "s0", "s1", "s2"))
+                    self.assertIn(value[0], ("batch", "s0", "s1", "s2", "s58"))
                     input_values.append(value[0])
             assert len(set(input_values)) <= 3, f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 if value != (1,):
-                    self.assertIn(value[0], ("batch", "s0", "s1", "s2"))
+                    self.assertIn(value[0], ("batch", "s0", "s1", "s2", "s58"))
                 self.assertEqual(input_values[0], value[0])
         if check_slice_input:
             if onx is None:
