@@ -8657,24 +8657,26 @@ def aten_slice_Tensor(
         # One row or something like that.
         return g.op.Identity(x, outputs=outputs)
 
-    assert start is not None and g.is_dynamic_dimension(start), (
+    assert start is None or g.is_dynamic_dimension(start), (
         f"aten_slice_Tensor not implemented for **start**={start!r}, "
-        f"end={end!r}, dim={dim!r}, step={step!r} x={x!r}{g.get_debug_msg()}"
+        f"end={end!r}, dim={dim!r}, step={step!r} x={x!r}, shape(x)="
+        f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
     )
     assert end is None or g.is_dynamic_dimension(end), (
         f"aten_slice_Tensor not implemented for start={start!r}, "
-        f"**end**={end!r}, dim={dim!r}, x={x!r}{g.get_debug_msg()}"
+        f"**end**={end!r}, dim={dim!r}, x={x!r}, shape(x)="
+        f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
     )
     assert step is None or isinstance(step, int), f"Not implemented for step={step!r}"
-    if end is None:
-        end = start
-        start = 0
+    # if end is None:
+    #     end = start
+    #     start = 0
     if start == 0 and end == 9223372036854775807 and step in {1, None}:
         # nothing to do
         return g.op.Identity(x, outputs=outputs)
     inputs = [
-        g.get_dynamic_dimension(start),
-        g.get_dynamic_dimension(end),
+        g.get_dynamic_dimension(start or 0),
+        g.get_dynamic_dimension(end or 9223372036854775807),
         np.array([dim], dtype=np.int64),
     ]
     if step is not None and step != 1:

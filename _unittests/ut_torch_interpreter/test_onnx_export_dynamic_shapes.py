@@ -274,7 +274,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             verbose=0,
             return_builder=True,
         )
-        self.assertNotIn("constraints", builder.get_debug_msg())
+        self.assertIn("int_oo", builder.get_debug_msg())
 
         shape = tuple(
             d.dim_param if d.dim_param else d.dim_value
