@@ -3636,6 +3636,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Operator Cast needs arguments to but kwargs={kwargs}, name={name!r}"
             f"{self.get_debug_msg()}"
         )
+        assert op_type != "Cast" or domain != "" or (len(inputs) == 1 and inputs[0]), (
+            f"Operator Cast has one empty input, name={name!r}, inputs={inputs}"
+            f"{self.get_debug_msg()}"
+        )
         assert op_type != "Concat" or domain != "" or len(inputs) > 1, (
             f"Concatenation of zero or one input is not necessary, "
             f"len(inputs)={len(inputs)}{self.get_debug_msg()} "

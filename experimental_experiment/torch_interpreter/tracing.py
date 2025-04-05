@@ -770,12 +770,20 @@ class CustomTracer(torch.fx.Tracer):
         """
         # Let's find the first clone node.
         given_node = node
+        assert hasattr(node, "target"), (
+            f"Unexpected case (1) node={node}, node.__dict__={node.__dict__}"
+            f"\n-----------\n{graph}"
+        )
         while (
             node.target not in {"clone"}
             and (not hasattr(node.target, "name") or node.target.name() != "aten::clone")
             and node.args
         ):
             node = node.args[0]
+            assert hasattr(node, "target"), (
+                f"Unexpected case (2) node={node}, node.__dict__={node.__dict__}"
+                f"\n-----------\n{graph}"
+            )
         clone = node
         target_name = node.target.name() if hasattr(node.target, "name") else node.target
         assert target_name in {"aten::clone", "clone"}, (

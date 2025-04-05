@@ -424,6 +424,11 @@ class ExtTestCase(unittest.TestCase):
         for a, b in zip(expected, value):
             self.assertEqualArray(a, b, atol=atol, rtol=rtol)
 
+    def assertEqualOr(self, value: Any, expected: Tuple[Any, ...]):
+        """Checks if value is one or the expected values."""
+        if value not in expected:
+            raise AssertionError(f"Unable to find {value!r} in {expected!r}")
+
     def assertEqualArray(
         self,
         expected: numpy.ndarray,

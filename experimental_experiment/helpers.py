@@ -877,7 +877,10 @@ def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
                 node.id = replacements[node.id]
             return node
 
-    tree = ast.parse(expression)
+    try:
+        tree = ast.parse(expression)
+    except SyntaxError:
+        return expression
     transformer = RenameVariable()
     new_tree = transformer.visit(tree)
     return ast.unparse(new_tree)

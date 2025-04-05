@@ -3398,7 +3398,9 @@ def aten_full_like(
     assert (
         memory_format is None or memory_format == torch.preserve_format
     ), f"empty_like not implemented for memory_format={memory_format}"
-    if isinstance(fill_value, (int, float, bool)):
+    if fill_value is None or isinstance(fill_value, (int, float, bool)):
+        if fill_value is None:
+            fill_value = 0
         if g.has_shape(x) and is_static_shape(g.get_shape(x)):
             # simple case
             return aten_full(

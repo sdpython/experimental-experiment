@@ -28,7 +28,10 @@ class ExportOptions:
     :param aten_as_function: keeps aten function as local function to keep a faithful
         translation of the fx graph.
     :param allow_untyped_output: allows output with no shape and/or no type
-    :param save_ep: to save the exported program
+    :param save_ep: to save the exported program, it True, it will save the
+        graph as well ``<save_ep>.graph``, it dumps them as text,
+        if decompositions are enabled, the exported program before them will be saved
+        as well
 
     The fallback strategy tries the following in order:
 
@@ -337,6 +340,9 @@ class ExportOptions:
                 assume_static_by_default=dynamic_shapes is None,
             )(*(args or tuple()), **(kwargs or {}))
 
+            if self.save_ep:
+                with open(f"{self.save_ep}.old_dynamo", "w") as f:
+                    f.write(str(res))
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return res  # _apply_decompositions(res, self.decomposition_table)
@@ -350,7 +356,13 @@ class ExportOptions:
                 mod, example_inputs=args, check_trace=False, strict=False
             )
             res = TS2EPConverter(jit_model, args, kwargs).convert()
+            if self.save_ep:
+                with open(f"{self.save_ep}.jit", "w") as f:
+                    f.write(str(res))
             dec = apply_decompositions(res, self.decomposition_table)
+            if self.save_ep:
+                with open(f"{self.save_ep}.jit.decomposed", "w") as f:
+                    f.write(str(dec))
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
@@ -385,6 +397,9 @@ class ExportOptions:
             graph = CustomTracer().trace(mod, concrete_args=concrete_args)
             if self.remove_inplace:
                 self.remove_inplace_nodes(graph, verbose=verbose)
+            if self.save_ep:
+                with open(f"{self.save_ep}.tracing", "w") as f:
+                    f.write(str(graph))
             gm = torch.fx.GraphModule(mod, graph)
             return gm
 
@@ -462,6 +477,11 @@ class ExportOptions:
             print("-- EXPORTED PROGRAM AFTER EXPORT -- ")
             print(exported_program)
             print("-- DONE -- ")
+        if self.save_ep:
+            with open(f"{self.save_ep}.ep", "w") as f:
+                f.write(str(exported_program))
+            with open(f"{self.save_ep}.ep.graph", "w") as f:
+                f.write(str(exported_program.graph))
 
         if self.decomposition_table:
             if verbose:
@@ -471,6 +491,11 @@ class ExportOptions:
                     f"{self.decomposition_table!r}..."
                 )
             dec = apply_decompositions(exported_program, self.decomposition_table)
+            if self.save_ep:
+                with open(f"{self.save_ep}.ep.decomposed", "w") as f:
+                    f.write(str(dec))
+                with open(f"{self.save_ep}.ep.graph.decomposed", "w") as f:
+                    f.write(str(dec.graph))
             if verbose:
                 print(
                     f"[ExportOptions.export] decomposition done in "
