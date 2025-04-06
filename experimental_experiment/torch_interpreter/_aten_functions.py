@@ -1262,6 +1262,20 @@ def aten_cat(
     return res
 
 
+def aten_ceil(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "ceil",
+) -> T:
+    "ceil"
+    res = g.op.Ceil(x, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_chunk(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3223,17 +3237,19 @@ def aten_floor_divide(
         itype = g.get_type(x)
         g.set_rank(div, max(g.get_rank(x), g.get_rank(y)))
     elif isinstance(x, str) and isinstance(y, int):
+        assert g.has_rank(x), f"missing rank for {x!r}{g.get_debug_msg()}"
         itype = g.get_type(x)
         dtype = tensor_dtype_to_np_dtype(itype)
-        div = g.op.Div(x, np.array([y], dtype=dtype), name=name)
+        div = g.op.Div(x, np.array([y] if g.get_rank(x) > 0 else y, dtype=dtype), name=name)
         if g.has_shape(x):
             g.set_shape(div, g.get_shape(x))
         else:
             g.set_rank(div, g.get_rank(x))
     elif isinstance(x, int) and isinstance(y, str):
+        assert g.has_rank(y), f"missing rank for {y!r}{g.get_debug_msg()}"
         itype = g.get_type(y)
         dtype = tensor_dtype_to_np_dtype(itype)
-        div = g.op.Div(np.array([x], dtype=dtype), y, name=name)
+        div = g.op.Div(np.array([x] if g.get_rank(x) > 0 else x, dtype=dtype), y, name=name)
         if g.has_shape(y):
             g.set_shape(div, g.get_shape(y))
         else:
@@ -3382,27 +3398,46 @@ def aten_full_like(
     assert (
         memory_format is None or memory_format == torch.preserve_format
     ), f"empty_like not implemented for memory_format={memory_format}"
-
-    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
-        # simple case
+    if fill_value is None or isinstance(fill_value, (int, float, bool)):
+        if fill_value is None:
+            fill_value = 0
+        if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+            # simple case
+            return aten_full(
+                g,
+                sts,
+                outputs,
+                g.get_shape(x),
+                fill_value,
+                dtype=dtype or g.get_type(x),
+                name=name,
+            )
         return aten_full(
             g,
             sts,
             outputs,
-            g.get_shape(x),
+            g.op.Shape(x, name=name),
             fill_value,
             dtype=dtype or g.get_type(x),
             name=name,
         )
-    return aten_full(
-        g,
-        sts,
-        outputs,
-        g.op.Shape(x, name=name),
-        fill_value,
-        dtype=dtype or g.get_type(x),
-        name=name,
-    )
+
+    if dtype is None:
+        assert g.has_type(x), f"missing type for {x!r}{g.get_debug_msg()}"
+        itype = g.get_type(x)
+    else:
+        itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
+    fill = g.op.Cast(fill_value, to=itype, name=name)
+    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+        # simple case
+        res = g.op.Expand(
+            fill, np.array(g.get_shape(x), dtype=np.int64), name=name, outputs=outputs
+        )
+    else:
+        res = g.op.Expand(fill, g.op.Shape(x, name=name), name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x, itype=itype)
+    return res
 
 
 def aten_FunctionCtx(
@@ -8340,14 +8375,14 @@ def aten_scalar_tensor(
     """constant"""
     import torch
 
-    assert layout in (
-        None,
-        torch.strided,
-    ), f"scalar_tensor: not implemented for layout={layout!r}{g.get_debug_msg()}"
-    assert pin_memory in (
-        None,
-        False,
-    ), f"scalar_tensor: not implemented for pin_memory={pin_memory!r}{g.get_debug_msg()}"
+    assert layout in (None, torch.strided), (
+        f"scalar_tensor: not implemented for layout={layout!r}, s={s}, "
+        f"dtype={dtype}{g.get_debug_msg()}"
+    )
+    assert pin_memory in (None, False), (
+        f"scalar_tensor: not implemented for pin_memory={pin_memory!r}, s={s}"
+        f"{g.get_debug_msg()}"
+    )
 
     if isinstance(s, str):
         # a scalar is turned into a tensor which should already be the case.
@@ -8357,9 +8392,10 @@ def aten_scalar_tensor(
         itype = torch_dtype_to_onnx_dtype(dtype)
         return g.op.Cast(s, to=itype, outputs=outputs, name=name)
 
-    assert isinstance(
-        s, (float, int)
-    ), f"scalar_tensor: not implemented for type(s)={type(s)!r}, s={s!r}{g.get_debug_msg()}"
+    assert isinstance(s, (float, int)), (
+        f"scalar_tensor: not implemented for type(s)={type(s)!r}, s={s!r}, "
+        f"type(s)={type(s)}{g.get_debug_msg()}"
+    )
     if dtype is None:
         if g.has_type(outputs[0]):
             dtype = tensor_dtype_to_np_dtype(g.get_type(outputs[0]))
@@ -8605,34 +8641,47 @@ def aten_slice_Tensor(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    dim: int = 0,
-    start: int = 0,
+    dim: Optional[int] = None,
+    start: Optional[int] = None,
     end: Optional[int] = None,
     step: Optional[int] = None,
+    name: str = "slide_Tensor",
 ) -> T:
     "slice"
     assert isinstance(dim, int), f"aten_slice_Tensor not implemented for dim={dim!r}"
-    assert g.is_dynamic_dimension(
-        start
-    ), f"aten_slice_Tensor not implemented for start={start!r}{g.get_debug_msg()}"
-    assert end is None or g.is_dynamic_dimension(
-        end
-    ), f"aten_slice_Tensor not implemented for end={end!r}{g.get_debug_msg()}"
+    if start is None and end is None and step in (None, 1) and dim in (None, 0):
+        # This is unexpected.
+        return g.op.Identity(x, outputs=outputs)
+
+    if start in (None, 0) and end == 9223372036854775807 and dim is not None and step == 1:
+        # One row or something like that.
+        return g.op.Identity(x, outputs=outputs)
+
+    assert start is None or g.is_dynamic_dimension(start), (
+        f"aten_slice_Tensor not implemented for **start**={start!r}, "
+        f"end={end!r}, dim={dim!r}, step={step!r} x={x!r}, shape(x)="
+        f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
+    )
+    assert end is None or g.is_dynamic_dimension(end), (
+        f"aten_slice_Tensor not implemented for start={start!r}, "
+        f"**end**={end!r}, dim={dim!r}, x={x!r}, shape(x)="
+        f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
+    )
     assert step is None or isinstance(step, int), f"Not implemented for step={step!r}"
-    if end is None:
-        end = start
-        start = 0
+    # if end is None:
+    #     end = start
+    #     start = 0
     if start == 0 and end == 9223372036854775807 and step in {1, None}:
         # nothing to do
         return g.op.Identity(x, outputs=outputs)
     inputs = [
-        g.get_dynamic_dimension(start),
-        g.get_dynamic_dimension(end),
+        g.get_dynamic_dimension(start or 0),
+        g.get_dynamic_dimension(end or 9223372036854775807),
         np.array([dim], dtype=np.int64),
     ]
     if step is not None and step != 1:
         inputs.append(np.array([step], dtype=np.int64))
-    res = g.op.Slice(x, *inputs, outputs=outputs, name="slice_Tensor")
+    res = g.op.Slice(x, *inputs, outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))
         if is_static_dimension(start) and is_static_dimension(end):
@@ -8694,7 +8743,7 @@ def aten_slice_backward(
         inputs.append(grad_output)
 
         if isinstance(end, int):
-            if end < 9223372036854775807:
+            if end is not None and end < 9223372036854775807:
                 assert isinstance(input_sizes[dim], int), (
                     f"Not implemented for input_sizes={input_sizes}, "
                     f"end={end}{g.get_debug_msg()}"
@@ -8744,7 +8793,7 @@ def aten_slice_backward(
 
         inputs.append(grad_output)
 
-        if isinstance(end, str) or end < 9223372036854775807:
+        if isinstance(end, str) or (end is not None and end < 9223372036854775807):
             the_end = np.array([end], dtype=np.int64) if isinstance(end, int) else end
             new_dim = g.op.Sub(
                 (
@@ -8872,26 +8921,26 @@ def _aten_slice_scatter_dynamic(
 ) -> T:
     "slice scatter"
     # step 1
-    assert start is None or g.is_dynamic_dimension(
-        start
-    ), f"slice_scatter not implemented for start={start}{g.get_debug_msg()}"
-    assert end is None or g.is_dynamic_dimension(
-        end
-    ), f"slice_scatter not implemented for end={end}{g.get_debug_msg()}"
-    assert step is None or is_static_dimension(
-        step
-    ), f"slice_scatter not implemented for step={step}{g.get_debug_msg()}"
+    assert start is None or g.is_dynamic_dimension(start), (
+        f"slice_scatter not implemented for **start**={start}, end={end}, x={x!r}"
+        f"{g.get_debug_msg()}"
+    )
+    assert end is None or g.is_dynamic_dimension(end), (
+        f"slice_scatter not implemented for start={start}, **end**={end}, x={x!r}"
+        f"{g.get_debug_msg()}"
+    )
+    assert step is None or is_static_dimension(step), (
+        f"slice_scatter not implemented for start={start}, **end**={end}, x={x!r}, "
+        f"**step**={step}={step}{g.get_debug_msg()}"
+    )
 
     if (
-        isinstance(start, int)
-        and not isinstance(start, g.torch.SymInt)
-        and start == 0
-        and isinstance(end, int)
+        not isinstance(start, g.torch.SymInt)
+        and ((isinstance(start, int) and start == 0) or start is None)
         and not isinstance(end, g.torch.SymInt)
-        and end == 9223372036854775807
-        and isinstance(step, int)
+        and ((isinstance(end, int) and end == 9223372036854775807) or end is None)
+        and (isinstance(step, int) and step == 1)
         and not isinstance(step, g.torch.SymInt)
-        and step == 1
     ):
         # slice scatter on dimension
         if g.has_shape(x) and g.has_shape(src) and g.get_shape(x) == g.get_shape(src):
@@ -8917,6 +8966,13 @@ def _aten_slice_scatter_dynamic(
     )
     g.set_type(index_1, TensorProto.INT64)
     g.set_rank(index_1, 1)
+    assert start is not None, (
+        f"not implemented with start={start!r}, end={end!r}, dim_shape={dim_shape}, "
+        f"index_1={index_1}, x={x}, src={src}, dim={dim!r}, "
+        f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
+        f"shape(src)={g.get_shape(src) if g.has_shape(src) else '?'}, "
+        f"{g.get_debug_msg()}"
+    )
     index_2 = g.op.Slice(
         index_1,
         g.get_dynamic_dimension(start),

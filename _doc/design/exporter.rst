@@ -588,7 +588,7 @@ Below is the graph module:
 
 ::
 
-    -- process.graph_module --
+    -- process.graph_module.graph --
     graph():
         %arg0_1 : [num_users=1] = placeholder[target=arg0_1]
         %arg1_1 : [num_users=1] = placeholder[target=arg1_1]

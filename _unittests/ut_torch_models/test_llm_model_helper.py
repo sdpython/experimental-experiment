@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     long_test,
     never_test,
+    requires_onnx_diagnostic,
     requires_torch,
     requires_transformers,
 )
@@ -723,7 +724,8 @@ class TestLlmModelHelper(ExtTestCase):
 
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
-    @requires_transformers("4.51")  # handle dynamic rope
+    @requires_transformers("4.52")  # handle dynamic rope
+    @requires_onnx_diagnostic("0.3.1")
     def test_a_get_tiny_llm_dynamic_rope(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -741,7 +743,7 @@ class TestLlmModelHelper(ExtTestCase):
         model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
-        with bypass_export_some_errors():
+        with bypass_export_some_errors(patch_transformers=True):
             torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
 
 

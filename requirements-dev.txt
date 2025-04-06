@@ -1,3 +1,4 @@
+accelerate
 black
 diffusers>=0.30.0
 furo

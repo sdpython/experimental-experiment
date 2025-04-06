@@ -28,6 +28,10 @@ class ExportOptions:
     :param aten_as_function: keeps aten function as local function to keep a faithful
         translation of the fx graph.
     :param allow_untyped_output: allows output with no shape and/or no type
+    :param save_ep: to save the exported program, it True, it will save the
+        graph as well ``<save_ep>.graph``, it dumps them as text,
+        if decompositions are enabled, the exported program before them will be saved
+        as well
 
     The fallback strategy tries the following in order:
 
@@ -89,10 +93,12 @@ class ExportOptions:
         aten_as_function: bool = False,
         remove_inplace: bool = True,
         allow_untyped_output: bool = False,
+        save_ep: Optional[str] = None,
     ):
         self.strict = strict
         self.fallback = fallback
         self.tracing = tracing
+        self.save_ep = save_ep
         self.decomposition_table = (
             None if decomposition_table in ("none", None) else decomposition_table
         )
@@ -180,6 +186,8 @@ class ExportOptions:
         """
         if self.decomposition_table:
             begin = time.perf_counter()
+            if verbose:
+                print(f"[ExportOptions.export] run decomposition {self.decomposition_table!r}")
             dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
                 print(
@@ -332,6 +340,9 @@ class ExportOptions:
                 assume_static_by_default=dynamic_shapes is None,
             )(*(args or tuple()), **(kwargs or {}))
 
+            if self.save_ep:
+                with open(f"{self.save_ep}.old_dynamo", "w") as f:
+                    f.write(str(res))
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return res  # _apply_decompositions(res, self.decomposition_table)
@@ -345,7 +356,13 @@ class ExportOptions:
                 mod, example_inputs=args, check_trace=False, strict=False
             )
             res = TS2EPConverter(jit_model, args, kwargs).convert()
+            if self.save_ep:
+                with open(f"{self.save_ep}.jit", "w") as f:
+                    f.write(str(res))
             dec = apply_decompositions(res, self.decomposition_table)
+            if self.save_ep:
+                with open(f"{self.save_ep}.jit.decomposed", "w") as f:
+                    f.write(str(dec))
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
@@ -380,6 +397,9 @@ class ExportOptions:
             graph = CustomTracer().trace(mod, concrete_args=concrete_args)
             if self.remove_inplace:
                 self.remove_inplace_nodes(graph, verbose=verbose)
+            if self.save_ep:
+                with open(f"{self.save_ep}.tracing", "w") as f:
+                    f.write(str(graph))
             gm = torch.fx.GraphModule(mod, graph)
             return gm
 
@@ -397,6 +417,9 @@ class ExportOptions:
             args0, kwargs0 = args, kwargs
             args = make_copy(args)
             kwargs = make_copy(kwargs)
+        if verbose:
+            t0 = time.perf_counter()
+            print("[ExportOptions.export] export start...")
         if exc:
             exported_program = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
@@ -438,6 +461,9 @@ class ExportOptions:
                     f"\n---exported-program---\n{exported_program}"
                 ) from e
 
+        if verbose:
+            print(f"[ExportOptions.export] export done in {time.perf_counter() - t0}")
+
         if self.strict:
             # torch.export.export may turn Tensor into FakeTensor.
             # We need to make a copy to avoid getting FakeTensor instead
@@ -451,10 +477,30 @@ class ExportOptions:
             print("-- EXPORTED PROGRAM AFTER EXPORT -- ")
             print(exported_program)
             print("-- DONE -- ")
+        if self.save_ep:
+            with open(f"{self.save_ep}.ep", "w") as f:
+                f.write(str(exported_program))
+            with open(f"{self.save_ep}.ep.graph", "w") as f:
+                f.write(str(exported_program.graph))
 
         if self.decomposition_table:
-            dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
+                t0 = time.perf_counter()
+                print(
+                    f"[ExportOptions.export] starts decomposition "
+                    f"{self.decomposition_table!r}..."
+                )
+            dec = apply_decompositions(exported_program, self.decomposition_table)
+            if self.save_ep:
+                with open(f"{self.save_ep}.ep.decomposed", "w") as f:
+                    f.write(str(dec))
+                with open(f"{self.save_ep}.ep.graph.decomposed", "w") as f:
+                    f.write(str(dec.graph))
+            if verbose:
+                print(
+                    f"[ExportOptions.export] decomposition done in "
+                    f"{time.perf_counter() - t0}"
+                )
                 print(
                     f"[ExportOptions.export] done after decomposition "
                     f"in {time.perf_counter() - begin}"

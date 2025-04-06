@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from . import _aten_functions, _aten_functions_attention, _prims_functions, _math_functions
+from ._non_aten_functions import onnx_symbolic__symbolic_default
 
 
 def _enumerate_aten_functions():
@@ -29,7 +30,10 @@ def _enumerate_prims_functions():
 
 
 def _register() -> Dict[str, Callable]:
-    res = {}
+    res = {
+        "onnx_symbolic__symbolic": onnx_symbolic__symbolic_default,
+        "onnx_symbolic::_symbolic": onnx_symbolic__symbolic_default,
+    }
     for k, v in _enumerate_aten_functions():
         other_key = "::".join(k.split("_", maxsplit=1))
         options = {k: v, other_key: v}
