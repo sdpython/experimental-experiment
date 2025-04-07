@@ -1912,6 +1912,40 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return self._known_types[name]
 
+    def _dims_equal_set(self, d):
+        done = set()
+        ds = {d}
+        while True:
+            nds = set()
+            for d in ds:
+                if d in done:
+                    continue
+                done.add(d)
+                if d in self.constraints_:
+                    nds |= self.constraints_[d]
+            if len(nds) == 0:
+                break
+            ds |= nds
+        return ds
+
+    def same_dimension(self, a, b) -> bool:
+        """Checks if the dimensions are the same. Looks into constraints as well."""
+        if a == b:
+            return True
+        return bool(self._dims_equal_set(a) & self._dims_equal_set(b))
+
+    def same_shape(self, x: str, y: str) -> bool:
+        """Checks if the shapes are the same. Looks into constraints as well."""
+        assert self.has_shape(x), f"missing shape for {x!r}{self.get_debug_msg()}"
+        assert self.has_shape(y), f"missing shape for {y!r}{self.get_debug_msg()}"
+        shape1 = self.get_shape(x)
+        shape2 = self.get_shape(y)
+        if shape1 == shape2:
+            return True
+        if len(shape1) != len(shape2):
+            return False
+        return all(self.same_dimension(a, b) for a, b in zip(shape1, shape2))
+
     def value_as_shape(self, name: str) -> bool:
         """Returns the value of a result if it is a shape."""
         if name in self._known_value_shape:

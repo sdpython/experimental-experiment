@@ -8959,7 +8959,7 @@ def _aten_slice_scatter_dynamic(
         and not isinstance(step, g.torch.SymInt)
     ):
         # slice scatter on dimension
-        if g.has_shape(x) and g.has_shape(src) and g.get_shape(x) == g.get_shape(src):
+        if g.has_shape(x) and g.has_shape(src) and g.same_shape(x, src):
             # Identity
             res = g.op.Identity(src, name=name)
             if not sts:
@@ -8968,7 +8968,10 @@ def _aten_slice_scatter_dynamic(
             return res
         raise AssertionError(
             f"start={start}, end={end}, step={step} is not implemented yet "
-            f"for slice_scatter{g.get_debug_msg()}"
+            f"for slice_scatter, x={x!r}, src={src!r}, "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
+            f"shape(src)={g.get_shape(src) if g.has_shape(src) else '?'}"
+            f"{g.get_debug_msg()}"
         )
 
     shape = g.op.Shape(x, name=name)
