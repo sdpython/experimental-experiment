@@ -399,9 +399,7 @@ class GraphBuilderPatternOptimization:
         return int(value)
 
     def get_computed_constant(self, name: str, statistics: Optional[List[str]] = None) -> Any:
-        """
-        Returns the value for the constant `name`.
-        """
+        """Returns the value for the constant `name`."""
         if name in self._cache_computed_constant:
             value = self._cache_computed_constant[name]
         else:
@@ -433,21 +431,15 @@ class GraphBuilderPatternOptimization:
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
     ) -> Optional[AttributeProto]:
-        """
-        Returns an attribute for a node.
-        """
+        """Returns an attribute for a node."""
         return self.builder.get_attribute(node, att_name, exc=exc)
 
     def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
-        """
-        Returns integer or float values for attributes.
-        """
+        """Returns integer or float values for attributes."""
         return self.builder.get_attributes_with_default(node, **default_values)
 
     def get_axis(self, node: NodeProto, default_axis: Optional[int] = None) -> int:
-        """
-        Retrieves the axis for many operators.
-        """
+        """Retrieves the axis for many operators."""
         att = self.get_attribute(node, "axis", exc=False)
         if att is None:
             assert (
@@ -495,39 +487,34 @@ class GraphBuilderPatternOptimization:
             raise RuntimeError(f"Unable to convert val={val} with cvt={cvt}") from e
 
     def has_type(self, name: str) -> bool:
-        """
-        Tells if a result has a type.
-        """
+        """Tells if a result has a type."""
         return self.builder.has_type(name)
 
     def get_type(self, name: str) -> int:
-        """
-        Returns the type of a result.
-        """
+        """Returns the type of a result."""
         return self.builder.get_type(name)
 
     def has_rank(self, name: str) -> int:
-        """
-        Tells if a result has a rank.
-        """
+        """Tells if a result has a rank."""
         return self.builder.has_rank(name)
 
     def get_rank(self, name: str) -> int:
-        """
-        Returns the rank of a result.
-        """
+        """Returns the rank of a result."""
         return self.builder.get_rank(name)
 
     def has_shape(self, name: str) -> bool:
-        """
-        Tells if a result has a shape.
-        """
+        """Tells if a result has a shape."""
         return self.builder.has_shape(name)
 
+    def same_shape(self, a: str, b: str) -> bool:
+        """
+        Tells if two results have the same shapes.
+        Considers the constraints.
+        """
+        return self.builder.same_shape(a, b)
+
     def get_shape(self, name: str) -> int:
-        """
-        Returns the shape of a result.
-        """
+        """Returns the shape of a result."""
         return self.builder.get_shape(name)
 
     def node_before(self, name: str) -> NodeProto:
@@ -541,17 +528,13 @@ class GraphBuilderPatternOptimization:
         return self.nodes_[predecessor]
 
     def next_node(self, name: str) -> NodeProto:
-        """
-        Returns the next node if it is unique, otherwise fails.
-        """
+        """Returns the next node if it is unique, otherwise fails."""
         res = self.next_nodes(name)
         assert len(res) == 1, f"Unexpected number of successors {len(res)} for {name!r}"
         return res[0]
 
     def next_nodes(self, name: str) -> List[NodeProto]:
-        """
-        Returns the node consuming the given results.
-        """
+        """Returns the node consuming the given results."""
         if name not in self.successors_:
             return []
         return [self.nodes_[i] for i in self.successors_[name]]
@@ -777,10 +760,7 @@ class GraphBuilderPatternOptimization:
         return proto
 
     def apply_match(self, match: MatchResult) -> List[NodeProto]:
-        """
-        Applies one match.
-        Returns the new nodes.
-        """
+        """Applies one match. Returns the new nodes."""
         idn = [id(n) for n in match.nodes if n is not None]
 
         assert all(i in self.nodes_ for i in idn), f"One node in {idn} is not referenced"
