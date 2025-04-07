@@ -131,9 +131,17 @@ def aten_add(
     name: str = "add",
 ) -> T:
     "add"
-    res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts, op_type="Add"
-    )
+    if (
+        isinstance(x, str)
+        and isinstance(y, str)
+        and g.get_type(x) == TensorProto.BOOL
+        and g.get_type(y) == TensorProto.BOOL
+    ):
+        res = g.op.Or(x, y, name=f"{name}_or", outputs=outputs)
+    else:
+        res, x, y = prepare_inputs_homogeneous_operator(
+            g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts, op_type="Add"
+        )
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
@@ -168,8 +176,16 @@ def aten_add_Tensor(
 ) -> T:
     "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
-    x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs, name=name)
+    if (
+        isinstance(x, str)
+        and isinstance(y, str)
+        and g.get_type(x) == TensorProto.BOOL
+        and g.get_type(y) == TensorProto.BOOL
+    ):
+        res = g.op.Or(x, y, name=f"{name}_or", outputs=outputs)
+    else:
+        x, y = prepare_inputs_homogeneous_operator(g, x, y)
+        res = g.op.Add(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
