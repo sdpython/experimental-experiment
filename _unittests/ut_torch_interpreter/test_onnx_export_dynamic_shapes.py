@@ -390,7 +390,7 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
                 return_builder=True,
                 export_options=ExportOptions(decomposition_table="default"),
             )
-            self.assertIn("+ 1)", builder.pretty_text())
+            self.assertIn("+1)", builder.pretty_text())
             if __name__ == "__main__":
                 with open(
                     "test_export_llama_model_dynamic_shapes_x2_cpu_tuple.onnx", "wb"
