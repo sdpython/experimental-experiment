@@ -131,9 +131,17 @@ def aten_add(
     name: str = "add",
 ) -> T:
     "add"
-    res, x, y = prepare_inputs_homogeneous_operator(
-        g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts, op_type="Add"
-    )
+    if (
+        isinstance(x, str)
+        and isinstance(y, str)
+        and g.get_type(x) == TensorProto.BOOL
+        and g.get_type(y) == TensorProto.BOOL
+    ):
+        res = g.op.Or(x, y, name=f"{name}_or", outputs=outputs)
+    else:
+        res, x, y = prepare_inputs_homogeneous_operator(
+            g, x, y, f=g.op.Add, name=name, outputs=outputs, sts=sts, op_type="Add"
+        )
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
@@ -168,8 +176,16 @@ def aten_add_Tensor(
 ) -> T:
     "add"
     assert alpha in (None, 1), f"alpha={alpha}, not implemented"
-    x, y = prepare_inputs_homogeneous_operator(g, x, y)
-    res = g.op.Add(x, y, outputs=outputs, name=name)
+    if (
+        isinstance(x, str)
+        and isinstance(y, str)
+        and g.get_type(x) == TensorProto.BOOL
+        and g.get_type(y) == TensorProto.BOOL
+    ):
+        res = g.op.Or(x, y, name=f"{name}_or", outputs=outputs)
+    else:
+        x, y = prepare_inputs_homogeneous_operator(g, x, y)
+        res = g.op.Add(x, y, outputs=outputs, name=name)
     if not sts:
         set_type_shape_binary_op(g, outputs[0], x, y)
     return res
@@ -4970,6 +4986,18 @@ def aten_index_select(
     "[..., :, ...]"
     assert g.has_type(index), f"aten_index_select: index type must be knonw{g.get_debug_msg()}"
     if g.get_type(index) == TensorProto.BOOL:
+        assert g.has_rank(index), f"missing rank for index={index!r}{g.get_debug_msg()}"
+        rk = g.get_rank(index)
+        if rk > 1:
+            index = g.op.Reshape(index, g.MINUS_ONE, name=name)
+            new_shape = (
+                np.array([-1, *g.get_shape(x)[rk:]], dtype=np.int64)
+                if g.has_shape(x) and all_int(g.get_shape(x)[rk:])
+                else g.op.Concat(
+                    g.MINUS_ONE, g.op.Shape(x, start=rk, name=name), axis=0, name=name
+                )
+            )
+            x = g.op.Reshape(x, new_shape, name=name)
         res = g.op.Compress(x, index, axis=dim, outputs=outputs, name=name)
     else:
         res = g.op.Gather(x, index, axis=dim, outputs=outputs, name=name)
@@ -8943,7 +8971,7 @@ def _aten_slice_scatter_dynamic(
         and not isinstance(step, g.torch.SymInt)
     ):
         # slice scatter on dimension
-        if g.has_shape(x) and g.has_shape(src) and g.get_shape(x) == g.get_shape(src):
+        if g.has_shape(x) and g.has_shape(src) and g.same_shape(x, src):
             # Identity
             res = g.op.Identity(src, name=name)
             if not sts:
@@ -8952,7 +8980,10 @@ def _aten_slice_scatter_dynamic(
             return res
         raise AssertionError(
             f"start={start}, end={end}, step={step} is not implemented yet "
-            f"for slice_scatter{g.get_debug_msg()}"
+            f"for slice_scatter, x={x!r}, src={src!r}, "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
+            f"shape(src)={g.get_shape(src) if g.has_shape(src) else '?'}"
+            f"{g.get_debug_msg()}"
         )
 
     shape = g.op.Shape(x, name=name)

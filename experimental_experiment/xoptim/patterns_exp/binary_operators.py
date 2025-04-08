@@ -48,7 +48,7 @@ class _common:
                     continue
                 return False
             return True
-        return g.get_shape(name1) == g.get_shape(name2)
+        return g.same_shape(name1, name2)
 
 
 class AddAddMulMulPattern(PatternOptimization, _common):
