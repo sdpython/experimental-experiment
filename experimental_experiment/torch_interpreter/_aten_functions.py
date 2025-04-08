@@ -4991,7 +4991,7 @@ def aten_index_select(
         if rk > 1:
             index = g.op.Reshape(index, g.MINUS_ONE, name=name)
             new_shape = (
-                np.array([-1, *g.get_shape(x)[rk:]], type=np.int64)
+                np.array([-1, *g.get_shape(x)[rk:]], dtype=np.int64)
                 if g.has_shape(x) and all_int(g.get_shape(x)[rk:])
                 else g.op.Concat(
                     g.MINUS_ONE, g.op.Shape(x, start=rk, name=name), axis=0, name=name
