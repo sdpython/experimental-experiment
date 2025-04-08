@@ -32,7 +32,7 @@ from ..helpers import (
     max_diff,
     flatten_object,
 )
-from ..torch_interpreter.onnx_export_errors import register_additional_serialization_functions
+from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
 
 
 class BenchmarkRunner:
@@ -1730,8 +1730,7 @@ class BenchmarkRunner:
                 if quiet:
                     try:
                         with register_additional_serialization_functions(
-                            replace_dynamic_cache=apply_patches
-                            and expected_dynamic is not None,
+                            patch_transformers=apply_patches and expected_dynamic is not None,
                             verbose=max(self.verbose - 5, 0),
                         ) as modificator:
                             new_feeds = modificator(feeds)
@@ -1755,21 +1754,10 @@ class BenchmarkRunner:
                         return stats
                 else:
                     with register_additional_serialization_functions(
-                        replace_dynamic_cache=apply_patches and expected_dynamic is not None,
+                        patch_transformers=apply_patches and expected_dynamic is not None,
                         verbose=max(self.verbose - 5, 0),
                     ) as modificator:
                         new_feeds = modificator(feeds)
-                        assert (
-                            not apply_patches
-                            or expected_dynamic is None
-                            or "DynamicCache"
-                            not in set(
-                                c.__class__.__name__ for c in new_feeds if c is not None
-                            )
-                        ), (
-                            f"Unexpected type found new modified feeds "
-                            f"{string_type(new_feeds, limit=20)}"
-                        )
                         for _ in range(warmup):
                             if self.nvtx:
                                 torch.cuda.nvtx.range_push("CPL-WARMUP")
@@ -1848,7 +1836,7 @@ class BenchmarkRunner:
                     # execute the fx graph.
                     with register_additional_serialization_functions(
                         verbose=max(self.verbose - 5, 0),
-                        replace_dynamic_cache=apply_patches and expected_dynamic is not None,
+                        patch_transformers=apply_patches and expected_dynamic is not None,
                     ) as modificator:
                         new_feeds = modificator(feeds)
                         for _ in range(repeat):

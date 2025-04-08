@@ -1,9 +1,11 @@
+accelerate
 black
 diffusers>=0.30.0
 furo
 matplotlib
 onnx-array-api
 git+https://github.com/microsoft/onnxscript.git
+git+https://github.com/sdpython/onnx-diagnostic.git
 openpyxl
 packaging
 pandas

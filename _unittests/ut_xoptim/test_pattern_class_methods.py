@@ -17,6 +17,9 @@ class TestPatternClassMethod(ExtTestCase):
                 if name == "b":
                     return sh2
 
+            def same_shape(self, a, b):
+                return self.get_shape(a) == self.get_shape(b)
+
         return AddAddMulMulPattern._same_shape(MockGB(), "a", "b", broadcast=broadcast)
 
     def test_same_shape(self):

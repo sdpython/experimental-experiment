@@ -5,9 +5,7 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     long_test,
 )
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
-    bypass_export_some_errors,
-)
+from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 from experimental_experiment.torch_bench.big_models.try_falcon_mamba import (
     load_model,
     demo_model,

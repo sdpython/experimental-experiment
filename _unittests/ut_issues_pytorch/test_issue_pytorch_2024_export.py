@@ -47,9 +47,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         import transformers
         import onnxruntime as ort
         from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 
         def assert_close(actual, desired):
             if isinstance(desired, torch.Tensor):

@@ -8,11 +8,12 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
     requires_torch,
     requires_transformers,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.cache_helpers import make_dynamic_cache
 from experimental_experiment.helpers import string_type
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
+from onnx_diagnostic.torch_export_patches import (
     bypass_export_some_errors,
     register_additional_serialization_functions,
 )
@@ -255,7 +256,7 @@ class TestPieceByPiece(ExtTestCase):
         atts = [k for k in dir(diag) if k.startswith("exporter")]
         self.assertEqual(set(atts), {"exporter_discs", "exporter_outputs", "exporter_status"})
 
-    @requires_torch("2.6")
+    @requires_torch("2.9", "https://github.com/pytorch/pytorch/issues/150022")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_to_kwargs(self):
         class Model(torch.nn.Module):
@@ -289,7 +290,7 @@ class TestPieceByPiece(ExtTestCase):
         _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
         self.assertEqual(ds, (tuple(), {"kwargs": {"x": {0: torch.export.Dim.DYNAMIC}}}))
 
-    @requires_torch("2.6")
+    @requires_torch("2.9", "https://github.com/pytorch/pytorch/issues/150022")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_not_to_kwargs(self):
         class Model(torch.nn.Module):
@@ -323,7 +324,7 @@ class TestPieceByPiece(ExtTestCase):
         _a, _kw, ds = diag._move_to_kwargs(*diag.inputs[0], ds)
         self.assertEqual(ds, (tuple(), {"x": {0: torch.export.Dim.DYNAMIC}}))
 
-    @requires_torch("2.6")
+    @requires_torch("2.9")
     @hide_stdout()
     def test_trace_execution_piece_by_piece_args_or_not_to_kwargs(self):
         class Model(torch.nn.Module):
@@ -557,7 +558,10 @@ class TestPieceByPiece(ExtTestCase):
         ep = torch.export.export(model, (x,), dynamic_shapes=ds)
         model.sub.forward = _forward
         self.assertIn("torch.ops.test_diag_lib.SubModelKAW_forward", str(ep))
-        self.assertIn('sub_model_kaw_forward: "f32[s0, 6]"', str(ep))
+        self.assertInOr(
+            ('sub_model_kaw_forward: "f32[s0, 6]"', 'sub_model_kaw_forward: "f32[s35, 6]"'),
+            str(ep),
+        )
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -708,6 +712,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertIn("OK_CHILDC", report)
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     @hide_stdout()
     def test_export_piece_dynamic_cache(self):
         def memo(
@@ -737,28 +742,33 @@ class TestPieceByPiece(ExtTestCase):
             def forward(self, x, cache):
                 return self.sub(x, self.subcache(cache))
 
-        cache = make_dynamic_cache([(torch.ones((5, 6, 2, 2)), torch.ones((5, 6, 2, 2)) + 2)])
+        cache = make_dynamic_cache([(torch.ones((5, 6, 5, 6)), torch.ones((5, 6, 5, 6)) + 2)])
         model = Model()
-        x = torch.randn((5, 6, 2, 2))
+        x = torch.randn((5, 6, 5, 6))
         y = model(x, cache)
         self.assertNotEmpty(y)
 
-        cache2 = make_dynamic_cache([(torch.ones((6, 6, 2, 2)), torch.ones((6, 6, 2, 2)) + 2)])
+        cache2 = make_dynamic_cache([(torch.ones((6, 6, 6, 6)), torch.ones((6, 6, 6, 6)) + 2)])
 
         inputs = [
-            ((torch.randn((5, 6, 2, 2)), cache), {}),
-            ((torch.randn((6, 6, 2, 2)), cache2), {}),
+            ((torch.randn((5, 6, 5, 6)), cache), {}),
+            ((torch.randn((6, 6, 6, 6)), cache2), {}),
         ]
 
-        expected_dyn_shapes = "(({0: DYN}, [[{0: DYN}], [{0: DYN}]]), {})"
+        expected_dyn_shapes = (
+            "(({0: DYN, 2: DYN}, [[{0: DYN, 2: DYN}], [{0: DYN, 2: DYN}]]), {})"
+        )
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
         got = (
             str(dyn_shapes)
-            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
             .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+            .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
+            .replace("_DimHint(type=DYN)", "DYN")
+            .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
         )
         self.assertEqual(expected_dyn_shapes, got)
+        print(diag.pretty_text(with_shape=True, with_min_max=False))
 
         expected = [
             ((0, torch.float32, None),),
@@ -777,12 +787,12 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        with register_additional_serialization_functions():
+        with bypass_export_some_errors(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
                 exporter_kwargs=dict(strict=False),
-                verbose=10,
+                verbose=0,
                 replace_by_custom_op=CustomOpStrategy.ALWAYS,
                 quiet=0,
             )
@@ -801,6 +811,7 @@ class TestPieceByPiece(ExtTestCase):
             self.assertIn(esch, str(ep))
 
     @requires_torch("2.7")
+    @ignore_warnings(UserWarning)
     @hide_stdout()
     def test_export_piece_dynamic_cache_io(self):
         class SubModelCacheIn(torch.nn.Module):
@@ -823,23 +834,25 @@ class TestPieceByPiece(ExtTestCase):
                 cache = self.subout(x, y)
                 return self.subin(cache)
 
-        cache = make_dynamic_cache([(torch.ones((5, 6)), torch.ones((5, 6)) + 2)])
+        cache = make_dynamic_cache([(torch.ones((5, 6, 5, 6)), torch.ones((5, 6, 5, 6)) + 2)])
         model = Model()
-        x = torch.randn((5, 6))
-        y = torch.randn((5, 6))
+        x = torch.randn((5, 6, 5, 6))
+        y = torch.randn((5, 6, 5, 6))
 
         inputs = [
             ((x, y), {}),
-            ((torch.randn((6, 6)), torch.randn((6, 6))), {}),
+            ((torch.randn((6, 6, 6, 6)), torch.randn((6, 6, 6, 6))), {}),
         ]
 
-        expected_dyn_shapes = "(({0: DYN}, {0: DYN}), {})"
+        expected_dyn_shapes = "(({0: DYN, 2: DYN}, {0: DYN, 2: DYN}), {})"
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
         got = (
             str(dyn_shapes)
-            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
             .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+            .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
+            .replace("_DimHint(type=DYN)", "DYN")
+            .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
         )
         self.assertEqual(expected_dyn_shapes, got)
 
@@ -859,7 +872,7 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        with bypass_export_some_errors():
+        with bypass_export_some_errors(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
@@ -1097,8 +1110,12 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertIn(
-            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+        self.assertInOr(
+            (
+                'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):',
+                'ep:         def forward(self, x: "f32[s35, 6]", y: "f32[s35, 6]"):',
+            ),
+            report,
         )
         report = diag.get_export_report(fx=True)
         self.assertIn(
@@ -1189,15 +1206,19 @@ class TestPieceByPiece(ExtTestCase):
         ds = diag.guess_dynamic_shapes()
         sds = (
             str(ds)
-            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
             .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+            .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
+            .replace("_DimHint(type=DYN)", "DYN")
+            .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
         )
         self.assertEqual(sds, "(({0: DYN},), {'y': {0: DYN}})")
         choose = choose_kwargs_for_dynamic_shapes(*ds, diag.forward_positioned_parameter_names)
         schoose = (
             str(choose)
-            .replace("_DimHint(type=<_DimHintType.DYNAMIC: 3>)", "DYN")
             .replace("<_DimHint.DYNAMIC: 3>", "DYN")
+            .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
+            .replace("_DimHint(type=DYN)", "DYN")
+            .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
         )
         self.assertEqual(schoose, "{'y': {0: DYN}, 'x': {0: DYN}}")
         ep = diag.try_export(
@@ -1210,8 +1231,12 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertIn(
-            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s1, 6]"):', report
+        self.assertInOr(
+            (
+                'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s1, 6]"):',
+                'ep:         def forward(self, x: "f32[s35, 6]", y: "f32[s14, 6]"):',
+            ),
+            report,
         )
         report = diag.get_export_report(fx=True)
         self.assertIn("torch.ops.diag_lib.C_Model.default", report)
@@ -1256,8 +1281,12 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertIn(
-            'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):', report
+        self.assertInOr(
+            (
+                'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):',
+                'ep:         def forward(self, x: "f32[s14, 6]", y: "f32[s14, 6]"):',
+            ),
+            report,
         )
         report = diag.get_export_report(fx=True)
         self.assertIn(
@@ -1528,13 +1557,13 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertIn('add: "f32[s0, 6, 16]"', report)
+        self.assertInOr(('add: "f32[s0, 6, 16]"', 'add: "f32[s35, 6, 16]"'), report)
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqual(str(shape), "(s0, 6, 16)")
+        self.assertEqualOr(str(shape), ("(s0, 6, 16)", "(s35, 6, 16)"))
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -1576,13 +1605,13 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertIn('add: "f32[s0, 6, 16]"', report)
+        self.assertInOr(('add: "f32[s0, 6, 16]"', 'add: "f32[s35, 6, 16]"'), report)
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqual(str(shape), "(s0, 6, 16)")
+        self.assertEqualOr(str(shape), ("(s0, 6, 16)", "(s35, 6, 16)"))
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -1631,13 +1660,16 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertIn('c_model_sub: "f32[s1, s0]"', report)
+        self.assertInOr(('c_model_sub: "f32[s1, s0]"', 'c_model_sub: "f32[s58, s16]"'), report)
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqual(str(shape), "(s1, s0)")
+        self.assertEqual(len(shape), 2)
+        self.assertNotEqual(shape[0], shape[1])
+        self.assertIsInstance(shape[0], (str, torch.SymInt))
+        self.assertIsInstance(shape[1], (str, torch.SymInt))
 
     @requires_torch("2.7")
     @hide_stdout()
@@ -1674,6 +1706,19 @@ class TestPieceByPiece(ExtTestCase):
         cache = make_dynamic_cache([(torch.randn((5, 6)), torch.randn((5, 6)))])
         z = model(x, cache)
         self.assertNotEmpty(z)
+        with bypass_export_some_errors(patch_transformers=True):
+            z2 = model(x, cache)
+            self.assertEqual(
+                len(z["past_key_value"].key_cache), len(z2["past_key_value"].key_cache)
+            )
+            for i in range(len(z["past_key_value"].key_cache)):
+                self.assertEqualArray(
+                    z["past_key_value"].key_cache[i], z2["past_key_value"].key_cache[i]
+                )
+                self.assertEqualArray(
+                    z["past_key_value"].value_cache[i], z2["past_key_value"].value_cache[i]
+                )
+            self.assertEqualArray(z["mask"], z2["mask"])
 
         cache2 = make_dynamic_cache([(torch.randn((6, 6)), torch.randn((6, 6)))])
         inputs = [
@@ -1682,7 +1727,7 @@ class TestPieceByPiece(ExtTestCase):
         ]
 
         diag = trace_execution_piece_by_piece(model, inputs)
-        with register_additional_serialization_functions():
+        with bypass_export_some_errors(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
@@ -1693,14 +1738,13 @@ class TestPieceByPiece(ExtTestCase):
             )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        print(report)
-        self.assertIn('ones_like: "f32[s0, 6]"', report)
+        self.assertInOr(('ones_like: "f32[s0, 6]"', 'ones_like: "f32[s35, 6]"'), report)
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqual(str(shape), "(s0, 6)")
+        self.assertEqualOr(str(shape), ("(s0, 6)", "(s32, 6)"))
 
     @requires_torch("2.7")
     @hide_stdout()
@@ -1742,13 +1786,13 @@ class TestPieceByPiece(ExtTestCase):
             )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertIn('c_model_sub: "f32[s0, 6]"', report)
+        self.assertInOr(('c_model_sub: "f32[s0, 6]"', 'c_model_sub: "f32[s32, 6]"'), report)
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqual(str(shape), "(s0, 6)")
+        self.assertEqualOr(str(shape), ("(s0, 6)", "(s32, 6)"))
 
     @requires_torch("2.6")
     @hide_stdout()

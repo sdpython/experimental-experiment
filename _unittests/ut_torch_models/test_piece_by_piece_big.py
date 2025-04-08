@@ -12,9 +12,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.xbuilder import GraphBuilder
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.helpers import max_diff
-from experimental_experiment.torch_interpreter.onnx_export_errors import (
-    bypass_export_some_errors,
-)
+from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,

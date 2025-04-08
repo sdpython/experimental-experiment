@@ -40,7 +40,7 @@ def make_aot_ort(
     assert not dump_prefix, f"dump_prefix={dump_prefix!r} not implemented"
     import onnxruntime
     from torch.onnx import (
-        OnnxRegistry,
+        # OnnxRegistry,
         _OrtBackend as OrtBackend,
         _OrtBackendOptions as OrtBackendOptions,
         ExportOptions,
@@ -48,15 +48,10 @@ def make_aot_ort(
 
     names = []
     onnx_registry = None
-    if aten_conversion_changes is not None:
-        onnx_registry = OnnxRegistry()
-        for fct, name in aten_conversion_changes:
-            onnx_registry.register_op(
-                function=fct, namespace="aten", op_name=name, overload="default"
-            )
-            names.append(f"torch.ops.aten.{name}.default")
-            if verbose:
-                print(f"[make_aot_ort] register {names[-1]!r}")
+    assert aten_conversion_changes is not None, (
+        f"this option is not supported anymore but "
+        f"aten_conversion_changes={aten_conversion_changes}"
+    )
 
     ort_session_options = onnxruntime.SessionOptions()
     # ort_session_options.log_severity_level = 1

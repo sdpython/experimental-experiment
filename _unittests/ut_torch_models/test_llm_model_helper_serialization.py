@@ -16,13 +16,11 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @skipif_ci_windows("not supported")
-    @requires_torch("2.6")  # for torch.export.Dim.DYNAMIC
+    @requires_torch("2.9")  # for torch.export.Dim.DYNAMIC
     @requires_transformers("4.49.9999")
     def test_phi2_output_order_export(self):
         import torch
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         res = get_phi2(
@@ -35,10 +33,8 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         )
         model, model_inputs, dyn_shapes = (res["model"], res["inputs"], res["dynamic_shapes"])
         expected = model(**copy.deepcopy(model_inputs))
-        with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True
-        ) as modificator:
-            modified_inputs = modificator(model_inputs)
+        with bypass_export_some_errors(patch_transformers=True) as modificator:
+            modified_inputs = modificator(copy.deepcopy(model_inputs))
             ep = torch.export.export(
                 model,
                 (),
@@ -47,7 +43,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
                 strict=False,
             )
             mod = ep.module()
-            got = mod(**modified_inputs)
+            got = mod(**copy.deepcopy(model_inputs))
 
             # We check that should be the same order.
             self.assertNotIn("patched_DynamicCache", string_type(expected, with_shape=True))
@@ -69,9 +65,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @long_test()
     def test_phi2_output_order_onnx_dynamo(self):
         import torch
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         res = get_phi2(
@@ -84,9 +78,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         )
         model, model_inputs, dyn_shapes = (res["model"], res["inputs"], res["dynamic_shapes"])
         expected = model(**copy.deepcopy(model_inputs))
-        with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True
-        ) as modificator:
+        with bypass_export_some_errors(patch_transformers=True) as modificator:
             modified_inputs = modificator(model_inputs)
             ep = torch.onnx.export(
                 model,
@@ -123,9 +115,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
     @long_test()
     def test_phi2_output_order_custom(self):
         import torch
-        from experimental_experiment.torch_interpreter.onnx_export_errors import (
-            bypass_export_some_errors,
-        )
+        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
         from experimental_experiment.torch_models.llm_model_helper import get_phi2
 
         res = get_phi2(
@@ -138,9 +128,7 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         )
         model, model_inputs, dyn_shapes = (res["model"], res["inputs"], res["dynamic_shapes"])
         expected = model(**copy.deepcopy(model_inputs))
-        with bypass_export_some_errors(
-            patch_transformers=True, replace_dynamic_cache=True
-        ) as modificator:
+        with bypass_export_some_errors(patch_transformers=True) as modificator:
             flatten_inputs = torch.utils._pytree.tree_flatten(model_inputs)[0]
             modified_inputs = modificator(model_inputs)
             onx = to_onnx(

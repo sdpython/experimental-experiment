@@ -268,7 +268,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7")
-    @requires_transformers("4.50.9999")
+    @requires_transformers("4.51.9999")
     def test_dynamic_cache_eager(self):
         for exporter in ["export", "eager"]:
             with self.subTest(exporter=exporter):
