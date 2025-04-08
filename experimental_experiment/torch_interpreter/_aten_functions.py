@@ -4986,6 +4986,18 @@ def aten_index_select(
     "[..., :, ...]"
     assert g.has_type(index), f"aten_index_select: index type must be knonw{g.get_debug_msg()}"
     if g.get_type(index) == TensorProto.BOOL:
+        assert g.has_rank(index), f"missing rank for index={index!r}{g.get_debug_msg()}"
+        rk = g.get_rank(index)
+        if rk > 1:
+            index = g.op.Reshape(index, g.MINUS_ONE, name=name)
+            new_shape = (
+                np.array([-1, *g.get_shape(x)[rk:]], type=np.int64)
+                if g.has_shape(x) and all_int(g.get_shape(x)[rk:])
+                else g.op.Concat(
+                    g.MINUS_ONE, g.op.Shape(x, start=rk, name=name), axis=0, name=name
+                )
+            )
+            x = g.op.Reshape(x, new_shape, name=name)
         res = g.op.Compress(x, index, axis=dim, outputs=outputs, name=name)
     else:
         res = g.op.Gather(x, index, axis=dim, outputs=outputs, name=name)

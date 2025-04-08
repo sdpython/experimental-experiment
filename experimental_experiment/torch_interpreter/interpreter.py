@@ -1823,7 +1823,7 @@ class DynamoInterpreter:
 
                     for t in shape:
                         if isinstance(t, self.builder.torch.SymInt):
-                            expr = str(t.node._expr)
+                            expr = str(t.node._expr).replace(",", ";").replace(" ", "")
                             if expr not in self.builder.dynamic_objects:
                                 # A new shape may be given to a result.
                                 self.builder.add_dynamic_object(expr, t, parse=True)

@@ -323,7 +323,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     return obj.node
                 i = obj.node._expr
                 if "sympy" in str(type(i)):
-                    return str(i)
+                    return str(i).replace(",", ";").replace(" ", "")
                 return None
             raise AssertionError(f"Unexpected type {type(obj)} to convert into string")
 
@@ -1572,7 +1572,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if hasattr(value, "node") and isinstance(value.node, SymNode):
             # '_expr' is safer than expr
-            return str(value.node._expr)
+            return str(value.node._expr).replace(",", ";").replace(" ", "")
 
         try:
             val_int = int(value)
@@ -1656,9 +1656,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.add_dynamic_object(dim, dim)
             return
 
-        assert isinstance(
-            dim, str
-        ), f"type(dim)={type(dim)} must be a str{self.get_debug_msg()}"
+        assert (
+            isinstance(dim, str)
+            and "," not in dim
+            and " " not in dim
+            and dim.count("(") == dim.count(")")
+        ), (
+            f"type(dim)={type(dim)} must be a str and should not contain "
+            f"a comma or a space dim={dim!r} and the same number of opened and closed é"
+            f"brackets{self.get_debug_msg()}"
+        )
         for token in parse_expression_tokens(dim):
             if token not in self.dynamic_objects:
                 self.add_dynamic_object(token, token)
@@ -2895,7 +2902,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         value = None
         try:
             # don't use 'expr'
-            dyn_val = str(d.node._expr)
+            dyn_val = str(d.node._expr).replace(",", ";").replace(" ", "")
             value = dyn_val
         except AttributeError:
             pass
@@ -3357,7 +3364,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return obj.node
             i = obj.node._expr
             if "sympy" in str(type(i)):
-                return str(i)
+                return str(i).replace(",", ";").replace(" ", "")
             if exc:
                 raise AssertionError(
                     f"Object has {type(obj)} but could not find a dynamic interpretation"
@@ -7430,11 +7437,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     return True
                 if (
                     isinstance(y, tuple)
-                    and isinstance(i, np.ndarray)
-                    and i.dtype == np.int64
-                    and i.shape in ((1,), tuple())
+                    and isinstance(i, (self.torch.Tensor, np.ndarray))
+                    and i.dtype in (np.int64, self.torch.int64)
+                    and tuple(i.shape) in ((1,), tuple())
                 ):
-                    ii = int(i[0]) if i.shape == (1,) else int(i)
+                    ishape = tuple(i.shape)
+                    ii = int(i[0]) if ishape == (1,) else int(i)
                     if self._debug_quiet and ii >= len(y):
                         node.doc_string += "#SV-Ga/77"
                         return False
@@ -7449,8 +7457,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     node.doc_string += "#SV-Ga7"
                     return True
                 raise RuntimeError(
-                    f"Not implemented when node Gather with inputs={node.input}, "
-                    f"y={y!r}, i={i!r}{self.get_debug_msg()}"
+                    f"Not implemented when node Gather(x,i) with inputs={node.input}, "
+                    f"shape(x)={y!r}, i={i!r}, i.dtype={i.dtype}{self.get_debug_msg()}"
                 )
             node.doc_string += "#SV-Ga/7"
             return False
