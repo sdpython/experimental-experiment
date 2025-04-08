@@ -32,6 +32,10 @@ class CustomBuilderEmitter(BuilderEmitter):
             "    g.make_local_function(gr, opts, optimize=False)",
         ]
 
+    def _emit_output(self, **kwargs: Dict[str, Any]) -> List[str]:
+        super()._emit_output(**kwargs)
+        return []
+
 
 def to_graph_builder_code(proto: onnx.ModelProto, function_name: str = "build_model") -> str:
     """
