@@ -71,43 +71,47 @@ class TestOnnxExportErrors(ExtTestCase):
             cache = MambaCache(_config(), max_batch_size=1, device="cpu")
             torch.export.export(Model(), (x, cache))
 
-    @requires_transformers("4.49.999")
-    @skipif_ci_windows("not working on Windows")
-    def test_exportable_mamba_cache_dynamic(self):
+    def test_exportable_dynamic_shapes_constraints(self):
         import torch
-        from transformers.models.mamba.modeling_mamba import MambaCache
 
-        class _config:
-            def __init__(self):
-                self.intermediate_size = 8
-                self.state_size = 16
-                self.conv_kernel = 32
-                self.num_hidden_layers = 2
-                self.dtype = torch.float16
+        class CustomCache:
+            def __init__(self, shape=None):
+                self.cache = [torch.zeros((shape)), torch.zeros((shape))] if shape else []
+
+        def flatten_cache(cache):
+            return [cache.cache], ["cache"]
+
+        def unflatten_cache(values, context, output_type=None):
+            cache = CustomCache()
+            cache.cache = values[0]
+            return cache
+
+        def flatten_with_keys_cache(d):
+            values, context = flatten_cache(d)
+            return [
+                (torch.utils._pytree.MappingKey(k), v) for k, v in zip(context, values)
+            ], context
+
+        torch.utils._pytree.register_pytree_node(
+            CustomCache,
+            flatten_cache,
+            unflatten_cache,
+            serialized_type_name=f"{CustomCache.__module__}.{CustomCache.__name__}",
+            flatten_with_keys_fn=flatten_with_keys_cache,
+        )
 
         class Model(torch.nn.Module):
-            def forward(self, x: torch.Tensor, cache: MambaCache):
-                x1 = cache.ssm_states[0] + x
-                x2 = cache.conv_states[0][:, :, ::2] + x1
-                return x2
+            def forward(self, x, cache):
+                return cache.cache[0][0, :] + x
 
-        cache = MambaCache(_config(), max_batch_size=1, device="cpu")
-        self.assertEqual(
-            string_type(cache),
-            "MambaCache(conv_states=#2[T10r3,T10r3], ssm_states=#2[T10r3,T10r3])",
-        )
-        x = torch.ones(2, 8, 16).to(torch.float16)
         model = Model()
+        model.eval()
+        x, cache = torch.rand((2, 4)), CustomCache((2, 4))
         model(x, cache)
         DYN = torch.export.Dim.DYNAMIC
-
-        with bypass_export_some_errors():
-            cache = MambaCache(_config(), max_batch_size=1, device="cpu")
-            torch.export.export(
-                Model(),
-                (x, cache),
-                dynamic_shapes=({0: DYN}, [[{0: DYN}, {0: DYN}], [{0: DYN}, {0: DYN}]]),
-            )
+        torch.export.export(
+            model, (x, cache), dynamic_shapes=({0: DYN}, [[{0: DYN}, {0: DYN}]])
+        )
 
 
 if __name__ == "__main__":

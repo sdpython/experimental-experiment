@@ -133,7 +133,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         import numpy as np
         from onnx import TensorProto
         from onnx.numpy_helper import from_array
-        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
 
@@ -143,8 +143,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             axes: "INT64[]",
         ):
             cst = __LONG__
-            Z = op.SqueezeAnyOpset(cst, axes)
-            op.Identity(Z, outputs=["Z"])
+            Z = op.SqueezeAnyOpset(cst, axes, outputs=['Z'])
             return Z
 
 
@@ -215,7 +214,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             import numpy as np
             from onnx import TensorProto
             from onnx.numpy_helper import from_array
-            from experimental_experiment.xbuilder import GraphBuilder
+            from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
 
@@ -225,8 +224,8 @@ class TestReverseGraphBuilder(ExtTestCase):
                 A: "FLOAT[, ]",
                 B: "FLOAT[, ]",
             ):
-                Y1 = op.LinearRegression(X, A, B, domain='custom')
-                Y = op.Abs(Y1)
+                Y1 = op.LinearRegression(X, A, B, domain='custom', outputs=['Y1'])
+                Y = op.Abs(Y1, outputs=['Y'])
                 op.Identity(Y, outputs=["Y"])
                 return Y
 
@@ -237,10 +236,14 @@ class TestReverseGraphBuilder(ExtTestCase):
                 a = gr.make_tensor_input('a')
                 b = gr.make_tensor_input('b')
                 op = gr.op
-                xa = op.MatMul(x, a)
-                y = op.Add(xa, b)
+                xa = op.MatMul(x, a, outputs=['xa'])
+                y = op.Add(xa, b, outputs=['y'])
                 gr.make_tensor_output(y)
-                opts = FunctionOptions(name='LinearRegression', domain='custom')
+                opts = FunctionOptions(
+                    name='LinearRegression',
+                    domain='custom',
+                    move_initializer_to_constant=True,
+                )
                 g.make_local_function(gr, opts, optimize=False)
                 return gr
 
