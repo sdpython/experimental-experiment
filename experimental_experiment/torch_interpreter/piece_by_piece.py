@@ -7,6 +7,7 @@ import pickle
 import pprint
 import sys
 import textwrap
+import traceback
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 import numpy as np
 import onnx
@@ -1608,7 +1609,9 @@ class ModelDiagnoseOutput:
                 if "'NoneType' object is not iterable" in str(e) or "stop" in str(e):
                     raise
                 self.last_error = e
-                se = str(e).split("\n")[0].replace("<_DimHint.DYNAMIC: 3>", "DYN")
+                se = " --- ".join(str(e).split("\n")).replace(
+                    "<_DimHint.DYNAMIC: 3>", "DYN"
+                ) + repr(traceback.format_exception(e)).replace("\n", " --- ")
                 self.exporter_status = StatusExport(
                     StatusExportCode.FAIL,
                     reason=se,
@@ -1780,7 +1783,7 @@ class ModelDiagnoseOutput:
                         got = fct(*args, **kwargs)
                     except Exception as e:
                         self.last_error = e
-                        se = str(e).split("\n")[0]
+                        se = " --- ".join(str(e).split("\n"))
                         self.exporter_status.status = (
                             self.exporter_status.status.remove(StatusExportCode.OK)
                             | StatusExportCode.FAIL

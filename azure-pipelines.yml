@@ -351,7 +351,7 @@ jobs:
   - script: |
       pip install chronos-forecasting --no-deps  # because it enforces transformers to a wrong version
     displayName: 'Install Requirements chronos'
-    continue-on-error: true
+    continueOnError: true
   - script: |
       python -c "import torch;print('torch', torch.__version__)"
       python -c "import transformers;print('transformers', transformers.__version__)"
