@@ -60,7 +60,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         import numpy as np
         from onnx import TensorProto
         from onnx.numpy_helper import from_array
-        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
 
@@ -71,7 +71,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             updates: "FLOAT[, , ]",
         ):
             cst = __LONG__
-            Z = op.ScatterND(cst, indices, updates, reduction='add')
+            Z = op.ScatterND(cst, indices, updates, reduction='add', outputs=['Z'])
             op.Identity(Z, outputs=["Z"])
             return Z
 
@@ -82,7 +82,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             g.make_tensor_input("indices", TensorProto.INT64, ('', ''))
             g.make_tensor_input("updates", TensorProto.FLOAT, ('', '', ''))
             create_graph(g.op, "shape", "indices", "updates")
-            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', ''))
+            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', '')__LONG2__)
             model = g.to_onnx()
             return model
 
@@ -94,8 +94,9 @@ class TestReverseGraphBuilder(ExtTestCase):
             .replace(
                 "__LONG__",
                 "op.ConstantOfShape(shape, value=from_array"
-                "(np.array([0.0], dtype=np.float32), name='value'))",
+                "(np.array([0.0], dtype=np.float32), name='value'), outputs=['cst'])",
             )
+            .replace("__LONG2__", ", is_dimension=False, indexed=False")
         )
         self.maxDiff = None
         self.assertEqual(expected, code.strip("\n"))
@@ -144,6 +145,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         ):
             cst = __LONG__
             Z = op.SqueezeAnyOpset(cst, axes, outputs=['Z'])
+            op.Identity(Z, outputs=["Z"])
             return Z
 
 
@@ -152,7 +154,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             g.make_tensor_input("shape", TensorProto.INT64, ('',))
             g.make_tensor_input("axes", TensorProto.INT64, ('',))
             create_graph(g.op, "shape", "axes")
-            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', ''))
+            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', '')__LONG2__)
             model = g.to_onnx()
             return model
 
@@ -164,8 +166,9 @@ class TestReverseGraphBuilder(ExtTestCase):
             .replace(
                 "__LONG__",
                 "op.ConstantOfShape(shape, value=from_array"
-                "(np.array([0.0], dtype=np.float32), name='value'))",
+                "(np.array([0.0], dtype=np.float32), name='value'), outputs=['cst'])",
             )
+            .replace("__LONG2__", ", is_dimension=False, indexed=False")
         )
         self.maxDiff = None
         self.assertEqual(expected, code.strip("\n"))

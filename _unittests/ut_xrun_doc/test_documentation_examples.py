@@ -206,6 +206,12 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(onnx_array_api.__version__) < pv.Version("0.3.1"):
                     reason = "requires onnx_array_api>=0.3.1"
 
+            if not reason and name in {
+                "plot_torch_sklearn_201.py",
+            }:
+                if pv.Version(torch.__version__) < pv.Version("2.9"):
+                    reason = "requires torch>=2.9"
+
             if (
                 not reason
                 and not has_onnxruntime_training()
