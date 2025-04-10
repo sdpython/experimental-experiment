@@ -173,7 +173,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         self.maxDiff = None
         self.assertEqual(expected, code.strip("\n"))
 
-    @requires_onnx_array_api("0.3.1")
+    @requires_onnx_array_api("0.3.2")
     def test_local_function(self):
         new_domain = "custom"
 
