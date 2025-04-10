@@ -44,7 +44,7 @@ onx = oh.make_model(
     opset_imports=[oh.make_opsetid("", 18)],
     ir_version=9,
 )
-print(translate(onx, api="onnx", use_random_weights=True))
+print(translate(onx, api="onnx-short"))
 
 # %%
 # Pattern Matching

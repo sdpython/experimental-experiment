@@ -60,7 +60,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         import numpy as np
         from onnx import TensorProto
         from onnx.numpy_helper import from_array
-        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
 
@@ -71,7 +71,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             updates: "FLOAT[, , ]",
         ):
             cst = __LONG__
-            Z = op.ScatterND(cst, indices, updates, reduction='add')
+            Z = op.ScatterND(cst, indices, updates, reduction='add', outputs=['Z'])
             op.Identity(Z, outputs=["Z"])
             return Z
 
@@ -82,7 +82,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             g.make_tensor_input("indices", TensorProto.INT64, ('', ''))
             g.make_tensor_input("updates", TensorProto.FLOAT, ('', '', ''))
             create_graph(g.op, "shape", "indices", "updates")
-            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', ''))
+            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', '')__LONG2__)
             model = g.to_onnx()
             return model
 
@@ -94,8 +94,9 @@ class TestReverseGraphBuilder(ExtTestCase):
             .replace(
                 "__LONG__",
                 "op.ConstantOfShape(shape, value=from_array"
-                "(np.array([0.0], dtype=np.float32), name='value'))",
+                "(np.array([0.0], dtype=np.float32), name='value'), outputs=['cst'])",
             )
+            .replace("__LONG2__", ", is_dimension=False, indexed=False")
         )
         self.maxDiff = None
         self.assertEqual(expected, code.strip("\n"))
@@ -133,7 +134,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         import numpy as np
         from onnx import TensorProto
         from onnx.numpy_helper import from_array
-        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
 
@@ -143,7 +144,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             axes: "INT64[]",
         ):
             cst = __LONG__
-            Z = op.SqueezeAnyOpset(cst, axes)
+            Z = op.SqueezeAnyOpset(cst, axes, outputs=['Z'])
             op.Identity(Z, outputs=["Z"])
             return Z
 
@@ -153,7 +154,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             g.make_tensor_input("shape", TensorProto.INT64, ('',))
             g.make_tensor_input("axes", TensorProto.INT64, ('',))
             create_graph(g.op, "shape", "axes")
-            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', ''))
+            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', '')__LONG2__)
             model = g.to_onnx()
             return model
 
@@ -165,13 +166,14 @@ class TestReverseGraphBuilder(ExtTestCase):
             .replace(
                 "__LONG__",
                 "op.ConstantOfShape(shape, value=from_array"
-                "(np.array([0.0], dtype=np.float32), name='value'))",
+                "(np.array([0.0], dtype=np.float32), name='value'), outputs=['cst'])",
             )
+            .replace("__LONG2__", ", is_dimension=False, indexed=False")
         )
         self.maxDiff = None
         self.assertEqual(expected, code.strip("\n"))
 
-    @requires_onnx_array_api("0.3.1")
+    @requires_onnx_array_api("0.3.2")
     def test_local_function(self):
         new_domain = "custom"
 
@@ -215,7 +217,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             import numpy as np
             from onnx import TensorProto
             from onnx.numpy_helper import from_array
-            from experimental_experiment.xbuilder import GraphBuilder
+            from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 
 
@@ -225,8 +227,8 @@ class TestReverseGraphBuilder(ExtTestCase):
                 A: "FLOAT[, ]",
                 B: "FLOAT[, ]",
             ):
-                Y1 = op.LinearRegression(X, A, B, domain='custom')
-                Y = op.Abs(Y1)
+                Y1 = op.LinearRegression(X, A, B, domain='custom', outputs=['Y1'])
+                Y = op.Abs(Y1, outputs=['Y'])
                 op.Identity(Y, outputs=["Y"])
                 return Y
 
@@ -237,10 +239,14 @@ class TestReverseGraphBuilder(ExtTestCase):
                 a = gr.make_tensor_input('a')
                 b = gr.make_tensor_input('b')
                 op = gr.op
-                xa = op.MatMul(x, a)
-                y = op.Add(xa, b)
+                xa = op.MatMul(x, a, outputs=['xa'])
+                y = op.Add(xa, b, outputs=['y'])
                 gr.make_tensor_output(y)
-                opts = FunctionOptions(name='LinearRegression', domain='custom')
+                opts = FunctionOptions(
+                    name='LinearRegression',
+                    domain='custom',
+                    move_initializer_to_constant=True,
+                )
                 g.make_local_function(gr, opts, optimize=False)
                 return gr
 
