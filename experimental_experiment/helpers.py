@@ -398,7 +398,16 @@ def string_type(
 
     if ignore:
         return f"{obj.__class__.__name__}(...)"
-    raise AssertionError(f"Unsupported type {type(obj).__name__!r} - {type(obj)}")
+    from onnx_diagnostic.helpers import string_type as string_type2
+
+    return string_type2(
+        obj,
+        with_shape=with_shape,
+        with_min_max=with_min_max,
+        with_device=with_device,
+        ignore=ignore,
+        limit=limit,
+    )
 
 
 def string_signature(sig: Any) -> str:
