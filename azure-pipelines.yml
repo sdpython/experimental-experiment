@@ -71,8 +71,11 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests _unittests/ut_torch_models _unittests/ut_torch_bench --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models _unittests/ut_torch_bench --durations=20 --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py
     displayName: 'Runs Unit Tests'
+  - script: |
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python _unittests/ut_torch_models/test_piece_by_piece_big.py
+    displayName: 'Runs Unit Tests KNN'
   - task: PublishPipelineArtifact@0
     inputs:
       artifactName: 'wheel-linux-wheel-$(python.version)'
