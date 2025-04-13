@@ -463,7 +463,7 @@ class ReshapeGemmPattern(PatternOptimization):
 class TransposeFusedMatMulBPattern(PatternOptimization):
     """
     Replaces the sequence Transpose(B, [0, 2, 3, 1] + (Fused)Matmul(A,B)
-    into Tranpose(A, [0, 2, 1, 3]) + FusedMatMul(A, B, transB=1).
+    into Transpose(A, [0, 2, 1, 3]) + FusedMatMul(A, B, transB=1).
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3):

@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional, Set, Tuple, Union
 from ..helpers import string_sig
 
 
@@ -8,7 +8,9 @@ class OptimizationOptions:
 
     :param remove_unused: remove all unused nodes, this must be true if
         pattern optimization is enabled
-    :param constant_folding: folds constant as much as possible
+    :param constant_folding: folds constant as much as possible,
+        it can be true or set of operator types if it must be restricted to
+        a subset of operators
     :param constant_size: all node Constant above this threshold should be
         defined as initializer
     :param remove_identity: remove identity nodes
@@ -55,7 +57,11 @@ class OptimizationOptions:
     def __init__(
         self,
         remove_unused: bool = True,
-        constant_folding: bool = False,
+        constant_folding: Union[
+            bool,
+            Union[Tuple[Union[str, Tuple[str, str]]], ...],
+            Set[Union[str, Tuple[str, str]]],
+        ] = ("Transpose", "Cast", "Reshape"),
         constant_size: int = 1024,
         constant_fusing: bool = True,
         remove_identity: bool = True,
@@ -70,7 +76,9 @@ class OptimizationOptions:
         order: Optional["OrderAlgorithm"] = None,  # noqa: F821
     ):
         self.remove_unused = remove_unused
-        self.constant_folding = constant_folding
+        self.constant_folding = (
+            set(constant_folding) if isinstance(constant_folding, tuple) else constant_folding
+        )
         self.remove_identity = remove_identity
         self.constant_size = constant_size
         self.constant_fusing = constant_fusing
