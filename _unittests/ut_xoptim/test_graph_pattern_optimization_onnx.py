@@ -2765,7 +2765,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["LayerNormalization"], verbose=0
+                patterns=["LayerNormalization"], verbose=0, constant_folding=False
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -2786,7 +2786,9 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes_options=True,
-            optimization_options=OptimizationOptions(patterns=["Cast", "Gelu"]),
+            optimization_options=OptimizationOptions(
+                patterns=["Cast", "Gelu"], constant_folding=False
+            ),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
@@ -2802,7 +2804,9 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes_options=True,
-            optimization_options=OptimizationOptions(patterns=["Dropout"], verbose=0),
+            optimization_options=OptimizationOptions(
+                patterns=["Dropout"], verbose=0, constant_folding=False
+            ),
         )
         opt_onx = gr.to_onnx(optimize=True)
         with open("test_dropout.onnx", "wb") as f:
@@ -3237,6 +3241,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(
                 patterns=["CastLayerNormalizationCast"],
                 verbose=0,
+                constant_folding=False,
             ),
             verbose=0,
         )

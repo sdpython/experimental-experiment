@@ -535,7 +535,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._update_structures_with_proto(
                 target_opset_or_existing_proto, infer_shapes_options
             )
-            self.constant_folding(convert_into_initializer=False)
+            self.constant_folding(
+                (optimization_options or OptimizationOptions()).constant_folding,
+                convert_into_initializer=False,
+            )
             self._update_shape_types_with_proto(
                 target_opset_or_existing_proto, infer_shapes_options
             )
