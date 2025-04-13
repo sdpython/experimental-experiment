@@ -496,6 +496,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 verbose=0,
                 verifies=False,
                 processor="CPU,CUDA" if torch.cuda.device_count() > 0 else "CPU",
+                constant_folding=False,
             )
             options.patterns = [
                 p for p in options.patterns if p.__class__.__name__ not in disabled
