@@ -62,8 +62,7 @@ class OptimizationOptions:
         remove_unused: bool = True,
         constant_folding: Union[
             bool,
-            Union[Tuple[Union[str, Tuple[str, str]]], ...],
-            Set[Union[str, Tuple[str, str]]],
+            Union[Set[Union[str, Tuple[str, str]]], Tuple[Union[str, Tuple[str, str]]], ...],
         ] = ("Transpose", "Cast", "Reshape", "Concat"),
         constant_size: int = 1024,
         constant_fusing: bool = True,
