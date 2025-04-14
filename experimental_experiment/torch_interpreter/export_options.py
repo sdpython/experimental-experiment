@@ -81,7 +81,7 @@ class ExportOptions:
 
     def __init__(
         self,
-        strict: bool = True,
+        strict: bool = False,  # strict=False is the default with torch>=2.7
         fallback: bool = False,
         tracing: bool = False,
         jit: bool = False,

@@ -872,7 +872,7 @@ def to_onnx(
     export_options: Optional[Union[str, ExportOptions]] = None,
     return_optimize_report: bool = False,
     filename: Optional[str] = None,
-    inline: bool = False,
+    inline: bool = True,
     export_modules_as_functions: Union[
         bool, Set[type["torch.nn.Module"]]  # noqa: F821
     ] = False,
