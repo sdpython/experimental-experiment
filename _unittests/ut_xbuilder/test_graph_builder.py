@@ -9,7 +9,7 @@ from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 
 class TestGraphBuilder(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
-    @hide_stdout
+    @hide_stdout()
     def test_inline_1_function(self):
         new_domain = "custom"
 
@@ -55,7 +55,7 @@ class TestGraphBuilder(ExtTestCase):
 
         gr = GraphBuilder(onnx_model)
         self.assertEqual(len(gr.functions), 1)
-        onx = gr.to_onnx()
+        onx = gr.to_onnx(inline=False)
         self.assertEqual(len(onx.functions), 1)
 
         self.assertRaise(
@@ -70,11 +70,12 @@ class TestGraphBuilder(ExtTestCase):
                 export_as_function=True,
                 name="lr",
                 domain="custom_domain",
-            )
+            ),
+            inline=False,
         )
         self.assertNotEmpty(function_proto)
 
-        onx = gr.to_onnx()
+        onx = gr.to_onnx(inline=False)
         self.assertEqual(len(gr.functions), 0)
         self.assertEqual(len(onx.functions), 0)
         ref2 = ExtendedReferenceEvaluator(onx)
@@ -139,7 +140,7 @@ class TestGraphBuilder(ExtTestCase):
 
         gr = GraphBuilder(onnx_model)
         self.assertEqual(len(gr.functions), 2)
-        onx = gr.to_onnx()
+        onx = gr.to_onnx(inline=False)
         self.assertEqual(len(onx.functions), 2)
 
         gr.inline_functions()
@@ -215,16 +216,16 @@ class TestGraphBuilder(ExtTestCase):
 
         gr = GraphBuilder(onnx_model)
         self.assertEqual(len(gr.functions), 2)
-        onx = gr.to_onnx()
+        onx = gr.to_onnx(inline=False)
         self.assertEqual(len(onx.functions), 2)
 
         gr.inline_functions()
         function_proto = gr.to_onnx(
-            function_options=FunctionOptions(name="lr", domain="custom_domain")
+            function_options=FunctionOptions(name="lr", domain="custom_domain"), inline=False
         )
         self.assertNotEmpty(function_proto)
 
-        onx = gr.to_onnx()
+        onx = gr.to_onnx(inline=False)
         self.assertEqual(len(gr.functions), 0)
         self.assertEqual(len(onx.functions), 0)
         ref2 = ExtendedReferenceEvaluator(onx)
@@ -322,7 +323,8 @@ class TestGraphBuilder(ExtTestCase):
         fct = g.to_onnx(
             function_options=FunctionOptions(
                 name="linear", domain="mine", return_initializer=True
-            )
+            ),
+            inline=False,
         )
 
         self.assertIsInstance(fct, dict)
@@ -438,6 +440,7 @@ class TestGraphBuilder(ExtTestCase):
                 domain="mine",
                 return_initializer=True,
             ),
+            inline=False,
         )
 
         self.assertIsInstance(fct, dict)
@@ -509,7 +512,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqualArray(expected, got[0])
 
         # Same with a model
-        proto = g.to_onnx()
+        proto = g.to_onnx(inline=False)
         self.assertEqual(len(proto.functions), 2)
         ref = ExtendedReferenceEvaluator(proto)
         got = ref.run(None, feeds)
@@ -583,7 +586,8 @@ class TestGraphBuilder(ExtTestCase):
         fct = g.to_onnx(
             function_options=FunctionOptions(
                 name="linear", domain="mine", return_initializer=True
-            )
+            ),
+            inline=False,
         )
 
         self.assertIsInstance(fct, dict)
@@ -727,7 +731,8 @@ class TestGraphBuilder(ExtTestCase):
                 name="linear",
                 domain="mine",
                 return_initializer=True,
-            )
+            ),
+            inline=False,
         )
 
         self.assertIsInstance(fct, dict)
@@ -788,7 +793,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqualArray(expected, got[0])
 
         # Same with a model
-        proto = g.to_onnx()
+        proto = g.to_onnx(inline=False)
         self.assertEqual(len(proto.functions), 4)
         ref = ExtendedReferenceEvaluator(proto)
         got = ref.run(None, feeds)
@@ -885,7 +890,8 @@ class TestGraphBuilder(ExtTestCase):
                 name="linear",
                 domain="mine",
                 return_initializer=True,
-            )
+            ),
+            inline=False,
         )
 
         self.assertIsInstance(fct, dict)
@@ -946,7 +952,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqualArray(expected, got[0])
 
         # Same with a model
-        proto = g.to_onnx()
+        proto = g.to_onnx(inline=False)
         self.assertEqual(len(proto.functions), 2)
         ref = ExtendedReferenceEvaluator(proto)
         got = ref.run(None, feeds)

@@ -5190,7 +5190,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         large_model: bool = False,
         external_threshold: int = 1024,
         return_optimize_report: bool = False,
-        inline: bool = False,
+        inline: bool = True,
         function_options: Optional[FunctionOptions] = None,
         mask_outputs: Optional[List[bool]] = None,
         as_graph_proto: bool = False,
@@ -8184,6 +8184,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         fct = builder.to_onnx(
             function_options=function_options,
             optimize=optimize,
+            inline=False,
         )
         assert isinstance(fct, (dict, FunctionProto)), (
             f"Unexpected type {type(fct)}, function_options={function_options}"
