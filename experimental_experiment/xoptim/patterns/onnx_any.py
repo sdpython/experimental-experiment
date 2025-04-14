@@ -155,8 +155,36 @@ class IdentityPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose"} or node.domain != "":
+        if (
+            node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose", "Slice"}
+            or node.domain != ""
+        ):
             return self.none()
+
+        if node.op_type == "Slice":
+            if len(node.input) == 5:
+                steps = node.input[4]
+                if (
+                    not g.is_constant(steps)
+                    or g.get_computed_constant(steps) is not None
+                    or set(g.get_computed_constant(steps)) != {1}
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+            starts, ends, _axes = node.input[1:4]
+            if (
+                not g.is_constant(starts)
+                or g.get_computed_constant(starts) is None
+                or set(g.get_computed_constant(starts)) != {0}
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if (
+                not g.is_constant(ends)
+                or g.get_computed_constant(ends) is None
+                or set(g.get_computed_constant(ends))
+                != {9223372036854775807}  # this a value used by torch
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+            return MatchResult(node, [node], self.apply, insert_at=node)
 
         if node.op_type == "Transpose":
             perm = list(g.get_attribute(node, "perm").ints)

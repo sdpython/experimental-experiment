@@ -617,7 +617,7 @@ class CustomTracer(torch.fx.Tracer):
             graph.erase_node(node)
 
     @classmethod
-    def _modify_graph_clone_copy_(
+    def _modify_graph_clone_copy_(  # != _modify_graph_clone_index_copy_
         cls,
         graph: torch.fx.Graph,
         node: torch.fx.Node,
@@ -626,6 +626,7 @@ class CustomTracer(torch.fx.Tracer):
         exported_program: torch.export.ExportedProgram,
         err_graph: str,
         verbose: int = 0,
+        exc: bool = True,
     ) -> int:
         """
         Removes inplace node ``clone`` + ``copy_`` (inplace copy).
@@ -638,12 +639,16 @@ class CustomTracer(torch.fx.Tracer):
         :param exported_program: for debugging purpose
         :param err_graph: original graph as a string, for debugging purpose
         :param verbose: verbosity
+        :param exc: if False, return -1 if unable to reach the goal
         :return: number of removed nodes
         """
         predecessor = node.args[0]
         predecessor_name = (
             predecessor.target.name() if hasattr(predecessor.target, "name") else None
         )
+
+        if not exc and predecessor_name != "aten::clone":
+            return -1
 
         assert predecessor_name == "aten::clone", (
             f"(inplace) Unexpected predecessor {predecessor.target!r} "
@@ -699,6 +704,7 @@ class CustomTracer(torch.fx.Tracer):
         exported_program: torch.export.ExportedProgram,
         err_graph: str,
         verbose: int = 0,
+        exc: bool = True,
     ) -> int:
         """
         Removes inplace node ``clone`` + ``index.Tensor`` + ``copy_`` (inplace copy).
@@ -711,6 +717,7 @@ class CustomTracer(torch.fx.Tracer):
         :param exported_program: for debugging purpose
         :param err_graph: original graph as a string, for debugging purpose
         :param verbose: verbosity
+        :param exc: raises an exception if cannot reach the goal
         :return: number of removed nodes
 
         Example of nodes it may face:
@@ -795,6 +802,8 @@ class CustomTracer(torch.fx.Tracer):
             if hasattr(node, "target")
             else None
         )
+        if not exc and target_name not in {"aten::clone", "clone"}:
+            return -1
         assert target_name in {"aten::clone", "clone"}, (
             f"(inplace) Unexpected predecessor {node.target!r} "
             f"(target_name={target_name!r}) "
@@ -1011,6 +1020,7 @@ class CustomTracer(torch.fx.Tracer):
         graph: torch.fx.Graph,
         exported_program: Optional[torch.export.ExportedProgram] = None,
         verbose: int = 0,
+        exc: bool = True,
     ) -> int:
         """
         Removes inplace operations.
@@ -1019,6 +1029,7 @@ class CustomTracer(torch.fx.Tracer):
         :param exported_program: if available, it is used in the error message
             to make it easier to trace the code source
         :param verbose: verbosity
+        :param exc: raise an exception if not possible, other return -1
         :return: number of inplace nodes removed
 
         The most difficult pattern is the following:
@@ -1037,7 +1048,7 @@ class CustomTracer(torch.fx.Tracer):
         inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace.
-            return False
+            return 0
 
         def delete_user_cb(n, nodes_to_leave):
             return n not in nodes_to_leave
@@ -1056,7 +1067,7 @@ class CustomTracer(torch.fx.Tracer):
             cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace anymore.
-            return False
+            return 0
 
         max_iter = 10
         if verbose:
@@ -1204,7 +1215,10 @@ class CustomTracer(torch.fx.Tracer):
                             exported_program,
                             err_graph,
                             verbose=verbose,
+                            exc=exc,
                         )
+                        if do_break == -1:
+                            return -1
                         if do_break:
                             break
                         continue
@@ -1217,7 +1231,10 @@ class CustomTracer(torch.fx.Tracer):
                         exported_program,
                         err_graph,
                         verbose=verbose,
+                        exc=exc,
                     )
+                    if do_break == -1:
+                        return -1
                     if do_break:
                         break
                 else:
@@ -1258,7 +1275,10 @@ class CustomTracer(torch.fx.Tracer):
                             exported_program,
                             err_graph,
                             verbose=verbose,
+                            exc=exc,
                         )
+                        if do_break == -1:
+                            return -1
                         if do_break:
                             break
                         continue

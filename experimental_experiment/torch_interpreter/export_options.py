@@ -185,8 +185,8 @@ class ExportOptions:
         The graph is modified inplace.
         """
         if self.decomposition_table:
-            begin = time.perf_counter()
             if verbose:
+                begin = time.perf_counter()
                 print(f"[ExportOptions.export] run decomposition {self.decomposition_table!r}")
             dec = apply_decompositions(exported_program, self.decomposition_table)
             if verbose:
@@ -201,9 +201,31 @@ class ExportOptions:
             return dec
 
         if self.remove_inplace:
-            self.remove_inplace_nodes(
+            if verbose:
+                begin = time.perf_counter()
+                print("[ExportOptions.export] remove inplace nodes")
+            modified = self.remove_inplace_nodes(
                 exported_program.graph, exported_program=exported_program, verbose=verbose
             )
+            if verbose:
+                print(
+                    f"[ExportOptions.export] done in {time.perf_counter() - begin}, "
+                    f"modified={modified}"
+                )
+            if modified < -1:
+                # We need to run decomposition to fully remove all inplace operations.
+                if verbose:
+                    begin = time.perf_counter()
+                    print(
+                        "[ExportOptions.export] use decomposition "
+                        "to remove inplace nodes left"
+                    )
+                exported_program = exported_program.run_decomposition({})
+                if verbose:
+                    print(
+                        f"[ExportOptions.export] done in {time.perf_counter() - begin}, "
+                        f"modified={modified}"
+                    )
             if print_exported_program:
                 print("-- EXPORTED PROGRAM AFTER REMOVING INLINE -- ")
                 print(exported_program)
@@ -396,7 +418,11 @@ class ExportOptions:
 
             graph = CustomTracer().trace(mod, concrete_args=concrete_args)
             if self.remove_inplace:
-                self.remove_inplace_nodes(graph, verbose=verbose)
+                if verbose:
+                    print("[ExportOptions.export] remove_inplace_nodes")
+                modified = self.remove_inplace_nodes(graph, verbose=verbose)
+                if verbose:
+                    print(f"[ExportOptions.export] done, modified={modified}")
             if self.save_ep:
                 with open(f"{self.save_ep}.tracing", "w") as f:
                     f.write(str(graph))
@@ -483,43 +509,9 @@ class ExportOptions:
             with open(f"{self.save_ep}.ep.graph", "w") as f:
                 f.write(str(exported_program.graph))
 
-        if self.decomposition_table:
-            if verbose:
-                t0 = time.perf_counter()
-                print(
-                    f"[ExportOptions.export] starts decomposition "
-                    f"{self.decomposition_table!r}..."
-                )
-            dec = apply_decompositions(exported_program, self.decomposition_table)
-            if self.save_ep:
-                with open(f"{self.save_ep}.ep.decomposed", "w") as f:
-                    f.write(str(dec))
-                with open(f"{self.save_ep}.ep.graph.decomposed", "w") as f:
-                    f.write(str(dec.graph))
-            if verbose:
-                print(
-                    f"[ExportOptions.export] decomposition done in "
-                    f"{time.perf_counter() - t0}"
-                )
-                print(
-                    f"[ExportOptions.export] done after decomposition "
-                    f"in {time.perf_counter() - begin}"
-                )
-            if print_exported_program:
-                print("-- EXPORTED PROGRAM AFTER DECOMPOSITION -- ")
-                print(dec)
-                print("-- DONE -- ")
-            return dec
-
-        if self.remove_inplace:
-            self.remove_inplace_nodes(
-                exported_program.graph, exported_program=exported_program, verbose=verbose
-            )
-            if print_exported_program:
-                print("-- EXPORTED PROGRAM AFTER REMOVING INLINE -- ")
-                print(exported_program)
-                print("-- DONE -- ")
-
+        exported_program = self.post_process_exported_program(
+            exported_program, verbose=verbose, print_exported_program=print_exported_program
+        )
         if verbose:
             print(
                 f"[ExportOptions.export] done with no decomposition "
@@ -540,7 +532,7 @@ class ExportOptions:
         :param exported_program: if available, it is used in the error message
             to make it easier to trace the code source
         :param verbose: verbosity
-        :return: number of inplace nodes removed
+        :return: number of inplace nodes removed or -1 if there are any remaining inplace nodes
         """
         from .tracing import CustomTracer
 
@@ -550,8 +542,10 @@ class ExportOptions:
                 print(f"[ExportOptions.export] slices: {removed} slices nodes were removed")
             graph.lint()
         modified = CustomTracer.remove_inplace(
-            graph, exported_program=exported_program, verbose=verbose
+            graph, exported_program=exported_program, verbose=verbose, exc=False
         )
+        if modified < 0:
+            return modified
         if modified:
             if verbose:
                 print(

@@ -52,6 +52,9 @@ class OptimizationOptions:
     * ``patterns="default+onnxruntime+experimental``: applies all patterns
       modifying standard onnx operators into other standard onnx operators,
       patterns fusing nodes into custom operators implemented by :epkg:`onnxruntime`.
+
+    Constant folding folds operators Transpose, Cast, Reshape and Concat
+    by default. Concat is often used to create shapes.
     """
 
     def __init__(
@@ -61,7 +64,7 @@ class OptimizationOptions:
             bool,
             Union[Tuple[Union[str, Tuple[str, str]]], ...],
             Set[Union[str, Tuple[str, str]]],
-        ] = ("Transpose", "Cast", "Reshape"),
+        ] = ("Transpose", "Cast", "Reshape", "Concat"),
         constant_size: int = 1024,
         constant_fusing: bool = True,
         remove_identity: bool = True,
