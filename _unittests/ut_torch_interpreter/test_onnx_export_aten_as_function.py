@@ -20,6 +20,7 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
         optimize: bool = False,
         strict: bool = False,
         dynamic_shapes=None,
+        inline=True,
     ) -> str:
         filename = f"{test_name}_{exporter}_{'dec' if decomposition else ''}.onnx"
         export_options = ExportOptions(
@@ -35,6 +36,7 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
             verbose=verbose,
             optimize=optimize,
             dynamic_shapes=dynamic_shapes,
+            inline=inline,
         )
         return filename
 
@@ -48,7 +50,9 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
         model = Model()
         x = (torch.arange(4 * 3) + 10).reshape((1, -1, 4)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter("test_aten_roll_relu_static", "custom", model, (x,))
+        model_path = self._call_exporter(
+            "test_aten_roll_relu_static", "custom", model, (x,), inline=False
+        )
         onx = onnx.load(model_path)
         op_types = [n.op_type for n in onx.graph.node]
         self.assertEqual(op_types, ["aten_roll_default", "aten_relu_default", "Identity"])
@@ -70,12 +74,14 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
         model = Model()
         x = (torch.arange(8 * 3) + 10).reshape((2, -1, 4)).to(torch.float32)
         expected = model(x)
+
         model_path = self._call_exporter(
             "test_aten_roll_relu_dynamic",
             "custom",
             model,
             (x,),
             dynamic_shapes={"x": {0: torch.export.Dim("batch", min=1, max=1024)}},
+            inline=False,
         )
         onx = onnx.load(model_path)
         op_types = [n.op_type for n in onx.graph.node]

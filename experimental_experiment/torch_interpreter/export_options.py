@@ -13,7 +13,8 @@ class ExportOptions:
     Gathers altogether all the options defining the way to export a model into a graph
     (not onnx).
 
-    :param strict: strict export or not
+    :param strict: strict export or not, it only applies
+        if :func:`torch.export.export` is called
     :param fallback: fallback to jit
     :param decomposition_table: decomposition_table, a string as well such as default
         to use the default decomposition table returned by
@@ -121,16 +122,9 @@ class ExportOptions:
         assert (
             not self.dynamo or not self.jit
         ), "jit and dynamo cannot be true at the same time"
-        assert self.strict or not self.jit, "jit and strict cannot be true at the same time"
-        assert (
-            self.strict or not self.dynamo
-        ), "strict and dynamo cannot be true at the same time"
         assert (
             not tracing or not dynamo
         ), f"Both tracing and dynamo are incompatible options in {self!r}"
-        assert (
-            not tracing or strict
-        ), f"Both tracing and strict=False are incompatible options in {self!r}"
 
     def __repr__(self) -> str:
         return string_sig(self)
