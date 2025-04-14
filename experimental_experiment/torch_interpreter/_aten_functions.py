@@ -3753,14 +3753,17 @@ def aten_group_norm(
     input_rank = g.get_rank(x)
 
     # 0 in the shape list keeps dimension value unchanged.
-    if is_static_dimension(shape_x[0]):
-        new_shape = np.array([shape_x[0], num_groups, -1], dtype=np.int64)
-        input_reshaped = g.op.Reshape(x, new_shape, name=name)
-    else:
-        raise AssertionError(
-            f"Dynamic batch size for shape={shape_x} "
-            f"is not implemented yet{g.get_debug_msg()}"
+    new_shape = (
+        np.array([shape_x[0], num_groups, -1], dtype=np.int64)
+        if is_static_dimension(shape_x[0])
+        else g.op.Concat(
+            g.op.Shape(x, start=0, end=1, name=name),
+            np.array([num_groups, -1], dtype=np.int64),
+            name=name,
+            axis=0,
         )
+    )
+    input_reshaped = g.op.Reshape(x, new_shape, name=name)
 
     # C is always divisible by num_groups
     # Due to shape difference. we need to apply weight and bias after
