@@ -458,7 +458,10 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["TriMatrix"], processor="CPU,CUDA", verbose=0
+                patterns=["TriMatrix"],
+                processor="CPU,CUDA",
+                verbose=0,
+                constant_folding=False,
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)

@@ -774,7 +774,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["Cast", "Gelu", "FastGelu"], verbose=0
+                patterns=["Cast", "Gelu", "FastGelu"], verbose=0, constant_folding=False
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -795,7 +795,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["Cast", "GeluOrt", "FastGelu"], verbose=0
+                patterns=["Cast", "GeluOrt", "FastGelu"], verbose=0, constant_folding=False
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)

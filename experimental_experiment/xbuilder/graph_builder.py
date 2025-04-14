@@ -535,7 +535,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._update_structures_with_proto(
                 target_opset_or_existing_proto, infer_shapes_options
             )
-            self.constant_folding(convert_into_initializer=False)
+            self.constant_folding(
+                (optimization_options or OptimizationOptions()).constant_folding,
+                convert_into_initializer=False,
+            )
             self._update_shape_types_with_proto(
                 target_opset_or_existing_proto, infer_shapes_options
             )
@@ -5798,7 +5801,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.optimization_options.constant_folding:
             # First constant removal
             begin = time.perf_counter()
-            stats_cf = self.constant_folding()
+            stats_cf = self.constant_folding(self.optimization_options.constant_folding)
             statistics.append(
                 dict(
                     pattern="apply_constant_folding",
@@ -5860,7 +5863,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.optimization_options.constant_folding:
             # Second constant removal
             begin = time.perf_counter()
-            stats_cf = self.constant_folding()
+            stats_cf = self.constant_folding(self.optimization_options.constant_folding)
             statistics.append(
                 dict(
                     pattern="apply_constant_folding",
@@ -6474,11 +6477,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return cst, feeds
 
-    def constant_folding(self, convert_into_initializer: bool = True) -> Dict[str, float]:
+    def constant_folding(
+        self, options: Union[bool, Set[str]], convert_into_initializer: bool = True
+    ) -> Dict[str, float]:
         """
         Folds all constants. Constants are marked during the creation of the graph.
         There is no need to propagate this information.
 
+        :param options: a boolean to fold anything
+            which can be folded or a list of operator type
         :param convert_into_initializer: moves the constant as an initializer,
             otherwise, just evaluates it
         :return: dictionary of statistics
@@ -6509,6 +6516,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for k={k!r}"
             if self.verbose > 4:
                 print(f"[GraphBuilder-{self._hash()}.constant_folding] from: {v.op_type}({k})")
+            if (
+                isinstance(options, set)
+                and v.op_type not in options
+                and (v.domain, v.op_type) not in options
+            ):
+                continue
             # a node
             if all(map(self.is_constant, v.input)):
                 # node evaluation
