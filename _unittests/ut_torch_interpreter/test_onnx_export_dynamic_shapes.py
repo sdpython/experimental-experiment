@@ -223,9 +223,10 @@ class TestOnnxExportDynamicShapes(ExtTestCase):
             dynamic_shapes=dynamic_shapes,
             verbose=0,
             return_builder=True,
+            inline=False,
         )
         self.assertInOr(
-            ("dynals: s0 -> 'batch'", "dynals: s77 -> 'batch'"),
+            ("dynals: s0 -> 'batch'", "dynals: s77 -> 'batch'", "dynals: s35 -> 'batch'"),
             _builder.pretty_text(add_fx_graph=True),
         )
 

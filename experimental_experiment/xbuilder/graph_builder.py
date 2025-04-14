@@ -8184,6 +8184,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         fct = builder.to_onnx(
             function_options=function_options,
             optimize=optimize,
+            inline=False,
         )
         assert isinstance(fct, (dict, FunctionProto)), (
             f"Unexpected type {type(fct)}, function_options={function_options}"

@@ -49,6 +49,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             export_modules_as_functions=True,
             optimize=False,
             verbose=0,
+            inline=False,
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 2)
@@ -93,6 +94,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             optimize=False,
             verbose=0,
             function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 2)
@@ -130,7 +132,12 @@ class TestOnnxExportSubModules(ExtTestCase):
         feeds = {"x": inputs[0].numpy()}
 
         onx = to_onnx(
-            model, inputs, export_modules_as_functions=True, optimize=False, verbose=0
+            model,
+            inputs,
+            export_modules_as_functions=True,
+            optimize=False,
+            verbose=0,
+            inline=False,
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 1)
@@ -170,6 +177,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             optimize=False,
             verbose=0,
             export_options=ExportOptions(strict=True),
+            inline=False,
         )
         node_names = [n.op_type for n in onx.graph.node]
         self.assertEqual(
@@ -226,6 +234,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             optimize=False,
             verbose=0,
             export_options=ExportOptions(strict=False),
+            inline=False,
         )
         node_names = [n.op_type for n in onx.graph.node]
         self.assertEqual(
