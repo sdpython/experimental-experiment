@@ -849,7 +849,7 @@ class BenchmarkRunner:
         stats["torch_model_name"] = model_name
         stats["torch_model_type"] = type(model_runner.model).__name__
         stats["torch_type_inputs"] = string_type(
-            model_runner.inputs, with_shape=True, with_min_max=True
+            model_runner.inputs, with_shape=True, with_min_max=True, limit=30
         )
         stats["suite"] = model_runner.suite
         stats["time_load"] = time.perf_counter() - begin
@@ -1089,7 +1089,7 @@ class BenchmarkRunner:
 
         dyn_shapes = model_runner.get_input_shapes(dynamic=dynamic)
         stats["onnx_type_inputs"] = string_type(
-            model_runner.inputs, with_shape=True, with_min_max=True
+            model_runner.inputs, with_shape=True, with_min_max=True, limit=30
         )
         if self.verbose:
             print(f"[BenchmarkRunner.benchmark] inputs={stats['onnx_type_inputs']}")
@@ -1233,7 +1233,9 @@ class BenchmarkRunner:
             )
         context["feeds"] = feeds
         context["feeds_dynamic"] = feeds_dynamic
-        stats["onnx_type_feeds"] = string_type(feeds, with_shape=True, with_min_max=True)
+        stats["onnx_type_feeds"] = string_type(
+            feeds, with_shape=True, with_min_max=True, limit=30
+        )
 
         #########
         # dynamic
@@ -1242,7 +1244,10 @@ class BenchmarkRunner:
         stats["onnx_type_expected"] = string_type(expected, with_shape=True, with_min_max=True)
         if dynamic:
             stats["onnx_type_inputs_dynamic"] = string_type(
-                model_runner.make_dynamic_inputs(), with_shape=True, with_min_max=True
+                model_runner.make_dynamic_inputs(),
+                with_shape=True,
+                with_min_max=True,
+                limit=30,
             )
             expected_dynamic = model_runner.run_dynamic(copy=True)
             expected_dynamic = self.move_to("cpu", expected_dynamic)
