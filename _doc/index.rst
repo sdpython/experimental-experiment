@@ -28,7 +28,7 @@ experimental-experiment: fuzzy work
 
 **experimental-experiment** is mostly to experiment ideas.
 
-Source are `sdpython/experimental-experiment
+Sources available at `sdpython/experimental-experiment
 <https://github.com/sdpython/experimental-experiment>`_.
 
 .. toctree::
