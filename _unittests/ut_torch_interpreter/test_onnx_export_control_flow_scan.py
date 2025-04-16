@@ -1,33 +1,11 @@
 import itertools
 import unittest
-from experimental_experiment.ext_test_case import (
-    ExtTestCase,
-    requires_torch,
-    ignore_warnings,
-)
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestOnnxExportControlFlow(ExtTestCase):
-
-    @classmethod
-    def get_custom_model(cls):
-        import torch
-
-        class Bad1Fixed(torch.nn.Module):
-            def forward(self, x):
-                def true_fn(x):
-                    return torch.sin(x)
-
-                def false_fn(x):
-                    return torch.cos(x)
-
-                return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
-
-        return Bad1Fixed, torch.rand(5, 3)
-
-    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_1(self):
         import torch
@@ -39,14 +17,14 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class ScanModel(torch.nn.Module):
             def forward(self, x):
                 init = torch.zeros_like(x[0])
-                carry, out = torch.ops.higher_order.scan(add, [init], [x], dim=0)
+                carry, out = torch.ops.higher_order.scan(add, [init], [x], [])
                 return carry
 
         x = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32)
         model = ScanModel()
         expected = model(x)
         self.assertEqualArray(expected, x.sum(axis=0))
-        self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
+        self.assertNotEmpty(torch.export.export(model, (x,), strict=False).graph)
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
@@ -78,7 +56,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_2(self):
         import torch
@@ -103,7 +80,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         model = ScanModel()
         expected = model(x)
         self.assertEqualArray(expected[0], x.sum(axis=0))
-        self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
+        self.assertNotEmpty(torch.export.export(model, (x,), strict=False).graph)
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
@@ -111,7 +88,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     model,
                     (x,),
                     optimize=optimize,
-                    export_options=ExportOptions(decomposition_table="default"),
+                    export_options=ExportOptions(decomposition_table="default", strict=False),
                 )
                 names = [(f.domain, f.name) for f in onx.functions]
                 self.assertEqual(len(names), len(set(names)))
@@ -137,7 +114,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     for e, g in zip(expected, got):
                         self.assertEqualArray(e, g, atol=1e-5)
 
-    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_cdist_carry(self):
         import torch
@@ -160,7 +136,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         expected = model(x)
         self.assertEqual(expected.shape, (3, 3))
         self.assertEqualArray(expected, torch.cdist(x, x))
-        self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
+        self.assertNotEmpty(torch.export.export(model, (x,), strict=False).graph)
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
@@ -168,7 +144,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     model,
                     (x,),
                     optimize=optimize,
-                    export_options=ExportOptions(decomposition_table="default"),
+                    export_options=ExportOptions(decomposition_table="default", strict=False),
                 )
                 names = [(f.domain, f.name) for f in onx.functions]
                 self.assertEqual(len(names), len(set(names)))
@@ -192,7 +168,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_cdist_add(self):
         import torch
@@ -217,7 +192,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
         expected = model(x)
         self.assertEqual(expected.shape, (3, 3))
         self.assertEqualArray(expected, torch.cdist(x, x))
-        self.assertNotEmpty(torch.export.export(model, (x,), strict=True).graph)
+        ep = torch.export.export(model, (x,), strict=False)
+        self.assertNotEmpty(ep.graph)
 
         for optimize in [False, True]:
             with self.subTest(optimize=optimize):
@@ -225,9 +201,12 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     model,
                     (x,),
                     optimize=optimize,
-                    export_options=ExportOptions(decomposition_table="default"),
+                    export_options=ExportOptions(decomposition_table="default", strict=False),
+                    inline=False,
                 )
-                with open(f"test_scan_cdist_add_{int(optimize)}.onnx", "wb") as f:
+                with open(
+                    self.get_dump_file(f"test_scan_cdist_add_{int(optimize)}.onnx"), "wb"
+                ) as f:
                     f.write(onx.SerializeToString())
 
                 names = [(f.domain, f.name) for f in onx.functions]
@@ -244,7 +223,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_torch("2.9")
     @ignore_warnings(UserWarning)
     def test_scan_cdist_dynamic(self):
         import torch
@@ -283,7 +261,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
                 inputs[0],
                 optimize=optimize,
                 dynamic_shapes=ds,
-                export_options=ExportOptions(decomposition_table="default"),
+                export_options=ExportOptions(decomposition_table="default", strict=False),
+                inline=False,
             )
             if isinstance(ds, dict):
                 for i in onx.graph.input:
@@ -313,7 +292,76 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     self.assertEqualArray(expected, got[0], atol=1e-5)
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
-                    return
+
+    @ignore_warnings(UserWarning)
+    def test_scan_cdist_dynamic_inline(self):
+        import torch
+
+        def dist(y: torch.Tensor, scanned_x: torch.Tensor):
+            sub = y - scanned_x.reshape((1, -1))
+            sq = sub * sub
+            rd = torch.sqrt(sq.sum(axis=1))
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [y.clone(), rd]
+
+        class ModuleWithControlFlowLoopScan(torch.nn.Module):
+
+            def forward(self, x, y):
+                carry, out = torch.ops.higher_order.scan(dist, [y], [x], additional_inputs=[])
+                return out
+
+        x_rows = torch.export.Dim("x_rows")
+        y_rows = torch.export.Dim("y_rows")
+        dim = torch.export.Dim("dim")
+        dyns = [
+            ({0: x_rows, 1: dim}, {0: y_rows, 1: dim}),
+            {"x": {0: x_rows, 1: dim}, "y": {0: y_rows, 1: dim}},
+        ]
+        inputs = [
+            (torch.randn(3, 4), torch.randn(5, 4)),
+            (torch.randn(13, 14), torch.randn(15, 14)),
+        ]
+        inputs.append((-inputs[0][0], -inputs[0][1]))
+        model = ModuleWithControlFlowLoopScan()
+
+        for optimize, ds in itertools.product([False, True], dyns):
+            onx = to_onnx(
+                model,
+                inputs[0],
+                optimize=optimize,
+                dynamic_shapes=ds,
+                export_options=ExportOptions(decomposition_table="default", strict=False),
+                inline=True,
+            )
+            if isinstance(ds, dict):
+                for i in onx.graph.input:
+                    shape = i.type.tensor_type.shape
+                    ods = tuple(d.dim_param for d in shape.dim)
+                    self.assertEqual(ods, (f"{i.name}_rows", "dim"))
+            else:
+                for i in onx.graph.input:
+                    shape = i.type.tensor_type.shape
+                    ods = tuple(d.dim_param for d in shape.dim)
+                    self.assertEqual(ods, (f"{i.name}_rows", "dim"))
+            # self.print_model(onx)
+            names = [(f.domain, f.name) for f in onx.functions]
+            self.assertEqual(len(names), len(set(names)))
+            import onnxruntime
+
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            ref = ExtendedReferenceEvaluator(onx)
+
+            for xy in inputs:
+                with self.subTest(optimize=optimize, ds=type(ds), xy=xy[0].shape):
+                    expected = model(*xy)
+                    feeds = {"x": xy[0].detach().numpy(), "y": xy[1].detach().numpy()}
+                    got = ref.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":

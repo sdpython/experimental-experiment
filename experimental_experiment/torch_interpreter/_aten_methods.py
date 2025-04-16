@@ -79,7 +79,7 @@ def aten_meth_cos(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "cos"
-    return aten_cos(g, sts, outputs, x)
+    return aten_cos(g, sts, outputs, x, name=".cos")
 
 
 def aten_meth_cpu(
@@ -97,10 +97,27 @@ def aten_meth_detach(
 
 
 def aten_meth_eq(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, y: T
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="meth_eq",
 ) -> T:
     "equal"
-    return aten_eq(g, sts, outputs, x, y)
+    return aten_eq(g, sts, outputs, x, y, name=name)
+
+
+def aten_meth___eq__(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="meth__eq___",
+) -> T:
+    "equal"
+    return aten_eq(g, sts, outputs, x, y, name=name)
 
 
 def aten_meth_expand(
@@ -351,7 +368,7 @@ def aten_meth_sin(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
 ) -> T:
     "sin"
-    return aten_sin(g, sts, outputs, x)
+    return aten_sin(g, sts, outputs, x, name=".sin")
 
 
 def aten_meth_size(

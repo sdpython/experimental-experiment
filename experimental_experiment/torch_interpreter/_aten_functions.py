@@ -7878,12 +7878,14 @@ def aten_scan(
     scan_graph: str,
     scan_inits: List[str],
     scan_inputs: List[str],
-    reverse: bool,
     additional_inputs: Optional[List[str]] = None,
     dim: int = 0,
+    reverse: bool = False,
     name="scan",
 ) -> T:
-    "cond"
+    "scan"
+    assert dim == 0, f"dim=={dim}!=0, impossible starting torch >= 2.7 for scan"
+    assert not reverse, f"reverse=={reverse}, impossible starting torch >= 2.7 for scan"
     assert g.has_local_function(
         scan_graph, g.local_domain
     ), f"Unable to find local function {scan_graph!r}{g.get_debug_msg()}"
