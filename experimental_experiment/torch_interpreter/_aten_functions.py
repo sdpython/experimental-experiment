@@ -7878,9 +7878,9 @@ def aten_scan(
     scan_graph: str,
     scan_inits: List[str],
     scan_inputs: List[str],
-    reverse: bool,
     additional_inputs: Optional[List[str]] = None,
     dim: int = 0,
+    reverse: bool = False,
     name="scan",
 ) -> T:
     "cond"

@@ -193,7 +193,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqual(expected.shape, (3, 3))
         self.assertEqualArray(expected, torch.cdist(x, x))
         ep = torch.export.export(model, (x,), strict=False)
-        print(ep.graph)
         self.assertNotEmpty(ep.graph)
 
         for optimize in [False, True]:
@@ -205,7 +204,66 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     export_options=ExportOptions(decomposition_table="default", strict=False),
                     inline=False,
                 )
-                with open(f"test_scan_cdist_add_{int(optimize)}.onnx", "wb") as f:
+                with open(
+                    self.get_dump_file(f"test_scan_cdist_add_{int(optimize)}.onnx"), "wb"
+                ) as f:
+                    f.write(onx.SerializeToString())
+
+                names = [(f.domain, f.name) for f in onx.functions]
+                self.assertEqual(len(names), len(set(names)))
+
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                for _x in (-x, x):
+                    expected = model(_x)
+                    feeds = {"x": _x.detach().numpy()}
+                    got = sess.run(None, feeds)
+                    self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @ignore_warnings(UserWarning)
+    def test_scan_cdist_add_reverse(self):
+        import torch
+
+        def dist(unused: torch.Tensor, x: torch.Tensor, samex: torch.Tensor):
+            sub = samex - x.reshape((1, -1))
+            sq = sub * sub
+            rd = torch.sqrt(sq.sum(axis=1))
+            # clone --> UnsupportedAliasMutationException:
+            # Combine_fn might be aliasing the input!
+            return [unused.clone(), rd]
+
+        class ScanModel(torch.nn.Module):
+            def forward(self, x):
+                z = torch.tensor([0], dtype=torch.float32)
+                y = x.clone()
+                out = torch.ops.higher_order.scan(
+                    dist, [z], [x], additional_inputs=[y], reverse=True
+                )
+                return out[1]
+
+        x = torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32)
+        model = ScanModel()
+        expected = model(x)
+        self.assertEqual(expected.shape, (3, 3))
+        self.assertEqualArray(expected, torch.cdist(x, x))
+        ep = torch.export.export(model, (x,), strict=False)
+        self.assertNotEmpty(ep.graph)
+
+        for optimize in [False, True]:
+            with self.subTest(optimize=optimize):
+                onx = to_onnx(
+                    model,
+                    (x,),
+                    optimize=optimize,
+                    export_options=ExportOptions(decomposition_table="default", strict=False),
+                    inline=False,
+                )
+                with open(
+                    self.get_dump_file(f"test_scan_cdist_add_{int(optimize)}.onnx"), "wb"
+                ) as f:
                     f.write(onx.SerializeToString())
 
                 names = [(f.domain, f.name) for f in onx.functions]
