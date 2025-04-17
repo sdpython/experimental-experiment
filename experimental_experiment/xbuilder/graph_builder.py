@@ -1988,10 +1988,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"types={string_type(value)}{self.get_debug_msg()}"
         )
         if not self.has_rank(name):
-            if isinstance(value, tuple):
-                self.set_shape(name, (len(value),))
-            else:
-                self.set_shape(name, tuple())
+            self.set_shape(name, (len(value),) if isinstance(value, tuple) else tuple())
         assert self.has_rank(name), (
             f"name={name!r}, has no rank, but it should, value={value!r}"
             f"{self.get_debug_msg()}"
@@ -7352,16 +7349,16 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if node.op_type == "Shape":
             if len(node.attribute) == 0:
-                node.doc_string += "#SV-Sh1"
                 if self.has_shape(node.input[0]):
+                    node.doc_string += "#SV-Sh1"
                     shape = self.get_shape(node.input[0])
                     self.set_value_shape(node.output[0], shape)
                     if all_int(shape):
                         self.update_node_constant(node.output[0], node)
                     self.set_shape(node.output[0], (len(shape),))
-                else:
-                    self.set_value_shape(node.output[0], node.output[0])
-                return True
+                    return True
+            node.doc_string += "#SV-Sh/1"
+            return False
 
             start = self.get_attribute(node, "start", exc=False)
             end = self.get_attribute(node, "end", exc=False)

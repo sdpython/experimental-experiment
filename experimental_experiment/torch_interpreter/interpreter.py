@@ -1707,10 +1707,24 @@ class DynamoInterpreter:
                 )
                 # nothing to do
                 res = tuple(res)
+            elif (
+                isinstance(res, list)
+                and len(res) == 1
+                and str(getattr(node, "target", None)) == "scan"
+            ):
+                # Scan allows that
+                name = output_names[0]
+                assert all(s.startswith(name) for s in res), (
+                    f"Unexpected output_names={output_names}, "
+                    f"res={res}, node.name={node.name}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+                # nothing to do
+                res = tuple(res)
             elif res != node.name:
                 assert isinstance(res, str), (
                     f"Unexpected res={res}, output_names={output_names}, "
-                    f"node.name={node.name}"
+                    f"node.name={node.name}, target={getattr(node, 'target', '?')!r}"
                     f"{self.builder.get_debug_msg()}"
                 )
                 self.builder.make_node(
