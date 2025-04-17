@@ -780,7 +780,10 @@ class CustomTracer(torch.fx.Tracer):
         while (
             hasattr(node, "target")
             and node.target not in {"clone"}
-            and (not hasattr(node.target, "name") or node.target.name() != "aten::clone")
+            and (
+                not hasattr(node.target, "name")
+                or node.target.name() not in {"aten::clone", "aten::zeros"}
+            )
             and node.args
         ):
             if isinstance(node.args[0], torch.fx.immutable_collections.immutable_list):
@@ -802,9 +805,10 @@ class CustomTracer(torch.fx.Tracer):
             if hasattr(node, "target")
             else None
         )
-        if not exc and target_name not in {"aten::clone", "clone"}:
+        allowed_names = {"aten::clone", "clone", "aten::zeros", "zeros"}
+        if not exc and target_name not in allowed_names:
             return -1
-        assert target_name in {"aten::clone", "clone"}, (
+        assert target_name in allowed_names, (
             f"(inplace) Unexpected predecessor {node.target!r} "
             f"(target_name={target_name!r}) "
             f"for node {given_node.name!r} with args={given_node.args} at position "
@@ -843,9 +847,9 @@ class CustomTracer(torch.fx.Tracer):
                 f"in {''.join(map(_str, pos_users))}\n"
                 f"-----\nseen_nodes={seen_nodes}"
             )
-            assert all(isinstance(_i, (tuple, int)) for _i in n.args[1:]), (
+            assert all(isinstance(_i, (tuple, int, torch.fx.Node)) for _i in n.args[1:]), (
                 f"Unexpected arguments for target {n.target} "
-                f"args={string_type(n.args)} - {n.args}"
+                f"args={string_type(n.args)} - {n.args}\n--graph--\n{graph}"
             )
             assert not is_getitem or not set_item_args, (
                 f"set_item_args should be empty for getitem at position {pos} "
@@ -1065,11 +1069,45 @@ class CustomTracer(torch.fx.Tracer):
         err_graph = str(graph)
         if changed:
             cls._inplace_nodes(graph)
+
         if len(inplace) == 0:
             # No inplace anymore.
             return 0
 
-        max_iter = 10
+        # First step: we remove every unused node.
+        for pos, node in reversed(inplace):
+            if node.target in {
+                operator.add,
+                operator.floordiv,
+                operator.mul,
+                operator.mod,
+                operator.sub,
+                torch._C._set_grad_enabled,
+                torch._C._log_api_usage_once,
+                torch.autograd.function.FunctionCtx,
+                torch.amp.autocast_mode._enter_autocast,
+                torch.amp.autocast_mode._exit_autocast,
+                torch.ops.aten._assert_scalar.default,
+                torch.ops.aten._assert_tensor_metadata.default,
+                torch.ops.aten.item.default,
+            }:
+                # This node cannot be one inplace modifications. The node is just not used.
+                graph.erase_node(node)
+                if verbose > 2:
+                    print(
+                        f"[CustomTracer.remove_inplace] A.remove "
+                        f"{pos}: {node.target}({node.args}) -> {node}"
+                    )
+                continue
+
+        inplace = cls._inplace_nodes(graph)
+        if len(inplace) == 0:
+            # No inplace left.
+            return 0
+
+        # Then the difficult ones.
+        MAX_ITER = 10
+        max_iter = MAX_ITER
         if verbose:
             print(
                 f"[CustomTracer.remove_inplace] S2: {len(inplace)} inplace nodes "
@@ -1091,31 +1129,6 @@ class CustomTracer(torch.fx.Tracer):
                         f"{pos}/{len(graph.nodes)}: {node} with args={node.args} "
                         f"and target={node.target}"
                     )
-
-                # easy cases
-                if node.target in {
-                    operator.add,
-                    operator.floordiv,
-                    operator.mul,
-                    operator.mod,
-                    operator.sub,
-                    torch._C._set_grad_enabled,
-                    torch._C._log_api_usage_once,
-                    torch.autograd.function.FunctionCtx,
-                    torch.amp.autocast_mode._enter_autocast,
-                    torch.amp.autocast_mode._exit_autocast,
-                    torch.ops.aten._assert_scalar.default,
-                    torch.ops.aten._assert_tensor_metadata.default,
-                }:
-                    # This node cannot be one inplace modifications. The node is just not used.
-                    graph.erase_node(node)
-                    del existing_nodes[pos]
-                    if verbose > 2:
-                        print(
-                            f"[CustomTracer.remove_inplace] A.remove "
-                            f"{pos}: {node.target}({node.args}) -> {node}"
-                        )
-                    continue
 
                 # if the target has a name
                 if hasattr(node.target, "name"):
@@ -1218,6 +1231,8 @@ class CustomTracer(torch.fx.Tracer):
                             exc=exc,
                         )
                         if do_break == -1:
+                            if verbose:
+                                print(f"[remove_inplace] unable to remove (1) {node.target}")
                             return -1
                         if do_break:
                             break
@@ -1234,6 +1249,8 @@ class CustomTracer(torch.fx.Tracer):
                         exc=exc,
                     )
                     if do_break == -1:
+                        if verbose:
+                            print(f"[remove_inplace] unable to remove (2) {node.target}")
                         return -1
                     if do_break:
                         break
@@ -1278,6 +1295,8 @@ class CustomTracer(torch.fx.Tracer):
                             exc=exc,
                         )
                         if do_break == -1:
+                            if verbose:
+                                print(f"[remove_inplace] unable to remove (3) {node.target}")
                             return -1
                         if do_break:
                             break

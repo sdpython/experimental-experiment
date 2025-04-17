@@ -3362,7 +3362,7 @@ def aten_full(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     size: T,
-    fill_value: float,
+    fill_value: Optional[float],
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
     layout=None,
     device: Optional["torch.device"] = None,  # noqa: F821
@@ -3409,7 +3409,9 @@ def aten_full(
 
     if dtype is None:
         if fill_value is None or isinstance(fill_value, float):
-            value = np.array(fill_value, dtype=np.float32).reshape((1,))
+            value = np.array(
+                fill_value if fill_value is not None else 0, dtype=np.float32
+            ).reshape((1,))
             itype = TensorProto.FLOAT
             suffx = "A"
         elif isinstance(fill_value, int):
@@ -7945,6 +7947,7 @@ def aten_scan(
         [mkv(o) for o in full_inputs_graph],
         [mkv(o) for o in loc.output],
     )
+    n_outputs = len(loc.output) - (len(full_inputs) - len(scan_inputs))
     g.make_node(
         "Scan",
         full_inputs,
@@ -7953,8 +7956,8 @@ def aten_scan(
         body=body,
         num_scan_inputs=len(scan_inputs),
         scan_input_directions=[(1 if reverse else 0) for _ in scan_inputs],
-        scan_output_axes=[dim for _ in scan_inputs],
-        scan_output_directions=[(1 if reverse else 0) for _ in scan_inputs],
+        scan_output_axes=[dim for _ in range(n_outputs)],
+        scan_output_directions=[(1 if reverse else 0) for _ in range(n_outputs)],
     )
     return outputs
 
@@ -8624,6 +8627,57 @@ def aten_setitem(
             name=f"{name}_E_1d",
         )
 
+    if g.has_rank(x) and g.get_rank(x) == 1 and g.has_rank(values) and g.get_rank(values) == 1:
+        # Uses concat.
+        assert len(indices) == 1 and isinstance(indices[0], slice), (
+            f"Unexpected type for indices {type(indices)}, value is {indices}"
+            f"{g.get_debug_msg()}"
+        )
+        assert g.has_shape(values) and (
+            g.get_shape(values) != (1,)
+            or (g.has_shape(x) and g.get_shape(x) == g.get_shape(values))
+        ), (
+            f"Not yet implemented when "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
+            f"shape(values)={g.get_shape(values) if g.has_shape(values) else '?'}"
+            f"{g.get_debug_msg()}"
+        )
+        name = f"{name}_rk0"
+        index = indices[0]
+        assert index.step in (
+            None,
+            1,
+        ), (
+            f"Not implemented when step != 1 (index={index}), step={index.step!r}"
+            f"{g.get_debug_msg()}"
+        )
+
+        if isinstance(index.stop, int):
+            stop = np.array([index.stop], dtype=np.int64)
+        else:
+            assert isinstance(index.stop, str), (
+                f"unexpected type for index.stop {type(index.stop)}, index={index}"
+                f"{g.get_debug_msg()}"
+            )
+            assert g.has_rank(index.stop) and g.get_rank(index.stop) == 0, (
+                f"Unexpected rank for index.stop={index.stop!r}, "
+                f"{g.get_rank(index.stop) if g.get_has_rank(index.stop) else '?'}"
+                f"{g.get_debug_msg()}"
+            )
+            stop = g.op.UnsqueezeAnyOpset(index.stop, g.ZERO, name=name)
+        if index.start == 0:
+            res = g.op.Concat(
+                values,
+                g.op.Slice(x, stop, g.op.Shape(x, name=name), g.ZERO, name=name),
+                axis=0,
+                name=name,
+                outputs=outputs,
+            )
+            if not sts:
+                set_type_shape_unary_op(g, res, x)
+            return res
+        raise NotImplementedError(f"Not implemented yet when index={index}{g.get_debug_msg()}")
+
     # We use padding to implement this.
     name = f"{name}_pad"
     assert g.has_shape(values), (
@@ -8678,8 +8732,8 @@ def aten_setitem(
                 stop -= shape_x[axis]
 
         assert isinstance(start, int) and isinstance(stop, int) and stop <= 0 and start >= 0, (
-            f"setitem is not implemented when index={index}, start={start}, "
-            f"stop={stop}, indices={indices}, shape(x)="
+            f"setitem is not implemented when index={index!r}, start={start!r}, "
+            f"stop={stop!r}, indices={indices}, shape(x)="
             f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
         )
         padding_x_start.append(start)
@@ -9764,6 +9818,8 @@ def aten_sym_size_int(
     ), f"aten_sym_size_int is not implemented for opset < 15{g.get_debug_msg()}"
     assert isinstance(dim, int), f"type(dim)={type(int)} must be an int{g.get_debug_msg()}"
     shape_x = g.op.Shape(x, name=name, start=dim, end=dim + 1)
+    g.set_type(shape_x, TensorProto.INT64)
+    g.set_shape(shape_x, (1,))
     res = g.op.Squeeze(shape_x, name=name, outputs=outputs)
     if not sts:
         g.set_type(res, TensorProto.INT64)
