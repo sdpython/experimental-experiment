@@ -8678,8 +8678,8 @@ def aten_setitem(
                 stop -= shape_x[axis]
 
         assert isinstance(start, int) and isinstance(stop, int) and stop <= 0 and start >= 0, (
-            f"setitem is not implemented when index={index}, start={start}, "
-            f"stop={stop}, indices={indices}, shape(x)="
+            f"setitem is not implemented when index={index!r}, start={start!r}, "
+            f"stop={stop!r}, indices={indices}, shape(x)="
             f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
         )
         padding_x_start.append(start)

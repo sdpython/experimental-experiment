@@ -203,8 +203,8 @@ class ExportOptions:
             )
             if verbose:
                 print(
-                    f"[ExportOptions.export] done in {time.perf_counter() - begin}, "
-                    f"modified={modified}"
+                    f"[ExportOptions.export] done remove inplace in "
+                    f"{time.perf_counter() - begin}, modified={modified}"
                 )
             if modified < -1:
                 # We need to run decomposition to fully remove all inplace operations.

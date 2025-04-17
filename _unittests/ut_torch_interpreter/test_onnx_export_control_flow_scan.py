@@ -363,6 +363,84 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    def test_scan_loop_inplace(self):
+        import torch
+
+        def dummy_loop(padded: torch.Tensor, pos: torch.Tensor):
+            copy = torch.zeros(padded.shape)
+            for i in range(pos.shape[0]):
+                p = pos[i]
+                copy[i, :p] = padded[i, :p]
+            return copy
+
+        def dummy_loop_with_scan(padded: torch.Tensor, pos: torch.Tensor):
+            def pad_row(padded, p):
+                row = torch.zeros((padded.shape[0],))
+                torch._check(p.item() > 0)
+                torch._check(p.item() < padded.shape[0])
+                # this check is not always true, we add it anyway to make this dimension >= 2
+                # and avoid raising an exception about dynamic dimension in {0, 1}
+                if torch.compiler.is_exporting():
+                    torch._check(p.item() > 1)
+                row[: p.item()] = padded[: p.item()]
+                return (row,)
+
+            return torch.ops.higher_order.scan(
+                pad_row,
+                [],
+                [padded, pos],
+                [],
+            )
+
+        def select_when_exporting(f, f_scan):
+            return f_scan if torch.compiler.is_exporting() else f
+
+        x = torch.randn((5, 6))
+        y = torch.arange(5, dtype=torch.int64) + 1
+        res = dummy_loop(x, y)
+        res_scan = dummy_loop_with_scan(x, y)
+        self.assertEqualArray(res, res_scan[0])
+
+        x = torch.randn((5, 6))
+        y = torch.arange(5, dtype=torch.int64) + 1
+        res = dummy_loop(x, y)
+        res_scan = dummy_loop_with_scan(x, y)
+        self.assertEqualArray(res, res_scan[0])
+
+        class Model(torch.nn.Module):
+            def forward(self, images, position):
+                return select_when_exporting(dummy_loop, dummy_loop_with_scan)(
+                    images, position
+                )
+
+        model = Model()
+        x = torch.randn((5, 6))
+        y = torch.arange(5, dtype=torch.int64) + 1
+        expected = model(x, y)
+
+        DYN = torch.export.Dim.DYNAMIC
+        ep = torch.export.export(
+            model,
+            (x, y),
+            dynamic_shapes={"images": {0: DYN, 1: DYN}, "position": {0: DYN}},
+            strict=False,
+        )
+        self.assertNotEmpty(ep)
+        ep.run_decompositions()
+
+        name2 = self.get_dump_file("test_export_loop.custom.onnx")
+        to_onnx(
+            model,
+            (x, y),
+            filename=name2,
+            dynamic_shapes={"images": {0: "batch", 1: "maxdim"}, "position": {0: "batch"}},
+            verbose=10,
+        )
+        ref = ExtendedReferenceEvaluator(name2)
+        feeds = dict(images=x.numpy(), position=y.numpy())
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

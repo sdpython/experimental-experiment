@@ -1341,7 +1341,7 @@ class DynamoInterpreter:
             return i.name
         if isinstance(i, tuple):
             return tuple(self._process_arg(node, aten_name, t) for t in i)
-        if isinstance(i, (float, int, tuple, slice, complex)):
+        if isinstance(i, (float, int, tuple, complex)):
             return i
         if isinstance(i, list):
             new_list = []
@@ -1352,9 +1352,14 @@ class DynamoInterpreter:
                     continue
                 new_list.append(el)
             return new_list
+        if isinstance(i, slice):
+            return slice(
+                self._process_arg(node, aten_name, i.start),
+                self._process_arg(node, aten_name, i.stop),
+                self._process_arg(node, aten_name, i.step),
+            )
         if i is Ellipsis:
             return i
-
         if isinstance(i, (self.torch.dtype, self.torch.device)):
             return i
         raise RuntimeError(
