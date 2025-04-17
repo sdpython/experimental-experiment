@@ -7219,7 +7219,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.make_dynamic_object(sh, self.torch.SymInt(sh), input_name=val.name, axis=i)
         if 0 in shape and len(shape) > 1 and min(shape) == max(shape) == 0:
             # something like (0, 0, 0), we skip.
+            if self.verbose > 4:
+                print(
+                    f"[_update_shape_types_with_proto_one_result] cannot "
+                    f"update shape({val.name}) with {shape}"
+                )
             return
+        if self.verbose > 3:
+            print(
+                f"[_update_shape_types_with_proto_one_result] "
+                f"update shape({val.name}) with {shape}"
+            )
         self.set_shape(val.name, shape, exc=False)
 
     def _update_shape_types_with_proto(
@@ -7357,8 +7367,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         self.update_node_constant(node.output[0], node)
                     self.set_shape(node.output[0], (len(shape),))
                     return True
-            node.doc_string += "#SV-Sh/1"
-            return False
+                node.doc_string += "#SV-Sh/1"
+                return False
 
             start = self.get_attribute(node, "start", exc=False)
             end = self.get_attribute(node, "end", exc=False)
