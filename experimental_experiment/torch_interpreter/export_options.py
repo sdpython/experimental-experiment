@@ -439,7 +439,7 @@ class ExportOptions:
             kwargs = make_copy(kwargs)
         if verbose:
             t0 = time.perf_counter()
-            print("[ExportOptions.export] export start...")
+            print(f"[ExportOptions.export] export start with strict={self.strict}...")
         if exc:
             exported_program = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict

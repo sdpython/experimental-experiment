@@ -185,7 +185,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
             args.model = ",".join([n for n in names if not n.startswith("101")][:10])
         elif args.model == "Tail":
             args.model = ",".join(n for n in names[-10:] if not n.startswith("101"))
-        elif isinstance(args.model, str) and "-" in args.model:
+        elif isinstance(args.model, str) and "-" in args.model and "/" not in args.model:
             ms = []
             for v in args.model.split(","):
                 if "-" not in v:
