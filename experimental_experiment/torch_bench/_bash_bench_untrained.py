@@ -23,6 +23,14 @@ from ..torch_models.llm_model_helper import (
 from ..torch_models.chronos_model_helper import get_chronos_t5_tiny
 
 
+def get_untrained_model_inputs(model_id: str):
+    from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+
+    res = get_untrained_model_with_inputs(model_id, add_second_input=True)
+    assert "inputs2" in res, "Second set of inputs is missing."
+    return res, dict(strict=False)
+
+
 class UntrainedRunner(BenchmarkRunner):
     SUITE = "Untrained"
     MODELS: Dict[str, Callable] = {}
@@ -356,6 +364,7 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(patch_transformers=True, strict=False),
                     )
                 ),
+                "arnir0/Tiny-LLM": (lambda: get_untrained_model_inputs("arnir0/Tiny-LLM")),
             }
         )
 
@@ -417,6 +426,7 @@ class UntrainedRunner(BenchmarkRunner):
         if isinstance(tu, dict):
             model_cls, example_inputs = tu["model"], tu["inputs"]
             dynamic_shapes = tu.get("dynamic_shapes", None)
+            task = tu.get("task", "")
             inputs2 = tu.get("inputs2", None)
             export_options = None
         elif len(tu) == 2:
@@ -424,6 +434,7 @@ class UntrainedRunner(BenchmarkRunner):
                 model_cls, example_inputs = tu[0]["model"], tu[0]["inputs"]
                 dynamic_shapes = tu[0].get("dynamic_shapes", None)
                 inputs2 = tu[0].get("inputs2", None)
+                task = tu[0].get("task", "")
                 export_options = tu[1]
             else:
                 model_cls, example_inputs = tu
@@ -466,6 +477,7 @@ class UntrainedRunner(BenchmarkRunner):
             patch_options=patch_options,
             dynamic_shapes=dynamic_shapes,
             inputs2=inputs2,
+            task=task,
         )
 
     def iter_model_names(self):

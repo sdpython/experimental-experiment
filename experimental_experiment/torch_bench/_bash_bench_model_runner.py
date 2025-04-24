@@ -176,6 +176,7 @@ class ModelRunner:
     :param dynamic_shapes: dynamic shapes to use instead of using automated ones
     :param inputs2: second set of inputs to check the model handles differents shapes
         when they are dynamic
+    :param task: task associated with the model if known
     """
 
     _patched = None
@@ -368,6 +369,7 @@ class ModelRunner:
         dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any], List[Any]]] = None,
         inputs2: Optional[Any] = None,
         kw_inputs2: Optional[Dict[str, Any]] = None,
+        task: str = "",
     ):
         inputs, kw_inputs, cvt = self._pre_process_inputs(inputs, kw_inputs, dtype, device)
         if inputs2:
@@ -452,6 +454,7 @@ class ModelRunner:
         self.warmup = warmup
         self.suite = suite
         self.autocast = autocast
+        self.model_task = task
         self.model_name = model_name
         self.nvtx = nvtx
         self.export_options = export_options
