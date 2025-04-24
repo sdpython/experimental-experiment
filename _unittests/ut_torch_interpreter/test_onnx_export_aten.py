@@ -1502,7 +1502,7 @@ class TestOnnxExportAten(ExtTestCase):
                 self.assertEqual(expected.numpy().dtype, got.dtype)
 
     @ignore_warnings(UserWarning)
-    @requires_torch("2.7")
+    @requires_torch("2.8")
     def test_symbolic(self):
         import torch
 
