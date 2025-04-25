@@ -1,4 +1,3 @@
-import copy
 import gc
 import os
 import pickle
@@ -14,6 +13,8 @@ import onnx
 import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
+from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, make_encoder_decoder_cache
 from .export_model_helper import (
     WrapForTorch,
     WrapInferenceSessionForTorch,
@@ -24,7 +25,6 @@ from .export_model_helper import (
 )
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
-from ..cache_helpers import make_dynamic_cache
 from ..helpers import (
     string_type,
     tensor_dtype_to_np_dtype,
@@ -32,7 +32,6 @@ from ..helpers import (
     max_diff,
     flatten_object,
 )
-from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
 
 
 class BenchmarkRunner:
@@ -308,11 +307,6 @@ class BenchmarkRunner:
                 # )
                 return new_cache
             return obj
-        if hasattr(obj, "key_cache") and obj.__class__.__name__ in ("patched_DynamicCache",):
-            cache = copy.deepcopy(obj)
-            cache.key_value = [self.move_to(device, _) for _ in obj.key_cache]
-            cache.value_value = [self.move_to(device, _) for _ in obj.value_cache]
-            return cache
 
         if hasattr(obj, "key_cache") and obj.__class__.__name__ in ("DynamicCache",):
             cache = make_dynamic_cache(
@@ -324,6 +318,18 @@ class BenchmarkRunner:
                 )
             )
             return cache
+
+        if hasattr(obj, "self_attention_cache") and obj.__class__.__name__ in (
+            "EncoderDecoderCache",
+        ):
+            return make_encoder_decoder_cache(
+                self.move_to(device, obj.self_attention_cache),
+                self.move_to(device, obj.cross_attention_cache),
+            )
+
+        if obj.__class__.__name__ == "BaseModelOutput":
+            cp = self.move_to(device, obj.to_tuple())
+            return obj.__class__(*cp)
 
         raise AssertionError(f"move_to not implemented for type {type(obj)}, dir={dir(obj)}")
 
@@ -865,7 +871,7 @@ class BenchmarkRunner:
         stats["exporter"] = exporter
         stats["input_size"] = self.obj_size(model_runner.inputs)
         stats["_index"] = (
-            f"{model_name}-{exporter}-{optimization}-"
+            f"{model_name.replace('/','_')}-{exporter}-{optimization}-"
             f"d{1 if dynamic else 0}-rt{1 if rtopt else 0}"
         )
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
@@ -886,6 +892,11 @@ class BenchmarkRunner:
         else:
             is_cuda = False
 
+        if self.verbose:
+            print(
+                f"[BenchmarkRunner.benchmark] inputs: "
+                f"{string_type(model_runner.inputs, with_shape=True, limit=30)}"
+            )
         if self.verbose > 1:
             print(
                 f"[BenchmarkRunner.benchmark] model size and dtype "
@@ -1056,7 +1067,7 @@ class BenchmarkRunner:
         pfilename = os.path.join(
             folder,
             (
-                f"{model_name}-{exporter}-{self.device.replace(':', '')}"
+                f"{model_name.replace('/', '_')}-{exporter}-{self.device.replace(':', '')}"
                 f"-{sdtype}{sopt}-"
                 f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
                 f"rt{1 if rtopt in BOOLEAN_VALUES else 0}"
