@@ -20,7 +20,7 @@ class BenchmarkError(RuntimeError):
 
 
 def _clean_string(s: str) -> str:
-    cleaned = [c for c in s if 32 <= ord(c) < 127 and c not in {","}]
+    cleaned = [c for c in s if 32 <= ord(c) < 127 and c not in {",", "/"}]
     return "".join(cleaned)
 
 
