@@ -6361,7 +6361,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert (
                 len(val.shape) == 0
                 or min(val.shape) > 0
-                or (val.shape == (0,) and v.op_type in {"Cast", "Identity", "Pad"})
+                or (val.shape == (0,) and v.op_type in {"Cast", "Identity", "Pad", "Concat"})
             ), (
                 f"One input has a empty shape {val.shape}, name={kval!r}, v.name={v.name!r}, "
                 f"node={self.pretty_node(v)}{self.get_debug_msg()}"

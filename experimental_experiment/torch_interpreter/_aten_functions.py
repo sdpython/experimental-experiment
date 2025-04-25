@@ -9802,6 +9802,60 @@ def aten_sym_constrain_range_for_size(
     return g.op.Cast(dim, name=name, to=TensorProto.BOOL, outputs=outputs)
 
 
+def aten_sym_max(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "sym_max",
+) -> T:
+    """sym_max"""
+    assert not isinstance(x, (int, float, g.torch.Tensor)) or not isinstance(
+        y, (int, float, g.torch.Tensor)
+    ), f"Both x={x} and y={y} are constants, this should not happen{g.get_debug_msg()}"
+    itype = None
+    if isinstance(x, (int, float)):
+        assert g.has_type(y), f"Type missing for y={y!r}{g.get_debug_msg()}"
+        itype = g.get_type(y)
+        x = np.array(x, dtype=tensor_dtype_to_np_dtype(itype))
+    if isinstance(y, (int, float)):
+        assert g.has_type(x), f"Type missing for x={x!r}{g.get_debug_msg()}"
+        itype = g.get_type(x)
+        y = np.array(y, dtype=tensor_dtype_to_np_dtype(itype))
+    res = g.op.Max(x, y, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_binary_op(g, res, x, y, itype=itype)
+    return res
+
+
+def aten_sym_min(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "sym_min",
+) -> T:
+    """sym_min"""
+    assert not isinstance(x, (int, float, g.torch.Tensor)) or not isinstance(
+        y, (int, float, g.torch.Tensor)
+    ), f"Both x={x} and y={y} are constants, this should not happen{g.get_debug_msg()}"
+    itype = None
+    if isinstance(x, (int, float)):
+        assert g.has_type(y), f"Type missing for y={y!r}{g.get_debug_msg()}"
+        itype = g.get_type(y)
+        x = np.array(x, dtype=tensor_dtype_to_np_dtype(itype))
+    if isinstance(y, (int, float)):
+        assert g.has_type(x), f"Type missing for x={x!r}{g.get_debug_msg()}"
+        itype = g.get_type(x)
+        y = np.array(y, dtype=tensor_dtype_to_np_dtype(itype))
+    res = g.op.Min(x, y, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_binary_op(g, res, x, y, itype=itype)
+    return res
+
+
 def aten_sym_size_int(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -9810,9 +9864,7 @@ def aten_sym_size_int(
     dim: int,
     name: str = "sym_size_int",
 ) -> T:
-    """
-    Shape + Squeeze
-    """
+    """Shape + Squeeze"""
     assert (
         g.main_opset >= 15
     ), f"aten_sym_size_int is not implemented for opset < 15{g.get_debug_msg()}"
