@@ -1250,6 +1250,9 @@ def aten_cat(
 ) -> T:
     "concat"
     assert len(tensors) > 0, f"No tensor to concat{g.get_debug_msg()}"
+    for i, c in enumerate(tensors):
+        if isinstance(c, str) and g.has_rank(c) and g.get_rank(c) == 0:
+            raise AssertionError(f"Input {i} ({c!r}) is a scalar{g.get_debug_msg()}")
     if len(tensors) == 1:
         # Nothing to concatenate.
         return g.op.Identity(tensors[0], name=name, outputs=outputs)
