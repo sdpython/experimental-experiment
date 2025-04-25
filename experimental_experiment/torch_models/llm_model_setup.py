@@ -50,7 +50,7 @@ def get_input_cache(
     """
     import torch
     import transformers
-    from ..cache_helpers import make_dynamic_cache
+    from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 
     if input_cache_class is None or input_cache_class is transformers.cache_utils.DynamicCache:
         cache = make_dynamic_cache(

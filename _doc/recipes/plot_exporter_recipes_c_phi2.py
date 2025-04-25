@@ -33,7 +33,7 @@ import onnx
 import torch
 import transformers
 from onnx_array_api.plotting.graphviz_helper import plot_dot
-from experimental_experiment.cache_helpers import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 from experimental_experiment.xbuilder import GraphBuilder, InferShapesOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions

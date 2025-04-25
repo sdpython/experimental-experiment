@@ -669,6 +669,9 @@ def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:
     if x.__class__.__name__ == "DynamicCache":
         res = flatten_object(x.key_cache) + flatten_object(x.value_cache)
         return tuple(res)
+    if x.__class__.__name__ == "EncoderDecoderCache":
+        res = flatten_object(x.self_attention_cache) + flatten_object(x.cross_attention_cache)
+        return tuple(res)
     if x.__class__.__name__ == "MambaCache":
         if isinstance(x.conv_states, list):
             res = flatten_object(x.conv_states) + flatten_object(x.ssm_states)

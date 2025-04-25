@@ -8,7 +8,7 @@ from experimental_experiment.mini_onnx_builder import (
     create_input_tensors_from_onnx_model,
     MiniOnnxBuilder,
 )
-from experimental_experiment.cache_helpers import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 
 

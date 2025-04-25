@@ -1,5 +1,5 @@
 import torch
-from ..cache_helpers import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from ._bash_bench_model_runner import MakeConfig
 
 
