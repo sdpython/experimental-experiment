@@ -9,8 +9,9 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
-from ..helpers import string_type
 from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+from onnx_diagnostic.helpers.torch_test_helper import torch_deepcopy
+from ..helpers import string_type
 from .export_model_helper import compute_weight_size
 
 
@@ -285,7 +286,7 @@ class ModelRunner:
             ext = {k: cls._to_type_or_device(v, dtype_or_device) for k, v in ext.items()}
             return o.__class__(**ext)
 
-        if isinstance(o, dict):
+        if isinstance(o, dict) and type(o) is dict:
             res = {}
             for k, v in o.items():
                 res[k] = cls._to_type_or_device(v, dtype_or_device)
@@ -299,6 +300,16 @@ class ModelRunner:
                 cp.value_cache[i] = o.value_cache[i].to(dtype_or_device)
             return cp
 
+        if o.__class__.__name__ == "EncoderDecoderCache":
+            cp = copy.deepcopy(o)
+            cp.self_attention_cache = cls._to_type_or_device(
+                cp.self_attention_cache, dtype_or_device
+            )
+            cp.cross_attention_cache = cls._to_type_or_device(
+                cp.cross_attention_cache, dtype_or_device
+            )
+            return cp
+
         if o.__class__.__name__ == "MambaCache":
             cp = copy.deepcopy(o)
             if isinstance(o.conv_states, list):
@@ -308,6 +319,10 @@ class ModelRunner:
                 cp.conv_states = o.conv_states.to(dtype_or_device)
                 cp.ssm_states = o.ssm_states.to(dtype_or_device)
             return cp
+
+        if o.__class__.__name__ == "BaseModelOutput":
+            cp = cls._to_type_or_device(o.to_tuple(), dtype_or_device)
+            return o.__class__(*cp)
 
         try:
             return o.to(dtype_or_device)
@@ -336,7 +351,7 @@ class ModelRunner:
             f"(check {cvt(inputs[0]).get_device()})"
         )
 
-        if isinstance(inputs, dict):
+        if isinstance(inputs, dict) and type(inputs) is dict:  # some types inherits from dict
             inputs = {k: cvt(v) for k, v in inputs.items()}
         elif isinstance(inputs, (list, tuple)):
             inputs = tuple(cvt(v) for v in inputs)
@@ -480,6 +495,20 @@ class ModelRunner:
                 devices.append(i.get_device())
             elif i.__class__.__name__ == "DynamicCache" and hasattr(i, "key_cache"):
                 devices.append(i.key_cache[0].get_device() if i.key_cache else None)
+            elif i.__class__.__name__ == "EncoderDecoderCache" and hasattr(
+                i, "self_attention_cache"
+            ):
+                devices.append(
+                    i.self_attention_cache.key_cache[0].get_device()
+                    if i.self_attention_cache.key_cache
+                    else None
+                )
+            elif i.__class__.__name__ == "BaseModelOutput" and hasattr(i, "last_hidden_state"):
+                devices.append(
+                    i.last_hidden_state.get_device()
+                    if i.last_hidden_state is not None
+                    else None
+                )
             elif i.__class__.__name__ == "MambaCache" and hasattr(i, "conv_states"):
                 devices.append(
                     i.conv_states[0].get_device()
@@ -514,51 +543,11 @@ class ModelRunner:
             with open(filename, "w", encoding="utf-8") as f:
                 f.write("\n".join(map(str, self.std_to_dump)))
 
-    def _copy_cache(self, i):
-        if isinstance(i, (int, float)):
-            return i
-        if isinstance(i, torch.Tensor):
-            return i.clone()
-        if isinstance(i, list):
-            return [self._copy_cache(_) for _ in i]
-        if isinstance(i, tuple):
-            return tuple(self._copy_cache(_) for _ in i)
-        if isinstance(i, dict):
-            return {k: self._copy_cache(_) for k, _ in i.items()}
-        if i.__class__.__name__ == "DynamicCache":
-            import transformers
-
-            if isinstance(i, transformers.cache_utils.DynamicCache):
-                inst = type(i)()
-                for k in ["key_cache", "value_cache", "_seen_tokens"]:
-                    if hasattr(i, k):
-                        setattr(inst, k, self._copy_cache(getattr(i, k)))
-                return inst
-            else:
-                return copy.deepcopy(i)
-        raise NotImplementedError(f"Unable to copy {string_type(i)}")
-
     def get_inputs_with_copied_dynamic_cache(self, inputs: Optional[Any] = None) -> Any:
         """LLM modifies the cache. It needs to be copied first."""
         if inputs is None:
             inputs = self.inputs
-        if isinstance(inputs, dict):
-            args = {}
-            for k, i in inputs.items():
-                if i.__class__.__name__ in {"DynamicCache"}:
-                    args[k] = self._copy_cache(i)
-                    continue
-                args[k] = i
-            return args
-        if isinstance(inputs, (list, tuple)):
-            args = []
-            for i in inputs:
-                if i.__class__.__name__ in {"DynamicCache"}:
-                    args.append(self._copy_cache(i))
-                    continue
-                args.append(i)
-            return tuple(args) if isinstance(inputs, tuple) else args
-        return inputs
+        return torch_deepcopy(inputs)
 
     def run(self, copy: bool = False) -> Any:
         inputs = self.get_inputs_with_copied_dynamic_cache()
@@ -1901,6 +1890,11 @@ class ModelRunner:
                 ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
                 raise NotImplementedError("Not yet implemented for MambaCache")
 
+            if inp.__class__.__name__ in ("BaseModelOutput", "EncoderDecoderCache"):
+                # We assume it is well defined.
+                dyn_inputs.append(torch_deepcopy(inp))
+                continue
+
             new_shape = self._make_export_new_dynamic_shape(
                 inp.shape, dynamic_shapes[i], dyn_values=dyn_values, i=i
             )
@@ -2072,6 +2066,37 @@ class ModelRunner:
                 )
                 continue
 
+            if inp.__class__.__name__ == "BaseModelOutput":
+                # Cache is not dynamic
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.modeling_outputs.BaseModelOutput
+                ), f"Unexpected type {type(inp)}"
+
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append([{} for t in inp])
+                    continue
+
+                dyn_input_shapes.append(
+                    [
+                        self._get_input_shape_tensor(
+                            export=export,
+                            input_shape=t.shape,
+                            dyn_shape=ds,
+                            dyn_values=dyn_values,
+                            i=i,
+                        )
+                        for t, ds in zip(inp.values(), dyn_shape)
+                    ]
+                )
+                continue
+
             if inp.__class__.__name__ == "MambaCache":
                 # Cache is not dynamic
                 import transformers
@@ -2104,6 +2129,92 @@ class ModelRunner:
                             dyn_values=dyn_values,
                             i=i,
                         ),
+                    ]
+                )
+                continue
+
+            if inp.__class__.__name__ == "EncoderDecoderCache":
+                # Cache is not dynamic
+                import transformers
+
+                assert isinstance(
+                    inp, transformers.cache_utils.EncoderDecoderCache
+                ), f"Unexpected type {type(inp)}"
+
+                dyn_shape = (
+                    None
+                    if dynamic_shapes is None or i >= len(dynamic_shapes)
+                    else dynamic_shapes[i]
+                )
+                if dyn_shape is None:
+                    dyn_input_shapes.append(
+                        [
+                            [
+                                [{} for t in inp.self_attention_cache.key_cache],
+                                [{} for t in inp.self_attention_cache.value_cache],
+                            ],
+                            [
+                                [{} for t in inp.cross_attention_cache.key_cache],
+                                [{} for t in inp.cross_attention_cache.value_cache],
+                            ],
+                        ]
+                    )
+                    continue
+
+                dyn_input_shapes.append(
+                    [
+                        [
+                            [
+                                self._get_input_shape_tensor(
+                                    export=export,
+                                    input_shape=t.shape,
+                                    dyn_shape=ds,
+                                    dyn_values=dyn_values,
+                                    i=i,
+                                )
+                                for t, ds in zip(
+                                    inp.self_attention_cache.key_cache, dyn_shape[0][0]
+                                )
+                            ],
+                            [
+                                self._get_input_shape_tensor(
+                                    export=export,
+                                    input_shape=t.shape,
+                                    dyn_shape=ds,
+                                    dyn_values=dyn_values,
+                                    i=i,
+                                )
+                                for t, ds in zip(
+                                    inp.self_attention_cache.value_cache, dyn_shape[0][1]
+                                )
+                            ],
+                        ],
+                        [
+                            [
+                                self._get_input_shape_tensor(
+                                    export=export,
+                                    input_shape=t.shape,
+                                    dyn_shape=ds,
+                                    dyn_values=dyn_values,
+                                    i=i,
+                                )
+                                for t, ds in zip(
+                                    inp.cross_attention_cache.key_cache, dyn_shape[1][0]
+                                )
+                            ],
+                            [
+                                self._get_input_shape_tensor(
+                                    export=export,
+                                    input_shape=t.shape,
+                                    dyn_shape=ds,
+                                    dyn_values=dyn_values,
+                                    i=i,
+                                )
+                                for t, ds in zip(
+                                    inp.cross_attention_cache.value_cache, dyn_shape[1][1]
+                                )
+                            ],
+                        ],
                     ]
                 )
                 continue
@@ -2334,7 +2445,7 @@ class ModelRunner:
                         f"Unable to process input type {type(u)} in input list"
                     )
                 continue
-            if i.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
+            if i.__class__.__name__ == "DynamicCache":
                 import transformers
 
                 assert isinstance(
@@ -2342,6 +2453,25 @@ class ModelRunner:
                 ), f"unexpected type {type(i)}"
                 new_inputs.extend(i.key_cache)
                 new_inputs.extend(i.value_cache)
+                continue
+            if i.__class__.__name__ == "EncoderDecoderCache":
+                import transformers
+
+                assert isinstance(
+                    i, transformers.cache_utils.EncoderDecoderCache
+                ), f"unexpected type {type(i)}"
+                new_inputs.extend(i.self_attention_cache.key_cache)
+                new_inputs.extend(i.self_attention_cache.value_cache)
+                new_inputs.extend(i.cross_attention_cache.key_cache)
+                new_inputs.extend(i.cross_attention_cache.value_cache)
+                continue
+            if i.__class__.__name__ == "BaseModelOutput":
+                import transformers
+
+                assert isinstance(
+                    i, transformers.modeling_outputs.BaseModelOutput
+                ), f"unexpected type {type(i)}"
+                new_inputs.extend(i.to_tuple())
                 continue
             if i.__class__.__name__ == "MambaCache":
                 import transformers

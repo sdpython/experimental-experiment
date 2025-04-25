@@ -34,12 +34,35 @@ def get_untrained_model_inputs(model_id: str):
 class UntrainedRunner(BenchmarkRunner):
     SUITE = "Untrained"
     MODELS: Dict[str, Callable] = {}
+    MODEL_IDS = [
+        "arnir0/Tiny-LLM",
+        "hf-internal-testing/tiny-random-BeitForImageClassification",
+        "HuggingFaceM4/tiny-random-idefics",
+        "sshleifer/tiny-marian-en-de",
+        "openai/whisper-tiny",
+        "google-bert/bert-base-multilingual-cased",
+        "facebook/bart-base",
+        "sentence-transformers/all-MiniLM-L6-v1",
+        "tiiuae/falcon-mamba-tiny-dev",
+        #
+        "openai/clip-vit-base-patch16",
+        "Intel/bert-base-uncased-mrpc",
+        #
+        "microsoft/Phi-3.5-mini-instruct",
+        "meta-llama/Llama-3.2-1B-Instruct",
+    ]
 
     @classmethod
     def initialize(cls):
         """Steps to run before running the benchmark."""
+        model_ids = {
+            k: (lambda _model_id_=k: get_untrained_model_inputs(_model_id_))
+            for k in cls.MODEL_IDS
+        }
         cls.MODELS.update(
             {
+                # model ids
+                **model_ids,
                 # diffusion
                 "StableDiffusion2Unet": get_stable_diffusion_2_unet,
                 # LLM simple
@@ -364,7 +387,6 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(patch_transformers=True, strict=False),
                     )
                 ),
-                "arnir0/Tiny-LLM": (lambda: get_untrained_model_inputs("arnir0/Tiny-LLM")),
             }
         )
 

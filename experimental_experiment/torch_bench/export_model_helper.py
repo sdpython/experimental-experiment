@@ -2,9 +2,9 @@ import os
 import sys
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-
 import numpy as np
 import onnx
+from onnx_diagnostic.helpers import max_diff
 from onnx import (
     AttributeProto,
     FunctionProto,
@@ -14,7 +14,6 @@ from onnx import (
     TensorProto,
 )
 from ..convert.convert_helper import optimize_model_proto_oxs
-from ..helpers import max_diff
 
 
 def size_type(dtype: Any) -> int:
@@ -89,6 +88,8 @@ def obj_size(obj: Any) -> int:
         return obj_size(obj.conv_states) + obj_size(obj.ssm_states)
     if obj.__class__.__name__ == "DynamicCache":
         return obj_size(obj.key_cache) + obj_size(obj.value_cache)
+    if obj.__class__.__name__ == "EncoderDecoderCache":
+        return obj_size(obj.self_attention_cache) + obj_size(obj.cross_attention_cache)
     raise AssertionError(f"input_size not implemented for type {type(obj)}")
 
 

@@ -102,7 +102,7 @@ def model_run(
     feeds = None
 
     if validate is not None and validate != "":
-        from .helpers import max_diff
+        from onnx_diagnostic.helpers import max_diff
 
         if verbose:
             smodel = validate if isinstance(validate, str) else str(type(validate))

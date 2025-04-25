@@ -15,7 +15,7 @@ from typing import Any, Dict
 import torch
 import torch._export.tools
 import transformers
-from experimental_experiment.cache_helpers import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
 

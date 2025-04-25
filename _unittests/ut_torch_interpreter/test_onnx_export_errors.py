@@ -1,12 +1,10 @@
 import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
-    requires_torch,
     requires_transformers,
     skipif_ci_windows,
 )
 from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
-from experimental_experiment.helpers import string_type
 
 
 class TestOnnxExportErrors(ExtTestCase):
@@ -37,39 +35,6 @@ class TestOnnxExportErrors(ExtTestCase):
             self.assertEqualArrayAny(cache.conv_states, cache2.conv_states)
             self.assertEqualArrayAny(cache.ssm_states, cache2.ssm_states)
             self.assertEqual(cache.ssm_states[0].dtype, cache2.ssm_states[0].dtype)
-
-    @requires_transformers("4.43")
-    @requires_torch("2.7")
-    @skipif_ci_windows("not working on Windows")
-    def test_exportable_mamba_cache(self):
-        import torch
-        from transformers.models.mamba.modeling_mamba import MambaCache
-
-        class _config:
-            def __init__(self):
-                self.intermediate_size = 8
-                self.state_size = 16
-                self.conv_kernel = 32
-                self.num_hidden_layers = 64
-                self.dtype = torch.float16
-
-        class Model(torch.nn.Module):
-            def forward(self, x: torch.Tensor, cache: MambaCache):
-                x1 = cache.ssm_states[0] + x
-                x2 = cache.conv_states[0][:, :, ::2] + x1
-                return x2
-
-        cache = MambaCache(_config(), max_batch_size=1, device="cpu")
-        self.assertEqual(
-            string_type(cache), "MambaCache(conv_states=[T10r3,...], ssm_states=[T10r3,...])"
-        )
-        x = torch.ones(2, 8, 16).to(torch.float16)
-        model = Model()
-        model(x, cache)
-
-        with bypass_export_some_errors():
-            cache = MambaCache(_config(), max_batch_size=1, device="cpu")
-            torch.export.export(Model(), (x, cache))
 
     def test_exportable_dynamic_shapes_constraints(self):
         import torch

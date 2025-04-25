@@ -3,6 +3,7 @@ import os
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from ..helpers import string_type, string_sig
 from ._torch_helper import make_copy
 from ._doc_ import TorchOpOverload
@@ -442,12 +443,20 @@ class ExportOptions:
             print(f"[ExportOptions.export] export start with strict={self.strict}...")
         if exc:
             exported_program = torch.export.export(
-                mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
+                mod,
+                args,
+                kwargs,
+                dynamic_shapes=use_dyn_not_str(dynamic_shapes),
+                strict=self.strict,
             )
         else:
             try:
                 exported_program = torch.export.export(
-                    mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=self.strict
+                    mod,
+                    args,
+                    kwargs,
+                    dynamic_shapes=use_dyn_not_str(dynamic_shapes),
+                    strict=self.strict,
                 )
             except torch._export.verifier.SpecViolationError:
                 # see https://github.com/pytorch/pytorch/issues/128394

@@ -13,7 +13,7 @@ First try: it fails
 from typing import Any, Dict, List, Tuple
 import torch
 import transformers
-from experimental_experiment.cache_helpers import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 
 
 class ModelTakingDynamicCacheAsInput(torch.nn.Module):

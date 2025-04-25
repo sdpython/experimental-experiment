@@ -7,6 +7,7 @@ import types
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 import numpy as np
 from onnx import TensorProto
+from onnx_diagnostic.helpers.helper import flatten_object
 from ..helpers import (
     string_type,
     make_hash,
@@ -101,12 +102,12 @@ class DynamoInterpreter:
                     ),
                 )
                 or t.__class__.__name__
-                in {"DynamicCache", "MambaCache", "patched_DynamicCache"}
+                in {"DynamicCache", "MambaCache", "EncoderDecoderCache", "BaseModelOutput"}
             )
             for t in example_inputs
         ), (
             f"Unexpected type for one input in example_inputs "
-            f"{string_type(example_inputs, with_shape=True)}"
+            f"{string_type(example_inputs, with_shape=True, limit=100)}"
         )
         self.example_inputs_ = example_inputs
         self.flat_example_inputs_ = self.flatten_inputs(example_inputs)
@@ -167,12 +168,7 @@ class DynamoInterpreter:
                 else:
                     res.extend(self.flatten_inputs(i))
             return tuple(res) if isinstance(x, tuple) else res
-        if x.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
-            res = self.flatten_inputs(x.key_cache) + self.flatten_inputs(x.value_cache)
-            return tuple(res)
-        if x.__class__.__name__ in ("MambaCache",):
-            return (x.conv_states, x.ssm_states)
-        raise AssertionError(f"Unexpected type {type(x)} for x")
+        return flatten_object(x, drop_keys=True)
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         """

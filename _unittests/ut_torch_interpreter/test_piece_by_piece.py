@@ -11,7 +11,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.cache_helpers import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 from onnx_diagnostic.torch_export_patches import (
     bypass_export_some_errors,

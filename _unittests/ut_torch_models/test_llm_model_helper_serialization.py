@@ -1,5 +1,6 @@
 import copy
 import unittest
+from onnx_diagnostic.helpers import max_diff, string_type
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -9,7 +10,6 @@ from experimental_experiment.ext_test_case import (
     long_test,
 )
 from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.helpers import max_diff, string_type
 
 
 class TestLlmModelHelperSerialization(ExtTestCase):

@@ -508,7 +508,8 @@ def run_exporter(
     :param verbose: verbosity
     :return: results
     """
-    from ...helpers import string_type, pretty_onnx, max_diff
+    from onnx_diagnostic.helpers import max_diff, string_type
+    from onnx_diagnostic.helpers.onnx_helper import pretty_onnx
 
     assert hasattr(
         cls_model, "_inputs"
