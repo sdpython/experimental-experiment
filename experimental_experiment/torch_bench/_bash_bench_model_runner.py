@@ -547,8 +547,6 @@ class ModelRunner:
         """LLM modifies the cache. It needs to be copied first."""
         if inputs is None:
             inputs = self.inputs
-        if isinstance(inputs, tuple):
-            return tuple((None if i is None else torch_deepcopy(i)) for i in inputs)
         return torch_deepcopy(inputs)
 
     def run(self, copy: bool = False) -> Any:
