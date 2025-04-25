@@ -14,8 +14,9 @@ A model with a test
 import onnx
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 import torch
+from onnx_diagnostic.helpers import max_diff
+from onnx_diagnostic.helpers.onnx_helper import pretty_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.helpers import pretty_onnx, max_diff
 from experimental_experiment.torch_interpreter import to_onnx
 
 

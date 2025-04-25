@@ -13,8 +13,8 @@ A model with a test
 
 from onnx.reference import ReferenceEvaluator
 from onnx_array_api.plotting.graphviz_helper import plot_dot
+from onnx_diagnostic.helpers import max_diff
 import torch
-from experimental_experiment.helpers import max_diff
 
 
 # %%

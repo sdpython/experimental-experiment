@@ -2,9 +2,9 @@ import os
 import sys
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-
 import numpy as np
 import onnx
+from onnx_diagnostic.helpers import max_diff
 from onnx import (
     AttributeProto,
     FunctionProto,
@@ -14,7 +14,6 @@ from onnx import (
     TensorProto,
 )
 from ..convert.convert_helper import optimize_model_proto_oxs
-from ..helpers import max_diff
 
 
 def size_type(dtype: Any) -> int:

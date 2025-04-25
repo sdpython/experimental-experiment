@@ -32,8 +32,9 @@ import onnx
 import sklearn
 import torch
 import onnxruntime
+from onnx_diagnostic.helpers import max_diff
+from onnx_diagnostic.helpers.onnx_helper import pretty_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.helpers import max_diff, pretty_onnx
 from experimental_experiment.skl.helpers import flatnonzero, _get_weights
 from experimental_experiment.torch_interpreter import make_undefined_dimension
 from onnx_diagnostic.torch_export_patches import bypass_export_some_errors

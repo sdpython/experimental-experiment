@@ -43,6 +43,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         timeout=600,
         dynamic=False,
         check_file=True,
+        unique_first_dim=1,
     ):
         if is_windows():
             raise unittest.SkipTest("export does not work on Windows")
@@ -108,9 +109,18 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             for i in onx.graph.input:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
-                self.assertIn(value[0], ("batch", "s0"))
+                self.assertIn(
+                    value[0],
+                    (
+                        ("batch", "s0", "seq_length")
+                        if unique_first_dim == 2
+                        else ("batch", "s0")
+                    ),
+                )
                 input_values.append(value[0])
-            assert len(set(input_values)) == 1, f"no unique value: input_values={input_values}"
+            assert (
+                len(set(input_values)) == unique_first_dim
+            ), f"no unique value: input_values={input_values}"
             for i in onx.graph.output:
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
@@ -186,6 +196,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             debug=False,
             check_file=False,
             dynamic=True,
+            unique_first_dim=2,
         )
 
 

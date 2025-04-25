@@ -21,11 +21,12 @@ import onnx
 from onnx.inliner import inline_local_functions
 from onnx_array_api.plotting.graphviz_helper import plot_dot
 from onnx_array_api.reference import compare_onnx_execution
+from onnx_diagnostic.helpers import max_diff
+from onnx_diagnostic.helpers.onnx_helper import pretty_onnx
 import torch
 from onnxruntime import InferenceSession
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
-from experimental_experiment.helpers import pretty_onnx, max_diff
 from experimental_experiment.xbuilder import OptimizationOptions
 
 

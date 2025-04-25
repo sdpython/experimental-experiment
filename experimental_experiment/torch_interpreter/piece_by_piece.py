@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set,
 import numpy as np
 import onnx
 import torch
-from ..helpers import string_type, string_sig, max_diff, string_diff
+from onnx_diagnostic.helpers import max_diff, string_diff, string_type, string_sig
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
 from ._torch_helper import make_copy

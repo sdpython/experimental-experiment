@@ -2,7 +2,7 @@ from typing import Any, Dict, Iterator, Optional, Tuple, Union
 import onnx
 import onnx.numpy_helper as onh
 import torch
-from ..helpers import string_type, string_diff, max_diff
+from onnx_diagnostic.helpers import max_diff, string_diff, string_type
 
 
 def validate_fx_tensor(

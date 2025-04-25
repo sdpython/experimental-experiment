@@ -14,6 +14,7 @@ import torch
 from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
 from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
+from onnx_diagnostic.helpers import string_type, max_diff
 from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, make_encoder_decoder_cache
 from .export_model_helper import (
     WrapForTorch,
@@ -26,10 +27,8 @@ from .export_model_helper import (
 from ..memory_peak import flatten, start_spying_on
 from ..ext_test_case import has_onnxruntime_training
 from ..helpers import (
-    string_type,
     tensor_dtype_to_np_dtype,
     torch_dtype_to_onnx_dtype,
-    max_diff,
     flatten_object,
 )
 
