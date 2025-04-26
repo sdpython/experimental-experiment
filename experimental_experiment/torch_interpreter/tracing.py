@@ -843,7 +843,7 @@ class CustomTracer(torch.fx.Tracer):
                 not inplace_functions
             ), f"Unexpected inplace_functions={inplace_functions} before {n.target}"
             assert len(n.args) and n.args[0] in seen_nodes, (
-                f"Unexpected node {n} at position {pos} "
+                f"Unexpected node {n} at position {pos} (n.args={n.args}) "
                 f"in {''.join(map(_str, pos_users))}\n"
                 f"-----\nseen_nodes={seen_nodes}"
             )

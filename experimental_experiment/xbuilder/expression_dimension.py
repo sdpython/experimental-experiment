@@ -69,6 +69,8 @@ def parse_expression(
     st = ast.parse(expr, mode="eval")
     for node in ast.walk(st):
         if isinstance(node, ast.Name):
+            if node.id in {"Max", "Min", "CeilToInt", "IntTrueDiv", "Mod"}:
+                continue
             sds = []
             for d_ in context.values():
                 # WrapSym
