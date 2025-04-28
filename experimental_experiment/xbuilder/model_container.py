@@ -7,6 +7,7 @@ from onnx import GraphProto, ModelProto, StringStringEntryProto, TensorProto
 from onnx.model_container import ModelContainer, _set_external_data
 from onnx.external_data_helper import _get_all_tensors, uses_external_data
 from onnx.inliner import inline_local_functions
+from ..helpers import tensor_dtype_to_np_dtype, torch_dtype_to_onnx_dtype
 from ..mini_onnx_builder import proto_from_array
 
 
@@ -237,12 +238,32 @@ class TorchModelContainer(ModelContainer):
                     f"{sorted(self.large_initializers)}."
                 )
                 np_tensor = self.large_initializers[prop.value]
-                t = oir.Tensor(
-                    np_tensor if hasattr(np_tensor, "shape") else to_array_extended(np_tensor),
-                    name=tensor.name,
-                    doc_string=tensor.doc_string,
-                    metadata_props=oirs.deserialize_metadata_props(tensor.metadata_props),
-                )
+                if isinstance(np_tensor, np.ndarray):
+                    t = oir.Tensor(
+                        np_tensor,
+                        name=tensor.name,
+                        doc_string=tensor.doc_string,
+                        metadata_props=oirs.deserialize_metadata_props(tensor.metadata_props),
+                    )
+                elif hasattr(np_tensor, "shape"):
+                    t = oir.Tensor(
+                        np_tensor.detach(),
+                        name=tensor.name,
+                        dtype=oir.DataType.from_numpy(
+                            tensor_dtype_to_np_dtype(
+                                torch_dtype_to_onnx_dtype(np_tensor.dtype)
+                            )
+                        ),
+                        doc_string=tensor.doc_string,
+                        metadata_props=oirs.deserialize_metadata_props(tensor.metadata_props),
+                    )
+                else:
+                    t = oir.Tensor(
+                        to_array_extended(np_tensor),
+                        name=tensor.name,
+                        doc_string=tensor.doc_string,
+                        metadata_props=oirs.deserialize_metadata_props(tensor.metadata_props),
+                    )
             else:
                 t = oirs.deserialize_tensor(tensor)
             initializer_tensors.append(t)
