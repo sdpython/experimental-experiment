@@ -1,9 +1,9 @@
 import os
 import time
 import sys
-from typing import Any, Optional
+from typing import Any, List, Dict, Optional
 import numpy as np
-from onnx import ModelProto, StringStringEntryProto, TensorProto
+from onnx import GraphProto, ModelProto, StringStringEntryProto, TensorProto
 from onnx.model_container import ModelContainer, _set_external_data
 from onnx.external_data_helper import _get_all_tensors, uses_external_data
 from onnx.inliner import inline_local_functions
@@ -117,8 +117,8 @@ class TorchModelContainer(ModelContainer):
         prefix = os.path.splitext(os.path.split(file_path)[-1])[0]
 
         if all_tensors_to_one_file:
-            file_weight = f"{os.path.split(file_path)[1]}.weight"
-            full_file_weight = f"{file_path}.weight"
+            file_weight = f"{os.path.split(file_path)[1]}.data"
+            full_file_weight = f"{file_path}.data"
             offset = 0
             with open(full_file_weight, "wb") as f:
                 pass
@@ -208,3 +208,131 @@ class TorchModelContainer(ModelContainer):
 
         self._stats["time_export_write_model"] += time.perf_counter() - begin
         return copy
+
+    def _deserialize_graph(
+        self,
+        proto: GraphProto,
+        scoped_values: List[Dict[str, "onnxscript.ir.Value"]],  # noqa: F821
+    ) -> "onnxscript.ir.Graph":  # noqa: F821
+        """See :epkg:`onnxscript`."""
+        import onnxscript.ir as oir
+        import onnxscript.ir.serde as oirs
+        from ..reference import to_array_extended
+
+        quantization_annotations = {
+            annotation.tensor_name for annotation in proto.quantization_annotation
+        }
+
+        initializer_tensors = []
+        for tensor in proto.initializer:
+            if uses_external_data(tensor):
+                prop = None
+                for ext in tensor.external_data:  # type: ignore[assignment]
+                    if ext.key == "location":  # type: ignore[attr-defined]
+                        prop = ext  # type: ignore[assignment]
+                assert prop is not None, f"No location found for tensor name {tensor.name!r}."
+                assert prop.value in self.large_initializers, (
+                    f"Unable to find large tensor named {tensor.name!r} "
+                    f"with location {prop.value!r} in "
+                    f"{sorted(self.large_initializers)}."
+                )
+                np_tensor = self.large_initializers[prop.value]
+                t = oir.Tensor(
+                    np_tensor if hasattr(np_tensor, "shape") else to_array_extended(np_tensor),
+                    name=tensor.name,
+                    doc_string=tensor.doc_string,
+                    metadata_props=oirs.deserialize_metadata_props(tensor.metadata_props),
+                )
+            else:
+                t = oirs.deserialize_tensor(tensor)
+            initializer_tensors.append(t)
+        inputs = [oir.Input(info.name) for info in proto.input]
+        for info, value in zip(proto.input, inputs):
+            oirs.deserialize_value_info_proto(info, value)
+            if value.name in quantization_annotations:
+                oirs._deserialize_quantization_annotation(
+                    quantization_annotations[value.name], value
+                )
+
+        values = {v.name: v for v in inputs}
+        scoped_values.append(values)
+
+        initializer_values = []
+        for i, tensor in enumerate(initializer_tensors):
+            initializer_name = tensor.name
+            assert initializer_name, f"Initializer {i} has no name, it should not be there."
+            assert initializer_name not in values, f"Duplicated name {initializer_name!r}"
+            initializer_value = oir.Value(
+                None,
+                index=None,
+                name=initializer_name,
+                type=oir.TensorType(tensor.dtype),
+                shape=tensor.shape,
+                const_value=tensor,
+            )
+            if initializer_value.name in quantization_annotations:
+                oirs._deserialize_quantization_annotation(
+                    quantization_annotations[initializer_value.name], initializer_value
+                )
+            values[initializer_name] = initializer_value
+            initializer_values.append(initializer_value)
+
+        value_info = {info.name: info for info in proto.value_info}
+        nodes = [
+            oirs._deserialize_node(node, scoped_values, value_info, quantization_annotations)
+            for node in proto.node
+        ]
+
+        outputs = []
+        for info in proto.output:
+            # Fill in values for graph outputs
+            output_name = info.name
+            assert output_name in values, f"Missing output_name={output_name!r} in {values}"
+            value = values[output_name]
+            oirs.deserialize_value_info_proto(info, value)
+            outputs.append(value)
+
+        # Exit the graph scope by popping the values for this scope from the stack
+        scoped_values.pop()
+
+        return oir.Graph(
+            inputs,
+            outputs,
+            nodes=nodes,
+            initializers=initializer_values,
+            doc_string=self._get_field(proto, "doc_string"),
+            name=self._get_field(proto, "name"),
+            metadata_props=oirs.deserialize_metadata_props(proto.metadata_props),
+        )
+
+    @classmethod
+    def _get_field(cls, proto: Any, field: str) -> Any:
+        if proto.HasField(field):
+            return getattr(proto, field)
+        return None
+
+    def to_ir(self) -> "onnxscript.ir.Model":  # noqa: F821
+        """Conversion to :class:`onnxscript.ir.Model`."""
+        import onnxscript.ir as oir
+        import onnxscript.ir.serde as oirs
+
+        proto = self.model_proto
+        graph = self._deserialize_graph(proto.graph, [])
+        graph.opset_imports.update(oirs.deserialize_opset_import(proto.opset_import))
+
+        functions = []
+        for func in proto.functions:
+            functions.append(oirs.deserialize_function(func))
+
+        model = oir.Model(
+            graph,
+            ir_version=proto.ir_version,
+            producer_name=self._get_field(proto, "producer_name"),
+            producer_version=self._get_field(proto, "producer_version"),
+            domain=self._get_field(proto, "domain"),
+            model_version=self._get_field(proto, "model_version"),
+            doc_string=self._get_field(proto, "doc_string"),
+            functions=functions,
+            meta_data_props=oirs.deserialize_metadata_props(proto.metadata_props),
+        )
+        return model

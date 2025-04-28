@@ -5181,6 +5181,16 @@ class GraphBuilder(_GraphBuilderRuntime):
         if values:
             oh.set_model_props(model, values)
 
+    def _get_size(
+        self, t: Union["torch.Tensor", np.ndarray, TensorProto]  # noqa: F821
+    ) -> int:
+        if hasattr(t, "shape"):
+            return np.prod(t.shape) * size_type(t.dtype)
+        assert isinstance(t, TensorProto), f"Unexpected type {type(t)}"
+        shape = tuple(t.dims)
+        dtype = t.data_type
+        return np.prod(shape) * size_type(dtype)
+
     def to_onnx(
         self,
         optimize: bool = True,
@@ -5335,8 +5345,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             size_initializers=int(
                 sum(np.prod(t.dims) * size_type(t.data_type) for t in initializers)
             ),
-            size_large_initializers=int(
-                sum(np.prod(t.shape) * size_type(t.dtype) for t in large_initializers.values())
+            size_large_initializers=sum(
+                self._get_size(t) for t in large_initializers.values()
             ),
             n_nodes=len(model.graph.node),
             n_nodes_other_domain=len([n for n in model.graph.node if n.domain != ""]),

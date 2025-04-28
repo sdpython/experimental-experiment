@@ -1,10 +1,12 @@
 import unittest
 import onnx.helper as oh
 import numpy as np
+import onnx.numpy_helper as onh
 from onnx import FunctionProto, TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
+from experimental_experiment.xbuilder.model_container import TorchModelContainer
 
 
 class TestGraphBuilder(ExtTestCase):
@@ -957,6 +959,70 @@ class TestGraphBuilder(ExtTestCase):
         ref = ExtendedReferenceEvaluator(proto)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0])
+
+    @ignore_warnings(DeprecationWarning)
+    def test_large_model_onnxscript_ir(self):
+        import onnxscript.ir as oir
+
+        new_domain = "custom"
+
+        linear_regression = oh.make_function(
+            new_domain,
+            "LinearRegression",
+            ["x", "a", "b"],
+            ["y"],
+            [
+                oh.make_node("MatMul", ["x", "a"], ["xa"]),
+                oh.make_node("Add", ["xa", "b"], ["y"]),
+            ],
+            [oh.make_opsetid("", 14)],
+            [],
+        )
+
+        graph = oh.make_graph(
+            [
+                oh.make_node("LinearRegression", ["X", "A", "B"], ["Y1"], domain=new_domain),
+                oh.make_node("Abs", ["Y1"], ["Y"]),
+            ],
+            "example",
+            [oh.make_tensor_value_info("X", TensorProto.FLOAT, ["da", "db"])],
+            [oh.make_tensor_value_info("Y", TensorProto.FLOAT, None)],
+            [
+                onh.from_array(np.random.rand(1024, 1024).astype(np.float32), name="A"),
+                onh.from_array(np.random.rand(1024).astype(np.float32), name="B"),
+            ],
+        )
+
+        onnx_model = oh.make_model(
+            graph,
+            opset_imports=[oh.make_opsetid("", 18), oh.make_opsetid(new_domain, 1)],
+            functions=[linear_regression],
+        )
+        ref = ExtendedReferenceEvaluator(onnx_model)
+        feeds = dict(
+            X=np.arange(9).reshape((3, 3)).astype(np.float32),
+            A=np.arange(9).reshape((3, 3)).astype(np.float32),
+            B=np.arange(9).reshape((3, 3)).astype(np.float32),
+        )
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(onnx_model)
+        self.assertEqual(len(gr.functions), 1)
+        container = gr.to_onnx(inline=False, large_model=True)
+        self.assertIsInstance(container, TorchModelContainer)
+        filename = self.get_dump_file("test_large_model_onnxscript_ir.onnx")
+        container.save(filename, True)
+        ref2 = ExtendedReferenceEvaluator(filename)
+        got = ref2.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+        # ir
+        m = container.to_ir()
+        proto = oir.to_proto(m)
+
+        ref3 = ExtendedReferenceEvaluator(proto)
+        got = ref3.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
