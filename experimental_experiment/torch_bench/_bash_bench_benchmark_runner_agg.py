@@ -409,8 +409,21 @@ def merge_benchmark_reports(
 
     if verbose:
         print("[merge_benchmark_reports] remove empty lines")
+
     # let's remove the empty line
-    df = df[~df[model].isna().max(axis=1)].copy()
+    # model_task
+    model_notask = [model[0], *model[2:]]
+    df = df[~df[model_notask].isna().max(axis=1)].copy()
+    df[model[1]] = df[model[1]].fillna("")
+
+    # unexpected cleaning
+    todrop = []
+    for c in df.columns:
+        if "Sym(Eq(" in c or "[][]" in c:
+            todrop.append(c)
+    df = df.drop(todrop, axis=1)
+
+    # Cleaning
 
     if verbose:
         print(f"[merge_benchmark_reports] new shape={df.shape}")

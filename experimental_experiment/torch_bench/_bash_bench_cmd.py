@@ -152,6 +152,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
 
     missing = {
         "suite": runner.SUITE,
+        "model_task": "",
         "time_latency": lambda missing, config: {
             "model_name": _name(config["model"], names),
             "ERR_crash": "INFERENCE failed",

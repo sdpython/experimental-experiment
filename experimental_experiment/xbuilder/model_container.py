@@ -117,8 +117,8 @@ class TorchModelContainer(ModelContainer):
         prefix = os.path.splitext(os.path.split(file_path)[-1])[0]
 
         if all_tensors_to_one_file:
-            file_weight = f"{os.path.split(file_path)[1]}.weight"
-            full_file_weight = f"{file_path}.weight"
+            file_weight = f"{os.path.split(file_path)[1]}.data"
+            full_file_weight = f"{file_path}.data"
             offset = 0
             with open(full_file_weight, "wb") as f:
                 pass
