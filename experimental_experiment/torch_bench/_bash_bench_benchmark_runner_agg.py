@@ -434,6 +434,8 @@ def merge_benchmark_reports(
             df[k] = v
         else:
             df[k] = df[k].apply(lambda x: x in BOOLEAN_VALUES).astype(float).fillna(v)
+    if "dtype" in df.columns:
+        df["dtype"] = df["dtype"].fillna("-")
 
     for c in ("rtopt", "dynamic"):
         assert c in df.columns and df[c].dtype in {
