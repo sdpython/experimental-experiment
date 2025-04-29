@@ -941,6 +941,7 @@ def _apply_excel_style(
                     "dynamic",
                     "rtopt",
                     "suite",
+                    "model_task",
                 } or k.startswith("version"):
                     sheet.column_dimensions[c].width = 15
                     for cell in sheet[c]:

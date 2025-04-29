@@ -135,7 +135,7 @@ def open_dataframe(
 
 def merge_benchmark_reports(
     data: Union[pandas.DataFrame, List[str], str],
-    model=("suite", "model_name"),
+    model=("suite", "model_task", "model_name"),
     keys=(
         "architecture",
         "exporter",
@@ -143,7 +143,6 @@ def merge_benchmark_reports(
         "rtopt",
         "device",
         "device_name",
-        "dtype",
         "dynamic",
         "flag_fake_tensor",
         "flag_no_grad",
@@ -166,6 +165,7 @@ def merge_benchmark_reports(
         "stat",
         "exporter",
         "opt_patterns",
+        "dtype",
         "dynamic",
         "rtopt",
     ),
@@ -1099,11 +1099,7 @@ def _build_aggregated_document(
 
     # adding dates
     df0 = final_res["0raw"]
-    date_col = [
-        c
-        for c in ["DATE", "suite", "exporter", "opt_patterns", "dtype", "dynamic", "rtopt"]
-        if c in df0.columns
-    ]
+    date_col = [c for c in ["DATE", *model[:1], *column_keys[1:]] if c in df0.columns]
     if verbose:
         print(f"[merge_benchmark_reports] add dates with columns={date_col}")
     date_col2 = [c for c in date_col if c != "DATE"]
@@ -1224,7 +1220,9 @@ def _build_aggregated_document(
         _set_ = set(data_csv)
 
         # first pivot
-        piv_index = tuple(c for c in ("dtype", "suite", "#order", "METRIC") if c in _set_)
+        piv_index = tuple(
+            c for c in ("dtype", "suite", "model_task", "#order", "METRIC") if c in _set_
+        )
         piv_columns = tuple(
             c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
         )
