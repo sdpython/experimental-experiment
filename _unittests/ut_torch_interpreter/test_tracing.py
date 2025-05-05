@@ -464,6 +464,10 @@ class TestTracing(ExtTestCase):
             got = mod(*inp)
             self.assertEqualArray(expected, got)
 
+    def test_lookup_op(self):
+        op = torch._library.utils.lookup_op("aten::masked_fill.Scalar")
+        self.assertEqual("aten::masked_fill.Scalar", op.name())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
