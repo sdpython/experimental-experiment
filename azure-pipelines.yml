@@ -148,6 +148,10 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
+      python -m pip uninstall -y onnx
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
@@ -217,6 +221,10 @@ jobs:
   - script: |
       python -m pip install . -v -v -v
     displayName: 'install wheel'
+  - script: |
+      python -m pip uninstall -y onnx
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
       python -m pip freeze
     displayName: 'pip freeze'
@@ -309,6 +317,10 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
+      python -m pip uninstall -y onnx
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
@@ -397,6 +409,10 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
+      python -m pip uninstall -y onnx
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
@@ -454,6 +470,10 @@ jobs:
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
+  - script: |
+      python -m pip uninstall -y onnx
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
       python -m pip freeze
     displayName: 'pip freeze'
