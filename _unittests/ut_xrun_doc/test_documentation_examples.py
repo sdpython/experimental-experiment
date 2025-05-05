@@ -206,11 +206,18 @@ class TestDocumentationExamples(ExtTestCase):
                 if pv.Version(onnx_array_api.__version__) < pv.Version("0.3.1"):
                     reason = "requires onnx_array_api>=0.3.1"
 
-            if not reason and name in {
-                "plot_torch_sklearn_201.py",
-            }:
+            if not reason and name in {"plot_torch_sklearn_201.py"}:
                 if pv.Version(torch.__version__) < pv.Version("2.9"):
                     reason = "requires torch>=2.9"
+
+            if not reason and name in {"plot_torch_export_201.py"}:
+                try:
+                    import onnx_array_api
+
+                    if pv.Version(onnx_array_api.__version__) < pv.Version("0.3.2"):
+                        reason = "requires onnx-array-api>=3.2"
+                except ImportError:
+                    reason = "missing onnx-array-pi"
 
             if (
                 not reason
