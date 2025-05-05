@@ -64,7 +64,7 @@ jobs:
 
       - name: Uninstall onnx and install onnx-weekly
         run: |
-          python -m pip uninstall -y onnx
+          python -m pip uninstall -y onnx onnx-weekly
           python -m pip install onnx-weekly
 
       - name: Cache pip

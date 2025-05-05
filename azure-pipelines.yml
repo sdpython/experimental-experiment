@@ -41,7 +41,7 @@ jobs:
       cd ..
     displayName: 'Install latest transformers'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -117,7 +117,7 @@ jobs:
       pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -148,7 +148,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -187,7 +187,7 @@ jobs:
   - script: |
       pip install -r requirements-dev.txt
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -222,7 +222,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -282,7 +282,7 @@ jobs:
   - script: |
       pip install -r requirements-dev.txt
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -317,7 +317,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -380,7 +380,7 @@ jobs:
       pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -409,7 +409,7 @@ jobs:
       python -m pip install . -v -v -v
     displayName: 'install wheel'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
@@ -465,13 +465,13 @@ jobs:
       pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
   - script: |
-      python -m pip uninstall -y onnx
+      python -m pip uninstall -y onnx onnx-weekly
       python -m pip install onnx-weekly
     displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
