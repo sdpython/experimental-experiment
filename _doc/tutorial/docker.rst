@@ -104,7 +104,6 @@ The docker can be saved with ``sudo docker commit docker-dort-new docker-dort-up
     # optional
     git clone https://github.com/onnx/sklearn-onnx.git
     git clone https://github.com/onnx/onnxmltools.git
-    git clone https://github.com/microsoft/onnxconverter-common.git
 
 **Install ort extension**
 
@@ -136,7 +135,7 @@ Mostly made for research until the ideas migrates to an officially supported pac
 .. code-block:: bash
 
     cd /github/github/experimental-experiment
-    export PYTHONPATH=/github/github/experimental-experiment/:/github/github/onnx-extended:/github/github/onnxscript:/github/github/onnxruntime/build/linux_cuda/Release:/github/github/sklearn-onnx:/github/github/onnxmltools:/github/github/onnxconverter-common
+    export PYTHONPATH=/github/github/experimental-experiment/:/github/github/onnx-extended:/github/github/onnxscript:/github/github/onnxruntime/build/linux_cuda/Release:/github/github/sklearn-onnx:/github/github/onnxmltools
 
     # check that dort is working on llama and export the onnx model (flag --help to see other options)
     python -m experimental_experiment.torch_bench.dort_bench --backend ort+ --device cuda --mixed=1 --export model -w 3 -r 5 --enable_pattern=default+onnxruntime+experimental --num_hidden_layers=1
