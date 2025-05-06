@@ -40,9 +40,10 @@ class MulMulMulScalarPattern(PatternOptimization):
         }:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if node_left.op_type == "Div" and cst_left.dtype not in (np.float32, np.float64):
-            return self.none(node, inspect.currentframe().f_lineno)
-        if node_right.op_type == "Div" and node_right.dtype not in (np.float32, np.float64):
+        if (node_left.op_type == "Div" or node_right.op_type == "Div") and (
+            cst_left.dtype not in (np.float32, np.float64, np.float16)
+            or cst_right.dtype not in (np.float32, np.float64, np.float16)
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         nodes = [node, node_left, node_right]
@@ -64,10 +65,14 @@ class MulMulMulScalarPattern(PatternOptimization):
         )
         cst_left = g.get_computed_constant(node_left.input[1])
         cst_right = g.get_computed_constant(node_right.input[1])
-        if node_left.op_type == "Div":
-            cst_left = np.reciprocal(cst_left)
-        if node_right.op_type == "Div":
-            cst_right = np.reciprocal(cst_right)
+        if node_left.op_type == "Div" and node_right.op_type == "Div":
+            op_type = "Div"
+        else:
+            op_type = "Mul"
+            if node_left.op_type == "Div":
+                cst_left = np.reciprocal(cst_left)
+            if node_right.op_type == "Div":
+                cst_right = np.reciprocal(cst_right)
 
         if not isinstance(cst_left, np.ndarray):
             cst_left = np.array(cst_left)
@@ -84,7 +89,7 @@ class MulMulMulScalarPattern(PatternOptimization):
         )
 
         new_node2 = g.make_node(
-            "Mul",
+            op_type,
             [new_node.output[0], new_cst],
             node.output,
             name=f"{self.__class__.__name__}--{node.name}-Cst",
