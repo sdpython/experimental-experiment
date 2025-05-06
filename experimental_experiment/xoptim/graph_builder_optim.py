@@ -1332,7 +1332,7 @@ class GraphBuilderPatternOptimization:
                 for i in full_removed:
                     assert not self.is_output(i), (
                         f"Output {i!r} must not be removed, added_outputs={added_outputs},"
-                        f"removed_outputs={removed_outputs}"
+                        f"removed_outputs={removed_outputs}, pattern={pattern}"
                     )
 
                 if self.verbose > 3:
