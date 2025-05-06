@@ -347,6 +347,8 @@ class FusedMatMulTransposePattern(PatternOptimization):
         ):
             return self.none()
 
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
         next_nodes = g.next_nodes(node.output[0])
         if (
             len(next_nodes) != 1
