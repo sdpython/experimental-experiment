@@ -442,6 +442,7 @@ class UntrainedRunner(BenchmarkRunner):
         reset_rng_state()
         tu = self._get_model_cls_and_config(model_name)
         tu = tu()
+        task = None
 
         dynamic_shapes = None
         inputs2 = None

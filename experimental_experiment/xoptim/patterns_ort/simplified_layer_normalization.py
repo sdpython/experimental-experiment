@@ -163,7 +163,7 @@ class SkipLayerNormalizationPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "LayerNormalization" or node.domain != "":
             return self.none()
-        if not g.has_rank(node.input[0]) and g.get_rank(node.input[0]) not in (2, 3):
+        if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) not in (2, 3):
             return self.none(node, inspect.currentframe().f_lineno)
         axis = g.get_attribute(node, "axis", exc=False)
         axis = 0 if axis is None else axis.i
@@ -171,6 +171,8 @@ class SkipLayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         before = g.node_before(node.input[0])
         if before is None or before.op_type != "Add":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(before.input[1]) or g.get_rank(before.input[1]) not in (2, 3):
             return self.none(node, inspect.currentframe().f_lineno)
         nodes = [before, node]
         return MatchResult(self, nodes, self.apply, insert_at=node)
