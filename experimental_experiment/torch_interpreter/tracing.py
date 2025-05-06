@@ -938,7 +938,7 @@ class CustomTracer(torch.fx.Tracer):
                     seen_nodes.add(n)
                     current_remove.append(n)
                 elif aten_name[-1] != "_" and "_." not in aten_name:
-                    # This is not inplace modification so all stored
+                    # This is no inplace modification so all stored
                     # slice operator are cleaned.
                     set_item_args = {}
                     current_remove = []
@@ -956,6 +956,15 @@ class CustomTracer(torch.fx.Tracer):
                     set_item_args = {}
                     current_remove = []
                     inplace_functions = []
+                elif aten_name == "aten::masked_fill_.Scalar":
+                    # python -m experimental_experiment.torch_bench.bash_bench_huggingface
+                    # --model MBartForConditionalGeneration --device cuda --dtype float16
+                    # --export custom --opt_patterns default --verbose 1 --quiet 0
+                    raise NotImplementedError(
+                        f"Unable to handle target {aten_name!r} (could probably be ignored) "
+                        f"with args={n.args} in\n{''.join(map(_str, pos_users))}\n----\n"
+                        f"{err_graph}"
+                    )
                 else:
                     raise NotImplementedError(
                         f"Unable to handle target {aten_name!r} with args={n.args} "

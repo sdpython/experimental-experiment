@@ -4,7 +4,7 @@ import numpy
 import onnx
 from onnx.helper import printable_graph, make_node, np_dtype_to_tensor_dtype
 from onnx import numpy_helper, ModelProto
-from onnx.mapping import TENSOR_TYPE_TO_NP_TYPE
+from onnx.helper import tensor_dtype_to_np_dtype
 from .onnx_export_templates import get_numpy_template
 from .numpy_helper import make_numpy_code
 
@@ -611,7 +611,7 @@ def export_template(
         map=map,
         select_attribute=select_attribute,
         repr=repr,
-        TENSOR_TYPE_TO_NP_TYPE=TENSOR_TYPE_TO_NP_TYPE,
+        tensor_dtype_to_np_dtype=tensor_dtype_to_np_dtype,
         make_numpy_code=lambda *args, **kwargs: make_numpy_code(
             *args, context=context, used=used, mark_inits=mark_inits, **kwargs
         ),

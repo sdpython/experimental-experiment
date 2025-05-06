@@ -207,7 +207,7 @@ class ExportOptions:
                     f"[ExportOptions.export] done remove inplace in "
                     f"{time.perf_counter() - begin}, modified={modified}"
                 )
-            if modified < -1:
+            if modified <= -1:
                 # We need to run decomposition to fully remove all inplace operations.
                 if verbose:
                     begin = time.perf_counter()

@@ -41,6 +41,10 @@ jobs:
       cd ..
     displayName: 'Install latest transformers'
   - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       python -c "import torch;print('torch', torch.__version__)"
       python -c "import transformers;print('transformers', transformers.__version__)"
       python -c "import onnxruntime;print('onnxruntime', onnxruntime.__version__)"
@@ -113,6 +117,10 @@ jobs:
       pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       python -c "import torch;print('torch', torch.__version__)"
       python -c "import transformers;print('transformers', transformers.__version__)"
       python -c "import onnxruntime;print('onnxruntime', onnxruntime.__version__)"
@@ -139,6 +147,10 @@ jobs:
   - script: |
       python -m pip install . -v -v -v
     displayName: 'install wheel'
+  - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
       python -m pip freeze
     displayName: 'pip freeze'
@@ -175,6 +187,10 @@ jobs:
   - script: |
       pip install -r requirements-dev.txt
   - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       pip uninstall -y onnxruntime onnxruntime-training
       pip install onnxruntime-training-cpu
     displayName: 'Install onnxruntime-training'
@@ -205,6 +221,10 @@ jobs:
   - script: |
       python -m pip install . -v -v -v
     displayName: 'install wheel'
+  - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
       python -m pip freeze
     displayName: 'pip freeze'
@@ -262,6 +282,10 @@ jobs:
   - script: |
       pip install -r requirements-dev.txt
   - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       pip uninstall -y onnxruntime onnxruntime-training
       pip install onnxruntime-training-cpu
     displayName: 'Install onnxruntime-training'
@@ -292,6 +316,10 @@ jobs:
   - script: |
       python -m pip install . -v -v -v
     displayName: 'install wheel'
+  - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
       python -m pip freeze
     displayName: 'pip freeze'
@@ -352,6 +380,10 @@ jobs:
       pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
   - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
+  - script: |
       pip install chronos-forecasting --no-deps  # because it enforces transformers to a wrong version
     displayName: 'Install Requirements chronos'
     continueOnError: true
@@ -376,6 +408,10 @@ jobs:
   - script: |
       python -m pip install . -v -v -v
     displayName: 'install wheel'
+  - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
       python -m pip freeze
     displayName: 'pip freeze'
@@ -428,8 +464,16 @@ jobs:
   - script: |
       pip install -r requirements-dev.txt
     displayName: 'Install Requirements dev'
+  - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: pip install onnxmltools --no-deps
     displayName: 'Install onnxmltools'
+  - script: |
+      python -m pip uninstall -y onnx onnx-weekly
+      python -m pip install onnx-weekly
+    displayName: 'Uninstall onnx and install onnx-weekly'
   - script: |
       python -m pip freeze
     displayName: 'pip freeze'

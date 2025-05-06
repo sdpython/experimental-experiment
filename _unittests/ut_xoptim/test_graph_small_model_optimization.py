@@ -36,6 +36,7 @@ class TestGraphSmallModelOptimization(ExtTestCase):
                 [onh.from_array(np.array([2], dtype=np.float32), name="init")],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
         )
         check_model(model)
 

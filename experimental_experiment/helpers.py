@@ -50,7 +50,7 @@ def size_type(dtype: Any) -> int:
 
     if dtype == np.float64 or dtype == np.int64:
         return 8
-    if dtype == np.float32 or dtype == np.float32:
+    if dtype == np.float32 or dtype == np.float32 or dtype == np.int32:
         return 4
     if dtype == np.float16 or dtype == np.int16:
         return 2

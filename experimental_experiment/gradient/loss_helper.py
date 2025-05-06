@@ -2,7 +2,6 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy
 from onnx import ModelProto
-from onnx.mapping import TENSOR_TYPE_TO_NP_TYPE
 from onnx.numpy_helper import to_array
 from onnx.helper import (
     make_node,
@@ -12,6 +11,7 @@ from onnx.helper import (
     set_model_props,
 )
 from onnx import TensorProto
+from onnx.helper import tensor_dtype_to_np_dtype
 from ..helpers import from_array_extended
 
 
@@ -113,7 +113,7 @@ def _loss_elastic(
     """
     l1_name = _unique_name(existing_names, "l1_name")
     l2_name = _unique_name(existing_names, "l2_name")
-    dtype = TENSOR_TYPE_TO_NP_TYPE[elem]
+    dtype = tensor_dtype_to_np_dtype(elem)
     onx_l1_weight = from_array_extended(numpy.array([l1_weight], dtype=dtype), name=l1_name)
     onx_l2_weight = from_array_extended(numpy.array([l2_weight], dtype=dtype), name=l2_name)
     inits = [onx_l1_weight, onx_l2_weight]
@@ -168,7 +168,7 @@ def _loss_log(
         raise RuntimeError(  # pragma: no cover
             f"output_name={output_name!r}, log loss does not work on labels."
         )
-    dtype = TENSOR_TYPE_TO_NP_TYPE[elem]
+    dtype = tensor_dtype_to_np_dtype(elem)
     one_name = _unique_name(existing_names, "one_name")
     eps_name = _unique_name(existing_names, "eps_name")
     eps1_name = _unique_name(existing_names, "eps1_name")
@@ -557,7 +557,7 @@ def add_loss_output(
                 v = {"l2": v}
             inits_to_add, nodes_to_add = penalty_loss_onnx(
                 k,
-                dtype=TENSOR_TYPE_TO_NP_TYPE[elem],
+                dtype=tensor_dtype_to_np_dtype(elem),
                 existing_names=existing_names,
                 **v,
             )
