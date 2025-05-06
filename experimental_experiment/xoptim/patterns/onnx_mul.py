@@ -40,6 +40,11 @@ class MulMulMulScalarPattern(PatternOptimization):
         }:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        if node_left.op_type == "Div" and cst_left.dtype not in (np.float32, np.float64):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if node_right.op_type == "Div" and node_right.dtype not in (np.float32, np.float64):
+            return self.none(node, inspect.currentframe().f_lineno)
+
         nodes = [node, node_left, node_right]
 
         return MatchResult(self, nodes, self.apply)
