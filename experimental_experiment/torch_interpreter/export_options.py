@@ -360,7 +360,7 @@ class ExportOptions:
             if self.save_ep:
                 with open(f"{self.save_ep}.old_dynamo", "w") as f:
                     f.write(str(res))
-                torch.export.save(exported_program, f"{self.save_ep}.old_dynamo.pt2")
+                torch.export.save(res, f"{self.save_ep}.old_dynamo.pt2")
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return res  # _apply_decompositions(res, self.decomposition_table)
@@ -377,12 +377,12 @@ class ExportOptions:
             if self.save_ep:
                 with open(f"{self.save_ep}.jit", "w") as f:
                     f.write(str(res))
-                torch.export.save(exported_program, f"{self.save_ep}.jit.pt2")
+                torch.export.save(res, f"{self.save_ep}.jit.pt2")
             dec = apply_decompositions(res, self.decomposition_table)
             if self.save_ep:
                 with open(f"{self.save_ep}.jit.decomposed", "w") as f:
                     f.write(str(dec))
-                torch.export.save(exported_program, f"{self.save_ep}.jit.decomposed.pt2")
+                torch.export.save(dec, f"{self.save_ep}.jit.decomposed.pt2")
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
@@ -424,7 +424,6 @@ class ExportOptions:
             if self.save_ep:
                 with open(f"{self.save_ep}.tracing", "w") as f:
                     f.write(str(graph))
-                torch.export.save(exported_program, f"{self.save_ep}.tracing.pt2")
             gm = torch.fx.GraphModule(mod, graph)
             return gm
 
