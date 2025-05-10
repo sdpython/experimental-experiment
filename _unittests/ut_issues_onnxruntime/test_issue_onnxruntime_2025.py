@@ -5,7 +5,7 @@ from experimental_experiment.ext_test_case import ExtTestCase, requires_onnxrunt
 
 class TestIssuesOnnxruntime2025(ExtTestCase):
 
-    @requires_onnxruntime("1.22")
+    @requires_onnxruntime("1.23")
     def test_ort_optimization_23199(self):
         # issue https://github.com/microsoft/onnxruntime/issues/23199
 

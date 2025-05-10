@@ -257,7 +257,7 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
         self.assertEqualArray(expected[0].ravel(), got[0].ravel(), atol=0.1)
         self.assertEqualArray(expected[0], got[0], atol=0.1)
 
-    @requires_onnxruntime("1.22")
+    @requires_onnxruntime("1.23")
     def test_attention_pattern_1_4d_cpu(self):
         model = self._get_model_attention_1()
         self.dump_onnx("test_attention_pattern_1.noopt.onnx", model)
