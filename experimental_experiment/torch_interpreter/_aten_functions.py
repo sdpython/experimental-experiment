@@ -7915,7 +7915,7 @@ def aten_scan(
         additional_inputs = [
             g.op.Identity(
                 a,
-                name="_DONOTREMOVE_Scan_hidden_input_{i}",
+                name=f"_DONOTREMOVE_Scan_hidden_input_{i}",
                 outputs=[g.unique_name(f"hidden_input_scan_{i}_{a}")],
             )
             for i, a in enumerate(additional_inputs)
