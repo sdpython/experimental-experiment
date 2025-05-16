@@ -1,7 +1,4 @@
 import unittest
-import torch
-from onnx_diagnostic.helpers import max_diff
-from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.bench_run import (
     BenchmarkError,
     _cmd_line,
@@ -10,7 +7,7 @@ from experimental_experiment.bench_run import (
     make_configs,
     run_benchmark,
 )
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
+from experimental_experiment.ext_test_case import ExtTestCase
 
 
 class TestBenchRun(ExtTestCase):
