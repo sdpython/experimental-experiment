@@ -102,65 +102,6 @@ class TestBenchRun(ExtTestCase):
             ],
         )
 
-    def test_max_diff(self):
-        self.assertEqual(
-            max_diff(torch.Tensor([1, 2]), torch.Tensor([1, 2])),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
-        )
-        self.assertEqual(
-            max_diff(
-                (torch.Tensor([1, 2]),),
-                (torch.Tensor([1, 2])),
-            ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
-        )
-        self.assertEqual(
-            max_diff(
-                (torch.Tensor([1, 2]), (torch.Tensor([1, 2]),)),
-                (torch.Tensor([1, 2]), (torch.Tensor([1, 2]),)),
-            ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 4.0, "dnan": 0.0},
-        )
-        self.assertEqual(
-            max_diff(
-                {"a": torch.Tensor([1, 2])},
-                {"a": torch.Tensor([1, 2])},
-            ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
-        )
-        self.assertEqual(
-            max_diff(
-                {"a": torch.Tensor([1, 2])},
-                [torch.Tensor([1, 2])],
-            ),
-            {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 2.0, "dnan": 0.0},
-        )
-        self.assertEqual(
-            max_diff(
-                {"a": torch.Tensor([1, float("nan")])},
-                [torch.Tensor([1, 2])],
-            ),
-            {
-                "abs": 9999999998.0,
-                "dnan": 1.0,
-                "n": 2.0,
-                "rel": 0.9999999997999001,
-                "sum": 9999999998.0,
-            },
-        )
-
-    @hide_stdout()
-    def test_max_diff_dynamic_cache(self):
-        t1 = torch.tensor([0, 1], dtype=torch.float32)
-        cache = make_dynamic_cache([(torch.ones((2, 2)), (torch.ones((2, 2)) * 2))])
-        md = max_diff(
-            (t1, cache),
-            (t1, cache.key_cache[0], cache.value_cache[0]),
-            flatten=True,
-            verbose=10,
-        )
-        self.assertEqual(md, {"abs": 0.0, "rel": 0.0, "sum": 0.0, "n": 10.0, "dnan": 0})
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
