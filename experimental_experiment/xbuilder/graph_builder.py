@@ -1131,7 +1131,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"multiple_outputs={multiple_outputs}{self.get_debug_msg()}"
                 )
                 if self._debug_get_constant:
-                    print("[GraphBuilder.get_constant]   A: None")
+                    print(f"[GraphBuilder.get_constant]   A: None, name={name!r}")
                 return None
             assert multiple_outputs or not isinstance(
                 res, tuple
@@ -1148,7 +1148,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if exc:
                 raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
             if self._debug_get_constant:
-                print("[GraphBuilder.get_constant]   C: None")
+                print(f"[GraphBuilder.get_constant]   C: None, name={name!r}")
             return None
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
@@ -1158,7 +1158,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 value, tuple
             ), f"Multiple output is not allowed but type is {type(value)} for name={name!r}"
             if self._debug_get_constant:
-                print(f"[GraphBuilder-{self._hash()}.get_constant]   D: value: {type(value)}")
+                print(
+                    f"[GraphBuilder-{self._hash()}.get_constant]   D: value: "
+                    f"{type(value)}, name={name!r}"
+                )
+            assert (
+                not exc or value is not None
+            ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
             return value
 
         if possible_value is not None:
@@ -1171,7 +1177,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if res is None:
                     # The constant is too big to be computed.
                     if self._debug_get_constant:
-                        print("[GraphBuilder.get_constant]   E: None")
+                        print(f"[GraphBuilder.get_constant]   E: None, name={name!r}")
                     return None
 
                 assert multiple_outputs or not isinstance(res, tuple), (
@@ -1184,7 +1190,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
                 if not isinstance(res, tuple):
                     if self._debug_get_constant:
-                        print("[GraphBuilder.get_constant]   F: tuple")
+                        print(f"[GraphBuilder.get_constant]   F: tuple, name={name!r}")
                     return res
 
                 assert isinstance(res, tuple), (
@@ -1198,8 +1204,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                     if self._debug_get_constant:
                         print(
-                            f"[GraphBuilder-{self._hash()}.get_constant]   G: {type(res[0])}"
+                            f"[GraphBuilder-{self._hash()}.get_constant]   "
+                            f"G: {type(res[0])}, name={name!r}"
                         )
+                    assert (
+                        not exc or res[0] is not None
+                    ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
                     return res[0]
 
                 index = list(possible_value.output).index(name)
@@ -1210,7 +1220,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"for name={name!r}"
                 )
                 if self._debug_get_constant:
-                    print(f"[GraphBuilder-{self._hash()}.get_constant]   H: {type(value)}")
+                    print(
+                        f"[GraphBuilder-{self._hash()}.get_constant]   "
+                        f"H: {type(value)}, name={name!r}"
+                    )
+                assert (
+                    not exc or value is not None
+                ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
                 return value
 
             assert possible_value is not None, f"Constant is empty for name={name!r}"
@@ -1220,8 +1236,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             if self._debug_get_constant:
                 print(
-                    f"[GraphBuilder-{self._hash()}.get_constant]   I: {type(possible_value)}"
+                    f"[GraphBuilder-{self._hash()}.get_constant]   "
+                    f"I: {type(possible_value)}, name={name!r}"
                 )
+            assert (
+                not exc or possible_value is not None
+            ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
             return possible_value
 
         if name not in self.initializers_dict:
@@ -1230,7 +1250,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"Result {name!r} was never evaluated within method 'constant_folding'."
                 )
             if self._debug_get_constant:
-                print("[GraphBuilder.get_constant]   J: None")
+                print(f"[GraphBuilder.get_constant]   J: None, name={name!r}")
             return None
 
         value = self.initializers_dict[name]
@@ -5643,7 +5663,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     continue
                 g.set_name(k, marker="optimize_node_subgraphs_inplace")
                 if self.has_shape(k):
-                    g.set_shape(k, self.get_shape(k))
+                    g.set_shape(k, self.get_shape(k), allow_zero=True)
                 elif self.has_rank(k):
                     g.set_rank(k, self.get_rank(k))
                 if self.has_type(k):
@@ -6243,13 +6263,6 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         If returns None if the constant is a FakeTensor.
         """
-        if self.main_opset < 18:
-            # This functionality is not enabled before that opset.
-            assert not self._debug_constant_folding, (
-                f"Unable to compute constant opset={self.main_opset}<18"
-                f"for name={name!r}{self.get_debug_msg()}"
-            )
-            return None, None
         assert self.is_constant(name), f"Name {name!r} is not a constant"
         if name in self.initializers_dict:
             value = self.initializers_dict[name]
@@ -6385,6 +6398,20 @@ class GraphBuilder(_GraphBuilderRuntime):
             elif hasattr(self, f"_apply_{v.op_type.lower()}"):
                 output = getattr(self, f"_apply_{v.op_type.lower()}")(v, feeds)
             elif all(isinstance(v, np.ndarray) for v in feeds.values()):
+                if v.op_type not in {"Constant", "ConstantOfShape"} and self.main_opset < 18:
+                    # This functionality is not enabled before that opset.
+                    if self._debug_get_constant:
+                        print(
+                            f"[GraphBuilder-{self._hash()}.compute_constant] fails "
+                            f"because opset={self.main_opset} for name={name!r}, "
+                            f"node={self.pretty_node(v)}"
+                        )
+                    assert not self._debug_constant_folding, (
+                        f"Unable to compute constant opset={self.main_opset}<18"
+                        f"for name={name!r}{self.get_debug_msg()}"
+                    )
+                    return None, None
+
                 # Let's avoid big computation on CPU.
                 max_dim = 0
                 for _v in feeds.values():
@@ -6731,6 +6758,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.input[0] not in input_names_and_init
                 and node.input[0] not in output_names
                 and node.input[0] not in replacements
+                and node.input[0] not in self._context  # neeeded for subgraphs
             ):
                 old_name, new_name = node.input[0], node.output[0]
             else:
@@ -7259,11 +7287,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"shapes."
             )
 
+        # if infer_shapes_options & InferShapesOptions.NEW:
+        #     clean_shapes(proto)
         if infer_shapes_options & InferShapesOptions.ONNX:
             if self.verbose > 1:
                 print("[GraphBuilder._update_shape_types_with_proto] infer shapes")
-            if infer_shapes_options & InferShapesOptions.NEW:
-                del proto.graph.value_info[:]
             new_proto = onnx_infer_shapes(
                 proto, data_prop=infer_shapes_options & InferShapesOptions.DATA_PROP
             )
@@ -7430,7 +7458,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if y is None:
                     node.doc_string += "#SV-Ga/2"
                     return False
-                i = self.get_constant(node.input[1], computed_value=True)
+                i = self.get_constant(node.input[1], computed_value=True, exc=True)
                 if isinstance(y, str) and isinstance(i, int):
                     self.set_value_shape(node.output[0], f"{y}[{i}]")
                     node.doc_string += "#SV-Ga3"
@@ -7480,7 +7508,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     return True
                 raise RuntimeError(
                     f"Not implemented when node Gather(x,i) with inputs={node.input}, "
-                    f"shape(x)={y!r}, i={i!r}, i.dtype={i.dtype}{self.get_debug_msg()}"
+                    f"shape(x)={y!r}, i={i!r}, i.dtype={i.dtype if i is not None else '?'}"
+                    f"{self.get_debug_msg()}"
                 )
             node.doc_string += "#SV-Ga/7"
             return False
@@ -7749,7 +7778,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return res
 
     def _update_structures_with_proto(
-        self, proto: Union[ModelProto, GraphProto], bypass_shape: bool
+        self, proto: Union[ModelProto, GraphProto], infer_shapes_options: InferShapesOptions
     ):
         """Updates the shapes and types for an existing model."""
         proto_graph = proto.graph if isinstance(proto, ModelProto) else proto
@@ -7786,7 +7815,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(proto, ModelProto):
             for f in proto.functions:
                 self.add_function(f)
-        self.value_info = list(proto_graph.value_info)
+        self.value_info = (
+            list(proto_graph.value_info)
+            if not (infer_shapes_options & InferShapesOptions.NEW)
+            else []
+        )
         self.inputs = list(proto_graph.input)
         self.outputs = list(proto_graph.output)
         self.input_names = [i.name for i in proto_graph.input]
@@ -7943,10 +7976,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
 
                 if replaced:
+                    self.set_shape(
+                        node.output[0], self.get_shape(node.input[0]), allow_zero=True
+                    )
                     self.set_type(node.output[0], self.get_type(node.input[0]))
-                    self.set_shape(node.output[0], self.get_shape(node.input[0]))
                 else:
-                    self.set_shape(node.output[0], self._get_tensor_shape(node))
+                    self.set_shape(
+                        node.output[0], self._get_tensor_shape(node), allow_zero=True
+                    )
                     self.set_type(node.output[0], self._get_tensor_type(node))
             elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
                 exist = self.is_exact_same_constant(node)
@@ -7996,7 +8033,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if o in available_shapes:
                     self._update_shape_types_with_proto_one_result(available_shapes[o])
 
-            if not bypass_shape:
+            if not infer_shapes_options:
                 if any(
                     (x not in available_shapes and not self.has_type(x)) for x in node.output
                 ):

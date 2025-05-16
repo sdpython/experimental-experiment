@@ -618,6 +618,10 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
         axis = self.get_attribute(node, "axis").i
         shapes = [self.get_shape(i) for i in node.input]
         new_shape = list(shapes[0])
+        assert shapes and axis < min(len(sh) for sh in shapes), (
+            f"axis={axis}, higher than a shape in {shapes}, "
+            f"node={self.pretty_node(node)}{self.get_debug_msg()}"
+        )
         dims = [sh[axis] for sh in shapes]
         if all_int(dims):
             new_shape[axis] = sum(dims)

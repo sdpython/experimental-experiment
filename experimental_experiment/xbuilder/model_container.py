@@ -3,7 +3,7 @@ import time
 import sys
 from typing import Any, List, Dict, Optional
 import numpy as np
-from onnx import GraphProto, ModelProto, StringStringEntryProto, TensorProto
+from onnx import GraphProto, ModelProto, StringStringEntryProto, TensorProto, load_model
 from onnx.model_container import ModelContainer, _set_external_data
 from onnx.external_data_helper import _get_all_tensors, uses_external_data
 from onnx.inliner import inline_local_functions
@@ -74,6 +74,39 @@ class TorchModelContainer(ModelContainer):
             "time_export_inline_model": 0,
         }
         self.inline = False
+
+    def save(self, file_path: str, all_tensors_to_one_file: bool = True) -> ModelProto:
+        """
+        Saves the large model.
+        The function returns a ModelProto,
+        the current one if the model did not need any modification,
+        a modified copy of it if it required changes such as giving file names
+        to every external tensor.
+
+        :param file_path: model file
+        :param all_tensors_to_one_file: saves all large tensors in one file or
+                one file per lerge tensor
+        :return: the saved ModelProto
+        """
+        return self._save_external(file_path, all_tensors_to_one_file=all_tensors_to_one_file)
+
+    def load(
+        self, file_path: str, load_large_initializers: bool = True
+    ) -> "TorchModelContainer":
+        """
+        Loads the large model.
+
+        :param file_path: model file
+        :param load_large_initializers: loads the large initializers,
+                if not done, the model is incomplete but it can be used to
+                look into the model without executing it and method
+                :meth:`_load_large_initializers` can be used to load them later
+        :return: self
+        """
+        self.model_proto_ = load_model(file_path, load_external_data=False)
+        if load_large_initializers:
+            self._load_large_initializers(file_path)
+        return self
 
     def _save_external(
         self,
