@@ -159,6 +159,8 @@ class FunctionPackedMatMulPattern(PatternOptimization):
 class FunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
     """
     Moves the nodes in match_pattern into a local function.
+    This is only applicable when the pattern to match has more than
+    one node.
 
     .. runpython::
         :showcode:
