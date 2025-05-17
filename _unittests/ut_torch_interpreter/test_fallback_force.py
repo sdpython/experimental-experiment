@@ -271,7 +271,7 @@ class TestFallbackForce(ExtTestCase):
     def test_fallback_force_llama_sdpa_export(self):
         import torch
         from experimental_experiment.torch_models.llama_helper import get_llama_model
-        from experimental_experiment.torch_interpreter import to_onnx
+        from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
         from experimental_experiment.torch_interpreter.dispatcher import (
             ForceDispatcher,
         )
@@ -290,6 +290,7 @@ class TestFallbackForce(ExtTestCase):
                         "_scaled_dot_product_flash_attention_for_cpu_default": _f_scaled_dot_product_flash_attention_for_cpu_default  # noqa: E501
                     }
                 ),
+                export_options=ExportOptions(aten_as_function=False),
             )
         dot = [n for n in onx.graph.node if "scaled" in n.op_type]
         if len(dot) == 0:

@@ -26,7 +26,7 @@ def _attention_scale(g: GraphBuilder, query: T, name: str = "_attention_scale") 
     shape = g.op.Shape(query, name=name)
     last = g.op.Gather(shape, g.MINUS_ONE, name=name)
     itype = g.get_type(query)
-    clast = g.op.Cast(itype, to=itype, name=name)
+    clast = g.op.Cast(last, to=itype, name=name)
     return g.op.Reciprocal(g.op.Sqrt(clast, name=name), name=name)
 
 

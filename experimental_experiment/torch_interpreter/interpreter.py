@@ -1445,9 +1445,15 @@ class DynamoInterpreter:
             f"{self.builder.get_debug_msg()}"
         )
 
-        if self.export_options.aten_as_function:
+        if self.export_options.export_as_aten_function(aten_name):
             res = self.add_aten_as_function(
-                str(aten_name), fct, can_set, output_names, args=args, kwargs=fx_kwargs
+                str(aten_name),
+                fct,
+                can_set,
+                output_names,
+                args=args,
+                kwargs=fx_kwargs,
+                metadata_props={"inline": "0"},
             )
             allow_new_dynamic_dimension = False
         elif isinstance(fct, GraphBuilder):
@@ -1561,8 +1567,16 @@ class DynamoInterpreter:
         output_names = self._get_output_names(node)
         can_set = self._can_set_shape_and_type(node)
 
-        if self.export_options.aten_as_function:
-            res = self.add_aten_as_function(name_fct, fct, can_set, output_names, args, kwargs)
+        if self.export_options.export_as_aten_function(method_name):
+            res = self.add_aten_as_function(
+                name_fct,
+                fct,
+                can_set,
+                output_names,
+                args,
+                kwargs,
+                metadata_props={"inline": "0"},
+            )
         else:
             res = fct(self.builder, can_set, output_names, *args, **kwargs)
 
@@ -1579,6 +1593,7 @@ class DynamoInterpreter:
         args: List[Any],
         kwargs: Dict[str, Any],
         domain: str = "aten",
+        metadata_props: Optional[Dict[str, str]] = None,
     ) -> Union[str, Tuple[str]]:
         """
         Converts a function into a local function and adds this local function to the graph.
@@ -1650,6 +1665,7 @@ class DynamoInterpreter:
                 external_threshold=2**8,
             ),
             optimize=False,
+            metadata_props=metadata_props,
         )
         new_inits = []
         for init in inits:
@@ -1658,7 +1674,12 @@ class DynamoInterpreter:
             )
             new_inits.append(new_init)
         self.builder.make_node(
-            fname, [*input_names, *new_inits], output_names, domain=fdomain, name=name_fct
+            fname,
+            [*input_names, *new_inits],
+            output_names,
+            domain=fdomain,
+            name=name_fct,
+            metadata_props=dict(aten_name=name_fct, args=str(args), kwargs=str(kwargs)),
         )
         return output_names[0] if len(output_names) == 1 else output_names
 

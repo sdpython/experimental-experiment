@@ -631,7 +631,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqual(f1.input, ["X", "weights", "bias"])
         f2 = fct["functions"][1]
         self.assertEqual(f2.domain, "custom")
-        self.assertEqual(f2.name, "Regression_2")
+        self.assertEqual(f2.name, "Regression__v2")
         self.assertEqual(f2.output, ["Y"])
         self.assertEqual(f2.input, ["X", "weights", "bias"])
 
