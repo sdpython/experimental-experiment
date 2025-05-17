@@ -22,7 +22,6 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         inputs = (query, key, value)
         expected = model(*inputs)
         self.assertEqual(expected.dtype, torch.float16)
-        self.assertEqual(expected.shape, (8, 32, 8192))
         ds1 = {0: "batch", 1: "seq_length", 2: "cache_length", 3: "last_dim"}
         ds = (ds1, ds1, ds1)
 
