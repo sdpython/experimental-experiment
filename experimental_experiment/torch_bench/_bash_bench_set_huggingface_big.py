@@ -15,10 +15,9 @@ class HuggingfaceBigRunner(BenchmarkRunner):
     MODELS: Dict[str, Callable] = {}
     CACHE = CACHE_DEFAULT
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
-        cls.MODELS.update(
+        self.MODELS.update(
             {
                 "all_MiniLM_L6_v1": get_minilm,
                 "code_llama": get_codellama,

@@ -176,8 +176,7 @@ class HuggingfaceRunner(BenchmarkRunner):
 
     EXTRA_MODELS = {}
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
         import transformers
 
@@ -186,16 +185,16 @@ class HuggingfaceRunner(BenchmarkRunner):
         #         transformers, cls
         #     ), f"{cls!r} not found, update transformers."
 
-        lines = cls.MODELS_FILENAME.split("\n")
+        lines = self.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
         for line in lines:
             if not line or len(line) < 2:
                 continue
             model_name, batch_size = line.split(",")
             batch_size = int(batch_size)
-            cls.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
+            self.BATCH_SIZE_KNOWN_MODELS[model_name] = batch_size
 
-        cls.EXTRA_MODELS.update(
+        self.EXTRA_MODELS.update(
             {
                 "101Dummy": (
                     lambda: Neuron.config,

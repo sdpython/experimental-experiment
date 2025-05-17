@@ -448,8 +448,7 @@ class TorchBenchRunner(BenchmarkRunner):
         config = maybe_list_to_set(data)
         return config
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
         try:
             import torch
@@ -457,13 +456,13 @@ class TorchBenchRunner(BenchmarkRunner):
             _ = torch.ops.fbgemm.asynchronous_complete_cumsum
         except (AttributeError, ImportError) as e:
             warnings.warn(f"Something wrong in the installation because of {e}.", stacklevel=2)
-        cls._config = cls.load_yaml_file()
-        assert "batch_size" in cls._config, f"config wrong {cls._config}"
-        assert cls._config["batch_size"] is not None, f"config wrong {cls._config}"
-        assert "inference" in cls._config["batch_size"], f"config wrong {cls._config}"
-        lines = cls.MODELS_FILENAME.split("\n")
+        self._config = self.load_yaml_file()
+        assert "batch_size" in self._config, f"config wrong {self._config}"
+        assert self._config["batch_size"] is not None, f"config wrong {self._config}"
+        assert "inference" in self._config["batch_size"], f"config wrong {self._config}"
+        lines = self.MODELS_FILENAME.split("\n")
         lines = [line.rstrip() for line in lines]
-        expected_models = {_.strip() for _ in cls.EXPECTED_MODELS.split("\n") if _}
+        expected_models = {_.strip() for _ in self.EXPECTED_MODELS.split("\n") if _}
         for line in lines:
             if not line or len(line) < 2:
                 continue
@@ -471,21 +470,21 @@ class TorchBenchRunner(BenchmarkRunner):
             if model_name not in expected_models:
                 continue
             batch_size = int(batch_size)
-            if "batch_size" not in cls._config or cls._config["batch_size"] is None:
-                cls._config["batch_size"] = {}
+            if "batch_size" not in self._config or self._config["batch_size"] is None:
+                self._config["batch_size"] = {}
             if (
-                "inference" not in cls._config["batch_size"]
-                or cls._config["batch_size"]["inference"] is None
+                "inference" not in self._config["batch_size"]
+                or self._config["batch_size"]["inference"] is None
             ):
-                cls._config["batch_size"]["inference"] = {}
-            assert "inference" in cls._config["batch_size"]
-            cls._config["batch_size"]["inference"][model_name] = batch_size
+                self._config["batch_size"]["inference"] = {}
+            assert "inference" in self._config["batch_size"]
+            self._config["batch_size"]["inference"][model_name] = batch_size
         for o in expected_models:
             model_name = o.strip()
             if len(model_name) < 3:
                 continue
-            if model_name not in cls._config["batch_size"]["inference"]:
-                cls._config["batch_size"]["inference"][model_name] = 1
+            if model_name not in self._config["batch_size"]["inference"]:
+                self._config["batch_size"]["inference"][model_name] = 1
 
     @classmethod
     def _get_module_cls_by_model_name(cls, model_cls_name):

@@ -52,14 +52,13 @@ class UntrainedRunner(BenchmarkRunner):
         "meta-llama/Llama-3.2-1B-Instruct",
     ]
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
         model_ids = {
             k: (lambda _model_id_=k: get_untrained_model_inputs(_model_id_))
-            for k in cls.MODEL_IDS
+            for k in self.MODEL_IDS
         }
-        cls.MODELS.update(
+        self.MODELS.update(
             {
                 # model ids
                 **model_ids,
@@ -406,6 +405,7 @@ class UntrainedRunner(BenchmarkRunner):
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         super().__init__(
             "untrained",
@@ -423,6 +423,7 @@ class UntrainedRunner(BenchmarkRunner):
             dtype=dtype,
             nvtx=nvtx,
             dump_ort=dump_ort,
+            attn_impl=attn_impl,
         )
         self.initialize()
 

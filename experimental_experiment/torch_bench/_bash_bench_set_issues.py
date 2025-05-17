@@ -12,10 +12,9 @@ class IssueRunner(BenchmarkRunner):
     MODELS: Dict[str, Callable] = {}
     CACHE = CACHE_DEFAULT
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
-        cls.MODELS.update({"FluxT5": get_flux_t5, "FluxTransformer": get_flux_transformer})
+        self.MODELS.update({"FluxT5": get_flux_t5, "FluxTransformer": get_flux_transformer})
 
     def __init__(
         self,

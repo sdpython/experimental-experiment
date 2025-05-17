@@ -25,17 +25,16 @@ class TorchBenchAdoRunner(TorchBenchRunner):
         """
     )
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
-        expected_models = {_.strip() for _ in cls.EXPECTED_MODELS.split("\n") if _}
-        cls._config = cls.load_yaml_file()
-        assert "batch_size" in cls._config, f"config wrong {cls._config}"
-        assert cls._config["batch_size"] is not None, f"config wrong {cls._config}"
-        assert "inference" in cls._config["batch_size"], f"config wrong {cls._config}"
+        expected_models = {_.strip() for _ in self.EXPECTED_MODELS.split("\n") if _}
+        self._config = self.load_yaml_file()
+        assert "batch_size" in self._config, f"config wrong {self._config}"
+        assert self._config["batch_size"] is not None, f"config wrong {self._config}"
+        assert "inference" in self._config["batch_size"], f"config wrong {self._config}"
         for o in expected_models:
             model_name = o.strip()
             if len(model_name) < 3:
                 continue
-            if model_name not in cls._config["batch_size"]["inference"]:
-                cls._config["batch_size"]["inference"][model_name] = 1
+            if model_name not in self._config["batch_size"]["inference"]:
+                self._config["batch_size"]["inference"][model_name] = 1

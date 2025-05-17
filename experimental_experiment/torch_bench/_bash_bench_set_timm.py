@@ -266,21 +266,20 @@ class TimmRunner(BenchmarkRunner):
         chosen_models.update(value[0] for key, value in all_models_family.items())
         return [c.split(".")[0] for c in chosen_models]
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
         import timm
 
         models = set(timm.list_models(pretrained=True, exclude_filters=["*in21k"]))
         models = {_.split(".")[0] for _ in models}
-        expected = [_ for _ in cls.EXPECTED.split("\n") if len(_) > 2]
-        expected = {_ for _ in cls.EXPECTED.split("\n") if len(_) > 2}
-        missing = expected - set(cls.TIMM_MODELS)
+        expected = [_ for _ in self.EXPECTED.split("\n") if len(_) > 2]
+        expected = {_ for _ in self.EXPECTED.split("\n") if len(_) > 2}
+        missing = expected - set(self.TIMM_MODELS)
         # These models seems to be missing.
         models |= missing
 
-        cls._config = {"done": True}
-        with io.StringIO(cls.MODELS_FILENAME) as fh:
+        self._config = {"done": True}
+        with io.StringIO(self.MODELS_FILENAME) as fh:
             lines = fh.readlines()
             lines = [line.rstrip() for line in lines]
             for line in lines:
@@ -289,12 +288,12 @@ class TimmRunner(BenchmarkRunner):
                 model_name, batch_size = line.split(" ")
                 if model_name not in models:
                     continue
-                cls.TIMM_MODELS[model_name] = int(batch_size)
+                self.TIMM_MODELS[model_name] = int(batch_size)
         for c in ["convit_base"]:
             assert c in expected, f"Unable to find {c!r} in {pprint.pformat(expected)}"
             assert (
-                c in cls.TIMM_MODELS
-            ), f"Unable to find {c!r} in {pprint.pformat(cls.TIMM_MODELS)}"
+                c in self.TIMM_MODELS
+            ), f"Unable to find {c!r} in {pprint.pformat(self.TIMM_MODELS)}"
 
     @classmethod
     def _get_module_cls_by_model_name(cls, model_cls_name):

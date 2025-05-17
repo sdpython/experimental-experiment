@@ -3204,8 +3204,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                                     dim_name_axis not in self._dynamic_alias
                                     or self._dynamic_alias[dim_name_axis] == dim_name
                                 ), (
-                                    "Alias mismatch for {dim_name_axis!r}, existing is "
-                                    f"{self._dynamic_alias[dim_name_axis]!r}, "
+                                    f"Alias mismatch for {dim_name_axis!r}, axis={axis}, "
+                                    f"existing is {self._dynamic_alias[dim_name_axis]!r}, "
                                     f"new is {dim_name!r} "
                                     f"for input {input_name!r} and shape {shape!r}"
                                     f"{self.get_debug_msg()}"

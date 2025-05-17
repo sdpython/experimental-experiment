@@ -55,6 +55,7 @@ class BenchmarkRunner:
     :param target_opset: target opset
     :param nvtx: add events to profile
     :param dump_ort: dumps onnxruntime optimized graph
+    :param attn_impl: attention implementation
     """
 
     def __init__(
@@ -77,6 +78,7 @@ class BenchmarkRunner:
         target_opset: int = 18,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         self.suite_name = suite_name
         self.device = device
@@ -88,6 +90,7 @@ class BenchmarkRunner:
         self.training = training
         self.use_eval_mode = use_eval_mode
         self.enable_activation_checkpointing = enable_activation_checkpointing
+        self.attn_impl = attn_impl
         if isinstance(dtype, str):
             if dtype in ("default", ""):
                 dtype = ""

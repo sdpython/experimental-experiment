@@ -175,6 +175,19 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
+    def test_untrained_export_bench_export_cpu_custom(self):
+        self._untrained_export(
+            "custom",
+            "arnir0/Tiny-LLM",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7.9999")
+    @requires_transformers("4.49.9999")
     def test_untrained_export_bench_export_cpu_whisper(self):
         self._untrained_export(
             "export-nostrict",

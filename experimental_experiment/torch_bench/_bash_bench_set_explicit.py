@@ -15,10 +15,9 @@ class ExplicitRunner(BenchmarkRunner):
     SUITE = "Explicit"
     MODELS: Dict[str, Callable] = {}
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
-        cls.MODELS.update(
+        self.MODELS.update(
             {
                 "1001Fail": get_dummy_model_fail,
                 "1001Fail2": get_dummy_model_fail_convert,
