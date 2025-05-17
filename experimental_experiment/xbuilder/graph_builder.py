@@ -607,6 +607,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(dynamic_shapes, str):
             # Not allowed by pytorch but allowed here.
             return cls.WrapDim(dynamic_shapes)
+        if isinstance(dynamic_shapes, cls.WrapDim):
+            return dynamic_shapes
         if not dynamic_shapes:
             return dynamic_shapes
         if unique_names is None:
@@ -3753,6 +3755,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         sts: Optional[Dict[str, Any]] = None,
         do_not_remove: bool = False,
         insert_position: Optional[int] = None,
+        metadata_props: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> Union[str, List[str]]:
         """
@@ -3774,6 +3777,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param insert_position: insert the node at the end (None) or
             at the top (HEAD).
         :param kwargs: additional attributes to add the node
+        :param metadata_props: additional information to store into the node
         :return: output names
         """
         if self._debug_local_function and domain:
@@ -3916,6 +3920,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Repeated outputs for node {node.op_type}({', '.join(node.input)}) -> "
             f"{', '.join(node.output)}"
         )
+        if metadata_props:
+            oh.set_model_props(node, metadata_props)
 
         if attributes:
             node.attribute.extend(attributes)
@@ -8167,6 +8173,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         builder: "GraphBuilder",
         function_options: FunctionOptions,
         optimize: bool = False,
+        metadata_props: Optional[Dict[str, str]] = None,
     ) -> Tuple[List[str], Tuple[str, str]]:
         """
         Adds a local function to exiting graph.
@@ -8174,6 +8181,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param builder: builder
         :param function_options: to define how to handle weights
         :param optimize: optimize the function
+        :param metadata_props: metadata to add to the function
         :return: the list of added initializers if
             *move_initializer_to_constant* is True,
             and the function name (domain, name),
@@ -8237,6 +8245,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{self.get_debug_msg()}"
         )
         onx = fct["proto"] if isinstance(fct, dict) else fct
+        if metadata_props:
+            oh.set_model_props(onx, metadata_props)
+
         if self._debug_local_function and isinstance(fct, dict):
             print(f"[GraphBuilder-{self._hash()}.make_local_function] keys={', '.join(fct)}")
             if "initializers_name" in fct:
@@ -8489,10 +8500,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return f.domain, f.name
         if rename_allowed and key in self.functions:
             i = 2
-            new_name = f"{f.name}_2"
+            new_name = f"{f.name}__v2"
             while (f.domain, new_name) in self.functions:
                 i += 1
-                new_name = f"{f.name}_{i}"
+                new_name = f"{f.name}__v{i}"
             f.name = new_name
         key = f.domain, f.name
         assert key not in self.functions, (
@@ -8582,7 +8593,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         begin0 = time.perf_counter()
 
         # Checks opsets
+        skip_functions = set()
         for v in self.functions.values():
+            if v.metadata_props:
+                for p in v.metadata_props:
+                    if p.key == "inline" and p.value in ("0", 0, "False", "false", False):
+                        skip_functions.add((v.domain, v.name))
+
             for op in v.opset_import:
                 if op.domain in self.opsets:
                     assert op.version == self.opsets[op.domain], (
@@ -8595,10 +8612,13 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if verbose:
             print(f"[inline_functions] begin graph {id(self)}")
+            print(f"[inline_functions] skip_functions={skip_functions}")
         stats = []
         self._check(stats, step="before inline")
         begin = time.perf_counter()
-        inlined = self._inline_functions_iteration(verbose=verbose)
+        inlined = self._inline_functions_iteration(
+            verbose=verbose, skip_functions=skip_functions
+        )
         stats.append(
             dict(
                 pattern="inline",
@@ -8612,7 +8632,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         while inlined:
             it += 1
             begin = time.perf_counter()
-            inlined = self._inline_functions_iteration(verbose=verbose)
+            inlined = self._inline_functions_iteration(
+                verbose=verbose, skip_functions=skip_functions
+            )
             stats.append(
                 dict(
                     pattern="inline",
@@ -8624,7 +8646,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._check(stats, step=f"after inline iteration {it}")
 
         # We can remove the local functions now.
-        self.functions = {}
+        self.functions = {k: v for k, v in self.functions.items() if k in skip_functions}
         if verbose:
             print(f"[inline_functions] done graph {id(self)} in {time.perf_counter()-begin0}")
         return stats
@@ -8647,10 +8669,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                         return True
         return False
 
-    def _inline_functions_iteration(self, verbose: int = 0) -> int:
+    def _inline_functions_iteration(
+        self, skip_functions: Optional[Set[Tuple[str, str]]] = None, verbose: int = 0
+    ) -> int:
         """
         Inlines local functions. Returns the number of replacements.
+
+        :param skip_functions: do not inline these functions
+        :param verbose: verbosity
         """
+        skip_functions = skip_functions or set()
         n_replacements = 0
         replacements = []
         for pos, node in enumerate(self.nodes):
@@ -8667,10 +8695,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"[_inline_functions_iterations] replace local "
                             f"functions in node {node.op_type!r}, name={node.name!r}"
                         )
-                    n_replacements += self._inline_functions_subgraph(att.g, verbose)
+                    n_replacements += self._inline_functions_subgraph(
+                        att.g, verbose=verbose, skip_functions=skip_functions
+                    )
 
             key = node.domain, node.op_type
-            if key not in self.functions:
+            if key not in self.functions or key in skip_functions:
                 continue
 
             n_replacements += 1
@@ -8698,26 +8728,41 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         return n_replacements
 
-    def _inline_functions_subgraph(self, g: GraphProto, verbose: int = 0) -> int:
+    def _inline_functions_subgraph(
+        self,
+        g: GraphProto,
+        skip_functions: Optional[Set[Tuple[str, str]]] = None,
+        verbose: int = 0,
+    ) -> int:
         """
         Inlines local functions in subgraph (inplace).
         Returns the number of replacements.
         """
         stat = []
         self._check(stat, step="before inline")
-        inlined = self._inline_functions_subgraph_iteration(g, verbose=verbose)
+        inlined = self._inline_functions_subgraph_iteration(
+            g, verbose=verbose, skip_functions=skip_functions
+        )
         self._check(stat, step="after inline iteration 0")
         total = inlined
         it = 0
         while inlined:
             it += 1
-            inlined = self._inline_functions_subgraph_iteration(g, verbose=verbose)
+            inlined = self._inline_functions_subgraph_iteration(
+                g, verbose=verbose, skip_functions=skip_functions
+            )
             total += inlined
             it += 1
             self._check(stat, step=f"after inline iteration {it}")
         return total
 
-    def _inline_functions_subgraph_iteration(self, g: GraphProto, verbose: int = 0) -> int:
+    def _inline_functions_subgraph_iteration(
+        self,
+        g: GraphProto,
+        skip_functions: Optional[Set[Tuple[str, str]]] = None,
+        verbose: int = 0,
+    ) -> int:
+        skip_functions = skip_functions or set()
         new_nodes = []
         if verbose:
             print(f"[_inline_functions_subgraph_iteration] begin with {id(g)}")
@@ -8736,10 +8781,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"[_inline_functions_subgraph_iteration] replace local "
                             f"functions in node {node.op_type!r}, name={node.name!r}"
                         )
-                    n_replacements += self._inline_functions_subgraph(att.g, verbose)
+                    n_replacements += self._inline_functions_subgraph(
+                        att.g, verbose=verbose, skip_functions=skip_functions
+                    )
 
             key = node.domain, node.op_type
-            if key not in self.functions:
+            if key not in self.functions or key in skip_functions:
                 new_nodes.append(node)
                 continue
 

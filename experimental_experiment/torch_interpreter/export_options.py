@@ -2,7 +2,7 @@ import inspect
 import os
 import pprint
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from ..helpers import string_type, string_sig
 from ._torch_helper import make_copy
@@ -28,7 +28,9 @@ class ExportOptions:
     :param strategy: to overwrite all the previous parameters with just a value
     :param remove_inplace: remove inplace nodes
     :param aten_as_function: keeps aten function as local function to keep a faithful
-        translation of the fx graph.
+        translation of the fx graph, it can also be a set of function name the export
+        should export as local function such as
+        ``torch.ops.aten.scaled_dot_product_attention``
     :param allow_untyped_output: allows output with no shape and/or no type
     :param save_ep: to save the exported program, it True, it will save the
         graph as well ``<save_ep>.graph``, it dumps them as text,
@@ -92,7 +94,9 @@ class ExportOptions:
         ] = None,
         strategy: Optional[str] = None,
         dynamo: bool = False,
-        aten_as_function: bool = False,
+        aten_as_function: Union[bool, Set[Any], Tuple[Any]] = (
+            "aten.scaled_dot_product_attention.default",
+        ),
         remove_inplace: bool = True,
         allow_untyped_output: bool = False,
         save_ep: Optional[str] = None,
@@ -107,7 +111,11 @@ class ExportOptions:
         self.dynamo = dynamo
         self.strategy = strategy
         self.jit = jit
-        self.aten_as_function = aten_as_function
+        self.aten_as_function = (
+            aten_as_function
+            if isinstance(aten_as_function, (bool, set))
+            else set(aten_as_function)
+        )
         self.remove_inplace = remove_inplace
         self.allow_untyped_output = allow_untyped_output
 
@@ -126,6 +134,15 @@ class ExportOptions:
         assert (
             not tracing or not dynamo
         ), f"Both tracing and dynamo are incompatible options in {self!r}"
+
+    def export_as_aten_function(self, aten_name: Any) -> bool:
+        if not self.aten_as_function:
+            return False
+        if isinstance(self.aten_as_function, bool):
+            return self.aten_as_function
+        if isinstance(aten_name, str):
+            return aten_name in self.aten_as_function
+        return aten_name in self.aten_as_function or str(aten_name) in self.aten_as_function
 
     def __repr__(self) -> str:
         return string_sig(self)
