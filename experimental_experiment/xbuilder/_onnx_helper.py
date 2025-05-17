@@ -1,6 +1,13 @@
 from typing import Dict, Iterator, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import AttributeProto, FunctionProto, GraphProto, NodeProto, TensorShapeProto
+from onnx import (
+    AttributeProto,
+    FunctionProto,
+    GraphProto,
+    ModelProto,
+    NodeProto,
+    TensorShapeProto,
+)
 from onnx.defs import onnx_opset_version, get_all_schemas_with_history
 
 
@@ -325,3 +332,19 @@ def same_function_proto(
             else False
         )
     return True
+
+
+def clean_shapes(proto: Union[GraphProto, ModelProto]):
+    """
+    Cleans all shapes inplace.
+    """
+    if isinstance(proto, ModelProto):
+        clean_shapes(proto.graph)
+        return
+    del proto.value_info[:]
+    for node in proto.node:
+        if node.op_type not in {"Scan", "If", "Loop"}:
+            continue
+        for att in node.attribute:
+            if att.type == AttributeProto.GRAPH:
+                clean_shapes(att.g)

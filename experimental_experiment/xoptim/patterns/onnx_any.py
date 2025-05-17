@@ -166,7 +166,7 @@ class IdentityPattern(PatternOptimization):
                 steps = node.input[4]
                 if (
                     not g.is_constant(steps)
-                    or g.get_computed_constant(steps) is not None
+                    or g.get_computed_constant(steps) is None
                     or set(g.get_computed_constant(steps)) != {1}
                 ):
                     return self.none(node, inspect.currentframe().f_lineno)

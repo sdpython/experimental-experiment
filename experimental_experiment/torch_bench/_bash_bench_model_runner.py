@@ -10,7 +10,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
-from onnx_diagnostic.helpers.torch_test_helper import torch_deepcopy
+
+try:
+    from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
+except ImportError:
+    from onnx_diagnostic.helpers.torch_test_helper import torch_deepcopy
 from ..helpers import string_type
 from .export_model_helper import compute_weight_size
 
