@@ -55,6 +55,7 @@ class UntrainedRunner(BenchmarkRunner):
         "openai/clip-vit-base-patch16",
         "Intel/bert-base-uncased-mrpc",
         #
+        "microsoft/phi-2",
         "microsoft/Phi-3.5-mini-instruct",
         "meta-llama/Llama-3.2-1B-Instruct",
     ]
