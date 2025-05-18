@@ -195,6 +195,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     :param output_dynamic_shapes: same as dynamic_shapes but for the output
     :param _opsets: to overwrite opsets when the builder receives a `GraphProto`
     :param _context: known names from the parent graph is any
+    :param _parent: parent owning the builder is any
 
     Important attributes:
 
@@ -407,6 +408,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         _opsets: Optional[Dict[str, int]] = None,
         _context: Optional[Set[str]] = None,
+        _parent: Optional["GraphBuilder"] = None,
     ):
         import torch
 
@@ -446,6 +448,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.check_empty_source = check_empty_source
         self.user_defined_output_names = output_names or []
         self._context = _context or set()
+        self._parent = _parent
 
         self.nodes = []
         self.initializers_dict = {}
@@ -573,7 +576,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise_list=self.raise_list,
             local_domain=self.local_domain,
             dynamic_shapes=self.dynamic_shapes,
+            _parent=self,
         )
+        new_builder.dynamic_objects = self.dynamic_objects.copy()
 
         for n in input_names:
             assert not self.is_sequence(
@@ -2890,7 +2895,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             dyn_shape = self.dynamic_shapes[name]
             if dim in dyn_shape:
                 dyndim = dyn_shape[dim]
-                self._dynamic_alias[key] = dyndim.__name__
+                self._add_dynamic_alias(key, dyndim.__name__)
 
         if parse:
             self.register_dynamic_objects_from_dim(keykey)
@@ -3199,7 +3204,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                                 f"{self.get_debug_msg()}"
                             )
                             dim_name_axis = self._torch_sym_int_to_str(shape[axis])
-                            if dim_name != dim_name_axis:
+                            if dim_name != dim_name_axis and not isinstance(
+                                dim_name_axis, int
+                            ):
                                 assert (
                                     dim_name_axis not in self._dynamic_alias
                                     or self._dynamic_alias[dim_name_axis] == dim_name
@@ -3210,7 +3217,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                                     f"for input {input_name!r} and shape {shape!r}"
                                     f"{self.get_debug_msg()}"
                                 )
-                                self._dynamic_alias[dim_name_axis] = dim_name
+                                self._add_dynamic_alias(dim_name_axis, dim_name)
                             shape = tuple(
                                 dim_name if i == axis else shape[i] for i in range(len(shape))
                             )
@@ -3332,7 +3339,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                                     f"for input {input_name!r} and shape {shape!r}"
                                     f"{self.get_debug_msg()}"
                                 )
-                                self._dynamic_alias[dim_name_axis] = dim_name
+                                self._add_dynamic_alias(dim_name_axis, dim_name)
                             shape = tuple(
                                 dim_name if i == axis else shape[i] for i in range(len(shape))
                             )
@@ -3407,6 +3414,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             ),
         )
 
+    def _add_dynamic_alias(self, key, value):
+        assert not isinstance(key, int), (
+            f"An integer should not be an alias, key={key}, value={value}"
+            f"{self.get_debug_msg()}"
+        )
+        self._dynamic_alias[key] = value
+
     def _fill_dynamic_alias(
         self, dyn_shape: Optional[Tuple[Any, ...]], name: str
     ) -> Optional[Tuple[Any, ...]]:
@@ -3431,7 +3445,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             dim = ds[pos]
             sdim = self._dynamic_to_str(dim, register_if_not_exist=True)
             if sdim != alias:
-                self._dynamic_alias[alias] = sdim
+                self._add_dynamic_alias(alias, sdim)
             res.append(sdim)
         return tuple(res)
 
@@ -4938,6 +4952,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"{len(self.nodes)} nodes, {len(self.inputs)} inputs, "
             f"{len(self.inputs)} outputs."
         )
+
+        if self._parent:
+            rows.extend(["######"] * 5)
+            rows.append(self._parent.get_debug_msg())
         return "\n".join(rows)
 
     def process(
