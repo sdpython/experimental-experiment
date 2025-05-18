@@ -626,6 +626,7 @@ class TimmRunner(BenchmarkRunner):
             autocast=self.autocast,
             model_name=model_name,
             wrap_kind="nowrap",
+            attn_impl=self.attn_impl,
         )
 
     def iter_model_names(self):

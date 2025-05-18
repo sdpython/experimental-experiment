@@ -854,6 +854,7 @@ class BenchmarkRunner:
         repeat = model_runner.repeat
         warmup = model_runner.warmup
         stats["model_name"] = model_name
+        stats["model_attn_impl"] = model_runner.attn_impl
         stats["model_task"] = model_runner.model_task
         stats["torch_model_name"] = model_name
         stats["torch_model_type"] = type(model_runner.model).__name__

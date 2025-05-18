@@ -389,12 +389,14 @@ class ModelRunner:
         inputs2: Optional[Any] = None,
         kw_inputs2: Optional[Dict[str, Any]] = None,
         task: str = "",
+        attn_impl: str = "eager",
     ):
         inputs, kw_inputs, cvt = self._pre_process_inputs(inputs, kw_inputs, dtype, device)
         if inputs2:
             inputs2, kw_inputs2s, _ = self._pre_process_inputs(
                 inputs2, kw_inputs2, dtype, device
             )
+        self.attn_impl = attn_impl
         self.kw_inputs = kw_inputs
         self.kw_inputs2 = kw_inputs2
         self.sig_input_names = list(inspect.signature(model.forward).parameters)
@@ -885,7 +887,10 @@ class ModelRunner:
         else:
             options = None
 
-        export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
+        exp_opts = (self.export_options or {}).copy()
+        if self.attn_impl:
+            exp_opts["aten_as_function"] = False
+        export_options = ExportOptions(strategy=strategy, **exp_opts)
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 

@@ -502,6 +502,7 @@ class UntrainedRunner(BenchmarkRunner):
             dynamic_shapes=dynamic_shapes,
             inputs2=inputs2,
             task=task,
+            attn_impl=self.attn_impl,
         )
 
     def iter_model_names(self):

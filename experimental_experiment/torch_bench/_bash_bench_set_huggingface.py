@@ -601,6 +601,7 @@ class HuggingfaceRunner(BenchmarkRunner):
             suite=self.SUITE,
             autocast=self.autocast,
             model_name=model_name,
+            attn_impl=self.attn_impl,
         )
 
     def iter_model_names(self):
