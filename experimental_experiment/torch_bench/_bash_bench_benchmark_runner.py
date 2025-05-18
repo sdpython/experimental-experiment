@@ -798,8 +798,8 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] test model {model_name!r} "
                 f"with exporter={exporter!r}"
             )
-        if self.verbose > 1:
-            print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
+            if self.verbose > 1:
+                print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
 
         stats = {
             "version_python": ".".join(str(i) for i in sys.version_info[:3]),
@@ -844,6 +844,7 @@ class BenchmarkRunner:
                 f"[benchmarkrunner.benchmark] model wrapped with class "
                 f"{type(model_runner.model)}"
             )
+            print(f"[BenchmarkRunner.benchmark] attn_impl={model_runner.model_name!r}")
         if self.device.startswith("cuda") and self.verbose > 1:
             print(
                 f"[benchmarkrunner.benchmark] gpu_allocation="

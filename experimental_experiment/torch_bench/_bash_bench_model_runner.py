@@ -888,7 +888,7 @@ class ModelRunner:
             options = None
 
         exp_opts = (self.export_options or {}).copy()
-        if self.attn_impl:
+        if self.attn_impl == "eager":
             exp_opts["aten_as_function"] = False
         export_options = ExportOptions(strategy=strategy, **exp_opts)
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
@@ -897,6 +897,10 @@ class ModelRunner:
         if verbose:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
+            print(
+                f"[ModelRunner._to_onnx_custom] aten_as_function="
+                f"{export_options.aten_as_function!r}"
+            )
             print(
                 f"[ModelRunner._to_onnx_custom] self.inputs="
                 f"{string_type(self.inputs, with_shape=True, limit=20)!r}"
@@ -965,6 +969,7 @@ class ModelRunner:
         stats["time_export_debuginfo"] = time.perf_counter() - begin
         begin = time.perf_counter()
         onx.save(name, all_tensors_to_one_file=True)
+        stats["model_aten_as_function"] = str(export_options.aten_as_function)
         stats["time_export_save"] = time.perf_counter() - begin
         for k, v in onx._stats.items():
             if v > 0:
