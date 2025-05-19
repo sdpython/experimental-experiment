@@ -389,12 +389,14 @@ class ModelRunner:
         inputs2: Optional[Any] = None,
         kw_inputs2: Optional[Dict[str, Any]] = None,
         task: str = "",
+        attn_impl: str = "eager",
     ):
         inputs, kw_inputs, cvt = self._pre_process_inputs(inputs, kw_inputs, dtype, device)
         if inputs2:
             inputs2, kw_inputs2s, _ = self._pre_process_inputs(
                 inputs2, kw_inputs2, dtype, device
             )
+        self.attn_impl = attn_impl
         self.kw_inputs = kw_inputs
         self.kw_inputs2 = kw_inputs2
         self.sig_input_names = list(inspect.signature(model.forward).parameters)
@@ -885,13 +887,20 @@ class ModelRunner:
         else:
             options = None
 
-        export_options = ExportOptions(strategy=strategy, **(self.export_options or {}))
+        exp_opts = (self.export_options or {}).copy()
+        if self.attn_impl == "eager":
+            exp_opts["aten_as_function"] = False
+        export_options = ExportOptions(strategy=strategy, **exp_opts)
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 
         if verbose:
             print(f"[ModelRunner._to_onnx_custom] dynamic_shapes={dyn_shapes!r}")
             print(f"[ModelRunner._to_onnx_custom] type(model)={type(self.model)!r}")
+            print(
+                f"[ModelRunner._to_onnx_custom] aten_as_function="
+                f"{export_options.aten_as_function!r}"
+            )
             print(
                 f"[ModelRunner._to_onnx_custom] self.inputs="
                 f"{string_type(self.inputs, with_shape=True, limit=20)!r}"
@@ -960,6 +969,7 @@ class ModelRunner:
         stats["time_export_debuginfo"] = time.perf_counter() - begin
         begin = time.perf_counter()
         onx.save(name, all_tensors_to_one_file=True)
+        stats["model_aten_as_function"] = str(export_options.aten_as_function)
         stats["time_export_save"] = time.perf_counter() - begin
         for k, v in onx._stats.items():
             if v > 0:

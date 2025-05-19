@@ -23,10 +23,17 @@ from ..torch_models.llm_model_helper import (
 from ..torch_models.chronos_model_helper import get_chronos_t5_tiny
 
 
-def get_untrained_model_inputs(model_id: str):
+def get_untrained_model_inputs(model_id: str, attn_implementation: str = ""):
     from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
 
-    res = get_untrained_model_with_inputs(model_id, add_second_input=True)
+    model_kwargs = (
+        None
+        if attn_implementation not in ("", None, "eager")
+        else dict(attn_implementation=attn_implementation)
+    )
+    res = get_untrained_model_with_inputs(
+        model_id, add_second_input=True, model_kwargs=model_kwargs
+    )
     assert "inputs2" in res, "Second set of inputs is missing."
     return res, dict(strict=False)
 
@@ -48,18 +55,23 @@ class UntrainedRunner(BenchmarkRunner):
         "openai/clip-vit-base-patch16",
         "Intel/bert-base-uncased-mrpc",
         #
+        "microsoft/phi-2",
         "microsoft/Phi-3.5-mini-instruct",
         "meta-llama/Llama-3.2-1B-Instruct",
+        "codellama/CodeLlama-7b-hf",
     ]
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
         model_ids = {
-            k: (lambda _model_id_=k: get_untrained_model_inputs(_model_id_))
-            for k in cls.MODEL_IDS
+            k: (
+                lambda _model_id_=k: get_untrained_model_inputs(
+                    _model_id_, attn_implementation=self.attn_impl
+                )
+            )
+            for k in self.MODEL_IDS
         }
-        cls.MODELS.update(
+        self.MODELS.update(
             {
                 # model ids
                 **model_ids,
@@ -73,7 +85,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_ai21_jamba_15_mini(
                             num_hidden_layers=1,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -85,7 +97,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_ai21_jamba_15_mini(
                             num_hidden_layers=1,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -97,7 +109,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_ai21_jamba_15_mini(
                             num_hidden_layers=2,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -109,7 +121,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_all_mini_ml_l6_v1(
                             num_hidden_layers=1,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -121,7 +133,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_all_mini_ml_l6_v1(
                             num_hidden_layers=1,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -133,7 +145,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_all_mini_ml_l6_v1(
                             num_hidden_layers=2,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -145,7 +157,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_all_mini_ml_l6_v1(
                             num_hidden_layers=2,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -157,7 +169,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_falcon_mamba_7b(
                             num_hidden_layers=1,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -169,7 +181,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_falcon_mamba_7b(
                             num_hidden_layers=1,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -181,7 +193,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_falcon_mamba_7b(
                             num_hidden_layers=1,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -193,7 +205,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_falcon_mamba_7b(
                             num_hidden_layers=1,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -206,7 +218,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_phi2(
                             num_hidden_layers=1,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                         ),
                         dict(strict=False, patch_transformers=True),
@@ -217,7 +229,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_phi2(
                             num_hidden_layers=1,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -229,7 +241,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_phi2(
                             num_hidden_layers=2,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                         ),
                         dict(strict=False, patch_transformers=True),
@@ -240,7 +252,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_phi2(
                             num_hidden_layers=2,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -276,7 +288,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_phi35_vision_instruct(
                             num_hidden_layers=1,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             input_kind=LLMInputKind.ALL,
                             common_dynamic_shapes=True,
                         ),
@@ -288,7 +300,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_phi4(
                             num_hidden_layers=2,
                             input_cache=False,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -300,7 +312,7 @@ class UntrainedRunner(BenchmarkRunner):
                         get_phi4(
                             num_hidden_layers=2,
                             input_cache=True,
-                            _attn_implementation="eager",
+                            _attn_implementation=self.attn_impl,
                             common_dynamic_shapes=True,
                             batch_size=2,
                         ),
@@ -406,6 +418,7 @@ class UntrainedRunner(BenchmarkRunner):
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         super().__init__(
             "untrained",
@@ -423,6 +436,7 @@ class UntrainedRunner(BenchmarkRunner):
             dtype=dtype,
             nvtx=nvtx,
             dump_ort=dump_ort,
+            attn_impl=attn_impl,
         )
         self.initialize()
 
@@ -501,6 +515,7 @@ class UntrainedRunner(BenchmarkRunner):
             dynamic_shapes=dynamic_shapes,
             inputs2=inputs2,
             task=task,
+            attn_impl=self.attn_impl,
         )
 
     def iter_model_names(self):

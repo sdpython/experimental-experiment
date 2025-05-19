@@ -12,10 +12,9 @@ class IssueRunner(BenchmarkRunner):
     MODELS: Dict[str, Callable] = {}
     CACHE = CACHE_DEFAULT
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
-        cls.MODELS.update({"FluxT5": get_flux_t5, "FluxTransformer": get_flux_transformer})
+        self.MODELS.update({"FluxT5": get_flux_t5, "FluxTransformer": get_flux_transformer})
 
     def __init__(
         self,
@@ -33,6 +32,7 @@ class IssueRunner(BenchmarkRunner):
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         super().__init__(
             "issues",
@@ -50,6 +50,7 @@ class IssueRunner(BenchmarkRunner):
             dtype=dtype,
             nvtx=nvtx,
             dump_ort=dump_ort,
+            attn_impl=attn_impl,
         )
         self.initialize()
 
@@ -93,6 +94,7 @@ class IssueRunner(BenchmarkRunner):
             autocast=self.autocast,
             wrap_kind="nowrap",
             model_name=model_name,
+            attn_impl=self.attn_impl,
         )
 
     def iter_model_names(self):

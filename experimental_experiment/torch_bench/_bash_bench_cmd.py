@@ -61,6 +61,7 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         timeout=("600", "timeout for subprocesses"),
         shape2=("0", "redo the shape inference"),
         patch=("1", "patches torch and transformers before exporting"),
+        attn_impl=("eager", "attention implementation"),
         new_args=new_args,
         expose="repeat,warmup",
     )
@@ -291,6 +292,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                 dtype=args.dtype,
                 nvtx=args.nvtx in BOOLEAN_VALUES,
                 dump_ort=args.dump_ort in BOOLEAN_VALUES,
+                attn_impl=args.attn_impl,
             )
 
             if do_profile:

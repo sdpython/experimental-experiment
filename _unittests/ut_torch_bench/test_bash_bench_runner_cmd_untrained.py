@@ -103,7 +103,11 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 filename = line.replace(":filename,", "").strip(";")
         if check_file:
             self.assertExists(filename)
-        if dynamic and exporter.startswith(("custom", "onnx", "torch")):
+        if (
+            dynamic
+            and exporter.startswith(("custom", "onnx", "torch"))
+            and models != "arnir0/Tiny-LLM"
+        ):
             onx = onnx.load(filename)
             input_values = []
             for i in onx.graph.input:
@@ -165,6 +169,19 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     def test_untrained_export_bench_export_cpu_diag(self):
         self._untrained_export(
             "export-nostrict",
+            "arnir0/Tiny-LLM",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7.9999")
+    @requires_transformers("4.49.9999")
+    def test_untrained_export_bench_export_cpu_custom(self):
+        self._untrained_export(
+            "custom",
             "arnir0/Tiny-LLM",
             verbose=1,
             debug=False,

@@ -55,6 +55,7 @@ class BenchmarkRunner:
     :param target_opset: target opset
     :param nvtx: add events to profile
     :param dump_ort: dumps onnxruntime optimized graph
+    :param attn_impl: attention implementation
     """
 
     def __init__(
@@ -77,6 +78,7 @@ class BenchmarkRunner:
         target_opset: int = 18,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         self.suite_name = suite_name
         self.device = device
@@ -88,6 +90,7 @@ class BenchmarkRunner:
         self.training = training
         self.use_eval_mode = use_eval_mode
         self.enable_activation_checkpointing = enable_activation_checkpointing
+        self.attn_impl = attn_impl
         if isinstance(dtype, str):
             if dtype in ("default", ""):
                 dtype = ""
@@ -471,7 +474,11 @@ class BenchmarkRunner:
                 new_stat.update({f"op_torch_{k}": v for k, v in builder["aten"].items()})
 
         new_stat.update(
-            {k: v for k, v in opt_stats.items() if k.startswith(("time_", "onnx_export_"))}
+            {
+                k: v
+                for k, v in opt_stats.items()
+                if k.startswith(("time_", "onnx_export_", "model_"))
+            }
         )
         return new_stat
 
@@ -795,8 +802,8 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] test model {model_name!r} "
                 f"with exporter={exporter!r}"
             )
-        if self.verbose > 1:
-            print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
+            if self.verbose > 1:
+                print(f"[BenchmarkRunner.benchmark] load model {model_name!r}")
 
         stats = {
             "version_python": ".".join(str(i) for i in sys.version_info[:3]),
@@ -841,6 +848,7 @@ class BenchmarkRunner:
                 f"[benchmarkrunner.benchmark] model wrapped with class "
                 f"{type(model_runner.model)}"
             )
+            print(f"[BenchmarkRunner.benchmark] attn_impl={model_runner.model_name!r}")
         if self.device.startswith("cuda") and self.verbose > 1:
             print(
                 f"[benchmarkrunner.benchmark] gpu_allocation="
@@ -851,6 +859,7 @@ class BenchmarkRunner:
         repeat = model_runner.repeat
         warmup = model_runner.warmup
         stats["model_name"] = model_name
+        stats["model_attn_impl"] = model_runner.attn_impl
         stats["model_task"] = model_runner.model_task
         stats["torch_model_name"] = model_name
         stats["torch_model_type"] = type(model_runner.model).__name__
@@ -1184,6 +1193,10 @@ class BenchmarkRunner:
         stats["filename"] = filename
         stats["onnx_weight_size_proto"] = compute_weight_size(exported_model)
         stats["onnx_weight_size_torch"] = model_runner.compute_weight_size()
+        stats["model_class"] = model_runner.model.__class__.__name__
+        stats["model_module"] = model_runner.model.__class__.__module__
+        if model_runner.model.__class__.__module__ in sys.modules:
+            stats["model_file"] = sys.modules[model_runner.model.__class__.__module__].__file__
 
         if shape_again:
             if self.verbose:

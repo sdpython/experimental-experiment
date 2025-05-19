@@ -15,10 +15,9 @@ class ExplicitRunner(BenchmarkRunner):
     SUITE = "Explicit"
     MODELS: Dict[str, Callable] = {}
 
-    @classmethod
-    def initialize(cls):
+    def initialize(self):
         """Steps to run before running the benchmark."""
-        cls.MODELS.update(
+        self.MODELS.update(
             {
                 "1001Fail": get_dummy_model_fail,
                 "1001Fail2": get_dummy_model_fail_convert,
@@ -44,6 +43,7 @@ class ExplicitRunner(BenchmarkRunner):
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         super().__init__(
             "explicit",
@@ -61,6 +61,7 @@ class ExplicitRunner(BenchmarkRunner):
             dtype=dtype,
             nvtx=nvtx,
             dump_ort=dump_ort,
+            attn_impl=attn_impl,
         )
         self.initialize()
 
@@ -99,6 +100,7 @@ class ExplicitRunner(BenchmarkRunner):
             autocast=self.autocast,
             wrap_kind="nowrap",
             model_name=model_name,
+            attn_impl=self.attn_impl,
         )
 
     def iter_model_names(self):
