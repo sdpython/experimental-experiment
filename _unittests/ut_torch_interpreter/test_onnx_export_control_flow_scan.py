@@ -32,7 +32,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     model,
                     (x,),
                     optimize=optimize,
-                    export_options=ExportOptions(decomposition_table="default"),
+                    export_options=ExportOptions(strict=False),
                 )
                 self.dump_onnx(f"test_scan_1_{optimize}.onnx", onx)
                 names = [(f.domain, f.name) for f in onx.functions]
@@ -89,7 +89,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     model,
                     (x,),
                     optimize=optimize,
-                    export_options=ExportOptions(decomposition_table="default", strict=False),
+                    export_options=ExportOptions(strict=False),
                 )
                 names = [(f.domain, f.name) for f in onx.functions]
                 self.assertEqual(len(names), len(set(names)))
