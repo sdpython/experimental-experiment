@@ -111,10 +111,10 @@ jobs:
           cp LICENSE* ./_doc
           cp CHANGELOGS* ./_doc
 
-      - name: Install onnxruntime-training again (3)
-        run: |
-          python -m pip uninstall -y onnxruntime onnxruntime-training
-          python -m pip install onnxruntime-training
+      # - name: Install onnxruntime-training again (3)
+      #   run: |
+      #    python -m pip uninstall -y onnxruntime onnxruntime-training
+      #     python -m pip install onnxruntime-training
 
       - name: Documentation
         continue-on-error: true
