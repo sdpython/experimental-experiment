@@ -58,6 +58,7 @@ class UntrainedRunner(BenchmarkRunner):
         "microsoft/phi-2",
         "microsoft/Phi-3.5-mini-instruct",
         "meta-llama/Llama-3.2-1B-Instruct",
+        "codellama/CodeLlama-7b-hf",
     ]
 
     def initialize(self):
