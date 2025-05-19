@@ -232,7 +232,7 @@ class ExportOptions:
                         "[ExportOptions.export] use decomposition "
                         "to remove inplace nodes left"
                     )
-                exported_program = exported_program.run_decomposition({})
+                exported_program = exported_program.run_decompositions({})
                 if verbose:
                     print(
                         f"[ExportOptions.export] done in {time.perf_counter() - begin}, "
