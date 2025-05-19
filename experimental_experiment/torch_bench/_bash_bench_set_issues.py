@@ -32,6 +32,7 @@ class IssueRunner(BenchmarkRunner):
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         super().__init__(
             "issues",
@@ -49,6 +50,7 @@ class IssueRunner(BenchmarkRunner):
             dtype=dtype,
             nvtx=nvtx,
             dump_ort=dump_ort,
+            attn_impl=attn_impl,
         )
         self.initialize()
 

@@ -659,6 +659,7 @@ class TorchBenchRunner(BenchmarkRunner):
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,
+        attn_impl: str = "eager",
     ):
         super().__init__(
             "torchbench",
@@ -676,6 +677,7 @@ class TorchBenchRunner(BenchmarkRunner):
             dtype=dtype,
             dump_ort=dump_ort,
             nvtx=nvtx,
+            attn_impl=attn_impl,
         )
         if not self._config:
             with warnings.catch_warnings():
