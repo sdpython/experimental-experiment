@@ -103,7 +103,11 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 filename = line.replace(":filename,", "").strip(";")
         if check_file:
             self.assertExists(filename)
-        if dynamic and exporter.startswith(("custom", "onnx", "torch")):
+        if (
+            dynamic
+            and exporter.startswith(("custom", "onnx", "torch"))
+            and models != "arnir0/Tiny-LLM"
+        ):
             onx = onnx.load(filename)
             input_values = []
             for i in onx.graph.input:

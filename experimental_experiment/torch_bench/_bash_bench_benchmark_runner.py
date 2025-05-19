@@ -474,7 +474,11 @@ class BenchmarkRunner:
                 new_stat.update({f"op_torch_{k}": v for k, v in builder["aten"].items()})
 
         new_stat.update(
-            {k: v for k, v in opt_stats.items() if k.startswith(("time_", "onnx_export_"))}
+            {
+                k: v
+                for k, v in opt_stats.items()
+                if k.startswith(("time_", "onnx_export_", "model_"))
+            }
         )
         return new_stat
 
@@ -1189,6 +1193,10 @@ class BenchmarkRunner:
         stats["filename"] = filename
         stats["onnx_weight_size_proto"] = compute_weight_size(exported_model)
         stats["onnx_weight_size_torch"] = model_runner.compute_weight_size()
+        stats["model_class"] = model_runner.model.__class__.__name__
+        stats["model_module"] = model_runner.model.__class__.__module__
+        if model_runner.model.__class__.__module__ in sys.modules:
+            stats["model_file"] = sys.modules[model_runner.model.__class__.__module__].__file__
 
         if shape_again:
             if self.verbose:
