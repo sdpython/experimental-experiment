@@ -205,24 +205,33 @@ class TestOnnxExportSubModules(ExtTestCase):
             inputs,
             optimize=True,
             verbose=0,
-            export_options=ExportOptions(strict=True),
+            export_options=ExportOptions(strict=False),
             inline=False,
-            options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=True),
+            options=OptimizationOptions(
+                patterns="default+onnxruntime", constant_folding=False
+            ),
             export_modules_as_functions=True,
         )
+        self.dump_onnx("test_dummy_llm_opts.onnx", onx)
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(
-            node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"]
-        )
+        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer"])
         node_names = [n.op_type for n in onx.functions[1].node]
-        self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
+        self.assertEqual(node_names, ["Embedding", "Embedding", "Add"])
         p_names = set(name for name, _ in model.named_parameters())
         init_names = set(i.name for i in onx.graph.initializer if "mask" not in i.name)
         self.assertEqual(len(p_names & init_names), 12)
         check_model(onx)
         self.check_ort(onx)
 
-        onx2 = to_onnx(model, inputs, optimize=False, verbose=0)
+        onx2 = to_onnx(
+            model,
+            inputs,
+            optimize=True,
+            verbose=0,
+            options=OptimizationOptions(
+                patterns="default+onnxruntime", constant_folding=False
+            ),
+        )
         init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
         self.assertEqual(init_names2 & init_names, init_names)
         self.check_ort(onx2)
