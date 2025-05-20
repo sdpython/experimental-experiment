@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.xbuilder import FunctionOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_test_helper import dummy_llm
 
@@ -178,6 +179,36 @@ class TestOnnxExportSubModules(ExtTestCase):
             verbose=0,
             export_options=ExportOptions(strict=True),
             inline=False,
+        )
+        node_names = [n.op_type for n in onx.graph.node]
+        self.assertEqual(
+            node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"]
+        )
+        node_names = [n.op_type for n in onx.functions[1].node]
+        self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
+        p_names = set(name for name, _ in model.named_parameters())
+        init_names = set(i.name for i in onx.graph.initializer if "mask" not in i.name)
+        self.assertEqual(len(p_names & init_names), 12)
+        check_model(onx)
+        self.check_ort(onx)
+
+        onx2 = to_onnx(model, inputs, optimize=False, verbose=0)
+        init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
+        self.assertEqual(init_names2 & init_names, init_names)
+        self.check_ort(onx2)
+
+    @requires_torch("2.6", "owning_module is None")
+    def test_dummy_llm_opts(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(
+            model,
+            inputs,
+            optimize=True,
+            verbose=0,
+            export_options=ExportOptions(strict=True),
+            inline=False,
+            options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=True),
+            export_modules_as_functions=True,
         )
         node_names = [n.op_type for n in onx.graph.node]
         self.assertEqual(

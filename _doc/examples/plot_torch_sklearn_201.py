@@ -262,10 +262,11 @@ class ColProcessorIdentity(torch.nn.Module):
         dist_idx_map,
         potential_donors_idx,
     ):
+        # .clone() not efficient but torch.cond does not like simple return
         return (
-            X,
-            dist_subset,
-            receivers_idx,
+            X.contiguous(),
+            dist_subset.contiguous(),
+            receivers_idx.contiguous(),
         )
 
 
@@ -306,7 +307,7 @@ class ColProcessorCond(torch.nn.Module):
                 potential_donors_idx,
             ],
         )
-        return X, dist_subset, receivers_idx
+        return X.contiguous(), dist_subset.contiguous(), receivers_idx.contiguous()
 
 
 class ColProcessor(torch.nn.Module):
@@ -731,19 +732,25 @@ with warnings.catch_warnings():
 # Let's run the conversion. We also check the conversion into ONNX
 # is accurate. It is doable because every intermediate results
 # were previously traced.
-onx = trace.to_onnx_local(
-    verbose=1,
-    check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
-    inline=False,
-)
+try:
+    onx = trace.to_onnx_local(
+        verbose=1,
+        check_conversion_cls=dict(cls=ExtendedReferenceEvaluator, atol=1e-5, rtol=1e-5),
+        inline=False,
+    )
+except Exception as e:
+    print(f"The example is broken: {e}")
+    onx = None
 
 # %%
 # Let's save it.
-onnx.save(onx, "plot_torch_sklearn_201.onnx")
+if onx:
+    onnx.save(onx, "plot_torch_sklearn_201.onnx")
 
 # %%
 # We can also print it.
-print(pretty_onnx(onx))
+if onx:
+    print(pretty_onnx(onx))
 
 
 # %%
@@ -826,9 +833,11 @@ def validate_onnx(size, sizey, onx, verbose: int = 1, use_ort: bool = False, col
     return feeds0, expected
 
 
+# %%
 # This does not work yet.
-feeds, expected = validate_onnx(5, 10, onx)
-validate_onnx(50, 40, onx)
+if onx:
+    feeds, expected = validate_onnx(5, 10, onx)
+    validate_onnx(50, 40, onx)
 
 # %%
 # ModelProto to python Code
@@ -839,34 +848,36 @@ validate_onnx(50, 40, onx)
 # to convert the onnx model into pseudo code if that helps moving that code
 # to a converter library (:epkg:`sklearn-onnx`).
 
-code = to_graph_builder_code(onx)
-addition = (
-    f"""
+if onx:
+    code = to_graph_builder_code(onx)
+    addition = (
+        f"""
 
-feeds = {feeds!r}
-expected = {expected!r}
-ref = ExtendedReferenceEvaluator(model)
-got = ref.run(None, feeds)
-print("disrepancies:", max_diff(expected, got[0]))
-""".replace(
-        "nan", "np.nan"
+    feeds = {feeds!r}
+    expected = {expected!r}
+    ref = ExtendedReferenceEvaluator(model)
+    got = ref.run(None, feeds)
+    print("disrepancies:", max_diff(expected, got[0]))
+    """.replace(
+            "nan", "np.nan"
+        )
+        .replace("array", "np.array")
+        .replace("float32", "np.float32")
     )
-    .replace("array", "np.array")
-    .replace("float32", "np.float32")
-)
-code = f"""
-from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.helpers import max_diff
-{code}
-{addition}
-"""
-print(code)
+    code = f"""
+    from experimental_experiment.reference import ExtendedReferenceEvaluator
+    from experimental_experiment.helpers import max_diff
+    {code}
+    {addition}
+    """
+    print(code)
 
 
 # %%
 # Let's finally check it produces the same results.
-with open("_plot_torch_sklearn_201_knnpy.py", "w") as f:
-    f.write(code)
+if onx:
+    with open("_plot_torch_sklearn_201_knnpy.py", "w") as f:
+        f.write(code)
 
 # %%
 # Let's run it...

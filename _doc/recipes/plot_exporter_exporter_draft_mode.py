@@ -211,9 +211,7 @@ print(string_type(inputs, with_shape=True))
 
 err = StringIO()
 with redirect_stderr(err), register_additional_serialization_functions():
-    ep, report = torch.export._draft_export.draft_export(
-        model, tuple(), kwargs=inputs, strict=False
-    )
+    ep = torch.export._draft_export.draft_export(model, tuple(), kwargs=inputs, strict=False)
 
 # %%
 # Errors if any.
@@ -221,7 +219,7 @@ print(err.getvalue())
 
 # %%
 # Let's print the report.
-print(report)
+print(ep._report)
 
 # %%
 # And the exported program.
