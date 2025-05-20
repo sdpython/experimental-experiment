@@ -1133,6 +1133,7 @@ class CustomTracer(torch.fx.Tracer):
                     operator.sub,
                     operator.le,
                     operator.ge,
+                    operator.eq,
                     torch._C._set_grad_enabled,
                     torch._C._log_api_usage_once,
                     torch.autograd.function.FunctionCtx,
