@@ -464,6 +464,7 @@ class CustomTracer(torch.fx.Tracer):
         """
         Returns the aten name for the target as a string.
         """
+        assert hasattr(node, "target"), f"Unable to return aten name for {node}"
         if node.target == operator.getitem:
             return "getitem"
         if isinstance(node.target, torch._ops.OpOverloadPacket):
@@ -511,7 +512,14 @@ class CustomTracer(torch.fx.Tracer):
                 "aten::sym_constrain_range_for_size",
                 "aten::_log_api_usage_once",
                 "aten::_enter_autocast",
+                "aten::_exit_autocast",
                 "aten::_set_grad_enabled",
+                "aten__assert_scalar",
+                "aten_sym_constrain_range_for_size",
+                "aten__log_api_usage_once",
+                "aten__enter_autocast",
+                "aten__exit_autocast",
+                "aten__set_grad_enabled",
             }
         ]
 
@@ -1058,6 +1066,31 @@ class CustomTracer(torch.fx.Tracer):
             %copy_ : [num_users=0] = call_function[target=torch.ops.aten.copy_.default]
                 (args = (%slice_13, %masked_fill), kwargs = {})
         """
+        # Remove obvious unused nodes.
+        rem = []
+        for node in graph.nodes:
+            if (
+                not node.users
+                and hasattr(node, "target")
+                and node.target
+                in {
+                    torch._C._set_grad_enabled,
+                    torch._C._log_api_usage_once,
+                    torch.autograd.function.FunctionCtx,
+                    torch.amp.autocast_mode._enter_autocast,
+                    torch.amp.autocast_mode._exit_autocast,
+                    torch.ops.aten._assert_scalar.default,
+                    torch.ops.aten._assert_tensor_metadata.default,
+                }
+            ):
+                rem.append(node)
+        for node in rem[::-1]:
+            graph.erase_node(node)
+            if verbose > 2:
+                print(f"[CustomTracer.remove_inplace] A.remove {node.target}")
+            continue
+
+        # True inplace nodes.
         inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace.
