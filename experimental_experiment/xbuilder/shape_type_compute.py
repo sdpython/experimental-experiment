@@ -593,6 +593,17 @@ def _set_shape_type_op_any_batch_normalization(
         set_type_shape_unary_op(self, node.output[2], node.input[2])
 
 
+def _set_shape_type_op_any_layer_normalization(
+    self: "GraphBuilder", node: NodeProto  # noqa: F821
+):
+    "Sets the output shape for node type LayerNormalization."
+    set_type_shape_unary_op(self, node.output[0], node.input[0])
+    if len(node.output) > 1:
+        set_type_shape_unary_op(self, node.output[1], node.input[1])
+    if len(node.output) > 2:
+        set_type_shape_unary_op(self, node.output[2], node.input[2])
+
+
 def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     "Sets the output shape for node type Cast."
     set_type_shape_unary_op(
@@ -1350,6 +1361,7 @@ _set_shape_type_op_any_known = {
     "Gemm": _set_shape_type_op_any_gemm,
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "IsNaN": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
+    "LayerNormalization": _set_shape_type_op_any_layer_normalization,
     "MatMul": _set_shape_type_op_any_matmul,
     "MaxPool": _set_shape_type_op_any_conv_max_pool,
     "NonZero": _set_shape_type_op_any_non_zero,
@@ -1439,7 +1451,10 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
     transB = transB.i if transB else 0
     if transA == 0 and transB == 0:
         return set_type_shape_matmul(self, name, x, y)
-    self.set_type(name, self.get_type(x))
+    if self.has_type(x):
+        self.set_type(name, self.get_type(x))
+    elif self.has_type(y):
+        self.set_type(name, self.get_type(y))
     if self.has_shape(x) and self.has_shape(y):
         sh1 = self.get_shape(x)
         sh2 = self.get_shape(y)

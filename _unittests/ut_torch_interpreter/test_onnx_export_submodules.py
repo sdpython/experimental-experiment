@@ -293,6 +293,22 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqual(init_names2 & init_names, init_names)
         self.check_ort(onx2)
 
+    def test_dummy_llm_opts_inline(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(
+            model,
+            inputs,
+            optimize=True,
+            verbose=0,
+            export_options=ExportOptions(strict=False),
+            inline=True,
+            options=OptimizationOptions(
+                patterns="default+onnxruntime", constant_folding=False
+            ),
+            export_modules_as_functions=True,
+        )
+        self.dump_onnx("test_dummy_llm_opts.onnx", onx)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

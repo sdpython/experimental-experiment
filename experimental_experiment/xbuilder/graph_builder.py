@@ -7129,6 +7129,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.nodes.insert(insert_at + i, n)
                 self._make_node_set_type_shape_constant(n, True)
                 self._make_node_set_type_shape(n)
+                assert (
+                    n.domain != ""
+                    or any(not self.has_type(o) for o in n.input)
+                    or all(self.has_type(o) for o in n.output)
+                ), (
+                    f"Missing one output type in node={self.pretty_node(n)}, "
+                    f"input_has_type={[self.has_type(o) for o in n.input]}, "
+                    f"output_has_type={[self.has_type(o) for o in n.output]}, "
+                    f"{self.get_debug_msg()}"
+                )
             self.nodes = [n for n in self.nodes if n is not None]
             return memo
 
@@ -7233,6 +7243,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self._make_node_set_type_shape_constant(n, True)
             self._make_node_set_type_shape(n)
+            assert (
+                n.domain != ""
+                or any(not self.has_type(o) for o in n.input)
+                or all(self.has_type(o) for o in n.output)
+            ), (
+                f"Missing one output type in node={self.pretty_node(n)}, "
+                f"input_has_type={[self.has_type(o) for o in n.input]}, "
+                f"output_has_type={[self.has_type(o) for o in n.output]}, "
+                f"{self.get_debug_msg()}"
+            )
         return memo
 
     @classmethod
@@ -7361,9 +7381,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
 
     def simple_update_value_shape_with_node(self, node) -> bool:
-        """
-        Updates ``_known`_value_shape`` for a particular node.
-        """
+        """Updates ``_known`_value_shape`` for a particular node."""
         if node.domain != "" or node.op_type not in {
             "Abs",
             "Add",
@@ -7748,9 +7766,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
     def _make_node_set_type_shape(self, node: NodeProto):
-        """
-        Updates shapes for a node.
-        """
+        """Updates shapes for a node."""
         if node.domain != "":
             node.doc_string += "#Io1"
             set_shape_type_custom(self, node)
