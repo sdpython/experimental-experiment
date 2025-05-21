@@ -710,27 +710,27 @@ an instance of class
 to change the way the model is exported into a graph (strict=True or False)
 for example.
 
-bypass_export_some_errors
-+++++++++++++++++++++++++
+torch_export_patches
+++++++++++++++++++++
 
-If the converter to onnx fails, function :func:`bypass_export_some_errors
-<onnx_diagnostic.torch_export_patches.bypass_export_some_errors>`
+If the converter to onnx fails, function :func:`torch_export_patches
+<onnx_diagnostic.torch_export_patches.torch_export_patches>`
 may help solving some of them.
 
 ::
 
-    from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+    from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-    with bypass_export_some_errors():
+    with torch_export_patches():
         onx = to_onnx(...)
 
 If the input contains a cache class, you may need to patch the inputs.
 
 ::
 
-    from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+    from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-    with bypass_export_some_errors(patch_transformers=True) as modificator:
+    with torch_export_patches(patch_transformers=True) as modificator:
         inputs = modificator(inputs)
         onx = to_onnx(..., inputs, ...)
 

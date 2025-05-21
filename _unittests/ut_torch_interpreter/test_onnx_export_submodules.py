@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.xbuilder import FunctionOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_test_helper import dummy_llm
 
@@ -197,6 +198,45 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.check_ort(onx2)
 
     @requires_torch("2.6", "owning_module is None")
+    def test_dummy_llm_opts(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(
+            model,
+            inputs,
+            optimize=True,
+            verbose=0,
+            export_options=ExportOptions(strict=False),
+            inline=False,
+            options=OptimizationOptions(
+                patterns="default+onnxruntime", constant_folding=False
+            ),
+            export_modules_as_functions=True,
+        )
+        self.dump_onnx("test_dummy_llm_opts.onnx", onx)
+        node_names = [n.op_type for n in onx.graph.node]
+        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer"])
+        node_names = [n.op_type for n in onx.functions[1].node]
+        self.assertEqual(node_names, ["Embedding", "Embedding", "Add"])
+        p_names = set(name for name, _ in model.named_parameters())
+        init_names = set(i.name for i in onx.graph.initializer if "mask" not in i.name)
+        self.assertEqual(len(p_names & init_names), 12)
+        check_model(onx)
+        self.check_ort(onx)
+
+        onx2 = to_onnx(
+            model,
+            inputs,
+            optimize=True,
+            verbose=0,
+            options=OptimizationOptions(
+                patterns="default+onnxruntime", constant_folding=False
+            ),
+        )
+        init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
+        self.assertEqual(init_names2 & init_names, init_names)
+        self.check_ort(onx2)
+
+    @requires_torch("2.6", "owning_module is None")
     def test_dummy_llm_strict_pieces_true(self):
         for cls_name in ["DecoderLayer", "AttentionBlock", "MultiAttentionBlock"]:
             with self.subTest(cls_name=cls_name):
@@ -252,6 +292,22 @@ class TestOnnxExportSubModules(ExtTestCase):
         init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
         self.assertEqual(init_names2 & init_names, init_names)
         self.check_ort(onx2)
+
+    def test_dummy_llm_opts_inline(self):
+        model, inputs = dummy_llm()
+        onx = to_onnx(
+            model,
+            inputs,
+            optimize=True,
+            verbose=0,
+            export_options=ExportOptions(strict=False),
+            inline=True,
+            options=OptimizationOptions(
+                patterns="default+onnxruntime", constant_folding=False
+            ),
+            export_modules_as_functions=True,
+        )
+        self.dump_onnx("test_dummy_llm_opts.onnx", onx)
 
 
 if __name__ == "__main__":

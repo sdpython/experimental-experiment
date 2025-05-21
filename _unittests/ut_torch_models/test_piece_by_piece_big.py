@@ -12,7 +12,7 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.xbuilder import GraphBuilder
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.torch_interpreter.piece_by_piece import (
     trace_execution_piece_by_piece,
     CustomOpStrategy,
@@ -425,7 +425,7 @@ class TestPieceByPieceBig(ExtTestCase):
             },
         }
 
-        with contextlib.redirect_stderr(io.StringIO()), bypass_export_some_errors():
+        with contextlib.redirect_stderr(io.StringIO()), torch_export_patches():
             ep = trace.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,

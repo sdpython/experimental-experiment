@@ -48,11 +48,15 @@ def to_graph_builder_code(proto: onnx.ModelProto, function_name: str = "build_mo
         :showcode:
 
         import numpy as np
+        import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
         from experimental_experiment.xbuilder.reverse_graph_builder import (
             to_graph_builder_code,
         )
+
+        TFLOAT = onnx.TensorProto.FLOAT
+        TINT64 = onnx.TensorProto.INT64
 
         model = oh.make_model(
             oh.make_graph(
@@ -115,11 +119,15 @@ def to_graph_pattern_matching(
         :showcode:
 
         import numpy as np
+        import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
         from experimental_experiment.xbuilder.reverse_graph_builder import (
             to_graph_pattern_matching,
         )
+
+        TFLOAT = onnx.TensorProto.FLOAT
+        TINT64 = onnx.TensorProto.INT64
 
         model = oh.make_model(
             oh.make_graph(

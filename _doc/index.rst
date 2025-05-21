@@ -37,7 +37,6 @@ Sources available at `sdpython/experimental-experiment
 
     design/index
     tutorial/index
-    tutorial/exported
     api/index
     galleries
     command_lines

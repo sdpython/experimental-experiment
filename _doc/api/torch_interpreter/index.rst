@@ -17,7 +17,6 @@
     aten_functions
     aten_methods
     dispatcher
-    eval/index
     export_options
     interpreter
     investigate_helper
@@ -26,7 +25,6 @@
     oxs_opset
     piece_by_piece
     piece_by_piece_serialize
-    patches/index
     tracing
 
 to_onnx

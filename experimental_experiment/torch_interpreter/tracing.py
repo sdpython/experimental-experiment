@@ -464,8 +464,14 @@ class CustomTracer(torch.fx.Tracer):
         """
         Returns the aten name for the target as a string.
         """
-        if node.target == operator.getitem:
-            return "getitem"
+        assert hasattr(node, "target"), f"Unable to return aten name for {node}"
+        known = {
+            operator.getitem: "getitem",
+            operator.le: "le",
+            operator.ge: "ge",
+        }
+        if node.target in known:
+            return known[node.target]
         if isinstance(node.target, torch._ops.OpOverloadPacket):
             if node.target != torch.ops.aten.sym_size:
                 raise RuntimeError(f"Unsupported function {node!r}.")
@@ -511,7 +517,14 @@ class CustomTracer(torch.fx.Tracer):
                 "aten::sym_constrain_range_for_size",
                 "aten::_log_api_usage_once",
                 "aten::_enter_autocast",
+                "aten::_exit_autocast",
                 "aten::_set_grad_enabled",
+                "aten__assert_scalar",
+                "aten_sym_constrain_range_for_size",
+                "aten__log_api_usage_once",
+                "aten__enter_autocast",
+                "aten__exit_autocast",
+                "aten__set_grad_enabled",
             }
         ]
 
@@ -1058,6 +1071,31 @@ class CustomTracer(torch.fx.Tracer):
             %copy_ : [num_users=0] = call_function[target=torch.ops.aten.copy_.default]
                 (args = (%slice_13, %masked_fill), kwargs = {})
         """
+        # Remove obvious unused nodes.
+        rem = []
+        for node in graph.nodes:
+            if (
+                not node.users
+                and hasattr(node, "target")
+                and node.target
+                in {
+                    torch._C._set_grad_enabled,
+                    torch._C._log_api_usage_once,
+                    torch.autograd.function.FunctionCtx,
+                    torch.amp.autocast_mode._enter_autocast,
+                    torch.amp.autocast_mode._exit_autocast,
+                    torch.ops.aten._assert_scalar.default,
+                    torch.ops.aten._assert_tensor_metadata.default,
+                }
+            ):
+                rem.append(node)
+        for node in reversed(rem):
+            graph.erase_node(node)
+            if verbose > 2:
+                print(f"[CustomTracer.remove_inplace] 0.remove {node.target}")
+            continue
+
+        # True inplace nodes.
         inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace.
@@ -1084,32 +1122,42 @@ class CustomTracer(torch.fx.Tracer):
             return 0
 
         # First step: we remove every unused node.
-        for pos, node in reversed(inplace):
-            if node.target in {
-                operator.add,
-                operator.floordiv,
-                operator.mul,
-                operator.mod,
-                operator.sub,
-                torch._C._set_grad_enabled,
-                torch._C._log_api_usage_once,
-                torch.autograd.function.FunctionCtx,
-                torch.amp.autocast_mode._enter_autocast,
-                torch.amp.autocast_mode._exit_autocast,
-                torch.ops.aten._assert_scalar.default,
-                torch.ops.aten._assert_tensor_metadata.default,
-                torch.ops.aten.item.default,
-            }:
-                # This node cannot be one inplace modifications. The node is just not used.
-                graph.erase_node(node)
-                if verbose > 2:
-                    print(
-                        f"[CustomTracer.remove_inplace] A.remove "
-                        f"{pos}: {node.target}({node.args}) -> {node}"
-                    )
-                continue
+        while True:
+            removed = 0
+            for pos, node in reversed(inplace):
+                if node.target in {
+                    operator.add,
+                    operator.floordiv,
+                    operator.mul,
+                    operator.mod,
+                    operator.sub,
+                    operator.le,
+                    operator.ge,
+                    operator.eq,
+                    torch._C._set_grad_enabled,
+                    torch._C._log_api_usage_once,
+                    torch.autograd.function.FunctionCtx,
+                    torch.amp.autocast_mode._enter_autocast,
+                    torch.amp.autocast_mode._exit_autocast,
+                    torch.ops.aten._assert_scalar.default,
+                    torch.ops.aten._assert_tensor_metadata.default,
+                    torch.ops.aten.item.default,
+                    torch.ops.aten.sym_constrain_range_for_size,
+                }:
+                    # This node cannot be one inplace modifications. The node is just not used.
+                    graph.erase_node(node)
+                    removed += 1
+                    if verbose > 2:
+                        print(
+                            f"[CustomTracer.remove_inplace] A.remove "
+                            f"{pos}: {node.target}({node.args}) -> {node}"
+                        )
+                    continue
+            if removed:
+                inplace = cls._inplace_nodes(graph)
+            else:
+                break
 
-        inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace left.
             return 0

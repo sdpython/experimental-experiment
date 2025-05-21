@@ -134,7 +134,7 @@ class _InferenceSession:
 class InferenceSessionForNumpy(_InferenceSession):
     """
     Wraps an `onnxruntime.InferenceSession` to overload method `run`
-    to support :class:`np.ndarray`.
+    to support :class:`numpy.ndarray`.
 
     :param sess: model or inference session
     :param session_options: options

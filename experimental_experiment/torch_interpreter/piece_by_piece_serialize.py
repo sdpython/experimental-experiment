@@ -282,10 +282,6 @@ def deserialize_args(
                 import transformers
 
                 cache = transformers.cache_utils.DynamicCache()
-            elif tt.startswith("patched_DynamicCache__"):
-                from .patches.patch_transformers import patched_DynamicCache
-
-                cache = patched_DynamicCache()
             elif tt is None:
                 cache = None
             else:

@@ -48,7 +48,7 @@ def make_aot_ort(
 
     names = []
     onnx_registry = None
-    assert aten_conversion_changes is not None, (
+    assert aten_conversion_changes is None, (
         f"this option is not supported anymore but "
         f"aten_conversion_changes={aten_conversion_changes}"
     )
@@ -104,11 +104,13 @@ def make_aot_ort(
     ), f"This requires torch>=2.3 not {torch_version!r}"
 
     if onnx_registry is None:
-        export_options = ExportOptions(dynamic_shapes=dynamic)
+        export_options = ExportOptions(dynamic_shapes=dynamic)  # noqa: F841
     else:
         if verbose:
             print(f"[make_aot_ort] enable {onnx_registry!r}")
-        export_options = ExportOptions(dynamic_shapes=dynamic, onnx_registry=onnx_registry)
+        export_options = ExportOptions(  # noqa: F841
+            dynamic_shapes=dynamic, onnx_registry=onnx_registry
+        )  # noqa: F841
 
     if rewrite_more:
 
@@ -182,7 +184,7 @@ def make_aot_ort(
             return first_model_proto
 
     options = OrtBackendOptions(
-        export_options=export_options,
+        # export_options=export_options,  # not available anymore
         ort_session_options=ort_session_options,
         pre_ort_model_transforms=[opt_f],
     )

@@ -46,20 +46,16 @@ except NotImplementedError as e:
 # Then we could make it a different one.
 
 dz = torch.export.Dim("dz") * 2
-try:
-    ep = torch.export.export(
-        model,
-        (x, y, z),
-        dynamic_shapes={
-            "x": {0: batch, 1: dx},
-            "y": {0: batch, 1: dy},
-            "z": {0: batch, 1: dz},
-        },
-    )
-    print(ep)
-    raise AssertionError("able to export this moel, please update the tutorial")
-except torch._dynamo.exc.UserError as e:
-    print(f"unable to use Dim('dz') because {type(e)}, {e}")
+ep = torch.export.export(
+    model,
+    (x, y, z),
+    dynamic_shapes={
+        "x": {0: batch, 1: dx},
+        "y": {0: batch, 1: dy},
+        "z": {0: batch, 1: dz},
+    },
+)
+print(ep)
 
 # %%
 # That works. We could also use

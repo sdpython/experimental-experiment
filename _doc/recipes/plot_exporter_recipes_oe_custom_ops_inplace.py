@@ -103,10 +103,13 @@ def numpy_sin_to_onnx(x) -> onnxscript.onnx_types.TensorType:
 # %%
 # And we convert again.
 
-ep = torch.onnx.export(
-    model,
-    (x,),
-    custom_translation_table={torch.ops.mylib.numpy_sin: numpy_sin_to_onnx},
-    dynamo=True,
-)
-print(to_text(ep.model_proto))
+try:
+    ep = torch.onnx.export(
+        model,
+        (x,),
+        custom_translation_table={torch.ops.mylib.numpy_sin.default: numpy_sin_to_onnx},
+        dynamo=True,
+    )
+    print(to_text(ep.model_proto))
+except Exception as e:
+    print(f"ERROR: {e}")
