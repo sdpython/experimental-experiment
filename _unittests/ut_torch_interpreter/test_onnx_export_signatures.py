@@ -12,7 +12,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.helpers import get_onnx_signature, string_type
-from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.torch_test_helper import dummy_llm
 
 
@@ -575,7 +575,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         dyn = {}
         sname = inspect.currentframe().f_code.co_name
         sig_tracing = "NOCHECK"
-        with bypass_export_some_errors():
+        with torch_export_patches():
             self._check_exporter(
                 sname,
                 Neuron(),

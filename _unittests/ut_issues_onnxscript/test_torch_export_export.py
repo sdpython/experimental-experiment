@@ -1,6 +1,6 @@
 import unittest
 import torch
-from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
@@ -139,7 +139,7 @@ class TestTorchExportExport(ExtTestCase):
         self.assertEqual(new_output.shape, (16, 16))
         self.assertEqualArray(expected, new_output)
 
-        with bypass_export_some_errors():
+        with torch_export_patches():
             export = torch.export.export(model, (a, b))
         module = export.module()
         got = module(a, b)
@@ -163,7 +163,7 @@ class TestTorchExportExport(ExtTestCase):
         a = torch.rand(8, 8, dtype=torch.float16)
         cst = torch.rand(8, 8, dtype=torch.float16)
         expected = model(a, cst)
-        with bypass_export_some_errors():
+        with torch_export_patches():
             export = torch.export.export(model, (a, cst))
         module = export.module()
         got = module(a, cst)
@@ -188,7 +188,7 @@ class TestTorchExportExport(ExtTestCase):
         x = torch.randn(1, 3, 128, 128, 128)
         expected = model(x)
 
-        with bypass_export_some_errors():
+        with torch_export_patches():
             export = torch.export.export(model, (x,))
         module = export.module()
         got = module(x)

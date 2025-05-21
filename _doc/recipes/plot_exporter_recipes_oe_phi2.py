@@ -147,15 +147,15 @@ except Exception as e:
 # %%
 # The export fails for a couple of reason but it is possible to patch the
 # code to make it work. All those modifications are put in place by
-# :func:`bypass_export_some_errors
-# <onnx_diagnostic.torch_export_patches.bypass_export_some_errors>`
+# :func:`torch_export_patches
+# <onnx_diagnostic.torch_export_patches.torch_export_patches>`
 # and reverted after the export is done. Among other things, this function registers
 # serialization functions as shown in example
 # :ref:`l-plot-torch-export-with-dynamic-cache-201`.
 
-from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-with bypass_export_some_errors(patch_transformers=True, verbose=1) as modificator:
+with torch_export_patches(patch_transformers=True, verbose=1) as modificator:
     print("inputs before", string_type(inputs, with_shape=True))
     inputs = modificator(inputs)
     print("inputs after", string_type(inputs, with_shape=True))

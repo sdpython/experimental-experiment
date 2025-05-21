@@ -569,7 +569,7 @@ def _make_builder_interpreter(
 
             # Let's rewrite the dyanmic shapes in case string replaced
             # torch.export.Dim.
-            # If this step fails, try bypass_export_some_errors.
+            # If this step fails, try torch_export_patches.
             exported_program = export_options.export(
                 mod,
                 args if isinstance(args, tuple) else (tuple() if args is None else args),

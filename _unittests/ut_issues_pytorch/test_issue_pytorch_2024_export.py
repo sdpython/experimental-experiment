@@ -47,7 +47,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         import transformers
         import onnxruntime as ort
         from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-        from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+        from onnx_diagnostic.torch_export_patches import torch_export_patches
 
         def assert_close(actual, desired):
             if isinstance(desired, torch.Tensor):
@@ -99,7 +99,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         input_ids = torch.randint(0, 99, shape).to(torch.int64)
         attention_mask = torch.ones(shape)
         expected = model(input_ids, attention_mask)
-        with bypass_export_some_errors():
+        with torch_export_patches():
             ep = torch.export.export(model, copy.deepcopy((input_ids, attention_mask)))
 
             # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"

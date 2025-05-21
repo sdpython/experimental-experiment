@@ -127,25 +127,25 @@ Frequent Exceptions or Errors with the Exporter
 
 **Unsupported functions or classes**
 
-If the converter to onnx fails, function :func:`bypass_export_some_errors
-<onnx_diagnostic.torch_export_patches.bypass_export_some_errors>`
+If the converter to onnx fails, function :func:`torch_export_patches
+<onnx_diagnostic.torch_export_patches.torch_export_patches>`
 may help solving some of them. The ocumentation of this function
 gives the list of issues it can bypass.
 
 ::
 
-    from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+    from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-    with bypass_export_some_errors():
+    with torch_export_patches():
         # export to onnx with (model, inputs, ...)
 
 If the input contains a cache class, you may need to patch the inputs.
 
 ::
 
-    from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+    from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-    with bypass_export_some_errors(patch_transformers=True) as modificator:
+    with torch_export_patches(patch_transformers=True) as modificator:
         inputs = modificator(inputs)
         # export to onnx with (model, inputs, ...)
 

@@ -14,7 +14,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.helpers import string_type
 from onnx_diagnostic.torch_export_patches import (
-    bypass_export_some_errors,
+    torch_export_patches,
     register_additional_serialization_functions,
 )
 from experimental_experiment.torch_interpreter.piece_by_piece import (
@@ -787,7 +787,7 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        with bypass_export_some_errors(patch_transformers=True):
+        with torch_export_patches(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
@@ -872,7 +872,7 @@ class TestPieceByPiece(ExtTestCase):
             sch = obj.build_c_schema()
             self.assertEqual(esch, sch)
 
-        with bypass_export_some_errors(patch_transformers=True):
+        with torch_export_patches(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
@@ -1416,7 +1416,7 @@ class TestPieceByPiece(ExtTestCase):
             },
         ]
 
-        with bypass_export_some_errors():
+        with torch_export_patches():
             flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
 
             self.assertTrue(all(isinstance(i, torch.Tensor) for i in flat_list))
@@ -1502,7 +1502,7 @@ class TestPieceByPiece(ExtTestCase):
         ]
 
         diag = trace_execution_piece_by_piece(model, inputs)
-        with bypass_export_some_errors():
+        with torch_export_patches():
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
@@ -1706,7 +1706,7 @@ class TestPieceByPiece(ExtTestCase):
         cache = make_dynamic_cache([(torch.randn((5, 6)), torch.randn((5, 6)))])
         z = model(x, cache)
         self.assertNotEmpty(z)
-        with bypass_export_some_errors(patch_transformers=True):
+        with torch_export_patches(patch_transformers=True):
             z2 = model(x, cache)
             self.assertEqual(
                 len(z["past_key_value"].key_cache), len(z2["past_key_value"].key_cache)
@@ -1727,7 +1727,7 @@ class TestPieceByPiece(ExtTestCase):
         ]
 
         diag = trace_execution_piece_by_piece(model, inputs)
-        with bypass_export_some_errors(patch_transformers=True):
+        with torch_export_patches(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,

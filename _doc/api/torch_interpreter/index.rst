@@ -26,7 +26,6 @@
     oxs_opset
     piece_by_piece
     piece_by_piece_serialize
-    patches/index
     tracing
 
 to_onnx

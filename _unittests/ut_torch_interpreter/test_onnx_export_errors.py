@@ -4,7 +4,7 @@ from experimental_experiment.ext_test_case import (
     requires_transformers,
     skipif_ci_windows,
 )
-from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 
 
 class TestOnnxExportErrors(ExtTestCase):
@@ -25,7 +25,7 @@ class TestOnnxExportErrors(ExtTestCase):
 
         cache = MambaCache(_config(), max_batch_size=1, device="cpu")
 
-        with bypass_export_some_errors():
+        with torch_export_patches():
             values, spec = py_pytree.tree_flatten(cache)
             cache2 = py_pytree.tree_unflatten(values, spec)
             self.assertEqual(cache.max_batch_size, cache2.max_batch_size)

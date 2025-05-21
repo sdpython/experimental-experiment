@@ -5,7 +5,7 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     long_test,
 )
-from onnx_diagnostic.torch_export_patches import bypass_export_some_errors
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.torch_bench.big_models.try_falcon_mamba import (
     load_model,
     demo_model,
@@ -37,7 +37,7 @@ class TestFalconMamba(ExtTestCase):
 
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="float16")
         model = model_fct()
-        with bypass_export_some_errors():
+        with torch_export_patches():
             export_program = torch.export.export(model, inputs)
             self.assertNotEmpty(export_program)
 
@@ -48,7 +48,7 @@ class TestFalconMamba(ExtTestCase):
 
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="float16")
         model = model_fct()
-        with bypass_export_some_errors():
+        with torch_export_patches():
             torch.onnx.export(model, inputs, "test_falcon_mamba_onnx_dynamo.onnx", dynamo=True)
 
     @long_test()
@@ -59,7 +59,7 @@ class TestFalconMamba(ExtTestCase):
 
         model_fct, inputs = get_model_inputs(verbose=1, device="cuda", dtype="float16")
         model = model_fct()
-        with bypass_export_some_errors():
+        with torch_export_patches():
             onx = to_onnx(
                 model,
                 inputs,
