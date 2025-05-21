@@ -17,7 +17,6 @@
     aten_functions
     aten_methods
     dispatcher
-    eval/index
     export_options
     interpreter
     investigate_helper
