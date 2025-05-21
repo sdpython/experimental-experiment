@@ -40,7 +40,8 @@ Tested Scenarios
 
 And for ONNX:
 
-* **custom-fallback**: tries to export with different sceanrios
+* **custom**: the development exporter implemented in this package
+* **custom-fallback**: tries to export with different scenarios
   then to convert into ONNX with the custom exporter
 * **custom-tracing**: traces the model and then converts
   into ONNX with the custom exporter
