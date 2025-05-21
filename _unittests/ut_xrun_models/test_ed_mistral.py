@@ -91,7 +91,7 @@ class TestEdMistral(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch(
-        "2.7",
+        "2.8",
         "AssertionError: original output #6 is None or "
         "issue with torch.ops.prims.convert_element_type.default",
     )
@@ -126,7 +126,7 @@ class TestEdMistral(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch(
-        "2.7",
+        "2.8",
         "AssertionError: original output #6 is None or "
         "issue with torch.ops.prims.convert_element_type.default",
     )
