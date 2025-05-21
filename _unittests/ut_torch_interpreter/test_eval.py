@@ -25,6 +25,7 @@ class TestEval(ExtTestCase):
                 "export-strict",
                 "export-nostrict",
                 "export-tracing",
+                "custom",
                 "custom-strict",
                 "custom-nostrict",
                 "custom-strict-dec",

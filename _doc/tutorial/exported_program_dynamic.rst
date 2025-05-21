@@ -50,8 +50,6 @@ to the original model. The tested scenarios are described at
             "export-strict-decall",
             "export-nostrict",
             "export-nostrict-decall",
-            "export-jit",
-            "export-jit-decall",
             "export-tracing",
         ):
             expname = exporter.replace("export-", "")

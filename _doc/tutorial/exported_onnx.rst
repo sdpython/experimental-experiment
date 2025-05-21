@@ -47,11 +47,9 @@ to the original model. The tested scenarios are described at
         print(textwrap.indent(textwrap.dedent(inspect.getsource(cls_model.forward)), "    "))
         print()
         for exporter in (
-            "custom-fallback",
-            "custom-dec",
+            "custom",
             "custom-tracing",
             "dynamo-ir",
-            "script",
         ):
             expname = exporter.replace("export-", "")
             print()
