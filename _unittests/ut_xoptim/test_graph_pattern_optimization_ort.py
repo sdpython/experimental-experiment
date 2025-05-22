@@ -1314,6 +1314,56 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(expected[0].ravel(), got[0].ravel())
         self.assertEqualArray(expected[0], got[0])
 
+    def test_skip_simplified_layer_normalization(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "skip"], ["xs"]),
+                    oh.make_node(
+                        "SimplifiedLayerNormalization",
+                        ["xs", "scale"],
+                        ["Y"],
+                        epsilon=1e-1,
+                        axis=-1,
+                    ),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["batch", "cache", 192]),
+                    oh.make_tensor_value_info("skip", TFLOAT, ["batch", "cache", 192]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["batch", "cache", 192])],
+                [onh.from_array(np.ones(192, dtype=np.float32), name="scale")],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        feeds = {"X": self._range(2, 128, 192), "skip": self._range(2, 128, 192)}
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SkipSimplifiedLayerNormalization"]
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["SkipSimplifiedLayerNormalization"], [n.op_type for n in opt_onx.graph.node]
+        )
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

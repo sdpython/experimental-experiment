@@ -25,10 +25,7 @@ class SimpleRotaryPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         axis = g.get_attribute(node, "axis", exc=False)
-        if axis is None:
-            axis = 0
-        else:
-            axis = axis.i
+        axis = 0 if axis is None else axis.i
         rk = g.get_rank(node.input[0])
         if axis < 0:
             axis += rk

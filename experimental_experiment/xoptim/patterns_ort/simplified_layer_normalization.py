@@ -199,3 +199,52 @@ class SkipLayerNormalizationPattern(PatternOptimization):
         if atts:
             layer.attribute.extend(atts)
         return [layer]
+
+
+class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
+    """
+    Replaces the sequence Add + SimplifiedLayerNormalization
+    into SkipSimplifiedLayerNormalization.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "SimplifiedLayerNormalization" or node.domain != "":
+            return self.none()
+
+        axis = g.get_attribute(node, "axis", exc=False)
+        axis = -1 if axis is None else axis.i
+        if axis != -1 and (
+            not g.has_rank(node.input[0]) or axis != g.get_rank(node.input[0]) - 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        add = g.node_before(node.input[0])
+        if add.op_type != "Add" or add.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            not g.has_shape(add.input[0])
+            or not g.has_shape(add.input[1])
+            or g.get_shape(add.input[0]) != g.get_shape(add.input[1])
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [add, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_add: NodeProto,
+        node_simplified: NodeProto,
+    ) -> List[NodeProto]:
+        layer = g.make_node(
+            "SkipSimplifiedLayerNormalization",
+            [*node_add.input, *node_simplified.input[1:]],
+            node_simplified.output,
+            name=f"{self.__class__.__name__}--{node_simplified.name}",
+            domain="com.microsoft",
+        )
+        layer.attribute.extend(att for att in node_simplified.attribute if att.name != "axis")
+        return [layer]

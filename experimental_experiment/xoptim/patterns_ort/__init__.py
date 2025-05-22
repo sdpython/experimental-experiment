@@ -44,6 +44,7 @@ def get_onnxruntime_patterns(
     from .simplified_layer_normalization import (
         SimplifiedLayerNormalizationPattern,
         SkipLayerNormalizationPattern,
+        SkipSimplifiedLayerNormalizationPattern,
     )
 
     return [
@@ -65,6 +66,7 @@ def get_onnxruntime_patterns(
         ReshapeGemmPattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),
         SkipLayerNormalizationPattern(verbose=verbose),
+        SkipSimplifiedLayerNormalizationPattern(verbose=verbose),
         SoftmaxGradPattern(verbose=verbose),
         TransposeFusedMatMulBPattern(verbose=verbose),
     ]
