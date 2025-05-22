@@ -7096,7 +7096,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if self.has_name(o):
                     # connecting to existing output
                     n_existing.append(o)
-                else:
+                elif o:
                     self.set_name(o, f"insert_and_remove_nodes_{node.op_type}_{o}")
 
             node_domain = node.domain or ""

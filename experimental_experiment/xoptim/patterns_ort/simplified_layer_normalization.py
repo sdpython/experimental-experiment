@@ -253,7 +253,7 @@ class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
         layer = g.make_node(
             "SkipSimplifiedLayerNormalization",
             [*node_add.input, *node_simplified.input[1:]],
-            [node_simplified.output[0], *node_add.output],
+            [node_simplified.output[0], "", "", *node_add.output],
             name=f"{self.__class__.__name__}--{node_simplified.name}",
             domain="com.microsoft",
         )

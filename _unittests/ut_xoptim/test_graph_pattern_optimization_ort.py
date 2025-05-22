@@ -1334,7 +1334,10 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     oh.make_tensor_value_info("X", TFLOAT, ["batch", "cache", 192]),
                     oh.make_tensor_value_info("skip", TFLOAT, ["batch", "cache", 192]),
                 ],
-                [oh.make_tensor_value_info("Y", TFLOAT, ["batch", "cache", 192])],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["batch", "cache", 192]),
+                    oh.make_tensor_value_info("xs", TFLOAT, ["batch", "cache", 192]),
+                ],
                 [onh.from_array(np.ones(192, dtype=np.float32), name="scale")],
             ),
             opset_imports=[
@@ -1362,7 +1365,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = opt_ref.run(None, feeds)
-        self.assertEqualArray(expected[0], got[0])
+        self.assertEqualAny(expected, got)
 
 
 if __name__ == "__main__":
