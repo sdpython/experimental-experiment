@@ -1016,11 +1016,21 @@ class GraphBuilderPatternOptimization:
                     after = set()
                     for nn in self.builder.nodes[p:]:
                         after |= set(nn.output)
+                    st = max(0, p - 5)
+                    assert_text = "\n".join(
+                        [
+                            f"{il+st:05d} -- {self.builder.pretty_node(node)}"
+                            for il, node in enumerate(
+                                self.builder.nodes[st : min(len(self.builder.nodes), p + 5)]
+                            )
+                        ]
+                    )
                     raise AssertionError(
                         f"Unknown input {i!r}, step {step!r} at position {p} "
                         f"in node {node.op_type!r} "
                         f"[{node.name}]: {node.input} -> {node.output}, "
                         f"found after = {i in after}\n------\n"
+                        f"{assert_text}\n------\n"
                         f"{self.builder.pretty_text()}"
                     )
             known |= set(node.output)
