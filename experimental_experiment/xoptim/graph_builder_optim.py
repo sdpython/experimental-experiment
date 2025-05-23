@@ -165,7 +165,7 @@ class GraphBuilderPatternOptimization:
                 for n in g.initializer:
                     sub_knowns.add(n.name)
                 for n in g.sparse_initializer:
-                    sub_knowns.add(n.name)
+                    sub_knowns.add(n.values.name)
                 for n in g.node:
                     for i in n.input:
                         if i not in sub_knowns:

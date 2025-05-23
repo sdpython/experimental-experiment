@@ -930,6 +930,12 @@ def to_onnx(
     Other debugging options are available, see :class:`GraphBuiler
     <experimental_experiment.xbuilder.GraphBuilder>`.
     """
+    assert export_options is None or isinstance(
+        export_options, ExportOptions
+    ), f"Unexpected type {type(export_options)} for export_options"
+    assert options is None or isinstance(
+        options, OptimizationOptions
+    ), f"Unexpected type {type(options)} for options"
     if target_opset is None:
         target_opset = min(18, onnx_opset_version() - 1)
     if options is None:

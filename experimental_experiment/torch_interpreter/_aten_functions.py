@@ -2330,15 +2330,22 @@ def aten_embedding(
                 f"indices: {g.get_shape(indices) if g.has_shape(indices) else '?'}"
                 f"{g.get_debug_msg()}"
             )
-    if (g.has_type(weight) and g.get_type(weight) == TensorProto.INT64) or (
+    if (
+        g.has_type(weight) and g.get_type(weight) in (TensorProto.INT64, TensorProto.INT32)
+    ) or (
         g.has_type(indices)
-        and g.get_type(indices) not in (TensorProto.UNDEFINED, TensorProto.INT64)
+        and g.get_type(indices)
+        not in (TensorProto.UNDEFINED, TensorProto.INT64, TensorProto.INT32)
     ):
         # Sometimes it is switched
         indices, weight = weight, indices
-        assert (g.has_type(indices) and g.get_type(indices) == TensorProto.INT64) or (
+        assert (
+            g.has_type(indices)
+            and g.get_type(indices) in (TensorProto.INT64, TensorProto.INT32)
+        ) or (
             g.has_type(weight)
-            and g.get_type(weight) not in (TensorProto.INT64, TensorProto.UNDEFINED)
+            and g.get_type(weight)
+            not in (TensorProto.INT64, TensorProto.INT32, TensorProto.UNDEFINED)
         ), (
             f"indices ({indices!r}) must be integer not "
             f"{g.get_type(indices) if g.has_type(indices) else '-'}, "
@@ -2347,9 +2354,13 @@ def aten_embedding(
             f"{g.get_debug_msg()}"
         )
     else:
-        assert (g.has_type(indices) and g.get_type(indices) == TensorProto.INT64) or (
+        assert (
+            g.has_type(indices)
+            and g.get_type(indices) in (TensorProto.INT64, TensorProto.INT32)
+        ) or (
             g.has_type(weight)
-            and g.get_type(weight) not in (TensorProto.INT64, TensorProto.UNDEFINED)
+            and g.get_type(weight)
+            not in (TensorProto.INT64, TensorProto.INT32, TensorProto.UNDEFINED)
         ), (
             f"indices ({indices!r}) must be integer not "
             f"{g.get_type(indices) if g.has_type(indices) else 0}, "
@@ -7355,7 +7366,7 @@ def aten_ones(
     assert not pin_memory, "ones not implemented for pin_memory=True"
     new_shape = None
     if isinstance(size, (tuple, list)):
-        if all_int(size) and min(size) > 0:
+        if all_int(size) and (len(size) == 0 or min(size) > 0):
             isize = np.array(size, dtype=np.int64)
             new_shape = tuple(size)
         else:
