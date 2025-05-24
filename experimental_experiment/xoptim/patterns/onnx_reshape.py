@@ -188,9 +188,7 @@ class ReshapeReshapePattern(PatternOptimization):
 
         sh1 = g.builder.value_as_shape(node.input[1])
         sh2 = g.builder.value_as_shape(next_node.input[1])
-        if sh1 is None or sh2 is None:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if -1 in sh1 or -1 in sh2:
+        if (sh2 is None or (-1 in sh2 and 0 not in sh2)) and (sh1 is None or -1 in sh1):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # If g.get_rank(node.input[0]) != g.get_rank(next_node.output[0]),

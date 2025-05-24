@@ -1988,6 +1988,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         """Returns the value of a result if it is a shape."""
         if name in self._known_value_shape:
             return self._known_value_shape[name]
+        if (
+            self.has_type(name)
+            and self.get_type(name) == TensorProto.INT64
+            and self.is_constant(name)
+        ):
+            # It is probably a shape because the user requested it as a shape.
+            cst = self.get_constant(name, exc=False, computed_value=True)
+            if cst is not None and len(cst.shape) == 1 and cst.dtype == np.int64:
+                value = tuple(map(int, cst))
+                self._known_value_shape[name] = value
+                return value
         return None
 
     def set_value_shape(

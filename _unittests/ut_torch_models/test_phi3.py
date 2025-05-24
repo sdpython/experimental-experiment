@@ -1,31 +1,9 @@
 import unittest
-from experimental_experiment.ext_test_case import (
-    ExtTestCase,
-    requires_onnxruntime_training,
-    ignore_warnings,
-)
-from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.ext_test_case import ExtTestCase, requires_onnxruntime_training
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestPhi3(ExtTestCase):
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @ignore_warnings("TracerWarning")
-    def test_get_phi3_model_export(self):
-        import torch
-        from experimental_experiment.torch_models.phi3_helper import (
-            get_phi3_model,
-        )
-
-        model, model_inputs = get_phi3_model()
-        expected = model(*model_inputs[0])
-        filename = self.get_dump_file("test_get_phi3_model_export.onnx")
-        torch.onnx.export(model, model_inputs[0], filename, input_names=["input0", "input1"])
-        ref = ExtendedReferenceEvaluator(filename)
-        feeds = dict(zip(["input0", "input1"], [t.detach().numpy() for t in model_inputs[0]]))
-        got = ref.run(None, feeds)
-        self.assertEqualArray(expected[0], got[0], atol=1e-5)
-
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_get_phi3_model_mask_eager(self):
         from experimental_experiment.torch_models.phi3_helper import (

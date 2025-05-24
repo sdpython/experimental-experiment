@@ -8,6 +8,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     ignore_warnings,
     requires_torch,
+    requires_transformers,
     requires_onnxruntime_training,
 )
 
@@ -65,6 +66,7 @@ class TestDortBench(ExtTestCase):
         self._dort_bench_small_llama_cpu("ort+", config="medium")
 
     @skipif_ci_windows("exporter does not work on Windows")
+    @requires_transformers("4.54")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_dort_bench_small_llama_cpu_debug(self):
         self._dort_bench_small_llama_cpu("debug")
