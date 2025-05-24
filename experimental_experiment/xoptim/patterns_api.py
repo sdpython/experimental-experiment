@@ -105,7 +105,8 @@ class PatternOptimization:
     :param min_opset: can be applied if main opset is > min_opset
 
     Example :ref:`l-plot-model-to-code` shows a way to find or build a skeleton
-    for a pattern.
+    for a pattern. If environment variable ``PATTERN`` is set to a specific pattern,
+    verbosity is enable for this pattern only.
     """
 
     def __init__(self, verbose: int = 0, priority: int = 1, min_opset: int = 1):
@@ -115,6 +116,12 @@ class PatternOptimization:
         self.verbose = max(self.verbose, int(value))
         self.priority = priority
         self.min_opset = min_opset
+        pattern = os.environ.get("PATTERN", "")
+        if pattern in (
+            self.__class__.__name__,
+            self.__class__.__name__.replace("Pattern", ""),
+        ):
+            self.verbose = max(self.verbose, 10)
 
     def __str__(self) -> str:
         return self.__class__.__name__
@@ -123,9 +130,7 @@ class PatternOptimization:
         return f"{self.__class__.__name__}()"
 
     def __eq__(self, o: "PatternOptimization"):
-        """
-        Basic comparison based on the class name.
-        """
+        """Basic comparison based on the class name."""
         return type(o) == type(self)  # noqa: E721
 
     def enumerate_matches(
@@ -133,7 +138,7 @@ class PatternOptimization:
         g: "GraphBuilderPatternOptimization",  # noqa: F821
     ) -> Iterator:
         """
-        Enumerates all the
+        Enumerates all the possible matches.
         """
         if self.verbose >= 10:
             print(
@@ -239,7 +244,8 @@ class PatternOptimization:
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
                     f"{os.path.split(self.__class__.__module__)[-1]}, "
-                    f"op_type={node.op_type}, name={node.name}{msg}"
+                    f"op_type={node.op_type}, name={node.name}, "
+                    f"inputs={','.join(node.input)}{msg}"
                 )
 
     def apply(
