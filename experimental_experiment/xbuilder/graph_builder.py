@@ -3769,6 +3769,75 @@ class GraphBuilder(_GraphBuilderRuntime):
         """Tells if a node should be removed or not."""
         return node.name.startswith("_DONOTREMOVE_")
 
+    def unique_names(
+        self,
+        outputs: int,
+        op_type: str,
+        inputs: List[str],
+        attributes: Optional[List[AttributeProto]] = None,
+        kwargs: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
+        if isinstance(inputs[0], str) and op_type in {
+            "Reshape",
+            "Shape",
+            "Size",
+            "Transpose",
+            "Cast",
+            "Squeeze",
+            "Unsqueeze",
+        }:
+
+            def _get(name, attributes, kwargs):
+                if kwargs and name in kwargs:
+                    return kwargs[name]
+                for att in attributes or []:
+                    if att.name == name:
+                        if att.type == AttributeProto.INTS:
+                            return tuple(att.ints)
+                        if att.type == AttributeProto.INT:
+                            return att.i
+                return None
+
+            if op_type == "Cast":
+                to = _get("to", attributes, kwargs)
+                name = f"{inputs[0]}::C{to}"
+            elif op_type == "Transpose":
+                perm = _get("perm", attributes, kwargs)
+                name = f"{inputs[0]}::T{''.join(map(str,perm))}"
+            elif op_type == "Shape":
+                start = _get("start", attributes, kwargs)
+                end = _get("end", attributes, kwargs)
+                name = f"{inputs[0]}::Shape{start or ''}:{end or ''}"
+            elif op_type == "Size":
+                name = f"{inputs[0]}::Size"
+            else:
+                short = {"Reshape": "RSh", "Squeeze": "Sq", "Unsqueeze": "UnSq"}[op_type]
+                cst = (
+                    self.compute_constant(inputs[0], exc=False)
+                    if self.is_constant(inputs[0])
+                    else None
+                )
+                name = (
+                    f"{inputs[0]}::{short}"
+                    if cst is None
+                    else f"{inputs[0]}::{short}{'x'.join(map(str,cst))}"
+                )
+            output_names = [name]
+        else:
+            lower = f"_onx_{op_type.lower()}_"
+            if inputs and isinstance(inputs[0], str) and inputs[0]:
+                # The new name tries to keep track of the first input,
+                # usually the most meaningful.
+                lower = (
+                    f"{lower}{inputs[0][5:]}"
+                    if inputs[0].startswith("_onx_")
+                    else f"{lower}{inputs[0]}"
+                )
+            output_names = (
+                [lower] if outputs == 1 else [f"{lower}_{i}" for i in range(outputs)]
+            )
+        return [self.unique_name(o) for o in output_names]
+
     def make_node(
         self,
         op_type: str,
@@ -3822,26 +3891,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         if isinstance(inputs, tuple):
             inputs = list(inputs)
         if isinstance(outputs, int):
-            if outputs < 1:
-                raise ValueError(f"outputs={outputs} must be > 0.")
+            assert outputs > 0, f"outputs={outputs} must be > 0."
             assert isinstance(op_type, str), f"Unexpected type {type(op_type)}: {op_type}"
-            if op_type == "Reshape":
-                lower = "_reshape_"
-            elif op_type == "Shape":
-                lower = "_shape_"
-            elif op_type == "Size":
-                lower = "_size_"
-            else:
-                lower = f"_onx_{op_type.lower()}_"
-            if inputs and isinstance(inputs[0], str) and inputs[0]:
-                # The new name tries to keep track of the first input,
-                # usually the most meaningful.
-                lower = (
-                    f"{lower}{inputs[0][5:]}"
-                    if inputs[0].startswith("_onx_")
-                    else f"{lower}{inputs[0]}"
-                )
-            output_names = [self.unique_name(f"{lower}{i}") for i in range(outputs)]
+            output_names = self.unique_names(outputs, op_type, inputs, attributes, kwargs)
         elif isinstance(outputs, str):
             output_names = [outputs]
         else:
