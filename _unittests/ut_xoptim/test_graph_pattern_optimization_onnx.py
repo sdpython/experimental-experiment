@@ -5074,6 +5074,98 @@ class TestGraphPatternOptimization(ExtTestCase):
         z = ref.run(None, feeds)[0]
         self.assertEqualArray(z, np.array([5.1, 6.1, 7.1], dtype=np.float32))
 
+    def test_squeeze_add_1(self):
+
+        def _mkv_(name):
+            value_info_proto = ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Squeeze", ["S1", "zero"], ["s1"]),
+                    oh.make_node("Squeeze", ["S2", "zero"], ["s2"]),
+                    oh.make_node("Add", ["s1", "s2"], ["s"]),
+                    oh.make_node("Unsqueeze", ["s", "zero"], ["S3"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("S1", TensorProto.INT64, [1]),
+                    oh.make_tensor_value_info("S2", TensorProto.INT64, [1]),
+                ],
+                [oh.make_tensor_value_info("S3", TensorProto.INT64, [1])],
+                [onh.from_array(np.array([0], dtype=np.int64), name="zero")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        # check_model(model)
+
+        feeds = {"S1": np.array([5], dtype=np.int64), "S2": np.array([7], dtype=np.int64)}
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([12], dtype=np.int64))
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="SqueezeAdd", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add", "Squeeze", "Unsqueeze"], [n.op_type for n in opt_onx.graph.node]
+        )
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_squeeze_add_2(self):
+
+        def _mkv_(name):
+            value_info_proto = ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Squeeze", ["S1"], ["s1"]),
+                    oh.make_node("Squeeze", ["S2"], ["s2"]),
+                    oh.make_node("Add", ["s1", "s2"], ["s"]),
+                    oh.make_node("Unsqueeze", ["s", "zero"], ["S3"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("S1", TensorProto.INT64, [1]),
+                    oh.make_tensor_value_info("S2", TensorProto.INT64, [1]),
+                ],
+                [oh.make_tensor_value_info("S3", TensorProto.INT64, [1])],
+                [onh.from_array(np.array([0], dtype=np.int64), name="zero")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        # check_model(model)
+
+        feeds = {"S1": np.array([5], dtype=np.int64), "S2": np.array([7], dtype=np.int64)}
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([12], dtype=np.int64))
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="SqueezeAdd", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Add", "Squeeze", "Unsqueeze"], [n.op_type for n in opt_onx.graph.node]
+        )
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
