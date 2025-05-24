@@ -1184,7 +1184,7 @@ class TestOnnxExportAten(ExtTestCase):
         )
         expected = model(*xs)
         model_path = self._call_exporter("test_aten_index_tensor_2_1_2", "custom", model, xs)
-        sess = ExtendedReferenceEvaluator(model_path, verbose=10)
+        sess = ExtendedReferenceEvaluator(model_path)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
@@ -1533,6 +1533,38 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqual(names, ["CustomSymOp"])
         domains = [d.domain for d in onx.opset_import]
         self.assertEqual(domains, ["", "custom_domain"])
+
+    @ignore_warnings(UserWarning)
+    def test_aten_index_tensor_rk2_rk4_rk4(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind1, ind2):
+                return x[ind1, ind2]
+
+        model = Model()
+        xs = (
+            torch.rand((2, 33)),
+            torch.randint(0, 1, (2, 1, 2, 33)),
+            torch.randint(0, 32, (2, 1, 2, 33)),
+        )
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_aten_index_tensor_rk2_rk4_rk4", "custom", model, xs
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [to_numpy(x) for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-6)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
 
 
 if __name__ == "__main__":

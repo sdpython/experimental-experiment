@@ -25,6 +25,7 @@ from onnx import (
     GraphProto,
     ModelProto,
     NodeProto,
+    SparseTensorProto,
     TensorProto,
     TypeProto,
     ValueInfoProto,
@@ -1987,6 +1988,17 @@ class GraphBuilder(_GraphBuilderRuntime):
         """Returns the value of a result if it is a shape."""
         if name in self._known_value_shape:
             return self._known_value_shape[name]
+        if (
+            self.has_type(name)
+            and self.get_type(name) == TensorProto.INT64
+            and self.is_constant(name)
+        ):
+            # It is probably a shape because the user requested it as a shape.
+            cst = self.get_constant(name, exc=False, computed_value=True)
+            if cst is not None and len(cst.shape) == 1 and cst.dtype == np.int64:
+                value = tuple(map(int, cst))
+                self._known_value_shape[name] = value
+                return value
         return None
 
     def set_value_shape(
@@ -4635,7 +4647,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     with self.maybe_disable_fake_tensor_mode():
                         tensor = proto_from_array(v, name=k, verbose=self.verbose)
 
-                tensor.doc_string += doc_string
+                if hasattr(tensor, "doc_string"):
+                    tensor.doc_string += doc_string
                 initializer.append(tensor)
 
             if self.verbose:
@@ -5361,13 +5374,30 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"but there is no initializer{self.get_debug_msg()}"
         )
         try:
-            model.graph.initializer.extend(initializers)
+            model.graph.initializer.extend(
+                init for init in initializers if isinstance(init, TensorProto)
+            )
         except Exception as e:
             raise RuntimeError(
                 "protobuf is limited to 2 Gb, if this fails here, "
                 "it probably means the result is beyond that limit. "
                 "You should use large_model=True."
             ) from e
+        sparse_initializer = [
+            init for init in initializers if isinstance(init, SparseTensorProto)
+        ]
+        if sparse_initializer:
+            assert all(
+                init.values.name for init in sparse_initializer
+            ), f"Missing name for one sparse initializer among {len(sparse_initializer)}"
+            try:
+                model.graph.sparse_initializer.extend(sparse_initializer)
+            except Exception as e:
+                raise RuntimeError(
+                    "protobuf is limited to 2 Gb, if this fails here, "
+                    "it probably means the result is beyond that limit. "
+                    "You should use large_model=True."
+                ) from e
 
         # opsets
         model.opset_import.extend(opsets)
@@ -5387,7 +5417,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             n_initializers=len(initializers),
             n_large_initializers=len(large_initializers),
             size_initializers=int(
-                sum(np.prod(t.dims) * size_type(t.data_type) for t in initializers)
+                sum(
+                    np.prod(t.dims)
+                    * size_type(
+                        t.data_type if isinstance(t, TensorProto) else t.values.data_type
+                    )
+                    for t in initializers
+                )
             ),
             size_large_initializers=sum(
                 self._get_size(t) for t in large_initializers.values()
@@ -6133,7 +6169,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         hidden = set()
         memo = set(i.name for i in graph.initializer)
-        memo |= set(i.name for i in graph.sparse_initializer)
+        memo |= set(i.values.name for i in graph.sparse_initializer)
         for node in graph.node:
             for i in node.input:
                 if i not in memo:
@@ -7096,7 +7132,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if self.has_name(o):
                     # connecting to existing output
                     n_existing.append(o)
-                else:
+                elif o:
                     self.set_name(o, f"insert_and_remove_nodes_{node.op_type}_{o}")
 
             node_domain = node.domain or ""
@@ -7845,7 +7881,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
         for i in proto_graph.sparse_initializer:
             self.add_initializer(
-                i.name,
+                i.values.name,
                 i,
                 allow_empty=True,
                 source=f"GraphBuilder._update_structures_with_proto.2/from({i.name})",

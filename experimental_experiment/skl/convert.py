@@ -170,6 +170,7 @@ def to_onnx(
             save_model(onx, filename)
         else:
             onx.save(filename, all_tensors_to_one_file=True)
+
     all_stats.update(add_stats)
     if return_builder:
         return (onx, builder, all_stats) if return_optimize_report else (onx, builder)

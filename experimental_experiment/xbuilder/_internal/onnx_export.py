@@ -233,8 +233,9 @@ def _python_make_node_graph(graph, opsets, indent=0, output_names=None):
     for init in graph.initializer:
         node = make_node("Constant", [], [_rename_var(init.name)], value=init)
         code.append(_python_make_node(node, opsets, indent=indent))
-    if len(graph.sparse_initializer) > 0:
-        raise NotImplementedError("Unable to convert sparse_initilizer into python.")
+    assert (
+        len(graph.sparse_initializer) == 0
+    ), "Unable to convert sparse_initilizer into python."
     for node in list(graph.node):
         code.append(_python_make_node(node, opsets, indent=indent))
     if output_names is not None:

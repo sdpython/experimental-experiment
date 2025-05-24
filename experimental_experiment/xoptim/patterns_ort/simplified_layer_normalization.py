@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 import numpy as np
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ...helpers import tensor_dtype_to_np_dtype, from_array_extended
 from ..patterns_api import MatchResult, PatternOptimization
 
@@ -198,4 +198,66 @@ class SkipLayerNormalizationPattern(PatternOptimization):
         )
         if atts:
             layer.attribute.extend(atts)
+        return [layer]
+
+
+class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
+    """
+    Replaces the sequence Add + SimplifiedLayerNormalization
+    into SkipSimplifiedLayerNormalization.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "SimplifiedLayerNormalization" or node.domain != "":
+            return self.none()
+        if len(node.output) > 1 and (len(node.output) != 2 or g.is_used(node.output[1])):
+            # second output is used
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # axis
+        axis = g.get_attribute(node, "axis", exc=False)
+        axis = -1 if axis is None else axis.i
+        if axis != -1 and (
+            not g.has_rank(node.input[0]) or axis != g.get_rank(node.input[0]) - 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # stash_type
+        stash_type = g.get_attribute(node, "stash_type", exc=False)
+        stash_type = TensorProto.FLOAT if stash_type is None else stash_type.i
+        if stash_type != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        add = g.node_before(node.input[0])
+        if add.op_type != "Add" or add.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            not g.has_shape(add.input[0])
+            or not g.has_shape(add.input[1])
+            or g.get_shape(add.input[0]) != g.get_shape(add.input[1])
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [add, node], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_add: NodeProto,
+        node_simplified: NodeProto,
+    ) -> List[NodeProto]:
+        layer = g.make_node(
+            "SkipSimplifiedLayerNormalization",
+            [*node_add.input, *node_simplified.input[1:]],
+            [node_simplified.output[0], "", "", *node_add.output],
+            name=f"{self.__class__.__name__}--{node_simplified.name}",
+            domain="com.microsoft",
+        )
+        layer.attribute.extend(
+            att for att in node_simplified.attribute if att.name not in {"axis", "stash_type"}
+        )
         return [layer]

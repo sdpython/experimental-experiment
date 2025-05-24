@@ -2330,15 +2330,22 @@ def aten_embedding(
                 f"indices: {g.get_shape(indices) if g.has_shape(indices) else '?'}"
                 f"{g.get_debug_msg()}"
             )
-    if (g.has_type(weight) and g.get_type(weight) == TensorProto.INT64) or (
+    if (
+        g.has_type(weight) and g.get_type(weight) in (TensorProto.INT64, TensorProto.INT32)
+    ) or (
         g.has_type(indices)
-        and g.get_type(indices) not in (TensorProto.UNDEFINED, TensorProto.INT64)
+        and g.get_type(indices)
+        not in (TensorProto.UNDEFINED, TensorProto.INT64, TensorProto.INT32)
     ):
         # Sometimes it is switched
         indices, weight = weight, indices
-        assert (g.has_type(indices) and g.get_type(indices) == TensorProto.INT64) or (
+        assert (
+            g.has_type(indices)
+            and g.get_type(indices) in (TensorProto.INT64, TensorProto.INT32)
+        ) or (
             g.has_type(weight)
-            and g.get_type(weight) not in (TensorProto.INT64, TensorProto.UNDEFINED)
+            and g.get_type(weight)
+            not in (TensorProto.INT64, TensorProto.INT32, TensorProto.UNDEFINED)
         ), (
             f"indices ({indices!r}) must be integer not "
             f"{g.get_type(indices) if g.has_type(indices) else '-'}, "
@@ -2347,9 +2354,13 @@ def aten_embedding(
             f"{g.get_debug_msg()}"
         )
     else:
-        assert (g.has_type(indices) and g.get_type(indices) == TensorProto.INT64) or (
+        assert (
+            g.has_type(indices)
+            and g.get_type(indices) in (TensorProto.INT64, TensorProto.INT32)
+        ) or (
             g.has_type(weight)
-            and g.get_type(weight) not in (TensorProto.INT64, TensorProto.UNDEFINED)
+            and g.get_type(weight)
+            not in (TensorProto.INT64, TensorProto.INT32, TensorProto.UNDEFINED)
         ), (
             f"indices ({indices!r}) must be integer not "
             f"{g.get_type(indices) if g.has_type(indices) else 0}, "
@@ -4096,18 +4107,42 @@ def aten_index_Tensor(
             f"{g.get_debug_msg()}"
         )
         same_shape = shapes[0]
-        assert len(same_shape) == 1, (
+        assert len(same_shape) == 1 or (g.has_rank(x) and len(indices) == g.get_rank(x)), (
             f"aten_index is not implemented for shapes={shapes} (2), x={x!r}, "
-            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}"
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
+            f"dtype(x)={g.get_type(x) if g.has_type(x) else '?'}, "
+            f"len(indices)={len(indices)}, "
+            f"types(indices)={[g.get_type(i) for i in indices]}, "
             f"{g.get_debug_msg()}"
         )
-        reshaped = [
-            g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name) for i in indices
-        ]
-        concat = g.op.Concat(*reshaped, axis=-1, name=name)
-        res = g.op.GatherND(x, concat, batch_dims=0, outputs=outputs, name=name)
+        if len(same_shape) == 1:
+            reshaped = [
+                g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name) for i in indices
+            ]
+            concat = g.op.Concat(*reshaped, axis=-1, name=name)
+            res = g.op.GatherND(x, concat, batch_dims=0, outputs=outputs, name=name)
+            if not sts:
+                g.set_type(res, g.get_type(x))
+            return res
+
+        # Other cases
+        assert g.get_rank(x) == 2, (
+            f"aten_index is not implemented for shapes={shapes} (2), x={x!r}, "
+            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
+            f"dtype(x)={g.get_type(x) if g.has_type(x) else '?'}, "
+            f"len(indices)={len(indices)}, "
+            f"types(indices)={[g.get_type(i) for i in indices]}, "
+            f"{g.get_debug_msg()}"
+        )
+        last = g.op.Shape(x, start=-1, name=name)
+        ind = g.op.Add(indices[1], g.op.Mul(indices[0], last, name=name), name=name)
+        flat = g.op.Gather(
+            g.op.Reshape(x, g.MINUS_ONE, name=name), g.op.Reshape(ind, g.MINUS_ONE, name=name)
+        )
+        res = g.op.Reshape(flat, g.op.Shape(indices[0], name=name), name=name, outputs=outputs)
         if not sts:
             g.set_type(res, g.get_type(x))
+            g.set_shape(res, g.get_shape(indices[0]))
         return res
 
     if n_none == 1 and indices[0] is None and len(indices) == 3:
@@ -7355,7 +7390,7 @@ def aten_ones(
     assert not pin_memory, "ones not implemented for pin_memory=True"
     new_shape = None
     if isinstance(size, (tuple, list)):
-        if all_int(size) and min(size) > 0:
+        if all_int(size) and (len(size) == 0 or min(size) > 0):
             isize = np.array(size, dtype=np.int64)
             new_shape = tuple(size)
         else:
@@ -11048,6 +11083,11 @@ def aten_where_Scalar(
         assert g.has_type(other), f"Type is missing for {other!r}{g.get_debug_msg()}"
         dtype = tensor_dtype_to_np_dtype(g.get_type(other))
         x = np.array([x], dtype=dtype)
+
+    if isinstance(x, str) and isinstance(other, float):
+        assert g.has_type(x), f"Type is missing for {x!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+        other = np.array([other], dtype=dtype)
 
     assert isinstance(x, str) or isinstance(other, str), (
         f"aten_where not implemented when both constants are float, "

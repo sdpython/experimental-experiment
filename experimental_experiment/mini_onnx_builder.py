@@ -123,9 +123,14 @@ def proto_from_array(
     if not isinstance(arr, torch.Tensor):
         raise TypeError(f"Unexpected type {type(arr)}.")
     if arr.is_sparse:
-        raise NotImplementedError(
-            f"Sparse tensor is not supported yet but initializer {name!r} is."
-        )
+        assert name, "Initializers must have a name."
+        arr = arr.to_sparse_coo()
+        values = proto_from_array(arr.values(), name=name)
+        assert values.name, f"Name still missing but name={name!r}"
+        indices = proto_from_array(arr.indices(), name=name)
+        proto = oh.make_sparse_tensor(values, indices, arr.shape)
+        assert proto.values.name, f"Name still missing but name={name!r}"
+        return proto
 
     # arr.contiguous() is slow after a transpose, maybe there is a way to optimize this.
     if arr.is_contiguous():
@@ -149,7 +154,7 @@ def proto_from_array(
 
     tensor = TensorProto()
     tensor.dims.extend(arr_cpu.shape)
-    tensor.name = name
+    assert name, "Initializers must have a name."
     itype = _get_type(arr_cpu.dtype)
     assert not hasattr(TensorProto, "INT4") or itype not in {
         TensorProto.INT4,
@@ -172,6 +177,7 @@ def proto_from_array(
             np_dtype = tensor_dtype_to_np_dtype(tensor.data_type)
             np.byteswap(np.frombuffer(tensor.raw_data, dtype=np_dtype), inplace=True)
 
+    tensor.name = name
     return tensor
 
 
