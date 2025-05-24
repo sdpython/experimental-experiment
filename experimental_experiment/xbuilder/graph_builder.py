@@ -3777,15 +3777,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         attributes: Optional[List[AttributeProto]] = None,
         kwargs: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
-        if isinstance(inputs[0], str) and op_type in {
-            "Reshape",
-            "Shape",
-            "Size",
-            "Transpose",
-            "Cast",
-            "Squeeze",
-            "Unsqueeze",
-        }:
+        if (
+            inputs
+            and isinstance(inputs[0], str)
+            and op_type
+            in {
+                "Reshape",
+                "Shape",
+                "Size",
+                "Transpose",
+                "Cast",
+                "Squeeze",
+                "Unsqueeze",
+            }
+        ):
 
             def _get(name, attributes, kwargs):
                 if kwargs and name in kwargs:
@@ -3799,10 +3804,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return None
 
             if op_type == "Cast":
-                to = _get("to", attributes, kwargs)
+                to = _get("to", attributes, kwargs) or "?"
                 name = f"{inputs[0]}::C{to}"
             elif op_type == "Transpose":
-                perm = _get("perm", attributes, kwargs)
+                perm = _get("perm", attributes, kwargs) or "?"
                 name = f"{inputs[0]}::T{''.join(map(str,perm))}"
             elif op_type == "Shape":
                 start = _get("start", attributes, kwargs)

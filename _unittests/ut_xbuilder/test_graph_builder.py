@@ -313,15 +313,15 @@ class TestGraphBuilder(ExtTestCase):
                     "custom",
                     "Regression",
                     ["X", "weights", "bias"],
-                    ["_onx_regression_X0"],
+                    ["_onx_regression_X"],
                 ),
-                ("", "Add", ["_onx_regression_X0", "bias2"], ["Y"]),
+                ("", "Add", ["_onx_regression_X", "bias2"], ["Y"]),
             ],
         )
 
         # finally, the conversion to onnx
         text = g.pretty_text()
-        self.assertIn("_onx_regression_X0, bias2", text)
+        self.assertIn("_onx_regression_X, bias2", text)
         fct = g.to_onnx(
             function_options=FunctionOptions(
                 name="linear", domain="mine", return_initializer=True
