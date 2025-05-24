@@ -186,6 +186,13 @@ class ReshapeReshapePattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        sh1 = g.builder.value_as_shape(node.input[1])
+        sh2 = g.builder.value_as_shape(next_node.input[1])
+        if sh1 is None or sh2 is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if -1 in sh1 or -1 in sh2:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         # If g.get_rank(node.input[0]) != g.get_rank(next_node.output[0]),
         # the bet is, when the shape is not a constant, then using 0 is not really
         # useful. Since 0 is only valid for ONNX, 0 should not be found

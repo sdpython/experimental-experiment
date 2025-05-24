@@ -3,8 +3,8 @@ import os
 import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
-from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
-from ..helpers import string_type, string_sig
+from onnx_diagnostic.helpers import max_diff, string_diff, string_type
+from ..helpers import string_sig
 from ._torch_helper import make_copy
 from ._doc_ import TorchOpOverload
 
@@ -36,6 +36,9 @@ class ExportOptions:
         graph as well ``<save_ep>.graph``, it dumps them as text,
         if decompositions are enabled, the exported program before them will be saved
         as well
+    :param validate_ep: validates the exported program with the given inputs,
+        by default the tolerance is ``1e-5``, use a float instead of a boolean
+        to change that value
 
     The fallback strategy tries the following in order:
 
@@ -100,6 +103,7 @@ class ExportOptions:
         remove_inplace: bool = True,
         allow_untyped_output: bool = False,
         save_ep: Optional[str] = None,
+        validate_ep: Union[float, bool] = False,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -118,6 +122,7 @@ class ExportOptions:
         )
         self.remove_inplace = remove_inplace
         self.allow_untyped_output = allow_untyped_output
+        self.validate_ep = validate_ep
 
         if strategy is not None:
             assert strategy in self._allowed, (
@@ -258,6 +263,7 @@ class ExportOptions:
     ) -> Union["torch.export.ExportedProgram", "torch.fx.GraphModule"]:  # noqa: F821
         """Exports the model into an exported program."""
         import torch
+        from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
         from .tracing import CustomTracer
 
         print_exported_program = os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1")
@@ -532,6 +538,10 @@ class ExportOptions:
             with open(f"{self.save_ep}.ep.graph", "w") as f:
                 f.write(str(exported_program.graph))
             torch.export.save(exported_program, f"{self.save_ep}.ep.pt2")
+        if isinstance(self.validate_ep, float) or self.validate_ep:
+            self.validate_exported_program(
+                mod, exported_program, args, kwargs, verbose=verbose
+            )
 
         exported_program = self.post_process_exported_program(
             exported_program, verbose=verbose, print_exported_program=print_exported_program
@@ -542,6 +552,39 @@ class ExportOptions:
                 f"in {time.perf_counter() - begin}"
             )
         return exported_program
+
+    def validate_exported_program(
+        self, model, exported_program, args, kwargs, verbose: int = 0
+    ):
+        """Validates the exported program by running the model."""
+        from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
+
+        (ar, kws) = torch_deepcopy((args, kwargs))
+        if verbose:
+            print(
+                f"[ExportOptions.validate_exported_program] run model with "
+                f"args={string_type(args, with_shape=True)} and "
+                f"kwargs={string_type(kwargs, with_shape=True)}"
+            )
+        expected = model(*(ar or []), **(kws or {}))
+        (ar, kws) = torch_deepcopy((args, kwargs))
+        if verbose:
+            print(
+                f"[ExportOptions.validate_exported_program] run exported_program with "
+                f"args={string_type(args, with_shape=True)} and "
+                f"kwargs={string_type(kwargs, with_shape=True)}"
+            )
+        got = exported_program.module()(*(ar or []), **(kws or {}))
+        diff = max_diff(expected, got)
+        if verbose:
+            print(
+                f"[ExportOptions.validate_exported_program] discrepancies: {string_diff(diff)}"
+            )
+        atol = self.validate_ep if isinstance(self.validate_ep, float) else 1e-5
+        assert diff["abs"] <= atol, (
+            f"Discrepancies oberseved between the model and the exported program "
+            f"(atol={atol}) diff={string_diff(diff)}"
+        )
 
     def remove_inplace_nodes(
         self,

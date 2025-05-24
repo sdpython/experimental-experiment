@@ -136,6 +136,7 @@ class Opset:
             or not isinstance(inputs[1], np.ndarray)
             or inputs[1].dtype == np.int64
         ), f"Suspicious shape {inputs[1]!r} for a Reshape{self.builder.get_debug_msg()}"
+        allow_empty_shape |= op_type in {"ConstantOfShape"}
         new_inputs = []
         for i in inputs:
             assert not isinstance(

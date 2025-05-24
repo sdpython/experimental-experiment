@@ -879,6 +879,7 @@ def to_onnx(
     function_options: Optional[FunctionOptions] = None,
     output_names: Optional[List[str]] = None,
     output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
+    validate_onnx: Union[bool, float] = False,
 ) -> Union[
     Union[ModelProto, ModelContainer],
     Tuple[Union[ModelProto, ModelContainer], GraphBuilder],
@@ -919,6 +920,9 @@ def to_onnx(
         add them as constants or inputs
     :param output_names: to rename the output names
     :param output_dynamic_shapes: same as *dynamic_shapes* but for the output
+    :param validate_onnx: if a float or True, validates the onnx model
+        against the model with the input used to export,
+        if True, the tolerance is 1e-5
     :return: onnx model
 
     If environment variable ``PRINT_GRAPH_MODULE`` is set to one,
@@ -1062,7 +1066,96 @@ def to_onnx(
             save_model(onx, filename)
         else:
             onx.save(filename, all_tensors_to_one_file=True)
+
+    if isinstance(validate_onnx, float) or validate_onnx:
+        assert filename, "validate_onnx is only implemented when filename is specified"
+        validate_exported_onnx(
+            mod,
+            args,
+            kwargs,
+            filename,
+            verbose=verbose,
+            atol=validate_onnx if isinstance(validate_onnx, float) else 1e-5,
+        )
+
     all_stats.update(add_stats)
     if return_builder:
         return (onx, builder, all_stats) if return_optimize_report else (onx, builder)
     return (onx, all_stats) if return_optimize_report else onx
+
+
+def validate_exported_onnx(
+    model: "torch.nn.Module",  # noqa: F821
+    args,
+    kwargs,
+    filename,
+    atol: float = 1e-5,
+    verbose: int = 0,
+):
+    """Validates the exported model with :epkg:`onnxruntime`."""
+    import onnxruntime
+    from onnx_diagnostic.helpers import max_diff, string_diff, string_type, flatten_object
+    from onnx_diagnostic.helpers.rt_helper import make_feeds
+    from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
+
+    (ar, kws) = torch_deepcopy((args, kwargs))
+    if verbose:
+        print(
+            f"[validate_exported_onnx] run model with "
+            f"args={string_type(args, with_shape=True)} and "
+            f"kwargs={string_type(kwargs, with_shape=True)}"
+        )
+    expected = model(*(ar or []), **(kws or {}))
+    (ar, kws) = torch_deepcopy((args, kwargs))
+
+    if verbose:
+        print(f"[validate_exported_onnx] create onnxruntime session with {filename!r}")
+    providers = ["CUDAExecutionProvider"] if str(model.device).startswith("cuda") else []
+    providers.append("CPUExecutionProvider")
+    sess = onnxruntime.InferenceSession(filename, providers=providers)
+    feeds = make_feeds([i.name for i in sess.get_inputs()], (ar, kws), use_numpy=True)
+    if verbose:
+        print(
+            f"[validate_exported_onnx] run onnx model with "
+            f"feeds={string_type(feeds, with_shape=True)}"
+        )
+        print(f"[validate_exported_onnx] device={model.device}, providers={providers}")
+
+    got = sess.run(None, feeds)
+    diff = max_diff(expected, got, flatten=True)
+    if verbose:
+        print(
+            f"[validate_exported_onnx] expected="
+            f"{string_type(expected, with_shape=True, with_min_max=True)}"
+        )
+        print(
+            f"[validate_exported_onnx] got="
+            f"{string_type(got, with_shape=True, with_min_max=True)}"
+        )
+        print(f"[validate_exported_onnx] discrepancies: {string_diff(diff)}")
+    if diff["abs"] > atol:
+        msg = (
+            f"Discrepancies oberseved between the model and the exported program "
+            f"(atol={atol}) diff={string_diff(diff)}"
+            f"\nexpected={string_type(expected, with_shape=True, with_min_max=True)}"
+            f"\ngot={string_type(expected, with_shape=True, with_min_max=True)}"
+        )
+        flattened_expected = flatten_object(expected)
+        assert len(flattened_expected) == len(got), (
+            f"Not the same number of outputs, expected {len(flattened_expected)}, "
+            f"got {len(got)}\n{msg}"
+        )
+        msgs = []
+        for i, (a, b) in enumerate(zip(flattened_expected, got)):
+            mx = max_diff(a, b)
+            if verbose:
+                print(f"[validate_exported_onnx] output {i}: diff={string_diff(mx)}")
+            if mx["abs"] > atol:
+                msgs.append(
+                    f"diff={string_diff(mx)} for output {i}"
+                    f"\nexpected={string_type(a, with_shape=True, with_min_max=True)}"
+                    f"\ngot={string_type(b, with_shape=True, with_min_max=True)}"
+                )
+        assert not msgs, "\n".join(msgs)
+
+    assert diff["abs"] <= atol, msg
