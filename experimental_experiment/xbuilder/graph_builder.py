@@ -3813,8 +3813,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 short = {"Reshape": "RSh", "Squeeze": "Sq", "Unsqueeze": "UnSq"}[op_type]
                 cst = (
-                    self.compute_constant(inputs[0], exc=False)
-                    if self.is_constant(inputs[0])
+                    self.compute_constant(
+                        inputs[1], exc=False, only_array=True, allow_empty=True
+                    )[0]
+                    if len(inputs) > 1 and self.is_constant(inputs[1])
                     else None
                 )
                 name = (
