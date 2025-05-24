@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional
 import numpy as np
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -19,7 +19,14 @@ class SqueezeUnsqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Unsqueeze" or node.domain != "":
             return self.none()
-        if g.is_used_more_than_once(node.input[0]) or len(node.input) < 2:
+        if len(node.input) < 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node.input[0]) and (
+            not g.has_type(node.input[0])
+            or g.get_type(node.input[0]) != TensorProto.INT64
+            or not g.has_shape(node.input[0])
+            or g.get_shape(node.input[0]) not in (tuple(), (1,))
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
         node_before = g.node_before(node.input[0])
         if node_before is None or node_before.op_type != "Squeeze" or node_before.domain != "":
@@ -47,7 +54,12 @@ class SqueezeUnsqueezePattern(PatternOptimization):
                 range(min(axes1), max(axes1) + 1)
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
-        return MatchResult(self, [node_before, node], self.apply, insert_at=node)
+        return MatchResult(
+            self,
+            [node_before, node],
+            self.apply,
+            insert_at=node_before if g.is_used_more_than_once(node.input[0]) else node,
+        )
 
     def apply(
         self,
@@ -62,7 +74,9 @@ class SqueezeUnsqueezePattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{node_uns.name}",
             doc_string=node_uns.doc_string,
         )
-        return [new_node]
+        return (
+            [node_squ, new_node] if g.is_used_more_than_once(node_uns.input[0]) else [new_node]
+        )
 
 
 class UnsqueezeUnsqueezePattern(PatternOptimization):
@@ -122,3 +136,78 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             doc_string=next_node.doc_string,
         )
         return [new_node]
+
+
+class SqueezeAddPattern(PatternOptimization):
+    """Replaces the sequence Add(Squeeze, Squeeze) by Squeeze(Add)."""
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Add" or node.domain != "" or g.builder.main_opset < 13:
+            return self.none()
+        node_before = [g.node_before(node.input[0]), g.node_before(node.input[1])]
+        if (
+            not node_before[0]
+            or not node_before[1]
+            or node_before[0].op_type != "Squeeze"
+            or node_before[1].op_type != "Squeeze"
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(node_before[0].input) == 2:
+            s1 = g.builder.value_as_shape(node_before[0].input[1])
+        else:
+            if not g.has_shape(node_before[0].input[0]) or g.get_shape(
+                node_before[0].input[0]
+            ) != (1,):
+                return self.none(node, inspect.currentframe().f_lineno)
+            s1 = (0,)
+
+        if len(node_before[1].input) == 2:
+            s2 = g.builder.value_as_shape(node_before[1].input[1])
+        else:
+            if not g.has_shape(node_before[1].input[0]) or g.get_shape(
+                node_before[1].input[0]
+            ) != (1,):
+                return self.none(node, inspect.currentframe().f_lineno)
+            s2 = (0,)
+
+        if s1 is None or s2 is None or s1 != s2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [*node_before, node], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        squeeze1: NodeProto,
+        squeeze2: NodeProto,
+        add: NodeProto,
+    ) -> List[NodeProto]:
+        new_name = g.unique_name(f"{self.__class__.__name__}_{add.output[0]}")
+        new_nodes = [
+            g.make_node(
+                "Add",
+                [squeeze1.input[0], squeeze2.input[0]],
+                [new_name],
+                name=f"{self.__class__.__name__}--{add.name}",
+                doc_string=add.doc_string,
+            ),
+            g.make_node(
+                "Squeeze",
+                [new_name, *squeeze1.input[1:]],
+                add.output,
+                name=f"{self.__class__.__name__}--{squeeze1.name}",
+                doc_string=squeeze1.doc_string,
+            ),
+        ]
+        if g.is_used_more_than_once(add.input[1]):
+            new_nodes = [squeeze2, *new_nodes]
+        if g.is_used_more_than_once(add.input[0]):
+            new_nodes = [squeeze1, *new_nodes]
+        return new_nodes
