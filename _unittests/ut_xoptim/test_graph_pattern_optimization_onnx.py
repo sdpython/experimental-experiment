@@ -5075,12 +5075,6 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(z, np.array([5.1, 6.1, 7.1], dtype=np.float32))
 
     def test_squeeze_add_1(self):
-
-        def _mkv_(name):
-            value_info_proto = ValueInfoProto()
-            value_info_proto.name = name
-            return value_info_proto
-
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -5121,12 +5115,6 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(z, zz)
 
     def test_squeeze_add_2(self):
-
-        def _mkv_(name):
-            value_info_proto = ValueInfoProto()
-            value_info_proto.name = name
-            return value_info_proto
-
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -5162,6 +5150,42 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual(
             ["Add", "Squeeze", "Unsqueeze"], [n.op_type for n in opt_onx.graph.node]
         )
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_concat_gather(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["D1", "D2"], ["d"], axis=0),
+                    oh.make_node("Gather", ["d", "un"], ["Y"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("D1", TensorProto.INT64, [1]),
+                    oh.make_tensor_value_info("D2", TensorProto.INT64, [1]),
+                ],
+                [oh.make_tensor_value_info("Y", TensorProto.INT64, [1])],
+                [onh.from_array(np.array([1], dtype=np.int64), name="un")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        # check_model(model)
+
+        feeds = {"D1": np.array([5], dtype=np.int64), "D2": np.array([7], dtype=np.int64)}
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, np.array([7], dtype=np.int64))
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="ConcatGather", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Identity"], [n.op_type for n in opt_onx.graph.node])
         ref = ExtendedReferenceEvaluator(opt_onx)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
