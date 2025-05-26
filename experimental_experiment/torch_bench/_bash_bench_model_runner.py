@@ -390,7 +390,11 @@ class ModelRunner:
         kw_inputs2: Optional[Dict[str, Any]] = None,
         task: str = "",
         attn_impl: str = "eager",
+        config: Optional[Any] = None,
     ):
+        assert (
+            "/" not in model_name or config
+        ), f"configuration must be specified for model_name={model_name!r}"
         inputs, kw_inputs, cvt = self._pre_process_inputs(inputs, kw_inputs, dtype, device)
         if inputs2:
             inputs2, kw_inputs2s, _ = self._pre_process_inputs(
@@ -400,6 +404,7 @@ class ModelRunner:
         self.kw_inputs = kw_inputs
         self.kw_inputs2 = kw_inputs2
         self.sig_input_names = list(inspect.signature(model.forward).parameters)
+        self.config = config
 
         if isinstance(inputs, dict):
             # torch.export.export does not allow that.
@@ -829,6 +834,22 @@ class ModelRunner:
                 fake_tensor=fake_tensor,
                 no_grad=no_grad,
                 optimization=optimization,
+                verbose=verbose,
+                target_opset=target_opset,
+            )
+        if exporter == "modelbuilder":
+            assert strategy in (
+                None,
+                "none",
+            ), f"strategy={strategy!r} not implemented for {exporter!r}"
+            assert optimization in (
+                None,
+                "",
+                "none",
+            ), f"optimization={optimization!r} not implemented for {exporter!r}"
+            assert dynamic, f"dynamic={dynamic!r} not implemented for {exporter!r}"
+            return self._to_modelbuilder(
+                name,
                 verbose=verbose,
                 target_opset=target_opset,
             )
@@ -1327,6 +1348,52 @@ class ModelRunner:
             # The model was not save in that case.
             onnx_program.save(name, external_data=True)
         return onnx.load(name, load_external_data=False), stats
+
+    def _to_modelbuilder(
+        self,
+        name: str,
+        verbose: int,
+        target_opset: int,
+    ):
+        if verbose:
+            print(f"[ModelRunner._to_modelbuilder] type(model)={type(self.model)}")
+
+        assert hasattr(
+            self, "config"
+        ), f"configuration must be stored in {type(self)} for ModelBuilder"
+        from onnx_diagnostic.helpers.model_builder_helper import (
+            create_model_builder,
+            save_model_builder,
+        )
+
+        dump_folder = os.path.dirname(name)
+        cache_dir = os.path.join(dump_folder, "cache_mb")
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+        if verbose:
+            print(f"[ModelRunner._to_modelbuilder] cache_dir={cache_dir!r}")
+        begin = time.perf_counter()
+        onx = save_model_builder(
+            create_model_builder(
+                self.config,
+                self.model,
+                precision={torch.float16: "fp16", torch.float32: "fp32"}.get(
+                    self.dtype, self.dtype
+                ),
+                execution_provider=self.device,
+                cache_dir=cache_dir,
+            ),
+            verbose=verbose,
+        )
+        onnx.save(
+            onx,
+            name,
+            save_as_external_data=True,
+            all_tensors_to_one_file=True,
+            location=f"{os.path.split(name)[-1]}.data",
+        )
+        duration = time.perf_counter() - begin
+        return onnx.load(name, load_external_data=False), {"time_export": duration}
 
     def _to_export(
         self,
@@ -2376,6 +2443,8 @@ class ModelRunner:
         filename: Optional[str] = None,
         dynamic: bool = False,
         remove_int: bool = False,
+        remove_position_ids: bool = False,
+        batch_size_one: bool = False,
     ):
         """Creates feed inputs."""
         if exporter.split("-", maxsplit=1)[0] in {
@@ -2396,6 +2465,7 @@ class ModelRunner:
             if not dynamic
             else self.make_dynamic_inputs()
         )
+
         if remove_int:
             ui = use_inputs
             use_inputs = []
@@ -2408,10 +2478,23 @@ class ModelRunner:
         else:
             raw_use_defaults = self.raw_use_defaults
 
+        if remove_position_ids and "position_ids" in self.sig_input_names:
+            pos = self.sig_input_names.index("position_ids")
+            if len(raw_use_defaults) == len(use_inputs):
+                temp = list(raw_use_defaults)
+                del temp[pos]
+                raw_use_defaults = type(raw_use_defaults)(temp)
+            temp = list(use_inputs)
+            del temp[pos]
+            use_inputs = type(use_inputs)(temp)
+
         # for onnx
         onx = onnx.load(filename, load_external_data=False)
         initializer_names = {i.name for i in onx.graph.initializer}
         names = [_.name for _ in onx.graph.input if _.name not in initializer_names]
+        assert (
+            not remove_position_ids or "position_ids" not in names
+        ), f"position_ids is in {names} but was asked to be removed."
         if isinstance(use_inputs, dict):
             assert set(names) == set(
                 self.inputs
@@ -2537,4 +2620,6 @@ class ModelRunner:
         assert all(
             i is None or isinstance(i, (int, float, torch.Tensor)) for i in new_inputs
         ), f"Unexpected type in feeds: {string_type(dict(zip(names, new_inputs)), limit=20)}"
+        if batch_size_one:
+            new_inputs = [i if i.shape[0] == 1 else i[:1] for i in new_inputs]
         return dict(zip(names, new_inputs))

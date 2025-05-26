@@ -547,6 +547,7 @@ class BenchmarkRunner:
         begin: int = 0,
         end: int = -1,
         _index: int = 0,
+        batch_size_one: bool = False,
     ) -> Dict[str, float]:
         """
         Returns the maximum discrepancy.
@@ -560,6 +561,9 @@ class BenchmarkRunner:
         :param begin: first output to considered
         :param end: last output to considered (-1 for the last one)
         :param _index: used with begin and end
+        :param batch_size_one: modelbuilder only supports batch size = 1,
+            we consider only the first row of the expected values,
+            *flatten* must be true otherwise it does not work
         :return: dictionary with many values
 
         * abs: max abolute error
@@ -582,6 +586,8 @@ class BenchmarkRunner:
                     f"[BenchmarkRunner.max_diff] compare after flattened "
                     f"{string_type(flatten_expected)} and {string_type(flatten_got)}"
                 )
+            if batch_size_one:
+                flatten_expected = type(flatten_expected)(i[:1] for i in flatten_expected)
             return cls.max_diff(
                 flatten_expected,
                 flatten_got,
@@ -593,6 +599,7 @@ class BenchmarkRunner:
                 end=end,
                 _index=_index,
             )
+        assert not batch_size_one, "batch_size_one=True only work flatten=True"
 
         if verbose >= 4:
             print(
@@ -1220,9 +1227,22 @@ class BenchmarkRunner:
 
         if quiet:
             try:
-                feeds = model_runner.make_feeds(exporter, filename)
+                feeds = model_runner.make_feeds(
+                    exporter,
+                    filename,
+                    remove_int=exporter in {"onnx_dynamo"},
+                    remove_position_ids=exporter in {"modelbuilder"},
+                    batch_size_one=exporter in {"modelbuilder"},
+                )
                 feeds_dynamic = (
-                    model_runner.make_feeds(exporter, filename, dynamic=True)
+                    model_runner.make_feeds(
+                        exporter,
+                        filename,
+                        dynamic=True,
+                        remove_int=exporter in {"onnx_dynamo"},
+                        remove_position_ids=exporter in {"modelbuilder"},
+                        batch_size_one=exporter in {"modelbuilder"},
+                    )
                     if dynamic
                     else None
                 )
@@ -1233,10 +1253,23 @@ class BenchmarkRunner:
                 return stats, context
         else:
             feeds = model_runner.make_feeds(
-                exporter, filename, remove_int=exporter in {"onnx_dynamo"}
+                exporter,
+                filename,
+                remove_int=exporter in {"onnx_dynamo"},
+                remove_position_ids=exporter in {"modelbuilder"},
+                batch_size_one=exporter in {"modelbuilder"},
             )
             feeds_dynamic = (
-                model_runner.make_feeds(exporter, filename, dynamic=True) if dynamic else None
+                model_runner.make_feeds(
+                    exporter,
+                    filename,
+                    dynamic=True,
+                    remove_int=exporter in {"onnx_dynamo"},
+                    remove_position_ids=exporter in {"modelbuilder"},
+                    batch_size_one=exporter in {"modelbuilder"},
+                )
+                if dynamic
+                else None
             )
             assert (dynamic and feeds_dynamic is not None) or (
                 not dynamic and feeds_dynamic is None
@@ -1924,9 +1957,14 @@ class BenchmarkRunner:
         ###############
         # discrepancies
         ###############
-
         if got is not None:
-            d = self.max_diff(expected, got, verbose=self.verbose, flatten=is_onnx)
+            d = self.max_diff(
+                expected,
+                got,
+                verbose=self.verbose,
+                flatten=is_onnx,
+                batch_size_one=exporter == "modelbuilder",
+            )
             stats["discrepancies_abs"] = d["abs"]
             stats["discrepancies_rel"] = d["rel"]
             stats["discrepancies_avg"] = d["sum"] / max(d["n"], 1)
@@ -1937,7 +1975,11 @@ class BenchmarkRunner:
                 expected_dynamic is not None
             ), "expected_dynamic is None and got_dynamic is not."
             d = self.max_diff(
-                expected_dynamic, got_dynamic, verbose=self.verbose, flatten=is_onnx
+                expected_dynamic,
+                got_dynamic,
+                verbose=self.verbose,
+                flatten=is_onnx,
+                batch_size_one=exporter == "modelbuilder",
             )
             stats["discrepancies_dynamic_abs"] = d["abs"]
             stats["discrepancies_dynamic_dnan"] = d["dnan"]
