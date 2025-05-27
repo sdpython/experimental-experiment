@@ -7,7 +7,7 @@ import numpy as np
 import pandas
 from pandas.errors import PerformanceWarning
 
-BUCKET_SCALES = [-np.inf, -20, -10, -5, -2, 0, 2, 5, 10, 20, np.inf]
+BUCKET_SCALES = [-np.inf, -20, -10, -5, -2, 0, 2, 5, 10, 20, 100, 200, 300, 400, np.inf]
 BUCKETS = [
     "<-20%",
     "[-20%,-10%[",
@@ -18,7 +18,11 @@ BUCKETS = [
     "[2%,5%[",
     "[5%,10%[",
     "[10%,20%[",
-    ">=20%",
+    "[20%,100%[",
+    "[100%,200%[",
+    "[200%,300%[",
+    "[300%,400%[",
+    ">=400%",
     "script <-20%",
     "script [-20%,-10%[",
     "script [-10%,-5%[",
@@ -28,7 +32,12 @@ BUCKETS = [
     "script [2%,5%[",
     "script [5%,10%[",
     "script [10%,20%[",
-    "script >=20%",
+    "script [10%,20%[",
+    "script [20%,100%[",
+    "script [100%,200%[",
+    "script [200%,300%[",
+    "script [300%,400%[",
+    "script >=400%",
 ]
 
 
