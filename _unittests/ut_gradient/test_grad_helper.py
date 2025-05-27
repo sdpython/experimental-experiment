@@ -12,6 +12,7 @@ except ImportError:
 from onnxruntime.capi.onnxruntime_pybind11_state import Fail as OrtFail
 from sklearn.datasets import make_regression
 from sklearn.linear_model import LinearRegression
+
 try:
     from skl2onnx.algebra.onnx_ops import OnnxAdd, OnnxMul, OnnxIdentity
     from skl2onnx.common.data_types import FloatTensorType
