@@ -11,9 +11,15 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.skl import to_onnx
 from experimental_experiment.torch_interpreter import to_onnx as tto_onnx
 
+try:
+    from skl2onnx import to_onnx as _to_onnx
+except ImportError:
+    _to_onnx = None
+
 
 class TestSklConvert(ExtTestCase):
 
+    @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
     def test_linear_regression(self):
@@ -28,6 +34,7 @@ class TestSklConvert(ExtTestCase):
             lr.predict(X), ref.run(None, {ref.input_names[0]: X})[0], atol=1e-5
         )
 
+    @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
     @skipif_ci_windows("not working")
@@ -45,6 +52,7 @@ class TestSklConvert(ExtTestCase):
             atol=1e-5,
         )
 
+    @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     @hide_stdout()
     def test_input_names(self):
         X = np.random.randn(10, 3)
@@ -58,6 +66,7 @@ class TestSklConvert(ExtTestCase):
             lr.predict(X), ref.run(None, {ref.input_names[0]: X})[0], atol=1e-5
         )
 
+    @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     def test_nan_to_euclidean(self):
         import torch
 
