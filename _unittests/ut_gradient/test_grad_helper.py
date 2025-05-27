@@ -12,9 +12,14 @@ except ImportError:
 from onnxruntime.capi.onnxruntime_pybind11_state import Fail as OrtFail
 from sklearn.datasets import make_regression
 from sklearn.linear_model import LinearRegression
-from skl2onnx.algebra.onnx_ops import OnnxAdd, OnnxMul, OnnxIdentity
-from skl2onnx.common.data_types import FloatTensorType
-from skl2onnx import to_onnx
+
+try:
+    from skl2onnx.algebra.onnx_ops import OnnxAdd, OnnxMul, OnnxIdentity
+    from skl2onnx.common.data_types import FloatTensorType
+    from skl2onnx import to_onnx
+except ImportError:
+    OnnxAdd = None
+
 from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.gradient.grad_helper import (
     random_feed,
@@ -76,6 +81,7 @@ class TestGradHelper(ExtTestCase):
         logging.basicConfig(level=logging.WARNING)
         ExtTestCase.setUpClass()
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
@@ -99,6 +105,7 @@ class TestGradHelper(ExtTestCase):
         with open(f"verbose_{'yield'}.onnx", "wb") as f:
             f.write(new_onx.SerializeToString())
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
@@ -122,6 +129,7 @@ class TestGradHelper(ExtTestCase):
         self.assertNotIn("Y", out_names)
         self.check_runtime(new_onx, "test_grad_helper")
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
@@ -142,6 +150,7 @@ class TestGradHelper(ExtTestCase):
         new_onx = onnx_derivative(onx, options=DerivativeOptions.KeepOutputs)
         self.check_runtime(new_onx, "test_grad_helper_nooutput")
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
@@ -158,6 +167,7 @@ class TestGradHelper(ExtTestCase):
         new_onx = onnx_derivative(onx)
         self.check_runtime(new_onx, "test_grad_helper_mul")
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
@@ -178,6 +188,7 @@ class TestGradHelper(ExtTestCase):
         new_onx = onnx_derivative(onx, weights=[])
         self.check_runtime(new_onx, "test_grad_helper_noweight")
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @skipif_ci_windows("not working on windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
@@ -208,6 +219,7 @@ class TestGradHelper(ExtTestCase):
         self.assertNotIn("Y_grad", input_names)
         self.check_runtime(new_onx, "test_grad_helper_fillgrad", verbose=False)
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_grad_helper_exc(self):
         opv = opset
@@ -224,6 +236,7 @@ class TestGradHelper(ExtTestCase):
         )
         self.assertRaise(lambda: onnx_derivative(onx, weights=[], options=1), AssertionError)
 
+    @unittest.skipIf(OnnxAdd is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @unittest.skipIf(GradientGraphBuilder is None, reason="not recent")
     def test_grad_helper_loss(self):

@@ -1079,6 +1079,11 @@ class BenchmarkRunner:
 
         sopt = ("-" + optimization.replace("+", "_").replace("/", "_")) if optimization else ""
         sdtype = str(self.dtype).lower().split(".")[-1]
+        simpl = (
+            "-" + model_runner.attn_impl
+            if model_runner.attn_impl not in {"eager", None, ""}
+            else ""
+        )
         pfilename = os.path.join(
             folder,
             (
@@ -1086,6 +1091,7 @@ class BenchmarkRunner:
                 f"-{sdtype}{sopt}-"
                 f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
                 f"rt{1 if rtopt in BOOLEAN_VALUES else 0}"
+                f"{simpl}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):

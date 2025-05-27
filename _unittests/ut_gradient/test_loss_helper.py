@@ -11,9 +11,13 @@ from sklearn.datasets import make_regression, make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import mean_squared_error, log_loss
-from skl2onnx.algebra.onnx_ops import OnnxIdentity
-from skl2onnx.common.data_types import DoubleTensorType
-from skl2onnx import to_onnx
+
+try:
+    from skl2onnx.algebra.onnx_ops import OnnxIdentity
+    from skl2onnx.common.data_types import DoubleTensorType
+    from skl2onnx import to_onnx
+except ImportError:
+    OnnxIdentity = None
 from onnx.reference import ReferenceEvaluator
 from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.gradient.loss_helper import (
@@ -25,6 +29,7 @@ opset = min(18, onnx.defs.onnx_opset_version() - 2)
 
 
 class TestOrtTraining(ExtTestCase):
+    @unittest.skipIf(OnnxIdentity is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_add_loss_output_reg(self):
@@ -43,6 +48,7 @@ class TestOrtTraining(ExtTestCase):
         skl_loss = mean_squared_error(reg.predict(X_test), y_test)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-5)
 
+    @unittest.skipIf(OnnxIdentity is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_add_loss_output_reg_l1(self):
@@ -61,6 +67,7 @@ class TestOrtTraining(ExtTestCase):
         skl_loss = mean_squared_error(reg.predict(X_test), y_test)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-2)
 
+    @unittest.skipIf(OnnxIdentity is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_get_train_initializer(self):
@@ -75,6 +82,7 @@ class TestOrtTraining(ExtTestCase):
         inits = get_train_initializer(onx)
         self.assertEqual({"intercept", "coef"}, set(inits))
 
+    @unittest.skipIf(OnnxIdentity is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_add_log_loss(self):
@@ -96,6 +104,7 @@ class TestOrtTraining(ExtTestCase):
         skl_loss = log_loss(y, xp)
         self.assertLess(numpy.abs(skl_loss - loss[0, 0]), 1e-5)
 
+    @unittest.skipIf(OnnxIdentity is None, "sklearn-onnx not recent enough")
     @requires_onnxruntime_training()
     @ignore_warnings((DeprecationWarning, FutureWarning))
     @requires_sklearn("1.6.0")
