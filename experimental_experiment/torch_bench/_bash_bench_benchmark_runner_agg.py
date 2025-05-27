@@ -144,6 +144,7 @@ def merge_benchmark_reports(
         "device",
         "device_name",
         "dynamic",
+        "model_attn_impl",
         "flag_fake_tensor",
         "flag_no_grad",
         "flag_training",
@@ -168,6 +169,7 @@ def merge_benchmark_reports(
         "dtype",
         "dynamic",
         "rtopt",
+        "model_attn_impl",
     ),
     report_on=(
         "speedup",
@@ -892,7 +894,9 @@ def _build_aggregated_document(
                 f"m0.columns.names={m0.columns.names}\n---\n{m0}"
             )
             exporter_column = [
-                c for c in cols if c in ("exporter", "opt_patterns", "dynamic", "rtopt")
+                c
+                for c in cols
+                if c in ("exporter", "opt_patterns", "dynamic", "rtopt", "model_attn_impl")
             ]
             assert "stat" in cols, (
                 f"Unexpected columns {cols}, expecting 'stat', "
@@ -1239,7 +1243,9 @@ def _build_aggregated_document(
             c for c in ("dtype", "suite", "model_task", "#order", "METRIC") if c in _set_
         )
         piv_columns = tuple(
-            c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
+            c
+            for c in ("exporter", "opt_patterns", "dynamic", "rtopt", "model_attn_impl")
+            if c in _set_
         )
         ccc = [*piv_index, *piv_columns]
         gr = data_csv[[*ccc, "value"]].groupby(ccc).count()
@@ -1264,7 +1270,9 @@ def _build_aggregated_document(
         # total
         piv_index = tuple(c for c in ("#order", "METRIC") if c in _set_)
         piv_columns = (
-            c for c in ("exporter", "opt_patterns", "dynamic", "rtopt") if c in _set_
+            c
+            for c in ("exporter", "opt_patterns", "dynamic", "rtopt", "model_attn_impl")
+            if c in _set_
         )
         piv_total = (
             pandas.pivot_table(

@@ -942,6 +942,7 @@ def _apply_excel_style(
                     "rtopt",
                     "suite",
                     "model_task",
+                    "model_attn_impl",
                 } or k.startswith("version"):
                     sheet.column_dimensions[c].width = 15
                     for cell in sheet[c]:
@@ -1232,6 +1233,7 @@ def _create_aggregation_figures(
                     "opt_patterns" not in df.index.names
                     and "rtopt" not in df.index.names
                     and "dynamic" not in df.index.names
+                    and "model_attn_impl" not in df.index.names
                 ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
                 df = df.to_frame()
                 if df.columns.names == [None]:
@@ -1867,7 +1869,9 @@ def _process_formulas(
                 gr = gr.drop("time_export_unbiased", axis=1)
                 if "opt_patterns" in gr.columns and len(set(gr.opt_patterns)) == 1:
                     on = [
-                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k
+                        for k in keep[:-1]
+                        if k not in {"exporter", "opt_patterns", "rtopt", "model_attn_impl"}
                     ]
                 else:
                     on = [k for k in keep[:-1] if k != "exporter"]
@@ -1900,6 +1904,7 @@ def _process_formulas(
                 and "opt_patterns" in set_columns
                 and "speedup" in set_columns
                 and "torch_script" in set(df.exporter)
+                and "model_attn_impl" in set_columns
                 and len(set(df.exporter)) > 1
             ):
                 # Do the same with the exporter as a baseline.
@@ -1931,7 +1936,9 @@ def _process_formulas(
                     gr = gr.drop("speedup", axis=1)
 
                     on = [
-                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k
+                        for k in keep[:-1]
+                        if k not in {"exporter", "opt_patterns", "rtopt", "model_attn_impl"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
@@ -1987,6 +1994,7 @@ def _process_formulas(
                 "exporter" in set_columns
                 and "dynamic" in set_columns
                 and "opt_patterns" in set_columns
+                and "model_attn_impl" in set_columns
                 and "speedup" in set_columns
                 and "inductor" in set(df.exporter)
                 and len(set(df.exporter)) > 1
@@ -2020,7 +2028,9 @@ def _process_formulas(
                     gr = gr.drop("speedup", axis=1)
 
                     on = [
-                        k for k in keep[:-1] if k not in {"exporter", "opt_patterns", "rtopt"}
+                        k
+                        for k in keep[:-1]
+                        if k not in {"exporter", "opt_patterns", "rtopt", "model_attn_impl"}
                     ]
                     joined = pandas.merge(df, gr, left_on=on, right_on=on, how="left")
 
@@ -2252,7 +2262,11 @@ def build_historical_report(
     df["value"] = df["value"].astype(float)
     df["dtype"] = df["dtype"].fillna("all")
     df = df[~df["value"].isna()]
-    exporter = [c for c in ["exporter", "opt_patterns", "dynamic", "dtype"] if c in df.columns]
+    exporter = [
+        c
+        for c in ["exporter", "opt_patterns", "dynamic", "dtype", "model_attn_impl"]
+        if c in df.columns
+    ]
     if verbose:
         print(f"[build_historical_report] shape={df.shape}, exporter={exporter}")
         print(f"[build_historical_report] unique exporter={set(df.exporter)}")
@@ -2350,11 +2364,14 @@ def build_historical_report(
                 ex = subset.loc[i, "exporter"]
                 optim = subset.loc[i, "opt_patterns"] if "opt_patterns" in exporter else ""
                 dynamic = subset.loc[i, "dynamic"] if "dynamic" in exporter else ""
+                attn_impl = (
+                    subset.loc[i, "model_attn_impl"] if "model_attn_impl" in exporter else ""
+                )
                 if suite not in locations_rows:
                     locations_rows[suite] = (
                         (max(locations_rows.values()) + 15) if locations_rows else 0
                     )
-                key = int(dynamic), ex, optim
+                key = int(dynamic), ex, optim, attn_impl
                 if key not in locations_cols:
                     locations_cols[key] = (
                         (max(locations_cols.values()) + 8) if locations_cols else 0
