@@ -466,18 +466,22 @@ class UntrainedRunner(BenchmarkRunner):
             task = tu.get("task", "")
             inputs2 = tu.get("inputs2", None)
             export_options = None
+            config = tu.get("configuration", None)
         elif len(tu) == 2:
             if isinstance(tu[0], dict):
                 model_cls, example_inputs = tu[0]["model"], tu[0]["inputs"]
                 dynamic_shapes = tu[0].get("dynamic_shapes", None)
                 inputs2 = tu[0].get("inputs2", None)
+                config = tu[0].get("configuration", None)
                 task = tu[0].get("task", "")
                 export_options = tu[1]
             else:
                 model_cls, example_inputs = tu
                 export_options = None
+                config = None
         elif len(tu) == 3:
             model_cls, example_inputs, export_options = tu
+            config = None
         else:
             raise AssertionError(
                 f"Unable to handle {len(tu)} elements: {string_type(tu)}, "
@@ -516,6 +520,7 @@ class UntrainedRunner(BenchmarkRunner):
             inputs2=inputs2,
             task=task,
             attn_impl=self.attn_impl,
+            config=config,
         )
 
     def iter_model_names(self):
