@@ -1461,9 +1461,15 @@ class CustomTracer(torch.fx.Tracer):
 
         # Then the difficult ones, we first operator on a copy to avoid
         # break the consistency of the graph.
-        graph_copy = graph.__class__()
+        graph_copy = graph.__class__(
+            tracer_cls=graph._tracer_cls, tracer_extras=graph._tracer_extras
+        )
         _vmap = {}
-        graph_copy.graph_copy(graph, _vmap)
+        out = graph_copy.graph_copy(graph, _vmap)
+        graph_copy.output(out)
+        assert len(graph_copy.nodes) == len(
+            graph.nodes
+        ), f"Graph copy did not work: {len(graph_copy.nodes)} != {len(graph.nodes)}"
         result = cls._remove_inplace(
             exported_program, graph_copy, verbose=verbose, exc=exc, err_graph=err_graph
         )
@@ -1482,5 +1488,11 @@ class CustomTracer(torch.fx.Tracer):
         )
         # It worked, wue put the modified node back into the original graph.
         _vmap = {}
-        graph.graph_copy(graph_copy, _vmap)
+        graph.__init__(
+            owning_module=graph.owning_module,
+            tracer_cls=graph._tracer_cls,
+            tracer_extras=graph._tracer_extras,
+        )
+        out = graph.graph_copy(graph_copy, _vmap)
+        graph.output(out)
         return n_inplace

@@ -44,6 +44,8 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         dynamic=False,
         check_file=True,
         unique_first_dim=1,
+        attn_impl=None,
+        dtype="",
     ):
         if is_windows():
             raise unittest.SkipTest("export does not work on Windows")
@@ -73,6 +75,10 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             "--output_data",
             "",
         ]
+        if attn_impl:
+            args.extend(["--attn_impl", attn_impl])
+        if dtype:
+            args.extend(["--dtype", dtype])
         if dynamic:
             args.extend(["--dynamic", "1"])
         if process:
@@ -187,6 +193,20 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             debug=False,
             check_file=False,
             dynamic=True,
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7.9999")
+    @requires_transformers("4.49.9999")
+    def test_untrained_export_bench_export_cpu_custom_sdpa(self):
+        self._untrained_export(
+            "custom",
+            "arnir0/Tiny-LLM",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
+            attn_impl="sdpa",
         )
 
     @ignore_warnings((DeprecationWarning, UserWarning))
