@@ -2011,7 +2011,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param value: it cannot be empty
         :param equal_to: if specified, the value is also equal to this value
 
-        A value can be a string (for an unknwon shape, a tuple for a shape,
+        A value can be a string (for an unknown shape, a tuple for a shape,
         an integer for a single scalar.
         """
         if self._debug_value_shape and name == self._debug_value_shape:
