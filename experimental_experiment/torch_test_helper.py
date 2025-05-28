@@ -16,7 +16,7 @@ def to_numpy(tensor: "torch.Tensor"):  # noqa: F821
     Convets a torch tensor to numy.
     """
     try:
-        return tensor.numpy()
+        return tensor.cpu().detach().numpy()
     except TypeError:
         # We try with ml_dtypes
         pass
@@ -26,7 +26,7 @@ def to_numpy(tensor: "torch.Tensor"):  # noqa: F821
 
     conv = {torch.bfloat16: ml_dtypes.bfloat16}
     assert tensor.dtype in conv, f"Unsupported type {tensor.dtype}, not in {conv}"
-    return tensor.to(torch.float32).numpy().astype(conv[tensor.dtype])
+    return tensor.to(torch.float32).cpu().numpy().astype(conv[tensor.dtype])
 
 
 def check_model_ort(

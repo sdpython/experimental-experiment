@@ -6284,16 +6284,51 @@ def aten_meshgrid(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
-    *tensors,
+    tensors,
     indexing: Optional[str] = None,
     name: str = "meshgrid",
 ):
     "meshgrid"
-    # indexing: xy, ij
-
     # python -m onnx_diagnostic validate -m microsoft/beit-base-patch16-224-pt22k-ft22k
     # --run -v 1 --export custom -o dump_test --dtype float16 --device cuda
-    raise NotImplementedError("Not yet imeplemented.")
+
+    assert indexing in (
+        None,
+        "",
+        "ij",
+    ), f"meshgrid not implemented for indexing={indexing!r}{g.get_debug_msg()}"
+    rk = len(tensors)
+
+    # reshape
+    reshaped = []
+    shapes = []
+    for i, t in enumerate(tensors):
+        new_shape = np.ones(rk, dtype=np.int64)
+        new_shape[i] = -1
+        reshaped.append(g.op.Reshape(t, new_shape, name=name))
+        shapes.append(g.op.Shape(t, name=name))
+    shape = g.op.Concat(*shapes, axis=0, name=name)
+
+    # expanded
+    if len(outputs) == 1 and rk > 1:
+        outputs = [f"{outputs[0]}#{i}" for i in range(rk)]
+
+    expanded = [
+        g.op.Expand(r, shape, name=name, outputs=[out]) for out, r in zip(outputs, reshaped)
+    ]
+    if not sts:
+        shape = []
+        for o, t in zip(outputs, tensors):
+            g.set_type(o, g.get_type(t))
+            g.get_rank(o, rk)
+            shape.append(g.get_shape(t) if g.has_shape(t) else None)
+        if None not in shape:
+            shape = tuple(shape)
+            for o in outputs:
+                g.get_shape(o, shape)
+    if len(expanded) == 1:
+        return expanded[0]
+    return expanded
 
 
 def aten_min(
