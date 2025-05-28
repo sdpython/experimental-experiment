@@ -855,7 +855,8 @@ class BenchmarkRunner:
                 f"[benchmarkrunner.benchmark] model wrapped with class "
                 f"{type(model_runner.model)}"
             )
-            print(f"[BenchmarkRunner.benchmark] attn_impl={model_runner.model_name!r}")
+            print(f"[BenchmarkRunner.benchmark] attn_impl={model_runner.attn_impl!r}")
+            print(f"[BenchmarkRunner.benchmark] task={model_runner.model_task!r}")
         if self.device.startswith("cuda") and self.verbose > 1:
             print(
                 f"[benchmarkrunner.benchmark] gpu_allocation="

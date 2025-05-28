@@ -47,6 +47,11 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         attn_impl=None,
         dtype="",
     ):
+        assert attn_impl in (
+            None,
+            "eager",
+            "sdpa",
+        ), f"unexpected value {attn_impl!r} for attn_impl"
         if is_windows():
             raise unittest.SkipTest("export does not work on Windows")
         from experimental_experiment.torch_bench.bash_bench_untrained import main
@@ -211,7 +216,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
-    @requires_transformers("4.49.9999")
+    @requires_transformers("4.53.9999")
     def test_untrained_export_bench_export_cpu_whisper(self):
         self._untrained_export(
             "export-nostrict",
@@ -224,7 +229,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
-    @requires_transformers("4.49.9999")
+    @requires_transformers("4.53.9999")
     def test_untrained_export_bench_custom_cpu_whisper(self):
         self._untrained_export(
             "custom",
