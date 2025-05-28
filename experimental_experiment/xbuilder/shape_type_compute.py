@@ -953,8 +953,19 @@ def _set_shape_type_op_any_pad(self: "GraphBuilder", node: NodeProto):  # noqa: 
     )
 
 
+def _set_shape_type_op_any_range(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    "Sets the output shape for for node type Range."
+    types = [self.get_type(i) for i in node.input if self.has_type(i)]
+    assert types and len(set(types)) == 1, (
+        f"Mixed type for node {self.pretty_node(node)}, types={types}, "
+        f"unable to set shape and types."
+    )
+    self.set_type(node.output[0], types[0])
+    self.set_rank(node.output[0], 1)
+
+
 def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    "Sets the output shape for Reduce type."
+    "Sets the output shape for Reduce node type."
     keepdim = self.get_attribute(node, "keepdims", exc=False)
     axes = self.get_attribute(node, "axes", exc=False)
     if axes is None:
@@ -1366,6 +1377,7 @@ _set_shape_type_op_any_known = {
     "MaxPool": _set_shape_type_op_any_conv_max_pool,
     "NonZero": _set_shape_type_op_any_non_zero,
     "Pad": _set_shape_type_op_any_pad,
+    "Range": _set_shape_type_op_any_range,
     "Reshape": _set_shape_type_op_any_reshape,
     "ScatterND": _set_shape_type_op_any_scatternd,
     "Sign": _set_shape_type_op_any_sign,

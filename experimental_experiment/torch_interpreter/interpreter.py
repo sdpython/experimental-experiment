@@ -1825,14 +1825,21 @@ class DynamoInterpreter:
 
         last_node = self.builder.last_added_node
         description = []
-        if val is not None and fct_name not in {"aten_cond"}:
+        if val is not None and fct_name not in {
+            "aten_cond",
+            "aten_wrap_with_set_grad_enabled",
+        }:
             # extracting shape and types
             if not isinstance(val, tuple):
                 val = (val,)
                 res = (res,)
-            assert isinstance(
-                res, (list, tuple)
-            ), f"Unexpected type {type(res)}{self.builder.get_debug_msg()}"
+            assert isinstance(res, (list, tuple)), (
+                f"fct_name={fct_name!r}, unexpected type {type(res)}, "
+                f"res={string_type(res, with_shape=True)}, "
+                f"val={string_type(val, with_shape=True)}, "
+                f"node={node}, node.target={node.target}"
+                f"{self.builder.get_debug_msg()}"
+            )
             if len(val) != len(res):
                 raise RuntimeError(
                     f"Length mismatch {len(val)} != {len(res)} "
