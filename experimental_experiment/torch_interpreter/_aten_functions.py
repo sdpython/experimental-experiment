@@ -6280,6 +6280,22 @@ def aten_mean(
     return res
 
 
+def aten_meshgrid(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    *tensors,
+    indexing: Optional[str] = None,
+    name: str = "meshgrid",
+):
+    "meshgrid"
+    # indexing: xy, ij
+
+    # python -m onnx_diagnostic validate -m microsoft/beit-base-patch16-224-pt22k-ft22k
+    # --run -v 1 --export custom -o dump_test --dtype float16 --device cuda
+    raise NotImplementedError("Not yet imeplemented.")
+
+
 def aten_min(
     g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name: str = "min"
 ) -> T:
