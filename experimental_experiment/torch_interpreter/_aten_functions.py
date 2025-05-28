@@ -3336,7 +3336,7 @@ def aten_floor_divide(
         assert g.has_rank(y), f"missing rank for {y!r}{g.get_debug_msg()}"
         itype = g.get_type(y)
         dtype = tensor_dtype_to_np_dtype(itype)
-        div = g.op.Div(np.array([x] if g.get_rank(x) > 0 else x, dtype=dtype), y, name=name)
+        div = g.op.Div(np.array([x] if g.get_rank(y) > 0 else x, dtype=dtype), y, name=name)
         if g.has_shape(y):
             g.set_shape(div, g.get_shape(y))
         else:
