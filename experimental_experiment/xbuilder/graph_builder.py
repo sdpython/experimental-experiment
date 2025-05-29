@@ -7715,10 +7715,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             if len(node.input) > 1:
                 cst = self.get_constant(node.input[1], exc=False, computed_value=True)
-                assert (
-                    cst.shape
-                ), f"Value={cst!r} is wrong for {node.input[0]}{self.get_debug_msg()}"
-                cst = tuple(cst)
+                cst = tuple() if not cst.shape else tuple(cst)
             else:
                 cst = tuple(self.get_attribute(node, "axes").ints)
                 assert cst, f"Value={cst!r} is wrong for {node.input[0]}{self.get_debug_msg()}"

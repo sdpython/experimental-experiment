@@ -6289,9 +6289,6 @@ def aten_meshgrid(
     name: str = "meshgrid",
 ):
     "meshgrid"
-    # python -m onnx_diagnostic validate -m microsoft/beit-base-patch16-224-pt22k-ft22k
-    # --run -v 1 --export custom -o dump_test --dtype float16 --device cuda
-
     assert indexing in (
         None,
         "",
@@ -6329,6 +6326,18 @@ def aten_meshgrid(
     if len(expanded) == 1:
         return expanded[0]
     return expanded
+
+
+def aten_meshgrid_indexing(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    tensors,
+    indexing: Optional[str] = None,
+    name: str = "meshgrid_indexing",
+):
+    "meshgrid"
+    return aten_meshgrid(g, sts, outputs, tensors, indexing=indexing, name=name)
 
 
 def aten_min(
