@@ -3336,7 +3336,7 @@ def aten_floor_divide(
         assert g.has_rank(y), f"missing rank for {y!r}{g.get_debug_msg()}"
         itype = g.get_type(y)
         dtype = tensor_dtype_to_np_dtype(itype)
-        div = g.op.Div(np.array([x] if g.get_rank(x) > 0 else x, dtype=dtype), y, name=name)
+        div = g.op.Div(np.array([x] if g.get_rank(y) > 0 else x, dtype=dtype), y, name=name)
         if g.has_shape(y):
             g.set_shape(div, g.get_shape(y))
         else:
@@ -6278,6 +6278,66 @@ def aten_mean(
         g.set_type(res, g.get_type(x) if dtype is None else itype)
         g.get_shape(res, tuple())
     return res
+
+
+def aten_meshgrid(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    tensors,
+    indexing: Optional[str] = None,
+    name: str = "meshgrid",
+):
+    "meshgrid"
+    assert indexing in (
+        None,
+        "",
+        "ij",
+    ), f"meshgrid not implemented for indexing={indexing!r}{g.get_debug_msg()}"
+    rk = len(tensors)
+
+    # reshape
+    reshaped = []
+    shapes = []
+    for i, t in enumerate(tensors):
+        new_shape = np.ones(rk, dtype=np.int64)
+        new_shape[i] = -1
+        reshaped.append(g.op.Reshape(t, new_shape, name=name))
+        shapes.append(g.op.Shape(t, name=name))
+    shape = g.op.Concat(*shapes, axis=0, name=name)
+
+    # expanded
+    if len(outputs) == 1 and rk > 1:
+        outputs = [f"{outputs[0]}#{i}" for i in range(rk)]
+
+    expanded = [
+        g.op.Expand(r, shape, name=name, outputs=[out]) for out, r in zip(outputs, reshaped)
+    ]
+    if not sts:
+        shape = []
+        for o, t in zip(outputs, tensors):
+            g.set_type(o, g.get_type(t))
+            g.get_rank(o, rk)
+            shape.append(g.get_shape(t) if g.has_shape(t) else None)
+        if None not in shape:
+            shape = tuple(shape)
+            for o in outputs:
+                g.get_shape(o, shape)
+    if len(expanded) == 1:
+        return expanded[0]
+    return expanded
+
+
+def aten_meshgrid_indexing(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    tensors,
+    indexing: Optional[str] = None,
+    name: str = "meshgrid_indexing",
+):
+    "meshgrid"
+    return aten_meshgrid(g, sts, outputs, tensors, indexing=indexing, name=name)
 
 
 def aten_min(

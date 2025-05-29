@@ -2011,7 +2011,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param value: it cannot be empty
         :param equal_to: if specified, the value is also equal to this value
 
-        A value can be a string (for an unknwon shape, a tuple for a shape,
+        A value can be a string (for an unknown shape, a tuple for a shape,
         an integer for a single scalar.
         """
         if self._debug_value_shape and name == self._debug_value_shape:
@@ -7715,10 +7715,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             if len(node.input) > 1:
                 cst = self.get_constant(node.input[1], exc=False, computed_value=True)
-                assert (
-                    cst.shape
-                ), f"Value={cst!r} is wrong for {node.input[0]}{self.get_debug_msg()}"
-                cst = tuple(cst)
+                cst = tuple() if not cst.shape else tuple(cst)
             else:
                 cst = tuple(self.get_attribute(node, "axes").ints)
                 assert cst, f"Value={cst!r} is wrong for {node.input[0]}{self.get_debug_msg()}"

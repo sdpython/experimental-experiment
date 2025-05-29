@@ -59,6 +59,12 @@ class UntrainedRunner(BenchmarkRunner):
         "microsoft/Phi-3.5-mini-instruct",
         "meta-llama/Llama-3.2-1B-Instruct",
         "codellama/CodeLlama-7b-hf",
+        #
+        "hf-tiny-model-private/tiny-random-PLBartForConditionalGeneration",
+        "sshleifer/tiny-marian-en-de",
+        "HuggingFaceM4/tiny-random-idefics",
+        "microsoft/beit-base-patch16-224-pt22k-ft22k",
+        "facebook/bart-base",
     ]
 
     def initialize(self):
