@@ -246,11 +246,11 @@ class TorchModelContainer(ModelContainer):
     def _deserialize_graph(
         self,
         proto: GraphProto,
-        scoped_values: List[Dict[str, "onnxscript.ir.Value"]],  # noqa: F821
-    ) -> "onnxscript.ir.Graph":  # noqa: F821
+        scoped_values: List[Dict[str, "onnx_ir.Value"]],  # noqa: F821
+    ) -> "onnx_ir.Graph":  # noqa: F821
         """See :epkg:`onnxscript`."""
-        import onnxscript.ir as oir
-        import onnxscript.ir.serde as oirs
+        import onnx_ir as oir
+        import onnx_ir.serde as oirs
         from ..reference import to_array_extended
 
         quantization_annotations = {
@@ -365,10 +365,10 @@ class TorchModelContainer(ModelContainer):
             return getattr(proto, field)
         return None
 
-    def to_ir(self) -> "onnxscript.ir.Model":  # noqa: F821
-        """Conversion to :class:`onnxscript.ir.Model`."""
-        import onnxscript.ir as oir
-        import onnxscript.ir.serde as oirs
+    def to_ir(self) -> "onnx_ir.Model":  # noqa: F821
+        """Conversion to :class:`onnx_ir.Model`."""
+        import onnx_ir as oir
+        import onnx_ir.serde as oirs
 
         proto = self.model_proto
         graph = self._deserialize_graph(proto.graph, [])
@@ -387,6 +387,6 @@ class TorchModelContainer(ModelContainer):
             model_version=self._get_field(proto, "model_version"),
             doc_string=self._get_field(proto, "doc_string"),
             functions=functions,
-            meta_data_props=oirs.deserialize_metadata_props(proto.metadata_props),
+            metadata_props=oirs.deserialize_metadata_props(proto.metadata_props),
         )
         return model
