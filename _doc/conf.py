@@ -106,7 +106,7 @@ nitpick_ignore = [
     ("py:class", "False"),
     ("py:class", "True"),
     ("py:class", "Argument"),
-    ("py:class", "onnxscript.ir.Tuple"),
+    ("py:class", "onnx_ir.Tuple"),
     ("py:class", "pipeline.Pipeline"),
     ("py:class", "default=sklearn.utils.metadata_routing.UNCHANGED"),
     ("py:class", "ModelProto"),

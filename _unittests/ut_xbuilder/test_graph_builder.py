@@ -962,7 +962,7 @@ class TestGraphBuilder(ExtTestCase):
 
     @ignore_warnings(DeprecationWarning)
     def test_large_model_onnxscript_ir(self):
-        import onnxscript.ir as oir
+        import onnx_ir as oir
 
         new_domain = "custom"
 
