@@ -387,6 +387,6 @@ class TorchModelContainer(ModelContainer):
             model_version=self._get_field(proto, "model_version"),
             doc_string=self._get_field(proto, "doc_string"),
             functions=functions,
-            meta_data_props=oirs.deserialize_metadata_props(proto.metadata_props),
+            metadata_props=oirs.deserialize_metadata_props(proto.metadata_props),
         )
         return model
