@@ -629,7 +629,7 @@ class BenchmarkRunner:
         memory_peak: bool = False,
         part: Optional[int] = None,
         pickled_name: Optional[str] = None,
-        rtopt: bool = True,
+        rtopt: int = 1,
         shape_again: bool = False,
         apply_patches: bool = True,
     ) -> Iterator[Dict[Any, Any]]:
@@ -647,7 +647,8 @@ class BenchmarkRunner:
             (load the model + eager mode + export),
             2 to run the run the inference
         :param pickled_name: name used to store everything on disk if *part* is True
-        :param rtopt: disable onnxruntime optimization
+        :param rtopt: disable onnxruntime optimization, or use a different runtime,
+            9 means ``TorchOnnxEvaluator``
         :param shape_again: run shape inference after the export,
             erases whatever the model already contains
         :param apply_patches: apply patches before exporting
@@ -888,11 +889,11 @@ class BenchmarkRunner:
         stats["input_size"] = self.obj_size(model_runner.inputs)
         stats["_index"] = (
             f"{model_name.replace('/','_')}-{exporter}-{optimization}-"
-            f"d{1 if dynamic else 0}-rt{1 if rtopt else 0}"
+            f"d{1 if dynamic else 0}-rt{rtopt}"
         )
         stats["date_start"] = f"{datetime.now():%Y-%m-%d}"
         stats["opt_patterns"] = optimization
-        stats["rtopt"] = 1 if rtopt else 0
+        stats["rtopt"] = rtopt
 
         if self.device.startswith("cuda"):
             is_cuda = True
@@ -1091,8 +1092,7 @@ class BenchmarkRunner:
                 f"{model_name.replace('/', '_')}-{exporter}-{self.device.replace(':', '')}"
                 f"-{sdtype}{sopt}-"
                 f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
-                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}"
-                f"{simpl}"
+                f"rt{rtopt}{simpl}"
             ),
         )
         if pfilename and not os.path.exists(pfilename):
@@ -1104,7 +1104,7 @@ class BenchmarkRunner:
             (
                 f"model_{cleaned_name}-{exporter}{sopt}-"
                 f"d{1 if dynamic in BOOLEAN_VALUES else 0}"
-                f"rt{1 if rtopt in BOOLEAN_VALUES else 0}.{ext}"
+                f"rt{rtopt}.{ext}"
             ),
         )
 
@@ -1437,7 +1437,7 @@ class BenchmarkRunner:
         if isinstance(exported_model, onnx.ModelProto):
             domains = {d.domain for d in exported_model.opset_import}
             session_options = onnxruntime.SessionOptions()
-            if not rtopt:
+            if rtopt == 0:
                 session_options.graph_optimization_level = (
                     onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
                 )
@@ -1466,20 +1466,36 @@ class BenchmarkRunner:
                 print("[BenchmarkRunner.benchmark] create session")
             is_onnx = True
             stats["onnx_model"] = "1"
-            if quiet:
-                try:
+
+            if rtopt == 9:
+                from onnx_diagnostic.reference import TorchOnnxEvaluator
+
+                if quiet:
+                    try:
+                        ort_sess = TorchOnnxEvaluator(filename, providers=providers)
+                    except Exception as e:
+                        stats["ERR_ort"] = _clean_string(str(e)).replace("\n", " ")
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_ort {e}")
+                        return stats
+                else:
+                    ort_sess = TorchOnnxEvaluator(filename, providers=providers)
+            else:
+                if quiet:
+                    try:
+                        ort_sess = onnxruntime.InferenceSession(
+                            filename, session_options, providers=providers
+                        )
+                    except Exception as e:
+                        stats["ERR_ort"] = _clean_string(str(e)).replace("\n", " ")
+                        if self.verbose:
+                            print(f"[benchmarkrunner.benchmark] err_ort {e}")
+                        return stats
+                else:
                     ort_sess = onnxruntime.InferenceSession(
                         filename, session_options, providers=providers
                     )
-                except Exception as e:
-                    stats["ERR_ort"] = _clean_string(str(e)).replace("\n", " ")
-                    if self.verbose:
-                        print(f"[benchmarkrunner.benchmark] err_ort {e}")
-                    return stats
-            else:
-                ort_sess = onnxruntime.InferenceSession(
-                    filename, session_options, providers=providers
-                )
+
             if self.verbose > 1:
                 print("[BenchmarkRunner.benchmark] WrapInferenceSessionForTorch")
             sess = WrapInferenceSessionForTorch(ort_sess, nvtx=self.nvtx)

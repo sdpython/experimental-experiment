@@ -303,6 +303,14 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
 
             split_process = args.split_process in BOOLEAN_VALUES
             begin = time.perf_counter()
+            assert args.rtopt in (
+                "0",
+                "1",
+                0,
+                1,
+                9,
+                "9",
+            ), f"rtopt={args.rtopt!r} must be in (0, 1, 9)"
             data = list(
                 runner.enumerate_test_models(
                     process=args.process in BOOLEAN_VALUES,
@@ -314,7 +322,7 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
                     memory_peak=args.memory_peak in BOOLEAN_VALUES,
                     part=int(args.part) if split_process else None,
                     pickled_name="temp_pickled_file.pkl" if split_process else None,
-                    rtopt=args.rtopt in BOOLEAN_VALUES,
+                    rtopt=int(args.rtopt),
                     shape_again=args.shape2 in BOOLEAN_VALUES,
                     apply_patches=args.patch in BOOLEAN_VALUES,
                 )
