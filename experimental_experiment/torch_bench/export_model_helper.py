@@ -464,6 +464,7 @@ class WrapInferenceSessionForTorch:
                 )
 
         self.DEVICES = DEVICES
+        self.use_run = not isinstance(sess, onnxruntime.InferenceSession)
 
     def _get_ortvalues_from_torch_tensors(
         self,
@@ -537,6 +538,8 @@ class WrapInferenceSessionForTorch:
         return tuple(res)
 
     def run(self, output_names, feeds):
+        if self.use_run:
+            return self.sess.run(output_names, feeds)
         inputs = [feeds[i] for i in self.input_names]
         if self.dlpack:
             return self.run_dlpack(*inputs, output_names=output_names)

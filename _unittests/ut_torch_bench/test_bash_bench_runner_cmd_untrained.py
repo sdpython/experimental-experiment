@@ -46,6 +46,8 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         unique_first_dim=1,
         attn_impl=None,
         dtype="",
+        rtopt=1,
+        opt_patterns="",
     ):
         assert attn_impl in (
             None,
@@ -79,9 +81,13 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             str(timeout),
             "--output_data",
             "",
+            "--rtopt",
+            str(rtopt),
         ]
         if attn_impl:
             args.extend(["--attn_impl", attn_impl])
+        if opt_patterns:
+            args.extend(["--opt_patterns", opt_patterns])
         if dtype:
             args.extend(["--dtype", dtype])
         if dynamic:
@@ -212,6 +218,21 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             check_file=False,
             dynamic=True,
             attn_impl="sdpa",
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7.9999")
+    @requires_transformers("4.49.9999")
+    def test_untrained_export_bench_export_cpu_custom_torchrt(self):
+        self._untrained_export(
+            "custom",
+            "arnir0/Tiny-LLM",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
+            rtopt=9,
+            opt_patterns="default",
         )
 
     @ignore_warnings((DeprecationWarning, UserWarning))
