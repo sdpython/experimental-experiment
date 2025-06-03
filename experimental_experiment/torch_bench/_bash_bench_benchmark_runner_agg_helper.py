@@ -2048,7 +2048,7 @@ def _process_formulas(
                         f"Shape mismatch after join {df.shape} -> {joined.shape}, "
                         f"gr.shape={gr.shape}, on={on}, model={model}, new_keys={new_keys}"
                         f"\n---\n{gr}\n--\n"
-                        f"{df[[*on, "speedup"]].groupby(on).count()}"
+                        f"{df[[*on, 'speedup']].groupby(on).count()}"
                     )
                     df = joined.copy()
                     df["speedup_increase_inductor"] = (
