@@ -348,10 +348,12 @@ class BenchmarkRunner:
         feeds: List[torch.Tensor],
     ) -> List[torch.Tensor]:
         """Runs with onnxruntme."""
-        list_feeds = [feeds[k] for k in sess.input_names]
-        if self.dlpack:
-            return sess.run_dlpack(*list_feeds)
-        return sess.run_ort_inference(*list_feeds)
+        if hasattr(self, "run_ort_inference"):
+            list_feeds = [feeds[k] for k in sess.input_names]
+            if self.dlpack:
+                return sess.run_dlpack(*list_feeds)
+            return sess.run_ort_inference(*list_feeds)
+        return sess.run(None, feeds)
 
     @classmethod
     def _post_process_optimization_statistics(
@@ -1472,14 +1474,18 @@ class BenchmarkRunner:
 
                 if quiet:
                     try:
-                        ort_sess = TorchOnnxEvaluator(filename, providers=providers)
+                        ort_sess = TorchOnnxEvaluator(
+                            filename, providers=providers, verbose=max(self.verbose - 2, 0)
+                        )
                     except Exception as e:
                         stats["ERR_ort"] = _clean_string(str(e)).replace("\n", " ")
                         if self.verbose:
                             print(f"[benchmarkrunner.benchmark] err_ort {e}")
                         return stats
                 else:
-                    ort_sess = TorchOnnxEvaluator(filename, providers=providers)
+                    ort_sess = TorchOnnxEvaluator(
+                        filename, providers=providers, verbose=max(self.verbose - 2, 0)
+                    )
             else:
                 if quiet:
                     try:

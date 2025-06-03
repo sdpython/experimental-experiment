@@ -514,7 +514,7 @@ class CustomTracer(torch.fx.Tracer):
             if node.op != "output"
             and len(node.users) == 0
             and node.op.startswith("call_")
-            and node.target not in {operator.getitem}
+            and node.target not in {operator.getitem, operator.or_, operator.and_}
             and cls._get_aten_name(node)
             not in {
                 "aten::_assert_scalar",
@@ -1253,6 +1253,8 @@ class CustomTracer(torch.fx.Tracer):
                         # other function may be needed, let's be strict
                     }, (
                         f"Unsupported target {node.target!r}, name={node.name!r} "
+                        f"({node.target.__name__!r}, "
+                        f"{getattr(node.target, '__module__', '-')}) "
                         f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
                     )
 

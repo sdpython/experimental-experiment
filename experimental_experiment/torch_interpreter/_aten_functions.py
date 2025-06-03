@@ -1138,6 +1138,29 @@ def _aten_adaptive_avg_poolnd(
     )
 
 
+def aten_bitwise_and(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_and",
+) -> T:
+    "bitwise and"
+    if g.get_type(x) == TensorProto.BOOL and g.get_type(y) == TensorProto.BOOL:
+        x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
+        res = g.op.And(x, y, outputs=outputs, name=name)
+        if not sts:
+            set_type_shape_binary_op(g, outputs[0], x, y)
+        return res
+
+    x, y = prepare_inputs_homogeneous_operator(g, x, y, name=name)
+    res = g.op.BitwiseAnd(x, y, outputs=outputs, name=name)
+    if not sts:
+        set_type_shape_binary_op(g, outputs[0], x, y, cmp_op=True)
+    return res
+
+
 def aten_bitwise_or(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

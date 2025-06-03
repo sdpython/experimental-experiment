@@ -845,8 +845,13 @@ class DynamoInterpreter:
         return complete_args, complete_kwargs
 
     def _get_aten_name(self, node: "torch.fx.Node") -> str:  # noqa: F821
-        if node.target == operator.getitem:
-            return "getitem"
+        if node.target in {operator.getitem, operator.or_, operator.and_}:
+            if node.target == operator.getitem:
+                return "getitem"
+            if node.target == operator.or_:
+                return "aten_bitwise_or"
+            if node.target == operator.and_:
+                return "aten_bitwise_and"
         if isinstance(node.target, self.torch._ops.OpOverloadPacket):
             if node.target != self.torch.ops.aten.sym_size:
                 raise RuntimeError(f"Unsupported function {node!r}.")
@@ -1423,6 +1428,11 @@ class DynamoInterpreter:
                 "aten__exit_autocast",
                 "aten__enter_autocast",
                 "aten_FunctionCtx",
+                # ending with '_' but not inplace
+                operator.or_,
+                operator.and_,
+                "aten_bitwise_or",
+                "aten_bitwise_and",
             }
             or (
                 hasattr(aten_name, "_opname")
@@ -1437,7 +1447,7 @@ class DynamoInterpreter:
             or ("val" in node.meta and isinstance(node.meta["val"], (int, self.torch.SymInt)))
         ), (
             f"This is probably one inplace function node={node!r}, "
-            f"node.meta={node.meta!r}, aten_name={aten_name!r}, "
+            f"aten_name={aten_name!r}, node.meta={node.meta!r}, "
             f"aten_name._opname={getattr(aten_name, '_opname', '?')}, "
             f"len(node.args[0].users)="
             f"{len(node.args[0].users) if node.args and hasattr(node.args[0], 'users') else 0}"
