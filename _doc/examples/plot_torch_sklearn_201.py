@@ -15,7 +15,7 @@ torch implementation of nan_euclidean_distances
 ===============================================
 
 Let's start with a simple case, a pairwise distance.
-See :func:`sklearn.metrics.nan_euclidean_distances`.
+See :func:`sklearn.metrics.pairwise.nan_euclidean_distances`.
 
 Module
 ++++++
@@ -46,7 +46,7 @@ from experimental_experiment.xbuilder.reverse_graph_builder import to_graph_buil
 
 
 class NanEuclidean(torch.nn.Module):
-    """Implements :func:`sklearn.metrics.nan_euclidean_distances`."""
+    """Implements :func:`sklearn.metrics.pairwise.nan_euclidean_distances`."""
 
     def __init__(self, squared=False, copy=True):
         super().__init__()
@@ -565,7 +565,9 @@ knn11, Y11 = validate(11, 11, n_nans=1)
 # This is case not supported by :func:`torch.export.export`.
 # We need to isolate that part before exporting the model.
 # It is done by replacing it with a custom op.
-# This is automatically done by function :func:`trace_execution_piece_by_piece`.
+# This is automatically done by function
+# :func:`experimental_experiment.torch_interpreter.
+# piece_by_piece.trace_execution_piece_by_piece`.
 #
 # First step, we create two sets of inputs. A function will use this
 # to infer the dynamic shapes.
