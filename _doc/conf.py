@@ -85,6 +85,7 @@ intersphinx_mapping = {
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "onnx": ("https://onnx.ai/onnx/", None),
+    "onnx_ir": ("https://onnx.ai/ir-py/", None),
     "onnxruntime": ("https://onnxruntime.ai/docs/api/python/", None),
     "onnxscript": ("https://microsoft.github.io/onnxscript/", None),
     "onnx_array_api": ("https://sdpython.github.io/doc/onnx-array-api/dev/", None),
@@ -111,6 +112,7 @@ nitpick_ignore = [
     ("py:class", "default=sklearn.utils.metadata_routing.UNCHANGED"),
     ("py:class", "ModelProto"),
     ("py:class", "Module"),
+    ("py:class", "onnx_array_api.translate_api.builder_emitter.BuilderEmitter"),
     ("py:class", "torch.fx.passes.operator_support.OperatorSupport"),
     ("py:class", "torch.fx.proxy.TracerBase"),
     ("py:class", "torch.utils._pytree.Context"),
@@ -119,6 +121,7 @@ nitpick_ignore = [
     ("py:class", "transformers.cache_utils.Cache"),
     ("py:class", "transformers.cache_utils.DynamicCache"),
     ("py:class", "transformers.cache_utils.MambaCache"),
+    ("py:class", "transformers.LlamaConfig"),
     ("py:func", "torch.export._draft_export.draft_export"),
     ("py:func", "torch._export.tools.report_exportability"),
 ]
