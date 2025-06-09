@@ -1625,9 +1625,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         register_int: bool = True,
         name: Optional[str] = None,
     ):
-        """
-        Raises an exception if two shapes are not compatabible.
-        """
+        """Raises an exception if two shapes are not compatabible."""
         import torch
 
         assert len(old_shape) == len(shape), (
@@ -5746,30 +5744,54 @@ class GraphBuilder(_GraphBuilderRuntime):
         rows.append("")
         return "\n".join(rows)
 
+    def _check_nodes(
+        self, nodes: List[NodeProto], known: Set[str], step: str, root: bool = False
+    ):
+        for node in nodes:
+            assert (
+                node.domain in self.opsets
+            ), f"Domain {node.domain!r} is not registered in {self.opsets}"
+            for i in node.input:
+                if i == "":
+                    continue
+                assert not root or self.has_name(i), (
+                    f"Name {i!r} not registered, node type is "
+                    f"{node.op_type!r}, node name is {node.name!r}, "
+                    f"input are {node.input}{self.get_debug_msg()}"
+                )
+                assert i in known, (
+                    f"Unknown input {i!r}, step {step!r} in node type "
+                    f"{node.op_type}, name is {node.name!r}\n"
+                    f"{self.pretty_node(node)}{self.get_debug_msg()}"
+                )
+            if node.op_type in {"If", "Loop", "Scan", "SequenceMap"}:
+                for att in node.attribute:
+                    if att.type == AttributeProto.GRAPH:
+                        g = att.g
+                        k2 = known.copy()
+                        k2 |= (
+                            set(i.name for i in g.input)
+                            | set(i.name for i in g.initializer)
+                            | set(i.name for i in g.sparse_initializer)
+                        )
+                        self._check_nodes(
+                            g.node, k2, step=f"{step}-{node.op_type}-{att.name}-{node.name}"
+                        )
+                        for o in g.output:
+                            assert o.name in k2, (
+                                f"Unknown output {o.name!r}, step {step!r}, "
+                                f"op_type={node.op_type!r}, att.name={att.name!r}, "
+                                f"node.name={node.name}"
+                            )
+            known |= set(node.output)
+
     def _check(self, stats: List, step: str):
         begin = time.perf_counter()
         assert (
             len(self.nodes) > 0
         ), f"The onnx model is empty (step {step}, no node){self.get_debug_msg()}"
         known = set(n.name for n in self.inputs) | set(self.initializers_dict) | self._context
-        for node in self.nodes:
-            assert (
-                node.domain in self.opsets
-            ), f"Domain {node.domain!r} is not registered in {self.opsets}"
-            for i in node.input:
-                assert not i or self.has_name(i), (
-                    f"Name {i!r} not registered, node type is "
-                    f"{node.op_type!r}, node name is {node.name!r}, "
-                    f"input are {node.input}{self.get_debug_msg()}"
-                )
-                if i == "":
-                    continue
-                assert i in known, (
-                    f"Unknown input {i!r}, step {step!r} in node type "
-                    f"{node.op_type}, name is {node.name!r}\n"
-                    f"{self.pretty_node(node)}{self.get_debug_msg()}"
-                )
-            known |= set(node.output)
+        self._check_nodes(self.nodes, known, step, root=True)
         for o in self.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
         stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
@@ -5901,7 +5923,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         if self.optimization_options.recursive and recursive:
             if self.verbose > 0:
                 print(f"[GraphBuilder-{self._hash()}.optimize] start with subgraphs")
-            context = set(i.name for i in self.inputs) | set(self.initializers_dict)
+            context = (
+                set(i.name for i in self.inputs) | set(self.initializers_dict) | self._context
+            )
             for node in self.nodes:
                 if any(att.type == AttributeProto.GRAPH for att in node.attribute):
                     if self.verbose > 1:
@@ -5918,8 +5942,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 context |= set(node.output)
             if self.verbose > 0:
                 print(f"[GraphBuilder-{self._hash()}.optimize] done with subgraphs")
+            self._check(statistics, "A-sub")
+        else:
+            self._check(statistics, "A")
 
-        self._check(statistics, "A")
         if self.optimization_options.remove_identity:
             begin = time.perf_counter()
             nr, na = self.remove_identity_nodes()
@@ -6877,7 +6903,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.input[0] not in input_names_and_init
                 and node.input[0] not in output_names
                 and node.input[0] not in replacements
-                and node.input[0] not in self._context  # neeeded for subgraphs
+                and node.input[0] not in self._context  # needed for subgraphs
             ):
                 old_name, new_name = node.input[0], node.output[0]
             else:
