@@ -2383,7 +2383,11 @@ def build_historical_report(
                     locations_rows[suite] = (
                         (max(locations_rows.values()) + 15) if locations_rows else 0
                     )
-                key = int(dynamic), ex, optim, attn_impl
+                key = (
+                    (int(dynamic), ex, optim, attn_impl)
+                    if attn_impl == "sdpa"
+                    else (int(dynamic), ex, optim)
+                )
                 if key not in locations_cols:
                     locations_cols[key] = (
                         (max(locations_cols.values()) + 8) if locations_cols else 0
@@ -2453,11 +2457,13 @@ def build_historical_report(
         locations_rows = sorted(locations_rows)
         locations_cols = sorted(locations_cols)
         for p in pages:
+            p = p.replace("default+onnxruntime", "+onnxruntime").replace("-none-", "-")
             pandas.DataFrame({p: list(range(10))}).to_excel(writer, sheet_name=p, index=False)
         workbook = writer.book
         for k, (chart, title) in export_export.items():
             key, suite, kind = k
             skey = "-".join(map(str, key))
+            skey = skey.replace("default+onnxruntime", "+onnxruntime").replace("-none-", "-")
             worksheet = writer.sheets[skey]
             x = locations_cols.index(suite) * 8
             y = locations_rows.index(kind) * 15

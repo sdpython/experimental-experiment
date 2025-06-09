@@ -65,6 +65,7 @@ class UntrainedRunner(BenchmarkRunner):
         "HuggingFaceM4/tiny-random-idefics",
         "microsoft/beit-base-patch16-224-pt22k-ft22k",
         "facebook/bart-base",
+        "microsoft/Phi-4-mini-reasoning",
     ]
 
     def initialize(self):

@@ -10,6 +10,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
 from onnx_diagnostic.torch_export_patches import torch_export_patches
+from onnx_diagnostic.torch_export_patches.patch_module_helper import code_needing_rewriting
+
 
 try:
     from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
@@ -878,6 +880,13 @@ class ModelRunner:
         options = self.patch_options.copy()
         options["verbose"] = max(verbose - 2, 0)
         options["patch"] = patch != 0
+        if options["patch"]:
+            model = (
+                self.model.model
+                if self.model.__class__.__name__.startswith("Wrap")
+                else self.model
+            )
+            options["rewrite"] = code_needing_rewriting(model.__class__.__name__)
         return options
 
     def _to_onnx_custom(
