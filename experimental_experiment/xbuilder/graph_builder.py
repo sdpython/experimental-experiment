@@ -7005,24 +7005,18 @@ class GraphBuilder(_GraphBuilderRuntime):
                 del self.constants_[k]
 
         # third pass: replacements in node
-        # We need to avoid replacing a name in a subgraphs which was not created before.
         if self.verbose > 1:
             print(
                 f"[GraphBuilder-{self._hash()}.remove_identity_nodes] "
                 f"kept {len(new_nodes)} nodes"
             )
         self.nodes = []
-        created = (
-            set(i.name for i in self.inputs) | set(self.initializers_dict) | set(self._context)
-        )
-        current = {k: v for k, v in replacements.items() if k in created}
         added = 0
         for node in new_nodes:
-            up = {k: v for k, v in replacements.items() if k in node.output}
             repo = {o for o in node.output if o in replacements}
-            repi = {o for o in self._enumerate_inputs_with_subgraph(node) if o in current}
+            repi = {o for o in self._enumerate_inputs_with_subgraph(node) if o in replacements}
             if repi or repo:
-                new_inputs = [current.get(i, i) for i in node.input]
+                new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
                 assert set(new_inputs) & set(new_outputs) in ({""}, set()), (
                     f"Node type {node.op_type}-{node.name} is incorrectly replaced "
@@ -7054,7 +7048,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             if att.type != AttributeProto.GRAPH
                             else oh.make_attribute(
                                 att.name,
-                                self._rename_inputs_in_subgraph(att.g, current),
+                                self._rename_inputs_in_subgraph(att.g, replacements),
                             )
                         )
                 else:
@@ -7066,8 +7060,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                         self.update_node_constant(o, new_node)
             else:
                 self.nodes.append(node)
-            current.update(up)
-            created |= set(up)
 
         if self.verbose > 1:
             print(
