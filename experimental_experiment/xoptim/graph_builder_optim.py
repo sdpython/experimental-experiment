@@ -323,11 +323,13 @@ class GraphBuilderPatternOptimization:
                         return tuple(att.t.dims)
                     if att.name in {"value_float", "value_int"}:
                         return tuple()
-                raise AssertionError(
-                    f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
-                    f"node.op_type={proto.op_type!r}, "
-                    f"attributes={[att.name for att in proto.attribute]}."
-                )
+                if exc:
+                    raise AssertionError(
+                        f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
+                        f"node.op_type={proto.op_type!r}, "
+                        f"attributes={[att.name for att in proto.attribute]}."
+                    )
+                return None
             if self.is_constant(name):
                 cst = self.get_computed_constant(name)
                 return None if cst is None else cst.shape

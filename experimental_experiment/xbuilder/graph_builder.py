@@ -4969,13 +4969,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                 rows.append("...")
                 break
 
-        rows.append("--")
+        rows.append(f"-- {len(self.inputs)} INPUTS")
         for io in self.inputs:
             shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
                 f"[GraphBuilder-{hs}.make_tensor_input] {io.name}"
                 f"[{io.type.tensor_type.elem_type}:{shh}]"
             )
+        rows.append(f"-- {len(self.initializers_dict)} INITIALIZERS")
         for name, init in self.initializers_dict.items():
             sval = "" if _size(init) > 5 else f":{_values(init)}"
             source = (
@@ -5009,6 +5010,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 rows.append("...")
                 break
 
+        rows.append(f"-- {len(self.outputs)} OUTPUTS")
         for io in self.outputs:
             shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
@@ -5785,7 +5787,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             )
             known |= set(node.output)
 
-    def _check(self, stats: List, step: str):
+    def _check(self, stats: List, step: str, shadowing: bool = False):
         begin = time.perf_counter()
         assert (
             len(self.nodes) > 0
@@ -5794,6 +5796,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._check_nodes(self.nodes, known, step, root=True)
         for o in self.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
+        if shadowing:
+            shadow = self.shadowing_names()
+            assert not shadow, f"Shadowing names were found ({shadow})."
         stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
 
     def _move_context_to_other_builder(self, context: Sequence[str], g: "GraphBuilder"):
@@ -7000,18 +7005,24 @@ class GraphBuilder(_GraphBuilderRuntime):
                 del self.constants_[k]
 
         # third pass: replacements in node
+        # We need to avoid replacing a name in a subgraphs which was not created before.
         if self.verbose > 1:
             print(
                 f"[GraphBuilder-{self._hash()}.remove_identity_nodes] "
                 f"kept {len(new_nodes)} nodes"
             )
         self.nodes = []
+        created = (
+            set(i.name for i in self.inputs) | set(self.initializers_dict) | set(self._context)
+        )
+        current = {k: v for k, v in replacements.items() if k in created}
         added = 0
         for node in new_nodes:
+            up = {k: v for k, v in replacements.items() if k in node.output}
             repo = {o for o in node.output if o in replacements}
-            repi = {o for o in self._enumerate_inputs_with_subgraph(node) if o in replacements}
+            repi = {o for o in self._enumerate_inputs_with_subgraph(node) if o in current}
             if repi or repo:
-                new_inputs = [replacements.get(i, i) for i in node.input]
+                new_inputs = [current.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
                 assert set(new_inputs) & set(new_outputs) in ({""}, set()), (
                     f"Node type {node.op_type}-{node.name} is incorrectly replaced "
@@ -7043,7 +7054,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             if att.type != AttributeProto.GRAPH
                             else oh.make_attribute(
                                 att.name,
-                                self._rename_inputs_in_subgraph(att.g, replacements),
+                                self._rename_inputs_in_subgraph(att.g, current),
                             )
                         )
                 else:
@@ -7055,6 +7066,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         self.update_node_constant(o, new_node)
             else:
                 self.nodes.append(node)
+            current.update(up)
+            created |= set(up)
 
         if self.verbose > 1:
             print(
@@ -9055,8 +9068,17 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_nodes.append(new_node)
             else:
                 new_nodes.append(node)
+
+            if set(node.output) & set_rep:
+                # This is shadowing. We can't continue with replacement.
+                set_rep -= set(node.output)
         if not do:
             return g
+        assert set(o.name for o in g.output) & set_rep, (
+            f"One output name is scheduled to be rename but an Identity "
+            f"node should have been inserted, set_rep={set_rep}, "
+            f"outputs={[o.name for o in g.output]}"
+        )
         g2 = oh.make_graph(
             new_nodes, g.name, g.input, g.output, g.initializer, g.sparse_initializer
         )
@@ -9424,3 +9446,46 @@ class GraphBuilder(_GraphBuilderRuntime):
                         to_rename -= {o}
 
         _rename_in_nodes(self.nodes, to_rename)
+
+    def shadowing_names(
+        self,
+        nodes: Optional[Sequence[NodeProto]] = None,
+        existing: Optional[Set[str]] = None,
+        shadow_context: Optional[Set[str]] = None,
+    ) -> Set[str]:
+        """Returns the names being shadowed in one subgraphs."""
+        if nodes is None:
+            assert (
+                existing is None and shadow_context is None
+            ), "existing must be None if nodes is None"
+            return self.shadowing_names(
+                self.nodes,
+                set(self.initializers_dict) | set(i.name for i in self.inputs) | self._context,
+                set(),
+            )
+
+        assert (
+            existing is not None and shadow_context is not None
+        ), "existing must not be None if nodes is not None"
+        shadow = set()
+        shadow_context = shadow_context.copy()
+        existing = existing.copy()
+        for node in nodes:
+            not_empty = set(n for n in node.input if n)
+            intersection = not_empty & existing
+            assert len(intersection) == len(not_empty), (
+                f"One input in {not_empty}, node={self.pretty_node(node)} "
+                f"was not found in {existing}\n--\n{self.get_debug_msg()}"
+            )
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    g = att.g
+                    shadow |= set(i.name for i in g.input) & shadow_context
+                    shadow |= set(i.name for i in g.initializer) & shadow_context
+                    shadow |= set(i.name for i in g.sparse_initializer) & shadow_context
+                    shadow |= self.shadowing_names(g.node, existing, existing)
+
+            not_empty = set(n for n in node.output if n)
+            shadow |= not_empty & shadow_context
+            existing |= not_empty
+        return shadow

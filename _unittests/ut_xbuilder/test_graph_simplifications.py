@@ -267,16 +267,35 @@ class TestGraphSimplification(ExtTestCase):
             "X": -np.array([1, 2, 3], dtype=np.float32),
             "one": np.array([1], dtype=np.float32),
         }
-        ref = ExtendedReferenceEvaluator(model, verbose=10)
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
         expected = ref.run(None, feeds)[0]
         expected2 = ref.run(None, feeds2)[0]
 
         gr = GraphBuilder(model, infer_shapes_options=True)
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        self.assertEqual({"three"}, gr.shadowing_names())
+        # gr.remove_shadowing()
+        # self.assertEqual({}, gr.shadowing_names())
+        # gr._check([], "before")
+        gr._check([], "identity", shadowing=False)
         gr.remove_identity_nodes()
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        self.assertEqual(set(), gr.shadowing_names())
+        gr._check([], "identity", shadowing=True)
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
         onx = gr.to_onnx()
         oc.check_model(onx)
 
-        ref2 = ExtendedReferenceEvaluator(onx, verbose=10)
+        ref2 = ExtendedReferenceEvaluator(onx)
         got = ref2.run(None, feeds)[0]
         self.assertEqualAny(expected, got)
         got2 = ref2.run(None, feeds2)[0]
@@ -284,7 +303,7 @@ class TestGraphSimplification(ExtTestCase):
 
         onx = self.call_optimizer(model)
         oc.check_model(onx)
-        ref2 = ExtendedReferenceEvaluator(onx, verbose=10)
+        ref2 = ExtendedReferenceEvaluator(onx)
         got = ref2.run(None, feeds)[0]
         self.assertEqualAny(expected, got)
         got2 = ref2.run(None, feeds2)[0]
