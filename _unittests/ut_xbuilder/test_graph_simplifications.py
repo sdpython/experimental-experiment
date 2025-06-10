@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import onnx
 import onnx.helper as oh
+import onnx.numpy_helper as onh
 import onnx.checker as oc
 from onnx import TensorProto
 from experimental_experiment.ext_test_case import ExtTestCase
@@ -202,6 +203,247 @@ class TestGraphSimplification(ExtTestCase):
         onx = self.call_optimizer(model)
         self.assertEqual(["Add", "Identity"], [n.op_type for n in onx.graph.node])
         oc.check_model(onx)
+
+    def test_remove_identity_shadowing(self):
+        def _mkv_(name):
+            value_info_proto = onnx.ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                    oh.make_node("Add", ["X", "two"], ["X0"]),
+                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                    oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                    oh.make_node("Identity", ["two"], ["three"]),
+                    oh.make_node(
+                        "If",
+                        ["cond"],
+                        ["Z_c"],
+                        then_branch=oh.make_graph(
+                            [
+                                # shadowing
+                                oh.make_node("Constant", [], ["three"], value_floats=[2.1]),
+                                oh.make_node("Add", ["X00", "three"], ["Y"]),
+                            ],
+                            "then",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                        else_branch=oh.make_graph(
+                            [
+                                # not shadowing
+                                oh.make_node("Sub", ["X0", "three"], ["Y"]),
+                            ],
+                            "else",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                    ),
+                    oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = {
+            "X": np.array([1, 2, 3], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+        }
+        feeds2 = {
+            "X": -np.array([1, 2, 3], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        expected = ref.run(None, feeds)[0]
+        expected2 = ref.run(None, feeds2)[0]
+
+        gr = GraphBuilder(model, infer_shapes_options=True)
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        self.assertEqual({"three"}, gr.shadowing_names())
+        # gr.remove_shadowing()
+        # self.assertEqual({}, gr.shadowing_names())
+        # gr._check([], "before")
+        gr._check([], "identity", shadowing=False)
+        gr.remove_identity_nodes()
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        self.assertEqual(set(), gr.shadowing_names())
+        gr._check([], "identity", shadowing=True)
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        onx = gr.to_onnx()
+        oc.check_model(onx)
+
+        ref2 = ExtendedReferenceEvaluator(onx)
+        got = ref2.run(None, feeds)[0]
+        self.assertEqualAny(expected, got)
+        got2 = ref2.run(None, feeds2)[0]
+        self.assertEqualAny(expected2, got2)
+
+        onx = self.call_optimizer(model)
+        oc.check_model(onx)
+        ref2 = ExtendedReferenceEvaluator(onx)
+        got = ref2.run(None, feeds)[0]
+        self.assertEqualAny(expected, got)
+        got2 = ref2.run(None, feeds2)[0]
+        self.assertEqualAny(expected2, got2)
+
+    def test_remove_post_shadowing(self):
+        def _mkv_(name):
+            value_info_proto = onnx.ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                    oh.make_node("Add", ["X", "two"], ["X0"]),
+                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                    oh.make_node("ReduceSum", ["X00"], ["Xred2"]),
+                    oh.make_node("Add", ["Xred", "Xred2"], ["Xred3"]),
+                    oh.make_node("Greater", ["Xred3", "one_c"], ["cond"]),
+                    oh.make_node("Identity", ["two"], ["three"]),
+                    oh.make_node(
+                        "If",
+                        ["cond"],
+                        ["Z_c"],
+                        then_branch=oh.make_graph(
+                            [
+                                # shadowing
+                                oh.make_node("Constant", [], ["five"], value_floats=[2.1]),
+                                oh.make_node("Add", ["X00", "five"], ["Y"]),
+                            ],
+                            "then",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                        else_branch=oh.make_graph(
+                            [
+                                # not shadowing
+                                oh.make_node("Identity", ["three"], ["four"]),
+                                oh.make_node("Sub", ["X0", "four"], ["Y"]),
+                            ],
+                            "else",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                    ),
+                    oh.make_node("CastLike", ["Z_c", "X"], ["Zc"]),
+                    oh.make_node("Neg", ["Zc"], ["five"]),
+                    oh.make_node("Abs", ["five"], ["four"]),
+                    oh.make_node(
+                        "If",
+                        ["cond"],
+                        ["D"],
+                        then_branch=oh.make_graph(
+                            [
+                                # shadowing
+                                oh.make_node("Add", ["X00", "five"], ["Y"]),
+                            ],
+                            "then",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                        else_branch=oh.make_graph(
+                            [
+                                # not shadowing
+                                oh.make_node("Sub", ["X0", "three"], ["t"]),
+                                oh.make_node("Mul", ["t", "four"], ["Y"]),
+                            ],
+                            "else",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                    ),
+                    oh.make_node("Add", ["five", "D"], ["Z"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = {
+            "X": np.array([1, 2, 3], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+        }
+        feeds2 = {
+            "X": -np.array([1, 2, 3], dtype=np.float32),
+            "one": np.array([1], dtype=np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        expected = ref.run(None, feeds)[0]
+        expected2 = ref.run(None, feeds2)[0]
+
+        gr = GraphBuilder(model, infer_shapes_options=True)
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        self.assertEqual(set(), gr.shadowing_names())
+        # gr.remove_shadowing()
+        # self.assertEqual({}, gr.shadowing_names())
+        # gr._check([], "before")
+        gr._check([], "identity", shadowing=False)
+        gr.remove_identity_nodes()
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        self.assertEqual(set(), gr.shadowing_names())
+        gr._check([], "identity", shadowing=True)
+        msg = gr.get_debug_msg()
+        self.assertIn("-- 2 INPUTS", msg)
+        self.assertIn("-- 2 INITIALIZERS", msg)
+        self.assertIn("-- 1 OUTPUTS", msg)
+        onx = gr.to_onnx()
+        oc.check_model(onx)
+        print(self.print_onnx(onx))
+
+        ref2 = ExtendedReferenceEvaluator(onx)
+        got = ref2.run(None, feeds)[0]
+        self.assertEqualAny(expected, got)
+        got2 = ref2.run(None, feeds2)[0]
+        self.assertEqualAny(expected2, got2)
+
+        onx = self.call_optimizer(model)
+        oc.check_model(onx)
+        ref2 = ExtendedReferenceEvaluator(onx)
+        got = ref2.run(None, feeds)[0]
+        self.assertEqualAny(expected, got)
+        got2 = ref2.run(None, feeds2)[0]
+        self.assertEqualAny(expected2, got2)
 
 
 if __name__ == "__main__":

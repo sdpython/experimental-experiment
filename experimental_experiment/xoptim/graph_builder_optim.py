@@ -323,11 +323,13 @@ class GraphBuilderPatternOptimization:
                         return tuple(att.t.dims)
                     if att.name in {"value_float", "value_int"}:
                         return tuple()
-                raise AssertionError(
-                    f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
-                    f"node.op_type={proto.op_type!r}, "
-                    f"attributes={[att.name for att in proto.attribute]}."
-                )
+                if exc:
+                    raise AssertionError(
+                        f"Unable to retrieve shape for name={name!r} (type is NodeProto), "
+                        f"node.op_type={proto.op_type!r}, "
+                        f"attributes={[att.name for att in proto.attribute]}."
+                    )
+                return None
             if self.is_constant(name):
                 cst = self.get_computed_constant(name)
                 return None if cst is None else cst.shape
@@ -961,6 +963,10 @@ class GraphBuilderPatternOptimization:
             )
 
     def _check_graph_verifies_whole(self, data_prop: bool = True):
+        """
+        Converts into ONNX and check the graphs.
+        This should not be called as it is very slow.
+        """
         onx = self.builder.to_onnx(optimize=False)
         new_shapes = infer_shapes(onx, data_prop=data_prop)
         for val in new_shapes.graph.value_info:
@@ -990,22 +996,17 @@ class GraphBuilderPatternOptimization:
         #     providers=["CPUExecutionProvider"],
         # )
 
-    def _check_graph(
+    def _check_graph_nodes(
         self,
-        statistics: List[Dict[str, Any]],
+        nodes: List[NodeProto],
         step: str,
         iteration: int,
         code: str,
+        known: Set[str],
         verifies: bool,
+        root: bool = False,
     ):
-        begin = time.perf_counter()
-        assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
-        known = (
-            set(n.name for n in self.builder.inputs)
-            | set(self.builder.initializers_dict)
-            | self.builder._context
-        )
-        for p, node in enumerate(self.builder.nodes):
+        for p, node in enumerate(nodes):
             assert (
                 node.domain in self.opsets
             ), f"domain {node.domain!r} is not registered in {self.opsets}"
@@ -1033,16 +1034,68 @@ class GraphBuilderPatternOptimization:
                         f"{assert_text}\n------\n"
                         f"{self.builder.pretty_text()}"
                     )
+            if node.op_type in {"If", "Loop", "Scan", "SequenceMap"}:
+                for att in node.attribute:
+                    if att.type == AttributeProto.GRAPH:
+                        g = att.g
+                        k2 = known.copy()
+                        k2 |= (
+                            set(i.name for i in g.input)
+                            | set(i.name for i in g.initializer)
+                            | set(i.name for i in g.sparse_initializer)
+                        )
+                        self._check_graph_nodes(
+                            g.node,
+                            known=k2,
+                            step=f"{step}-{node.op_type}-{att.name}-{node.name}",
+                            code=code,
+                            iteration=iteration,
+                            verifies=False,
+                        )
+                        for o in g.output:
+                            assert o.name in k2, (
+                                f"Unknown output {o.name!r}, step {step!r}, "
+                                f"op_type={node.op_type!r}, att.name={att.name!r}, "
+                                f"node.name={node.name}"
+                            )
             known |= set(node.output)
 
             if verifies:
                 self._check_graph_verifies(node)
 
+    def _check_graph(
+        self,
+        statistics: List[Dict[str, Any]],
+        step: str,
+        iteration: int,
+        code: str,
+        verifies: bool,
+    ):
+        """
+        Verifies the graph.
+        """
+        begin = time.perf_counter()
+        assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
+        known = (
+            set(n.name for n in self.builder.inputs)
+            | set(self.builder.initializers_dict)
+            | self.builder._context
+        )
+        self._check_graph_nodes(
+            self.builder.nodes,
+            step=step,
+            iteration=iteration,
+            code=code,
+            known=known,
+            verifies=verifies,
+            root=True,
+        )
+
         for o in self.builder.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
 
         if verifies:
-            self._chech_graph_verifies_whole()
+            self._check_graph_verifies_whole()
 
         statistics.append(
             dict(
