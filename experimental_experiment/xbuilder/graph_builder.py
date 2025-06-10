@@ -5947,9 +5947,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 context |= set(node.output)
             if self.verbose > 0:
                 print(f"[GraphBuilder-{self._hash()}.optimize] done with subgraphs")
-            self._check(statistics, "A-sub")
+            self._check(statistics, "A-opt-sub")
         else:
-            self._check(statistics, "A")
+            self._check(statistics, "A-opt")
 
         if self.optimization_options.remove_identity:
             begin = time.perf_counter()
@@ -5962,7 +5962,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            self._check(statistics, "B")
+            self._check(statistics, "B-remove-identity")
         if self.optimization_options.remove_unused:
             begin = time.perf_counter()
             n = self.remove_unused()
@@ -5973,7 +5973,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            self._check(statistics, "C")
+            self._check(statistics, "C-remove-unused")
 
         if self.optimization_options.constant_folding:
             # First constant removal
@@ -5997,7 +5997,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         iteration=0,
                     )
                 )
-            self._check(statistics, "Da")
+            self._check(statistics, "Da-constant-folding")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
                 n = self.remove_unused()
@@ -6008,7 +6008,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                self._check(statistics, "Ea")
+                self._check(statistics, "Ea-remove-unused")
 
         if self.optimization_options.patterns:
             assert (
@@ -6025,7 +6025,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            self._check(statistics, "F")
+            self._check(statistics, "F-patterns")
             begin = time.perf_counter()
             n = self.remove_unused()
             statistics.append(
@@ -6035,7 +6035,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     time_in=time.perf_counter() - begin,
                 )
             )
-            self._check(statistics, "G")
+            self._check(statistics, "G-remove-unused")
 
         if self.optimization_options.constant_folding:
             # Second constant removal
@@ -6059,7 +6059,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         iteration=1,
                     )
                 )
-            self._check(statistics, "Db")
+            self._check(statistics, "Db-constant-folding")
             if self.optimization_options.remove_unused:
                 begin = time.perf_counter()
                 n = self.remove_unused()
@@ -6070,7 +6070,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                self._check(statistics, "Eb")
+                self._check(statistics, "Eb-remove-unused")
 
         if self.optimization_options.order:
             res = self.optimize_order()
@@ -6880,6 +6880,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             kept or inserted in that case. In that particular case, a node can be
             marked so that it does not get deleted: its name must start with
             ``'_DONOTREMOVE_'``.
+
+        The default behavior is to keep the name coming from the node producing the result
+        unless this name is an output.
+        Shadowing is not an issue but there is also post-shadowing, a result is creating
+        after a subgraph has created the same name.
         """
         self._clean_values_cache()
         # make_initializer
@@ -7029,18 +7034,28 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"node {node.op_type}-{node.name}:"
                         f"{node.input}->{new_inputs}:{node.output}->{new_outputs}"
                     )
-                new_node = oh.make_node(
-                    node.op_type,
-                    new_inputs,
-                    new_outputs,
-                    domain=node.domain,
-                    name=node.name,
-                )
+                new_node = node
+                del node.input[:]
+                node.input.extend(new_inputs)
+                del node.output[:]
+                node.output.extend(new_outputs)
+
+                # oh.make_node(
+                #    node.op_type,
+                #    new_inputs,
+                #    new_outputs,
+                #    domain=node.domain,
+                #    name=node.name,
+                # )
+
                 added += 1
                 removed += 1
 
                 if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
                     # Hidden inputs must be taken care of.
+                    short_replacements = {
+                        k: replacements[k] for k in repi if k in replacements
+                    }
                     node_attributes = []
                     for att in node.attribute:
                         node_attributes.append(
@@ -7048,12 +7063,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                             if att.type != AttributeProto.GRAPH
                             else oh.make_attribute(
                                 att.name,
-                                self._rename_inputs_in_subgraph(att.g, replacements),
+                                self._rename_inputs_in_subgraph(att.g, short_replacements),
                             )
                         )
-                else:
-                    node_attributes = node.attribute
-                new_node.attribute.extend(node_attributes)
+                    del new_node.attribute[:]
+                    new_node.attribute.extend(node_attributes)
+
                 self.nodes.append(new_node)
                 if all(self.is_constant(i) for i in new_node.input):
                     for o in new_node.output:
