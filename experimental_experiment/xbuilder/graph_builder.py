@@ -5757,9 +5757,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if i == "":
                     continue
                 assert not root or self.has_name(i), (
-                    f"Name {i!r} not registered, node type is "
-                    f"{node.op_type!r}, node name is {node.name!r}, "
-                    f"input are {node.input}{self.get_debug_msg()}"
+                    f"Name {i!r} not registered, step {step!r}, node type is "
+                    f"{node.op_type!r}, root={root!r}, node name is {node.name!r}, "
+                    f"input are {node.input}, i in known={i in known}"
+                    f"{self.get_debug_msg()}"
                 )
                 assert i in known, (
                     f"Unknown input {i!r}, step {step!r} in node type "

@@ -115,45 +115,61 @@ class TestGraphPatternDynamic(ExtTestCase):
         exceptions: List[str],
         name: Optional[str] = None,
     ):
+        model1s = model1.SerializeToString()
+        model2s = model2.SerializeToString()
         self.assertNotEqual(len(model1.graph.node), len(model2.graph.node))
         for i in range(len(patterns)):
-            opts = OptimizationOptions(
-                patterns=patterns[: i + 1] if cumulative else patterns[i : i + 1],
-                verbose=0,
-            )
-            gr1 = GraphBuilder(model1, infer_shapes_options=True, optimization_options=opts)
-            stat1 = gr1.optimize()
-            gr2 = GraphBuilder(model2, infer_shapes_options=True, optimization_options=opts)
-            stat2 = gr2.optimize()
-            pat = patterns[i]
-            prefix = f"apply_{pat.__class__.__name__}"
-            app1 = [
-                s
-                for s in stat1
-                if s["pattern"].startswith(prefix) and s["pattern"] != "apply_ReshapePattern"
-            ]
-            app2 = [
-                s
-                for s in stat2
-                if s["pattern"].startswith(prefix) and s["pattern"] != "apply_ReshapePattern"
-            ]
-            if pat.__class__.__name__ in exceptions:
-                assert len(app1) > 0, f"Issue with pattern {patterns[i]} and app1={app1}"
-                continue
-            if len(app1) > len(app2):
-                if name:
-                    save_onnx(
-                        gr2.to_onnx(optimize=False), f"{name}_{pat.__class__.__name__}.onnx"
-                    )
-                raise AssertionError(
-                    f"Discrepancies static/dynamic: i={i}, "
-                    f"len(app1)={len(app1)}, len(app2)={len(app2)}, "
-                    f"pattern={patterns[i]}\n-----\n"
-                    f"#applied static={len(app1)}, #applied dynamic={len(app2)}"
-                    f"\n---------\n{pprint.pformat(app1)}"
-                    f"\n--------\n{pprint.pformat(app2)}"
-                    f"\n------------\n{gr2.get_debug_msg()}"
+            model1 = ModelProto()
+            model1.ParseFromString(model1s)
+            model2 = ModelProto()
+            model2.ParseFromString(model2s)
+            with self.subTest(i=i, cumulative=cumulative, pattern=patterns[i]):
+                opts = OptimizationOptions(
+                    patterns=patterns[: i + 1] if cumulative else patterns[i : i + 1],
+                    verbose=0,
                 )
+                gr1 = GraphBuilder(
+                    model1, infer_shapes_options=True, optimization_options=opts
+                )
+                gr1._check([], step="T1")
+                stat1 = gr1.optimize()
+                gr2 = GraphBuilder(
+                    model2, infer_shapes_options=True, optimization_options=opts
+                )
+                gr2._check([], step="T2")
+                stat2 = gr2.optimize()
+                pat = patterns[i]
+                prefix = f"apply_{pat.__class__.__name__}"
+                app1 = [
+                    s
+                    for s in stat1
+                    if s["pattern"].startswith(prefix)
+                    and s["pattern"] != "apply_ReshapePattern"
+                ]
+                app2 = [
+                    s
+                    for s in stat2
+                    if s["pattern"].startswith(prefix)
+                    and s["pattern"] != "apply_ReshapePattern"
+                ]
+                if pat.__class__.__name__ in exceptions:
+                    assert len(app1) > 0, f"Issue with pattern {patterns[i]} and app1={app1}"
+                    continue
+                if len(app1) > len(app2):
+                    if name:
+                        save_onnx(
+                            gr2.to_onnx(optimize=False),
+                            f"{name}_{pat.__class__.__name__}.onnx",
+                        )
+                    raise AssertionError(
+                        f"Discrepancies static/dynamic: i={i}, "
+                        f"len(app1)={len(app1)}, len(app2)={len(app2)}, "
+                        f"pattern={patterns[i]}\n-----\n"
+                        f"#applied static={len(app1)}, #applied dynamic={len(app2)}"
+                        f"\n---------\n{pprint.pformat(app1)}"
+                        f"\n--------\n{pprint.pformat(app2)}"
+                        f"\n------------\n{gr2.get_debug_msg()}"
+                    )
 
 
 if __name__ == "__main__":
