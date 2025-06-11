@@ -534,6 +534,38 @@ class TestGraphPatternCombination(ExtTestCase):
             if check_ort and has_onnxruntime_training():
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
+    def test_insert_position(self):
+        model = "this_fail.onnx"
+        enabled = {
+            "AddMulSharedInputBroadcastPattern",
+        }
+        disabled = {}
+        options = OptimizationOptions(
+            patterns="default+onnxruntime+experimental",
+            verbose=0,
+            verifies=False,
+            dump_applied_patterns="dump_applied_pattern",
+            max_iter=len(enabled) + 1 if enabled else -1,
+            processor="CPU,CUDA",
+        )
+        options.patterns = [
+            p
+            for p in options.patterns
+            if (not enabled or p.__class__.__name__ in enabled)
+            and p.__class__.__name__ not in disabled
+        ]
+        assert options.patterns, "Pattern is empty."
+        onx = self._get_model(model, skip=True)
+        self._fix_shape(onx)
+
+        gr = GraphBuilder(
+            onx,
+            optimization_options=options,
+            infer_shapes=False,
+            verbose=2 if __name__ == "__main__" else 0,
+        )
+        gr.to_onnx(optimize=True)
+
     @skipif_ci_windows("crash")
     def test_study(self):
         """
