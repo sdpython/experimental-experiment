@@ -23,7 +23,7 @@ experimental-experiment: fuzzy work
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
     :target: https://github.com/psf/black
 
-.. image:: https://codecov.io/gh/sdpython/experimental-experiment/branch/main/graph/badge.svg?token=Wb9ZGDta8J 
+.. image:: https://codecov.io/gh/sdpython/experimental-experiment/graph/badge.svg?token=AR8TUA3Y3F 
     :target: https://codecov.io/gh/sdpython/experimental-experiment
 
 **experimental-experiment** is mostly to experiment ideas.
