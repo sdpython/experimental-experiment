@@ -7755,6 +7755,9 @@ def aten_pow_Tensor_Scalar(
     name: str = "pow_Tensor_Scalar",
 ) -> T:
     "pow"
+    if isinstance(exponent, (int, float)):
+        assert g.has_type(x), f"Not implemented if type({x!r}) is missing"
+        exponent = np.array(exponent, dtype=tensor_dtype_to_np_dtype(g.get_type(x)))
     return aten_pow_Tensor_Tensor(g, sts, outputs, x, exponent, name=name)
 
 
@@ -7767,6 +7770,7 @@ def aten_pow_Tensor_Tensor(
     name: str = "pow_Tensor_Tensor",
 ) -> T:
     "pow"
+    print("++++", name, [x], type(exponent))
     if isinstance(exponent, (int, float)):
         if exponent == 1:
             # The node is removed.
@@ -7814,10 +7818,11 @@ def aten_pow_Tensor_Tensor(
         return res
 
     if isinstance(exponent, np.ndarray):
-        if g.has_type(x):
-            exponent = exponent.astype(tensor_dtype_to_np_dtype(g.get_type(x)))
-        else:
-            exponent = g.op.CastLike(exponent, x, name=name)
+        exponent = (
+            exponent.astype(tensor_dtype_to_np_dtype(g.get_type(x)))
+            if g.has_type(x)
+            else g.op.CastLike(exponent, x, name=name)
+        )
     else:
         assert isinstance(
             exponent, str

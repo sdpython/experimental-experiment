@@ -56,16 +56,19 @@ class UntrainedRunner(BenchmarkRunner):
         "Intel/bert-base-uncased-mrpc",
         #
         "microsoft/phi-2",
+        "microsoft/Phi-3-mini-4k-instruct",
         "microsoft/Phi-3.5-mini-instruct",
+        "microsoft/Phi-3.5-MoE-instruct",
+        "microsoft/Phi-4-mini-reasoning",
+        "microsoft/Phi-4-reasoning",
+        "microsoft/beit-base-patch16-224-pt22k-ft22k",
+        #
         "meta-llama/Llama-3.2-1B-Instruct",
         "codellama/CodeLlama-7b-hf",
-        #
         "hf-tiny-model-private/tiny-random-PLBartForConditionalGeneration",
         "sshleifer/tiny-marian-en-de",
         "HuggingFaceM4/tiny-random-idefics",
-        "microsoft/beit-base-patch16-224-pt22k-ft22k",
         "facebook/bart-base",
-        "microsoft/Phi-4-mini-reasoning",
     ]
 
     def initialize(self):
