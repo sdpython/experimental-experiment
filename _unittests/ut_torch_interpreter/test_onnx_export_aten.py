@@ -1596,6 +1596,33 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)
         self.assertEqualAny(expected, tuple(got), atol=1e-5)
 
+    @ignore_warnings(UserWarning)
+    def test_aten_pow_tensor_scalar(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.pow(x, 0.466)
+
+        x = torch.tensor(4.5, dtype=torch.float32)
+        model = Model()
+        xs = (x,)
+        expected = model(*xs).numpy()
+        model_path = self._call_exporter("test_aten_pow_tensor_scalar", "custom", model, xs)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [to_numpy(x) for x in xs]))
+        got = sess.run(None, feeds)
+        self.assertEqualAny(expected, got[0], atol=1e-6)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)
+        self.assertEqualAny(expected, got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
