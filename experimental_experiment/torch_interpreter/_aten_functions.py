@@ -7770,7 +7770,6 @@ def aten_pow_Tensor_Tensor(
     name: str = "pow_Tensor_Tensor",
 ) -> T:
     "pow"
-    print("++++", name, [x], type(exponent))
     if isinstance(exponent, (int, float)):
         if exponent == 1:
             # The node is removed.
