@@ -4087,6 +4087,24 @@ def aten_im2col(
     raise AssertionError(f"Not implemented with dynamic shape for {x!r}{g.get_debug_msg()}")
 
 
+def aten_index_copy(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    axis: int,
+    indices: T,
+    values: T,
+    name: str = "index_copy",
+):
+    "index_copy"
+    assert g.has_rank(x), f"Rank missing for {x!r} in index_copy{g.get_debug_msg()}"
+    assert isinstance(indices, T), f"indices must be a Tensor{g.get_debug_msg()}"
+    new_indices = [None for _i in range(g.get_rank(x))]
+    new_indices[axis] = indices
+    return aten_index_put(g, sts, outputs, x, new_indices, values, name=name)
+
+
 def aten_index_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4616,10 +4634,10 @@ def aten_index_put(
                 shape_x = g.op.Shape(x, name=name)
                 stride_1 = g.op.ReduceProd(
                     g.op.GatherElements(
-                        shape_x, np.array([1, 2], dtype=np.int64), name=name, keepdim=1
+                        shape_x, np.array([1, 2], dtype=np.int64), name=name, keepdims=1
                     ),
                     name=name,
-                    keepdim=1,
+                    keepdims=1,
                 )
                 stride_2 = g.op.GatherElements(
                     shape_x, np.array([2], dtype=np.int64), name=name
@@ -4799,13 +4817,13 @@ def aten_index_put(
                 static_shape = False
                 shape_x = g.op.Shape(x, name=name)
                 stride_1 = g.op.ReduceProd(
-                    g.op.Shape(x, start=1, name=name), name=name, keepdim=1
+                    g.op.Shape(x, start=1, name=name), name=name, keepdims=1
                 )
                 stride_2 = g.op.ReduceProd(
-                    g.op.Shape(x, start=2, name=name), name=name, keepdim=1
+                    g.op.Shape(x, start=2, name=name), name=name, keepdims=1
                 )
                 stride_3 = g.op.ReduceProd(
-                    g.op.Shape(x, start=3, name=name), name=name, keepdim=1
+                    g.op.Shape(x, start=3, name=name), name=name, keepdims=1
                 )
                 size = g.op.Size(x, name=name)
                 arange_1d = g.op.Range(
