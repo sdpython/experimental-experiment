@@ -9295,6 +9295,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             ret_shape = list(example_shape)
             if isinstance(info, dict):
                 for k, v in info.items():
+                    assert k < len(ret_shape), (
+                        f"name={name!r}, input_index={input_index}, "
+                        f"dimension {k} does not extist in shape {ret_shape!r}"
+                        f"{self.get_debug_msg()}"
+                    )
 
                     if isinstance(ret_shape[k], self.torch.SymInt):
                         # We let it, set_shape will replace it
