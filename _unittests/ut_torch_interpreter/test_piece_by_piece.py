@@ -559,7 +559,11 @@ class TestPieceByPiece(ExtTestCase):
         model.sub.forward = _forward
         self.assertIn("torch.ops.test_diag_lib.SubModelKAW_forward", str(ep))
         self.assertInOr(
-            ('sub_model_kaw_forward: "f32[s0, 6]"', 'sub_model_kaw_forward: "f32[s35, 6]"'),
+            (
+                'sub_model_kaw_forward: "f32[s0, 6]"',
+                'sub_model_kaw_forward: "f32[s35, 6]"',
+                'sub_model_kaw_forward: "f32[s77, 6]"',
+            ),
             str(ep),
         )
 
@@ -1114,6 +1118,7 @@ class TestPieceByPiece(ExtTestCase):
             (
                 'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):',
                 'ep:         def forward(self, x: "f32[s35, 6]", y: "f32[s35, 6]"):',
+                'ep:         def forward(self, x: "f32[s17, 6]", y: "f32[s17, 6]"):',
             ),
             report,
         )
@@ -1235,6 +1240,7 @@ class TestPieceByPiece(ExtTestCase):
             (
                 'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s1, 6]"):',
                 'ep:         def forward(self, x: "f32[s35, 6]", y: "f32[s14, 6]"):',
+                'ep:         def forward(self, x: "f32[s77, 6]", y: "f32[s17, 6]"):',
             ),
             report,
         )
@@ -1285,6 +1291,7 @@ class TestPieceByPiece(ExtTestCase):
             (
                 'ep:         def forward(self, x: "f32[s0, 6]", y: "f32[s0, 6]"):',
                 'ep:         def forward(self, x: "f32[s14, 6]", y: "f32[s14, 6]"):',
+                'ep:         def forward(self, x: "f32[s17, 6]", y: "f32[s17, 6]"):',
             ),
             report,
         )
@@ -1557,13 +1564,16 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertInOr(('add: "f32[s0, 6, 16]"', 'add: "f32[s35, 6, 16]"'), report)
+        self.assertInOr(
+            ('add: "f32[s0, 6, 16]"', 'add: "f32[s35, 6, 16]"', 'add: "f32[s77, 6, 16]"'),
+            report,
+        )
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqualOr(str(shape), ("(s0, 6, 16)", "(s35, 6, 16)"))
+        self.assertEqualOr(str(shape), ("(s0, 6, 16)", "(s35, 6, 16)", "(s77, 6, 16)"))
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -1605,13 +1615,16 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertInOr(('add: "f32[s0, 6, 16]"', 'add: "f32[s35, 6, 16]"'), report)
+        self.assertInOr(
+            ('add: "f32[s0, 6, 16]"', 'add: "f32[s35, 6, 16]"', 'add: "f32[s77, 6, 16]"'),
+            report,
+        )
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqualOr(str(shape), ("(s0, 6, 16)", "(s35, 6, 16)"))
+        self.assertEqualOr(str(shape), ("(s0, 6, 16)", "(s35, 6, 16)", "(s77, 6, 16)"))
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -1660,7 +1673,14 @@ class TestPieceByPiece(ExtTestCase):
         )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertInOr(('c_model_sub: "f32[s1, s0]"', 'c_model_sub: "f32[s58, s16]"'), report)
+        self.assertInOr(
+            (
+                'c_model_sub: "f32[s1, s0]"',
+                'c_model_sub: "f32[s58, s16]"',
+                'c_model_sub: "f32[s17, s27]"',
+            ),
+            report,
+        )
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
@@ -1738,13 +1758,20 @@ class TestPieceByPiece(ExtTestCase):
             )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertInOr(('ones_like: "f32[s0, 6]"', 'ones_like: "f32[s35, 6]"'), report)
+        self.assertInOr(
+            (
+                'ones_like: "f32[s0, 6]"',
+                'ones_like: "f32[s35, 6]"',
+                'ones_like: "f32[s13, 6]"',
+            ),
+            report,
+        )
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqualOr(str(shape), ("(s0, 6)", "(s32, 6)"))
+        self.assertEqualOr(str(shape), ("(s0, 6)", "(s32, 6)", "(s77, 6)"))
 
     @requires_torch("2.7")
     @hide_stdout()
@@ -1786,13 +1813,20 @@ class TestPieceByPiece(ExtTestCase):
             )
         self.assertNotEmpty(ep)
         report = diag.get_export_report(exported_program=True)
-        self.assertInOr(('c_model_sub: "f32[s0, 6]"', 'c_model_sub: "f32[s32, 6]"'), report)
+        self.assertInOr(
+            (
+                'c_model_sub: "f32[s0, 6]"',
+                'c_model_sub: "f32[s32, 6]"',
+                'c_model_sub: "f32[s77, 6]"',
+            ),
+            report,
+        )
         for node in ep.exported.graph.nodes:
             if "val" in node.meta:
                 last_node = node
         shape = tuple(last_node.meta["val"].shape)
         self.assertNotEqual(shape, (6, 16))
-        self.assertEqualOr(str(shape), ("(s0, 6)", "(s32, 6)"))
+        self.assertEqualOr(str(shape), ("(s0, 6)", "(s32, 6)", "(s77, 6)"))
 
     @requires_torch("2.6")
     @hide_stdout()
