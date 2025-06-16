@@ -9296,7 +9296,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(info, dict):
                 for k, v in info.items():
                     assert k < len(ret_shape), (
-                        f"name={name!r}, input_index={input_index}, "
+                        f"name={name!r}, input_index={input_index}, info={info}, "
                         f"dimension {k} does not extist in shape {ret_shape!r}"
                         f"{self.get_debug_msg()}"
                     )
