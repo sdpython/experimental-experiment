@@ -566,6 +566,23 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param domain: domain name for the function
         :return: shortened builder
         """
+        # new dynamic_shapes
+        print("***", self.dynamic_shapes)
+        ds2 = []
+        for n in input_names:
+            assert not self.is_sequence(n), (
+                f"Input {n!r} is sequence but that's not yet implemented"
+                f"{self.get_debug_msg()}"
+            )
+            if not self.has_shape(n):
+                ds2 = (None,)
+                break
+            shape = self.get_shape(n)
+            ds = {i: s for i, s in enumerate(shape) if isinstance(s, str)}
+            ds2.append(ds)
+        if ds2:
+            ds2 = tuple(ds2)
+
         new_builder = GraphBuilder(
             target_opset_or_existing_proto=self.opsets,
             input_names=input_names,
@@ -576,21 +593,22 @@ class GraphBuilder(_GraphBuilderRuntime):
             infer_shapes_options=False,
             raise_list=self.raise_list,
             local_domain=self.local_domain,
-            dynamic_shapes=self.dynamic_shapes,
+            dynamic_shapes=ds2,
             _parent=self,
         )
         new_builder.dynamic_objects = self.dynamic_objects.copy()
 
         for n in input_names:
-            assert not self.is_sequence(
-                n
-            ), f"Input {n!r} is sequence but that's not yet supported{self.get_debug_msg()}"
+            assert not self.is_sequence(n), (
+                f"Input {n!r} is sequence but that's not yet implemented"
+                f"{self.get_debug_msg()}"
+            )
             new_builder.make_tensor_input(
                 n,
                 self.get_type(n),
                 self.get_shape(n) if self.has_shape(n) else None,
                 is_dimension=self.get_is_dimension(n),
-                marker="make_subset_builder",
+                marker=f"make_subset_builder-{name}",
             )
         for k, v in self.functions.items():
             if v.domain != domain:
@@ -5026,7 +5044,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
 
         if self._parent:
-            rows.extend(["######"] * 5)
+            rows.extend(["############"] * 3)
+            rows.append("### PARENT ###")
+            rows.extend(["############"] * 3)
             rows.append(self._parent.get_debug_msg())
         return "\n".join(rows)
 

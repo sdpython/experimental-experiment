@@ -4,6 +4,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_cuda,
     requires_onnxruntime,
+    hide_stdout,
 )
 
 
@@ -11,6 +12,7 @@ class TestIssuesOnnxruntime2024(ExtTestCase):
 
     @requires_cuda()
     @requires_onnxruntime("1.21")
+    @hide_stdout()
     def test_ort_optimization(self):
         # issue https://github.com/microsoft/onnxruntime/issues/23143
 

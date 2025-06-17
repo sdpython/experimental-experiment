@@ -12,6 +12,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     has_cuda,
     requires_onnxruntime_training,
+    hide_stdout,
 )
 
 
@@ -245,6 +246,7 @@ class TestBackend(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
 
     @skipif_ci_windows("no torch dynamo")
+    @hide_stdout()
     def test_backend_dynger_verbose(self):
         from experimental_experiment.torch_dynamo import dynger_backend
 

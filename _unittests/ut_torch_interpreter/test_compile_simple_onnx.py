@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnxruntime_training,
     requires_torch,
     skipif_ci_windows,
+    hide_stdout,
 )
 from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.helpers import pretty_onnx
@@ -103,6 +104,7 @@ class TestDynamoCompileOnnx(ExtTestCase):
 
     @skipif_ci_windows("not supported yet on Windows")
     @requires_torch("2.2", "export fails")
+    @hide_stdout()
     def test_simple_dort_2_onnx(self):
         import torch
 
