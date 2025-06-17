@@ -504,6 +504,10 @@ class CustomTracer(torch.fx.Tracer):
         )
 
     @classmethod
+    def _is_trully_inplace(cls, node: torch.fx.Node) -> bool:
+        return True
+
+    @classmethod
     def _inplace_nodes(cls, graph: torch.fx.Graph) -> List[Tuple[int, torch.fx.Node]]:
         """
         Returns the position and the node involved in inplace modifications.
@@ -530,6 +534,7 @@ class CustomTracer(torch.fx.Tracer):
                 "aten__exit_autocast",
                 "aten__set_grad_enabled",
             }
+            and cls._is_trully_inplace(node)
         ]
 
     @classmethod
@@ -716,7 +721,7 @@ class CustomTracer(torch.fx.Tracer):
         cls,
         graph: torch.fx.Graph,
         node: torch.fx.Node,
-        existing_nodes: List[torch.fx.Node],
+        existing_nodes: List[Tuple[int, torch.fx.Node]],
         pos: int,
         exported_program: torch.export.ExportedProgram,
         err_graph: str,
@@ -999,11 +1004,12 @@ class CustomTracer(torch.fx.Tracer):
                     # python -m experimental_experiment.torch_bench.bash_bench_huggingface
                     # --model MBartForConditionalGeneration --device cuda --dtype float16
                     # --export custom --opt_patterns default --verbose 1 --quiet 0
-                    raise NotImplementedError(
-                        f"Unable to handle target {aten_name!r} (could probably be ignored) "
-                        f"with args={n.args} in\n{''.join(map(_str, pos_users))}\n----\n"
-                        f"{err_graph}"
-                    )
+                    # assert False, (
+                    #    f"Unable to handle target {aten_name!r} (could probably be ignored) "
+                    #    f"with args={n.args} in\n{''.join(map(_str, pos_users))}\n----\n"
+                    #    f"{err_graph}"
+                    # )
+                    return -1
                 else:
                     raise NotImplementedError(
                         f"Unable to handle target {aten_name!r} with args={n.args} "

@@ -8696,10 +8696,11 @@ def aten_select_scatter(
     assert isinstance(
         index, int
     ), f"select_scatter not implemented for index={index!r}{g.get_debug_msg()}"
-
-    # Change src rank to self rank according to dim
-    # e.g. if self is [2,3,4], src is [2,4], dim=1, then update is [2,1,4]
-    update = g.op.Unsqueeze(src, axes=dim, name=name)
+    assert isinstance(
+        dim, int
+    ), f"Unexpected value for dim={dim!r} type is {type(dim)}{g.get_debug_msg()}"
+    dima = np.array([dim], dtype=np.int64)
+    update = g.op.Unsqueeze(src, axes=dima, name=name)
     # Change index rank to the same as 'update' [2,1,4]
     indices = g.op.Expand(
         np.array([index], dtype=np.int64), g.op.Shape(update, name=name), name=name

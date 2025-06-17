@@ -5964,7 +5964,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"[GraphBuilder-{self._hash()}.optimize] "
                             f"done {self.pretty_node(node)}"
                         )
-                context |= set(node.output)
+                context |= set(o for o in node.output if o)
             if self.verbose > 0:
                 print(f"[GraphBuilder-{self._hash()}.optimize] done with subgraphs")
             self._check(statistics, "A-opt-sub")
