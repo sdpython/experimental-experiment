@@ -1679,10 +1679,16 @@ class DynamoInterpreter:
         )
         new_inits = []
         for init in inits:
-            new_init = self.builder.make_initializer(
-                init.name, init, source="add_aten_as_function"
-            )
-            new_inits.append(new_init)
+            if isinstance(init, str):
+                assert (
+                    init in self.builder.initializers_dict
+                ), f"Missing initializer {init!r}{self.builder.get_debug_msg()}."
+                new_inits.append(init)
+            else:
+                new_init = self.builder.make_initializer(
+                    init.name, init, source="add_aten_as_function"
+                )
+                new_inits.append(new_init)
         self.builder.make_node(
             fname,
             [*input_names, *new_inits],

@@ -1233,7 +1233,7 @@ class TestOnnxExportAten(ExtTestCase):
             dynamic_shapes=ds,
             decomposition=True,
         )
-        sess = ExtendedReferenceEvaluator(model_path, verbose=10)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
@@ -1282,7 +1282,7 @@ class TestOnnxExportAten(ExtTestCase):
             dynamic_shapes=ds,
             decomposition=True,
         )
-        sess = ExtendedReferenceEvaluator(model_path, verbose=10)
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)

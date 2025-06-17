@@ -232,7 +232,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         expected = model(
             torch.Tensor(input_n["update"]), torch.Tensor(input_n["kv_index"]).to(int)
         )
-        # _ = ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_n)
+        # _ = ExtendedReferenceEvaluator(model_path, verbose=0).run(None, input_n)
         # self.assertEqualArray(expected, _[0])
         e1 = session.run(None, input_n)[0]
         self.assertEqualArray(expected, e1)
@@ -242,7 +242,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             torch.Tensor(input_2["update"]), torch.Tensor(input_2["kv_index"]).to(int)
         )
         if dynamic:
-            # ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_2)
+            # ExtendedReferenceEvaluator(model_path, verbose=0).run(None, input_2)
             e2 = session.run(None, input_2)[0]
             self.assertEqualArray(expected, e2)
 
@@ -380,7 +380,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         feeds = dict(
             zip(inputs_names, (query_states.numpy(), key_states.numpy(), value_states.numpy()))
         )
-        # got = ExtendedReferenceEvaluator(onnx_file_path, verbose=10).run(None, feeds)
+        # got = ExtendedReferenceEvaluator(onnx_file_path, verbose=0).run(None, feeds)
         # self.assertEqualArray(expected_output, got[0], atol=1e-5)
         output = session.run(None, feeds)
         self.assertEqualArray(expected_output, output[0], atol=1e-5)
@@ -899,7 +899,7 @@ class TestIssuesPytorch2024(ExtTestCase):
             )
         )
         expected = model(update, index1, index2)
-        # _ = ExtendedReferenceEvaluator(model_path, verbose=10).run(None, input_n)
+        # _ = ExtendedReferenceEvaluator(model_path, verbose=0).run(None, input_n)
         # self.assertEqualArray(expected, _[0])
         e1 = session.run(None, input_n)[0]
         self.assertEqualArray(expected, e1)

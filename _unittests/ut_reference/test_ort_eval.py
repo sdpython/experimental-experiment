@@ -11,6 +11,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_onnxruntime_training,
+    hide_stdout,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator, OrtEval
 
@@ -58,6 +59,7 @@ class TestOrtEval(ExtTestCase):
         return model
 
     @ignore_warnings(DeprecationWarning)
+    @hide_stdout()
     def test_ort_eval(self):
         model = self._get_model()
 
@@ -73,6 +75,7 @@ class TestOrtEval(ExtTestCase):
 
     @ignore_warnings(DeprecationWarning)
     @requires_onnxruntime_training()
+    @hide_stdout()
     def test_ort_eval_dlpack(self):
         import torch
 
@@ -90,6 +93,7 @@ class TestOrtEval(ExtTestCase):
         self.assertIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
+    @hide_stdout()
     def test_ort_eval_whole(self):
         model = self._get_model()
 
@@ -105,6 +109,7 @@ class TestOrtEval(ExtTestCase):
 
     @ignore_warnings(DeprecationWarning)
     @requires_onnxruntime_training()
+    @hide_stdout()
     def test_ort_eval_dlpack_whole(self):
         import torch
 
@@ -122,6 +127,7 @@ class TestOrtEval(ExtTestCase):
         self.assertNotIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
+    @hide_stdout()
     def test_ort_eval_incremental(self):
         model = self._get_model()
 
@@ -137,6 +143,7 @@ class TestOrtEval(ExtTestCase):
 
     @ignore_warnings(DeprecationWarning)
     @requires_onnxruntime_training()
+    @hide_stdout()
     def test_ort_eval_dlpack_incremental(self):
         import torch
 

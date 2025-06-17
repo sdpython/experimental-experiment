@@ -99,6 +99,8 @@ class ExportOptions:
         dynamo: bool = False,
         aten_as_function: Union[bool, Set[Any], Tuple[Any]] = (
             "aten.scaled_dot_product_attention.default",
+            "aten.index_put.default",
+            "aten.index_copy.default",
         ),
         remove_inplace: bool = True,
         allow_untyped_output: bool = False,

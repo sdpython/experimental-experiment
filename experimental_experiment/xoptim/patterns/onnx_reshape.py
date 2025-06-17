@@ -57,7 +57,7 @@ class ReshapePattern(PatternOptimization):
 class ReduceReshapePattern(PatternOptimization):
     """
     Replaces the sequence Reduce* Reshape if reshape is only
-    introduces to deal with a dimension kept because keepdim=1.
+    introduces to deal with a dimension kept because keepdims=1.
     """
 
     def match(

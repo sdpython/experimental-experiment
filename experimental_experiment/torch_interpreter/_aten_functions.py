@@ -4087,6 +4087,24 @@ def aten_im2col(
     raise AssertionError(f"Not implemented with dynamic shape for {x!r}{g.get_debug_msg()}")
 
 
+def aten_index_copy(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    axis: int,
+    indices: T,
+    values: T,
+    name: str = "index_copy",
+):
+    "index_copy"
+    assert g.has_rank(x), f"Rank missing for {x!r} in index_copy{g.get_debug_msg()}"
+    assert isinstance(indices, T), f"indices must be a Tensor{g.get_debug_msg()}"
+    new_indices = [None for _i in range(g.get_rank(x))]
+    new_indices[axis] = indices
+    return aten_index_put(g, sts, outputs, x, new_indices, values, name=name)
+
+
 def aten_index_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4616,10 +4634,10 @@ def aten_index_put(
                 shape_x = g.op.Shape(x, name=name)
                 stride_1 = g.op.ReduceProd(
                     g.op.GatherElements(
-                        shape_x, np.array([1, 2], dtype=np.int64), name=name, keepdim=1
+                        shape_x, np.array([1, 2], dtype=np.int64), name=name, keepdims=1
                     ),
                     name=name,
-                    keepdim=1,
+                    keepdims=1,
                 )
                 stride_2 = g.op.GatherElements(
                     shape_x, np.array([2], dtype=np.int64), name=name
@@ -4799,13 +4817,13 @@ def aten_index_put(
                 static_shape = False
                 shape_x = g.op.Shape(x, name=name)
                 stride_1 = g.op.ReduceProd(
-                    g.op.Shape(x, start=1, name=name), name=name, keepdim=1
+                    g.op.Shape(x, start=1, name=name), name=name, keepdims=1
                 )
                 stride_2 = g.op.ReduceProd(
-                    g.op.Shape(x, start=2, name=name), name=name, keepdim=1
+                    g.op.Shape(x, start=2, name=name), name=name, keepdims=1
                 )
                 stride_3 = g.op.ReduceProd(
-                    g.op.Shape(x, start=3, name=name), name=name, keepdim=1
+                    g.op.Shape(x, start=3, name=name), name=name, keepdims=1
                 )
                 size = g.op.Size(x, name=name)
                 arange_1d = g.op.Range(
@@ -7770,7 +7788,6 @@ def aten_pow_Tensor_Tensor(
     name: str = "pow_Tensor_Tensor",
 ) -> T:
     "pow"
-    print("++++", name, [x], type(exponent))
     if isinstance(exponent, (int, float)):
         if exponent == 1:
             # The node is removed.
@@ -8679,10 +8696,11 @@ def aten_select_scatter(
     assert isinstance(
         index, int
     ), f"select_scatter not implemented for index={index!r}{g.get_debug_msg()}"
-
-    # Change src rank to self rank according to dim
-    # e.g. if self is [2,3,4], src is [2,4], dim=1, then update is [2,1,4]
-    update = g.op.Unsqueeze(src, axes=dim, name=name)
+    assert isinstance(
+        dim, int
+    ), f"Unexpected value for dim={dim!r} type is {type(dim)}{g.get_debug_msg()}"
+    dima = np.array([dim], dtype=np.int64)
+    update = g.op.Unsqueeze(src, axes=dima, name=name)
     # Change index rank to the same as 'update' [2,1,4]
     indices = g.op.Expand(
         np.array([index], dtype=np.int64), g.op.Shape(update, name=name), name=name

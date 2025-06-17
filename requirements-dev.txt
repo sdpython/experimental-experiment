@@ -27,4 +27,4 @@ timm
 transformers>=4.49
 tqdm
 wheel
-xlsxwriter
+xlsxwriter==3.2.2
