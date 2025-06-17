@@ -567,7 +567,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         :return: shortened builder
         """
         # new dynamic_shapes
-        print("***", self.dynamic_shapes)
         ds2 = []
         for n in input_names:
             assert not self.is_sequence(n), (
@@ -7133,7 +7132,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def _position_msg(
         self, nodes: List[NodeProto], around: Optional[Tuple[int, int]] = None
     ) -> str:
-        "Buids an error message."
+        "Builds an error message."
         pos = {}
         posi = {}
         for i, n in enumerate(self.nodes):
