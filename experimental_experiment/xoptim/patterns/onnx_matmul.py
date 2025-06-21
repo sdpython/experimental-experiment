@@ -443,7 +443,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
 
         if next_node is not None:
             next_shape = g.get_shape(next_node.output[0])
-            matmul_shape = the_shape_left[:-1] + (shape_right[-1],)
+            matmul_shape = (*the_shape_left[:-1], shape_right[-1])
             if matmul_shape[-2:] != next_shape[-2:] and not self.same_size(
                 g, matmul_shape[:-2], next_shape[:-2], g.get_registered_constraints()
             ):
@@ -587,8 +587,8 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 f"are not implemented yet in this case."
             )
             # Reshape is needed.
-            previous_shape = shape_left[:-1] + (shape_right[-1],)
-            new_shape = the_shape_left[:-1] + (the_shape_right[-1],)
+            previous_shape = (*shape_left[:-1], shape_right[-1])
+            new_shape = (*the_shape_left[:-1], the_shape_right[-1])
             if previous_shape != new_shape:
                 new_name = g.unique_name(f"{self.__class__.__name__}L_{node.output[0]}")
                 previous_shape_name = g.make_initializer(
@@ -677,7 +677,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             res.append(main_node)
 
             if g.is_used_more_than_once(node.output[0]):
-                previous_shape = shape_left[:-1] + (shape_right[-1],)
+                previous_shape = (*shape_left[:-1], shape_right[-1])
                 previous_shape_name = g.make_initializer(
                     "",
                     np.array(previous_shape, dtype=np.int64),

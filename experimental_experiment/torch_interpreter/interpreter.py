@@ -1538,7 +1538,10 @@ class DynamoInterpreter:
             res,
             fct_name=aten_name,
             allow_new_dynamic_dimension=allow_new_dynamic_dimension
-            or (node.target == self.torch.ops.aten.nonzero_numpy.default),
+            or (
+                node.target == self.torch.ops.aten.nonzero_numpy.default
+                or (node.target == self.torch.ops.aten.where.default and len(node.args) == 1)
+            ),
         )
         res = self._check_output_name(node, res, output_names)
         return res

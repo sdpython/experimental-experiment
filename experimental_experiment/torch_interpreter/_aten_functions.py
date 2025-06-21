@@ -11141,11 +11141,15 @@ def aten_where(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     condition: T,
-    x: T,
-    other: T,
+    x: Optional[T] = None,
+    other: Optional[T] = None,
     name: str = "where",
 ) -> T:
     """where"""
+    if other is None and x is None:
+        return aten_nonzero(g, sts, outputs, condition, as_tuple=True, name=f"{name}_nonzero")
+    assert x, f"where: x is missing{g.get_debug_msg()}"
+    assert other, f"where: other is missing{g.get_debug_msg()}"
     res = g.op.Where(condition, x, other, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, condition, x, other, begin=1)
