@@ -1424,9 +1424,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param name: result name
         :param value: rank
         """
-        # if name == self._debug_stop or name == self._debug_stop_shape:
-        #    # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
-        #    raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
+        if name == self._debug_stop or name == self._debug_stop_shape:
+            # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
+            raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
         assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
         assert not isinstance(value, bool), f"Unexpected rank type {type(value)} for {name!r}"
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -5590,7 +5590,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if isinstance(dyn_name, str):
                         assert dyn_name == iname, (
                             f"Issue with one input name and its associated dynamic shape "
-                            f"dyn_name={dyn_name!r}, input_name={iname}"
+                            f"dyn_name={dyn_name!r}, input_name={iname!r}, among "
+                            f"\ndyn_name={dd_flat}\nnames={names!r}"
                             f"{self.get_debug_msg()}"
                         )
                         continue

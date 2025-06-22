@@ -223,10 +223,9 @@ def set_type_shape_binary_op(
     rank = None
     for input_name in input_names:
         if g.has_rank(input_name):
-            if rank is None:
-                rank = g.get_rank(input_name)
-            else:
-                rank = max(rank, g.get_rank(input_name))
+            rank = (
+                g.get_rank(input_name) if rank is None else max(rank, g.get_rank(input_name))
+            )
             continue
         if rank is not None:
             rank = None
