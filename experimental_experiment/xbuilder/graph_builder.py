@@ -1914,6 +1914,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return self._known_ranks[name]
 
+    def _get_shape_(self, name) -> str:
+        "Use to debug."
+        if self.has_shape(name):
+            return f"{name}:{self.get_shape(name)}"
+        if self.has_rank(name):
+            s = tuple(["?" for _ in range(self.get_rank(name))])
+            return f"{name}:{s}"
+        return f"{name}:?"
+
     def get_shape(self, name: str) -> int:
         """Returns the shape of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
