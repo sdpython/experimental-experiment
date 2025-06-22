@@ -349,9 +349,27 @@ class Reshape2Of3Pattern(PatternOptimization):
                 else g.get_shape(next_node.output[0])
             ),
         ]
+        ranks = [
+            (
+                None
+                if (node_left is None or not g.has_rank(node_left.input[0]))
+                else g.get_rank(node_left.input[0])
+            ),
+            (
+                None
+                if (node_right is None or not g.has_rank(node_right.input[0]))
+                else g.get_rank(node_right.input[0])
+            ),
+            (
+                None
+                if (next_node is None or not g.has_rank(next_node.output[0]))
+                else g.get_rank(next_node.output[0])
+            ),
+        ]
 
         all_shapes = [_ for _ in shapes if _ is not None]
-        if len(set(all_shapes)) != 1 or (shapes[-1] is not None and None not in shapes[:2]):
+        all_ranks = [_ for _ in ranks if _ is not None]
+        if len(set(all_shapes)) != 1 or len(set(all_ranks)) != 1 or len(all_shapes) < 2:
             # Not the same shapes.
             return self.none(node, inspect.currentframe().f_lineno)
 
