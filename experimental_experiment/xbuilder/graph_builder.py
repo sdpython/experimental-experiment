@@ -5591,8 +5591,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                         assert dyn_name == iname, (
                             f"Issue with one input name and its associated dynamic shape "
                             f"dyn_name={dyn_name!r}, input_name={iname!r}, among "
-                            f"\ndyn_name={dd_flat}\nnames={names!r}"
-                            f"{self.get_debug_msg()}"
+                            f"\ndyn_name={dd_flat}\nnames={names!r},\n"
+                            f"You should give the dummy inputs in the same order than "
+                            f"the forward signature, even if the inputs are given in "
+                            f"a dictionary.{self.get_debug_msg()}"
                         )
                         continue
                     if not self.has_shape(iname):
