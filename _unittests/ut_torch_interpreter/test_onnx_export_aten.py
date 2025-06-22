@@ -1650,6 +1650,40 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)
         self.assertEqualAny(expected, got, atol=1e-5)
 
+    @ignore_warnings(UserWarning)
+    def test_aten_index_put_no_dimension(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind1, ind2):
+                cst = torch.tensor(5, dtype=x.dtype)
+                x = x.clone()
+                x[ind1, ind2] = cst
+                return x
+
+        x = torch.zeros((4, 4), dtype=torch.float32)
+        ind1 = torch.tensor([1, 2], dtype=torch.int64)
+        ind2 = torch.tensor([1, 3], dtype=torch.int64)
+        model = Model()
+        xs = (x, ind1, ind2)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_aten_index_put_no_dimension", "custom", model, xs
+        )
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [to_numpy(x) for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualAny(expected.numpy(), got, atol=1e-6)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualAny(expected.numpy(), got, atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

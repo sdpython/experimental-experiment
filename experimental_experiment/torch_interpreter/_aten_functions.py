@@ -4489,7 +4489,7 @@ def aten_index_put(
                 f"x{g.get_rank(x)}_v{g.get_rank(values)}"
             )
             assert g.get_rank(x) == 2 and (
-                g.get_rank(values) == 1 or ind0 is None or ind1 is None
+                g.get_rank(values) <= 1 or ind0 is None or ind1 is None
             ), (
                 f"No implementation for index_put when indices={indices}, "
                 f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
@@ -4546,7 +4546,13 @@ def aten_index_put(
                 )
             else:
                 indices_2d = g.op.Add(g.op.Mul(ind0, n_cols, name=name), ind1, name=name)
-                expanded = values
+                if g.get_rank(values) == 1:
+                    expanded = values
+                else:
+                    assert (
+                        g.get_rank(values) == 0
+                    ), f"rk(values) not in {{0, 1}} in index_put{g.get_debug_msg()}"
+                    expanded = g.op.Expand(values, g.op.Shape(ind0, name=name), name=name)
 
             indices_1d = g.op.GatherElements(
                 arange_1d,
