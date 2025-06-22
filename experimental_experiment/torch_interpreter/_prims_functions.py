@@ -451,7 +451,7 @@ def prims_split_dim(
     )
 
     inner_length = shape_dim // outer_length
-    new_shape = shape[0:dim] + (outer_length, inner_length) + shape[dim + 1 :]
+    new_shape = (*shape[0:dim], outer_length, inner_length, *shape[dim + 1 :])
     res = g.op.Reshape(x, np.array(new_shape), outputs=outputs, name=name)
     if not sts:
         g.set_type(res, g.get_type(x))

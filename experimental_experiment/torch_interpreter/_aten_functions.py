@@ -4482,89 +4482,146 @@ def aten_index_put(
             and g.has_rank(values)
             and g.has_rank(x)
         ):
-            # index_put2i... or index_put_2i...
+            if g.get_rank(x) == 2:
+                # index_put2i... or index_put_2i...
+                name = (
+                    f"{name}2i{'o' if ind0 is None else g.get_rank(ind0)}"
+                    f"i{'o' if ind1 is None else g.get_rank(ind1)}"
+                    f"x{g.get_rank(x)}_v{g.get_rank(values)}"
+                )
+                assert g.get_rank(x) == 2 and (
+                    g.get_rank(values) <= 1 or ind0 is None or ind1 is None
+                ), (
+                    f"No implementation for index_put when indices={indices}, "
+                    f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+                    f"shapes = {g._get_shape_(x)}, {g._get_shape_(ind0)}, "
+                    f"{g._get_shape_(ind1)}, {g._get_shape_(values)}"
+                    f"{g.get_debug_msg()}"
+                )
+                if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+                    static_shape = True
+                    shape_x = np.array(g.get_shape(x), dtype=np.int64)
+                    n_cols = shape_x[1:2]
+                    size = np.prod(shape_x).astype(np.int64)
+                    arange_1d = np.arange(0, size).astype(np.int64)
+                else:
+                    static_shape = False
+                    shape_x = g.op.Shape(x, name=name)
+                    n_cols = g.op.GatherElements(shape_x, g.ONE, name=name)
+                    size = g.op.Size(x, name=name)
+                    arange_1d = g.op.Range(
+                        np.array(0, dtype=np.int64),
+                        size,
+                        np.array(1, dtype=np.int64),
+                        name=name,
+                    )
+
+                ind0, do_expand0 = _make_range_or_cast(ind0, shape_x, static_shape, 0, name)
+                ind1, do_expand1 = _make_range_or_cast(ind1, shape_x, static_shape, 1, name)
+
+                if do_expand0 or do_expand1:
+                    if (
+                        isinstance(ind0, np.ndarray)
+                        or (g.has_shape(ind0) and is_static_shape(g.get_shape(ind0)))
+                    ) and (
+                        isinstance(ind1, np.ndarray)
+                        or (g.has_shape(ind1) and is_static_shape(g.get_shape(ind1)))
+                    ):
+                        sh0 = ind0.shape if isinstance(ind0, np.ndarray) else g.get_shape(ind0)
+                        sh1 = ind1.shape if isinstance(ind1, np.ndarray) else g.get_shape(ind1)
+                        new_shape = np.hstack([sh0, sh1]).astype(np.int64)
+                    else:
+                        new_shape = g.op.Concat(
+                            g.op.Shape(ind0, name=name),
+                            g.op.Shape(ind1, name=name),
+                            axis=0,
+                            name=name,
+                        )
+                    expanded = g.op.Expand(values, new_shape, name=name)
+                    indices_2d = g.op.Add(
+                        g.op.Mul(
+                            g.op.Reshape(ind0, np.array([1, -1], dtype=np.int64), name=name),
+                            n_cols,
+                            name=name,
+                        ),
+                        g.op.Reshape(ind1, np.array([1, -1], dtype=np.int64), name=name),
+                        name=name,
+                    )
+                else:
+                    indices_2d = g.op.Add(g.op.Mul(ind0, n_cols, name=name), ind1, name=name)
+                    if g.get_rank(values) == 1:
+                        expanded = values
+                    else:
+                        assert (
+                            g.get_rank(values) == 0
+                        ), f"rk(values) not in {{0, 1}} in index_put{g.get_debug_msg()}"
+                        expanded = g.op.Expand(values, g.op.Shape(ind0, name=name), name=name)
+
+                indices_1d = g.op.GatherElements(
+                    arange_1d,
+                    g.op.Reshape(indices_2d, g.MINUS_ONE, name=name),
+                    name=name,
+                )
+
+                expanded = g.op.Reshape(expanded, g.MINUS_ONE, name=name)
+                flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+                if accumulate:
+                    flat_up_x = g.op.ScatterElements(
+                        flat_x, indices_1d, expanded, name=name, reduction="add"
+                    )
+                else:
+                    flat_up_x = g.op.ScatterElements(flat_x, indices_1d, expanded, name=name)
+                g.set_type(flat_up_x, g.get_type(x))
+
+                res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
+                if not sts:
+                    set_type_shape_unary_op(g, res, x)
+                return res
+
+            # index_put2j... or index_put_2j...
             name = (
-                f"{name}2i{'o' if ind0 is None else g.get_rank(ind0)}"
+                f"{name}2j{'o' if ind0 is None else g.get_rank(ind0)}"
                 f"i{'o' if ind1 is None else g.get_rank(ind1)}"
                 f"x{g.get_rank(x)}_v{g.get_rank(values)}"
             )
-            assert g.get_rank(x) == 2 and (
-                g.get_rank(values) == 1 or ind0 is None or ind1 is None
+            assert (
+                g.get_rank(x) > 2
+                and g.get_rank(x) > g.get_rank(values)
+                and g.get_rank(values) > 0
+                and g.get_rank(ind0) == g.get_rank(ind1) == 1
             ), (
                 f"No implementation for index_put when indices={indices}, "
                 f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
+                f"shapes = {g._get_shape_(x)}, {g._get_shape_(ind0)}, "
+                f"{g._get_shape_(ind1)}, {g._get_shape_(values)}"
                 f"{g.get_debug_msg()}"
             )
-            if g.has_shape(x) and is_static_shape(g.get_shape(x)):
-                static_shape = True
-                shape_x = np.array(g.get_shape(x), dtype=np.int64)
-                n_cols = shape_x[1:2]
-                size = np.prod(shape_x).astype(np.int64)
-                arange_1d = np.arange(0, size).astype(np.int64)
-            else:
-                static_shape = False
-                shape_x = g.op.Shape(x, name=name)
-                n_cols = g.op.GatherElements(shape_x, g.ONE, name=name)
-                size = g.op.Size(x, name=name)
-                arange_1d = g.op.Range(
-                    np.array(0, dtype=np.int64),
-                    size,
-                    np.array(1, dtype=np.int64),
-                    name=name,
-                )
-
-            ind0, do_expand0 = _make_range_or_cast(ind0, shape_x, static_shape, 0, name)
-            ind1, do_expand1 = _make_range_or_cast(ind1, shape_x, static_shape, 1, name)
-
-            if do_expand0 or do_expand1:
-                if (
-                    isinstance(ind0, np.ndarray)
-                    or (g.has_shape(ind0) and is_static_shape(g.get_shape(ind0)))
-                ) and (
-                    isinstance(ind1, np.ndarray)
-                    or (g.has_shape(ind1) and is_static_shape(g.get_shape(ind1)))
-                ):
-                    sh0 = ind0.shape if isinstance(ind0, np.ndarray) else g.get_shape(ind0)
-                    sh1 = ind1.shape if isinstance(ind1, np.ndarray) else g.get_shape(ind1)
-                    new_shape = np.hstack([sh0, sh1]).astype(np.int64)
-                else:
-                    new_shape = g.op.Concat(
-                        g.op.Shape(ind0, name=name),
-                        g.op.Shape(ind1, name=name),
-                        axis=0,
-                        name=name,
-                    )
-                expanded = g.op.Expand(values, new_shape, name=name)
-                indices_2d = g.op.Add(
-                    g.op.Mul(
-                        g.op.Reshape(ind0, np.array([1, -1], dtype=np.int64), name=name),
-                        n_cols,
-                        name=name,
-                    ),
-                    g.op.Reshape(ind1, np.array([1, -1], dtype=np.int64), name=name),
-                    name=name,
-                )
-            else:
-                indices_2d = g.op.Add(g.op.Mul(ind0, n_cols, name=name), ind1, name=name)
-                expanded = values
-
-            indices_1d = g.op.GatherElements(
-                arange_1d,
-                g.op.Reshape(indices_2d, g.MINUS_ONE, name=name),
+            rk_values = g.get_rank(values)
+            n_cols = g.op.Shape(x, name=name, start=-rk_values, end=-rk_values + 1)
+            indices_1d = g.op.Reshape(
+                g.op.Add(g.op.Mul(ind0, n_cols, name=name), ind1, name=name),
+                np.array([-1, 1], dtype=np.int64),
                 name=name,
             )
-
-            expanded = g.op.Reshape(expanded, g.MINUS_ONE, name=name)
-            flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+            flat_x = g.op.Reshape(
+                x,
+                g.op.Concat(
+                    g.MINUS_ONE,
+                    g.op.Shape(x, start=-rk_values + 1, name=name),
+                    name=name,
+                    axis=0,
+                ),
+                name=name,
+            )
             if accumulate:
-                flat_up_x = g.op.ScatterElements(
-                    flat_x, indices_1d, expanded, name=name, reduction="add"
+                flat_up_x = g.op.ScatterND(
+                    flat_x, indices_1d, values, name=name, reduction="add"
                 )
             else:
-                flat_up_x = g.op.ScatterElements(flat_x, indices_1d, expanded, name=name)
+                flat_up_x = g.op.ScatterND(flat_x, indices_1d, values, name=name)
             g.set_type(flat_up_x, g.get_type(x))
 
-            res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
+            res = g.op.Reshape(flat_up_x, g.op.Shape(x, name=name), name=name, outputs=outputs)
             if not sts:
                 set_type_shape_unary_op(g, res, x)
             return res
@@ -11141,11 +11198,15 @@ def aten_where(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     condition: T,
-    x: T,
-    other: T,
+    x: Optional[T] = None,
+    other: Optional[T] = None,
     name: str = "where",
 ) -> T:
     """where"""
+    if other is None and x is None:
+        return aten_nonzero(g, sts, outputs, condition, as_tuple=True, name=f"{name}_nonzero")
+    assert x, f"where: x is missing{g.get_debug_msg()}"
+    assert other, f"where: other is missing{g.get_debug_msg()}"
     res = g.op.Where(condition, x, other, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, condition, x, other, begin=1)

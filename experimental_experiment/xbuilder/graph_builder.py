@@ -1424,9 +1424,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param name: result name
         :param value: rank
         """
-        # if name == self._debug_stop or name == self._debug_stop_shape:
-        #    # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
-        #    raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
+        if name == self._debug_stop or name == self._debug_stop_shape:
+            # Set ONNXSTOP or ONNXSTOPSHAPE to stop here.
+            raise AssertionError(f"Requested stop, name={name!r}, rank={value}")
         assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
         assert not isinstance(value, bool), f"Unexpected rank type {type(value)} for {name!r}"
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
@@ -1913,6 +1913,15 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"known_ranks={self._known_ranks}{self.get_debug_msg()}"
         )
         return self._known_ranks[name]
+
+    def _get_shape_(self, name) -> str:
+        "Use to debug."
+        if self.has_shape(name):
+            return f"{name}:{self.get_shape(name)}"
+        if self.has_rank(name):
+            s = tuple(["?" for _ in range(self.get_rank(name))])
+            return f"{name}:{s}"
+        return f"{name}:?"
 
     def get_shape(self, name: str) -> int:
         """Returns the shape of a result."""
@@ -5581,8 +5590,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if isinstance(dyn_name, str):
                         assert dyn_name == iname, (
                             f"Issue with one input name and its associated dynamic shape "
-                            f"dyn_name={dyn_name!r}, input_name={iname}"
-                            f"{self.get_debug_msg()}"
+                            f"dyn_name={dyn_name!r}, input_name={iname!r}, among "
+                            f"\ndyn_name={dd_flat}\nnames={names!r},\n"
+                            f"You should give the dummy inputs in the same order than "
+                            f"the forward signature, even if the inputs are given in "
+                            f"a dictionary.{self.get_debug_msg()}"
                         )
                         continue
                     if not self.has_shape(iname):
