@@ -351,7 +351,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         ]
 
         all_shapes = [_ for _ in shapes if _ is not None]
-        if len(set(all_shapes)) != 1 or len(shapes) != len(all_shapes):
+        if len(set(all_shapes)) != 1 or (shapes[-1] is not None and None not in shapes[:2]):
             # Not the same shapes.
             return self.none(node, inspect.currentframe().f_lineno)
 
