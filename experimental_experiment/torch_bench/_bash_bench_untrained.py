@@ -31,8 +31,18 @@ def get_untrained_model_inputs(model_id: str, attn_implementation: str = ""):
         if attn_implementation not in ("", None, "eager")
         else dict(attn_implementation=attn_implementation)
     )
+    if model_id.endswith("//pretrained"):
+        use_pretrained = True
+        model_id = model_id.replace("//pretrained", "")
+    else:
+        use_pretrained = False
+        model_id = model_id
     res = get_untrained_model_with_inputs(
-        model_id, add_second_input=True, model_kwargs=model_kwargs
+        model_id,
+        add_second_input=True,
+        model_kwargs=model_kwargs,
+        use_pretrained=use_pretrained,
+        same_as_pretrained=use_pretrained,
     )
     assert "inputs2" in res, "Second set of inputs is missing."
     return res, dict(strict=False)
@@ -68,6 +78,7 @@ class UntrainedRunner(BenchmarkRunner):
         "sshleifer/tiny-marian-en-de",
         "sshleifer/tiny-marian-en-de",
         "tiiuae/falcon-mamba-tiny-dev",
+        "emilyalsentzer/Bio_ClinicalBERT//pretrained",
     ]
 
     def initialize(self):
