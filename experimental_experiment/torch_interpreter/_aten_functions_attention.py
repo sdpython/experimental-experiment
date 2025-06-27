@@ -10,7 +10,6 @@ from onnx.helper import make_tensor
 from ..helpers import tensor_dtype_to_np_dtype, from_array_extended
 from ..xbuilder.graph_builder import GraphBuilder
 from ..xbuilder.shape_type_compute import set_type_shape_unary_op, set_type_shape_binary_op
-from ..xbuilder._shape_helper import is_static_dimension
 
 
 T = str
@@ -125,42 +124,13 @@ def aten_scaled_dot_product_attention(
     )
     if g.main_opset >= 23:
         if dropout_p == 0:
-            assert g.has_shape(query), f"missing shape for {query!r}{g.get_debug_msg()}"
-            assert g.has_shape(key), f"missing shape for {key!r}{g.get_debug_msg()}"
-            assert g.has_shape(value), f"missing shape for {value!r}{g.get_debug_msg()}"
-            query_shape = g.get_shape(query)
-            key_shape = g.get_shape(key)
-            value_shape = g.get_shape(value)
-            assert len(query_shape) in {
-                3,
-                4,
-            }, f"wrong shape for {query!r}: {query_shape}{g.get_debug_msg()}"
-            assert len(key_shape) in {
-                3,
-                4,
-            }, f"wrong shape for {key!r}: {key_shape}{g.get_debug_msg()}"
-            assert len(value_shape) in {
-                3,
-                4,
-            }, f"wrong shape for {value!r}: {value_shape}{g.get_debug_msg()}"
-            q1 = value_shape[1]
-            k1 = key_shape[1]
-            v1 = value_shape[1]
-            assert is_static_dimension(
-                q1
-            ), f"dynamic dimension for {query!r}: {query_shape}{g.get_debug_msg()}"
-            assert is_static_dimension(
-                k1
-            ), f"dynamic dimension for {key!r}: {key_shape}{g.get_debug_msg()}"
-            assert is_static_dimension(
-                v1
-            ), f"dynamic dimension for {value!r}: {value_shape}{g.get_debug_msg()}"
-            assert (enable_gqa and q1 > k1 == v1 and q1 % k1 == 0) or (
-                not enable_gqa and q1 == k1 == v1
-            ), (
-                f"Attention not impelmented for shapes query {query!r}: {query_shape}, "
-                f"key {key!r}: {key_shape}, value {value!r}: {value_shape}"
-                f"{g.get_debug_msg()}"
+            assert g.has_rank(query), f"missing shape for {query!r}{g.get_debug_msg()}"
+            assert g.has_rank(key), f"missing shape for {key!r}{g.get_debug_msg()}"
+            assert g.has_rank(value), f"missing shape for {value!r}{g.get_debug_msg()}"
+            assert g.get_rank(query) == g.get_rank(key) == g.get_rank(value) == 4, (
+                f"The converter is only implemented for rank == 4 "
+                f"but rank(query)={g.get_rank(query)}, rank(key)={g.get_rank(key)}, "
+                f"rank(value)={g.get_rank(value)}{g.get_debug_msg()}"
             )
             Y = g.op.Attention(
                 query,
@@ -168,8 +138,8 @@ def aten_scaled_dot_product_attention(
                 value,
                 attn_mask=attn_mask,
                 scale=scale,
-                q_num_heads=q1,
-                kv_num_heads=k1,
+                # q_num_heads=q1,
+                # kv_num_heads=k1,
                 is_causal=is_causal,
                 outputs=outputs,
                 name=name,
