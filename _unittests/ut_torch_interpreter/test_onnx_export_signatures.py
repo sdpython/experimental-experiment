@@ -120,7 +120,6 @@ class TestOnnxExportSignatures(ExtTestCase):
                 decomposition_table="all" if decomposition else None,
                 strict="-nostrict" not in exporter,
                 tracing="-tracing" in exporter,
-                target_opset=target_opset,
             )
             to_onnx(
                 model,

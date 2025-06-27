@@ -88,7 +88,7 @@ class TestOnnxExportComplex(ExtTestCase):
                     model,
                     (x,),
                     dynamic_shapes=({0: "batch", 1: "length"},),
-                    export_options=ExportOptions("all"),
+                    export_options=ExportOptions("all", target_opset=opset),
                     target_opset=opset,
                 )
                 # self.print_model(onx)

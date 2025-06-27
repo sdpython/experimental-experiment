@@ -519,12 +519,7 @@ def _make_builder_interpreter(
         import torch.export
 
     if export_options is None:
-        assert isinstance(
-            target_opset, (int, dict)
-        ), f"Unable to interpret target_opset={target_opset!r}"
-        export_options = ExportOptions(
-            target_opset=target_opset if isinstance(target_opset, int) else target_opset[""]
-        )
+        export_options = ExportOptions()
 
     mask_outputs = None
     if isinstance(mod, torch.fx.GraphModule):

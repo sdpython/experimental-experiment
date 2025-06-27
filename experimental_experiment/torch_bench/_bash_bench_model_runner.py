@@ -920,8 +920,6 @@ class ModelRunner:
         exp_opts = (self.export_options or {}).copy()
         if self.attn_impl == "eager":
             exp_opts["aten_as_function"] = False
-        if "target_opset" not in exp_opts:
-            exp_opts["target_opset"] = target_opset
         export_options = ExportOptions(strategy=strategy, **exp_opts)
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)
