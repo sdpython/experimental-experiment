@@ -440,6 +440,22 @@ def rewrite_dynamic_shapes(dynamic_shapes: Any) -> Any:
     return dynamic_shapes
 
 
+def get_default_aten_as_function(target_opset: int) -> Tuple[str]:
+    """
+    Returns the list of aten functions to export as local functions
+    depending on this opset.
+    """
+    return (
+        (
+            "aten.scaled_dot_product_attention.default",
+            "aten.index_put.default",
+            "aten.index_copy.default",
+        )
+        if target_opset < 23
+        else ("aten.index_put.default", "aten.index_copy.default")
+    )
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -519,7 +535,8 @@ def _make_builder_interpreter(
         import torch.export
 
     if export_options is None:
-        export_options = ExportOptions()
+        aten_as_function = get_default_aten_as_function(target_opset)
+        export_options = ExportOptions(aten_as_function=aten_as_function)
 
     mask_outputs = None
     if isinstance(mod, torch.fx.GraphModule):

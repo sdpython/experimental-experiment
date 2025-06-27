@@ -727,7 +727,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_transformers("4.53")  # handle dynamic rope
-    @requires_onnx_diagnostic("0.3.1")
+    @requires_onnx_diagnostic("0.7.2")
     def test_a_get_tiny_llm_dynamic_rope(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
@@ -745,7 +745,7 @@ class TestLlmModelHelper(ExtTestCase):
         model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
         expected = list(flatten_outputs(model(**model_inputs)))
         self.assertNotEmpty(expected)
-        with torch_export_patches(patch_transformers=True):
+        with torch_export_patches(patch_transformers=True, verbose=2):
             torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
 
 

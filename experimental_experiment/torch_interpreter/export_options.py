@@ -4,7 +4,7 @@ import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type
-from ..helpers import string_sig
+from ..helpers import string_sig, get_sig_kwargs
 from ._torch_helper import make_copy
 from ._doc_ import TorchOpOverload
 
@@ -150,6 +150,12 @@ class ExportOptions:
     def __repr__(self) -> str:
         return string_sig(self)
 
+    def clone(self, **kwargs) -> "ExportOptions":
+        """Makes a copy and updates some of the values."""
+        kw = get_sig_kwargs(self)
+        kw.update(kwargs)
+        return ExportOptions(**kwargs)
+
     def get_decomposition_table(
         self,
     ) -> Dict[TorchOpOverload, Callable[..., Any]]:  # noqa: F821
@@ -170,22 +176,22 @@ class ExportOptions:
         if kind is None or kind in ("fallback", "fallback-dec", "fallback-decall"):
             other_dec = None if self.decomposition_table else "default"
             return [
-                ExportOptions(strict=True, decomposition_table=self.decomposition_table),
-                ExportOptions(strict=False, decomposition_table=self.decomposition_table),
-                ExportOptions(strict=True, decomposition_table=other_dec),
-                ExportOptions(strict=False, decomposition_table=other_dec),
-                ExportOptions(dynamo=True, decomposition_table=self.decomposition_table),
-                ExportOptions(dynamo=True, decomposition_table=other_dec),
-                ExportOptions(jit=True, decomposition_table=self.decomposition_table),
+                self.clone(strict=True, decomposition_table=self.decomposition_table),
+                self.clone(strict=False, decomposition_table=self.decomposition_table),
+                self.clone(strict=True, decomposition_table=other_dec),
+                self.clone(strict=False, decomposition_table=other_dec),
+                self.clone(dynamo=True, decomposition_table=self.decomposition_table),
+                self.clone(dynamo=True, decomposition_table=other_dec),
+                self.clone(jit=True, decomposition_table=self.decomposition_table),
             ]
         if kind == "strict":
-            return [ExportOptions(strict=True), ExportOptions(strict=False)]
+            return [self.clone(strict=True), self.clone(strict=False)]
         if kind == "nostrict":
-            return [ExportOptions(strict=False), ExportOptions(strict=True)]
+            return [self.clone(strict=False), self.clone(strict=True)]
         if kind in ("jit"):
             return [
-                ExportOptions(strict=True),
-                ExportOptions(jit=True, decomposition_table=self.decomposition_table),
+                self.clone(strict=True),
+                self.clone(jit=True, decomposition_table=self.decomposition_table),
             ]
         raise AssertionError(f"Unable to return fallback strategy with kind={kind!r}")
 
@@ -360,6 +366,7 @@ class ExportOptions:
             print(
                 f"[ExportOptions.export] {self!r} - torch.export.export {type(mod).__name__!r}"
             )
+            print(f"[ExportOptions.export] aten_as_function={self.aten_as_function!r}")
             begin = time.perf_counter()
 
         if self.dynamo:

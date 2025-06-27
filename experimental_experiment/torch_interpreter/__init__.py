@@ -1,6 +1,11 @@
 from ._exceptions import FunctionNotFoundError
 from .export_options import ExportOptions
-from .onnx_export import to_onnx, match_input_parameters, FunctionOptions
+from .onnx_export import (
+    to_onnx,
+    match_input_parameters,
+    FunctionOptions,
+    get_default_aten_as_function,
+)
 from .dispatcher import Dispatcher, ForceDispatcher
 
 LOCAL_DOMAIN = "aten_local_function"
