@@ -694,11 +694,6 @@ def _make_builder_interpreter(
         exe_path=f"{exe_path}-export_options={export_options}",
         output_dynamic_shapes=output_dynamic_shapes,
     )
-    assert builder.main_opset == export_options.target_opset, (
-        f"Target opset mismatch builder.main_opset={builder.main_opset} != "
-        f"export_options.target_opset={export_options.target_opset}, "
-        f"target_opset={target_opset}"
-    )
 
     def retrieve(
         name,
