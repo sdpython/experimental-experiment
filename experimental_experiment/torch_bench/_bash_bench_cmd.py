@@ -28,7 +28,10 @@ def bash_bench_parse_args(name: str, doc: str, new_args: Optional[List[str]] = N
         process=("0", "run every run in a separate process"),
         device=("cpu", "'cpu' or 'cuda'"),
         dynamic=("0", "use dynamic shapes"),
-        target_opset=("18", "opset to convert into, use with backend=custom"),
+        target_opset=(
+            "18",  # from ..torch_interpreter import DEFAULT_TARGET_OPSET
+            "opset to convert into, use with backend=custom",
+        ),
         verbose=("0", "verbosity"),
         opt_patterns=("", "a list of optimization patterns to disable"),
         dump_folder=("dump_bash_bench", "where to dump the exported model"),

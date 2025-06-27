@@ -21,6 +21,7 @@ from ..torch_models.llm_model_helper import (
     get_tiny_llm,
 )
 from ..torch_models.chronos_model_helper import get_chronos_t5_tiny
+from ..torch_interpreter import DEFAULT_TARGET_OPSET
 
 
 def get_untrained_model_inputs(model_id: str, attn_implementation: str = ""):
@@ -434,7 +435,7 @@ class UntrainedRunner(BenchmarkRunner):
         repeat: int = 30,
         fake_tensor: bool = False,
         no_grad: bool = True,
-        target_opset: int = 18,
+        target_opset: int = DEFAULT_TARGET_OPSET,
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,

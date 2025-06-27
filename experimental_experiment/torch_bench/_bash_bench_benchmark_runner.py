@@ -31,6 +31,7 @@ from ..helpers import (
     torch_dtype_to_onnx_dtype,
     flatten_object,
 )
+from ..torch_interpreter import DEFAULT_TARGET_OPSET
 
 
 class BenchmarkRunner:
@@ -75,7 +76,7 @@ class BenchmarkRunner:
         repeat: int = 30,
         fake_tensor: bool = False,
         no_grad: bool = True,
-        target_opset: int = 18,
+        target_opset: int = DEFAULT_TARGET_OPSET,
         nvtx: bool = False,
         dump_ort: bool = False,
         attn_impl: str = "eager",

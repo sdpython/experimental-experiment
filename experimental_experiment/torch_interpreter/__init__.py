@@ -4,6 +4,7 @@ from .onnx_export import to_onnx, match_input_parameters, FunctionOptions
 from .dispatcher import Dispatcher, ForceDispatcher
 
 LOCAL_DOMAIN = "aten_local_function"
+DEFAULT_TARGET_OPSET = 18
 
 
 class TorchOpOverload:

@@ -445,6 +445,7 @@ def _make_builder_interpreter(
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
     kwargs: Optional[Dict[str, "torch.Tensor"]] = None,  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
+    # from . import DEFAULT_TARGET_OPSET, circular import
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
     optimization_options: Optional[OptimizationOptions] = None,
@@ -950,8 +951,10 @@ def to_onnx(
     assert options is None or isinstance(
         options, OptimizationOptions
     ), f"Unexpected type {type(options)} for options"
+    from . import DEFAULT_TARGET_OPSET
+
     if target_opset is None:
-        target_opset = min(18, onnx_opset_version() - 1)
+        target_opset = min(DEFAULT_TARGET_OPSET, onnx_opset_version() - 1)
     if options is None:
         options = OptimizationOptions()
     begin = time.perf_counter()
