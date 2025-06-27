@@ -3779,6 +3779,39 @@ def aten_group_norm(
     "instance_normalization"
     assert g.has_rank(x), f"rank for {x!r} is unknown{g.get_debug_msg()}"
     assert g.has_shape(x), f"shape for {x!r} is unknown{g.get_debug_msg()}"
+    assert g.has_type(x), f"type for {x!r} is unknown{g.get_debug_msg()}"
+
+    if g.main_opset >= 18:
+        if weight is None or bias is None:
+            shape = g.get_shape(x)
+            np_dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+            if is_static_dimension(shape[1]):
+                if weight is None:
+                    weight = np.ones((shape[1],), dtype=np_dtype)
+                if bias is None:
+                    bias = np.zeros((shape[1],), dtype=np_dtype)
+            else:
+                np_dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+                shape = g.op.Shape(x, start=1, end=2, name=name)
+                if weight is None:
+                    weight = g.op.ConstantOfShape(
+                        shape,
+                        value=from_array_extended(np.array([1], dtype=np_dtype)),
+                        name=name,
+                    )
+                if bias is None:
+                    bias = g.op.ConstantOfShape(
+                        shape,
+                        value=from_array_extended(np.array([0], dtype=np_dtype)),
+                        name=name,
+                    )
+        res = g.op.GroupNormalization(
+            x, weight, bias, epsilon=eps, num_groups=num_groups, name=name, outputs=outputs
+        )
+        if not sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
     shape_x = g.get_shape(x)
     assert len(shape_x) > 1, f"Unexpected shape {shape_x} for {x!r}{g.get_debug_msg()}"
     channel_size = shape_x[1]
@@ -3837,6 +3870,8 @@ def aten_group_norm(
 
     # Norm has shape [N, C, *] so we reshape weight and bias to [C, *]
     res = g.op.Add(g.op.Mul(norm, w, name=name), b, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 

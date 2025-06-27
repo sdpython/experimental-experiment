@@ -200,6 +200,47 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_group_norm_opset_17_18_21(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.nn.functional.group_norm(x, 4)
+
+        inputs = (torch.randn(1, 4, 4, 4, dtype=torch.float32),)
+        model = Model()
+        expected = model(*inputs)
+        ds = ({3: "last"},)
+        for opset in [17, 18, 21]:
+            with self.subTest(opset=opset):
+                onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset)
+                self.dump_onnx(f"test_group_norm_opset_{opset}.onnx", onx)
+                if opset >= 18:
+                    self.assertEqual(
+                        ["GroupNormalization"], [n.op_type for n in onx.graph.node]
+                    )
+                else:
+                    self.assertEqual(
+                        ["Reshape", "InstanceNormalization", "Shape", "Reshape"],
+                        [n.op_type for n in onx.graph.node],
+                    )
+                self.assertEqual(
+                    ("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version)
+                )
+
+                feeds = dict(zip(["x"], [x.detach().cpu().numpy() for x in inputs]))
+                ref = ExtendedReferenceEvaluator(onx)
+                got = ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-2)
+
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
