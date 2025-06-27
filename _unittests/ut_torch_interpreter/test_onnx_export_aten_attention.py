@@ -254,7 +254,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         inputs = (query, key, value)
         model = Model()
         expected = model(*inputs)
-        ds1 = {0: "batch", 1: "seq_length", 2: "cache_length", 3: "last_dim"}
+        ds1 = {0: "batch", 2: "cache_length", 3: "last_dim"}
         ds = (ds1, ds1, ds1)
         for opset in [23, 18]:
             with self.subTest(opset=opset):
@@ -262,20 +262,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                 self.dump_onnx(f"scaled_dot_product_attention_{opset}.onnx", onx)
                 if opset >= 23:
                     self.assertEqual(
-                        [
-                            "Shape",
-                            "Gather",
-                            "Cast",
-                            "Sqrt",
-                            "Reciprocal",
-                            "Transpose",
-                            "Sqrt",
-                            "Mul",
-                            "Mul",
-                            "MatMul",
-                            "Softmax",
-                            "MatMul",
-                        ],
+                        ["Attention"],
                         [n.op_type for n in onx.graph.node],
                     )
                 else:
