@@ -727,7 +727,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_transformers("4.53")  # handle dynamic rope
-    @requires_onnx_diagnostic("0.7.2")
+    @requires_onnx_diagnostic("0.7.3")
     def test_a_get_tiny_llm_dynamic_rope(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
