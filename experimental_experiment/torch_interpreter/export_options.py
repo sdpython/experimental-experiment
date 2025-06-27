@@ -39,6 +39,8 @@ class ExportOptions:
     :param validate_ep: validates the exported program with the given inputs,
         by default the tolerance is ``1e-5``, use a float instead of a boolean
         to change that value
+    :param target_opset: onnx conversion is not handle in that class,
+        but some options may depend on it
 
     The fallback strategy tries the following in order:
 
@@ -98,7 +100,10 @@ class ExportOptions:
         strategy: Optional[str] = None,
         dynamo: bool = False,
         aten_as_function: Union[bool, Set[Any], Tuple[Any]] = (
-            "aten.scaled_dot_product_attention.default",
+            (
+                "aten.scaled_dot_product_attention.default",
+                22,
+            ),  # only exported as a function if the opset is below 22
             "aten.index_put.default",
             "aten.index_copy.default",
         ),
@@ -106,7 +111,12 @@ class ExportOptions:
         allow_untyped_output: bool = False,
         save_ep: Optional[str] = None,
         validate_ep: Union[float, bool] = False,
+        target_opset: Optional[int] = None,
     ):
+        assert target_opset and isinstance(target_opset, int), (
+            f"target_opset must be populated with an integer but "
+            f"target_opset={target_opset}"
+        )
         self.strict = strict
         self.fallback = fallback
         self.tracing = tracing
@@ -117,10 +127,15 @@ class ExportOptions:
         self.dynamo = dynamo
         self.strategy = strategy
         self.jit = jit
+        self.target_opset = target_opset
         self.aten_as_function = (
             aten_as_function
             if isinstance(aten_as_function, (bool, set))
-            else set(aten_as_function)
+            else set(
+                (a if isinstance(a, str) else a[0])
+                for a in aten_as_function
+                if isinstance(a, str) or target_opset <= a[1]
+            )
         )
         self.remove_inplace = remove_inplace
         self.allow_untyped_output = allow_untyped_output

@@ -38,6 +38,8 @@ def _default_OPSET_TO_IR_VERSION() -> Dict[int, int]:
         19: 9,
         20: 9,
         21: 10,
+        22: 10,
+        23: 11,
     }
 
 

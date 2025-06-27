@@ -231,6 +231,67 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                 feeds = dict(zip(["x"], [x.detach().cpu().numpy() for x in inputs]))
                 ref = ExtendedReferenceEvaluator(onx)
                 got = ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-4)
+
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-4)
+
+    def test_scaled_dot_product_attention_18_23(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, query, key, value):
+                return torch.nn.functional.scaled_dot_product_attention(query, key, value)
+
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float16)
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float16)
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float16)
+        inputs = (query, key, value)
+        model = Model()
+        expected = model(*inputs)
+        ds1 = {0: "batch", 1: "seq_length", 2: "cache_length", 3: "last_dim"}
+        ds = (ds1, ds1, ds1)
+        for opset in [18, 23]:
+            with self.subTest(opset=opset):
+                onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset)
+                self.dump_onnx(f"scaled_dot_product_attention_{opset}.onnx", onx)
+                if opset >= 23:
+                    self.assertEqual(
+                        [
+                            "Shape",
+                            "Gather",
+                            "Cast",
+                            "Sqrt",
+                            "Reciprocal",
+                            "Transpose",
+                            "Sqrt",
+                            "Mul",
+                            "Mul",
+                            "MatMul",
+                            "Softmax",
+                            "MatMul",
+                        ],
+                        [n.op_type for n in onx.graph.node],
+                    )
+                else:
+                    self.assertEqual(
+                        ["aten_scaled_dot_product_attention_default"],
+                        [n.op_type for n in onx.graph.node],
+                    )
+                self.assertEqual(
+                    ("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version)
+                )
+
+                feeds = dict(
+                    zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs])
+                )
+                ref = ExtendedReferenceEvaluator(onx)
+                got = ref.run(None, feeds)[0]
                 self.assertEqualArray(expected, got, atol=1e-2)
 
                 import onnxruntime
