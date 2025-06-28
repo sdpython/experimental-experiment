@@ -96,7 +96,7 @@ def export_script(filename, model, *args):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             torch.onnx.export(
-                model, args, filename, input_names=["input"], opset_version=opset
+                model, args, filename, input_names=["input"], opset_version=opset, dynamo=False
             )
     if ortopt:
         onx = onnx.load(filename)

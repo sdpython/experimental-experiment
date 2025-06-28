@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
     requires_onnxscript,
 )
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 
 
 class TestTorchOnnxExport2025(ExtTestCase):
@@ -46,6 +47,46 @@ class TestTorchOnnxExport2025(ExtTestCase):
         ref = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    def test_of_scaled_dot_product_attention_23(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, query, key, value):
+                return torch.nn.functional.scaled_dot_product_attention(query, key, value)
+
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float16)
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float16)
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float16)
+        inputs = (query, key, value)
+        model = Model()
+        expected = model(*inputs)
+        ds1 = {0: "batch", 2: "cache_length", 3: "last_dim"}
+        ds = (ds1, ds1, ds1)
+        opset = 23
+        onx = torch.onnx.export(
+            model, inputs, dynamic_shapes=ds, opset_version=opset, dynamo=True
+        ).model_proto
+        self.dump_onnx(f"test_of_scaled_dot_product_attention_{opset}.onnx", onx)
+        self.assertEqual(["Attention"], [n.op_type for n in onx.graph.node])
+        self.assertEqual(
+            ("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version)
+        )
+
+        feeds = dict(
+            zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs])
+        )
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
 
 
 if __name__ == "__main__":

@@ -127,8 +127,16 @@ def aten_scaled_dot_product_attention(
             assert g.has_rank(query), f"missing shape for {query!r}{g.get_debug_msg()}"
             assert g.has_rank(key), f"missing shape for {key!r}{g.get_debug_msg()}"
             assert g.has_rank(value), f"missing shape for {value!r}{g.get_debug_msg()}"
-            assert g.get_rank(query) == g.get_rank(key) == g.get_rank(value) == 4, (
-                f"The converter is only implemented for rank == 4 "
+            ranks = {g.get_rank(query), g.get_rank(key), g.get_rank(value)}
+            assert len(ranks) == 1, (
+                f"The converter is only implemented when all inputs have the same rank "
+                f"but rank(query)={g.get_rank(query)}, rank(key)={g.get_rank(key)}, "
+                f"rank(value)={g.get_rank(value)}{g.get_debug_msg()}"
+            )
+            rk = ranks.pop()
+            assert rk in {4}, (
+                f"The converter is only implemented "
+                f"when all inputs have the same rank 4 "
                 f"but rank(query)={g.get_rank(query)}, rank(key)={g.get_rank(key)}, "
                 f"rank(value)={g.get_rank(value)}{g.get_debug_msg()}"
             )

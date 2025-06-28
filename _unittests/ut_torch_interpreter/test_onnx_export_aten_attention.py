@@ -241,7 +241,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                 got = sess.run(None, feeds)[0]
                 self.assertEqualArray(expected, got, atol=1e-4)
 
-    def test_scaled_dot_product_attention_18_23(self):
+    def test_scaled_dot_product_attention_4D_18_23(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -259,7 +259,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         for opset in [23, 18]:
             with self.subTest(opset=opset):
                 onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset)
-                self.dump_onnx(f"scaled_dot_product_attention_{opset}.onnx", onx)
+                self.dump_onnx(f"test_scaled_dot_product_attention_{opset}.onnx", onx)
                 if opset >= 23:
                     self.assertEqual(
                         ["Attention"],
