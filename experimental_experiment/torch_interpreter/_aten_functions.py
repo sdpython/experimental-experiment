@@ -1161,6 +1161,18 @@ def aten_bitwise_and(
     return res
 
 
+def aten_bitwise_and_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_and",
+) -> T:
+    "bitwise and"
+    return aten_bitwise_and(g, sts, outputs, x, y, name=name)
+
+
 def aten_bitwise_or(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4177,21 +4189,8 @@ def aten_index_Tensor(
 
         name = f"{name}_rk1"
         shapes = [g.get_shape(i) for i in indices]
-        assert len(set(shapes)) == 1, (
-            f"aten_index is not implemented for shapes={shapes} (1), x={x!r}, "
-            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}"
-            f"{g.get_debug_msg()}"
-        )
         same_shape = shapes[0]
-        assert len(same_shape) == 1 or (g.has_rank(x) and len(indices) == g.get_rank(x)), (
-            f"aten_index is not implemented for shapes={shapes} (2), x={x!r}, "
-            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
-            f"dtype(x)={g.get_type(x) if g.has_type(x) else '?'}, "
-            f"len(indices)={len(indices)}, "
-            f"types(indices)={[g.get_type(i) for i in indices]}, "
-            f"{g.get_debug_msg()}"
-        )
-        if len(same_shape) == 1:
+        if len(set(shapes)) == 1 and len(same_shape) == 1:
             reshaped = [
                 g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name) for i in indices
             ]
@@ -4215,7 +4214,7 @@ def aten_index_Tensor(
         flat = g.op.Gather(
             g.op.Reshape(x, g.MINUS_ONE, name=name), g.op.Reshape(ind, g.MINUS_ONE, name=name)
         )
-        res = g.op.Reshape(flat, g.op.Shape(indices[0], name=name), name=name, outputs=outputs)
+        res = g.op.Reshape(flat, g.op.Shape(ind, name=name), name=name, outputs=outputs)
         if not sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, g.get_shape(indices[0]))
@@ -8945,27 +8944,27 @@ def aten_setitem(
             f"when index={index}{g.get_debug_msg()}"
         )
 
-        def _d(axis=axis):
+        def _d(name, axis=axis):
             return g.op.SqueezeAnyOpset(
-                g.op.Shape(x, start=axis, end=axis + 1, name=name), g.ZERO, name=name
+                g.op.Shape(name, start=axis, end=axis + 1, name=name), g.ZERO, name=name
             )
 
         start = (
-            (index.start if index.start >= 0 else g.op.Add(_d(), index.start, name=name))
+            (index.start if index.start >= 0 else g.op.Add(_d(x), index.start, name=name))
             if isinstance(index.start, int)
             else g.op.Where(
                 g.op.GreaterOrEqual(index.start, g.ZERO_NO_DIM, name=name),
                 index.start,
-                g.op.Add(_d(), index.start, name=name),
+                g.op.Add(_d(x), index.start, name=name),
             )
         )
         stop = (
-            (-index.stop if index.stop < 0 else g.op.Add(_d(), index.stop, name=name))
+            (-index.stop if index.stop < 0 else g.op.Sub(_d(x), index.stop, name=name))
             if isinstance(index.stop, int)
             else g.op.Where(
                 g.op.GreaterOrEqual(index.stop, g.ZERO_NO_DIM, name=name),
+                g.op.Sub(_d(x), index.stop, name=name),
                 g.op.Neg(index.stop, name=name),
-                g.op.Add(_d(), index.stop, name=name),
             )
         )
         padding_x_start.append(start)
@@ -9006,7 +9005,9 @@ def aten_setitem(
         )
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-    padded_values = g.op.Pad(values, padding_x_cst, name=name)
+    padded_values = g.op.Pad(
+        values, padding_x_cst, name=name, outputs=[g.unique_name(f"{values}_padded")]
+    )
     set_type_shape_unary_op(g, padded_values, x)
 
     # the mask
@@ -9019,6 +9020,7 @@ def aten_setitem(
         padding_x_cst,
         np.array(1, dtype=dtype),
         name=name,
+        outputs=[g.unique_name(f"{x}_mask")],
     )
     g.set_type(mask, g.get_type(x))
     g.set_rank(mask, g.get_rank(x))

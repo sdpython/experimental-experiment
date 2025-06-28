@@ -56,9 +56,9 @@ class TestTorchOnnxExport2025(ExtTestCase):
             def forward(self, query, key, value):
                 return torch.nn.functional.scaled_dot_product_attention(query, key, value)
 
-        query = torch.rand(32, 8, 128, 64, dtype=torch.float16)
-        key = torch.rand(32, 8, 128, 64, dtype=torch.float16)
-        value = torch.rand(32, 8, 128, 64, dtype=torch.float16)
+        query = torch.rand(32, 8, 128, 64, dtype=torch.float32)
+        key = torch.rand(32, 8, 128, 64, dtype=torch.float32)
+        value = torch.rand(32, 8, 128, 64, dtype=torch.float32)
         inputs = (query, key, value)
         model = Model()
         expected = model(*inputs)

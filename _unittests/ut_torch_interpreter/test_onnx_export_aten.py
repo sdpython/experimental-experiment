@@ -1718,14 +1718,14 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualAny(expected.numpy(), got, atol=1e-5)
 
-    def test_getitem_index_put(self):
+    def test_getitem_index_put1(self):
         import torch
 
         class Model(torch.nn.Module):
-            def forward(self, mask, value):
-                mask = mask.clone()
-                mask[:, :, :, : value.shape[-1]] = value
-                return mask
+            def forward(self, x, value):
+                x = x.clone()
+                x[:, :, :, : value.shape[-1]] = value
+                return x
 
         inputs = (torch.randn(2, 2, 3, 4), torch.randn(2, 2, 3, 3))
         model = Model()
@@ -1735,8 +1735,108 @@ class TestOnnxExportAten(ExtTestCase):
             model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), target_opset=23, verbose=0
         )
         self.dump_onnx("test_getitem_index_put.onnx", onx)
-        feeds = dict(zip(["mask", "value"], [x.detach().cpu().numpy() for x in inputs]))
-        ref = ExtendedReferenceEvaluator(onx)
+        feeds = dict(zip(["x", "value"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_getitem_index_put2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, value):
+                x = x.clone()
+                x[:, :, :, 1 : value.shape[-1] + 1] = value
+                return x
+
+        inputs = (torch.randn(2, 2, 3, 4), torch.randn(2, 2, 3, 3))
+        model = Model()
+        expected = model(*inputs)
+
+        onx = to_onnx(
+            model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), target_opset=23, verbose=0
+        )
+        self.dump_onnx("test_getitem_index_put.onnx", onx)
+        feeds = dict(zip(["x", "value"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_getitem_index_put3(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, value):
+                x = x.clone()
+                x[:, :, 1 : value.shape[-2] + 1, 1 : value.shape[-1] + 1] = value
+                return x
+
+        inputs = (torch.randn(2, 2, 4, 4), torch.randn(2, 2, 3, 3))
+        model = Model()
+        expected = model(*inputs)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=({2: "M1", 3: "M1"}, {2: "N1", 3: "N2"}),
+            target_opset=23,
+            verbose=0,
+        )
+        self.dump_onnx("test_getitem_index_put.onnx", onx)
+        feeds = dict(zip(["x", "value"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_index_Tensor_21_2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind1, ind2):
+                return x[ind1, ind2]
+
+        inputs = (
+            torch.randn(2, 1024),
+            torch.tensor([[0, 1]], dtype=torch.int64).T,
+            torch.arange(1024, dtype=torch.int64),
+        )
+        model = Model()
+        expected = model(*inputs)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"}),
+            target_opset=23,
+            verbose=0,
+        )
+        self.dump_onnx("test_getitem_index_put.onnx", onx)
+        feeds = dict(zip(["x", "ind1", "ind2"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 

@@ -1,5 +1,6 @@
 from logging import getLogger
 from typing import Any, Dict, List, Optional, Union
+import numpy as np
 from onnx import FunctionProto, ModelProto
 from onnx.defs import get_schema
 from onnx.reference import ReferenceEvaluator
@@ -174,6 +175,15 @@ class ExtendedReferenceEvaluator(ReferenceEvaluator):
             new_ops=new_ops,
             **kwargs,
         )
+
+    def _log_arg(self, a: Any) -> Any:
+        if self.verbose >= 4 and isinstance(a, np.ndarray) and a.dtype == np.int64:
+            elements = a.ravel().tolist()
+            if len(elements) > 10:  # noqa: PLR2004
+                elements = elements[:10]
+                return f"{a.dtype}:{a.shape}:{','.join(map(str, elements))}..."
+            return f"{a.dtype}:{a.shape}:{elements}"
+        return super()._log_arg(a)
 
     def _log(self, level: int, pattern: str, *args: List[Any]) -> None:
         if level < self.verbose:
