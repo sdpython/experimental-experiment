@@ -280,7 +280,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
     ONE = np.array([1], dtype=np.int64)
+    ONE_NO_DIM = np.array(1, dtype=np.int64)
     ZERO = np.array([0], dtype=np.int64)
+    ZERO_NO_DIM = np.array(0, dtype=np.int64)
 
     class ShapeConstant:
         """Wraps a constant shape even if the input producing the shape is not."""

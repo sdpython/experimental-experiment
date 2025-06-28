@@ -8842,29 +8842,28 @@ def aten_setitem(
     values: T,
     name: str = "setitem",
 ) -> T:
-    "scatter"
+    "setitem"
+
+    # dealing with ellipsis
     if (
         isinstance(indices, tuple)
         and len(indices) == 2
         and indices[0] is Ellipsis
-        and isinstance(indices[1], slice)
+        and isinstance(indices[1], (slice, int, str))
     ):
-        s = indices[1]
-        return aten_slice_scatter(
-            g,
-            sts,
-            outputs,
-            x,
-            values,
-            dim=g.get_rank(x) - 1,
-            start=s.start,
-            end=s.stop,
-            step=s.step,
-            name=f"{name}_E_1d",
-        )
+        assert g.has_rank(x), f"Missing rank for x{g.get_debug_msg()}"
+        indices = [*([None] * (g.get_rank(x) - 1)), indices[1]]
+    elif (
+        isinstance(indices, tuple)
+        and len(indices) == 2
+        and indices[1] is Ellipsis
+        and isinstance(indices[0], (int, str, slice))
+    ):
+        assert g.has_rank(x), f"Missing rank for x{g.get_debug_msg()}"
+        indices = [indices[0], *([None] * (g.get_rank(x) - 1))]
 
     if g.has_rank(x) and g.get_rank(x) == 1 and g.has_rank(values) and g.get_rank(values) == 1:
-        # Uses concat.
+        # Uses concat, it might be applicable to other cases. To be improved.
         assert len(indices) == 1 and isinstance(indices[0], slice), (
             f"Unexpected type for indices {type(indices)}, value is {indices}"
             f"{g.get_debug_msg()}"
@@ -8932,50 +8931,45 @@ def aten_setitem(
         if index is None:
             padding_x_start.append(0)
             padding_x_stop.append(0)
-        elif isinstance(index, int):
-            assert g.has_shape(x), (
-                f"Not implemented when shape for {x!r} is missing, "
-                f"indices={indices}{g.get_debug_msg()}"
-            )
-            shape = g.get_shape(x)
-            assert isinstance(shape[axis], int), (
-                f"Not implemented for dynamic shape for {x!r}, shape={shape}, "
-                f"axis={axis}, indices={indices}{g.get_debug_msg()}"
-            )
-            if index < 0:
-                start = shape[axis] + index
-                stop = index + 1
-            else:
-                start = index
-                stop = -index - shape[axis] + 1
-        else:
-            assert isinstance(index, slice), (
-                f"setitem is not implemented when index is not a slice "
-                f"({type(index)}), indices={indices}{g.get_debug_msg()}"
-            )
-            assert index.step in {None, 0}, (
-                f"unsupported step={index.step}, setitem is not implemented "
-                f"when index={index}{g.get_debug_msg()}"
-            )
-            start = index.start or 0
-            if start == 0 and index.stop is None:
-                # No padding is needed.
-                continue
-            stop = index.stop
+            continue
+        if isinstance(index, int):
+            index = slice(index, None if index == -1 else index + 1)
+        if isinstance(index, str):
+            index = slice(index, g.op.Add(index, g.ONE_NO_DIM, name=name))
+        assert isinstance(index, slice), (
+            f"setitem is not implemented when index is not a slice "
+            f"({type(index)}), indices={indices}{g.get_debug_msg()}"
+        )
+        assert index.step in {None, 0}, (
+            f"unsupported step={index.step}, setitem is not implemented "
+            f"when index={index}{g.get_debug_msg()}"
+        )
 
-        if isinstance(stop, int) and stop > 0 and g.has_shape(x):
-            # static shape
-            shape_x = g.get_shape(x)
-            if isinstance(shape_x[axis], int):
-                stop -= shape_x[axis]
+        def _d(axis=axis):
+            return g.op.SqueezeAnyOpset(
+                g.op.Shape(x, start=axis, end=axis + 1, name=name), g.ZERO, name=name
+            )
 
-        assert isinstance(start, int) and isinstance(stop, int) and stop <= 0 and start >= 0, (
-            f"setitem is not implemented when index={index!r}, start={start!r}, "
-            f"stop={stop!r}, indices={indices}, shape(x)="
-            f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
+        start = (
+            (index.start if index.start >= 0 else g.op.Add(_d(), index.start, name=name))
+            if isinstance(index.start, int)
+            else g.op.Where(
+                g.op.GreaterOrEqual(index.start, g.ZERO_NO_DIM, name=name),
+                index.start,
+                g.op.Add(_d(), index.start, name=name),
+            )
+        )
+        stop = (
+            (-index.stop if index.stop < 0 else g.op.Add(_d(), index.stop, name=name))
+            if isinstance(index.stop, int)
+            else g.op.Where(
+                g.op.GreaterOrEqual(index.stop, g.ZERO_NO_DIM, name=name),
+                g.op.Neg(index.stop, name=name),
+                g.op.Add(_d(), index.stop, name=name),
+            )
         )
         padding_x_start.append(start)
-        padding_x_stop.append(-stop)
+        padding_x_stop.append(stop)
 
     rk_x = g.get_rank(x)
     rk_values = g.get_rank(values)
@@ -8993,7 +8987,23 @@ def aten_setitem(
         values = g.op.Expand(values, shape_values, name=name)
 
     # padding values
-    padding_x_cst = np.array(padding_x_start + padding_x_stop, dtype=np.int64)
+    if all(isinstance(i, int) for i in padding_x_start) and all(
+        isinstance(i, int) for i in padding_x_stop
+    ):
+        padding_x_cst = np.array(padding_x_start + padding_x_stop, dtype=np.int64)
+    else:
+        padding_x_cst = g.op.Concat(
+            *[
+                (
+                    np.array([i], dtype=np.int64)
+                    if isinstance(i, int)
+                    else g.op.UnsqueezeAnyOpset(i, g.ZERO, name=name)
+                )
+                for i in [*padding_x_start, *padding_x_stop]
+            ],
+            axis=0,
+            name=name,
+        )
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
     padded_values = g.op.Pad(values, padding_x_cst, name=name)
