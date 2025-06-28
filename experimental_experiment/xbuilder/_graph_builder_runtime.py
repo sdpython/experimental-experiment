@@ -220,10 +220,16 @@ class _GraphBuilderRuntime:
         if isinstance(axis, np.ndarray):
             axis = [int(axis)] if axis.shape == tuple() else axis.tolist()
         if len(axis) == 1:
-            return [x.unsqueeze(int(axis[0]))]
+            if isinstance(x, (np.int64, np.int32)):
+                return np.array([x])
+            return (
+                [x.expand_dims(int(axis[0]))]
+                if isinstance(x, np.ndarray)
+                else [x.unsqueeze(int(axis[0]))]
+            )
         assert len(axis) > 0, f"axis={axis} is null"
         for a in axis:
-            x = x.unsqueeze(int(a))
+            x = x.expand_dims(int(a)) if isinstance(x, np.ndarray) else x.unsqueeze(int(a))
         return [x]
 
     def _apply_cast(

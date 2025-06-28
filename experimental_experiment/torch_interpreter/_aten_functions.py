@@ -8950,7 +8950,11 @@ def aten_setitem(
             )
 
         start = (
-            (index.start if index.start >= 0 else g.op.Add(_d(x), index.start, name=name))
+            (
+                index.start
+                if index.start >= 0
+                else g.op.Add(_d(x), np.array(index.start, dtype=np.int64), name=name)
+            )
             if isinstance(index.start, int)
             else g.op.Where(
                 g.op.GreaterOrEqual(index.start, g.ZERO_NO_DIM, name=name),
@@ -8959,12 +8963,16 @@ def aten_setitem(
             )
         )
         stop = (
-            (-index.stop if index.stop < 0 else g.op.Sub(_d(x), index.stop, name=name))
-            if isinstance(index.stop, int)
-            else g.op.Where(
-                g.op.GreaterOrEqual(index.stop, g.ZERO_NO_DIM, name=name),
-                g.op.Sub(_d(x), index.stop, name=name),
-                g.op.Neg(index.stop, name=name),
+            0
+            if index.stop is None
+            else (
+                (-index.stop if index.stop < 0 else g.op.Sub(_d(x), index.stop, name=name))
+                if isinstance(index.stop, int)
+                else g.op.Where(
+                    g.op.GreaterOrEqual(index.stop, g.ZERO_NO_DIM, name=name),
+                    g.op.Sub(_d(x), index.stop, name=name),
+                    g.op.Neg(index.stop, name=name),
+                )
             )
         )
         padding_x_start.append(start)
@@ -8978,11 +8986,43 @@ def aten_setitem(
             f"setitem is not implemented when rank(x)={rk_x} < rank(values)={rk_values}"
             f"{g.get_debug_msg()}"
         )
-        shape_values = g.op.Sub(
-            g.op.Shape(x, name=name),
-            (np.array(padding_x_start) + np.array(padding_x_stop)).astype(np.int64),
-            name=name,
-        )
+        # padding values added
+        if all(isinstance(i, int) for i in padding_x_start) and all(
+            isinstance(i, int) for i in padding_x_stop
+        ):
+            padding_x_cst_added = (
+                np.array(padding_x_start) + np.array(padding_x_stop)
+            ).astype(dtype=np.int64)
+        else:
+            padding_x_cst_added = g.op.Add(
+                g.op.Concat(
+                    *[
+                        (
+                            np.array([i], dtype=np.int64)
+                            if isinstance(i, int)
+                            else g.op.UnsqueezeAnyOpset(i, g.ZERO, name=name)
+                        )
+                        for i in padding_x_start
+                    ],
+                    axis=0,
+                    name=name,
+                ),
+                g.op.Concat(
+                    *[
+                        (
+                            np.array([i], dtype=np.int64)
+                            if isinstance(i, int)
+                            else g.op.UnsqueezeAnyOpset(i, g.ZERO, name=name)
+                        )
+                        for i in padding_x_stop
+                    ],
+                    axis=0,
+                    name=name,
+                ),
+                name=name,
+            )
+
+        shape_values = g.op.Sub(g.op.Shape(x, name=name), padding_x_cst_added, name=name)
         values = g.op.Expand(values, shape_values, name=name)
 
     # padding values

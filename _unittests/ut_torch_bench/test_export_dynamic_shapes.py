@@ -51,13 +51,13 @@ class TestExportDynamicShapes(ExtTestCase):
         got = mod(*args)
         self.assertEqualArray(expected=expected, value=got)
 
-    @requires_torch("2.8")
+    @requires_torch("2.7.99")
     def test_dynamic_batch_1b(self):
         import torch
 
         Neuron = self.get_class_model()
         nn = Neuron()
-        args = (torch.randn(1, 5),)
+        args = (torch.randn(2, 5),)
         batch = torch.export.Dim("batch", min=1, max=1024)
         compiled = torch.export.export(nn, args, dynamic_shapes=({0: batch},))
         expected = nn(*args)
