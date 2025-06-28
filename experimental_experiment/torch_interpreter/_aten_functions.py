@@ -8929,7 +8929,10 @@ def aten_setitem(
     padding_x_start = []
     padding_x_stop = []
     for axis, index in enumerate(indices):
-        if isinstance(index, int):
+        if index is None:
+            padding_x_start.append(0)
+            padding_x_stop.append(0)
+        elif isinstance(index, int):
             assert g.has_shape(x), (
                 f"Not implemented when shape for {x!r} is missing, "
                 f"indices={indices}{g.get_debug_msg()}"
@@ -8950,16 +8953,15 @@ def aten_setitem(
                 f"setitem is not implemented when index is not a slice "
                 f"({type(index)}), indices={indices}{g.get_debug_msg()}"
             )
-            assert index.step in {
-                None,
-                0,
-            }, f"setitem is not implemented when index={index}{g.get_debug_msg()}"
-            start = index.start or 0
-            assert index != 0, (
-                f"setitem is not implemented when index={index}, indices={indices}, shape(x)="
-                f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
+            assert index.step in {None, 0}, (
+                f"unsupported step={index.step}, setitem is not implemented "
+                f"when index={index}{g.get_debug_msg()}"
             )
-            stop = index.stop or 0
+            start = index.start or 0
+            if start == 0 and index.stop is None:
+                # No padding is needed.
+                continue
+            stop = index.stop
 
         if isinstance(stop, int) and stop > 0 and g.has_shape(x):
             # static shape

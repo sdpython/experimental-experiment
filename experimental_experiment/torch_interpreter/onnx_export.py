@@ -70,7 +70,7 @@ def match_input_parameters(
 
     weights = dict(model.named_parameters())
     buffers = dict(model.named_buffers())
-    constants = model.state_dict()
+    constants = model.state_dict(keep_vars=True)
     mapping = {}
     for k in weights:
         mapping[f"p_{cl(k)}"] = (k, weights[k], 0)
@@ -535,7 +535,12 @@ def _make_builder_interpreter(
         import torch.export
 
     if export_options is None:
-        aten_as_function = get_default_aten_as_function(target_opset)
+        from . import DEFAULT_TARGET_OPSET
+
+        opset = target_opset or DEFAULT_TARGET_OPSET
+        aten_as_function = get_default_aten_as_function(
+            opset if isinstance(opset, int) else opset.get("", DEFAULT_TARGET_OPSET)
+        )
         export_options = ExportOptions(aten_as_function=aten_as_function)
 
     mask_outputs = None
@@ -548,7 +553,7 @@ def _make_builder_interpreter(
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
-        constants = mod.state_dict()
+        constants = mod.state_dict(keep_vars=True)
         mapping = {}
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- GIVEN GRAPH MODULE")
@@ -564,7 +569,7 @@ def _make_builder_interpreter(
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
-        constants = mod.state_dict()
+        constants = mod.state_dict(keep_vars=True)
         mapping = {}
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- GIVEN GRAPH MODULE")

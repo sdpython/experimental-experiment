@@ -614,7 +614,7 @@ class CustomTracer(torch.fx.Tracer):
             changed = old_name.replace_all_uses_with(new_name)
             assert changed, (
                 f"No change applied, the node [{node}] at position {pos} "
-                f"can be removed and replaced by {old_name} in \n{graph}."
+                f"cannot be removed and replaced by {old_name} in \n{graph}."
             )
             graph.erase_node(old_name)
             removed += 1

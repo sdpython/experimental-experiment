@@ -1718,6 +1718,36 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualAny(expected.numpy(), got, atol=1e-5)
 
+    def test_getitem_index_put(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, mask, value):
+                mask = mask.clone()
+                mask[:, :, :, : value.shape[-1]] = value
+                return mask
+
+        inputs = (torch.randn(2, 2, 3, 4), torch.randn(2, 2, 3, 3))
+        model = Model()
+        expected = model(*inputs)
+
+        onx = to_onnx(
+            model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), target_opset=23, verbose=0
+        )
+        self.dump_onnx("test_getitem_index_put.onnx", onx)
+        feeds = dict(zip(["mask", "value"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

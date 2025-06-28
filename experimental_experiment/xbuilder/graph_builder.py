@@ -2516,7 +2516,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             pass
         elif isinstance(value, np.ndarray):
             pass
-        elif hasattr(value, "data"):
+        elif isinstance(value, self.torch.Tensor):
             # torch.nn.parameter.Parameter -> np.ndarray
             assert "FakeTensor" not in str(type(value)), (
                 f"FakeTensor {name!r} cannot be an initializer {type(value)}"

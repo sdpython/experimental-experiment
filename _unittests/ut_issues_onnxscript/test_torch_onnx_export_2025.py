@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnxscript,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.torch_interpreter import to_onnx
 
 
 class TestTorchOnnxExport2025(ExtTestCase):
@@ -87,6 +88,70 @@ class TestTorchOnnxExport2025(ExtTestCase):
         )
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_mask_update(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, causal_mask, fill_value):
+                causal_mask = causal_mask.clone()
+                mask_length = fill_value.shape[-1]
+                causal_mask[:, :, :, :mask_length] = fill_value
+                return causal_mask
+
+        B = 2
+        N = 2
+        S = 3
+        T = 4
+        T2 = 3
+        causal_mask = torch.randn(B, N, S, T)
+        fill_value = torch.randn(B, N, S, T2)
+        inputs = (causal_mask, fill_value)
+        model = Model()
+        expected = model(*inputs)
+
+        ds = ({3: "M"}, {3: "N"})
+        opset = 23
+
+        for exp in ["custom", "onnx-dynamo"]:
+            if exp == "onnx-dynamo":
+                epo = torch.onnx.export(
+                    model, inputs, dynamic_shapes=ds, opset_version=opset, dynamo=True
+                )
+                epo.optimize()
+                onx = epo.model_proto
+            else:
+                ep = torch.export.export(
+                    model,
+                    inputs,
+                    dynamic_shapes=(
+                        {3: torch.export.Dim.DYNAMIC},
+                        {3: torch.export.Dim.DYNAMIC},
+                    ),
+                )
+                print(ep)
+                ep = ep.run_decompositions()
+                print(ep)
+                onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset, verbose=0)
+            self.dump_onnx(f"test_of_mask_update_{exp}.onnx", onx)
+            self.assertEqual(
+                ("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version)
+            )
+
+            feeds = dict(
+                zip(["causal_mask", "fill_value"], [x.detach().cpu().numpy() for x in inputs])
+            )
+            ref = ExtendedReferenceEvaluator(onx)
+            got = ref.run(None, feeds)[0]
+            self.assertEqualArray(expected, got, atol=1e-2)
+
+            import onnxruntime
+
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            got = sess.run(None, feeds)[0]
+            self.assertEqualArray(expected, got, atol=1e-2)
 
 
 if __name__ == "__main__":
