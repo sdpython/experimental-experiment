@@ -99,7 +99,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         input_ids = torch.randint(0, 99, shape).to(torch.int64)
         attention_mask = torch.ones(shape)
         expected = model(input_ids, attention_mask)
-        with torch_export_patches():
+        with torch_export_patches(patch_transformers=True):
             ep = torch.export.export(model, copy.deepcopy((input_ids, attention_mask)))
 
             # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
