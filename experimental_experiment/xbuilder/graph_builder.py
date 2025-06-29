@@ -4859,12 +4859,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             if hasattr(t, "detach"):
 
                 def is_allow_non_fake_inputs_enabled():
-                    from torch._subclasses.fake_tensor import FakeTensorMode
+                    from torch._guards import detect_fake_mode
 
-                    mode = FakeTensorMode.current
-                    if mode is not None:
-                        return mode.allow_non_fake_inputs
-                    return None
+                    return detect_fake_mode(t)
 
                 if is_allow_non_fake_inputs_enabled():
                     return "FakeTensorMode enabled"
