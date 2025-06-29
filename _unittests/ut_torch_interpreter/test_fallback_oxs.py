@@ -130,8 +130,9 @@ class TestFallbackOxs(ExtTestCase):
         from experimental_experiment.torch_interpreter.oxs_dispatcher import (
             OxsDebugDispatcher,
         )
+        from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-        with torch.no_grad():
+        with torch.no_grad(), torch_export_patches(patch_transformers=True):
             model, input_tensors = get_llama_model()
             input_tensors = input_tensors[0]
             expected = model(*input_tensors)

@@ -118,9 +118,41 @@ def aten_scaled_dot_product_attention(
     *S* is the source sequence length, and E is the embedding size.
     """
     assert not enable_gqa, f"not implemented if enable_gqa={enable_gqa}"
-    assert (not is_causal) or (
-        is_causal and attn_mask is None
-    ), f"is_causal and attn_mask cannot be set at the same time{g.get_debug_msg()}"
+    assert (not is_causal) or (is_causal and attn_mask is None), (
+        f"is_causal and attn_mask cannot be set at the same time"
+        f"is_causal={is_causal}, attn_mask={attn_mask}{g.get_debug_msg()}"
+    )
+    if g.main_opset >= 23:
+        if dropout_p == 0:
+            assert g.has_rank(query), f"missing shape for {query!r}{g.get_debug_msg()}"
+            assert g.has_rank(key), f"missing shape for {key!r}{g.get_debug_msg()}"
+            assert g.has_rank(value), f"missing shape for {value!r}{g.get_debug_msg()}"
+            ranks = {g.get_rank(query), g.get_rank(key), g.get_rank(value)}
+            assert len(ranks) == 1, (
+                f"The converter is only implemented when all inputs have the same rank "
+                f"but rank(query)={g.get_rank(query)}, rank(key)={g.get_rank(key)}, "
+                f"rank(value)={g.get_rank(value)}{g.get_debug_msg()}"
+            )
+            rk = ranks.pop()
+            assert rk in {4}, (
+                f"The converter is only implemented "
+                f"when all inputs have the same rank 4 "
+                f"but rank(query)={g.get_rank(query)}, rank(key)={g.get_rank(key)}, "
+                f"rank(value)={g.get_rank(value)}{g.get_debug_msg()}"
+            )
+            Y = g.op.Attention(
+                query,
+                key,
+                value,
+                attn_mask=attn_mask,
+                scale=scale,
+                # q_num_heads=q1,
+                # kv_num_heads=k1,
+                is_causal=is_causal,
+                outputs=outputs,
+                name=name,
+            )
+            return Y
 
     if scale is None:
         tscale = _attention_scale(g, query, name=name)

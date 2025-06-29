@@ -917,12 +917,14 @@ def _set_shape_type_op_any_pad(self: "GraphBuilder", node: NodeProto):  # noqa: 
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
 
-    if self.has_shape(node.input[0]):
+    if self.has_shape(node.input[0]) and self.is_constant(node.input[1]):
         pads = self.compute_constant(node.input[1])[0]
         assert pads is not None or not self._debug_shape_missing, (
             f"Unable to evaluate pad={node.input[1]!r}: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
+        if pads is None:
+            return
         pads = pads.tolist()
         if len(node.input) > 3 and node.input[3]:
             axes = self.compute_constant(node.input[1])[0]

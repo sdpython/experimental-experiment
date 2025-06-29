@@ -118,7 +118,7 @@ def export_to_onnx(
         filename = f"{prefix}.onnx"
         with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            torch.onnx.export(model, args, filename, input_names=["input"])
+            torch.onnx.export(model, args, filename, input_names=["input"], dynamo=False)
             ret["torch.script"] = filename
 
     if isinstance(optimize, str):

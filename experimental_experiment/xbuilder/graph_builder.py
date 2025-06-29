@@ -280,7 +280,9 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
     ONE = np.array([1], dtype=np.int64)
+    ONE_NO_DIM = np.array(1, dtype=np.int64)
     ZERO = np.array([0], dtype=np.int64)
+    ZERO_NO_DIM = np.array(0, dtype=np.int64)
 
     class ShapeConstant:
         """Wraps a constant shape even if the input producing the shape is not."""
@@ -579,8 +581,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             shape = self.get_shape(n)
             ds = {i: s for i, s in enumerate(shape) if isinstance(s, str)}
             ds2.append(ds)
-        if ds2:
-            ds2 = tuple(ds2)
+        ds2 = tuple(ds2)
 
         new_builder = GraphBuilder(
             target_opset_or_existing_proto=self.opsets,
@@ -2516,7 +2517,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             pass
         elif isinstance(value, np.ndarray):
             pass
-        elif hasattr(value, "data"):
+        elif isinstance(value, self.torch.Tensor):
             # torch.nn.parameter.Parameter -> np.ndarray
             assert "FakeTensor" not in str(type(value)), (
                 f"FakeTensor {name!r} cannot be an initializer {type(value)}"
@@ -4856,6 +4857,14 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         def _values(t):
             if hasattr(t, "detach"):
+
+                def is_allow_non_fake_inputs_enabled():
+                    from torch._guards import detect_fake_mode
+
+                    return detect_fake_mode(t)
+
+                if is_allow_non_fake_inputs_enabled():
+                    return "FakeTensorMode enabled"
                 return t.detach().cpu().flatten().tolist()
             if hasattr(t, "size"):
                 return t.ravel().tolist()

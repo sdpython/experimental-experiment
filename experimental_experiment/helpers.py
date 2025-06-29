@@ -185,6 +185,29 @@ def string_signature(sig: Any) -> str:
         return "\n".join(text)
 
 
+def get_sig_kwargs(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
+    """Returns updated attributes."""
+    if hasattr(f, "__init__") and kwargs is None:
+        fct = f.__init__
+        kwargs = f.__dict__
+    else:
+        fct = f
+
+    if kwargs is None:
+        kwargs = {}
+    res = {}
+    sig = inspect.signature(fct)
+    for p in sig.parameters:
+        pp = sig.parameters[p]
+        d = pp.default
+        if d is inspect._empty:
+            if p in kwargs:
+                v = kwargs[p]
+                res[p] = v
+            continue
+    return res
+
+
 def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
     """
     Displays the signature of a functions if the default

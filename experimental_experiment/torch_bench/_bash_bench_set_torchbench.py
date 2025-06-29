@@ -10,6 +10,7 @@ from typing import Any, NamedTuple, Optional, Set, Tuple
 
 import torch
 from torch._dynamo.testing import reset_rng_state
+from ..torch_interpreter import DEFAULT_TARGET_OPSET
 from ._bash_bench_benchmark_runner import BenchmarkRunner
 from ._bash_bench_model_runner import (
     MakeConfig,
@@ -655,7 +656,7 @@ class TorchBenchRunner(BenchmarkRunner):
         repeat: int = 30,
         fake_tensor: bool = False,
         no_grad: bool = True,
-        target_opset: int = 18,
+        target_opset: int = DEFAULT_TARGET_OPSET,
         dtype: Optional[Any] = None,
         nvtx: bool = False,
         dump_ort: bool = False,

@@ -70,7 +70,7 @@ def match_input_parameters(
 
     weights = dict(model.named_parameters())
     buffers = dict(model.named_buffers())
-    constants = model.state_dict()
+    constants = model.state_dict(keep_vars=True)
     mapping = {}
     for k in weights:
         mapping[f"p_{cl(k)}"] = (k, weights[k], 0)
@@ -440,11 +440,29 @@ def rewrite_dynamic_shapes(dynamic_shapes: Any) -> Any:
     return dynamic_shapes
 
 
+def get_default_aten_as_function(target_opset: int) -> Tuple[str]:
+    """
+    Returns the list of aten functions to export as local functions
+    depending on this opset.
+    """
+    return (
+        (
+            "aten.index_copy.default",
+            "aten.index_put.default",
+            "aten.scaled_dot_product_attention.default",
+            "aten.setitem",
+        )
+        if target_opset < 23
+        else ("aten.index_copy.default", "aten.index_put.default", "aten.setitem")
+    )
+
+
 def _make_builder_interpreter(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
     kwargs: Optional[Dict[str, "torch.Tensor"]] = None,  # noqa: F821
     input_names: Optional[Sequence[str]] = None,
+    # from . import DEFAULT_TARGET_OPSET, circular import
     target_opset: Union[int, Dict[str, int]] = 18,
     as_function: bool = False,
     optimization_options: Optional[OptimizationOptions] = None,
@@ -518,7 +536,13 @@ def _make_builder_interpreter(
         import torch.export
 
     if export_options is None:
-        export_options = ExportOptions()
+        from . import DEFAULT_TARGET_OPSET
+
+        opset = target_opset or DEFAULT_TARGET_OPSET
+        aten_as_function = get_default_aten_as_function(
+            opset if isinstance(opset, int) else opset.get("", DEFAULT_TARGET_OPSET)
+        )
+        export_options = ExportOptions(aten_as_function=aten_as_function)
 
     mask_outputs = None
     if isinstance(mod, torch.fx.GraphModule):
@@ -530,7 +554,7 @@ def _make_builder_interpreter(
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
-        constants = mod.state_dict()
+        constants = mod.state_dict(keep_vars=True)
         mapping = {}
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- GIVEN GRAPH MODULE")
@@ -546,7 +570,7 @@ def _make_builder_interpreter(
         graph_module = mod
         weights = dict(graph_module.named_parameters())
         buffers = dict(graph_module.named_buffers())
-        constants = mod.state_dict()
+        constants = mod.state_dict(keep_vars=True)
         mapping = {}
         if os.environ.get("PRINT_GRAPH_MODULE", "0") in (1, "1"):
             print("-- GIVEN GRAPH MODULE")
@@ -940,8 +964,10 @@ def to_onnx(
     assert options is None or isinstance(
         options, OptimizationOptions
     ), f"Unexpected type {type(options)} for options"
+    from . import DEFAULT_TARGET_OPSET
+
     if target_opset is None:
-        target_opset = min(18, onnx_opset_version() - 1)
+        target_opset = min(DEFAULT_TARGET_OPSET, onnx_opset_version() - 1)
     if options is None:
         options = OptimizationOptions()
     begin = time.perf_counter()

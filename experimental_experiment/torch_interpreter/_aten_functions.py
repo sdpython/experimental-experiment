@@ -1161,6 +1161,18 @@ def aten_bitwise_and(
     return res
 
 
+def aten_bitwise_and_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name: str = "bitwise_and",
+) -> T:
+    "bitwise and"
+    return aten_bitwise_and(g, sts, outputs, x, y, name=name)
+
+
 def aten_bitwise_or(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -3779,6 +3791,39 @@ def aten_group_norm(
     "instance_normalization"
     assert g.has_rank(x), f"rank for {x!r} is unknown{g.get_debug_msg()}"
     assert g.has_shape(x), f"shape for {x!r} is unknown{g.get_debug_msg()}"
+    assert g.has_type(x), f"type for {x!r} is unknown{g.get_debug_msg()}"
+
+    if g.main_opset >= 18:
+        if weight is None or bias is None:
+            shape = g.get_shape(x)
+            np_dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+            if is_static_dimension(shape[1]):
+                if weight is None:
+                    weight = np.ones((shape[1],), dtype=np_dtype)
+                if bias is None:
+                    bias = np.zeros((shape[1],), dtype=np_dtype)
+            else:
+                np_dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+                shape = g.op.Shape(x, start=1, end=2, name=name)
+                if weight is None:
+                    weight = g.op.ConstantOfShape(
+                        shape,
+                        value=from_array_extended(np.array([1], dtype=np_dtype)),
+                        name=name,
+                    )
+                if bias is None:
+                    bias = g.op.ConstantOfShape(
+                        shape,
+                        value=from_array_extended(np.array([0], dtype=np_dtype)),
+                        name=name,
+                    )
+        res = g.op.GroupNormalization(
+            x, weight, bias, epsilon=eps, num_groups=num_groups, name=name, outputs=outputs
+        )
+        if not sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+
     shape_x = g.get_shape(x)
     assert len(shape_x) > 1, f"Unexpected shape {shape_x} for {x!r}{g.get_debug_msg()}"
     channel_size = shape_x[1]
@@ -3837,6 +3882,8 @@ def aten_group_norm(
 
     # Norm has shape [N, C, *] so we reshape weight and bias to [C, *]
     res = g.op.Add(g.op.Mul(norm, w, name=name), b, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 
@@ -4142,21 +4189,8 @@ def aten_index_Tensor(
 
         name = f"{name}_rk1"
         shapes = [g.get_shape(i) for i in indices]
-        assert len(set(shapes)) == 1, (
-            f"aten_index is not implemented for shapes={shapes} (1), x={x!r}, "
-            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}"
-            f"{g.get_debug_msg()}"
-        )
         same_shape = shapes[0]
-        assert len(same_shape) == 1 or (g.has_rank(x) and len(indices) == g.get_rank(x)), (
-            f"aten_index is not implemented for shapes={shapes} (2), x={x!r}, "
-            f"shape(x)={g.get_shape(x) if g.has_shape(x) else '?'}, "
-            f"dtype(x)={g.get_type(x) if g.has_type(x) else '?'}, "
-            f"len(indices)={len(indices)}, "
-            f"types(indices)={[g.get_type(i) for i in indices]}, "
-            f"{g.get_debug_msg()}"
-        )
-        if len(same_shape) == 1:
+        if len(set(shapes)) == 1 and len(same_shape) == 1:
             reshaped = [
                 g.op.Reshape(i, np.array([-1, 1], dtype=np.int64), name=name) for i in indices
             ]
@@ -4180,7 +4214,7 @@ def aten_index_Tensor(
         flat = g.op.Gather(
             g.op.Reshape(x, g.MINUS_ONE, name=name), g.op.Reshape(ind, g.MINUS_ONE, name=name)
         )
-        res = g.op.Reshape(flat, g.op.Shape(indices[0], name=name), name=name, outputs=outputs)
+        res = g.op.Reshape(flat, g.op.Shape(ind, name=name), name=name, outputs=outputs)
         if not sts:
             g.set_type(res, g.get_type(x))
             g.set_shape(res, g.get_shape(indices[0]))
@@ -8807,29 +8841,28 @@ def aten_setitem(
     values: T,
     name: str = "setitem",
 ) -> T:
-    "scatter"
+    "setitem"
+
+    # dealing with ellipsis
     if (
         isinstance(indices, tuple)
         and len(indices) == 2
         and indices[0] is Ellipsis
-        and isinstance(indices[1], slice)
+        and isinstance(indices[1], (slice, int, str))
     ):
-        s = indices[1]
-        return aten_slice_scatter(
-            g,
-            sts,
-            outputs,
-            x,
-            values,
-            dim=g.get_rank(x) - 1,
-            start=s.start,
-            end=s.stop,
-            step=s.step,
-            name=f"{name}_E_1d",
-        )
+        assert g.has_rank(x), f"Missing rank for x{g.get_debug_msg()}"
+        indices = [*([None] * (g.get_rank(x) - 1)), indices[1]]
+    elif (
+        isinstance(indices, tuple)
+        and len(indices) == 2
+        and indices[1] is Ellipsis
+        and isinstance(indices[0], (int, str, slice))
+    ):
+        assert g.has_rank(x), f"Missing rank for x{g.get_debug_msg()}"
+        indices = [indices[0], *([None] * (g.get_rank(x) - 1))]
 
     if g.has_rank(x) and g.get_rank(x) == 1 and g.has_rank(values) and g.get_rank(values) == 1:
-        # Uses concat.
+        # Uses concat, it might be applicable to other cases. To be improved.
         assert len(indices) == 1 and isinstance(indices[0], slice), (
             f"Unexpected type for indices {type(indices)}, value is {indices}"
             f"{g.get_debug_msg()}"
@@ -8894,51 +8927,56 @@ def aten_setitem(
     padding_x_start = []
     padding_x_stop = []
     for axis, index in enumerate(indices):
+        if index is None:
+            padding_x_start.append(0)
+            padding_x_stop.append(0)
+            continue
         if isinstance(index, int):
-            assert g.has_shape(x), (
-                f"Not implemented when shape for {x!r} is missing, "
-                f"indices={indices}{g.get_debug_msg()}"
-            )
-            shape = g.get_shape(x)
-            assert isinstance(shape[axis], int), (
-                f"Not implemented for dynamic shape for {x!r}, shape={shape}, "
-                f"axis={axis}, indices={indices}{g.get_debug_msg()}"
-            )
-            if index < 0:
-                start = shape[axis] + index
-                stop = index + 1
-            else:
-                start = index
-                stop = -index - shape[axis] + 1
-        else:
-            assert isinstance(index, slice), (
-                f"setitem is not implemented when index is not a slice "
-                f"({type(index)}), indices={indices}{g.get_debug_msg()}"
-            )
-            assert index.step in {
-                None,
-                0,
-            }, f"setitem is not implemented when index={index}{g.get_debug_msg()}"
-            start = index.start or 0
-            assert index != 0, (
-                f"setitem is not implemented when index={index}, indices={indices}, shape(x)="
-                f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
-            )
-            stop = index.stop or 0
+            index = slice(index, None if index == -1 else index + 1)
+        if isinstance(index, str):
+            index = slice(index, g.op.Add(index, g.ONE_NO_DIM, name=name))
+        assert isinstance(index, slice), (
+            f"setitem is not implemented when index is not a slice "
+            f"({type(index)}), indices={indices}{g.get_debug_msg()}"
+        )
+        assert index.step in {None, 0}, (
+            f"unsupported step={index.step}, setitem is not implemented "
+            f"when index={index}{g.get_debug_msg()}"
+        )
 
-        if isinstance(stop, int) and stop > 0 and g.has_shape(x):
-            # static shape
-            shape_x = g.get_shape(x)
-            if isinstance(shape_x[axis], int):
-                stop -= shape_x[axis]
+        def _d(name, axis=axis):
+            return g.op.SqueezeAnyOpset(
+                g.op.Shape(name, start=axis, end=axis + 1, name=name), g.ZERO, name=name
+            )
 
-        assert isinstance(start, int) and isinstance(stop, int) and stop <= 0 and start >= 0, (
-            f"setitem is not implemented when index={index!r}, start={start!r}, "
-            f"stop={stop!r}, indices={indices}, shape(x)="
-            f"{g.get_shape(x) if g.has_shape(x) else '?'}{g.get_debug_msg()}"
+        start = (
+            (
+                index.start
+                if index.start >= 0
+                else g.op.Add(_d(x), np.array(index.start, dtype=np.int64), name=name)
+            )
+            if isinstance(index.start, int)
+            else g.op.Where(
+                g.op.GreaterOrEqual(index.start, g.ZERO_NO_DIM, name=name),
+                index.start,
+                g.op.Add(_d(x), index.start, name=name),
+            )
+        )
+        stop = (
+            0
+            if index.stop is None
+            else (
+                (-index.stop if index.stop < 0 else g.op.Sub(_d(x), index.stop, name=name))
+                if isinstance(index.stop, int)
+                else g.op.Where(
+                    g.op.GreaterOrEqual(index.stop, g.ZERO_NO_DIM, name=name),
+                    g.op.Sub(_d(x), index.stop, name=name),
+                    g.op.Neg(index.stop, name=name),
+                )
+            )
         )
         padding_x_start.append(start)
-        padding_x_stop.append(-stop)
+        padding_x_stop.append(stop)
 
     rk_x = g.get_rank(x)
     rk_values = g.get_rank(values)
@@ -8948,18 +8986,68 @@ def aten_setitem(
             f"setitem is not implemented when rank(x)={rk_x} < rank(values)={rk_values}"
             f"{g.get_debug_msg()}"
         )
-        shape_values = g.op.Sub(
-            g.op.Shape(x, name=name),
-            (np.array(padding_x_start) + np.array(padding_x_stop)).astype(np.int64),
-            name=name,
-        )
+        # padding values added
+        if all(isinstance(i, int) for i in padding_x_start) and all(
+            isinstance(i, int) for i in padding_x_stop
+        ):
+            padding_x_cst_added = (
+                np.array(padding_x_start) + np.array(padding_x_stop)
+            ).astype(dtype=np.int64)
+        else:
+            padding_x_cst_added = g.op.Add(
+                g.op.Concat(
+                    *[
+                        (
+                            np.array([i], dtype=np.int64)
+                            if isinstance(i, int)
+                            else g.op.UnsqueezeAnyOpset(i, g.ZERO, name=name)
+                        )
+                        for i in padding_x_start
+                    ],
+                    axis=0,
+                    name=name,
+                ),
+                g.op.Concat(
+                    *[
+                        (
+                            np.array([i], dtype=np.int64)
+                            if isinstance(i, int)
+                            else g.op.UnsqueezeAnyOpset(i, g.ZERO, name=name)
+                        )
+                        for i in padding_x_stop
+                    ],
+                    axis=0,
+                    name=name,
+                ),
+                name=name,
+            )
+
+        shape_values = g.op.Sub(g.op.Shape(x, name=name), padding_x_cst_added, name=name)
         values = g.op.Expand(values, shape_values, name=name)
 
     # padding values
-    padding_x_cst = np.array(padding_x_start + padding_x_stop, dtype=np.int64)
+    if all(isinstance(i, int) for i in padding_x_start) and all(
+        isinstance(i, int) for i in padding_x_stop
+    ):
+        padding_x_cst = np.array(padding_x_start + padding_x_stop, dtype=np.int64)
+    else:
+        padding_x_cst = g.op.Concat(
+            *[
+                (
+                    np.array([i], dtype=np.int64)
+                    if isinstance(i, int)
+                    else g.op.UnsqueezeAnyOpset(i, g.ZERO, name=name)
+                )
+                for i in [*padding_x_start, *padding_x_stop]
+            ],
+            axis=0,
+            name=name,
+        )
 
     dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-    padded_values = g.op.Pad(values, padding_x_cst, name=name)
+    padded_values = g.op.Pad(
+        values, padding_x_cst, name=name, outputs=[g.unique_name(f"{values}_padded")]
+    )
     set_type_shape_unary_op(g, padded_values, x)
 
     # the mask
@@ -8972,6 +9060,7 @@ def aten_setitem(
         padding_x_cst,
         np.array(1, dtype=dtype),
         name=name,
+        outputs=[g.unique_name(f"{x}_mask")],
     )
     g.set_type(mask, g.get_type(x))
     g.set_rank(mask, g.get_rank(x))

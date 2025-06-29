@@ -903,7 +903,7 @@ class ModelRunner:
     ):
         assert not fake_tensor, "fake_tensor not implemented."
         assert no_grad, "no_grad false not implemented yet"
-        from ..torch_interpreter import to_onnx, ExportOptions
+        from ..torch_interpreter import to_onnx, ExportOptions, get_default_aten_as_function
         from ..xbuilder import OptimizationOptions
 
         if optimization and optimization != "none":
@@ -920,6 +920,8 @@ class ModelRunner:
         exp_opts = (self.export_options or {}).copy()
         if self.attn_impl == "eager":
             exp_opts["aten_as_function"] = False
+        else:
+            exp_opts["aten_as_function"] = get_default_aten_as_function(target_opset)
         export_options = ExportOptions(strategy=strategy, **exp_opts)
         export_inputs, export_kw_inputs = self.make_export_inputs(dynamic)
         dyn_shapes = self.get_dynamic_shapes(dynamic)

@@ -8,6 +8,7 @@ from ._dort_cmd_common_models import (
     _create_configuration_for_benchmark_phi,
     _create_configuration_for_benchmark_phi3,
 )
+from ..torch_interpreter import DEFAULT_TARGET_OPSET
 
 
 def get_fused_aten_ops_dispatcher():
@@ -496,7 +497,10 @@ def dort_args(name: str, description: str, new_args: Optional[List[str]] = None)
         mixed=("0", "mixed precision (based on autocast)"),
         export=("", "export the dynamo models"),
         dynamic=("0", "use dynamic shapes"),
-        target_opset=("18", "opset to convert into, use with backend=custom"),
+        target_opset=(
+            f"{DEFAULT_TARGET_OPSET}",
+            "opset to convert into, use with backend=custom",
+        ),
         config=("default", "default, medium, or small to test"),
         verbose=("0", "verbosity"),
         implementation=("eager", "eager or sdpa"),
@@ -541,7 +545,7 @@ def export_args(name: str, description: str, new_args: Optional[List[str]] = Non
         num_hidden_layers=(1, "number of hidden layers"),
         dtype=("float32", "model float type"),
         dynamic=("0", "use dynamic shapes"),
-        target_opset=(18, "opset to convert into, use with backend=custom"),
+        target_opset=(DEFAULT_TARGET_OPSET, "opset to convert into, use with backend=custom"),
         config=("default", "default, medium, or small to test"),
         verbose=(0, "verbosity"),
         ort=(1, "produce the model optimized by onnxruntime"),

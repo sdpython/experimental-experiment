@@ -250,7 +250,7 @@ def export_script(filename, model, *args):
     with contextlib.redirect_stdout(io.StringIO()):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            torch.onnx.export(model, *args, filename, input_names=["input"])
+            torch.onnx.export(model, *args, filename, input_names=["input"], dynamo=False)
 
 
 def export_dynamo(filename, model, *args):

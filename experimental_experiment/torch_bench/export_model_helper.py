@@ -14,6 +14,7 @@ from onnx import (
     TensorProto,
 )
 from ..convert.convert_helper import optimize_model_proto_oxs
+from ..torch_interpreter import DEFAULT_TARGET_OPSET
 
 
 def size_type(dtype: Any) -> int:
@@ -160,7 +161,7 @@ def common_export(
     model: Any,
     inputs: List[Any],
     exporter: str = "custom",
-    target_opset: int = 18,
+    target_opset: int = DEFAULT_TARGET_OPSET,
     folder: str = "",
     filename: str = "model.onnx",
     dynamic_shapes: Optional[Any] = None,
