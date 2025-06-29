@@ -1731,9 +1731,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*inputs)
 
-        onx = to_onnx(
-            model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), target_opset=23, verbose=0
-        )
+        onx = to_onnx(model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), verbose=0)
         self.dump_onnx("test_getitem_index_put.onnx", onx)
         feeds = dict(zip(["x", "value"], [x.detach().cpu().numpy() for x in inputs]))
         ref = ExtendedReferenceEvaluator(onx, verbose=0)
@@ -1761,9 +1759,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*inputs)
 
-        onx = to_onnx(
-            model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), target_opset=23, verbose=0
-        )
+        onx = to_onnx(model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), verbose=0)
         self.dump_onnx("test_getitem_index_put.onnx", onx)
         feeds = dict(zip(["x", "value"], [x.detach().cpu().numpy() for x in inputs]))
         ref = ExtendedReferenceEvaluator(onx, verbose=0)
@@ -1795,7 +1791,6 @@ class TestOnnxExportAten(ExtTestCase):
             model,
             inputs,
             dynamic_shapes=({2: "M1", 3: "M1"}, {2: "N1", 3: "N2"}),
-            target_opset=23,
             verbose=0,
         )
         self.dump_onnx("test_getitem_index_put.onnx", onx)
@@ -1831,7 +1826,6 @@ class TestOnnxExportAten(ExtTestCase):
             model,
             inputs,
             dynamic_shapes=({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"}),
-            target_opset=23,
             verbose=0,
         )
         self.dump_onnx("test_getitem_index_put.onnx", onx)

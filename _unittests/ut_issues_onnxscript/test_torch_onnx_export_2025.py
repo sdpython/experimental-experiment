@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     hide_stdout,
     requires_onnxscript,
+    has_onnxruntime,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
@@ -83,6 +84,9 @@ class TestTorchOnnxExport2025(ExtTestCase):
 
         import onnxruntime
 
+        if not has_onnxruntime("1.23"):
+            raise unittest.SkipTest("onnxruntime 1.23 is required")
+
         sess = onnxruntime.InferenceSession(
             onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
@@ -121,6 +125,7 @@ class TestTorchOnnxExport2025(ExtTestCase):
                 epo.optimize()
                 onx = epo.model_proto
             else:
+                """
                 ep = torch.export.export(
                     model,
                     inputs,
@@ -132,6 +137,7 @@ class TestTorchOnnxExport2025(ExtTestCase):
                 print(ep)
                 ep = ep.run_decompositions()
                 print(ep)
+                """
                 onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset, verbose=0)
             self.dump_onnx(f"test_of_mask_update_{exp}.onnx", onx)
             self.assertEqual(
@@ -146,6 +152,9 @@ class TestTorchOnnxExport2025(ExtTestCase):
             self.assertEqualArray(expected, got, atol=1e-2)
 
             import onnxruntime
+
+            if not has_onnxruntime("1.23"):
+                raise unittest.SkipTest("onnxruntime 1.23 is required")
 
             sess = onnxruntime.InferenceSession(
                 onx.SerializeToString(), providers=["CPUExecutionProvider"]

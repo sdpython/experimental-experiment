@@ -581,8 +581,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             shape = self.get_shape(n)
             ds = {i: s for i, s in enumerate(shape) if isinstance(s, str)}
             ds2.append(ds)
-        if ds2:
-            ds2 = tuple(ds2)
+        ds2 = tuple(ds2)
 
         new_builder = GraphBuilder(
             target_opset_or_existing_proto=self.opsets,
@@ -4858,6 +4857,17 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         def _values(t):
             if hasattr(t, "detach"):
+
+                def is_allow_non_fake_inputs_enabled():
+                    from torch._subclasses.fake_tensor import FakeTensorMode
+
+                    mode = FakeTensorMode.current
+                    if mode is not None:
+                        return mode.allow_non_fake_inputs
+                    return None
+
+                if is_allow_non_fake_inputs_enabled():
+                    return "FakeTensorMode enabled"
                 return t.detach().cpu().flatten().tolist()
             if hasattr(t, "size"):
                 return t.ravel().tolist()

@@ -1,5 +1,5 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, has_onnxruntime
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
@@ -282,6 +282,9 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                 self.assertEqualArray(expected, got, atol=1e-2)
 
                 import onnxruntime
+
+                if not has_onnxruntime("1.23"):
+                    raise unittest.SkipTest("onnxruntime 1.23 is required")
 
                 sess = onnxruntime.InferenceSession(
                     onx.SerializeToString(), providers=["CPUExecutionProvider"]
