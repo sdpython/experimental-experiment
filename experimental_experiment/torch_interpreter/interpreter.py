@@ -1457,7 +1457,7 @@ class DynamoInterpreter:
 
         if self.export_options.export_as_aten_function(aten_name):
             res = self.add_aten_as_function(
-                f"call_{aten_name.__name__}" if callable(aten_name) else str(aten_name),
+                f"aten_{aten_name.__name__}" if callable(aten_name) else str(aten_name),
                 fct,
                 can_set,
                 output_names,

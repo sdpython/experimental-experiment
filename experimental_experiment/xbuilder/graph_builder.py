@@ -3204,15 +3204,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.input_names.append(name)
                 input_name = name
 
-        assert (is_dimension and ("_dim_" in input_name or "sym_size_int" in input_name)) or (
-            not is_dimension and "_dim_" not in input_name and "sym_size_int" not in input_name
-        ), (
-            f"Inconsistence for input {name!r}, input_name={input_name!r}, "
-            f"elem_type={elem_type}, shape={shape!r}, is_dimension={is_dimension}, "
-            f"self.current_input={self.current_input}, "
-            f"len(self.input_names)={len(self.input_names)}"
-        )
-
         self.current_input += 1
         elem_type = _get_type(elem_type)
 
