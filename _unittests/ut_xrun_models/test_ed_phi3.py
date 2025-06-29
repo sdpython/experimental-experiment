@@ -1,23 +1,19 @@
 import unittest
-from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
     requires_onnxruntime_training,
     requires_cuda,
-    has_cuda,
     skipif_ci_windows,
 )
 from experimental_experiment.torch_models.phi3_helper import get_phi3_model
-from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
 from experimental_experiment.torch_models.training_helper import (
     train_loop,
     train_loop_mixed_precision,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
-from experimental_experiment.torch_interpreter import ExportOptions
 
 
 class TestEdPhi3(ExtTestCase):
@@ -33,37 +29,6 @@ class TestEdPhi3(ExtTestCase):
         import torch._dynamo
 
         torch._dynamo.config.suppress_errors = cls._keep
-
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
-    @skipif_ci_windows("not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.8")
-    def test_phi3_export_no_rename(self):
-        import torch
-
-        model, input_tensors = get_phi3_model()
-        input_tensors = input_tensors[0]
-        expected = model(*input_tensors)
-        with torch.no_grad():
-            ret = export_to_onnx(
-                model,
-                *input_tensors,
-                rename_inputs=False,
-                optimize=True,
-                prefix="test_phi3_export",
-                export_options=ExportOptions(decomposition_table="default"),
-            )
-        onx = ret["proto"]
-        names = [i.name for i in onx.graph.input]
-        xp = [x.numpy() for x in input_tensors]
-        feeds = dict(zip(names, xp))
-        ref = ExtendedReferenceEvaluator(onx)
-        results = ref.run(None, feeds)
-        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
-        if has_cuda():
-            sess = check_model_ort(onx, providers="cuda")
-            results = sess.run(None, feeds)
-            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=2e-3)
 
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")

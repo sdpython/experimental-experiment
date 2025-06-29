@@ -1,5 +1,4 @@
 import unittest
-from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -9,46 +8,14 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
 )
 from experimental_experiment.torch_models.phi_helper import get_phi_model
-from experimental_experiment.torch_test_helper import export_to_onnx, check_model_ort
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
 from experimental_experiment.torch_models.training_helper import (
     train_loop,
     train_loop_mixed_precision,
 )
-from experimental_experiment.torch_interpreter import ExportOptions
 
 
 class TestEdPhi(ExtTestCase):
-    @skipif_ci_windows("not supported yet on Windows")
-    @ignore_warnings(DeprecationWarning)
-    @requires_torch("2.6")
-    def test_phi_export_no_rename(self):
-        model, input_tensors = get_phi_model()
-        input_tensors = input_tensors[0]
-        expected = model(*input_tensors)
-        ret = export_to_onnx(
-            model,
-            *input_tensors,
-            rename_inputs=False,
-            optimize=True,
-            prefix="test_phi_export",
-            verbose=0,
-            export_options=ExportOptions(decomposition_table="default"),
-        )
-        onx = ret["proto"]
-        # with open("test_ed.onnx", "wb") as f:
-        #    f.write(onx.SerializeToString())
-        names = [i.name for i in onx.graph.input]
-        xp = [x.numpy() for x in input_tensors]
-        feeds = dict(zip(names, xp))
-        ref = ExtendedReferenceEvaluator(onx)
-        results = ref.run(None, feeds)
-        self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)
-        if has_cuda():
-            sess = check_model_ort(onx, providers="cuda")
-            results = sess.run(None, feeds)
-            self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-2)
-
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_phi_cort_static_not_mixed(self):

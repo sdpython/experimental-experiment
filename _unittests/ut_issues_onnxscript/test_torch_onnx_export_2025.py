@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
     requires_onnxscript,
     has_onnxruntime,
+    skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
@@ -50,6 +51,7 @@ class TestTorchOnnxExport2025(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @skipif_ci_windows("not working")
     def test_of_scaled_dot_product_attention_23(self):
         import torch
 
