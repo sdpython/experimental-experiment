@@ -3204,8 +3204,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.input_names.append(name)
                 input_name = name
 
-        assert (is_dimension and "_dim_" in input_name) or (
-            not is_dimension and "_dim_" not in input_name
+        assert (is_dimension and ("_dim_" in input_name or "sym_size_int" in input_name)) or (
+            not is_dimension and "_dim_" not in input_name and "sym_size_int" not in input_name
         ), (
             f"Inconsistence for input {name!r}, input_name={input_name!r}, "
             f"elem_type={elem_type}, shape={shape!r}, is_dimension={is_dimension}, "
@@ -9542,3 +9542,23 @@ class GraphBuilder(_GraphBuilderRuntime):
             shadow |= not_empty & shadow_context
             existing |= not_empty
         return shadow
+
+    def extract_input_names_from_args(self, args: Any) -> List[str]:
+        input_names = []
+        for a in args:
+            if isinstance(a, str) and self.has_name(a):
+                if a not in input_names:
+                    input_names.append(a)
+            elif isinstance(a, (list, tuple)):
+                input_names.extend(self.extract_input_names_from_args(a))
+            elif isinstance(a, slice):
+                input_names.extend(
+                    self.extract_input_names_from_args([a.start, a.stop, a.step])
+                )
+        dedup_names = []
+        unique = set()
+        for i in input_names:
+            if i not in unique:
+                dedup_names.append(i)
+                unique.add(i)
+        return dedup_names

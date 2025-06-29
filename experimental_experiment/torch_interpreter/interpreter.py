@@ -1457,7 +1457,7 @@ class DynamoInterpreter:
 
         if self.export_options.export_as_aten_function(aten_name):
             res = self.add_aten_as_function(
-                str(aten_name),
+                f"call_{aten_name.__name__}" if callable(aten_name) else str(aten_name),
                 fct,
                 can_set,
                 output_names,
@@ -1615,21 +1615,12 @@ class DynamoInterpreter:
             f"Unexpected type {type(name_fct)} for name_fct={name_fct}"
             f"{self.builder.get_debug_msg()}"
         )
+        assert (
+            "<" not in name_fct
+        ), f"Unexpected name {name_fct!r}{self.builder.get_debug_msg()}"
         # Collects inputs
-        input_names = []
-        for a in args:
-            if isinstance(a, str) and self.builder.has_name(a):
-                if a not in input_names:
-                    input_names.append(a)
-            elif isinstance(a, list):
-                # some inputs are given as a list
-                for n in a:
-                    if (
-                        isinstance(n, str)
-                        and self.builder.has_name(n)
-                        and n not in input_names
-                    ):
-                        input_names.append(n)
+        input_names = self.builder.extract_input_names_from_args(args)
+
         for k, v in kwargs.items():
             if isinstance(v, str):
                 raise NotImplementedError(
@@ -1700,6 +1691,17 @@ class DynamoInterpreter:
             name=name_fct,
             metadata_props=dict(aten_name=name_fct, args=str(args), kwargs=str(kwargs)),
         )
+        assert len(output_names) == len(new_builder.outputs), (
+            f"Function output mismatch {output_names} != {new_builder.outputs}"
+            f"{self.get_debug_msg()}"
+        )
+        for out, lout in zip(output_names, new_builder.outputs):
+            if new_builder.has_type(lout.name):
+                self.builder.set_type(out, new_builder.get_type(lout.name))
+            if new_builder.has_shape(lout.name):
+                self.builder.set_shape(out, new_builder.get_shape(lout.name))
+            elif new_builder.has_rank(lout.name):
+                self.builder.set_rank(out, new_builder.get_rank(lout.name))
         return output_names[0] if len(output_names) == 1 else output_names
 
     def _get_output_names(self, node: "torch.fx.Node") -> List[str]:  # noqa: F821

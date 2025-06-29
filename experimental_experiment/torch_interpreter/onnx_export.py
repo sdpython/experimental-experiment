@@ -1,4 +1,5 @@
 import inspect
+import operator
 import os
 import pprint
 import time
@@ -451,9 +452,15 @@ def get_default_aten_as_function(target_opset: int) -> Tuple[str]:
             "aten.index_put.default",
             "aten.scaled_dot_product_attention.default",
             "aten.setitem",
+            operator.setitem,
         )
         if target_opset < 23
-        else ("aten.index_copy.default", "aten.index_put.default", "aten.setitem")
+        else (
+            "aten.index_copy.default",
+            "aten.index_put.default",
+            "aten.setitem",
+            operator.setitem,
+        )
     )
 
 
