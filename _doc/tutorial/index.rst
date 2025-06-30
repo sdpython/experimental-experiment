@@ -111,7 +111,7 @@ in :func:`torch.export.export`.
 
 It is recommended to optimize the obtained model by running
 method :meth:`torch.onnx.ONNXProgram.optimize`. It removes
-many unncessary nodes (Identity, multiplication by 1) and other
+many unnecessary nodes (Identity, multiplication by 1) and other
 patterns. It tries to find patterns it knows how to optimize.
 See :epkg:`Pattern-based Rewrite Using Rules With onnxscript`.
 
