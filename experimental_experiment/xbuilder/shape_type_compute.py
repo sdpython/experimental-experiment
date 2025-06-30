@@ -97,12 +97,13 @@ def set_type_shape_reshape(
             arg_size = np.prod([a for a in new_shape if a >= 0])
             size = np.prod(shape)
             index = new_shape.index(-1)
+            new_shape = list(new_shape)
             if arg_size == 0:
                 assert size == 0, f"Unable to reshape {shape} into {new_shape}"
-                shape[index] = 1
+                new_shape[index] = 1
             else:
-                shape[index] = int(size // arg_size)
-            g.set_shape(name, tuple(shape))
+                new_shape[index] = int(size // arg_size)
+            g.set_shape(name, tuple(new_shape))
         else:
             g.set_rank(name, len(new_shape))
     else:

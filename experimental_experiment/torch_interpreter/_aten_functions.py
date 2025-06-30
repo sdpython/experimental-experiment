@@ -255,6 +255,23 @@ def aten_addmm(
     return res
 
 
+def aten_iadd(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "iadd",
+) -> T:
+    "iadd"
+    assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    cst = np.array([1], dtype=dtype)
+    res = g.op.Add(x, cst, outputs=outputs, name=name)
+    if not res:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_all(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "all"
     res = g.op.Cast(

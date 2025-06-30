@@ -347,6 +347,8 @@ def aten_meth_reshape(
     name: str = "reshape",
 ) -> T:
     "reshape"
+    if isinstance(shape, tuple) and len(shape) == 1 and isinstance(shape[0], tuple):
+        shape = shape[0]
     if all_int(shape):
         # static version
         cst = g.make_initializer(

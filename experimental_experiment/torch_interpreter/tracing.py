@@ -1117,152 +1117,38 @@ class CustomTracer(torch.fx.Tracer):
                     )
 
                 # if the target has a name
-                if hasattr(node.target, "name"):
-                    if node.target.name() in {
-                        "aten::view",
-                        "aten::detach_",  # output = input
-                        "aten::add.Tensor",  # it happens when running
-                        "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
-                        "aten::mul.Tensor",
-                        "aten::sub.Tensor",
-                        "aten::zeros",  # unused as it does not end up with '_'
-                    } or not (  # not an inplace modification
-                        node.target.name().endswith(("_", "_.Tensor"))
-                    ):
-                        # This node cannot be one inplace modification.
-                        # The node is just not used.
-                        cls.graph_erase_node(graph, node)
-                        del existing_nodes[pos]
-                        if verbose > 2:
-                            print(
-                                f"[CustomTracer.remove_inplace] B1.remove "
-                                f"{pos}: {node.target}({node.args}) -> {node}"
-                            )
-                        continue
-
-                    if (
-                        # y = add_(x, 1) but x is used once (here) and y is not used
-                        node.target.name() in {"aten::add_.Tensor", "aten::mul_.Tensor"}
-                        and isinstance(node.args[0], torch.fx.Node)
-                        and not isinstance(node.args[1], torch.fx.Node)
-                        and len(node.args[0].users) <= 1
-                    ):
-                        # This node cannot be one inplace modification.
-                        # The node is just not used.
-                        cls.graph_erase_node(graph, node)
-                        del existing_nodes[pos]
-                        if verbose > 2:
-                            print(
-                                f"[CustomTracer.remove_inplace] B2.remove "
-                                f"{pos}: {node.target}({node.args}) -> {node}"
-                            )
-                        continue
-
-                    if len(node.args) == 1:
-                        # We should be able to remove this inplace modification
-                        # unless the predecessor is a Tensor.
-                        # %slice_21 : [num_users=1] = call_function[
-                        #           target=torch.ops.aten.slice.Tensor
-                        # ](
-                        #   args = (%clone_2, 4, 4, 9223372036854775807),
-                        #   kwargs = {}
-                        # )
-                        # %sigmoid__2 : [num_users=0] = call_function[
-                        #           target=torch.ops.aten.sigmoid_.default
-                        # ](
-                        #   args = (%slice_21,), kwargs = {}
-                        # )
-                        predecessor = node.args[0]
-                        if len(predecessor.users) == 0:
-                            # We can safely remove as the precessessor
-                            # is only used by this node
-                            cls.graph_erase_node(graph, node)
-                            del existing_nodes[pos]
-                            if verbose > 2:
-                                print(
-                                    f"[CustomTracer.remove_inplace] B3.remove "
-                                    f"{pos}: {node.target}({node.args}) -> {node}"
-                                )
-                            continue
-
-                    assert (
-                        node.target.name() in {"aten::copy_", "aten::fill_.Tensor"}
-                        and len(node.args) == 2
-                    ) or node.target.name() in {"aten::sigmoid_"}, (
-                        f"(inplace) Unsupported target {node.target!r}, target_name="
-                        f"{node.target.name()!r}, name={node.name!r}, node.args={node.args} "
-                        f"at position {pos}/{len(graph.nodes)}"
-                        f"\n--original graph--\n{err_graph}"
-                        f"\n--graph\n{exported_program or graph}"
-                    )
-
-                    # We check the predecessor if the node is a node copy_.
-                    predecessor = node.args[0]
-                    predecessor_name = (
-                        predecessor.target.name()
-                        if hasattr(predecessor.target, "name")
-                        else predecessor.target
-                    )
-                    if predecessor_name in {"aten::slice.Tensor", "aten::select.int"}:
-                        # We face a schema such as
-                        # K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
-                        do_break = cls._modify_graph_clone_index_copy_(
-                            graph,
-                            node,
-                            existing_nodes,
-                            pos,
-                            exported_program,
-                            err_graph,
-                            verbose=verbose,
-                            exc=exc,
+                node_target_name = (
+                    node.target.name()
+                    if hasattr(node.target, "name")
+                    else (
+                        node.target
+                        if isinstance(node.target, str)
+                        else (
+                            f"{node.target.__module__}.{node.target.__name__}"
+                            if callable(node.target)
+                            else None
                         )
-                        if do_break == -1:
-                            if verbose:
-                                print(
-                                    f"[CustomTracer.remove_inplace] "
-                                    f"unable to remove (1) {node.target}"
-                                )
-                            return -1
-                        if do_break:
-                            break
-                        continue
+                    )
+                )
+                assert node_target_name is not None, (
+                    f"Unable to guess the target node from type {type(node.target)}, "
+                    f"node.target={node.target}, name={node.name!r}, node.args={node.args} "
+                    f"at position {pos}/{len(graph.nodes)}"
+                    f"\n--original graph--\n{err_graph}"
+                    f"\n--graph\n{exported_program or graph}"
+                )
 
-                    do_break = cls._modify_graph_clone_copy_(
-                        graph,
-                        node,
-                        existing_nodes,
-                        pos,
-                        exported_program,
-                        err_graph,
-                        verbose=verbose,
-                        exc=exc,
-                    )
-                    if do_break == -1:
-                        if verbose:
-                            print(
-                                f"[CustomTracer.remove_inplace] "
-                                f"unable to remove (2) {node.target}"
-                            )
-                        return -1
-                    if do_break:
-                        break
-                else:
-                    assert node.target in {
-                        "add_",
-                        "div_",
-                        "mul_",
-                        "mod_",
-                        "sub_",
-                        torch.exp_,
-                        torch.sigmoid_,
-                        operator.setitem,
-                        # other function may be needed, let's be strict
-                    }, (
-                        f"Unsupported target {node.target!r}, name={node.name!r} "
-                        f"({node.target.__name__!r}, "
-                        f"{getattr(node.target, '__module__', '-')}) "
-                        f"at position {pos}/{len(graph.nodes)}\n--graph\n{graph}"
-                    )
+                if node_target_name in {
+                    "add_",
+                    "div_",
+                    "mul_",
+                    "mod_",
+                    "sub_",
+                    "torch.exp_",
+                    "torch.sigmoid_",
+                    "operator.setitem",
+                    # other function may be needed, let's be strict
+                }:
 
                     # We still need to check the predecessor.
                     # We check the predecessor if the node is a node copy_.
@@ -1326,6 +1212,136 @@ class CustomTracer(torch.fx.Tracer):
                         f"does not replace [{old_name}] in \n{graph}\n-- node to keep --"
                         f"\n{nodes_to_leave}"
                     )
+                else:
+                    if node_target_name in {
+                        "aten::view",
+                        "aten::detach_",  # output = input
+                        "aten::add.Tensor",  # it happens when running
+                        "aten::div.Tensor",  # z = f(x=x, y=x+1) but f does not use y
+                        "aten::mul.Tensor",
+                        "aten::sub.Tensor",
+                        "aten::zeros",  # unused as it does not end up with '_'
+                        "expand",  # torch.compile
+                    } or not (  # not an inplace modification
+                        node_target_name.endswith(("_", "_.Tensor"))
+                    ):
+                        # This node cannot be one inplace modification.
+                        # The node is just not used.
+                        cls.graph_erase_node(graph, node)
+                        del existing_nodes[pos]
+                        if verbose > 2:
+                            print(
+                                f"[CustomTracer.remove_inplace] B1.remove "
+                                f"{pos}: {node.target}({node.args}) -> {node}"
+                            )
+                        continue
+
+                    if (
+                        # y = add_(x, 1) but x is used once (here) and y is not used
+                        node_target_name in {"aten::add_.Tensor", "aten::mul_.Tensor"}
+                        and isinstance(node.args[0], torch.fx.Node)
+                        and not isinstance(node.args[1], torch.fx.Node)
+                        and len(node.args[0].users) <= 1
+                    ):
+                        # This node cannot be one inplace modification.
+                        # The node is just not used.
+                        cls.graph_erase_node(graph, node)
+                        del existing_nodes[pos]
+                        if verbose > 2:
+                            print(
+                                f"[CustomTracer.remove_inplace] B2.remove "
+                                f"{pos}: {node.target}({node.args}) -> {node}"
+                            )
+                        continue
+
+                    if len(node.args) == 1:
+                        # We should be able to remove this inplace modification
+                        # unless the predecessor is a Tensor.
+                        # %slice_21 : [num_users=1] = call_function[
+                        #           target=torch.ops.aten.slice.Tensor
+                        # ](
+                        #   args = (%clone_2, 4, 4, 9223372036854775807),
+                        #   kwargs = {}
+                        # )
+                        # %sigmoid__2 : [num_users=0] = call_function[
+                        #           target=torch.ops.aten.sigmoid_.default
+                        # ](
+                        #   args = (%slice_21,), kwargs = {}
+                        # )
+                        predecessor = node.args[0]
+                        if len(predecessor.users) == 0:
+                            # We can safely remove as the precessessor
+                            # is only used by this node
+                            cls.graph_erase_node(graph, node)
+                            del existing_nodes[pos]
+                            if verbose > 2:
+                                print(
+                                    f"[CustomTracer.remove_inplace] B3.remove "
+                                    f"{pos}: {node.target}({node.args}) -> {node}"
+                                )
+                            continue
+
+                    assert (
+                        node_target_name in {"aten::copy_", "aten::fill_.Tensor"}
+                        and len(node.args) == 2
+                    ) or node.target.name() in {"aten::sigmoid_"}, (
+                        f"(inplace) Unsupported target {node.target!r}, target_name="
+                        f"{node_target_name!r}, name={node.name!r}, node.args={node.args} "
+                        f"at position {pos}/{len(graph.nodes)}"
+                        f"\n--original graph--\n{err_graph}"
+                        f"\n--graph\n{exported_program or graph}"
+                    )
+
+                    # We check the predecessor if the node is a node copy_.
+                    predecessor = node.args[0]
+                    predecessor_name = (
+                        predecessor.target.name()
+                        if hasattr(predecessor.target, "name")
+                        else predecessor.target
+                    )
+                    if predecessor_name in {"aten::slice.Tensor", "aten::select.int"}:
+                        # We face a schema such as
+                        # K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
+                        do_break = cls._modify_graph_clone_index_copy_(
+                            graph,
+                            node,
+                            existing_nodes,
+                            pos,
+                            exported_program,
+                            err_graph,
+                            verbose=verbose,
+                            exc=exc,
+                        )
+                        if do_break == -1:
+                            if verbose:
+                                print(
+                                    f"[CustomTracer.remove_inplace] "
+                                    f"unable to remove (1) {node.target}"
+                                )
+                            return -1
+                        if do_break:
+                            break
+                        continue
+
+                    do_break = cls._modify_graph_clone_copy_(
+                        graph,
+                        node,
+                        existing_nodes,
+                        pos,
+                        exported_program,
+                        err_graph,
+                        verbose=verbose,
+                        exc=exc,
+                    )
+                    if do_break == -1:
+                        if verbose:
+                            print(
+                                f"[CustomTracer.remove_inplace] "
+                                f"unable to remove (2) {node.target}"
+                            )
+                        return -1
+                    if do_break:
+                        break
 
             # We need to continue in case one unused node left another one
             # after it was removed. It could be improved by looking at

@@ -53,6 +53,7 @@ from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_dynamo import onnx_custom_backend
 from experimental_experiment.bench_run import get_machine
 from experimental_experiment.ext_test_case import unit_test_going
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 
 has_cuda = torch.cuda.device_count() > 0
 machine = get_machine()
@@ -198,7 +199,7 @@ if unit_test_going():
     times = []
 
 
-with torch.no_grad():
+with torch.no_grad(), torch_export_patches(patch_transformers=True):
 
     for optim in optimization:
         print("----------------------")
