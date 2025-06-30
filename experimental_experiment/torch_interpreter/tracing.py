@@ -1073,6 +1073,29 @@ class CustomTracer(torch.fx.Tracer):
         return len(to_remove)
 
     @classmethod
+    def get_node_target_name(cls, node, exc: bool = True):
+        res = (
+            node.target.name()
+            if hasattr(node.target, "name")
+            else (
+                node.target
+                if isinstance(node.target, str)
+                else (
+                    f"{node.target.__module__}.{node.target.__name__}"
+                    if callable(node.target)
+                    else None
+                )
+            )
+        )
+        assert res is not None, (
+            f"Unable to guess the target node from type {type(node.target)}, "
+            f"node.target={node.target}, name={node.name!r}, node.args={node.args} "
+        )
+        if res.startswith("_operator."):
+            return res[1:]
+        return res
+
+    @classmethod
     def _remove_inplace(
         cls,
         exported_program,
@@ -1117,19 +1140,7 @@ class CustomTracer(torch.fx.Tracer):
                     )
 
                 # if the target has a name
-                node_target_name = (
-                    node.target.name()
-                    if hasattr(node.target, "name")
-                    else (
-                        node.target
-                        if isinstance(node.target, str)
-                        else (
-                            f"{node.target.__module__}.{node.target.__name__}"
-                            if callable(node.target)
-                            else None
-                        )
-                    )
-                )
+                node_target_name = cls.get_node_target_name(node, False)
                 assert node_target_name is not None, (
                     f"Unable to guess the target node from type {type(node.target)}, "
                     f"node.target={node.target}, name={node.name!r}, node.args={node.args} "
@@ -1152,15 +1163,11 @@ class CustomTracer(torch.fx.Tracer):
 
                     # We still need to check the predecessor.
                     # We check the predecessor if the node is a node copy_.
-                    predecessor_name = (
-                        node.args[0].target.name()
-                        if hasattr(node.args[0].target, "name")
-                        else node.args[0].target
-                    )
+                    predecessor_name = cls.get_node_target_name(node.args[0])
                     if predecessor_name in {
                         "aten::slice.Tensor",
                         "aten::select.int",
-                        operator.getitem,
+                        "operator.getitem",
                     }:
                         # We face a schema such as
                         # K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
@@ -1284,7 +1291,7 @@ class CustomTracer(torch.fx.Tracer):
                     assert (
                         node_target_name in {"aten::copy_", "aten::fill_.Tensor"}
                         and len(node.args) == 2
-                    ) or node.target.name() in {"aten::sigmoid_"}, (
+                    ) or node_target_name in {"aten::sigmoid_"}, (
                         f"(inplace) Unsupported target {node.target!r}, target_name="
                         f"{node_target_name!r}, name={node.name!r}, node.args={node.args} "
                         f"at position {pos}/{len(graph.nodes)}"
@@ -1294,11 +1301,7 @@ class CustomTracer(torch.fx.Tracer):
 
                     # We check the predecessor if the node is a node copy_.
                     predecessor = node.args[0]
-                    predecessor_name = (
-                        predecessor.target.name()
-                        if hasattr(predecessor.target, "name")
-                        else predecessor.target
-                    )
+                    predecessor_name = cls.get_node_target_name(predecessor)
                     if predecessor_name in {"aten::slice.Tensor", "aten::select.int"}:
                         # We face a schema such as
                         # K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
@@ -1316,7 +1319,7 @@ class CustomTracer(torch.fx.Tracer):
                             if verbose:
                                 print(
                                     f"[CustomTracer.remove_inplace] "
-                                    f"unable to remove (1) {node.target}"
+                                    f"unable to remove (1) {node_target_name!r}"
                                 )
                             return -1
                         if do_break:
@@ -1337,7 +1340,7 @@ class CustomTracer(torch.fx.Tracer):
                         if verbose:
                             print(
                                 f"[CustomTracer.remove_inplace] "
-                                f"unable to remove (2) {node.target}"
+                                f"unable to remove (2) {node_target_name!r}"
                             )
                         return -1
                     if do_break:
