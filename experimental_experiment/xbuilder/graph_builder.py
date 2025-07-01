@@ -78,8 +78,13 @@ from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
 from .virtual_tensor import VirtualTensor
 
+
 # To help finding bugs.
-assert_sorted = sorted
+def assert_sorted(inputs):
+    try:
+        return sorted(inputs)
+    except TypeError:
+        return list(inputs)
 
 
 @contextlib.contextmanager
@@ -5603,8 +5608,15 @@ class GraphBuilder(_GraphBuilderRuntime):
                     for axis, sh in enumerate(self.get_shape(iname)):
                         for dim_name, where in self.dynamic_dimensions_source.items():
                             for d in where:
-                                if d["axis"] != axis or d["input_name"] != dyn_name:
-                                    continue
+                                if d["axis"] != axis:
+                                    try:
+                                        r = bool(d["input_name"] != dyn_name)
+                                    except (
+                                        self.torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode
+                                    ):
+                                        r = True
+                                    if r:
+                                        continue
                                 # We add a constraint.
                                 if dim_name in self.constraints_:
                                     self.constraints_[dim_name].add(sh)

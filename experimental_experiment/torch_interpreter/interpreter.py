@@ -639,8 +639,12 @@ class DynamoInterpreter:
             # scalar input
             return self._make_tensor_input(
                 node.name,
-                elem_type=TensorProto.INT64 if isinstance(val, int) else TensorProto.FLOAT,
-                shape=(1,),  # should we change that?
+                elem_type=(
+                    TensorProto.BOOL
+                    if isinstance(val, bool)
+                    else (TensorProto.INT64 if isinstance(val, int) else TensorProto.FLOAT)
+                ),
+                shape=tuple(),  # scalar should have no dimension
                 is_dimension=False,
                 users=node.users,
             )
