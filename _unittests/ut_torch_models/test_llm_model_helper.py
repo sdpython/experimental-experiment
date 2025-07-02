@@ -11,6 +11,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnx_diagnostic,
     requires_torch,
     requires_transformers,
+    hide_stdout,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_models import flatten_outputs
@@ -600,6 +601,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    @hide_stdout()
     # @long_test(): let's keep this test to avoid any regression.
     def test_b_get_phi4_export(self):
         import torch
@@ -607,12 +609,13 @@ class TestLlmModelHelper(ExtTestCase):
             get_phi4,
         )
         from onnx_diagnostic.torch_export_patches import torch_export_patches
+        from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 
         data = get_phi4(
             batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
         )
         model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
-        expected = list(flatten_outputs(model(**model_inputs)))
+        expected = list(flatten_outputs(model(**torch_deepcopy(model_inputs))))
         self.assertNotEmpty(expected)
         with torch_export_patches(
             catch_constraints=False, verbose=0, patch_transformers=True
@@ -705,8 +708,9 @@ class TestLlmModelHelper(ExtTestCase):
 
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
-    @requires_torch("2.10")  # torch.export.Dim.DYNAMIC
+    @requires_torch("2.8.99")  # torch.export.Dim.DYNAMIC
     @requires_transformers("4.49.9999")
+    @hide_stdout()
     def test_a_get_tiny_llm_default_rope(self):
         """Somehow putting this test after test_get_phi4_export makes it fail."""
         import torch
@@ -714,26 +718,29 @@ class TestLlmModelHelper(ExtTestCase):
             get_tiny_llm,
         )
         from onnx_diagnostic.torch_export_patches import torch_export_patches
+        from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 
         data = get_tiny_llm(
             batch_size=2, num_hidden_layers=1, input_cache=True, common_dynamic_shapes=True
         )
         model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
-        expected = list(flatten_outputs(model(**model_inputs)))
+        expected = list(flatten_outputs(model(**torch_deepcopy(model_inputs))))
         self.assertNotEmpty(expected)
-        with torch_export_patches():
+        with torch_export_patches(patch_transformers=True):
             torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)
 
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_transformers("4.53")  # handle dynamic rope
     @requires_onnx_diagnostic("0.7.3")
+    @hide_stdout()
     def test_a_get_tiny_llm_dynamic_rope(self):
         import torch
         from experimental_experiment.torch_models.llm_model_helper import (
             get_tiny_llm,
         )
         from onnx_diagnostic.torch_export_patches import torch_export_patches
+        from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 
         data = get_tiny_llm(
             batch_size=2,
@@ -743,7 +750,7 @@ class TestLlmModelHelper(ExtTestCase):
             dynamic_rope=True,
         )
         model, model_inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
-        expected = list(flatten_outputs(model(**model_inputs)))
+        expected = list(flatten_outputs(model(**torch_deepcopy(model_inputs))))
         self.assertNotEmpty(expected)
         with torch_export_patches(patch_transformers=True, verbose=2):
             torch.export.export(model, (), model_inputs, dynamic_shapes=ds, strict=False)

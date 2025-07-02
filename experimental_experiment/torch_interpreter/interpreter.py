@@ -361,19 +361,21 @@ class DynamoInterpreter:
             and self.example_inputs_ is not None
             and not self.builder.was_inputs_renamed
         ):
-            assert len(self.builder.input_names) < len(self.flat_example_inputs_), (
+            assert (
+                len(self.builder.input_names) < len(self.flat_example_inputs_) or not users
+            ), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"self.current_input_={self.current_input_}, "
-                f"unexpected {name!r} "
+                f"unexpected {name!r}, users={users}, "
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
-            if (
-                not self.builder.as_function
+            if not self.builder.as_function and (
+                self.current_input_ < len(self.flat_example_inputs_)
                 and self.flat_example_inputs_[self.current_input_] is None
             ):
                 # We skip it.
-                assert users is None or len(users) == 0, (
+                assert not users, (
                     f"Input {name!r} (index {self.current_input_}"
                     f"/{len(self.flat_example_inputs_)}) "
                     f"is None but it is used by {users}, "
@@ -386,11 +388,14 @@ class DynamoInterpreter:
                 return ""
 
             # second check
-            assert self.builder.as_function or len(self.builder.input_names) < len(
-                tuple(t for t in self.flat_example_inputs_ if t is not None)
+            assert (
+                self.builder.as_function
+                or len(self.builder.input_names)
+                < len(tuple(t for t in self.flat_example_inputs_ if t is not None))
+                or not users
             ), (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
-                f"unexpected {name!r} "
+                f"unexpected {name!r}, users={users}, "
                 f"after {self.builder.input_names}"
                 f"{self.builder.get_debug_msg()}"
             )
@@ -634,8 +639,12 @@ class DynamoInterpreter:
             # scalar input
             return self._make_tensor_input(
                 node.name,
-                elem_type=TensorProto.INT64 if isinstance(val, int) else TensorProto.FLOAT,
-                shape=(1,),
+                elem_type=(
+                    TensorProto.BOOL
+                    if isinstance(val, bool)
+                    else (TensorProto.INT64 if isinstance(val, int) else TensorProto.FLOAT)
+                ),
+                shape=tuple(),  # scalar should have no dimension
                 is_dimension=False,
                 users=node.users,
             )
