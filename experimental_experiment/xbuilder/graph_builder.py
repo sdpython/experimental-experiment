@@ -9086,10 +9086,10 @@ class GraphBuilder(_GraphBuilderRuntime):
     def _rename_results_in_subgraph(
         self, g: GraphProto, replacements: Dict[str, str]
     ) -> GraphProto:
-        set_rep = set(replacements)
+        set_rep = set({k: v for k, v in replacements.items() if k != v})
         new_nodes = []
         do = False
-        for node in g:
+        for node in g.node:
             diff = bool(set(node.input) & set_rep)
             new_inputs = [replacements.get(i, i) for i in node.input]
             new_atts = []
@@ -9127,9 +9127,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         if not do:
             return g
         assert set(o.name for o in g.output) & set_rep, (
-            f"One output name is scheduled to be rename but an Identity "
+            f"One output name is scheduled to be renamed but an Identity "
             f"node should have been inserted, set_rep={set_rep}, "
-            f"outputs={[o.name for o in g.output]}"
+            f"outputs={[o.name for o in g.output]}\n---\n{pretty_onnx(g)}"
+            f"\n----\nreplacements={replacements}"
         )
         g2 = oh.make_graph(
             new_nodes, g.name, g.input, g.output, g.initializer, g.sparse_initializer
