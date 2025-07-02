@@ -571,7 +571,7 @@ class WrapInferenceSessionForTorch:
                     # it does not seem to write for all releases
                     self.TORCH_DTYPE_TO_ONNX_DTYPE[tensor.dtype],
                 ),
-                tensor.shape,
+                tensor.shape or (1,),  # onnxruntime does not like empty shape here
                 tensor.data_ptr(),
             )
 
