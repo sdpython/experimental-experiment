@@ -1,13 +1,18 @@
 from onnx.onnx_pb import TensorProto
 from onnx.reference.op_run import OpRun
-from onnx.reference.ops.op_cast import (
-    bfloat16,
-    cast_to,
-    float8e4m3fn,
-    float8e4m3fnuz,
-    float8e5m2,
-    float8e5m2fnuz,
-)
+
+try:
+    from onnx.reference.ops.op_cast import (
+        bfloat16,
+        cast_to,
+        float8e4m3fn,
+        float8e4m3fnuz,
+        float8e5m2,
+        float8e5m2fnuz,
+    )
+except ImportError:
+    from onnx.reference.ops.op_cast import cast_to
+
 from ...helpers import np_dtype_to_tensor_dtype
 
 

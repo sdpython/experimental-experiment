@@ -439,13 +439,16 @@ def from_array_extended(tensor: np.ndarray, name: Optional[str] = None) -> Tenso
     :param name: name
     :return: TensorProto
     """
-    from onnx.reference.ops.op_cast import (
-        bfloat16,
-        float8e4m3fn,
-        float8e4m3fnuz,
-        float8e5m2,
-        float8e5m2fnuz,
-    )
+    try:
+        from onnx.reference.ops.op_cast import (
+            bfloat16,
+            float8e4m3fn,
+            float8e4m3fnuz,
+            float8e5m2,
+            float8e5m2fnuz,
+        )
+    except ImportError:
+        return onnx_from_array(tensor, name)
 
     dt = tensor.dtype
     if dt == float8e4m3fn and dt.descr[0][0] == "e4m3fn":
