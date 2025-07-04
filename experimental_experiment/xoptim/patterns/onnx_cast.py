@@ -91,6 +91,9 @@ class CastCastBinaryPattern(PatternOptimization):
         if dtype_left not in self._dtypes_allowed or dtype_right not in self._dtypes_allowed:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        # We also need to check the precision is not lowered.
+        # At this stage dtype_left == dtype_right otherwise ONNX would complain.
+
         return MatchResult(self, [left, right, node], self.apply, insert_at=node)
 
     def apply(

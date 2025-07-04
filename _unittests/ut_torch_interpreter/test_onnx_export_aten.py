@@ -1842,6 +1842,29 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_cast_cast(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                xb = x.to(torch.bfloat16)
+                return (xb + xb).to(torch.float32)
+
+        inputs = (torch.randn(2, 10),)
+        model = Model()
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype == torch.bfloat16)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=({0: "A", 1: "B"},),
+            verbose=0,
+        )
+        self.dump_onnx("test_cast_cast.onnx", onx)
+        op_types = [n.op_type for n in onx.graph.node]
+        self.assertEqual(["Cast", "Add", "Cast"], op_types)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
