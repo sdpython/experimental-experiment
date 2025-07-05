@@ -1,6 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto, TensorProto
+from ...helpers import size_type, is_float_type
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -87,8 +88,25 @@ class CastCastBinaryPattern(PatternOptimization):
         if right is None or right.op_type != "Cast" or right.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 
+        itype = (
+            g.get_type(left.input[0])
+            if g.has_type(left.input[0])
+            else (g.get_type(right.input[0]) if g.has_type(right.input[0]) else 0)
+        )
+        if itype == 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+
         dtype_left, dtype_right = g.get_type(left.input[0]), g.get_type(right.input[0])
         if dtype_left not in self._dtypes_allowed or dtype_right not in self._dtypes_allowed:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # We also need to check the precision is not lowered.
+        # At this stage dtype_left == dtype_right otherwise ONNX would complain.
+        if size_type(dtype_left) > size_type(itype):
+            # The precision is higher for the computation. Let's not do that.
+            return self.none(node, inspect.currentframe().f_lineno)
+        if is_float_type(dtype_left) != is_float_type(itype):
+            # float, int changes, let's avoid that as well
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [left, right, node], self.apply, insert_at=node)
@@ -182,6 +200,19 @@ class CastOpCastPattern(PatternOptimization):
                 compute_type == TensorProto.FLOAT
                 and before_type in (TensorProto.FLOAT16, TensorProto.BFLOAT16)
             ):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if not is_float_type(compute_type) and is_float_type(before_type):
+                # The intent is something else.
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            compute_type = g.get_type(node.output[0])
+            other_type = (
+                g.get_type(cast_out_node.output[0])
+                if cast_out_node
+                else (g.get_type((cast_in_left or cast_in_right).input[0]))
+            )
+            if not is_float_type(compute_type) and is_float_type(other_type):
+                # The intent is something else.
                 return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(
