@@ -22,6 +22,34 @@ from onnx.helper import (
 from onnx.numpy_helper import from_array as onnx_from_array
 
 
+def is_integer_type(itype: int) -> bool:
+    return itype in {
+        TensorProto.INT64,
+        TensorProto.UINT64,
+        TensorProto.INT16,
+        TensorProto.UINT16,
+        TensorProto.INT32,
+        TensorProto.UINT32,
+        TensorProto.INT8,
+        TensorProto.UINT8,
+        TensorProto.INT4,
+    }
+
+
+def is_float_type(itype: int) -> bool:
+    return itype in {
+        TensorProto.DOUBLE,
+        TensorProto.FLOAT,
+        TensorProto.FLOAT16,
+        TensorProto.BFLOAT16,
+        TensorProto.INT32,
+        TensorProto.UINT32,
+        TensorProto.INT8,
+        TensorProto.UINT8,
+        TensorProto.INT4,
+    }
+
+
 def size_type(dtype: Any) -> int:
     """Returns the element size for an element type."""
     if isinstance(dtype, int):

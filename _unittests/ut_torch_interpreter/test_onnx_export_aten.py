@@ -1853,17 +1853,19 @@ class TestOnnxExportAten(ExtTestCase):
         inputs = (torch.randn(2, 10),)
         model = Model()
         expected = model(*inputs)
-        self.assertEqual(expected.dtype == torch.bfloat16)
+        self.assertEqual(expected.dtype, torch.float32)
 
         onx = to_onnx(
             model,
             inputs,
             dynamic_shapes=({0: "A", 1: "B"},),
             verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=10),
         )
+        print(onx)
         self.dump_onnx("test_cast_cast.onnx", onx)
         op_types = [n.op_type for n in onx.graph.node]
-        self.assertEqual(["Cast", "Add", "Cast"], op_types)
+        self.assertEqual(["Add", "Cast", "Cast"], op_types)
 
 
 if __name__ == "__main__":
