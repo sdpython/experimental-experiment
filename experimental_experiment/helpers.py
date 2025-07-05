@@ -42,11 +42,6 @@ def is_float_type(itype: int) -> bool:
         TensorProto.FLOAT,
         TensorProto.FLOAT16,
         TensorProto.BFLOAT16,
-        TensorProto.INT32,
-        TensorProto.UINT32,
-        TensorProto.INT8,
-        TensorProto.UINT8,
-        TensorProto.INT4,
     }
 
 

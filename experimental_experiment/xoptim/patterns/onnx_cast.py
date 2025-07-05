@@ -201,6 +201,19 @@ class CastOpCastPattern(PatternOptimization):
                 and before_type in (TensorProto.FLOAT16, TensorProto.BFLOAT16)
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
+            if not is_float_type(compute_type) and is_float_type(before_type):
+                # The intent is something else.
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            compute_type = g.get_type(node.output[0])
+            other_type = (
+                g.get_type(cast_out_node.output[0])
+                if cast_out_node
+                else (g.get_type((cast_in_left or cast_in_right).input[0]))
+            )
+            if not is_float_type(compute_type) and is_float_type(other_type):
+                # The intent is something else.
+                return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(
             self,
