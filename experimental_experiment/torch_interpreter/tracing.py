@@ -433,6 +433,7 @@ class CustomTracer(torch.fx.Tracer):
         if update_model_with_callable and self._callables:
             for k, v in self._callables.items():
                 setattr(root, k, v)
+        self.remove_last_unused_inputs(graph)
         self.remove_unnecessary_slices(graph)
         if not remove_inplace:
             graph.lint()
@@ -617,6 +618,23 @@ class CustomTracer(torch.fx.Tracer):
                 f"cannot be removed and replaced by {old_name} in \n{graph}."
             )
             graph.erase_node(old_name)
+            removed += 1
+        return removed
+
+    @classmethod
+    def remove_last_unused_inputs(cls, graph: torch.fx.Graph) -> int:
+        """
+        Removes unnecessary inputs as they are not uused in the graph.
+        Only the last ones are removed to avoid changing the positions
+        of those which are mandatory.
+        """
+        nodes = list(enumerate(graph.nodes))
+
+        removed = 0
+        for _pos, node in nodes:
+            if node.op != "placeholder" or node.users:
+                continue
+            graph.erase_node(node)
             removed += 1
         return removed
 
