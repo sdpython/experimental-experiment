@@ -5087,6 +5087,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
         #         node.replace_all_uses_with(cloned_node)
         # graph_module.recompile()
+
+        inputs = []
+        for n in graph_module.graph.nodes:
+            if n.op == "placeholder":
+                # Not tensor constant are not captured by the exporter.
+                inputs.append(
+                    (n, bool(n.users), type(n.meta["val"]) if "val" in n.meta else None)
+                )
+        inputs_to_remove = []
+        for n, has_users, type_value in inputs[::-1]:
+            if has_users or type_value not in {int, bool, float}:
+                break
+            inputs_to_remove.append(n.name)
+
         if int(os.environ.get("ONNX_BUILDER_PROGRESS", "0")) or (
             self.verbose and len(graph_module.graph.nodes) > 100
         ):
@@ -5099,7 +5113,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         else:
             loop = enumerate(graph_module.graph.nodes)
 
+        inputs_to_remove = set(inputs_to_remove)
+        self._debug_msg["process.inputs_to_remove"] = inputs_to_remove
         for i, node in loop:
+            if node.op == "placeholder" and node.name in inputs_to_remove and not node.users:
+                continue
             self._debug_msg["process.progress"] = (
                 f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
             )
