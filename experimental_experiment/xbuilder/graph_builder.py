@@ -5091,10 +5091,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         inputs = []
         for n in graph_module.graph.nodes:
             if n.op == "placeholder":
-                inputs.append((n, bool(n.users)))
+                # Not tensor constant are not captured by the exporter.
+                inputs.append(
+                    (n, bool(n.users), type(n.meta["val"]) if "val" in n.meta else None)
+                )
         inputs_to_remove = []
-        for n, has_users in inputs[::-1]:
-            if has_users:
+        for n, has_users, type_value in inputs[::-1]:
+            if has_users or type_value not in {int, bool, float}:
                 break
             inputs_to_remove.append(n.name)
 
