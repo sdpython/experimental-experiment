@@ -608,11 +608,6 @@ class ExportOptions:
         """
         from .tracing import CustomTracer
 
-        removed = CustomTracer.remove_last_unused_inputs(graph)
-        if removed:
-            if verbose:
-                print(f"[ExportOptions.export] unused inputs: {removed} last unused inputs")
-            graph.lint()
         removed = CustomTracer.remove_unnecessary_slices(graph)
         if removed:
             if verbose:
