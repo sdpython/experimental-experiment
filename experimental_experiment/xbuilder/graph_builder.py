@@ -5097,7 +5097,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
         inputs_to_remove = []
         for n, has_users, type_value in inputs[::-1]:
-            if has_users or type_value not in {int, bool, float}:
+            if has_users or type_value not in {int, bool, float, type(None)}:
                 break
             inputs_to_remove.append(n.name)
 
