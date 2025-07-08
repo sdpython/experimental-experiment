@@ -592,6 +592,19 @@ class TestOnnxExportSignatures(ExtTestCase):
                 exporter="custom-nostrict",
             )
 
+    def test_signature_dynamic_int(self):
+        class Model(torch.nn.Module):
+            def forward(self, x, i):
+                return x + i
+
+        inputs = (torch.rand((2, 2)), 6)
+        Model()(*inputs)
+        DYN = torch.export.Dim.DYNAMIC
+        ep = torch.export.export(Model(), inputs, dynamic_shapes=({0: DYN, 1: DYN}, DYN))
+        self.assertNotEmpty(ep)
+        # onx = to_onnx(Model(), inputs, dynamic_shapes=({0:DYN, 1:DYN}, DYN))
+        # print(onx)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
