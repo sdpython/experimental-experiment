@@ -80,6 +80,7 @@ class UntrainedRunner(BenchmarkRunner):
         "sshleifer/tiny-marian-en-de",
         "tiiuae/falcon-mamba-tiny-dev",
         "emilyalsentzer/Bio_ClinicalBERT//pretrained",
+        "nateraw/vit-age-classifier",
     ]
 
     def initialize(self):

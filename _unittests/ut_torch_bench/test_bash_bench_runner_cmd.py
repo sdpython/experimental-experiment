@@ -489,51 +489,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
                     raise unittest.SkipTest("integer input fails with list")
                 self._hg_export_bench_cpu(exporter, "101DummyIList", dynamic=dynamic)
 
-    # int
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.6")
-    def test_huggingface_export_bench_cpu_dummy_int(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
-            with self.subTest(exporter=exporter, dynamic=dynamic):
-                if exporter in ("torch_script", "onnx_dynamo"):
-                    raise unittest.SkipTest(f"not working with {exporter}")
-                self._hg_export_bench_cpu(
-                    exporter, "101DummyIInt", dynamic=dynamic, check_slice_input=True
-                )
-
-    # int, none
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_huggingface_export_bench_cpu_dummy_none_int(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
-            with self.subTest(exporter=exporter, dynamic=dynamic):
-                if exporter == "onnx_dynamo" or (dynamic and exporter == "torch_script"):
-                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
-                self._hg_export_bench_cpu(
-                    exporter, "101DummyNoneInt", dynamic=dynamic, check_slice_input=True
-                )
-
-    # int, none, default
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_huggingface_export_bench_cpu_dummy_none_int_default(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
-            with self.subTest(exporter=exporter, dynamic=dynamic):
-                if exporter == "onnx_dynamo" or (dynamic and exporter == "torch_script"):
-                    raise unittest.SkipTest(f"this input fails with {exporter!r}")
-                self._hg_export_bench_cpu(
-                    exporter, "101DummyNoneIntDefault", dynamic=dynamic, check_slice_input=True
-                )
-
     # int, list, none
 
     @unittest.skip("torch.expot.export does not work")

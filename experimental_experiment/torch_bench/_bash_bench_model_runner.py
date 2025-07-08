@@ -246,24 +246,28 @@ class ModelRunner:
                     ) from e
             return o
 
+        if isinstance(o, (bool, int, float)):
+            # Let's keep a constant, the model may be different but that is expected.
+            return o
+
         if isinstance(o, bool):
             # always check for boolean first as a boolean is an int
             # int gets ignored by torch.export.export
-            t = torch.Tensor([o]).to(torch.bool)
+            t = torch.Tensor([o]).to(torch.bool).squeeze()
             if isinstance(dtype_or_device, str):
                 t = t.to(dtype_or_device)
             return t
 
         if isinstance(o, int):
             # int gets ignored by torch.export.export
-            t = torch.Tensor([o]).to(torch.int32)
+            t = torch.Tensor([o]).to(torch.int32).squeeze()
             if isinstance(dtype_or_device, str):
                 t = t.to(dtype_or_device)
             return t
 
         if isinstance(o, float):
             # int gets ignored by torch.export.export
-            t = torch.Tensor([o]).to(torch.float32)
+            t = torch.Tensor([o]).to(torch.float32).squeeze()
             if isinstance(dtype_or_device, str):
                 t = t.to(dtype_or_device)
             return t
@@ -2482,7 +2486,7 @@ class ModelRunner:
             use_inputs = []
             raw_use_defaults = []
             for a, b in zip(ui, self.raw_use_defaults):
-                if isinstance(a, (int, float)):
+                if isinstance(a, (bool, int, float)):
                     continue
                 use_inputs.append(a)
                 raw_use_defaults.append(b)
@@ -2527,16 +2531,16 @@ class ModelRunner:
             if isinstance(i, torch.Tensor):
                 new_inputs.append(i)
                 continue
+            if isinstance(i, bool):
+                t = torch.Tensor([i]).to(torch.bool).squeeze(dim=0)
+                new_inputs.append(t)
+                continue
             if isinstance(i, int):
-                t = torch.Tensor([i]).to(torch.int64)
-                if exporter == "torch_script":
-                    t = t.squeeze(dim=0)
+                t = torch.Tensor([i]).to(torch.int64).squeeze(dim=0)
                 new_inputs.append(t)
                 continue
             if isinstance(i, float):
-                t = torch.Tensor([i]).to(torch.float32)
-                if exporter == "torch_script":
-                    t = t.squeeze(dim=0)
+                t = torch.Tensor([i]).to(torch.float32).squeeze(dim=0)
                 new_inputs.append(t)
                 continue
             if isinstance(i, list):
@@ -2610,7 +2614,10 @@ class ModelRunner:
             (
                 r == UseDefaultValue.TRUE
                 # onnx_dynamo does not seem to consider int or float as inputs
-                or (exporter == "onnx_dynamo" and isinstance(i, (int, float)))
+                or (
+                    exporter in {"onnx_dynamo", "custom", "modelbuilder"}
+                    and isinstance(i, (int, float, bool))
+                )
             )
             for i, r in zip(use_inputs[len(names) :], raw_use_defaults[len(names) :])
         ):
