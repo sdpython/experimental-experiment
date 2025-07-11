@@ -664,7 +664,8 @@ class GraphBuilder(_GraphBuilderRuntime):
     def _register_dynamic_object_from_dynamic_shapes_dict(self, input_name, shape_dict):
         # example:
         # args_0 {0: <class '._bash_bench_model_runner.batch'>}
-        for _k, _v in shape_dict.items():
+
+        def handle_dim(_k, _v, input_name=input_name):
             if isinstance(_v, self.torch.SymInt):
                 self.make_dynamic_object(
                     _v.__name__,
@@ -710,6 +711,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"self.output_dynamic_shapes={self.output_dynamic_shapes}"
                 )
 
+        if not isinstance(shape_dict, dict):
+            # A scalar, no axis.
+            handle_dim(None, shape_dict)
+            return
+
+        for _k, _v in shape_dict.items():
+            handle_dim(_k, _v)
+
     def _register_dynamic_object_from_dynamic_shapes(self, output: bool = False):
         dynamic_shapes = self.output_dynamic_shapes if output else self.dynamic_shapes
         assert (
@@ -726,7 +735,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 prefix, (str, tuple, int)
             ), f"Unexpected type prefix={prefix!r}, obj={obj!r}"
             if isinstance(obj, dict) and all_int(obj):
-                assert prefix is not None
+                assert prefix is not None, f"prefix is None for obj={obj}"
                 _prefixes.append(prefix)
                 return [(prefix, obj)]
             if isinstance(obj, dict):
@@ -755,14 +764,18 @@ class GraphBuilder(_GraphBuilderRuntime):
                     u = _unfold(v, p)
                     res.extend(u)
                 return res
+            if isinstance(obj, (str, self.torch.export.dynamic_shapes._Dim)):
+                _prefixes.append(prefix)
+                return [(prefix, obj)]
             raise TypeError(f"Unexpected type {type(obj)} and prefix={prefix!r}")
 
         seq_dynamic_shapes = _unfold(dynamic_shapes)
 
         for input_name_or_position, pos_vv in seq_dynamic_shapes:
-            assert isinstance(
-                pos_vv, dict
-            ), f"Unexpected pos_vv={pos_vv}, input_name_or_position={input_name_or_position}"
+            assert isinstance(pos_vv, (dict, str, self.torch.export.dynamic_shapes._Dim)), (
+                f"Unexpected pos_vv={pos_vv} (type is {type(pos_vv)}), "
+                f"input_name_or_position={input_name_or_position}"
+            )
             self._register_dynamic_object_from_dynamic_shapes_dict(
                 input_name_or_position, pos_vv
             )
@@ -2216,11 +2229,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         def _append_to_source(name, input_name, axis, value):
             if input_name is not None and isinstance(value, self.torch.SymInt):
-                assert axis is not None, (
-                    f"input_name={input_name!r} but axis is None for "
-                    f"dynamic shape {name!r}, value type is {type(value)!r} "
-                    f"{self.get_debug_msg}"
-                )
+                # axis can be None for a scaler.
                 assert name != input_name, (
                     f"Name {name!r} cannot be defined from itself (axis={axis}), "
                     f"value type is {type(value)}{self.get_debug_msg()}"
@@ -5673,9 +5682,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if len(axis) == 1:
                     a = axis.pop()
                     prefix = (
-                        implicit_names[a]
-                        if a < len(implicit_names)
-                        else f"D{a - len(implicit_names)}"
+                        "scalar"
+                        if a is None
+                        else (
+                            implicit_names[a]
+                            if a < len(implicit_names)
+                            else f"D{a - len(implicit_names)}"
+                        )
                     )
                 else:
                     prefix = "g0"

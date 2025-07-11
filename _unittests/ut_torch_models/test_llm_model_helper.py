@@ -601,6 +601,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_torch("2.6")  # torch.export.Dim.DYNAMIC
+    @requires_onnx_diagnostic("0.7.5")
     @hide_stdout()
     # @long_test(): let's keep this test to avoid any regression.
     def test_b_get_phi4_export(self):
@@ -710,6 +711,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings(UserWarning)
     @requires_torch("2.8.99")  # torch.export.Dim.DYNAMIC
     @requires_transformers("4.49.9999")
+    @requires_onnx_diagnostic("0.7.5")
     @hide_stdout()
     def test_a_get_tiny_llm_default_rope(self):
         """Somehow putting this test after test_get_phi4_export makes it fail."""
@@ -732,7 +734,7 @@ class TestLlmModelHelper(ExtTestCase):
     @ignore_warnings("TracerWarning")
     @ignore_warnings(UserWarning)
     @requires_transformers("4.53")  # handle dynamic rope
-    @requires_onnx_diagnostic("0.7.3")
+    @requires_onnx_diagnostic("0.7.5")
     @hide_stdout()
     def test_a_get_tiny_llm_dynamic_rope(self):
         import torch

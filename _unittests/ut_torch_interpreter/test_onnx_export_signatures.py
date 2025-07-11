@@ -4,15 +4,16 @@ from typing import Any, Dict, List, Optional, Tuple
 import onnx
 import numpy as np
 import torch
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_torch,
 )
+from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from experimental_experiment.helpers import get_onnx_signature, string_type
-from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.torch_test_helper import dummy_llm
 
 
@@ -599,12 +600,39 @@ class TestOnnxExportSignatures(ExtTestCase):
                 return x + i
 
         inputs = (torch.rand((2, 2)), 6)
-        Model()(*inputs)
+        expected = Model()(*inputs)
         DYN = torch.export.Dim.DYNAMIC
         ep = torch.export.export(Model(), inputs, dynamic_shapes=({0: DYN, 1: DYN}, DYN))
         self.assertNotEmpty(ep)
-        # onx = to_onnx(Model(), inputs, dynamic_shapes=({0:DYN, 1:DYN}, DYN))
-        # print(onx)
+        self.assertEqualArray(expected, ep.module()(*inputs))
+        onx = to_onnx(Model(), inputs, dynamic_shapes=({0: DYN, 1: DYN}, DYN))
+        self.assertEqual(2, len(onx.graph.input))
+        ref = ExtendedReferenceEvaluator(onx)
+        feeds = dict(
+            zip(
+                [i.name for i in onx.graph.input],
+                [
+                    np.array(i, dtype=np.int64) if isinstance(i, int) else i.numpy()
+                    for i in inputs
+                ],
+            )
+        )
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+        from onnxruntime import InferenceSession
+
+        ref = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        feeds = dict(
+            zip(
+                [i.name for i in onx.graph.input],
+                [
+                    np.array(i, dtype=np.int64) if isinstance(i, int) else i.numpy()
+                    for i in inputs
+                ],
+            )
+        )
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
 
 
 if __name__ == "__main__":
