@@ -10,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     is_windows,
     requires_torch,
     requires_transformers,
+    requires_onnx_diagnostic,
 )
 from experimental_experiment.torch_models.phi3_helper import has_phi3
 
@@ -150,12 +151,14 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    @requires_onnx_diagnostic("0.7.5")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
         self._untrained_export("custom-dec", "Phi2LM_1Layer", verbose=1, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    @requires_onnx_diagnostic("0.7.5")
     def test_untrained_export_bench_custom_tiny_llm_cpu(self):
         self._untrained_export("custom", "TinyLLM", verbose=1, debug=False)
 
@@ -183,6 +186,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
+    @requires_onnx_diagnostic("0.7.5")
     def test_untrained_export_bench_export_cpu_diag(self):
         self._untrained_export(
             "export-nostrict",
@@ -196,6 +200,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
+    @requires_onnx_diagnostic("0.7.5")
     def test_untrained_export_bench_export_cpu_custom(self):
         self._untrained_export(
             "custom",
@@ -209,6 +214,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
+    @requires_onnx_diagnostic("0.7.5")
     def test_untrained_export_bench_export_cpu_custom_sdpa(self):
         self._untrained_export(
             "custom",
@@ -223,6 +229,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
+    @requires_onnx_diagnostic("0.7.5")
     def test_untrained_export_bench_export_cpu_custom_torchrt(self):
         self._untrained_export(
             "custom",
