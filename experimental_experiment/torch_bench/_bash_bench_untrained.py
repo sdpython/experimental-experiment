@@ -55,7 +55,7 @@ class UntrainedRunner(BenchmarkRunner):
     MODEL_IDS = [
         "arnir0/Tiny-LLM",
         "codellama/CodeLlama-7b-hf",
-        "facebook/bart-base",
+        "emilyalsentzer/Bio_ClinicalBERT//pretrained",
         "facebook/bart-base",
         "google-bert/bert-base-multilingual-cased",
         "google/gemma-2b",
@@ -73,14 +73,13 @@ class UntrainedRunner(BenchmarkRunner):
         "microsoft/Phi-4-reasoning",
         "microsoft/beit-base-patch16-224-pt22k-ft22k",
         "microsoft/phi-2",
+        "nateraw/vit-age-classifier",
         "openai/clip-vit-base-patch16",
         "openai/whisper-tiny",
         "sentence-transformers/all-MiniLM-L6-v1",
         "sshleifer/tiny-marian-en-de",
         "sshleifer/tiny-marian-en-de",
         "tiiuae/falcon-mamba-tiny-dev",
-        "emilyalsentzer/Bio_ClinicalBERT//pretrained",
-        "nateraw/vit-age-classifier",
     ]
 
     def initialize(self):
