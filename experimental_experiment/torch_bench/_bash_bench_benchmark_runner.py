@@ -913,15 +913,17 @@ class BenchmarkRunner:
             is_cuda = False
 
         if self.verbose:
+            print(f"[BenchmarkRunner.benchmark] model type: {type(model_runner.model)}")
             print(
                 f"[BenchmarkRunner.benchmark] inputs: "
                 f"{string_type(model_runner.inputs, with_shape=True, limit=30)}"
             )
-        if self.verbose > 1:
-            print(
-                f"[BenchmarkRunner.benchmark] model size and dtype "
-                f"{stats['params_size']}, {stats['params_dtype']}"
-            )
+            print(f"[BenchmarkRunner.benchmark] sig_input_names: {model_runner.input_names}")
+            if self.verbose > 1:
+                print(
+                    f"[BenchmarkRunner.benchmark] model size and dtype "
+                    f"{stats['params_size']}, {stats['params_dtype']}"
+                )
 
         ########
         # warmup
