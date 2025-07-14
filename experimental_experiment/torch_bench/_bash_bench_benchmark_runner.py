@@ -918,9 +918,7 @@ class BenchmarkRunner:
                 f"[BenchmarkRunner.benchmark] inputs: "
                 f"{string_type(model_runner.inputs, with_shape=True, limit=30)}"
             )
-            print(
-                f"[BenchmarkRunner.benchmark] sig_input_names: {model_runner.input_names}"
-            )
+            print(f"[BenchmarkRunner.benchmark] sig_input_names: {model_runner.input_names}")
             if self.verbose > 1:
                 print(
                     f"[BenchmarkRunner.benchmark] model size and dtype "
