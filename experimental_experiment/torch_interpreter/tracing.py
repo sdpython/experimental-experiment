@@ -581,7 +581,7 @@ class CustomTracer(torch.fx.Tracer):
     @classmethod
     def remove_unnecessary_slices(cls, graph: torch.fx.Graph) -> int:
         """
-        Removes unnecessary slices:
+        Removes unnecessary slices and other nodes doing nothing.
 
         :param graph: graph to modify
         :return: number of inplace nodes removed
@@ -591,6 +591,7 @@ class CustomTracer(torch.fx.Tracer):
             %slice_11 : [num_users=1] = call_function[target=torch.ops.aten.slice.Tensor]
                 (args = (%clone, 0, 0, 9223372036854775807), kwargs = {})
         """
+        # slices
         nodes = list(enumerate(graph.nodes))
 
         removed = 0
@@ -615,6 +616,50 @@ class CustomTracer(torch.fx.Tracer):
             assert changed, (
                 f"No change applied, the node [{node}] at position {pos} "
                 f"cannot be removed and replaced by {old_name} in \n{graph}."
+            )
+            graph.erase_node(old_name)
+            removed += 1
+
+        # copy_.default
+        nodes = list(enumerate(graph.nodes))
+        max_pos = {}
+        for pos, node in nodes:
+            for a in node.args:
+                if isinstance(a, torch.fx.Node):
+                    max_pos[id(a)] = pos
+
+        for pos, node in nodes[::-1]:
+            if not hasattr(node.target, "name"):
+                continue
+            if (
+                node.target.name() != "aten::copy_"
+                or len(node.args) != 2
+                or len(node.users) == 0
+            ):
+                # Not the expected node, not the expected number of arguments
+                # or not used (meaning this is partial inplace modification)
+                continue
+            if "val" not in node.args[0].meta or "val" not in node.args[1].meta:
+                continue
+            if node.args[0].meta["val"].shape != node.args[1].meta["val"].shape:
+                continue
+            # We need to check that node.args[0] is not used after that.
+            if max_pos[id(node.args[0])] > pos:
+                # The node is used after
+                continue
+
+            # The first argument is the node to keep.
+            new_name = node.args[1]
+            old_name = node
+
+            # Let's replace.
+            changed = old_name.replace_all_uses_with(new_name)
+            assert changed, (
+                f"No change applied, the node [{node}] at position {pos} "
+                f"cannot be removed and replaced by {old_name}, "
+                f"shape0={node.args[0].meta['val'].shape}, "
+                f"shape1={node.args[1].meta['val'].shape}, "
+                f" in \n{graph}"
             )
             graph.erase_node(old_name)
             removed += 1
