@@ -631,7 +631,13 @@ class CustomTracer(torch.fx.Tracer):
         for pos, node in nodes[::-1]:
             if not hasattr(node.target, "name"):
                 continue
-            if node.target.name() != "aten::copy_" or len(node.args) != 2:
+            if (
+                node.target.name() != "aten::copy_"
+                or len(node.args) != 2
+                or len(node.users) == 0
+            ):
+                # Not the expected node, not the expected number of arguments
+                # or not used (meaning this is partial inplace modification)
                 continue
             if "val" not in node.args[0].meta or "val" not in node.args[1].meta:
                 continue
@@ -650,7 +656,10 @@ class CustomTracer(torch.fx.Tracer):
             changed = old_name.replace_all_uses_with(new_name)
             assert changed, (
                 f"No change applied, the node [{node}] at position {pos} "
-                f"cannot be removed and replaced by {old_name} in \n{graph}."
+                f"cannot be removed and replaced by {old_name}, "
+                f"shape0={node.args[0].meta['val'].shape}, "
+                f"shape1={node.args[1].meta['val'].shape}, "
+                f" in \n{graph}"
             )
             graph.erase_node(old_name)
             removed += 1
