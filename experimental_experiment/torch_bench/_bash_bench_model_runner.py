@@ -2195,11 +2195,12 @@ class ModelRunner:
 
             if inp.__class__.__name__ == "MambaCache":
                 # Cache is not dynamic
-                import transformers
+                try:
+                    from transformers.models.mamba.modeling_mamba import MambaCache
+                except ImportError:
+                    from transformers.cache_utils import MambaCache
 
-                assert isinstance(
-                    inp, transformers.cache_utils.MambaCache
-                ), f"Unexpected type {type(inp)}"
+                assert isinstance(inp, MambaCache), f"Unexpected type {type(inp)}"
 
                 dyn_shape = (
                     None
@@ -2578,19 +2579,18 @@ class ModelRunner:
                 new_inputs.extend(i.cross_attention_cache.value_cache)
                 continue
             if i.__class__.__name__ == "BaseModelOutput":
-                import transformers
-
                 assert isinstance(
                     i, transformers.modeling_outputs.BaseModelOutput
                 ), f"unexpected type {type(i)}"
                 new_inputs.extend(i.to_tuple())
                 continue
             if i.__class__.__name__ == "MambaCache":
-                import transformers
+                try:
+                    from transformers.models.mamba.modeling_mamba import MambaCache
+                except ImportError:
+                    from transformers.cache_utils import MambaCache
 
-                assert isinstance(
-                    i, transformers.cache_utils.MambaCache
-                ), f"unexpected type {type(i)}"
+                assert isinstance(i, MambaCache), f"unexpected type {type(i)}"
                 if isinstance(i.conv_states, list):
                     new_inputs.extend(i.conv_states)
                     new_inputs.extend(i.ssm_states)
