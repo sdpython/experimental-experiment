@@ -8201,6 +8201,10 @@ def aten_masked_scatter(
 ) -> T:
     """masked_scatter"""
     assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
+    print("-----------")
+    print("****", g.get_shape(x))
+    print("****", g.get_shape(mask))
+    print("****", g.get_shape(updates))
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     imask = g.op.Cast(mask, to=itype, name=name)
