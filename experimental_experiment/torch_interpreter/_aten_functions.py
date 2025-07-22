@@ -1662,8 +1662,8 @@ def aten_convolution(
             f"aten_convolution does not support output_padding={output_padding}."
         )
     if isinstance(padding, str):
-        assert padding == "same", (
-            f"output should have the same dimensions but padding={padding}"
+        assert padding in ("same", "valid"), (
+            f"output should have the same dimensions but padding={padding!r}"
             f"{g.get_debug_msg()}"
         )
         assert d > 0, f"Dimension must be known d={d}{g.get_debug_msg()}"
@@ -1678,12 +1678,18 @@ def aten_convolution(
         assert (
             len(shapew) == 4
         ), f"Unexpected shape={shapew} for the weights{g.get_debug_msg()}"
-        assert set(i % 2 for i in shapew[2:]) == {
-            1
-        }, f"Not implemented for even shape for the weight: {shapew}{g.get_debug_msg()}"
-        padding = []
-        for i in shapew[2:]:
-            padding.extend([i // 2])
+        if padding == "valid":
+            padding = []
+            for _i in shapew[2:]:
+                padding.extend([0])
+        else:
+            # same
+            assert set(i % 2 for i in shapew[2:]) == {
+                1
+            }, f"Not implemented for even shape for the weight: {shapew}{g.get_debug_msg()}"
+            padding = []
+            for i in shapew[2:]:
+                padding.extend([i // 2])
 
     if not isinstance(padding, Sequence):
         padding = (padding, padding)
