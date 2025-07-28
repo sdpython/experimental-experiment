@@ -1,2 +1,0 @@
-ignore:
-  - experimental_experiment/torch_bench/big_models/*

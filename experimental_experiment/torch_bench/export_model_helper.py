@@ -88,7 +88,10 @@ def obj_size(obj: Any) -> int:
     if obj.__class__.__name__ == "MambaCache":
         return obj_size(obj.conv_states) + obj_size(obj.ssm_states)
     if obj.__class__.__name__ == "DynamicCache":
-        return obj_size(obj.key_cache) + obj_size(obj.value_cache)
+        from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
+
+        kv = CacheKeyValue(obj)
+        return obj_size(kv.key_cache) + obj_size(kv.value_cache)
     if obj.__class__.__name__ == "EncoderDecoderCache":
         return obj_size(obj.self_attention_cache) + obj_size(obj.cross_attention_cache)
     raise AssertionError(f"input_size not implemented for type {type(obj)}")

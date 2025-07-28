@@ -1,5 +1,4 @@
 import torch
-from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from ._bash_bench_model_runner import MakeConfig
 
 
@@ -247,25 +246,6 @@ class NeuronNoneIntDict(torch.nn.Module):
 
     def _get_random_inputs(self, device: str):
         return {"x": torch.randn(1, 5).to(device)}
-
-    config = MakeConfig(download=False, to_tuple=False)
-
-
-class NeuronDynamicCache(torch.nn.Module):
-    "Dummy module with a :class:`transformers.cache_utils.DynamicCache`."
-
-    def forward(self, x, dc):
-        return x @ (
-            (torch.cat(dc.key_cache, axis=1) + torch.cat(dc.value_cache, axis=1)).reshape(
-                (-1, x.shape[1])
-            )
-        ).transpose(1, 0)
-
-    def _get_random_inputs(self, device: str):
-        cache = make_dynamic_cache(
-            [(torch.ones((3, 8, 3, 8)).to(device), (torch.ones((3, 8, 3, 8)) * 2).to(device))]
-        )
-        return {"x": torch.randn(3, 8, 3, 8).to(device), "dc": cache}
 
     config = MakeConfig(download=False, to_tuple=False)
 

@@ -117,14 +117,6 @@ def bash_bench_main(script_name: str, doc: str, args: Optional[List[str]] = None
         from ._bash_bench_set_huggingface import HuggingfaceRunner
 
         runner = HuggingfaceRunner(device=args.device, verbose=int(args.verbose))
-    elif script_name == "bash_bench_huggingface_big":
-        from ._bash_bench_set_huggingface_big import HuggingfaceBigRunner
-
-        runner = HuggingfaceBigRunner(device=args.device, verbose=int(args.verbose))
-    elif script_name == "bash_bench_issues":
-        from ._bash_bench_set_issues import IssueRunner
-
-        runner = IssueRunner(device=args.device, verbose=int(args.verbose))
     elif script_name == "bash_bench_torchbench":
         from ._bash_bench_set_torchbench import TorchBenchRunner
 

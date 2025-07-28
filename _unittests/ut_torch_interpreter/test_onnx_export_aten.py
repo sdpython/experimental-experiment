@@ -1890,6 +1890,66 @@ class TestOnnxExportAten(ExtTestCase):
         op_types = [n.op_type for n in onx.graph.node]
         self.assertEqual(["Cast", "Add", "Cast"], op_types)
 
+    def test_convolution_valid(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv2d(
+                    in_channels=1,
+                    out_channels=1,
+                    kernel_size=3,
+                    stride=1,
+                    padding=0,
+                    bias=False,
+                )
+
+            def forward(self, x):
+                return self.conv(x)
+
+        inputs = (
+            torch.tensor(
+                [
+                    [
+                        [
+                            [1.0, 2.0, 3.0, 4.0, 5.0],
+                            [6.0, 7.0, 8.0, 9.0, 10.0],
+                            [11.0, 12.0, 13.0, 14.0, 15.0],
+                            [16.0, 17.0, 18.0, 19.0, 20.0],
+                            [21.0, 22.0, 23.0, 24.0, 25.0],
+                        ]
+                    ]
+                ]
+            ),
+        )
+        model = Model()
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.float32)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_convolution_valid.onnx", onx)
+        op_types = [n.op_type for n in onx.graph.node]
+        self.assertEqual(["Conv"], op_types)
+
+        feeds = dict(zip(["x"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

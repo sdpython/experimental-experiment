@@ -5,6 +5,7 @@ import re
 import zlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from ..helpers import string_type
 
 
@@ -57,7 +58,7 @@ def serialize_one(
     if isinstance(obj, dict) and all(isinstance(t, torch.Tensor) for t in obj.values()):
         sorted_items = sorted(obj.items())
         return [_[1] for _ in sorted_items]
-    if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
+    if obj.__class__.__name__ == "DynamicCache":
         return [*obj.key_cache, *obj.value_cache]
     if obj is None:
         return None
@@ -167,7 +168,7 @@ def type_as_str_with_info(obj: Any) -> str:
     if isinstance(obj, dict) and all(isinstance(t, torch.Tensor) for t in obj.values()):
         sorted_keys = "__".join(sorted(obj))
         return f"dict__{len(obj)}_{sorted_keys}"
-    if obj.__class__.__name__ in {"DynamicCache", "patched_DynamicCache"}:
+    if obj.__class__.__name__ == "DynamicCache":
         return f"{obj.__class__.__name__}__{len(obj.key_cache)}_{len(obj.value_cache)}"
     if obj is None:
         return "None"
@@ -250,7 +251,7 @@ def deserialize_args(
                 pos_res += 1
             continue
 
-        if tt.startswith(("DynamicCache__", "patched_DynamicCache__")):
+        if tt.startswith("DynamicCache__"):
             info = tt.split("__")[-1]
             n1, n2 = tuple(map(int, info.split("_")))
             assert n1 == n2, f"Unexpected sizes for n1={n1} and n2={n2} for a DynamicCache"
@@ -287,11 +288,11 @@ def deserialize_args(
             else:
                 raise NotImplementedError(f"Unable to handle type info(2) {tt!r}")
             if clone:
-                cache.key_cache = [t.clone() for t in key_cache]
-                cache.value_cache = [t.clone() for t in value_cache]
+                cache = make_dynamic_cache(
+                    list(zip([t.clone() for t in key_cache], [t.clone() for t in value_cache]))
+                )
             else:
-                cache.key_cache = key_cache
-                cache.value_cache = value_cache
+                cache = make_dynamic_cache(list(zip(key_cache, value_cache)))
             des.append(cache)
             continue
 

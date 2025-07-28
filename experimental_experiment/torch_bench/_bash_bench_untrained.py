@@ -8,14 +8,11 @@ from ..torch_models.diffusion_model_helper import (
     get_stable_diffusion_2_unet,
 )
 from ..torch_models.llm_model_helper import (
-    LLMInputKind,
     get_ai21_jamba_15_mini,
-    get_all_mini_ml_l6_v1,
     get_falcon_mamba_7b,
     get_llama32_9b_vision,
     get_phi2,
     get_phi35_mini_instruct,
-    get_phi35_vision_instruct,
     get_phi4,
     get_smollm_1_7b,
     get_tiny_llm,
@@ -137,54 +134,6 @@ class UntrainedRunner(BenchmarkRunner):
                         dict(strict=False),
                     )
                 ),
-                "AllMiniLML6v1_1Layer": (
-                    lambda: (
-                        get_all_mini_ml_l6_v1(
-                            num_hidden_layers=1,
-                            input_cache=True,
-                            _attn_implementation=self.attn_impl,
-                            common_dynamic_shapes=True,
-                            batch_size=2,
-                        ),
-                        dict(strict=False),
-                    )
-                ),
-                "AllMiniLML6v1_1LayerNoCache": (
-                    lambda: (
-                        get_all_mini_ml_l6_v1(
-                            num_hidden_layers=1,
-                            input_cache=False,
-                            _attn_implementation=self.attn_impl,
-                            common_dynamic_shapes=True,
-                            batch_size=2,
-                        ),
-                        dict(strict=False),
-                    )
-                ),
-                "AllMiniLML6v1_2Layer": (
-                    lambda: (
-                        get_all_mini_ml_l6_v1(
-                            num_hidden_layers=2,
-                            input_cache=True,
-                            _attn_implementation=self.attn_impl,
-                            common_dynamic_shapes=True,
-                            batch_size=2,
-                        ),
-                        dict(strict=False),
-                    )
-                ),
-                "AllMiniLML6v1_2LayerNoCache": (
-                    lambda: (
-                        get_all_mini_ml_l6_v1(
-                            num_hidden_layers=2,
-                            input_cache=False,
-                            _attn_implementation=self.attn_impl,
-                            common_dynamic_shapes=True,
-                            batch_size=2,
-                        ),
-                        dict(strict=False),
-                    )
-                ),
                 "FalconMamba7bLM_1LayerNoCache": (
                     lambda: (
                         get_falcon_mamba_7b(
@@ -287,31 +236,6 @@ class UntrainedRunner(BenchmarkRunner):
                             input_cache=True,
                             common_dynamic_shapes=True,
                             batch_size=2,
-                        ),
-                        dict(strict=False, patch_transformers=True),
-                    )
-                ),
-                "Phi35MiniInstructLMVision_2Layer": (
-                    lambda: (
-                        get_phi35_vision_instruct(
-                            num_hidden_layers=2,
-                            input_cache=True,
-                            input_kind=LLMInputKind.input_ids
-                            | LLMInputKind.attention_mask
-                            | LLMInputKind.past_key_values,
-                            common_dynamic_shapes=True,
-                        ),
-                        dict(strict=False, patch_transformers=True),
-                    )
-                ),
-                "Phi35MiniInstructLMVision_1Layer_Images": (
-                    lambda: (
-                        get_phi35_vision_instruct(
-                            num_hidden_layers=1,
-                            input_cache=True,
-                            _attn_implementation=self.attn_impl,
-                            input_kind=LLMInputKind.ALL,
-                            common_dynamic_shapes=True,
                         ),
                         dict(strict=False, patch_transformers=True),
                     )

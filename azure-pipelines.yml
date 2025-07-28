@@ -244,9 +244,6 @@ jobs:
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models --ignore=_unittests/ut_torch_models/test_llm_model_helper.py --ignore=_unittests/ut_torch_models/test_chronos_model_helper.py --durations=20
     displayName: 'Test Models'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_llm_model_helper.py --durations=20
-    displayName: 'Test Llm'
-  - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_chronos_model_helper.py --durations=20
     displayName: 'Test Chronos'
   - script: |

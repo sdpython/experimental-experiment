@@ -292,45 +292,7 @@ def finalize_llm_vision_setup(
             "attention_mask": {0: batch, 1: seq_length},
         }
     else:
-        from .dummy_inputs.llm_dummy_inputs import (
-            restore_dummy_inputs_for_phi35_vision_instruct,
-        )
-
-        input_cache = input_kind & LLMInputKind.past_key_values
-        data = restore_dummy_inputs_for_phi35_vision_instruct(
-            num_hidden_layers=num_hidden_layers,
-            n_iteration=1 if input_cache else 0,
-            with_images=input_kind & LLMInputKind.images,
-            device=device,
-        )
-        args, kwargs = data
-        inputs = {}
-        shapes = {}
-
-        batch = torch.export.Dim("batch", min=1, max=1024)
-        seq_length = torch.export.Dim("seq_length", min=1, max=4096)
-        cache_length = torch.export.Dim("cache_length", min=1, max=4096)
-        if input_kind & LLMInputKind.input_ids:
-            inputs["input_ids"] = kwargs["input_ids"]
-            shapes["input_ids"] = {0: batch, 1: seq_length} if not input_cache else {0: batch}
-        if input_kind & LLMInputKind.position_ids:
-            inputs["position_ids"] = kwargs["position_ids"]
-            shapes["position_ids"] = {0: batch, 1: seq_length}
-        if input_kind & LLMInputKind.attention_mask:
-            inputs["attention_mask"] = kwargs["attention_mask"]
-            shapes["attention_mask"] = {0: batch, 1: cache_length + 1}
-        if input_kind & LLMInputKind.past_key_values:
-            inputs["past_key_values"] = kwargs["past_key_values"]
-            n = len(data[1]["past_key_values"].key_cache)
-            shapes["past_key_values"] = [
-                [{0: batch, 2: cache_length} for _ in range(n)],
-                [{0: batch, 2: cache_length} for _ in range(n)],
-            ]
-        if input_kind & LLMInputKind.images:
-            inputs["pixel_values"] = kwargs["pixel_values"]
-            inputs["image_sizes"] = kwargs["image_sizes"]
-            n_images = torch.export.Dim("n_images", min=0, max=1024)
-            shapes["pixel_values"] = shapes["image_sizes"] = {0: n_images}
+        raise NotImplementedError("use onnx-diagnostic for dummy inputs")
 
     if inputs_as_tuple:
         inputs = tuple(inputs.values())
