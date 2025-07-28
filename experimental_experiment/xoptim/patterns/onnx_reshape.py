@@ -548,7 +548,7 @@ class ConcatReshapePattern(PatternOptimization):
         if node.op_type != "Reshape" or node.domain != "":
             return self.none()
         gen = g.node_before(node.input[1])
-        if gen.op_type != "Concat":
+        if gen is None or gen.op_type != "Concat":
             return self.none(node, inspect.currentframe().f_lineno)
 
         op_types = {}
