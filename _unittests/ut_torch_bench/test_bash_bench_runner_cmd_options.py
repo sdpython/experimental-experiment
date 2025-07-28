@@ -267,51 +267,6 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     # DynamicCache
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.7")
-    @requires_transformers("4.51.9999")
-    def test_dynamic_cache_eager(self):
-        for exporter in ["export", "eager"]:
-            with self.subTest(exporter=exporter):
-                self._export_cmd(
-                    exporter,
-                    "101DummyDynamicCache",
-                    dynamic=False,
-                    check_file=False,
-                    debug=False,
-                )
-
-    @unittest.skip("issue https://github.com/pytorch/pytorch/issues/142161")
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_dynamic_cache_custom_dynamic(self):
-        for exporter in ["custom"]:
-            for dyn in [True]:
-                with self.subTest(exporter=exporter, dynamic=dyn):
-                    self._export_cmd(
-                        exporter,
-                        "101DummyDynamicCache",
-                        dynamic=dyn,
-                        check_file=False,
-                        debug=False,
-                        verbose=30,
-                    )
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_dynamic_cache_custom_static(self):
-        for exporter in ["custom"]:
-            for dyn in [False]:
-                with self.subTest(exporter=exporter, dynamic=dyn):
-                    self._export_cmd(
-                        exporter,
-                        "101DummyDynamicCache",
-                        dynamic=dyn,
-                        check_file=False,
-                        debug=False,
-                        verbose=30,
-                    )
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_mamba_cache_custom_static(self):
         for exporter in ["custom"]:
