@@ -61,7 +61,6 @@ select = [
 "_doc/examples/plot_first_example.py" = ["F811"]
 "experimental_experiment/checks.py" = ["F401"]
 "experimental_experiment/skl/__init__.py" = ["F401"]
-"experimental_experiment/torch_bench/big_models/main_spy_phi35_vision_dummy.py" = ["E501"]
 "experimental_experiment/torch_bench/check_model.py" = ["E402"]
 "experimental_experiment/torch_bench/dort_bench.py" = ["E402"]
 "experimental_experiment/torch_bench/dort_bench_profile.py" = ["E402"]

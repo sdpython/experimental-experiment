@@ -7,8 +7,8 @@ from onnx import GraphProto, ModelProto, StringStringEntryProto, TensorProto, lo
 from onnx.model_container import ModelContainer, _set_external_data
 from onnx.external_data_helper import _get_all_tensors, uses_external_data
 from onnx.inliner import inline_local_functions
+from onnx_diagnostic.helpers.mini_onnx_builder import proto_from_array
 from ..helpers import tensor_dtype_to_np_dtype, torch_dtype_to_onnx_dtype
-from ..mini_onnx_builder import proto_from_array
 
 
 STORAGE_TYPE = {

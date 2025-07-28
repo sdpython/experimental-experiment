@@ -13,6 +13,7 @@ import numpy as np
 import onnx
 import torch
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type, string_sig
+from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
 from ._torch_helper import make_copy
@@ -491,8 +492,8 @@ class ModelDiagnoseOutput:
                 shapes.append(self.guess_dynamic_shape_object(*[o[i] for o in objs]))
             return shapes
 
-        if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
-            kc = set(len(o.key_cache) for o in objs)
+        if obj.__class__.__name__ == "DynamicCache":
+            kc = set(len(CacheKeyValue(o).key_cache) for o in objs)
             assert (
                 len(kc) == 1
             ), f"All attribute 'key_cache' should have the same length but found {kc}"
@@ -503,12 +504,16 @@ class ModelDiagnoseOutput:
             key_cache = []
             for i in range(kc.pop()):
                 key_cache.append(
-                    self.guess_dynamic_dimensions(*[o.key_cache[i] for o in objs])
+                    self.guess_dynamic_dimensions(
+                        *[CacheKeyValue(o).key_cache[i] for o in objs]
+                    )
                 )
             value_cache = []
             for i in range(vc.pop()):
                 value_cache.append(
-                    self.guess_dynamic_dimensions(*[o.value_cache[i] for o in objs])
+                    self.guess_dynamic_dimensions(
+                        *[CacheKeyValue(o).value_cache[i] for o in objs]
+                    )
                 )
             return [key_cache, value_cache]
 

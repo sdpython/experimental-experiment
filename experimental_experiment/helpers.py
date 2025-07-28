@@ -716,6 +716,9 @@ def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:
         return flatten_object(list(x.items()), drop_keys=drop_keys)
 
     if x.__class__.__name__ == "DynamicCache":
+        from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
+
+        x = CacheKeyValue(x)
         res = flatten_object(x.key_cache) + flatten_object(x.value_cache)
         return tuple(res)
     if x.__class__.__name__ == "EncoderDecoderCache":

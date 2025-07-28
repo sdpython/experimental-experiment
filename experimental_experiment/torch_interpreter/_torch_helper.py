@@ -5,6 +5,7 @@ import torch
 from torch.fx.experimental.symbolic_shapes import ShapeEnv, DimDynamic
 from torch.fx.experimental.sym_node import SymNode
 from torch._dynamo.source import ConstantSource
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from ..helpers import string_type
 
 
@@ -54,13 +55,8 @@ def make_copy(obj: Any) -> Any:
         return {k: make_copy(v) for k, v in obj.items()}
     if hasattr(obj, "clone"):
         return obj.clone()
-    if obj.__class__.__name__ in ("DynamicCache", "patched_DynamicCache"):
-        cache = obj.__class__()
-        if hasattr(obj, "_seen_tokens"):
-            cache._seen_tokens = obj._seen_tokens
-        cache.key_cache = make_copy(obj.key_cache)
-        cache.value_cache = make_copy(obj.value_cache)
-        return cache
+    if obj.__class__.__name__ == "DynamicCache":
+        return torch_deepcopy(obj)
     try:
         return copy.deepcopy(obj)
     except RuntimeError as e:

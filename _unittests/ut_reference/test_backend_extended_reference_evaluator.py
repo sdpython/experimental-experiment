@@ -238,6 +238,9 @@ if onnx_opset_version() < 21:
     # The following tests fail due to a type mismatch.
     backend_test.exclude("(test_eyelike_without_dtype)")
 
+if onnx_opset_version() <= 24:
+    backend_test.exclude("(causal_expanded)")
+
 
 # import all test cases at global scope to make them visible to python.unittest
 globals().update(backend_test.test_cases)

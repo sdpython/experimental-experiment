@@ -16,7 +16,6 @@ from ._bash_bench_set_dummies import (
     Neuron16,
     NeuronTuple,
     Neuron2Inputs,
-    NeuronDynamicCache,
     NeuronMambaCache,
     NeuronNamed1,
     NeuronNamed2,
@@ -256,10 +255,6 @@ class HuggingfaceRunner(BenchmarkRunner):
                 "101DummyNoneIntDict": (
                     lambda: NeuronNoneIntDict.config,
                     NeuronNoneIntDict,
-                ),
-                "101DummyDynamicCache": (
-                    lambda: NeuronDynamicCache.config,
-                    NeuronDynamicCache,
                 ),
                 "101DummyMambaCache": (
                     lambda: NeuronMambaCache.config,

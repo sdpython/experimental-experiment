@@ -8,21 +8,16 @@ It can be triggered on sets or models through a different script for each of the
 
 * **explicit**: ``python -m experimental_experiment.torch_bench.bash_bench_explicit``
 * **huggingface**: ``python -m experimental_experiment.torch_bench.bash_bench_huggingface``
-* **huggingface_big**: ``python -m experimental_experiment.torch_bench.bash_bench_huggingface_big``
-* **issues**: ``python -m experimental_experiment.torch_bench.bash_bench_issues``
 * **timm**: ``python -m experimental_experiment.torch_bench.bash_bench_timm``
 * **torchbench**: ``python -m experimental_experiment.torch_bench.bash_bench_torchbench``
 * **torchbench_ado**: ``python -m experimental_experiment.torch_bench.bash_bench_torchbench_ado``
 * **untrained**: ``python -m experimental_experiment.torch_bench.bash_bench_untrained``
 
 **huggingface** is a set of models coming from :epkg:`transformers`,
-**huggingface_big** is a another set of models coming from :epkg:`transformers`, models are bigger,
 **timm** is a set of models coming from :epkg:`timm`,
 **torchbench** and **torchbench_ado** models come from :epkg:`torchbench`,
 **explicit** is a set of custom models,
-**issues** is a set of models to track after they failed,
-**untrained** is a set similar to *huggingface_big* but it bypasses the downloading
-part which can takes several minutes.
+**untrained** is a set of untrained models referenced by model id.
 
 These scripts are usually uses in two ways:
 

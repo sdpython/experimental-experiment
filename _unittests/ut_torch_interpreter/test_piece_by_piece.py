@@ -771,6 +771,7 @@ class TestPieceByPiece(ExtTestCase):
             .replace("_DimHint(type=DYN)", "DYN")
             .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
         )
+        print(got)
         self.assertEqual(expected_dyn_shapes, got)
         print(diag.pretty_text(with_shape=True, with_min_max=False))
 

@@ -16,8 +16,6 @@
     _bash_bench_set_dummies
     _bash_bench_set_explicit
     _bash_bench_set_huggingface
-    _bash_bench_set_huggingface_big
-    _bash_bench_set_issues
     _bash_bench_set_timm
     _bash_bench_set_torchbench
     _bash_bench_set_torchbench_ado
@@ -27,8 +25,6 @@
     bash_bench_agg
     bash_bench_explicit
     bash_bench_huggingface
-    bash_bench_huggingface_big
-    bash_bench_issues
     bash_bench_timm
     bash_bench_torchbench
     bash_bench_torchbench_ado
