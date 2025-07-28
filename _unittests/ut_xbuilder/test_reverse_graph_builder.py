@@ -208,6 +208,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             graph,
             opset_imports=[oh.make_opsetid("", 14), oh.make_opsetid(new_domain, 1)],
             functions=[linear_regression],
+            ir_version=11,
         )
         code = to_graph_builder_code(onnx_model)
 
