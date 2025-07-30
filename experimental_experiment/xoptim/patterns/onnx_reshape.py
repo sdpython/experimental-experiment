@@ -579,7 +579,10 @@ class ConcatReshapePattern(PatternOptimization):
             if op_types["Shape"] != total - 1:
                 return self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(self, [gen, node], self.apply, insert_at=gen)
+        if g.is_used_more_than_once(node.input[1]):
+            # Not really safe to do the replacement.
+            return MatchResult(self, [gen, node], self.apply)
+        return MatchResult(self, [gen, node], self.apply, insert_at=node)
 
     def apply(
         self,
