@@ -15,7 +15,11 @@ from torch._dynamo.testing import collect_results
 from torch._dynamo.utils import clone_inputs
 from onnx_diagnostic.torch_export_patches import register_additional_serialization_functions
 from onnx_diagnostic.helpers import string_type, max_diff
-from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, make_encoder_decoder_cache
+from onnx_diagnostic.helpers.cache_helper import (
+    CacheKeyValue,
+    make_dynamic_cache,
+    make_encoder_decoder_cache,
+)
 from .export_model_helper import (
     WrapForTorch,
     WrapInferenceSessionForTorch,
@@ -311,7 +315,8 @@ class BenchmarkRunner:
                 return new_cache
             return obj
 
-        if hasattr(obj, "key_cache") and obj.__class__.__name__ in ("DynamicCache",):
+        if obj.__class__.__name__ in ("DynamicCache",):
+            obj = CacheKeyValue(obj)
             cache = make_dynamic_cache(
                 list(
                     zip(

@@ -9,6 +9,8 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import torch
+from onnx_diagnostic.helpers.cache_helper import CacheKeyValue, make_dynamic_cache
+from onnx_diagnostic.helpers.torch_helper import to_any
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from onnx_diagnostic.torch_export_patches.patch_module_helper import code_needing_rewriting
 
@@ -303,11 +305,7 @@ class ModelRunner:
             return res
 
         if o.__class__.__name__ == "DynamicCache":
-            cp = copy.deepcopy(o)
-            for i in range(len(o.key_cache)):
-                cp.key_cache[i] = o.key_cache[i].to(dtype_or_device)
-            for i in range(len(o.value_cache)):
-                cp.value_cache[i] = o.value_cache[i].to(dtype_or_device)
+            cp = to_any(copy.deepcopy(o), dtype_or_device)
             return cp
 
         if o.__class__.__name__ == "EncoderDecoderCache":
@@ -1963,6 +1961,7 @@ class ModelRunner:
                 assert isinstance(
                     inp, transformers.cache_utils.DynamicCache
                 ), f"Unexpected input type {type(inp)}, input types are {string_type(inputs)}"
+                inp = CacheKeyValue(inp)
                 new_input = copy.deepcopy(inp)
                 ds = dynamic_shapes[i]
                 for k in range(len(new_input.key_cache)):
@@ -1975,6 +1974,9 @@ class ModelRunner:
                         inp.value_cache[k].shape, ds[1][k], dyn_values=dyn_values, i=i
                     )
                     new_input.value_cache[k] = inp.value_cache[k].expand(new_shape)
+                new_input = make_dynamic_cache(
+                    list(zip(new_input.key_cache, new_input.value_cache))
+                )
                 dyn_inputs.append(new_input)
                 continue
 
@@ -2136,6 +2138,7 @@ class ModelRunner:
                     )
                     continue
 
+                inp = CacheKeyValue(inp)
                 dyn_input_shapes.append(
                     [
                         [
@@ -2564,6 +2567,7 @@ class ModelRunner:
                 assert isinstance(
                     i, transformers.cache_utils.DynamicCache
                 ), f"unexpected type {type(i)}"
+                i = CacheKeyValue(i)
                 new_inputs.extend(i.key_cache)
                 new_inputs.extend(i.value_cache)
                 continue

@@ -42,6 +42,7 @@ from .onnx_matmul import (
 )
 from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
+    ConcatReshapePattern,
     ReshapePattern,
     ReduceReshapePattern,
     Reshape2Of3Pattern,
@@ -127,6 +128,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ClipClipPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
         ConcatGatherPattern(verbose=verbose),
+        ConcatReshapePattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
