@@ -8581,6 +8581,20 @@ def aten_repeat_interleave_self_int(
     return aten_repeat_interleave(g, sts, outputs, x, repeats, dim, output_size, name=name)
 
 
+def aten_repeat_interleave_self_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    repeats: T,
+    dim: Optional[int] = None,
+    output_size: Optional[Tuple[int, ...]] = None,
+    name: str = "repeat_interleave_self_int",
+) -> T:
+    "repeat_interleave_self_int"
+    return aten_repeat_interleave(g, sts, outputs, x, repeats, dim, output_size, name=name)
+
+
 def aten_roll(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
