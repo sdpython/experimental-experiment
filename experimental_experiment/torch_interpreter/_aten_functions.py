@@ -8528,8 +8528,55 @@ def aten_repeat_interleave(
     output_size: Optional[Tuple[int, ...]] = None,
     name: str = "repeat_interleave",
 ) -> T:
-    "repeat_interleave"
-    assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
+    """
+    repeat_interleave
+
+    if `repeats` is an integer, then repeat_interleave
+    is just a repeat in the other dimension and a reshape.
+
+    .. runpython::
+        :showcode:
+
+        import torch
+
+        x = torch.tensor([[0, 1, 2], [3, 4, 5]])
+        x.repeat_interleave(2, dim=0)
+
+    is equivalent to:
+
+    .. runpython::
+        :showcode:
+
+        import torch
+
+        x = torch.tensor([[0, 1, 2], [3, 4, 5]])
+        x.repeat((1, 2)).reshape((-1, t.shape[1]))
+
+    When `repeats` is a tensor, each line is multiplied
+    by a different number and this strategy no longer works.
+    There are multiple strategies. Here is one.
+
+    .. runpython::
+        :showcode:
+
+        import torch
+
+        x = torch.tensor([[0, 1, 2], [3, 4, 5]])
+        times = torch.tensor([2, 3], dtype=torch.int64)
+        y = x.repeat_interleave(times, dim=0)
+        print("repeat_interleave")
+        print(y)
+
+        ci = times.cumsum(dim=0)
+        rows = torch.arange(ci[-1], dtype=torch.int64) < ci.reshape((-1, 1))
+        srows = times.shape[0] - rows.to(torch.int64).sum(axis=0)
+        indices = srows.reshape((-1, ))
+        print("decomposed")
+        print(x[indices, :])
+    """
+    assert dim is None or isinstance(
+        dim, int
+    ), f"dim={dim} is not an integer{g.get_debug_msg()}"
     assert (
         output_size is None
     ), f"Not implemented when output_size={output_size} is not None{g.get_debug_msg()}"
@@ -8537,6 +8584,7 @@ def aten_repeat_interleave(
     rkx = g.get_rank(x)
 
     if isinstance(dim, int) and isinstance(repeats, int):
+        name = f"{name}_int"
         pos_dim = (dim + rkx) % rkx
         unsqueezed = g.op.UnsqueezeAnyOpset(
             x, np.array([pos_dim + 1], dtype=np.int64), name=name
@@ -8559,6 +8607,86 @@ def aten_repeat_interleave(
         if not sts:
             g.set_type(res, g.get_type(x))
             g.set_rank(res, rkx)
+        return res
+
+    if (dim is None or isinstance(dim, int)) and dim in (0, None):
+        assert (
+            g.has_rank(repeats) and g.get_rank(repeats) == 1
+        ), f"repeats {repeats!r} must be a 1D tensor"
+        assert g.has_rank(x), f"x={x!r} must have a known rank."
+        name = f"{name}_T"
+
+        if dim is None:
+            # flatten
+            x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+            rk = 1
+        else:
+            rk = g.get_rank(x)
+        if rk > 2:
+            shape_x0 = g.op.Shape(x, start=0, end=1, name=name)
+            shape_x = g.op.Shape(x, start=1, name=name)
+            x = g.op.Reshape(
+                x, g.op.Concat(shape_x0, g.MINUS_ONE, axis=0, name=name), name=name
+            )
+        elif rk == 1:
+            shape_x0 = None
+            shape_x = None
+            x = g.op.Reshape(x, np.array([-1, 1], dtype=np.int64), name=name)
+        else:
+            assert rk == 2, f"rank({x!r}={rk} not implemented for repeat_interleave"
+
+        # ci = times.cumsum(dim=0)
+        # rows = torch.arange(ci[-1], dtype=torch.int64) < ci.reshape((-1, 1))
+        # srows = times.shape[0] - rows.to(torch.int64).sum(axis=0)
+        # indices = srows.reshape((-1, ))
+        # print(x[indices, :])
+        ci = g.op.CumSum(repeats, g.ZERO, name=name)
+        last_ci = g.op.Gather(ci, g.MINUS_ONE, name=name)
+        trange = g.op.Range(
+            g.ZERO_NO_DIM,
+            g.op.SqueezeAnyOpset(last_ci, g.ZERO, name=name),
+            g.ONE_NO_DIM,
+            name=name,
+        )
+        rows = g.op.Less(trange, g.op.UnsqueezeAnyOpset(ci, g.MINUS_ONE, name=name), name=name)
+        g.set_rank(rows, 2)
+        srows = g.op.Sub(
+            g.op.Shape(x, start=0, end=1, name=name),
+            g.op.ReduceSumAnyOpset(
+                g.op.Cast(rows, to=TensorProto.INT64, name=name), g.ZERO, name=name
+            ),
+            name=name,
+        )
+        indices = g.op.Reshape(srows, g.MINUS_ONE, name=name)
+        if rk == 2:
+            res = g.op.GatherND(
+                x,
+                g.op.UnsqueezeAnyOpset(indices, g.MINUS_ONE, name=name),
+                name=name,
+                outputs=outputs,
+            )
+        else:
+            temp = g.op.GatherND(
+                x, g.op.UnsqueezeAnyOpset(indices, g.MINUS_ONE, name=name), name=name
+            )
+            res = g.op.Reshape(
+                temp,
+                (
+                    g.op.Concat(g.MINUS_ONE, shape_x, name=name, axis=0)
+                    if shape_x
+                    else g.MINUS_ONE
+                ),
+                name=name,
+                outputs=outputs,
+            )
+
+        if not sts:
+            g.set_type(res, g.get_type(x))
+            g.set_rank(res, g.get_rank(x))
+            if g.has_shape(x):
+                ishape = g.get_shape(x)
+                u = g.unique_dimension_name(f"repeat_interleave_{repeats}")
+                g.set_shape(res, (u, *ishape[1:]))
         return res
 
     raise NotImplementedError(
