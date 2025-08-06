@@ -8727,9 +8727,23 @@ def aten_repeat_interleave_Tensor(
     repeats: Optional[T] = None,
     dim: Optional[int] = None,
     output_size: Optional[Tuple[int, ...]] = None,
-    name: str = "repeat_interleave_self_int",
+    name: str = "repeat_interleave_Tensor",
 ) -> T:
-    "repeat_interleave_self_int"
+    "repeat_interleave_Tensor"
+    return aten_repeat_interleave(g, sts, outputs, x, repeats, dim, output_size, name=name)
+
+
+def aten_repeat_interleave_self_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    repeats: Optional[T] = None,
+    dim: Optional[int] = None,
+    output_size: Optional[Tuple[int, ...]] = None,
+    name: str = "repeat_interleave_self_Tensor",
+) -> T:
+    "repeat_interleave_self_Tensor"
     return aten_repeat_interleave(g, sts, outputs, x, repeats, dim, output_size, name=name)
 
 
