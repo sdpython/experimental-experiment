@@ -29,6 +29,7 @@ class Opset:
         "ConstantOfShape": 1,
         "Cos": 1,
         "Cosh": 1,
+        "CumSum": 1,
         "Div": 1,
         "Dropout": 2,
         "Elu": 1,
