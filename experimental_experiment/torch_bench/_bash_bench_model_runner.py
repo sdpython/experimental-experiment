@@ -2246,16 +2246,18 @@ class ModelRunner:
                     if dynamic_shapes is None or i >= len(dynamic_shapes)
                     else dynamic_shapes[i]
                 )
+                ec1 = CacheKeyValue(inp.self_attention_cache)
+                ec2 = CacheKeyValue(inp.cross_attention_cache)
                 if dyn_shape is None:
                     dyn_input_shapes.append(
                         [
                             [
-                                [{} for t in inp.self_attention_cache.key_cache],
-                                [{} for t in inp.self_attention_cache.value_cache],
+                                [{} for t in ec1.key_cache],
+                                [{} for t in ec1.value_cache],
                             ],
                             [
-                                [{} for t in inp.cross_attention_cache.key_cache],
-                                [{} for t in inp.cross_attention_cache.value_cache],
+                                [{} for t in ec2.key_cache],
+                                [{} for t in ec2.value_cache],
                             ],
                         ]
                     )
@@ -2272,9 +2274,7 @@ class ModelRunner:
                                     dyn_values=dyn_values,
                                     i=i,
                                 )
-                                for t, ds in zip(
-                                    inp.self_attention_cache.key_cache, dyn_shape[0][0]
-                                )
+                                for t, ds in zip(ec1.key_cache, dyn_shape[0][0])
                             ],
                             [
                                 self._get_input_shape_tensor(
@@ -2284,9 +2284,7 @@ class ModelRunner:
                                     dyn_values=dyn_values,
                                     i=i,
                                 )
-                                for t, ds in zip(
-                                    inp.self_attention_cache.value_cache, dyn_shape[0][1]
-                                )
+                                for t, ds in zip(ec1.value_cache, dyn_shape[0][1])
                             ],
                         ],
                         [
@@ -2298,9 +2296,7 @@ class ModelRunner:
                                     dyn_values=dyn_values,
                                     i=i,
                                 )
-                                for t, ds in zip(
-                                    inp.cross_attention_cache.key_cache, dyn_shape[1][0]
-                                )
+                                for t, ds in zip(ec2.key_cache, dyn_shape[1][0])
                             ],
                             [
                                 self._get_input_shape_tensor(
@@ -2310,9 +2306,7 @@ class ModelRunner:
                                     dyn_values=dyn_values,
                                     i=i,
                                 )
-                                for t, ds in zip(
-                                    inp.cross_attention_cache.value_cache, dyn_shape[1][1]
-                                )
+                                for t, ds in zip(ec2.value_cache, dyn_shape[1][1])
                             ],
                         ],
                     ]
@@ -2577,12 +2571,16 @@ class ModelRunner:
                 assert isinstance(
                     i, transformers.cache_utils.EncoderDecoderCache
                 ), f"unexpected type {type(i)}"
-                new_inputs.extend(i.self_attention_cache.key_cache)
-                new_inputs.extend(i.self_attention_cache.value_cache)
-                new_inputs.extend(i.cross_attention_cache.key_cache)
-                new_inputs.extend(i.cross_attention_cache.value_cache)
+                ec1 = CacheKeyValue(i.self_attention_cache)
+                ec2 = CacheKeyValue(i.cross_attention_cache)
+                new_inputs.extend(ec1.key_cache)
+                new_inputs.extend(ec1.value_cache)
+                new_inputs.extend(ec2.key_cache)
+                new_inputs.extend(ec2.value_cache)
                 continue
             if i.__class__.__name__ == "BaseModelOutput":
+                import transformers
+
                 assert isinstance(
                     i, transformers.modeling_outputs.BaseModelOutput
                 ), f"unexpected type {type(i)}"
