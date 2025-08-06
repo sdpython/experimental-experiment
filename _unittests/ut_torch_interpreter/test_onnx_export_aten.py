@@ -2055,7 +2055,36 @@ class TestOnnxExportAten(ExtTestCase):
         )
         self.dump_onnx("test_repeat_interleave_tensor_none.onnx", onx)
         feeds = dict(zip(["x", "ind"], [x.detach().cpu().numpy() for x in inputs]))
-        ref = ExtendedReferenceEvaluator(onx, verbose=10)
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_repeat_interleave_tensor_none_decompose(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind):
+                return torch.repeat_interleave(x, ind)
+
+        inputs = (
+            torch.arange(4, dtype=torch.float32).reshape((2, 2)),
+            torch.tensor([1, 2, 3, 2], dtype=torch.int64),
+        )
+        model = Model()
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.float32)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=({0: "A", 1: "B"}, {0: "C"}),
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+            export_options=ExportOptions(decomposition_table="all"),
+        )
+        self.dump_onnx("test_repeat_interleave_tensor_none_decompose.onnx", onx)
+        feeds = dict(zip(["x", "ind"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 

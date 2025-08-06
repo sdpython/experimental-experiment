@@ -8482,7 +8482,7 @@ def aten_repeat(
                 return g.op.Identity(x, name=name, outputs=outputs)
             assert rk < len(repeats), (
                 f"inconsistencies between rank and repeats, "
-                f"rank({x})={rk} and repeats={repeats}{g.get_debug_msg()}"
+                f"rank({x!r})={rk} and repeats={repeats}{g.get_debug_msg()}"
             )
             return g.op.UnsqueezeAnyOpset(
                 x, np.arange(len(repeats) - rk).astype(np.int64), name=name, outputs=outputs
@@ -8523,7 +8523,7 @@ def aten_repeat_interleave(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    repeats: List[int],
+    repeats: Optional[Union[T, List[int]]] = None,
     dim: Optional[int] = None,
     output_size: Optional[Tuple[int, ...]] = None,
     name: str = "repeat_interleave",
@@ -8583,7 +8583,7 @@ def aten_repeat_interleave(
     assert g.has_rank(x), f"Rank for x={x!r} is needed{g.get_debug_msg()}"
     rkx = g.get_rank(x)
 
-    if isinstance(dim, int) and isinstance(repeats, int):
+    if isinstance(dim, int) and isinstance(repeats, int) and repeats is not None:
         name = f"{name}_int"
         pos_dim = (dim + rkx) % rkx
         unsqueezed = g.op.UnsqueezeAnyOpset(
@@ -8609,6 +8609,15 @@ def aten_repeat_interleave(
             g.set_rank(res, rkx)
         return res
 
+    if repeats is None:
+        repeats = x
+        x = g.op.Range(
+            g.ZERO_NO_DIM,
+            g.op.SqueezeAnyOpset(g.op.Shape(x, start=-1, name=name), g.ZERO, name=name),
+            g.ONE_NO_DIM,
+            name=name,
+        )
+
     if (dim is None or isinstance(dim, int)) and dim in (0, None):
         assert (
             g.has_rank(repeats) and g.get_rank(repeats) == 1
@@ -8622,6 +8631,7 @@ def aten_repeat_interleave(
             rk = 1
         else:
             rk = g.get_rank(x)
+
         if rk > 2:
             shape_x0 = g.op.Shape(x, start=0, end=1, name=name)
             shape_x = g.op.Shape(x, start=1, name=name)
@@ -8633,7 +8643,7 @@ def aten_repeat_interleave(
             shape_x = None
             x = g.op.Reshape(x, np.array([-1, 1], dtype=np.int64), name=name)
         else:
-            assert rk == 2, f"rank({x!r}={rk} not implemented for repeat_interleave"
+            assert rk == 2, f"rank({x!r})={rk} not implemented for repeat_interleave"
 
         # ci = times.cumsum(dim=0)
         # rows = torch.arange(ci[-1], dtype=torch.int64) < ci.reshape((-1, 1))
@@ -8709,12 +8719,12 @@ def aten_repeat_interleave_self_int(
     return aten_repeat_interleave(g, sts, outputs, x, repeats, dim, output_size, name=name)
 
 
-def aten_repeat_interleave_self_Tensor(
+def aten_repeat_interleave_Tensor(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    repeats: T,
+    repeats: Optional[T] = None,
     dim: Optional[int] = None,
     output_size: Optional[Tuple[int, ...]] = None,
     name: str = "repeat_interleave_self_int",
