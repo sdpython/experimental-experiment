@@ -187,10 +187,13 @@ def aten_scaled_dot_product_attention(
 
     itype = g.get_type(query)
     dtype = tensor_dtype_to_np_dtype(itype)
+    mask_type = None
 
     if attn_mask is None:
         mul_qk_add = mul_qk
     elif g.get_type(attn_mask) == TensorProto.BOOL:
+        assert g.has_type(attn_mask), f"Missing type for {attn_mask!r}{g.get_debug_msg()}"
+        mask_type = g.get_type(attn_mask)
         _attn_mask = g.op.Where(
             attn_mask,
             np.array([0.0], dtype=dtype),
@@ -207,6 +210,13 @@ def aten_scaled_dot_product_attention(
 
     attn_weight = g.op.Softmax(mul_qk_add, axis=-1, name=name)
     set_type_shape_unary_op(g, attn_weight, mul_qk_add)
+    if mask_type == TensorProto.BOOL:
+        attn_weight = g.op.Where(
+            g.op.IsNaN(attn_weight, name=name),
+            np.array([0], dtype=dtype),
+            attn_weight,
+            name=name,
+        )
 
     if dropout_p != 0:
         _attn_weight = g.op.Dropout(attn_weight, np.array(dropout_p, dtype=dtype), name=name)[
