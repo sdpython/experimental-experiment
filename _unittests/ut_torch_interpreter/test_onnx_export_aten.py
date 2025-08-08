@@ -2088,6 +2088,39 @@ class TestOnnxExportAten(ExtTestCase):
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_attention_scale_dot_product_attention(self):
+        import torch
+
+        class ScaledDotProductAttention(torch.nn.Module):
+            def forward(self, query, key, value, attn_mask):
+                return torch.nn.functional.scaled_dot_product_attention(
+                    query, key, value, attn_mask=attn_mask
+                )
+
+        model = ScaledDotProductAttention()
+        attn_mask = torch.ones(2, 4, 8, 8).bool()
+        attn_mask[0, 0, 0, :] = False
+        query = torch.randn(2, 4, 8, 16)
+        key = torch.randn(2, 4, 8, 16)
+        value = torch.randn(2, 4, 8, 16)
+        inputs = query, key, value, attn_mask
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.float32)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_attention_scale_dot_product_attention.onnx", onx)
+        feeds = dict(
+            zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
+        )
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
