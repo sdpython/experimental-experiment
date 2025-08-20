@@ -49,7 +49,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         dtype="",
         rtopt=1,
         opt_patterns="",
-        investigate_dim_issues=False,
+        investigate_dim_issues=True,
     ):
         assert attn_impl in (
             None,
@@ -141,7 +141,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                     ),
                 )
                 input_values.append(value[0])
-            assert investigate_dim_issues or len(set(input_values)) == unique_first_dim, (
+            assert not investigate_dim_issues or len(set(input_values)) == unique_first_dim, (
                 f"no unique value: input_values={input_values}, "
                 f"unique_first_dim={unique_first_dim}"
             )
@@ -270,7 +270,23 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             check_file=False,
             dynamic=True,
             unique_first_dim=2,
-            investigate_dim_issues=True,
+            investigate_dim_issues=False,
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7.9999")
+    @requires_transformers("4.55.9999")
+    def test_untrained_export_bench_custom_cpu_phi35(self):
+        self._untrained_export(
+            "custom",
+            "microsoft/Phi-3.5-mini-instruct",
+            verbose=1,
+            debug=False,
+            check_file=False,
+            dynamic=True,
+            unique_first_dim=2,
+            investigate_dim_issues=False,
+            optimization="default",
         )
 
 
