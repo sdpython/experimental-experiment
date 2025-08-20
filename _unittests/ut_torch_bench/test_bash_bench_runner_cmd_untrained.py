@@ -49,7 +49,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         dtype="",
         rtopt=1,
         opt_patterns="",
-        investigate_dim_issues=False,
+        investigate_dim_issues=True,
     ):
         assert attn_impl in (
             None,
@@ -141,7 +141,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                     ),
                 )
                 input_values.append(value[0])
-            assert investigate_dim_issues or len(set(input_values)) == unique_first_dim, (
+            assert not investigate_dim_issues or len(set(input_values)) == unique_first_dim, (
                 f"no unique value: input_values={input_values}, "
                 f"unique_first_dim={unique_first_dim}"
             )
@@ -149,12 +149,12 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0", "s11"))
-                if not investigate_dim_issues:
+                if investigate_dim_issues:
                     self.assertEqual(input_values[0], value[0])
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
-    @requires_onnx_diagnostic("0.7.5")
+    @requires_onnx_diagnostic("0.7.8")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
         self._untrained_export("custom-dec", "Phi2LM_1Layer", verbose=1, debug=False)
@@ -270,7 +270,23 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             check_file=False,
             dynamic=True,
             unique_first_dim=2,
-            investigate_dim_issues=True,
+            investigate_dim_issues=False,
+        )
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7.9999")
+    @requires_transformers("4.55.9999")
+    def test_untrained_export_bench_custom_cpu_phi35(self):
+        self._untrained_export(
+            "custom",
+            "microsoft/Phi-3.5-mini-instruct",
+            verbose=1,
+            debug=True,
+            check_file=False,
+            dynamic=True,
+            unique_first_dim=2,
+            investigate_dim_issues=False,
+            optimization="default",
         )
 
 

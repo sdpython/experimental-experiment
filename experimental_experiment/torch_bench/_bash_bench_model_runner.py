@@ -2132,13 +2132,13 @@ class ModelRunner:
                     if dynamic_shapes is None or i >= len(dynamic_shapes)
                     else dynamic_shapes[i]
                 )
+                inp = CacheKeyValue(inp)
                 if dyn_shape is None:
                     dyn_input_shapes.append(
                         [[{} for t in inp.key_cache], [{} for t in inp.value_cache]]
                     )
                     continue
 
-                inp = CacheKeyValue(inp)
                 dyn_input_shapes.append(
                     [
                         [

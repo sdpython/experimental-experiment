@@ -633,6 +633,9 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
             f"axis={axis}, higher than a shape in {shapes}, "
             f"node={self.pretty_node(node)}{self.get_debug_msg()}"
         )
+        assert all(
+            axis < len(sh) for sh in shapes
+        ), f"Unexpected shape in {shapes}, axis={axis}"
         dims = [sh[axis] for sh in shapes]
         if all_int(dims):
             new_shape[axis] = sum(dims)
