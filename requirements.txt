@@ -1,6 +1,6 @@
 numpy
 onnx>=1.16.0
-onnx-diagnostic>=0.7.7  # 0.7.8 needed for transformers>=4.55.1
+onnx-diagnostic>=0.7.6  # 0.7.7 needed for transformers>=4.55.1
 # onnxruntime-training; sys_platform == 'linux' and python_version < "3.12"
 # onnxruntime; sys_platform != 'linux' or python_version >= "3.12"
 onnxruntime
