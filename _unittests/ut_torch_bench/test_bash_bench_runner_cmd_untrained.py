@@ -149,7 +149,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 shape = i.type.tensor_type.shape
                 value = tuple(d.dim_param or d.dim_value for d in shape.dim)
                 self.assertIn(value[0], ("batch", "s0", "s11"))
-                if not investigate_dim_issues:
+                if investigate_dim_issues:
                     self.assertEqual(input_values[0], value[0])
 
     @ignore_warnings((DeprecationWarning, UserWarning))
