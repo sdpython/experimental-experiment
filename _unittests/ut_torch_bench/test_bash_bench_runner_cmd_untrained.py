@@ -154,7 +154,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
-    @requires_onnx_diagnostic("0.7.5")
+    @requires_onnx_diagnostic("0.7.8")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
         self._untrained_export("custom-dec", "Phi2LM_1Layer", verbose=1, debug=False)
@@ -281,7 +281,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             "custom",
             "microsoft/Phi-3.5-mini-instruct",
             verbose=1,
-            debug=False,
+            debug=True,
             check_file=False,
             dynamic=True,
             unique_first_dim=2,

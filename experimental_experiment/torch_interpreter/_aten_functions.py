@@ -1308,6 +1308,18 @@ def aten_cat(
     if len(tensors) == 1:
         # Nothing to concatenate.
         return g.op.Identity(tensors[0], name=name, outputs=outputs)
+
+    rk = None
+    for t in tensors:
+        if g.has_rank(t):
+            r = g.get_rank(t)
+            if rk is None:
+                rk = r
+            else:
+                assert rk == r, (
+                    f"Rank mismatch with t={t!r}, tensors={tensors}, "
+                    f"r={r}, rk={rk!r}{g.get_debug_msg()}"
+                )
     input_types = [(g.get_type(t) if isinstance(t, str) else None) for t in tensors]
     if len(set(input_types)) != 1:
         # Type conflicts: we use the output type
@@ -2696,6 +2708,36 @@ def aten_empty_like(
         0,
         dtype=dtype or g.get_type(x),
         name="empty_like",
+    )
+
+
+def aten_empty_memory_format(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    size: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout=None,
+    device: Optional["torch.device"] = None,  # noqa: F821
+    pin_memory=None,
+    requires_grad: bool = False,
+    memory_format=None,
+    name: str = "zeros",
+) -> T:
+    "constantofshape"
+    assert memory_format is None, f"memory_format={memory_format}{g.get_debug_msg()}"
+    return aten_full(
+        g,
+        sts,
+        outputs,
+        size,
+        fill_value=None,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        requires_grad=requires_grad,
+        name=name,
     )
 
 

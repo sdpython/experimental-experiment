@@ -220,7 +220,10 @@ def finalize_llm_setup(
             }
         )
         if input_cache_class is None or input_cache_class.__name__ == "DynamicCache":
-            n = len(cache.key_cache)
+            from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
+
+            ca = CacheKeyValue(cache)
+            n = len(ca.key_cache)
             cache_length = torch.export.Dim("cache_length", min=1, max=4096)
             shapes.update(
                 {
