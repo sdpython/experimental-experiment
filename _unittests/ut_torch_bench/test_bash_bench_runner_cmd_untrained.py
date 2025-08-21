@@ -281,7 +281,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             "custom",
             "microsoft/Phi-3.5-mini-instruct",
             verbose=1,
-            debug=True,
+            debug=False,
             check_file=False,
             dynamic=True,
             unique_first_dim=2,
