@@ -4187,7 +4187,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                     node.input[0], computed_value=True, as_shape=True, exc=False
                 )
                 if value is not None:
-                    self.set_shape(node.output[0], value)
+                    # This is needed when concatenating caches.
+                    self.set_shape(node.output[0], value, allow_zero=True)
                     node.doc_string += ":constant-9:"
         elif node.op_type == "Identity":
             if self.has_shape(node.input[0]):
