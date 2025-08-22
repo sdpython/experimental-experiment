@@ -53,7 +53,7 @@ class TestGraphPatternRepeated(ExtTestCase):
             h,
         )
 
-    def test_repeated_pattern_simple(self):
+    def test_repeated_pattern_asimple(self):
         onx = oh.make_model(
             oh.make_graph(
                 [
@@ -75,6 +75,84 @@ class TestGraphPatternRepeated(ExtTestCase):
         self.assertNotEmpty(h)
         indices, _nodes = h
         self.assertEqual(indices, [0, 1, 2])
+
+    def test_repeated_pattern_order_equal(self):
+        onx = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "un"], ["a1"]),
+                    oh.make_node("Neg", ["a1"], ["a21"]),
+                    oh.make_node("Abs", ["a1"], ["a22"]),
+                    oh.make_node("Add", ["a21", "a22"], ["a3"]),
+                    oh.make_node("Add", ["a3", "un"], ["b1"]),
+                    oh.make_node("Neg", ["b1"], ["b21"]),
+                    oh.make_node("Abs", ["b1"], ["b22"]),
+                    oh.make_node("Add", ["b21", "b22"], ["Z"]),
+                ],
+                "test",
+                [],
+                [],
+            ),
+        )
+        h = node_type_frequency(onx)
+        self.assertEqual(
+            (
+                {("", "Add"): 4, ("", "Neg"): 2, ("", "Abs"): 2},
+                {4: 1, 2: 4},
+                2,
+                [("", "Neg"), ("", "Abs")],
+            ),
+            h,
+        )
+        h = find_largest_repeated_pattern(onx)
+        self.assertNotEmpty(h)
+        indices, _nodes = h
+        self.assertEqual(indices, [0, 1, 2, 3])
+
+    def test_repeated_pattern_order_unequal(self):
+        onx = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "un"], ["a1"]),
+                    oh.make_node("Neg", ["a1"], ["a21"]),
+                    oh.make_node("Abs", ["a1"], ["a22"]),
+                    oh.make_node("Add", ["a21", "a22"], ["a3"]),
+                    oh.make_node("Add", ["a3", "un"], ["b1"]),
+                    oh.make_node("Abs", ["b1"], ["b22"]),
+                    oh.make_node("Neg", ["b1"], ["b21"]),
+                    oh.make_node("Add", ["b21", "b22"], ["Z"]),
+                ],
+                "test",
+                [],
+                [],
+            ),
+        )
+        h = node_type_frequency(onx)
+        self.assertEqual(
+            (
+                {("", "Add"): 4, ("", "Neg"): 2, ("", "Abs"): 2},
+                {4: 1, 2: 4},
+                2,
+                [("", "Neg"), ("", "Abs")],
+            ),
+            h,
+        )
+        h = find_largest_repeated_pattern(onx)
+        self.assertNotEmpty(h)
+        indices, _nodes = h
+        self.assertEqual(indices, [0, 1, 2, 3])
+
+    def test_repeated_pattern_true(self):
+        file = os.path.join(
+            os.path.dirname(__file__),
+            "data",
+            "model_microsoft_Phi-3_5-mini-instruct-custom-default-d1rt1.onnx",
+        )
+        onx = onnx.load(file, load_external_data=False)
+        h = find_largest_repeated_pattern(onx)
+        self.assertNotEmpty(h)
+        indices, _nodes = h
+        self.assertNotEmpty(indices)
 
 
 if __name__ == "__main__":

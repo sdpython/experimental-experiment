@@ -1,3 +1,4 @@
+import hashlib
 from collections import Counter
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 import onnx
@@ -36,10 +37,14 @@ def node_type_frequency(
     return freq, freqs, ret[1], types
 
 
+def _serialize_attribute(attribute: Sequence[onnx.AttributeProto]) -> bytes:
+    return b"/".join(a.SerializeToString() for a in attribute)
+
+
 class _GraphPattern:
-    def __init__(self, cursor: int):
-        self.cursor = cursor
-        self.first_node = cursor
+    def __init__(self, first_node: int):
+        self.cursor = first_node
+        self.first_node = first_node
         self.subgraph = set()
 
     def add_cursor(self):
@@ -58,6 +63,7 @@ class _GraphIterator:
         self.io_kind = None
         self.io_name = None
         self.o_suc = None
+        self.o_suc_index = None
 
     def __str__(self) -> str:
         if self.node_index is None:
@@ -77,23 +83,29 @@ class _GraphIterator:
         node = self.graph.nodes[self.node_index]
         if self.io_name is None:
             self.io_index = 0
+            self.o_suc = 0
             self.io_kind = bool(node.input)
-            if self.io_kind:
-                self.io_name = node.input[0]
-            else:
-                self.o_suc = 0
-                self.io_name = node.output[0]
+            self.io_name = node.input[0] if self.io_kind else node.output[0]
+            self.o_suc_index = (
+                None
+                if self.io_kind or not self.graph.successors[self.io_name]
+                else self.graph.successors[self.io_name][self.o_suc]
+            )
         else:
             if self.io_kind:
                 self.io_index += 1
+                self.o_suc = 0
                 if self.io_index >= len(node.input):
                     self.io_kind = False
                     self.io_index = 0
-                    self.o_suc = 0
-                if self.io_kind:
-                    self.io_name = node.input[self.io_index]
-                else:
-                    self.io_name = node.output[self.io_index]
+                self.io_name = (
+                    node.input[self.io_index] if self.io_kind else node.output[self.io_index]
+                )
+                self.o_suc_index = (
+                    None
+                    if not self.graph.successors[self.io_name]
+                    else self.graph.successors[self.io_name][self.o_suc]
+                )
             else:
                 self.io_name = node.output[self.io_index]
                 if self.io_name not in self.graph.successors:
@@ -101,13 +113,20 @@ class _GraphIterator:
                     return False
                 self.o_suc += 1
                 if self.o_suc < len(self.graph.successors[self.io_name]):
+                    self.o_suc_index = self.graph.successors[self.io_name][self.o_suc]
                     return True
                 self.o_suc = 0
                 self.io_index += 1
                 if self.io_index >= len(node.output):
                     self.io_name = None
+                    self.o_suc_index = None
                     return False
                 self.io_name = node.output[self.io_index]
+                self.o_suc_index = (
+                    None
+                    if not self.graph.successors[self.io_name]
+                    else self.graph.successors[self.io_name][self.o_suc]
+                )
         return True
 
     def get_name(self, node_index: int) -> str:
@@ -135,10 +154,31 @@ class _GraphIterator:
             suc = self.graph.successors.get(name, [])
             if not suc:
                 return -1
-            index = suc[self.o_suc]
-        assert (
-            node_index != self.node_index or name == self.io_name
-        ), f"Inconsistency with node_index={node_index}, name={name!r}, self={self!r}"
+            # It is tricky here because the order of the successors
+            # is not necessarily the same.
+            if self.o_suc == 0 and len(suc) == 1:
+                # Only one possible.
+                index = suc[self.o_suc]
+            else:
+                assert self.o_suc_index is not None, (
+                    f"Unable to guess the forward node, node_index={node_index}, "
+                    f"self={self}, mapped={self.graph.mapped}"
+                )
+                expected_sig = self.graph.signatures[self.o_suc_index]
+                sigs = {self.graph.signatures[s]: s for s in suc}
+                assert len(sigs) == len(suc), (
+                    f"Unable to distinguish between successors signatares: {sigs}, "
+                    f"node_index={node_index}, self={self}"
+                )
+                if expected_sig not in sigs:
+                    # Cannot find the expected successor
+                    return -1
+                return sigs[expected_sig]
+
+        assert node_index != self.node_index or name == self.io_name, (
+            f"Inconsistency with node_index={node_index}, "
+            f"self.io_index={self.io_index!r}, name={name!r}, self={self!r}"
+        )
         return index
 
 
@@ -149,21 +189,37 @@ class _GraphPatterns:
         self.current: List[_GraphIterator] = []
         self.build_edges()
         self.processed_indices = set()
+        self.mapped: Dict[int : List[int]] = {}
+
+    def make_sig(self, node: onnx.NodeProto) -> str:
+        hash = (
+            f"H{hashlib.sha256(_serialize_attribute(node.attribute)).hexdigest()[:20]}"
+            if node.attribute
+            else ""
+        )
+        sigi = []
+        for i in node.input:
+            p = self.predecessor.get(i, -1)
+            sigi.append(self.nodes[p].op_type if p >= 0 else "")
+        sig = (
+            f"{node.domain}/{node.op_type}/{len(node.input)}-{len(node.output)}"
+            f"{hash}//{'/'.join(sigi)}"
+        )
+        return sig
 
     def build_edges(self):
-        self.successors: Dict[str, List[int]] = {}
+        self.successors: Dict[str, Dict[str, int]] = {}
         self.predecessor: Dict[str, int] = {}
+        self.signatures: Dict[int, str] = {}
         for node_index, node in enumerate(self.nodes):
+            for i in node.output:
+                self.predecessor[i] = node_index
             for i in node.input:
                 if i not in self.successors:
                     self.successors[i] = []
                 self.successors[i].append(node_index)
-            for i in node.output:
-                self.predecessor[i] = node_index
-        for k in self.successors:
-            s = sorted(set(self.successors[k]))
-            del self.successors[k][:]
-            self.successors[k].extend(s)
+            sig = self.make_sig(node)
+            self.signatures[node_index] = sig
 
     def validate_cursor(self):
         # op_types
@@ -181,21 +237,27 @@ class _GraphPatterns:
             return True
 
         # Needs to check attributes
-        base = nodes[0].attribute.SerializeToString()
+        base = _serialize_attribute(nodes[0].attribute)
         for n in nodes[1:]:
-            get = n.attribute.SerializeToString()
+            get = _serialize_attribute(n.attribute)
             if get != base:
                 return False
         return True
 
     def add_cursor(self):
         bug = set()
-        for p in self.pats:
-            assert (
-                p.cursor not in bug
-            ), f"Every cursor should be different but {[p.cursor for p in self.pats]}"
+        for pi, p in enumerate(self.pats):
+            assert p.cursor not in bug, (
+                f"Every cursor pi={pi}, should be different but "
+                f"{[p.cursor for p in self.pats]}"
+            )
             bug.add(p.cursor)
             p.add_cursor()
+            if p.cursor not in self.mapped:
+                self.mapped[p.cursor] = set()
+        for p in self.pats:
+            for pp in self.pats:
+                self.mapped[p.cursor].add(pp.cursor)
 
     def apply_path(self, node_index: int) -> int:
         if not self.current:
@@ -205,12 +267,20 @@ class _GraphPatterns:
         return node_index
 
     def set_cursor(self):
-        for p in self.pats:
+        bug = set()
+        for pi, p in enumerate(self.pats):
             p.cursor = self.apply_path(p.first_node)
             assert p.cursor is not None, (
                 f"Wonrg cursor for p.first_node={p.first_node} and "
                 f"path={'/'.join(map(str,self.current))}"
             )
+            if p.cursor >= 0:
+                assert p.cursor not in bug, (
+                    f"Every cursor pi={pi}, should be different but "
+                    f"{[p.cursor for p in self.pats]}, "
+                    f"first_nodes={[p.first_node for p in self.pats]}"
+                )
+                bug.add(p.cursor)
 
     def next_valid(self):
         i = self.pats[0].cursor
