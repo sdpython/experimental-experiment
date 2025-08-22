@@ -39,22 +39,139 @@ def node_type_frequency(
 class _GraphPattern:
     def __init__(self, cursor: int):
         self.cursor = cursor
+        self.first_node = cursor
         self.subgraph = set()
 
     def add_cursor(self):
+        assert self.cursor >= 0, f"Cannot add a negative cursor ({self.cursor})"
         assert (
             self.cursor not in self.subgraph
         ), f"Cursor {self.cursor} already added in {self.subgraph}"
         self.subgraph.add(self.cursor)
 
 
+class _GraphIterator:
+    def __init__(self, graph: "_GraphPatterns", node_index: int):
+        self.graph = graph
+        self.node_index = node_index
+        self.io_index = None
+        self.io_kind = None
+        self.io_name = None
+        self.o_suc = None
+
+    def __str__(self) -> str:
+        if self.node_index is None:
+            return "it()"
+        indices = [
+            self.node_index,
+            self.io_index,
+            "N" if self.io_kind is None else ("I" if self.io_kind else "O"),
+            "." if self.o_suc is None else self.o_suc,
+            self.io_name,
+        ]
+        s = ", ".join(map(str, indices))
+        return f"it({s})"
+
+    def next(self):
+        # assumes node.output is never empty
+        node = self.graph.nodes[self.node_index]
+        if self.io_name is None:
+            self.io_index = 0
+            self.io_kind = bool(node.input)
+            if self.io_kind:
+                self.io_name = node.input[0]
+            else:
+                self.o_suc = 0
+                self.io_name = node.output[0]
+        else:
+            if self.io_kind:
+                self.io_index += 1
+                if self.io_index >= len(node.input):
+                    self.io_kind = False
+                    self.io_index = 0
+                    self.o_suc = 0
+                if self.io_kind:
+                    self.io_name = node.input[self.io_index]
+                else:
+                    self.io_name = node.output[self.io_index]
+            else:
+                self.io_name = node.output[self.io_index]
+                if self.io_name not in self.graph.successors:
+                    self.io_name = None
+                    return False
+                self.o_suc += 1
+                if self.o_suc < len(self.graph.successors[self.io_name]):
+                    return True
+                self.o_suc = 0
+                self.io_index += 1
+                if self.io_index >= len(node.output):
+                    self.io_name = None
+                    return False
+                self.io_name = node.output[self.io_index]
+        return True
+
+    def get_name(self, node_index: int) -> str:
+        node = self.graph.nodes[node_index]
+        if self.io_kind is None:
+            return None
+        if self.io_kind:
+            name = node.input[self.io_index]
+        else:
+            name = node.output[self.io_index]
+        assert (
+            node_index != self.node_index or name == self.io_name
+        ), f"Inconsistency with node_index={node_index}, name={name!r}, self={self!r}"
+        return name
+
+    def get_node_index(self, node_index: int) -> int:
+        node = self.graph.nodes[node_index]
+        if self.io_kind is None:
+            return None
+        if self.io_kind:
+            name = node.input[self.io_index]
+            index = self.graph.predecessor.get(name, -1)
+        else:
+            name = node.output[self.io_index]
+            suc = self.graph.successors.get(name, [])
+            if not suc:
+                return -1
+            index = suc[self.o_suc]
+        assert (
+            node_index != self.node_index or name == self.io_name
+        ), f"Inconsistency with node_index={node_index}, name={name!r}, self={self!r}"
+        return index
+
+
 class _GraphPatterns:
     def __init__(self, nodes: List[onnx.NodeProto], cursor: Sequence[int]):
         self.nodes = nodes
         self.pats = [_GraphPattern(c) for c in cursor]
+        self.current: List[_GraphIterator] = []
+        self.build_edges()
+        self.processed_indices = set()
+
+    def build_edges(self):
+        self.successors: Dict[str, List[int]] = {}
+        self.predecessor: Dict[str, int] = {}
+        for node_index, node in enumerate(self.nodes):
+            for i in node.input:
+                if i not in self.successors:
+                    self.successors[i] = []
+                self.successors[i].append(node_index)
+            for i in node.output:
+                self.predecessor[i] = node_index
+        for k in self.successors:
+            s = sorted(set(self.successors[k]))
+            del self.successors[k][:]
+            self.successors[k].extend(s)
 
     def validate_cursor(self):
         # op_types
+        if any(p.cursor < 0 for p in self.pats):
+            return False
+        # already processed
+        if any(p.cursor in self.processed_indices for p in self.pats):
+            return False
         nodes = [self.nodes[p.cursor] for p in self.pats]
         rec = set((n.op_type, len(n.input), len(n.output), len(n.attribute)) for n in nodes)
         if len(rec) != 1:
@@ -72,20 +189,84 @@ class _GraphPatterns:
         return True
 
     def add_cursor(self):
+        bug = set()
         for p in self.pats:
+            assert (
+                p.cursor not in bug
+            ), f"Every cursor should be different but {[p.cursor for p in self.pats]}"
+            bug.add(p.cursor)
             p.add_cursor()
+
+    def apply_path(self, node_index: int) -> int:
+        if not self.current:
+            return node_index
+        for p in self.current:
+            node_index = p.get_node_index(node_index)
+        return node_index
+
+    def set_cursor(self):
+        for p in self.pats:
+            p.cursor = self.apply_path(p.first_node)
+            assert p.cursor is not None, (
+                f"Wonrg cursor for p.first_node={p.first_node} and "
+                f"path={'/'.join(map(str,self.current))}"
+            )
+
+    def next_valid(self):
+        i = self.pats[0].cursor
+        self.current.append(_GraphIterator(self, i))
+        return self.next_not_valid()
+
+    def next_not_valid(self):
+        has_next = self.current[-1].next()
+        while not has_next:
+            self.current.pop()
+            if not self.current:
+                return False
+            has_next = self.current[-1].next()
+        self.set_cursor()
+        return True
+
+    def add_processed_cursor(self):
+        if any(p.cursor == -1 for p in self.pats):
+            return
+        for p in self.pats:
+            if p.cursor != -1:
+                self.processed_indices.add(p.cursor)
+
+    def process(self) -> Optional[Tuple[List[int], List[onnx.NodeProto]]]:
+        valid = self.validate_cursor()
+        n_iter = 0
+        while True and n_iter < len(self.nodes):
+            if valid:
+                self.add_cursor()
+                self.add_processed_cursor()
+                is_next = self.next_valid()
+            else:
+                self.add_processed_cursor()
+                is_next = self.next_not_valid()
+            if not is_next:
+                valid = True
+                break
+            valid = self.validate_cursor()
+            n_iter += 1
+
+        if self.pats[0].subgraph:
+            indices = sorted(self.pats[0].subgraph)
+            return indices, [self.nodes[i] for i in indices]
+        return None
 
 
 def find_largest_repeated_pattern(
     onx: Union[Sequence[onnx.NodeProto], onnx.ModelProto, onnx.GraphProto, onnx.FunctionProto],
     min_freq: int = 2,
-) -> Optional[List[onnx.NodeProto]]:
+) -> Optional[Tuple[List[int], List[onnx.NodeProto]]]:
     """
     Finds the largest repeated pattern in a graph.
 
     :param onx: any object containing a sequence of NodeProto
     :param min_freq: do not consider any frequency below that threshold
-    :return: list of node in the pattern
+    :return: list of node indices in the pattern, list of nodes in the pattern
     """
     if isinstance(onx, onnx.ModelProto):
         return find_largest_repeated_pattern(onx.graph, min_freq=min_freq)
@@ -97,14 +278,7 @@ def find_largest_repeated_pattern(
     nodes = list(onx.node)
     cursor = []
     for i, n in enumerate(nodes):
-        if n.op_type == types[0]:
+        if (n.domain, n.op_type) == types[0]:
             cursor.append(i)
-    patterns = _GraphPatterns(cursor)
-
-    valid = patterns.validate_cursor()
-    if valid:
-        patterns.add_cursor()
-
-    # explores backward
-    # _step_backward(nodes, )
-    return [nodes[i] for i in sorted(patterns[0].subgraph)]
+    patterns = _GraphPatterns(nodes, cursor)
+    return patterns.process()
