@@ -966,7 +966,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqualArray(expected, got[0])
 
     @ignore_warnings(DeprecationWarning)
-    @requires_onnxir("0.1.5")
+    @requires_onnxir("0.1.6")
     def test_large_model_onnxscript_ir(self):
         import onnx_ir as oir
 
