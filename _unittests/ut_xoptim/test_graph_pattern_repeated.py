@@ -2,7 +2,7 @@ import os
 import unittest
 import onnx
 import onnx.helper as oh
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 from experimental_experiment.xoptim.repeated_optim import (
     node_type_frequency,
     find_largest_repeated_pattern,
@@ -142,6 +142,7 @@ class TestGraphPatternRepeated(ExtTestCase):
         indices, _nodes = h
         self.assertEqual(indices, [0, 1, 2, 3])
 
+    @hide_stdout()
     def test_repeated_pattern_true(self):
         file = os.path.join(
             os.path.dirname(__file__),
@@ -149,10 +150,13 @@ class TestGraphPatternRepeated(ExtTestCase):
             "model_microsoft_Phi-3_5-mini-instruct-custom-default-d1rt1.onnx",
         )
         onx = onnx.load(file, load_external_data=False)
-        h = find_largest_repeated_pattern(onx)
+        h = find_largest_repeated_pattern(onx, verbose=3, all_instances=True)
         self.assertNotEmpty(h)
-        indices, _nodes = h
-        self.assertNotEmpty(indices)
+        self.assertEqual(len(h), 2)
+        print(h)
+        n = 60
+        self.assertEqual(len(h[0][0]), n)
+        self.assertEqual(len(h[1][0]), n)
 
 
 if __name__ == "__main__":

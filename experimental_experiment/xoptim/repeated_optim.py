@@ -1,7 +1,9 @@
 import hashlib
 from collections import Counter
 from typing import Dict, List, Optional, Sequence, Tuple, Union
+import numpy as np
 import onnx
+import onnx.numpy_helper as onh
 
 
 def node_type_frequency(
@@ -168,12 +170,15 @@ class _GraphIterator:
                 sigs = {self.graph.signatures[s]: s for s in suc}
                 assert len(sigs) == len(suc), (
                     f"Unable to distinguish between successors signatares: {sigs}, "
-                    f"node_index={node_index}, self={self}"
+                    f"node_index={node_index}, type is "
+                    f"{self.graph.nodes[node_index].op_type!r} "
+                    f"name is {self.graph.nodes[node_index].name!r}, self={self}"
                 )
                 if expected_sig not in sigs:
                     # Cannot find the expected successor
                     return -1
-                return sigs[expected_sig]
+                index = sigs[expected_sig]
+                return index
 
         assert node_index != self.node_index or name == self.io_name, (
             f"Inconsistency with node_index={node_index}, "
@@ -183,10 +188,16 @@ class _GraphIterator:
 
 
 class _GraphPatterns:
-    def __init__(self, nodes: List[onnx.NodeProto], cursor: Sequence[int]):
+    def __init__(
+        self,
+        nodes: List[onnx.NodeProto],
+        cursor: Sequence[int],
+        initializer: Optional[onnx.TensorProto] = None,
+    ):
         self.nodes = nodes
         self.pats = [_GraphPattern(c) for c in cursor]
         self.current: List[_GraphIterator] = []
+        self.initializer = {init.name: init for init in initializer} if initializer else {}
         self.build_edges()
         self.processed_indices = set()
         self.mapped: Dict[int : List[int]] = {}
@@ -199,8 +210,25 @@ class _GraphPatterns:
         )
         sigi = []
         for i in node.input:
-            p = self.predecessor.get(i, -1)
-            sigi.append(self.nodes[p].op_type if p >= 0 else "")
+            if i in self.initializer:
+                cst = self.initializer[i]
+                shape = tuple(cst.dims)
+                if len(shape) <= 1:
+                    size = np.prod(shape)
+                    if size < 1024:
+                        t = onh.to_array(cst).ravel()
+                        if t.size < 16:
+                            c = ",".join(str(x) for x in t.ravel())
+                        else:
+                            c = ",".join(str(x) for x in t.ravel()[:16])
+                        sigi.append(c)
+                    else:
+                        sigi.append("CC")
+                else:
+                    sigi.append("C")
+            else:
+                p = self.predecessor.get(i, -1)
+                sigi.append(self.nodes[p].op_type if p >= 0 else "")
         sig = (
             f"{node.domain}/{node.op_type}/{len(node.input)}-{len(node.output)}"
             f"{hash}//{'/'.join(sigi)}"
@@ -221,19 +249,27 @@ class _GraphPatterns:
             sig = self.make_sig(node)
             self.signatures[node_index] = sig
 
-    def validate_cursor(self):
+    def validate_cursor(self, verbose: int = 0):
         # op_types
         if any(p.cursor < 0 for p in self.pats):
+            if verbose > 2:
+                print("[_GraphPatterns.validate_cursor] INVALID (-1)")
             return False
         # already processed
         if any(p.cursor in self.processed_indices for p in self.pats):
+            if verbose > 2:
+                print("[_GraphPatterns.validate_cursor] INVALID (processed)")
             return False
         nodes = [self.nodes[p.cursor] for p in self.pats]
         rec = set((n.op_type, len(n.input), len(n.output), len(n.attribute)) for n in nodes)
         if len(rec) != 1:
+            if verbose > 2:
+                print("[_GraphPatterns.validate_cursor] INVALID (not unique type)")
             return False
         n_atts = rec.pop()[-1]
         if n_atts == 0:
+            if verbose > 2:
+                print("[_GraphPatterns.validate_cursor] VALID (1)")
             return True
 
         # Needs to check attributes
@@ -241,7 +277,11 @@ class _GraphPatterns:
         for n in nodes[1:]:
             get = _serialize_attribute(n.attribute)
             if get != base:
+                if verbose > 2:
+                    print("[_GraphPatterns.validate_cursor] INVALID (not the same attribute)")
                 return False
+        if verbose > 2:
+            print("[_GraphPatterns.validate_cursor] VALID (2)")
         return True
 
     def add_cursor(self):
@@ -272,15 +312,15 @@ class _GraphPatterns:
             p.cursor = self.apply_path(p.first_node)
             assert p.cursor is not None, (
                 f"Wonrg cursor for p.first_node={p.first_node} and "
-                f"path={'/'.join(map(str,self.current))}"
+                f"path={'/'.join(map(str,self.current))}, pi={pi}"
             )
             if p.cursor >= 0:
-                assert p.cursor not in bug, (
-                    f"Every cursor pi={pi}, should be different but "
-                    f"{[p.cursor for p in self.pats]}, "
-                    f"first_nodes={[p.first_node for p in self.pats]}"
-                )
-                bug.add(p.cursor)
+                if p.cursor in bug:
+                    # This means one input is shared accross multiple patterns.
+                    # This cannot be possible.
+                    p.cursor = -1
+                else:
+                    bug.add(p.cursor)
 
     def next_valid(self):
         i = self.pats[0].cursor
@@ -304,11 +344,24 @@ class _GraphPatterns:
             if p.cursor != -1:
                 self.processed_indices.add(p.cursor)
 
-    def process(self) -> Optional[Tuple[List[int], List[onnx.NodeProto]]]:
-        valid = self.validate_cursor()
+    def process(self, verbose: int = 0) -> Optional[Tuple[List[int], List[onnx.NodeProto]]]:
+        """Main function, looks for repeated patterns."""
+        valid = self.validate_cursor(verbose=verbose)
         n_iter = 0
         while True and n_iter < len(self.nodes):
+            if verbose > 1:
+                node = self.nodes[self.pats[0].cursor]
+                print(
+                    f"[_GraphPatterns.process] it={n_iter}: {node.op_type!r}: "
+                    f"{','.join(str(p.cursor) for p in self.pats)}"
+                )
             if valid:
+                if verbose:
+                    node = self.nodes[self.pats[0].cursor]
+                    print(
+                        f"[_GraphPatterns.process] add node type "
+                        f"{node.op_type}({', '.join(node.input)})"
+                    )
                 self.add_cursor()
                 self.add_processed_cursor()
                 is_next = self.next_valid()
@@ -318,7 +371,7 @@ class _GraphPatterns:
             if not is_next:
                 valid = True
                 break
-            valid = self.validate_cursor()
+            valid = self.validate_cursor(verbose=verbose)
             n_iter += 1
 
         if self.pats[0].subgraph:
@@ -330,25 +383,62 @@ class _GraphPatterns:
 def find_largest_repeated_pattern(
     onx: Union[Sequence[onnx.NodeProto], onnx.ModelProto, onnx.GraphProto, onnx.FunctionProto],
     min_freq: int = 2,
+    verbose: int = 0,
+    all_instances: bool = False,
 ) -> Optional[Tuple[List[int], List[onnx.NodeProto]]]:
     """
     Finds the largest repeated pattern in a graph.
 
     :param onx: any object containing a sequence of NodeProto
     :param min_freq: do not consider any frequency below that threshold
+    :param verbose: verbosity
+    :param all_instances: if True, returns all instances
     :return: list of node indices in the pattern, list of nodes in the pattern
     """
     if isinstance(onx, onnx.ModelProto):
-        return find_largest_repeated_pattern(onx.graph, min_freq=min_freq)
+        return find_largest_repeated_pattern(
+            onx.graph, min_freq=min_freq, verbose=verbose, all_instances=all_instances
+        )
     _freq, _freqs, npats, types = node_type_frequency(onx, min_freq)
     if not types:
         return None
+    if verbose:
+        print(f"[find_largest_repeated_pattern] number of patterns: {npats}")
+        print(f"[find_largest_repeated_pattern] frequencies of frequencies: {_freqs}")
+        print(f"[find_largest_repeated_pattern] candidates: {types}")
 
     # initialization
+    keep = None
+    all_patterns = None
     nodes = list(onx.node)
-    cursor = []
-    for i, n in enumerate(nodes):
-        if (n.domain, n.op_type) == types[0]:
-            cursor.append(i)
-    patterns = _GraphPatterns(nodes, cursor)
-    return patterns.process()
+    for candidate in types:
+        if verbose:
+            print(f"[find_largest_repeated_pattern] tries: {candidate}")
+        cursor = []
+        for i, n in enumerate(nodes):
+            if (n.domain, n.op_type) == candidate:
+                cursor.append(i)
+        patterns = _GraphPatterns(
+            nodes, cursor, initializer=onx.initializer if hasattr(onx, "initializer") else None
+        )
+        res = patterns.process(verbose=verbose)
+        if res is not None:
+            if verbose:
+                print(
+                    f"[find_largest_repeated_pattern] found a pattern of length {len(res[0])}"
+                )
+            if keep is None or len(keep[0]) < len(res[0]):
+                keep = res
+                all_patterns = []
+                for p in patterns.pats:
+                    indices = sorted(p.subgraph)
+                    all_patterns.append((indices, [patterns.nodes[i] for i in indices]))
+            if len(keep[0]) > 1:
+                break
+        elif verbose:
+            print("[find_largest_repeated_pattern] no found pattern")
+    if keep is None:
+        return keep
+    if all_instances:
+        return all_patterns
+    return keep
