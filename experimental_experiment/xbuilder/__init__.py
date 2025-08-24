@@ -4,6 +4,9 @@ from .graph_builder import GraphBuilder, FunctionOptions, InferShapesOptions
 from .virtual_tensor import VirtualTensor
 
 
+TEMPLATE_TYPE = 999
+
+
 def str_tensor_proto_type() -> str:
     mapping = [
         (getattr(TensorProto, att), att)

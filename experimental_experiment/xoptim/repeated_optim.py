@@ -3,7 +3,9 @@ from collections import Counter
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import onnx
+import onnx.helper as oh
 import onnx.numpy_helper as onh
+from .patterns_api import make_pattern_from_onnx, OnnxEasyPatternOptimization
 
 
 def node_type_frequency(
@@ -187,20 +189,15 @@ class _GraphIterator:
         return index
 
 
-class _GraphPatterns:
+class _GraphPredecessorSuccessors:
     def __init__(
         self,
         nodes: List[onnx.NodeProto],
-        cursor: Sequence[int],
         initializer: Optional[onnx.TensorProto] = None,
     ):
         self.nodes = nodes
-        self.pats = [_GraphPattern(c) for c in cursor]
-        self.current: List[_GraphIterator] = []
         self.initializer = {init.name: init for init in initializer} if initializer else {}
         self.build_edges()
-        self.processed_indices = set()
-        self.mapped: Dict[int : List[int]] = {}
 
     def make_sig(self, node: onnx.NodeProto) -> str:
         hash = (
@@ -239,7 +236,9 @@ class _GraphPatterns:
         self.successors: Dict[str, Dict[str, int]] = {}
         self.predecessor: Dict[str, int] = {}
         self.signatures: Dict[int, str] = {}
+        self.result_names = set()
         for node_index, node in enumerate(self.nodes):
+            self.result_names |= set(node.input) | set(node.output)
             for i in node.output:
                 self.predecessor[i] = node_index
             for i in node.input:
@@ -248,6 +247,51 @@ class _GraphPatterns:
                 self.successors[i].append(node_index)
             sig = self.make_sig(node)
             self.signatures[node_index] = sig
+
+
+def make_function_from_nodes(
+    nodes: List[onnx.NodeProto], name: str = "function", domain: str = "repeated"
+) -> onnx.FunctionProto:
+    """
+    Creates a function from a list of nodes.
+    Looks into inputs not created by one of the nodes, looks into unused outputs.
+    Opset versions are all set to one.
+
+    :param nodes: list of nodes
+    :param name: function name
+    :param domain: domain name
+    :return: function proto
+    """
+    gr = _GraphPredecessorSuccessors(nodes)
+    domains = sorted(set(n.domain for n in nodes))
+    inputs = sorted(
+        k for k in gr.result_names if k not in gr.predecessor or gr.predecessor[k] is None
+    )
+    outputs = sorted(
+        k for k in gr.result_names if k not in gr.successors or not gr.successors[k]
+    )
+    return oh.make_function(
+        name,
+        domain,
+        inputs,
+        outputs,
+        nodes,
+        opset_imports=[oh.make_opsetid(n, 1) for n in domains],
+    )
+
+
+class _GraphPatterns(_GraphPredecessorSuccessors):
+    def __init__(
+        self,
+        nodes: List[onnx.NodeProto],
+        cursor: Sequence[int],
+        initializer: Optional[onnx.TensorProto] = None,
+    ):
+        super().__init__(nodes, initializer)
+        self.pats = [_GraphPattern(c) for c in cursor]
+        self.current: List[_GraphIterator] = []
+        self.processed_indices = set()
+        self.mapped: Dict[int : List[int]] = {}
 
     def validate_cursor(self, verbose: int = 0):
         # op_types
@@ -344,7 +388,9 @@ class _GraphPatterns:
             if p.cursor != -1:
                 self.processed_indices.add(p.cursor)
 
-    def process(self, verbose: int = 0) -> Optional[Tuple[List[int], List[onnx.NodeProto]]]:
+    def process(
+        self, name: str = "RepeatedPattern", verbose: int = 0
+    ) -> Optional[Tuple[Union[List[int], List[List[int]]], OnnxEasyPatternOptimization]]:
         """Main function, looks for repeated patterns."""
         valid = self.validate_cursor(verbose=verbose)
         n_iter = 0
@@ -376,7 +422,28 @@ class _GraphPatterns:
 
         if self.pats[0].subgraph:
             indices = sorted(self.pats[0].subgraph)
-            return indices, [self.nodes[i] for i in indices]
+            nodes = [self.nodes[i] for i in indices]
+            proto = make_function_from_nodes(nodes, domain="repeated")
+            pattern = make_pattern_from_onnx(
+                name,
+                proto,
+                oh.make_function(
+                    "repeated",
+                    "pattern",
+                    proto.input,
+                    proto.output,
+                    [
+                        oh.make_node(
+                            name,
+                            proto.input,
+                            proto.output,
+                            domain="repeated",
+                        )
+                    ],
+                    opset_imports=[oh.make_opsetid("repeated", 1)],
+                ),
+            )
+            return indices, pattern
         return None
 
 
@@ -385,7 +452,8 @@ def find_largest_repeated_pattern(
     min_freq: int = 2,
     verbose: int = 0,
     all_instances: bool = False,
-) -> Optional[Tuple[List[int], List[onnx.NodeProto]]]:
+    name: str = "RepeatedPattern",
+) -> Optional[Tuple[Union[List[int], List[List[int]]], OnnxEasyPatternOptimization]]:
     """
     Finds the largest repeated pattern in a graph.
 
@@ -393,12 +461,31 @@ def find_largest_repeated_pattern(
     :param min_freq: do not consider any frequency below that threshold
     :param verbose: verbosity
     :param all_instances: if True, returns all instances
-    :return: list of node indices in the pattern, list of nodes in the pattern
+    :param name: class name for the instance of :class:`OnnxEasyPatternOptimization
+        <experimental_experiment.xoptim.patterns_api.OnnxEasyPatternOptimization>`
+    :return: list of node indices in the pattern, the pattern as a subtype of
+        :class:`OnnxEasyPatternOptimization
+        <experimental_experiment.xoptim.patterns_api.OnnxEasyPatternOptimization>`
+
+    The opset are correct if the input is a ModelProto.
     """
     if isinstance(onx, onnx.ModelProto):
-        return find_largest_repeated_pattern(
-            onx.graph, min_freq=min_freq, verbose=verbose, all_instances=all_instances
+        res = find_largest_repeated_pattern(
+            onx.graph,
+            min_freq=min_freq,
+            verbose=verbose,
+            all_instances=all_instances,
+            name=name,
         )
+        if res is None:
+            return res
+        # Let's adjust the domain.
+        subgraphs, pattern = res
+        ds = {d.domain: d.version for d in onx.opset_import}
+        for d in pattern._match_model.opset_import:
+            d.version = ds[d.domain]
+        return subgraphs, pattern
+
     _freq, _freqs, npats, types = node_type_frequency(onx, min_freq)
     if not types:
         return None
@@ -421,7 +508,7 @@ def find_largest_repeated_pattern(
         patterns = _GraphPatterns(
             nodes, cursor, initializer=onx.initializer if hasattr(onx, "initializer") else None
         )
-        res = patterns.process(verbose=verbose)
+        res = patterns.process(verbose=verbose, name=name)
         if res is not None:
             if verbose:
                 print(
@@ -429,10 +516,7 @@ def find_largest_repeated_pattern(
                 )
             if keep is None or len(keep[0]) < len(res[0]):
                 keep = res
-                all_patterns = []
-                for p in patterns.pats:
-                    indices = sorted(p.subgraph)
-                    all_patterns.append((indices, [patterns.nodes[i] for i in indices]))
+                all_patterns = [sorted(p.subgraph) for p in patterns.pats]
             if len(keep[0]) > 1:
                 break
         elif verbose:
@@ -440,5 +524,5 @@ def find_largest_repeated_pattern(
     if keep is None:
         return keep
     if all_instances:
-        return all_patterns
+        return all_patterns, keep[1]
     return keep
