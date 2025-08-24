@@ -260,8 +260,6 @@ class NeuronMambaCache(torch.nn.Module):
         return x @ (torch.cat([*dc.conv_states, *dc.ssm_states], axis=-1))
 
     def _get_random_inputs(self, device: str):
-        import transformers
-
         class _config:
             def __init__(self):
                 self.intermediate_size = 8
@@ -270,7 +268,13 @@ class NeuronMambaCache(torch.nn.Module):
                 self.num_hidden_layers = 64
                 self.dtype = torch.float32
 
-        cache = transformers.cache_utils.MambaCache(_config(), max_batch_size=1, device="cpu")
+        try:
+            from transformers.models.mamba.modeling_mamba import MambaCache
+        except ImportError:
+            # transformers<4.55.3
+            from transformers.cache_utils import MambaCache
+
+        cache = MambaCache(_config(), max_batch_size=1, device="cpu")
         cache.conv_states[0] += 1
         cache.ssm_states[0] += 2
         if isinstance(cache.conv_states, list):

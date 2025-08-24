@@ -3,7 +3,12 @@ import onnx.helper as oh
 import numpy as np
 import onnx.numpy_helper as onh
 from onnx import FunctionProto, TensorProto
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    hide_stdout,
+    ignore_warnings,
+    requires_onnxir,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 from experimental_experiment.xbuilder.model_container import TorchModelContainer
@@ -961,6 +966,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqualArray(expected, got[0])
 
     @ignore_warnings(DeprecationWarning)
+    @requires_onnxir("0.1.8")
     def test_large_model_onnxscript_ir(self):
         import onnx_ir as oir
 
