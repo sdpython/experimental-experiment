@@ -411,9 +411,12 @@ class _GraphPatterns(_GraphPredecessorSuccessors):
                 self.add_cursor()
                 self.add_processed_cursor()
                 is_next = self.next_valid()
-            else:
+            elif self.current:
+                # let's try the next one.
                 self.add_processed_cursor()
                 is_next = self.next_not_valid()
+            else:
+                is_next = False
             if not is_next:
                 valid = True
                 break

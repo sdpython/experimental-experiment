@@ -189,11 +189,26 @@ class TestGraphPatternRepeated(ExtTestCase):
         self.assertEqual(indices, [0, 1, 2, 3])
 
     @hide_stdout()
-    def test_repeated_pattern_true(self):
+    def test_repeated_pattern_true_phi3_mini(self):
         file = os.path.join(
             os.path.dirname(__file__),
             "data",
             "model_microsoft_Phi-3_5-mini-instruct-custom-default-d1rt1.onnx",
+        )
+        onx = onnx.load(file, load_external_data=False)
+        h = find_largest_repeated_pattern(onx, verbose=3, all_instances=True)
+        self.assertNotEmpty(h)
+        self.assertEqual(len(h), 2)
+        n = 60
+        self.assertEqual(len(h[0][0]), n)
+        self.assertIsInstance(h[1], OnnxEasyPatternOptimization)
+
+    @hide_stdout()
+    def test_repeated_pattern_true_phi4_mini(self):
+        file = os.path.join(
+            os.path.dirname(__file__),
+            "data",
+            "microsoft_Phi-4-mini-reasoning-custom-default-f32-cpu.onnx",
         )
         onx = onnx.load(file, load_external_data=False)
         h = find_largest_repeated_pattern(onx, verbose=3, all_instances=True)
