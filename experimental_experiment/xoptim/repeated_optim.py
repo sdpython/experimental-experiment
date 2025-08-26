@@ -171,10 +171,11 @@ class _GraphIterator:
                 expected_sig = self.graph.signatures[self.o_suc_index]
                 sigs = {self.graph.signatures[s]: s for s in suc}
                 assert len(sigs) == len(suc), (
-                    f"Unable to distinguish between successors signatares: {sigs}, "
+                    f"Unable to distinguish between successors signatures: {sigs}, "
                     f"node_index={node_index}, type is "
                     f"{self.graph.nodes[node_index].op_type!r} "
-                    f"name is {self.graph.nodes[node_index].name!r}, self={self}"
+                    f"name is {self.graph.nodes[node_index].name!r}, self={self}, "
+                    f"len(suc)={len(suc)}"
                 )
                 if expected_sig not in sigs:
                     # Cannot find the expected successor
@@ -194,12 +195,27 @@ class _GraphPredecessorSuccessors:
         self,
         nodes: List[onnx.NodeProto],
         initializer: Optional[onnx.TensorProto] = None,
+        input_names: Optional[List[str]] = None,
     ):
         self.nodes = nodes
         self.initializer = {init.name: init for init in initializer} if initializer else {}
+        self.input_names = input_names or []
         self.build_edges()
+        self.build_all_predecessors()
+        self.build_signatures()
 
-    def make_sig(self, node: onnx.NodeProto) -> str:
+    def input_names_involved(self, node: onnx.NodeProto) -> List[int]:
+        set_inputs = set(self.input_names)
+        inputs = set()
+        allp = self.all_precessors[node.output[0]]
+        for i in allp:
+            n = self.nodes[i]
+            inputs |= set(n.input) & set_inputs
+        if len(inputs) == len(set_inputs):
+            return "ALL"
+        return sorted(inputs)
+
+    def make_signature(self, node: onnx.NodeProto) -> str:
         hash = (
             f"H{hashlib.sha256(_serialize_attribute(node.attribute)).hexdigest()[:20]}"
             if node.attribute
@@ -225,11 +241,26 @@ class _GraphPredecessorSuccessors:
                     sigi.append("C")
             else:
                 p = self.predecessor.get(i, -1)
-                sigi.append(self.nodes[p].op_type if p >= 0 else "")
+                if p >= 0:
+                    n = self.nodes[p]
+                    if len(n.output) > 1:
+                        sigi.append(f"{n.op_type}.{list(n.output).index(i)}")
+                    else:
+                        sigi.append(n.op_type)
+                else:
+                    sigi.append("")
+        sigo = []
+        if len(node.output) == 1 and len(self.successors.get(node.output[0], [])) == 1:
+            suc = self.successors[node.output[0]]
+            n = self.nodes[suc[0]]
+            sigo = [f"{n.op_type}.{list(n.input).index(node.output[0])}"]
         sig = (
             f"{node.domain}/{node.op_type}/{len(node.input)}-{len(node.output)}"
-            f"{hash}//{'/'.join(sigi)}"
+            f"{hash}<<{'/'.join(sigi)}>>{'/'.join(sigo)}"
         )
+        iv = self.input_names_involved(node)
+        if iv != "ALL":
+            sig += f"II{'/'.join(iv)}"
         return sig
 
     def build_edges(self):
@@ -245,8 +276,32 @@ class _GraphPredecessorSuccessors:
                 if i not in self.successors:
                     self.successors[i] = []
                 self.successors[i].append(node_index)
-            sig = self.make_sig(node)
+
+    def build_signatures(self):
+        for node_index, node in enumerate(self.nodes):
+            sig = self.make_signature(node)
             self.signatures[node_index] = sig
+
+    def build_all_predecessors(self):
+        self.all_precessors = {}
+        for k, v in self.predecessor.items():
+            self.all_precessors[k] = {v}
+        changes = 1
+        it = 0
+        while changes and it < len(self.nodes) // 2 + 1:
+            changes = 0
+            for _k, v in self.all_precessors.items():
+                addition = set()
+                for index in v:
+                    n = self.nodes[index]
+                    for i in n.input:
+                        if i in self.all_precessors:
+                            addition |= self.all_precessors[i]
+                before = len(v)
+                v |= addition
+                if len(v) > before:
+                    changes += 1
+            it += 1
 
 
 def make_function_from_nodes(
@@ -286,8 +341,12 @@ class _GraphPatterns(_GraphPredecessorSuccessors):
         nodes: List[onnx.NodeProto],
         cursor: Sequence[int],
         initializer: Optional[onnx.TensorProto] = None,
+        input_names: Optional[List[str]] = None,
     ):
-        super().__init__(nodes, initializer)
+        super().__init__(nodes, initializer, input_names)
+        self.change_cursor(cursor)
+
+    def change_cursor(self, cursor):
         self.pats = [_GraphPattern(c) for c in cursor]
         self.current: List[_GraphIterator] = []
         self.processed_indices = set()
@@ -501,6 +560,10 @@ def find_largest_repeated_pattern(
     keep = None
     all_patterns = None
     nodes = list(onx.node)
+    patterns = None
+    input_names = (
+        onx.input if isinstance(onx, onnx.FunctionProto) else [i.name for i in onx.input]
+    )
     for candidate in types:
         if verbose:
             print(f"[find_largest_repeated_pattern] tries: {candidate}")
@@ -508,9 +571,15 @@ def find_largest_repeated_pattern(
         for i, n in enumerate(nodes):
             if (n.domain, n.op_type) == candidate:
                 cursor.append(i)
-        patterns = _GraphPatterns(
-            nodes, cursor, initializer=onx.initializer if hasattr(onx, "initializer") else None
-        )
+        if patterns is None:
+            patterns = _GraphPatterns(
+                nodes,
+                cursor,
+                initializer=onx.initializer if hasattr(onx, "initializer") else None,
+                input_names=input_names,
+            )
+        else:
+            patterns.change_cursor(cursor)
         res = patterns.process(verbose=verbose, name=name)
         if res is not None:
             if verbose:

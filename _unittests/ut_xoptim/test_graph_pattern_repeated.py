@@ -214,7 +214,7 @@ class TestGraphPatternRepeated(ExtTestCase):
         h = find_largest_repeated_pattern(onx, verbose=3, all_instances=True)
         self.assertNotEmpty(h)
         self.assertEqual(len(h), 2)
-        n = 60
+        n = 50
         self.assertEqual(len(h[0][0]), n)
         self.assertIsInstance(h[1], OnnxEasyPatternOptimization)
 
