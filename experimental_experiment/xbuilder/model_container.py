@@ -333,10 +333,21 @@ class TorchModelContainer(ModelContainer):
             initializer_values.append(initializer_value)
 
         value_info = {info.name: info for info in proto.value_info}
-        nodes = [
-            oirs._deserialize_node(node, scoped_values, value_info, quantization_annotations)
-            for node in proto.node
-        ]
+        for node in proto.node:
+            oirs._declare_node_outputs(
+                node,
+                scoped_values[-1],
+                value_info=value_info,
+                quantization_annotations=quantization_annotations,
+            )
+
+        nodes = []
+        for node in proto.node:
+            nodes.append(
+                oirs._deserialize_node(
+                    node, scoped_values, value_info, quantization_annotations
+                )
+            )
 
         outputs = []
         for info in proto.output:

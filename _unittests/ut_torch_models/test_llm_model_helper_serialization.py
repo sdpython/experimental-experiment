@@ -1,6 +1,7 @@
 import copy
 import unittest
 from onnx_diagnostic.helpers import max_diff, string_type
+from onnx_diagnostic.torch_models.validate import validate_model
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -8,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_transformers,
     long_test,
+    hide_stdout,
 )
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -154,6 +156,27 @@ class TestLlmModelHelperSerialization(ExtTestCase):
         self.assertLess(diff["abs"], 1e-5)
         diff = max_diff(expected, got)
         self.assertLess(diff["abs"], 1e-5)
+
+    @requires_torch("2.7")
+    @hide_stdout()
+    @ignore_warnings(FutureWarning)
+    def test_h_validate_model_custom_os_ort(self):
+        mid = "arnir0/Tiny-LLM"
+        summary, data = validate_model(
+            mid,
+            do_run=True,
+            verbose=10,
+            exporter="custom",
+            dump_folder="dump_test/validate_model_custom_os_ort",
+            patch=True,
+            stop_if_static=2,
+            optimization="default+os_ort",
+        )
+        self.assertIsInstance(summary, dict)
+        self.assertIsInstance(data, dict)
+        self.assertLess(summary["disc_onnx_ort_run_abs"], 1e-4)
+        onnx_filename = data["onnx_filename"]
+        self.assertExists(onnx_filename)
 
 
 if __name__ == "__main__":
