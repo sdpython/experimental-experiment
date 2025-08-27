@@ -135,9 +135,9 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
                 self.assertIn(
                     value[0],
                     (
-                        ("batch", "s0", "seq_length", "s11")
+                        ("batch", "s0", "seq_length", "s11", "s58")
                         if unique_first_dim == 2
-                        else ("batch", "s0", "s11")
+                        else ("batch", "s0", "s11", "s58")
                     ),
                 )
                 input_values.append(value[0])
