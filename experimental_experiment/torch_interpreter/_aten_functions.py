@@ -1,5 +1,5 @@
 """
-See https://docs.pytorch.org/stable/torch.compiler_ir.html
+See https://docs.pytorch.org/docs/stable/torch.compiler_ir.html
 for the full list of aten functions.
 """
 

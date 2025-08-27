@@ -6,7 +6,7 @@
 ===============================
 
 This example leverages the examples introduced on this page
-`Custom Backends <https://docs.pytorch.org/stable/torch.compiler_custom_backends.html>`_.
+`Custom Backends <https://docs.pytorch.org/docs/stable/torch.compiler_custom_backends.html>`_.
 It uses backend :func:`experimental_experiment.torch_dynamo.onnx_custom_backend`
 based on :epkg:`onnxruntime` and running on CPU or CUDA.
 It could easily replaced by

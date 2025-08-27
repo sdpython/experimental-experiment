@@ -1,5 +1,5 @@
 """
-See https://docs.pytorch.org/stable/torch.compiler_ir.html
+See https://docs.pytorch.org/docs/stable/torch.compiler_ir.html
 for the full list of aten functions.
 """
 
@@ -92,7 +92,7 @@ def aten_scaled_dot_product_attention(
     scaled_dot_product_attention
 
     See `torch.nn.functional.scaled_dot_product_attention
-    <https://docs.pytorch.org/stable/generated/torch.nn.functional.scaled_dot_product_attention.html>`_.
+    <https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html>`_.
 
     Equivalent to the PyTorch code::
 
