@@ -96,7 +96,7 @@ intersphinx_mapping = {
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
     "skl2onnx": ("https://onnx.ai/sklearn-onnx/", None),
-    "torch": ("https://docs.pytorch.org/main/", None),
+    "torch": ("https://docs.pytorch.org/docs/stable/", None),
 }
 
 # Check intersphinx reference targets exist
