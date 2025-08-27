@@ -115,7 +115,7 @@ assert_almost_equal(res, rest[0, 0].numpy())
 # such as a matrix multiplication. The goal is to transform the tensor `data`
 # into a new matrix which can be mutiplied with a flatten kernel and finally
 # reshaped into the expected result. pytorch calls this function
-# `Unfold <https://pytorch.org/docs/stable/generated/torch.nn.Unfold.html>`_.
+# `Unfold <https://docs.pytorch.org/stable/generated/torch.nn.Unfold.html>`_.
 # This function is also called
 # `im2col <https://caffe.berkeleyvision.org/tutorial/layers/im2col.html>`_.
 
@@ -176,7 +176,7 @@ ct
 
 # %%
 # And now the version with `col2im` or
-# `Fold <https://pytorch.org/docs/stable/generated/torch.nn.Fold.html#torch.nn.Fold>`_
+# `Fold <https://docs.pytorch.org/stable/generated/torch.nn.Fold.html#torch.nn.Fold>`_
 # applied on the result product of the output from `Conv` and the kernel:
 # the output of `Conv` is multiplied by every coefficient of the kernel.
 # Then all these matrices are concatenated to build a matrix of the same

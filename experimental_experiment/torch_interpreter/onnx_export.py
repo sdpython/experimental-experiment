@@ -497,7 +497,7 @@ def _make_builder_interpreter(
     """
     Exports a torch model into ONNX using
     `dynamo export
-    <https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`_.
+    <https://docs.pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`_.
 
     :param mod: torch module
     :param args: input arguments
@@ -918,7 +918,7 @@ def to_onnx(
     """
     Exports a torch model into ONNX using
     `dynamo export
-    <https://pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`_.
+    <https://docs.pytorch.org/tutorials/intermediate/torch_export_tutorial.html>`_.
 
     :param mod: torch module
     :param args: input arguments

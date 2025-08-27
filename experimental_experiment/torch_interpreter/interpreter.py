@@ -2046,7 +2046,7 @@ class DynamoInterpreter:
         ):
             gm = sub_module
         else:
-            # https://pytorch.org/docs/stable/fx.html
+            # https://docs.pytorch.org/docs/stable/fx.html
             tracer_class = self.torch.fx.Tracer
             graph = tracer_class().trace(sub_module)
             # Let's propulate with type
