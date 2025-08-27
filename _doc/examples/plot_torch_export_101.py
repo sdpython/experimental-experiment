@@ -33,7 +33,7 @@ print(exported_program.graph)
 # With an integer as input
 # ++++++++++++++++++++++++
 #
-# As `torch.export.export <https://pytorch.org/docs/stable/export.html>`_
+# As `torch.export.export <https://docs.pytorch.org/docs/stable/export.html>`_
 # documentation, integer do not show up on the graph.
 # An exporter based on :func:`torch.export.export` cannot consider
 # the integer as an input.

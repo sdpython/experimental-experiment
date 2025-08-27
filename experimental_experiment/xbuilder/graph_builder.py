@@ -419,6 +419,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         _parent: Optional["GraphBuilder"] = None,
     ):
         import torch
+        from . import TEMPLATE_TYPE
+
+        self.TEMPLATE_TYPE = TEMPLATE_TYPE
 
         self.torch = torch
         self.maybe_disable_fake_tensor_mode = _unset_fake_temporarily
@@ -529,7 +532,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.current_input = 0
             self._unique_names = set(self.input_names)
 
-        elif isinstance(target_opset_or_existing_proto, (GraphProto, ModelProto)):
+        elif isinstance(
+            target_opset_or_existing_proto, (GraphProto, ModelProto, FunctionProto)
+        ):
             # loads a model from nothing
             if input_names:
                 raise ValueError(
@@ -550,9 +555,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 (optimization_options or OptimizationOptions()).constant_folding,
                 convert_into_initializer=False,
             )
-            self._update_shape_types_with_proto(
-                target_opset_or_existing_proto, infer_shapes_options
-            )
+            if not isinstance(target_opset_or_existing_proto, FunctionProto):
+                self._update_shape_types_with_proto(
+                    target_opset_or_existing_proto, infer_shapes_options
+                )
         else:
             raise NotImplementedError(
                 f"{type(target_opset_or_existing_proto)} is not supported."
@@ -5835,7 +5841,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 assert not root or self.has_name(i), (
                     f"Name {i!r} not registered, step {step!r}, node type is "
                     f"{node.op_type!r}, root={root!r}, node name is {node.name!r}, "
-                    f"input are {node.input}, i in known={i in known}"
+                    f"input are {node.input}, i={i!r} in known={i in known}"
                     f"{self.get_debug_msg()}"
                 )
                 assert i in known, (
@@ -8044,29 +8050,30 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{len(proto_graph.node)} nodes"
             )
         self.existing_metadata_props = {p.key: p.value for p in proto.metadata_props}
-        if isinstance(proto, ModelProto):
+        if isinstance(proto, (FunctionProto, ModelProto)):
             self.opsets = {d.domain: d.version for d in proto.opset_import}
         else:
             assert self.opsets, "opsets must be not None"
         if self.ir_version is None and isinstance(proto, ModelProto):
             self.ir_version = proto.ir_version
         self.nodes = list(proto_graph.node)
-        for i in proto_graph.initializer:
-            self.add_initializer(
-                i.name,
-                i,
-                allow_empty=True,
-                source=f"GraphBuilder._update_structures_with_proto.1/from({i.name})",
-            )
-        for i in proto_graph.sparse_initializer:
-            self.add_initializer(
-                i.values.name,
-                i,
-                allow_empty=True,
-                source=f"GraphBuilder._update_structures_with_proto.2/from({i.name})",
-            )
         self.functions = {}
         self.functions_builder = {}
+        if isinstance(proto_graph, GraphProto):
+            for i in proto_graph.initializer:
+                self.add_initializer(
+                    i.name,
+                    i,
+                    allow_empty=True,
+                    source=f"GraphBuilder._update_structures_with_proto.1/from({i.name})",
+                )
+            for i in proto_graph.sparse_initializer:
+                self.add_initializer(
+                    i.values.name,
+                    i,
+                    allow_empty=True,
+                    source=f"GraphBuilder._update_structures_with_proto.2/from({i.name})",
+                )
         if isinstance(proto, ModelProto):
             for f in proto.functions:
                 self.add_function(f)
@@ -8075,9 +8082,23 @@ class GraphBuilder(_GraphBuilderRuntime):
             if not (infer_shapes_options & InferShapesOptions.NEW)
             else []
         )
-        self.inputs = list(proto_graph.input)
-        self.outputs = list(proto_graph.output)
-        self.input_names = [i.name for i in proto_graph.input]
+        if isinstance(proto_graph, GraphProto):
+            self.inputs = list(proto_graph.input)
+            self.outputs = list(proto_graph.output)
+            self.input_names = [i.name for i in proto_graph.input]
+        else:
+            assert isinstance(
+                proto_graph, FunctionProto
+            ), f"Unexpected type {type(proto_graph)} for proto_graph"
+            self.inputs = [
+                oh.make_tensor_value_info(name, self.TEMPLATE_TYPE, None)
+                for name in proto_graph.input
+            ]
+            self.outputs = [
+                oh.make_tensor_value_info(name, self.TEMPLATE_TYPE, None)
+                for name in proto_graph.output
+            ]
+            self.input_names = list(proto_graph.input)
 
         available_shapes = (
             {v.name: v for v in proto_graph.value_info}

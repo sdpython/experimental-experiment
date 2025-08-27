@@ -1344,7 +1344,7 @@ def make_pattern_from_onnx(
     match_model: Union[ModelProto, FunctionProto],
     apply_model: Union[ModelProto, FunctionProto],
     verbose: int = 0,
-):
+) -> OnnxEasyPatternOptimization:
     """
     Dynamically create a new class inheriting from
     :class:`EasyPatternOptimization`.

@@ -8,15 +8,15 @@ The example evaluates the performance of onnxruntime of a simple
 torch model after it was converted into ONNX through different processes:
 
 * `TorchScript-based ONNX Exporter
-  <https://pytorch.org/docs/stable/onnx.html#torchscript-based-onnx-exporter>`_,
+  <https://docs.pytorch.org/docs/stable/onnx.html#torchscript-based-onnx-exporter>`_,
   let's call it **script**
 * `TorchDynamo-based ONNX Exporter
-  <https://pytorch.org/docs/stable/onnx.html#torchdynamo-based-onnx-exporter>`_,
+  <https://docs.pytorch.org/docs/stable/onnx.html#torchdynamo-based-onnx-exporter>`_,
   let's call it **dynamo**
 * if available, the previous model but optimized, **dynopt**
 * a custom exporter **cus_p0**, this exporter supports a very limited
   set of models, as **dynamo**, it relies on
-  `torch.fx <https://pytorch.org/docs/stable/fx.html>`_ but the design is closer to
+  `torch.fx <https://docs.pytorch.org/docs/stable/fx.html>`_ but the design is closer to
   what tensorflow-onnx does.
 * the same exporter but unused nodes were removed and constants were folded, **cus_p2**
 
