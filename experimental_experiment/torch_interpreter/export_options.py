@@ -490,7 +490,7 @@ class ExportOptions:
                     strict=self.strict,
                 )
             except torch._export.verifier.SpecViolationError:
-                # see https://github.com/pytorch/pytorch/issues/128394
+                # see issue 128394 on pytorch repo
                 if verbose:
                     print("[ExportOptions.export] torch.export._trace._export")
                 exported_program = torch.export._trace._export(
