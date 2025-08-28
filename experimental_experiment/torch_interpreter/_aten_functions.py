@@ -384,6 +384,38 @@ def aten___or___Tensor(
     return aten_or(g, sts, outputs, x, y, name=name)
 
 
+def aten_one_hot(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    num_classes=-1,
+    name="one_hot",
+) -> T:
+    "one_hot"
+    assert num_classes != 0, f"num_classes={num_classes} is not expected{g.get_debug_msg()}"
+    assert g.has_type(x), f"missing type for {x!r}{g.get_debug_msg()}"
+    if num_classes > 0:
+        t_num_classes = np.array(num_classes, dtype=np.int64)
+    else:
+        t_num_classes = g.op.ReduceMax(x, name=name)
+    dtype = tensor_dtype_to_np_dtype(g.get_type(x))
+    res = g.op.OneHot(
+        x, t_num_classes, np.array([0, 1], dtype=dtype), name=name, outputs=outputs
+    )
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            if isinstance(num_classes, int):
+                g.set_shape(res, (*g.get_shape(x), num_classes))
+            else:
+                new_dim = g.unique_dimension_name("one_hot")
+                g.set_shape(res, (*g.get_shape(x), new_dim))
+        elif g.has_rank(x):
+            g.set_rank(res, g.get_rank(x) + 1)
+    return res
+
+
 def aten_or(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4170,6 +4202,48 @@ def aten_im2col(
     raise AssertionError(f"Not implemented with dynamic shape for {x!r}{g.get_debug_msg()}")
 
 
+def aten_index_add(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    axis: int,
+    indices: T,
+    values: T,
+    alpha: float = 1,
+    name: str = "index_add",
+    accumulate: bool = True,
+):
+    "index_copy"
+    assert g.has_rank(x), f"Rank missing for {x!r} in index_add{g.get_debug_msg()}"
+    assert g.has_rank(indices), f"Rank missing for {indices!r} in index_add{g.get_debug_msg()}"
+    assert g.has_rank(values), f"Rank missing for {values!r} in index_add{g.get_debug_msg()}"
+    assert isinstance(indices, T), f"indices must be a Tensor{g.get_debug_msg()}"
+    if alpha != 1:
+        assert g.has_type(values), f"missing type for {values!r}{g.get_debug_msg()}"
+        dtype = tensor_dtype_to_np_dtype(g.get_type(values))
+        values = g.op.Mul(values, np.array([alpha], dtype=dtype), name=name)
+    if g.get_rank(x) == g.get_rank(values) and g.get_rank(indices) == 1 and axis == 0:
+        # ScatterND
+        name = f"{name}.A"
+        res = g.op.ScatterND(
+            x,
+            g.op.UnsqueezeAnyOpset(indices, g.MINUS_ONE, name=name),
+            values,
+            reduction="add" if accumulate else "none",
+            name=name,
+            outputs=outputs,
+        )
+        if not sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
+    new_indices = [None for _i in range(g.get_rank(x))]
+    new_indices[axis] = indices
+    return aten_index_put(
+        g, sts, outputs, x, new_indices, values, name=name, accumulate=accumulate
+    )
+
+
 def aten_index_copy(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4181,11 +4255,9 @@ def aten_index_copy(
     name: str = "index_copy",
 ):
     "index_copy"
-    assert g.has_rank(x), f"Rank missing for {x!r} in index_copy{g.get_debug_msg()}"
-    assert isinstance(indices, T), f"indices must be a Tensor{g.get_debug_msg()}"
-    new_indices = [None for _i in range(g.get_rank(x))]
-    new_indices[axis] = indices
-    return aten_index_put(g, sts, outputs, x, new_indices, values, name=name)
+    return aten_index_add(
+        g, sts, outputs, x, axis, indices, values, name=name, accumulate=False
+    )
 
 
 def aten_index_Tensor(
@@ -4401,6 +4473,10 @@ def aten_index_put(
     "M[..., :, ...] = ..."
     assert isinstance(indices, list), f"Unexpected type {type(indices)}{g.get_debug_msg()}"
     assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
+    assert not accumulate or g.main_opset >= 13, (
+        f"index_put with accumulate=True cannot be implemented for opset < 13 "
+        f"because ScatterND does not support reduction{g.get_debug_msg()}"
+    )
 
     if len(indices) == 1:
         name = f"{name}1"
@@ -4447,6 +4523,9 @@ def aten_index_put(
                         name=name,
                     )
                     index = g.op.Reshape(index, new_shape, name=name)
+                assert (
+                    not accumulate
+                ), f"Not implemented yet if accumulate is True{g.get_debug_msg()}"
                 res = g.op.Where(index, values, x, outputs=outputs, name=name)
                 if not sts:
                     g.set_type(res, g.get_type(x))
@@ -4493,17 +4572,14 @@ def aten_index_put(
             name += "r_"
             g.set_rank(new_index, g.get_rank(index) + 1)
 
-        if accumulate:
-            assert g.main_opset >= 13, (
-                f"index_put cannot be implemented for opset < 13 "
-                f"because ScatterND does not support reduction"
-                f"{g.get_debug_msg()}"
-            )
-            res = g.op.ScatterND(
-                x, new_index, values, name=name, reduction="add", outputs=outputs
-            )
-        else:
-            res = g.op.ScatterND(x, new_index, values, name=name, outputs=outputs)
+        res = g.op.ScatterND(
+            x,
+            new_index,
+            values,
+            name=name,
+            reduction="add" if accumulate else "none",
+            outputs=outputs,
+        )
 
         if not sts:
             g.set_type(res, g.get_type(x))
@@ -4635,12 +4711,13 @@ def aten_index_put(
 
                 expanded = g.op.Reshape(expanded, g.MINUS_ONE, name=name)
                 flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
-                if accumulate:
-                    flat_up_x = g.op.ScatterElements(
-                        flat_x, indices_1d, expanded, name=name, reduction="add"
-                    )
-                else:
-                    flat_up_x = g.op.ScatterElements(flat_x, indices_1d, expanded, name=name)
+                flat_up_x = g.op.ScatterElements(
+                    flat_x,
+                    indices_1d,
+                    expanded,
+                    name=name,
+                    reduction="add" if accumulate else "none",
+                )
                 g.set_type(flat_up_x, g.get_type(x))
 
                 res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
@@ -4683,12 +4760,13 @@ def aten_index_put(
                 ),
                 name=name,
             )
-            if accumulate:
-                flat_up_x = g.op.ScatterND(
-                    flat_x, indices_1d, values, name=name, reduction="add"
-                )
-            else:
-                flat_up_x = g.op.ScatterND(flat_x, indices_1d, values, name=name)
+            flat_up_x = g.op.ScatterND(
+                flat_x,
+                indices_1d,
+                values,
+                name=name,
+                reduction="add" if accumulate else "none",
+            )
             g.set_type(flat_up_x, g.get_type(x))
 
             res = g.op.Reshape(flat_up_x, g.op.Shape(x, name=name), name=name, outputs=outputs)
