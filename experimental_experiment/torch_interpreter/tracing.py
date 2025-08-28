@@ -1274,6 +1274,7 @@ class CustomTracer(torch.fx.Tracer):
                         "aten::sub.Tensor",
                         "aten::zeros",  # unused as it does not end up with '_'
                         "expand",  # torch.compile
+                        "aten::__and__.Tensor",  # found in causal mask
                     } or not (  # not an inplace modification
                         node_target_name.endswith(("_", "_.Tensor"))
                     ):
