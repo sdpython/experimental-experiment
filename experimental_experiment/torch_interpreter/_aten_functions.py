@@ -4219,24 +4219,61 @@ def aten_index_add(
     assert g.has_rank(indices), f"Rank missing for {indices!r} in index_add{g.get_debug_msg()}"
     assert g.has_rank(values), f"Rank missing for {values!r} in index_add{g.get_debug_msg()}"
     assert isinstance(indices, T), f"indices must be a Tensor{g.get_debug_msg()}"
+
     if alpha != 1:
         assert g.has_type(values), f"missing type for {values!r}{g.get_debug_msg()}"
         dtype = tensor_dtype_to_np_dtype(g.get_type(values))
         values = g.op.Mul(values, np.array([alpha], dtype=dtype), name=name)
-    if g.get_rank(x) == g.get_rank(values) and g.get_rank(indices) == 1 and axis == 0:
-        # ScatterND
-        name = f"{name}.A"
-        res = g.op.ScatterND(
+
+    if g.get_rank(x) == g.get_rank(values) and g.get_rank(indices) == 1:
+        if axis == 0 or g.get_rank(x) == 1:
+            # ScatterND
+            name = f"{name}.A"
+            res = g.op.ScatterND(
+                x,
+                g.op.UnsqueezeAnyOpset(indices, g.MINUS_ONE, name=name),
+                values,
+                reduction="add" if accumulate else "none",
+                name=name,
+                outputs=outputs,
+            )
+            if not sts:
+                set_type_shape_unary_op(g, res, x)
+            return res
+
+        # axis > 0:
+        assert g.has_shape(x), f"missing shape for {x!r}{g.get_debug_msg()}"
+        assert g.has_shape(values), f"missing shape for {values!r}{g.get_debug_msg()}"
+        shape_x = g.get_shape(x)
+        shape_v = g.get_shape(values)
+        if axis < 0:
+            axis += len(shape_x)
+        dx = [s for i, s in enumerate(shape_x) if i != axis]
+        dv = [s for i, s in enumerate(shape_v) if i != axis]
+        assert dx == dv, (
+            f"index_add not implemented for shape(x)={shape_x}, "
+            f"shape(values)={shape_v}, axis={axis}{g.get_debug_msg()}"
+        )
+        name = f"{name}.B"
+        new_shape = np.array([1] * g.get_rank(values), dtype=np.int64)
+        new_shape[axis] = -1
+        res = g.op.ScatterElements(
             x,
-            g.op.UnsqueezeAnyOpset(indices, g.MINUS_ONE, name=name),
+            g.op.Expand(
+                g.op.Reshape(indices, new_shape, name=name),
+                g.op.Shape(values, name=name),
+                name=name,
+            ),
             values,
             reduction="add" if accumulate else "none",
             name=name,
             outputs=outputs,
+            axis=axis,
         )
         if not sts:
             set_type_shape_unary_op(g, res, x)
         return res
+
     new_indices = [None for _i in range(g.get_rank(x))]
     new_indices[axis] = indices
     return aten_index_put(

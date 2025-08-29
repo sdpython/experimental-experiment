@@ -2193,7 +2193,6 @@ class TestOnnxExportAten(ExtTestCase):
             got = ref.run(None, feeds)[0]
             self.assertEqualArray(expected, got, atol=1e-2)
 
-    @unittest.skip("not implemented yet")
     def test_index_add_d1(self):
         import torch
 
@@ -2212,6 +2211,8 @@ class TestOnnxExportAten(ExtTestCase):
         index = torch.tensor([0, 4, 2, 4])
         inputs = (x, index, t)
         expected = model(*inputs)
+        print("---")
+        print(expected)
         self.assertEqual(expected.dtype, torch.float32)
 
         onx = to_onnx(
@@ -2224,7 +2225,12 @@ class TestOnnxExportAten(ExtTestCase):
         feeds = dict(
             zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
         )
-        ref = ExtendedReferenceEvaluator(onx, verbose=10)
+        import onnxruntime
+
+        ref = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        # ref = ExtendedReferenceEvaluator(onx, verbose=10)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
@@ -2276,7 +2282,7 @@ class TestOnnxExportAten(ExtTestCase):
         feeds = dict(
             zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
         )
-        ref = ExtendedReferenceEvaluator(onx, verbose=10)
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
