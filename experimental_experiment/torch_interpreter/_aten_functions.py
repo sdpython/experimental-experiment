@@ -3386,24 +3386,16 @@ def aten_flatten_using_ints(
             rk = g.get_rank(x)
             if end_dim == rk - 1:
                 end_dim = -1
-        if start_dim == 1 and end_dim == -1:
-            shape = g.op.Shape(x, name=name)
-            take = g.op.GatherElements(shape, g.ZERO, axis=0, name=name)
-            resh = g.op.Concat(take, g.MINUS_ONE, axis=0, name=name)
-            return g.op.Reshape(x, resh, outputs=outputs, name=name)
         if end_dim == -1:
-            shape = g.op.Shape(x, name=name)
-            take = g.op.GatherElements(
-                shape, np.arange(start_dim).astype(np.int64), axis=0, name=name
-            )
+            take = g.op.Shape(x, name=name, start=0, end=start_dim)
             resh = g.op.Concat(take, g.MINUS_ONE, axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
 
-        # x='_tile03', start_dim=3, end_dim=-1 not supported, GPTJForCausalLM
-        raise NotImplementedError(
-            f"x={x!r}, start_dim={start_dim}, end_dim={end_dim} "
-            f"not supported{g.get_debug_msg()}"
-        )
+        take1 = g.op.Shape(x, name=name, start=0, end=start_dim)
+        take2 = g.op.Shape(x, name=name, start=end_dim + 1)
+        resh = g.op.Concat(take1, g.MINUS_ONE, take2, axis=0, name=name)
+        return g.op.Reshape(x, resh, outputs=outputs, name=name)
+
     # start_dim == 0
     if end_dim == -1:
         # Flattens everything
