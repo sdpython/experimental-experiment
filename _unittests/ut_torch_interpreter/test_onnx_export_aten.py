@@ -1963,7 +1963,7 @@ class TestOnnxExportAten(ExtTestCase):
         )
         self.assertEqualArray(r, r2)
 
-    def test_repeat_interleave_int(self):
+    def test_repeat_interleave_int_1(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -1982,7 +1982,32 @@ class TestOnnxExportAten(ExtTestCase):
             verbose=0,
             options=OptimizationOptions(patterns="default", verbose=0),
         )
-        self.dump_onnx("test_repeat_interleave_int.onnx", onx)
+        self.dump_onnx("test_repeat_interleave_int_1.onnx", onx)
+        feeds = dict(zip(["x"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_repeat_interleave_int_2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.repeat_interleave(x, 3, dim=1)
+
+        inputs = (torch.randn(2, 3, 4),)
+        model = Model()
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.float32)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=({0: "A", 1: "B"},),
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_repeat_interleave_int_2.onnx", onx)
         feeds = dict(zip(["x"], [x.detach().cpu().numpy() for x in inputs]))
         ref = ExtendedReferenceEvaluator(onx, verbose=0)
         got = ref.run(None, feeds)[0]
