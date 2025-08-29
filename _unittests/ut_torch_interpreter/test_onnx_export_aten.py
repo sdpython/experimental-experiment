@@ -1950,6 +1950,19 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_repeat_interleave_strategy(self):
+        import torch
+
+        rep = 2
+        t = torch.arange((2 * 3 * 2), dtype=torch.float32).reshape((2, 3, -1))
+        r = torch.repeat_interleave(t, rep, dim=1)
+        r2 = (
+            t.unsqueeze(2)
+            .expand((*t.shape[:2], rep, *t.shape[2:]))
+            .reshape((*t.shape[:1], t.shape[1] * rep, *t.shape[2:]))
+        )
+        self.assertEqualArray(r, r2)
+
     def test_repeat_interleave_int(self):
         import torch
 
