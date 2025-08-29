@@ -490,7 +490,7 @@ class ExportOptions:
                     strict=self.strict,
                 )
             except torch._export.verifier.SpecViolationError:
-                # see https://github.com/pytorch/pytorch/issues/128394
+                # see issue 128394 on pytorch repo
                 if verbose:
                     print("[ExportOptions.export] torch.export._trace._export")
                 exported_program = torch.export._trace._export(
@@ -538,11 +538,24 @@ class ExportOptions:
             print(exported_program)
             print("-- DONE -- ")
         if self.save_ep:
+
+            def torch_model_size(model):
+                size_model = 0
+                for param in model.parameters():
+                    size = param.numel() * torch.finfo(param.data.dtype).bits / 8
+                    size_model += size
+                return size_model
+
             with open(f"{self.save_ep}.ep", "w") as f:
                 f.write(str(exported_program))
             with open(f"{self.save_ep}.ep.graph", "w") as f:
                 f.write(str(exported_program.graph))
-            torch.export.save(exported_program, f"{self.save_ep}.ep.pt2")
+            size = torch_model_size(mod)
+            if verbose:
+                print(f"[ExportOptions.export] model size {size / 2**20} Mb")
+            if size < 2**30:
+                # skipping if the model is too big.
+                torch.export.save(exported_program, f"{self.save_ep}.ep.pt2")
         if isinstance(self.validate_ep, float) or self.validate_ep:
             self.validate_exported_program(
                 mod, exported_program, args, kwargs, verbose=verbose

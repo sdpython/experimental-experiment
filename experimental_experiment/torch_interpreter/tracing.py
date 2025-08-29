@@ -1274,6 +1274,7 @@ class CustomTracer(torch.fx.Tracer):
                         "aten::sub.Tensor",
                         "aten::zeros",  # unused as it does not end up with '_'
                         "expand",  # torch.compile
+                        "aten::__and__.Tensor",  # found in causal mask
                     } or not (  # not an inplace modification
                         node_target_name.endswith(("_", "_.Tensor"))
                     ):
@@ -1290,7 +1291,13 @@ class CustomTracer(torch.fx.Tracer):
 
                     if (
                         # y = add_(x, 1) but x is used once (here) and y is not used
-                        node_target_name in {"aten::add_.Tensor", "aten::mul_.Tensor"}
+                        node_target_name
+                        in {
+                            "aten::add_.Tensor",
+                            "aten::mul_.Tensor",
+                            "aten::div_.Tensor",
+                            "aten::sub_.Tensor",
+                        }
                         and isinstance(node.args[0], torch.fx.Node)
                         and not isinstance(node.args[1], torch.fx.Node)
                         and len(node.args[0].users) <= 1

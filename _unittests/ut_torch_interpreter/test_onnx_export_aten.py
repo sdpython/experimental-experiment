@@ -1950,6 +1950,19 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_repeat_interleave_strategy(self):
+        import torch
+
+        rep = 2
+        t = torch.arange((2 * 3 * 2), dtype=torch.float32).reshape((2, 3, -1))
+        r = torch.repeat_interleave(t, rep, dim=1)
+        r2 = (
+            t.unsqueeze(2)
+            .expand((*t.shape[:2], rep, *t.shape[2:]))
+            .reshape((*t.shape[:1], t.shape[1] * rep, *t.shape[2:]))
+        )
+        self.assertEqualArray(r, r2)
+
     def test_repeat_interleave_int(self):
         import torch
 
@@ -2114,6 +2127,171 @@ class TestOnnxExportAten(ExtTestCase):
             options=OptimizationOptions(patterns="default", verbose=0),
         )
         self.dump_onnx("test_attention_scale_dot_product_attention.onnx", onx)
+        feeds = dict(
+            zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
+        )
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_index_copy(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self, dim: int, alpha: float):
+                super().__init__()
+                self.dim = dim
+                self.alpha = alpha
+
+            def forward(self, x, index, source):
+                return x.index_copy(self.dim, index, source)
+
+        model = Model(0, 1)
+        x = torch.ones(5, 3, dtype=torch.float32)
+        t = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float)
+        index = torch.tensor([0, 4, 2])
+        inputs = (x, index, t)
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.float32)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_index_copy.onnx", onx)
+        feeds = dict(
+            zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
+        )
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_index_add_d0(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self, dim: int, alpha: float):
+                super().__init__()
+                self.dim = dim
+                self.alpha = alpha
+
+            def forward(self, x, index, source):
+                return x.index_add(self.dim, index, source, alpha=self.alpha)
+
+        for alpha in (1, 1.34):
+            model = Model(0, alpha)
+            x = torch.ones(5, 3, dtype=torch.float32)
+            t = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float)
+            index = torch.tensor([0, 4, 2])
+            inputs = (x, index, t)
+            expected = model(*inputs)
+            self.assertEqual(expected.dtype, torch.float32)
+
+            onx = to_onnx(
+                model,
+                inputs,
+                verbose=0,
+                options=OptimizationOptions(patterns="default", verbose=0),
+            )
+            self.dump_onnx(f"test_index_add_{alpha}.onnx", onx)
+            feeds = dict(
+                zip(
+                    [i.name for i in onx.graph.input],
+                    [x.detach().cpu().numpy() for x in inputs],
+                )
+            )
+            ref = ExtendedReferenceEvaluator(onx, verbose=0)
+            got = ref.run(None, feeds)[0]
+            self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_index_add_d1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self, dim: int, alpha: float):
+                super().__init__()
+                self.dim = dim
+                self.alpha = alpha
+
+            def forward(self, x, index, source):
+                return x.index_add(self.dim, index, source, alpha=self.alpha)
+
+        model = Model(1, 1.34)
+        x = torch.ones(3, 5, dtype=torch.float32)
+        t = torch.arange(12).to(torch.float).reshape((3, -1))
+        index = torch.tensor([0, 4, 2, 4])
+        inputs = (x, index, t)
+        expected = model(*inputs)
+        print("---")
+        print(expected)
+        self.assertEqual(expected.dtype, torch.float32)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_index_add_d1.onnx", onx)
+        feeds = dict(
+            zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
+        )
+        import onnxruntime
+
+        ref = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        # ref = ExtendedReferenceEvaluator(onx, verbose=10)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_index_one_hot_d1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.nn.functional.one_hot(x, 3)
+
+        model = Model()
+        inputs = (torch.arange(0, 5, dtype=torch.int64) % 3,)
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.int64)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_onx_hot_d1.onnx", onx)
+        feeds = dict(
+            zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
+        )
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_index_one_hot_d2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.nn.functional.one_hot(x, 3)
+
+        model = Model()
+        inputs = (torch.arange(0, 10, dtype=torch.int64).reshape((5, -1)) % 3,)
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.int64)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_onx_hot_d2.onnx", onx)
         feeds = dict(
             zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
         )
