@@ -47,6 +47,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         import transformers
         import onnxruntime as ort
         from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+        from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
         from onnx_diagnostic.torch_export_patches import torch_export_patches
 
         def assert_close(actual, desired):
