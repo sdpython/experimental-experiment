@@ -6710,10 +6710,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             len(cst.shape) == 0
             or min(cst.shape) > 0
-            or (
-                cst.shape == (0,)
-                and v.op_type in {"ConstantOfShape", "Cast", "Identity", "Constant"}
-            )
+            or (v.op_type in {"ConstantOfShape", "Cast", "Identity", "Constant"})
         ), (
             f"Output has empty shape {cst.shape}, name={name!r} "
             f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
@@ -6826,6 +6823,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             existing=None,
                             source=f"GraphBuilder.constant_folding.from/fold"
                             f"({','.join(assert_sorted(feeds))}){text_sources}",
+                            allow_empty=True,
                         )
                         stats_cf["new_inits"] += 1
                     else:

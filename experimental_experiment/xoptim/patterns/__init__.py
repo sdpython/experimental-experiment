@@ -12,7 +12,7 @@ from .onnx_cast import (
     ComputationCastOpCastPattern,
 )
 from .onnx_clip import ClipClipPattern
-from .onnx_concat import ConcatGatherPattern
+from .onnx_concat import ConcatEmptyPattern, ConcatGatherPattern
 from .onnx_constants import ConstantToInitializerPattern  # noqa: F401
 from .onnx_conv import ConvBiasNullPattern
 from .onnx_dropout import DropoutPattern
@@ -127,6 +127,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         CastOpCastPattern(verbose=verbose),
         ClipClipPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
+        ConcatEmptyPattern(verbose=verbose),
         ConcatGatherPattern(verbose=verbose),
         ConcatReshapePattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),

@@ -5,7 +5,7 @@ import re
 import zlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
-from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, CacheKeyValue
 from ..helpers import string_type
 
 
@@ -169,7 +169,8 @@ def type_as_str_with_info(obj: Any) -> str:
         sorted_keys = "__".join(sorted(obj))
         return f"dict__{len(obj)}_{sorted_keys}"
     if obj.__class__.__name__ == "DynamicCache":
-        return f"{obj.__class__.__name__}__{len(obj.key_cache)}_{len(obj.value_cache)}"
+        kv = CacheKeyValue(obj)
+        return f"{obj.__class__.__name__}__{len(kv.key_cache)}_{len(kv.value_cache)}"
     if obj is None:
         return "None"
     if isinstance(obj, bool):
@@ -279,14 +280,7 @@ def deserialize_args(
                 value_cache = value[n1:]
                 pos_res += 1
 
-            if tt.startswith("DynamicCache__"):
-                import transformers
-
-                cache = transformers.cache_utils.DynamicCache()
-            elif tt is None:
-                cache = None
-            else:
-                raise NotImplementedError(f"Unable to handle type info(2) {tt!r}")
+            assert tt.startswith("DynamicCache__"), f"Unable to handle type info(2) {tt!r}"
             if clone:
                 cache = make_dynamic_cache(
                     list(zip([t.clone() for t in key_cache], [t.clone() for t in value_cache]))
