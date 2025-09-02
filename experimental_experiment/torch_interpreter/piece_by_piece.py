@@ -493,14 +493,21 @@ class ModelDiagnoseOutput:
             return shapes
 
         if obj.__class__.__name__ == "DynamicCache":
-            kc = set(len(CacheKeyValue(o).key_cache) for o in objs)
-            assert (
-                len(kc) == 1
-            ), f"All attribute 'key_cache' should have the same length but found {kc}"
-            vc = set(len(o.value_cache) for o in objs)
-            assert (
-                len(vc) == 1
-            ), f"All attribute 'value_cache' should have the same length but found {vc}"
+            if hasattr(obj, "layers"):
+                kc = set(len(o.layers) for o in objs)
+                assert (
+                    len(kc) == 1
+                ), f"All attribute 'key_cache' should have the same length but found {kc}"
+                vc = kc.copy()
+            else:
+                kc = set(len(o.key_cache) for o in objs)
+                assert (
+                    len(kc) == 1
+                ), f"All attribute 'key_cache' should have the same length but found {kc}"
+                vc = set(len(o.value_cache) for o in objs)
+                assert (
+                    len(vc) == 1
+                ), f"All attribute 'value_cache' should have the same length but found {vc}"
             key_cache = []
             for i in range(kc.pop()):
                 key_cache.append(

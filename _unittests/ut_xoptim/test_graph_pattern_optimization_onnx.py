@@ -5273,6 +5273,41 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_concat_empty(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["X", "Y", "I"], ["Z"], axis=0),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.INT64, ["a"]),
+                    oh.make_tensor_value_info("Y", TensorProto.INT64, ["b"]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.INT64, ["c"])],
+                [
+                    onh.from_array(np.array([], dtype=np.int64), name="I"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = {"X": np.arange(2).astype(np.int64), "Y": np.arange(2).astype(np.int64)}
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="ConcatEmpty", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Concat"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(len(opt_onx.graph.initializer), 0)
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
