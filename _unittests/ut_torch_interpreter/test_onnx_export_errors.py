@@ -1,10 +1,5 @@
 import unittest
-from experimental_experiment.ext_test_case import (
-    ExtTestCase,
-    requires_transformers,
-    skipif_ci_windows,
-)
-from onnx_diagnostic.torch_export_patches import torch_export_patches
+from experimental_experiment.ext_test_case import ExtTestCase
 
 
 class TestOnnxExportErrors(ExtTestCase):
