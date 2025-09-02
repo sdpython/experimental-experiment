@@ -659,6 +659,7 @@ class ModelDiagnoseOutput:
             #   y = custom_op(x) and y and x are the same Tensor. Please instead return a
             #   clone of the offending output tensor(s) (e.g. return x.clone()) or
             #   refactor the custom operator to not return y.
+            obj = CacheKeyValue(obj)
             return ["Tensor" for i in range(len(obj.key_cache) + len(obj.value_cache))]
         if obj is None:
             # Let's assume it is a tensor. It should not matter anyway.

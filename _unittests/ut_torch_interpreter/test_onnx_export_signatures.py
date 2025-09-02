@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import onnx
 import numpy as np
 import torch
-from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, CacheKeyValue
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -555,6 +555,7 @@ class TestOnnxExportSignatures(ExtTestCase):
     def test_signature_dc_none(self):
         class Neuron(torch.nn.Module):
             def forward(self, x=None, y=None, z=None, w=None, ww=None):
+                z = CacheKeyValue(z)
                 return x * (z.key_cache[0] + z.value_cache[0]) + ww
 
         cache = make_dynamic_cache(
@@ -576,7 +577,8 @@ class TestOnnxExportSignatures(ExtTestCase):
         dyn = {}
         sname = inspect.currentframe().f_code.co_name
         sig_tracing = "NOCHECK"
-        with torch_export_patches():
+        with torch_export_patches(patch_transformers=True):
+            inp2 = CacheKeyValue(inputs[2])
             self._check_exporter(
                 sname,
                 Neuron(),
@@ -586,8 +588,8 @@ class TestOnnxExportSignatures(ExtTestCase):
                 others=None,
                 feeds=dict(
                     x=inputs[0].numpy(),
-                    z_key_cache_0=inputs[2].key_cache[0].numpy(),
-                    z_value_cache_0=inputs[2].value_cache[0].numpy(),
+                    z_key_cache_0=inp2.key_cache[0].numpy(),
+                    z_value_cache_0=inp2.value_cache[0].numpy(),
                     ww=inputs[4].numpy(),
                 ),
                 exporter="custom-nostrict",

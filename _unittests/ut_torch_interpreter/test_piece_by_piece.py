@@ -11,7 +11,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, CacheKeyValue
 from experimental_experiment.helpers import string_type
 from onnx_diagnostic.torch_export_patches import (
     torch_export_patches,
@@ -730,12 +730,14 @@ class TestPieceByPiece(ExtTestCase):
         class SubModelCache(torch.nn.Module):
             def forward(self, cache):
                 d = cache.__class__()
-                d.update(cache.key_cache[0] + 1, cache.value_cache[0] + 2, 0)
+                dc = CacheKeyValue(cache)
+                d.update(dc.key_cache[0] + 1, dc.value_cache[0] + 2, 0)
                 return d
 
         class SubModel(torch.nn.Module):
             def forward(self, x, cache):
-                return x + cache.key_cache[0] + cache.value_cache[0]
+                dc = CacheKeyValue(cache)
+                return x + dc.key_cache[0] + dc.value_cache[0]
 
         class Model(torch.nn.Module):
             def __init__(self):
@@ -821,6 +823,7 @@ class TestPieceByPiece(ExtTestCase):
     def test_export_piece_dynamic_cache_io(self):
         class SubModelCacheIn(torch.nn.Module):
             def forward(self, cache):
+                cache = CacheKeyValue(cache)
                 return cache.key_cache[0] * cache.value_cache[0]
 
         class SubModelCacheOut(torch.nn.Module):
@@ -1496,6 +1499,7 @@ class TestPieceByPiece(ExtTestCase):
 
             def forward(self, x, y):
                 r, cache = self.sub(x, y)
+                cache = CacheKeyValue(cache)
                 return r.abs() + cache.key_cache[0].abs() + cache.value_cache[0].abs()
 
         model = Model()
@@ -1704,6 +1708,7 @@ class TestPieceByPiece(ExtTestCase):
                 x: Optional[torch.Tensor] = None,
                 cache: Optional[transformers.cache_utils.DynamicCache] = None,
             ):
+                cache = CacheKeyValue(cache)
                 new_cache = make_dynamic_cache(
                     [(cache.key_cache[0] + x, cache.value_cache[0] + x)]
                 )
@@ -1729,16 +1734,12 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(z)
         with torch_export_patches(patch_transformers=True):
             z2 = model(x, cache)
-            self.assertEqual(
-                len(z["past_key_value"].key_cache), len(z2["past_key_value"].key_cache)
-            )
-            for i in range(len(z["past_key_value"].key_cache)):
-                self.assertEqualArray(
-                    z["past_key_value"].key_cache[i], z2["past_key_value"].key_cache[i]
-                )
-                self.assertEqualArray(
-                    z["past_key_value"].value_cache[i], z2["past_key_value"].value_cache[i]
-                )
+            zp = CacheKeyValue(z["past_key_value"])
+            zp2 = CacheKeyValue(z2["past_key_value"])
+            self.assertEqual(len(zp.key_cache), len(zp2.key_cache))
+            for i in range(len(zp.key_cache)):
+                self.assertEqualArray(zp.key_cache[i], zp2.key_cache[i])
+                self.assertEqualArray(zp.value_cache[i], zp2.value_cache[i])
             self.assertEqualArray(z["mask"], z2["mask"])
 
         cache2 = make_dynamic_cache([(torch.randn((6, 6)), torch.randn((6, 6)))])
@@ -1981,7 +1982,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertNotEmpty(ep)
 
     @requires_torch("2.7")
-    @hide_stdout
+    @hide_stdout()
     def test_piece_by_piece_phi35_local(self):
         import torch
 
@@ -2043,7 +2044,7 @@ class TestPieceByPiece(ExtTestCase):
             self.assertNotEmpty(ep)
 
     @requires_torch("2.7")
-    @hide_stdout
+    @hide_stdout()
     def test_piece_by_piece_phi35_functions(self):
         import torch
 

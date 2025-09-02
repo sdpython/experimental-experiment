@@ -40,7 +40,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         ep.run_decompositions()  # Fails here
 
     @skipif_ci_windows("not working")
-    @requires_torch("2.8")
+    @requires_torch("2.10")
     def test_export_mistral_nousers(self):
         import onnx
         import torch
@@ -80,6 +80,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
                         res.extend(flatten(o))
                 return res
             if isinstance(obj, transformers.cache_utils.DynamicCache):
+                obj = CacheKeyValue(obj)
                 return [*obj.key_cache, *obj.value_cache]
             raise NotImplementedError(f"Not implemented for class {type(obj)}")
 
@@ -99,7 +100,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         input_ids = torch.randint(0, 99, shape).to(torch.int64)
         attention_mask = torch.ones(shape)
         expected = model(input_ids, attention_mask)
-        with torch_export_patches(patch_transformers=True):
+        with torch_export_patches(patch_transformers=True, patch_torch=True):
             ep = torch.export.export(model, copy.deepcopy((input_ids, attention_mask)))
 
             # assert "[num_users=0]" not in str(ep.graph), f"One output is unused:\n{ep.graph}"
