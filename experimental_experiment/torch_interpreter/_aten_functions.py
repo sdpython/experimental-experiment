@@ -9392,7 +9392,7 @@ def aten_slice_Tensor(
     start: Optional[int] = None,
     end: Optional[int] = None,
     step: Optional[int] = None,
-    name: str = "slide_Tensor",
+    name: str = "slice_Tensor",
 ) -> T:
     "slice"
     assert isinstance(dim, int), f"aten_slice_Tensor not implemented for dim={dim!r}"

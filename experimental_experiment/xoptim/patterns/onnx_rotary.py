@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
@@ -548,7 +548,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         tr_update_left: NodeProto,
         tr_update_right: NodeProto,
         node: NodeProto,
-    ):
+    ) -> List[NodeProto]:
         keep = []
         if cst_left is not None and g.is_used_more_than_once(cst_left.output[0]):
             keep.append(cst_left)
@@ -627,3 +627,206 @@ class RotaryConcatPartPattern(PatternOptimization):
         if other_nodes:
             return [*reversed(other_nodes), split, neg, concat]
         return [*keep, split, neg, concat]
+
+
+class RotaryEmbeddingPattern(PatternOptimization):
+    """Fuses nodes matching operator RotaryEmbedding(23)."""
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            g.main_opset < 24
+            or node.op_type != "Split"
+            or node.domain != ""
+            or len(node.output) != 2
+        ):
+            # Not ready in opset 23.
+            return self.none()
+        split_node = node
+        rk = None if not g.has_rank(node.input[0]) else g.get_rank(node.input[0])
+        if rk is None or rk != 4:
+            # 3 should be allowed as well. Let's see when it happens.
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # checks split is the expected split
+        axis = g.get_attribute(node, "axis", exc=False)
+        axis = 0 if axis is None else axis.i
+        rk = g.get_rank(node.input[0])
+        if axis < 0:
+            axis += rk
+        if axis != rk - 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if len(node.input) == 2:
+            cst = g.get_computed_constant(node.input[1])
+            if cst.dtype != np.int64 or cst.shape != (2,) or cst[0] != cst[1]:
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            att = g.get_attribute(node, "num_outputs", exc=False)
+            if att is None or att.i != 2:
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        # checks what follows
+        node_after = g.next_nodes(node.output[1])
+        if len(node_after) != 1 or node_after[0].op_type != "Neg":
+            return self.none(node, inspect.currentframe().f_lineno)
+        neg_node = node_after[0]
+        node_after = g.next_nodes(neg_node.output[0])
+        if len(node_after) != 1 or node_after[0].op_type != "Concat":
+            return self.none(node, inspect.currentframe().f_lineno)
+        concat_node = node_after[0]
+        if set(concat_node.input) != {split_node.output[0], neg_node.output[0]}:
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis = g.get_attribute(concat_node, "axis").i
+        if axis != -1 and (rk is None or axis != rk - 1):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        node_after = g.next_nodes(concat_node.output[0])
+        if len(node_after) != 1 or node_after[0].op_type != "Mul":
+            return self.none(node, inspect.currentframe().f_lineno)
+        mul1_node = node_after[0]
+        node_after = g.next_nodes(split_node.input[0])
+        if len(node_after) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        mul2_node = node_after[0] if node_after[0].op_type == "Mul" else node_after[1]
+        if mul2_node.op_type != "Mul":
+            return self.none(node, inspect.currentframe().f_lineno)
+        node_after1 = g.next_nodes(mul1_node.output[0])
+        node_after2 = g.next_nodes(mul2_node.output[0])
+        if (
+            len(node_after1) != 1
+            or len(node_after2) != 1
+            or node_after1[0].op_type != node_after2[0].op_type
+            or node_after1[0].op_type != "Add"
+            or id(node_after1[0]) != id(node_after2[0])
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(
+            self,
+            [split_node, neg_node, concat_node, mul1_node, mul2_node, node_after1[0]],
+            self.apply,
+            insert_at=node_after1[0],
+        )
+
+    def preprocess_cache(
+        self, context: Dict[str, str], g: "GraphBuilder", x: str, cache: str  # noqa: F821
+    ) -> Tuple[str, List[NodeProto]]:
+        nodes = []
+        rkx = g.get_rank(x)
+        rk = g.get_rank(cache)
+        if rk != 3:
+            if rk == 2:
+                uni = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                if "zero" not in context:
+                    zero = g.unique_name("zero")
+                    g.make_initializer(zero, g.ZERO)
+                    context["zero"] = zero
+                else:
+                    zero = context["zero"]
+                if "shape_e" not in context:
+                    shape_x = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                    shape_e = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                    cst = g.make_initializer(
+                        g.unique_name("cst11"), np.array([1, 1], dtype=np.int64)
+                    )
+                    nodes.extend(
+                        [
+                            g.make_node(
+                                "Shape",
+                                [x],
+                                [shape_x],
+                                start=0,
+                                end=1,
+                                name=f"{self.__class__.__name__}--{cache}",
+                            ),
+                            g.make_node(
+                                "Concat",
+                                [shape_x, cst],
+                                [shape_e],
+                                axis=0,
+                                name=f"{self.__class__.__name__}--{cache}",
+                            ),
+                        ]
+                    )
+                    context["shape_e"] = shape_e
+                else:
+                    shape_e = context["shape_e"]
+
+                uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                nodes.append(
+                    g.make_node(
+                        "Unsqueeze",
+                        [cache, zero],
+                        [uni],
+                        name=f"{self.__class__.__name__}--{cache}",
+                    )
+                )
+                nodes.append(
+                    g.make_node(
+                        "Expand",
+                        [uni, shape_e],
+                        [uni2],
+                        name=f"{self.__class__.__name__}--{cache}",
+                    )
+                )
+                return uni2, nodes
+        raise NotImplementedError(
+            f"preprocess not implemented when rk={rk}, rkx={rkx} for x={x!r} and res={cache!r}"
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        split_node: NodeProto,
+        neg_node: NodeProto,
+        concat_node: NodeProto,
+        mul1_node: NodeProto,
+        mul2_node: NodeProto,
+        add_node: NodeProto,
+    ) -> List[NodeProto]:
+        names = (set(mul1_node.input) | set(mul2_node.input)) - {
+            split_node.input[0],
+            concat_node.output[0],
+        }
+        assert len(names) == 2, f"Inconsistency names={names}, it should have 2 names"
+        lnames = list(names)
+        index = 0 if lnames[0] in mul1_node.input else 1
+        lnames = [lnames[index], lnames[1 - index]]
+        sin_cache, cos_cache = (
+            lnames if concat_node.input[0] in mul1_node.input else lnames[::-1]
+        )
+
+        context = {}
+        cos_cache, ex1 = self.preprocess_cache(context, g, split_node.input[0], cos_cache)
+        sin_cache, ex2 = self.preprocess_cache(context, g, split_node.input[0], sin_cache)
+        expand_nodes = [*ex1, *ex2]
+
+        tr_name = g.unique_name(f"{self.__class__.__name__}--{split_node.input[0]}")
+        utr_name = g.unique_name(f"{self.__class__.__name__}--{add_node.output[0]}")
+        rotary_nodes = [
+            g.make_node(
+                "Transpose",
+                [split_node.input[0]],
+                [tr_name],
+                perm=[0, 2, 1, 3],
+                name=f"{self.__class__.__name__}--{split_node.name}",
+            ),
+            g.make_node(
+                "RotaryEmbedding",
+                [tr_name, cos_cache, sin_cache],
+                [utr_name],
+                name=f"{self.__class__.__name__}--{split_node.name}",
+            ),
+            g.make_node(
+                "Transpose",
+                [utr_name],
+                [add_node.output[0]],
+                perm=[0, 2, 1, 3],
+                name=f"{self.__class__.__name__}--{split_node.name}",
+            ),
+        ]
+        return [*expand_nodes, *rotary_nodes]

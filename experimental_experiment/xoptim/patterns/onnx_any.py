@@ -213,9 +213,9 @@ class IdentityPattern(PatternOptimization):
             cst = g.get_constant_scalar(node.input[1])
             val = self._any_value_to_scalar(cst)
             if val == 0 and node.op_type in {"Add", "Sub"}:
-                return MatchResult(node, [node], self.apply, insert_at=node)
+                return MatchResult(self, [node], self.apply, insert_at=node)
             if val == 1 and node.op_type in {"Mul", "Div"}:
-                return MatchResult(node, [node], self.apply, insert_at=node)
+                return MatchResult(self, [node], self.apply, insert_at=node)
         elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div"}:
             # less simple case, the tensor is multiplied on its last dimension.
             cst = g.get_computed_constant(node.input[1])

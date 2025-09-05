@@ -49,7 +49,7 @@ from .onnx_reshape import (
     ReshapeReshapeBinaryPattern,
     ReshapeReshapePattern,
 )
-from .onnx_rotary import RotaryConcatPartPattern
+from .onnx_rotary import RotaryConcatPartPattern, RotaryEmbeddingPattern
 from .onnx_sequence import SequenceConstructAtPattern
 from .onnx_slice import SliceSlicePattern
 from .onnx_split import SlicesSplitPattern, SplitConcatPattern
@@ -153,6 +153,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         MulMulMatMulPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
+        RotaryEmbeddingPattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
         SequenceConstructAtPattern(verbose=verbose),
         SliceSlicePattern(verbose=verbose),

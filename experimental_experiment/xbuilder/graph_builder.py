@@ -2553,21 +2553,23 @@ class GraphBuilder(_GraphBuilderRuntime):
         key = self.make_key(value)
         if key and key in self._values:
             if name == "":
-                assert (
-                    not parameter_name
-                ), f"Empty name cannot be used with parameter_name={parameter_name!r}"
+                assert not parameter_name, (
+                    f"Empty name cannot be used with parameter_name={parameter_name!r}, "
+                    f"key={key!r}"
+                )
                 new_name = self._values[key]
                 assert new_name in self.initializers_dict, f"Unable to find {new_name!r}"
                 self._append_initializer_source(new_name, source, existing=True)
                 return new_name
             self._append_initializer_source(name, source, same_as=key)
-            return self.make_node(
+            res = self.make_node(
                 "Identity",
                 [self._values[key]],
                 [name],
                 name="make_initializer",
                 insert_position="HEAD",
             )
+            return res
 
         if isinstance(value, TensorProto):
             itype = value.data_type
@@ -7285,23 +7287,26 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"The position {insert_at} must be higher than the position "
             f"of the removed nodes {removed}"
         )
+        remove_constants = set()
         memo = []
         for i in removed:
-            assert i < len(
-                self.nodes
-            ), f"Unable to remove node position {i}, there are {len(self.nodes)}"
+            assert i < len(self.nodes), (
+                f"Unable to remove node position {i}, there are {len(self.nodes)}, "
+                f"type is {self.nodes[i].op_type}"
+            )
             n = self.nodes[i]
             if not n:
                 # already marked as removed
                 continue
-            assert n and not self.do_not_remove(
-                n
-            ), f"Node {n.name!r} marked as 'DONOTREMOVE' cannot be removed."
+            assert n and not self.do_not_remove(n), (
+                f"Node {n.name!r} marked as 'DONOTREMOVE' cannot be removed "
+                f"for node {i} and type {n.op_type}"
+            )
             memo.append(n)
             # We need to remove the constant.
             for o in n.output:
                 if o in self.constants_:
-                    del self.constants_[o]
+                    remove_constants.add(o)
             self.nodes[i] = None
 
         n_existing = []
@@ -7475,6 +7480,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"output_has_type={[self.has_type(o) for o in n.output]}, "
                 f"{self.get_debug_msg()}"
             )
+        # final removal of the unneeded constants
+        for o in remove_constants:
+            del self.constants_[o]
         return memo
 
     @classmethod
@@ -7513,7 +7521,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(sh, int):
                 continue
             self.make_dynamic_object(sh, self.torch.SymInt(sh), input_name=val.name, axis=i)
-        if 0 in shape and len(shape) > 1 and min(shape) == max(shape) == 0:
+        if (
+            0 in shape
+            and len(shape) > 1
+            and all(isinstance(s, int) for s in shape)
+            and min(shape) == max(shape) == 0
+        ):
             # something like (0, 0, 0), we skip.
             if self.verbose > 4:
                 print(
@@ -7526,7 +7539,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[_update_shape_types_with_proto_one_result] "
                 f"update shape({val.name}) with {shape}"
             )
-        self.set_shape(val.name, shape, exc=False)
+        self.set_shape(val.name, shape, exc=False, allow_zero=True)
 
     def _update_shape_types_with_proto(
         self,

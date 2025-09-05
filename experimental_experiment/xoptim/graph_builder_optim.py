@@ -1113,6 +1113,7 @@ class GraphBuilderPatternOptimization:
         self,
         max_iter=-1,
         remove_identity: bool = True,
+        remove_unused: bool = True,
         stop_after: int = -1,
         recursive: bool = True,
     ) -> List[Dict[str, Any]]:
@@ -1188,14 +1189,15 @@ class GraphBuilderPatternOptimization:
         priorities = list(sorted(set(p.priority for p in self.patterns)))  # noqa: C413
         assert priorities, "list of priority is null."
         if max_iter == -1:
-            max_iter = len(self.builder.nodes) * max(len(priorities), 1)
+            max_iter = max(len(self.builder.nodes), 10) * max(len(priorities), 1)
         if self.verbose > 0:
             print(
                 f"[GraphBuilderPatternOptimization-"
                 f"{self.builder._hash()}.optimize] start with "
                 f"{len(self.builder.nodes)} nodes, "
                 f"{len(self.builder.initializers_dict)} initializers, "
-                f"{len(self.patterns)} patterns, priorities={priorities}"
+                f"{len(self.patterns)} patterns, priorities={priorities}, "
+                f"max_iter={max_iter}"
             )
             if self.verbose > 1:
                 for i, (pp, _, pattern) in enumerate(
@@ -1280,7 +1282,7 @@ class GraphBuilderPatternOptimization:
                             bypass = True
                             break
                     if bypass:
-                        if self.verbose >= 9:
+                        if self.verbose >= 9 or pattern.verbose >= 10:
                             print(
                                 f"[{self.__class__.__name__}.match] OVERLAP "
                                 f"match={match} #marked: {len(marked)})"
@@ -1291,7 +1293,7 @@ class GraphBuilderPatternOptimization:
                             continue
                         marked.add(id(n))
                     found = True
-                    if self.verbose > 2:
+                    if self.verbose > 2 or pattern.verbose >= 10:
                         print(
                             f"[GraphBuilderPatternOptimization-"
                             f"{self.builder._hash()}.optimize] match={match}"
@@ -1299,7 +1301,7 @@ class GraphBuilderPatternOptimization:
                     matches.append((pattern, match))
                     if stop_after > 0 and len(matches) + n_applied >= stop_after:
                         continue_optimization = False
-                        if self.verbose > 0:
+                        if self.verbose > 0 or pattern.verbose >= 10:
                             print(
                                 f"[GraphBuilderPatternOptimization-"
                                 f"{self.builder._hash()}.optimize] "
@@ -1363,7 +1365,7 @@ class GraphBuilderPatternOptimization:
 
             # loop over patterns
             for im, (pattern, match) in enumerate(matches):
-                if self.verbose > 3:
+                if self.verbose > 3 or pattern.verbose >= 10:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"apply {match.to_string(short=False)}"
@@ -1373,7 +1375,7 @@ class GraphBuilderPatternOptimization:
                 added_nodes = self.apply_match(match)
                 added_types |= set(n.op_type for n in added_nodes)
 
-                if self.verbose > 3:
+                if self.verbose > 3 or pattern.verbose >= 10:
                     print(
                         f"[GraphBuilderPatternOptimization-"
                         f"{self.builder._hash()}.optimize] - add "
@@ -1398,13 +1400,13 @@ class GraphBuilderPatternOptimization:
                         f"removed_outputs={removed_outputs}, pattern={pattern}"
                     )
 
-                if self.verbose > 3:
+                if self.verbose > 3 or pattern.verbose >= 10:
                     print(
                         f"[GraphBuilderPatternOptimization-"
                         f"{self.builder._hash()}.optimize] done "
                         f"{match}: -{rem} +{add} nodes"
                     )
-                    if full_removed and self.verbose > 4:
+                    if full_removed and (self.verbose > 4 or pattern.verbose >= 10):
                         print(
                             f"[GraphBuilderPatternOptimization-"
                             f"{self.builder._hash()}.optimize] "
@@ -1448,6 +1450,21 @@ class GraphBuilderPatternOptimization:
                     )
                 )
                 self._check_graph(statistics, "remove_identity", it, "B", self.verifies)
+
+            if remove_unused:
+                # remove unused nodes
+                begin = time.perf_counter()
+                id_removed = self.builder.remove_unused()
+                statistics.append(
+                    dict(
+                        pattern="remove_unused",
+                        iteration=it,
+                        added=0,
+                        removed=id_removed,
+                        time_in=time.perf_counter() - begin,
+                    )
+                )
+                self._check_graph(statistics, "remove_unused", it, "B", self.verifies)
 
             # rebuild the graph structure
 
