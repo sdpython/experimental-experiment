@@ -184,14 +184,14 @@ class IdentityPattern(PatternOptimization):
                 != {9223372036854775807}  # this a value used by torch
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
-            return MatchResult(node, [node], self.apply, insert_at=node)
+            return MatchResult(self, [node], self.apply, insert_at=node)
 
         if node.op_type == "Transpose":
             perm = list(g.get_attribute(node, "perm").ints)
             expected = list(range(len(perm)))
             if perm != expected:
                 return self.none(node, inspect.currentframe().f_lineno)
-            return MatchResult(node, [node], self.apply, insert_at=node)
+            return MatchResult(self, [node], self.apply, insert_at=node)
 
         assert len(node.input) == 2, (
             f"Unexpected number of inputs {len(node.input)} "
@@ -233,7 +233,7 @@ class IdentityPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             if node.op_type in {"Mul", "Div"} and unique != 1:
                 return self.none(node, inspect.currentframe().f_lineno)
-            return MatchResult(node, [node], self.apply, insert_at=node)
+            return MatchResult(self, [node], self.apply, insert_at=node)
 
         return self.none(node, inspect.currentframe().f_lineno)
 

@@ -38,6 +38,9 @@ class MatchResult:
         self.nodes = nodes
         self.apply = apply
         self.insert_at = insert_at
+        assert hasattr(
+            pattern, "verbose"
+        ), f"Class {type(pattern)} has not attribute 'verbose'"
         if pattern.verbose >= 10:
             print(
                 f"[{self.__class__.__name__}.match] MATCH {pattern.__class__.__name__} "
