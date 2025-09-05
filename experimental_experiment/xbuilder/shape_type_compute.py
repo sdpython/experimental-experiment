@@ -614,6 +614,13 @@ def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa:
     )
 
 
+def _set_shape_type_op_any_rotary_embedding(
+    self: "GraphBuilder", node: NodeProto  # noqa: F821
+):
+    "Sets the output shape for node type Cast."
+    set_type_shape_unary_op(self, node.output[0], node.input[0])
+
+
 def _set_shape_type_op_any_castlike(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     "Sets the output shape for node type CastLike."
     set_type_shape_unary_op(
@@ -1221,7 +1228,7 @@ def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # 
             cst = np.array(c.ints, dtype=np.int64)
         else:
             assert self.is_constant(node.input[1]), (
-                f"axes from node {node.op_type}, "
+                f"axes {node.input[1]!r} from node {node.op_type}, "
                 f"name={node.name!r} is not a constant, "
                 f"the new shape cannot be infered{self.get_debug_msg()}"
             )
@@ -1384,6 +1391,7 @@ _set_shape_type_op_any_known = {
     "Pad": _set_shape_type_op_any_pad,
     "Range": _set_shape_type_op_any_range,
     "Reshape": _set_shape_type_op_any_reshape,
+    "RotaryEmbedding": _set_shape_type_op_any_rotary_embedding,
     "ScatterND": _set_shape_type_op_any_scatternd,
     "Sign": _set_shape_type_op_any_sign,
     "Slice": _set_shape_type_op_any_slice,

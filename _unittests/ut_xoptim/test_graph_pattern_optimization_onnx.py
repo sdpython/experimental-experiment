@@ -307,8 +307,8 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertIn("OptimizationOptions(", s)
         self.assertIn("CastPattern", s)
         opt_onx, out, _ = self.capture(lambda: gr.to_onnx(optimize=True))
-        self.assertIn("remove_initializer 3:2/6:shape1", out)
-        self.assertIn("remove_initializer 4:3/6:shape2", out)
+        self.assertIn("remove_initializer 1:0/4:shape1", out)
+        self.assertIn("remove_initializer 2:1/4:shape2", out)
         self.assertEqual(["Unsqueeze", "MatMul"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(1, len(opt_onx.graph.initializer))
 
@@ -454,7 +454,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertIn("OptimizationOptions(", s)
         self.assertIn("CastPattern", s)
         opt_onx, out, _ = self.capture(lambda: gr.to_onnx(optimize=True))
-        self.assertIn("remove_initializer 3:3/6:shape2", out)
+        self.assertIn("remove_initializer 1:1/4:shape2", out)
         self.assertEqual(
             ["Unsqueeze", "Reshape", "MatMul"], [n.op_type for n in opt_onx.graph.node]
         )
@@ -5307,6 +5307,63 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(opt_onx)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
+
+    def test_rotary_embedding_2(self):
+        opset = 23
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Split", ["X"], ["x1", "x2"], axis=-1, num_outputs=2),
+                    oh.make_node("Neg", ["x2"], ["nx2"]),
+                    oh.make_node("Concat", ["nx2", "x1"], ["c"], axis=-1),
+                    oh.make_node("Mul", ["c", "m1"], ["cm1"]),
+                    oh.make_node("Mul", ["X", "m2"], ["cm2"]),
+                    oh.make_node("Add", ["cm1", "cm2"], ["Y"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", "b", "c", "d"]),
+                    oh.make_tensor_value_info("m1", TensorProto.FLOAT, ["c", "d"]),
+                    oh.make_tensor_value_info("m2", TensorProto.FLOAT, ["c", "d"]),
+                ],
+                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", "b", "c", "d"])],
+            ),
+            opset_imports=[oh.make_operatorsetid("", opset)],
+            ir_version=10,
+        )
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="RotaryEmbedding", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_rotary_embedding_2.onnx", opt_onx)
+        if opset < 24:
+            raise unittest.SkipTest(f"opset={opset}, RotaryEmbedding not ready")
+        self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
+
+        feeds = {
+            "X": (np.arange(2 * 4 * 6 * 8) / (2 * 4 * 6 * 8))
+            .reshape((2, 4, 6, 8))
+            .astype(np.float32),
+            "m1": (np.arange(6 * 8) / 24).reshape((6, 8)).astype(np.float32),
+            "m2": (np.arange(6 * 8) / 36).reshape((6, 8)).astype(np.float32),
+        }
+
+        import onnxruntime
+
+        for cls in [
+            lambda m: onnxruntime.InferenceSession(
+                m.SerializeToString(), providers=["CPUExecutionProvider"]
+            ),
+            ExtendedReferenceEvaluator,
+        ]:
+            ref = cls(model)
+            z = ref.run(None, feeds)[0]
+            ref = cls(opt_onx)
+            zz = ref.run(None, feeds)[0]
+            self.assertEqualArray(z, zz)
 
 
 if __name__ == "__main__":

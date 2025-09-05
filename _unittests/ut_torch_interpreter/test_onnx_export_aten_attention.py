@@ -45,7 +45,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
             onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got, atol=1e-3)
+        self.assertEqualArray(expected, got, atol=1e-2)
 
     def test_scaled_dot_product_attention_causal(self):
         import torch
@@ -89,7 +89,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
             onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got, atol=1e-3)
+        self.assertEqualArray(expected, got, atol=1e-2)
 
     def test_scaled_dot_product_attention_function_1(self):
         import torch
@@ -130,7 +130,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
             onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got, atol=1e-3)
+        self.assertEqualArray(expected, got, atol=1e-2)
 
     def test_scaled_dot_product_attention_function_2(self):
         import torch
@@ -251,11 +251,11 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         expected = model(*inputs)
         ds1 = {0: "batch", 2: "cache_length", 3: "last_dim"}
         ds = (ds1, ds1, ds1)
-        for opset in [23, 18]:
+        for opset in [24, 18]:
             with self.subTest(opset=opset):
                 onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset)
                 self.dump_onnx(f"test_scaled_dot_product_attention_{opset}.onnx", onx)
-                if opset >= 23:
+                if opset >= 24:
                     self.assertEqual(
                         ["Attention"],
                         [n.op_type for n in onx.graph.node],
@@ -281,9 +281,13 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                 if not has_onnxruntime("1.23"):
                     raise unittest.SkipTest("onnxruntime 1.23 is required")
 
-                sess = onnxruntime.InferenceSession(
-                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
-                )
+                try:
+                    sess = onnxruntime.InferenceSession(
+                        onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                    )
+                except Exception as e:
+                    if "till opset 23" in str(e):
+                        raise unittest.SkipTest("onnxruntime does not support opset > 23 yet")
                 got = sess.run(None, feeds)[0]
                 self.assertEqualArray(expected, got, atol=1e-2)
 

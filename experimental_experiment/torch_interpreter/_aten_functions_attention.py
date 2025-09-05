@@ -122,7 +122,8 @@ def aten_scaled_dot_product_attention(
         f"is_causal and attn_mask cannot be set at the same time"
         f"is_causal={is_causal}, attn_mask={attn_mask}{g.get_debug_msg()}"
     )
-    if g.main_opset >= 23:
+    if g.main_opset >= 24:
+        # Attention has a bug in opset 23
         if dropout_p == 0:
             assert g.has_rank(query), f"missing shape for {query!r}{g.get_debug_msg()}"
             assert g.has_rank(key), f"missing shape for {key!r}{g.get_debug_msg()}"

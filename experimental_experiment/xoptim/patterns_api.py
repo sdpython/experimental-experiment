@@ -38,6 +38,15 @@ class MatchResult:
         self.nodes = nodes
         self.apply = apply
         self.insert_at = insert_at
+        assert hasattr(
+            pattern, "verbose"
+        ), f"Class {type(pattern)} has not attribute 'verbose'"
+        if pattern.verbose >= 10:
+            print(
+                f"[{self.__class__.__name__}.match] MATCH {pattern.__class__.__name__} "
+                f"with {len(nodes)} nodes and types "
+                f"{[n.op_type for n in nodes if n is not None]}"
+            )
 
     def to_string(self, short: bool = True) -> str:
         types = [n.op_type for n in self.nodes if n is not None]
@@ -137,9 +146,7 @@ class PatternOptimization:
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
     ) -> Iterator:
-        """
-        Enumerates all the possible matches.
-        """
+        """Enumerates all the possible matches."""
         if self.verbose >= 10:
             print(
                 f"[PatternOptimization.enumerate_matches] start {self.__class__.__name__} "
