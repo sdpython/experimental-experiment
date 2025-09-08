@@ -7991,7 +7991,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.doc_string += "#SV-Sl3"
                 self.set_value_shape(node.output[0], values[0][values[1][0] : values[2][0]])
                 return True
-            if len(values) == 4 and values[1] == (0,) and isinstance(values[2][0], str) and isinstance(values[3][0], int):
+            if (
+                len(values) == 4
+                and values[1] == (0,)
+                and isinstance(values[2][0], str)
+                and isinstance(values[3][0], int)
+            ):
                 # Maybe a shape but probably not.
                 node.doc_string += "#SV-Sl/3"
                 return False
