@@ -8350,10 +8350,6 @@ def aten_masked_scatter(
 ) -> T:
     """masked_scatter"""
     assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
-    print("-----------")
-    print("****", g.get_shape(x))
-    print("****", g.get_shape(mask))
-    print("****", g.get_shape(updates))
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     imask = g.op.Cast(mask, to=itype, name=name)
@@ -8503,6 +8499,47 @@ def aten_scatter_reduce__two(
         include_self=include_self,
         name=name,
     )
+
+
+def aten_scatter_src(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    name: str = "scatter_src",
+) -> T:
+    """scatter_src"""
+    assert isinstance(
+        dim, int
+    ), f"scatter_src not implemented if type(dim)={type(dim)}{g.get_debug_msg()}"
+    if g.main_opset < 13:
+        # reduction is not available for opset < 13
+        raise FunctionNotFoundError(
+            f"reduction='add' not available in opset {g.main_opset}{g.get_debug_msg()}"
+        )
+    res = g.op.ScatterElements(
+        x, index, src, axis=dim, reduction="none", name=name, outputs=outputs
+    )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_scatter__src(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    name: str = "scatter__src",
+) -> T:
+    """``scatter__src``"""
+    return aten_scatter_src(g, sts, outputs, x, dim, index, src=src, name=name)
 
 
 def aten_relu(
@@ -8768,10 +8805,45 @@ def aten_repeat_interleave(
         )
 
     if (dim is None or isinstance(dim, int)) and dim in (0, None):
-        assert (
-            g.has_rank(repeats) and g.get_rank(repeats) == 1
-        ), f"repeats {repeats!r} must be a 1D tensor"
-        assert g.has_rank(x), f"x={x!r} must have a known rank."
+        assert g.has_rank(x), f"x={x!r} must have a known rank{g.get_debug_msg()}"
+        rkx = g.get_rank(x)
+        assert g.has_rank(
+            repeats
+        ), f"repeats {repeats!r} has not rank, it must be a 1D tensor{g.get_debug_msg()}"
+        rkr = g.get_rank(repeats)
+        if rkr == 0:
+            # This is an integer. This is equivalent to the first case.
+            name = f"{name}_intsym"
+            pos_dim = (dim + rkx) % rkx
+            unsqueezed = g.op.UnsqueezeAnyOpset(
+                x, np.array([pos_dim + 1], dtype=np.int64), name=name
+            )
+            onehot = g.op.Concat(
+                np.ones((pos_dim + 1,), dtype=np.int64),
+                g.op.UnsqueezeAnyOpset(repeats, g.ZERO, name=name),
+                np.ones((rkx - pos_dim - 1), dtype=np.int64),
+                axis=0,
+                name=name,
+            )
+            tiled = g.op.Tile(unsqueezed, onehot, name=name)
+
+            if dim < -1:
+                dim += rkx
+            res = aten_flatten(
+                g,
+                sts,
+                outputs,
+                tiled,
+                -2 if dim == -1 else dim,
+                -1 if dim == -1 else (dim + 1),
+                name=name,
+            )
+            if not sts:
+                g.set_type(res, g.get_type(x))
+                g.set_rank(res, rkx)
+            return res
+
+        assert rkr == 1, f"rank(repeats)={rkr}, repeats must be a 1D tensor{g.get_debug_msg()}"
         name = f"{name}_T"
 
         if dim is None:
@@ -8779,7 +8851,7 @@ def aten_repeat_interleave(
             x = g.op.Reshape(x, g.MINUS_ONE, name=name)
             rk = 1
         else:
-            rk = g.get_rank(x)
+            rk = rkx
 
         if rk > 2:
             shape_x0 = g.op.Shape(x, start=0, end=1, name=name)
@@ -10459,6 +10531,23 @@ def aten_sym_min(
     return res
 
 
+def aten_sym_not(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "sym_not",
+) -> T:
+    """sym_not"""
+    assert not isinstance(
+        x, (bool, g.torch.Tensor)
+    ), f"x={x} is constants, this should not happen{g.get_debug_msg()}"
+    res = g.op.Not(x, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_binary_op(g, res, x)
+    return res
+
+
 def aten_sym_size_int(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -11211,6 +11300,33 @@ def _aten_upsample_output_size(
         g.set_type(res, g.get_type(x))
         g.set_rank(res, g.get_rank(x))
     return res
+
+
+def aten_upsample_linear1d_vec(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    output_size: T,
+    align_corners: bool,
+    scales: Optional[float] = None,
+    name: str = "upsample_linear1d_vec",
+) -> T:
+    """upsample_linear1d"""
+    assert scales is None, f"Unexpected scales={scales!r}{g.get_debug_msg()}"
+    return _aten_upsample_output_size(
+        g,
+        sts,
+        outputs,
+        x,
+        output_size,
+        mode="linear",
+        coordinate_transformation_mode=(
+            "align_corners" if align_corners else "pytorch_half_pixel"
+        ),
+        d=1,
+        name=name,
+    )
 
 
 def aten_upsample_nearest2d(

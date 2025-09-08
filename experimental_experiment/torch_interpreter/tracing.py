@@ -1019,6 +1019,9 @@ class CustomTracer(torch.fx.Tracer):
                     seen_nodes.add(n)
                     current_remove.append(n)
                 elif aten_name == "aten::select.int":
+                    if not n.args or n.args[0] not in seen_nodes:
+                        # Cannot handle this.
+                        return -1
                     _macro_assert_index_()
                     axis = _macro_get_axis_(n, set_item_args)
                     if axis is LEAVE_INPLACE:

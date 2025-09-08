@@ -422,6 +422,8 @@ class ReshapeGemmPattern(PatternOptimization):
         shape = g.get_shape(node.input[1])
         if not all_int(shape):
             return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node_before.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
 
         shape = g.get_computed_constant(node_before.input[1])
         if shape.shape != (2,) or shape[0] != -1:

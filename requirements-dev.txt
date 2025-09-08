@@ -5,7 +5,7 @@ furo
 matplotlib
 onnx-array-api
 onnx-ir
-git+https://github.com/microsoft/onnxscript.git
+onnxscript
 git+https://github.com/sdpython/onnx-diagnostic.git
 openpyxl
 packaging
