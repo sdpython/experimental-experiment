@@ -109,7 +109,7 @@ class OrderOptimization:
                 for i in node.input:
                     if i == "":
                         continue
-                    assert i in known, f"Unknown input {i!r}, step {step!r}  in node {node}"
+                    assert i in known, f"Unknown input {i!r}, step {step!r} in node {node}"
                 known |= set(node.output)
             for o in self.builder.outputs:
                 assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "

@@ -8350,10 +8350,6 @@ def aten_masked_scatter(
 ) -> T:
     """masked_scatter"""
     assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
-    print("-----------")
-    print("****", g.get_shape(x))
-    print("****", g.get_shape(mask))
-    print("****", g.get_shape(updates))
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     imask = g.op.Cast(mask, to=itype, name=name)
@@ -8503,6 +8499,47 @@ def aten_scatter_reduce__two(
         include_self=include_self,
         name=name,
     )
+
+
+def aten_scatter_src(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    name: str = "scatter_src",
+) -> T:
+    """scatter_src"""
+    assert isinstance(
+        dim, int
+    ), f"scatter_src not implemented if type(dim)={type(dim)}{g.get_debug_msg()}"
+    if g.main_opset < 13:
+        # reduction is not available for opset < 13
+        raise FunctionNotFoundError(
+            f"reduction='add' not available in opset {g.main_opset}{g.get_debug_msg()}"
+        )
+    res = g.op.ScatterElements(
+        x, index, src, axis=dim, reduction="none", name=name, outputs=outputs
+    )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_scatter__src(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    index: T,
+    src: T,
+    name: str = "scatter__src",
+) -> T:
+    """``scatter__src``"""
+    return aten_scatter_src(g, sts, outputs, x, dim, index, src=src, name=name)
 
 
 def aten_relu(
