@@ -2772,7 +2772,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         # with open("gggg.onnx", "wb") as f:
         #     f.write(opt_onx.SerializeToString())
         self.assertIn("LayerNormalization", set(n.op_type for n in opt_onx.graph.node))
-        self.assertEqual(217, len(opt_onx.graph.initializer))
+        self.assertEqual(92, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
@@ -2792,7 +2792,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
-        self.assertEqual(154, len(opt_onx.graph.initializer))
+        self.assertEqual(42, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
@@ -2812,7 +2812,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         with open("test_dropout.onnx", "wb") as f:
             f.write(opt_onx.SerializeToString())
         self.assertNotIn("Dropout", set(n.op_type for n in opt_onx.graph.node))
-        self.assertEqual(169, len(opt_onx.graph.initializer))
+        self.assertEqual(44, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
@@ -4168,7 +4168,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
 
         self.assertEqual(["Slice"], [n.op_type for n in opt_onx.graph.node])
-        self.assertEqual(len(opt_onx.graph.initializer), 4)
+        self.assertEqual(len(opt_onx.graph.initializer), 3)
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
@@ -4210,7 +4210,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
 
         self.assertEqual(["Slice"], [n.op_type for n in opt_onx.graph.node])
-        self.assertEqual(len(opt_onx.graph.initializer), 4)
+        self.assertEqual(len(opt_onx.graph.initializer), 3)
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
@@ -4252,7 +4252,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
 
         self.assertEqual(["Slice"], [n.op_type for n in opt_onx.graph.node])
-        self.assertEqual(len(opt_onx.graph.initializer), 4)
+        self.assertEqual(len(opt_onx.graph.initializer), 3)
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]

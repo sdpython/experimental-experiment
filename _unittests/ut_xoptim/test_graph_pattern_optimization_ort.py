@@ -780,7 +780,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
         self.assertNotIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
         self.assertIn("FastGelu", set(n.op_type for n in opt_onx.graph.node))
-        self.assertEqual(154, len(opt_onx.graph.initializer))
+        self.assertEqual(42, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 
@@ -801,7 +801,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
         self.assertNotIn("Gelu", set(n.op_type for n in opt_onx.graph.node))
         self.assertIn("FastGelu", set(n.op_type for n in opt_onx.graph.node))
-        self.assertEqual(154, len(opt_onx.graph.initializer))
+        self.assertEqual(42, len(opt_onx.graph.initializer))
         new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
         self.assertNotEqual(inputs, new_inputs)
 

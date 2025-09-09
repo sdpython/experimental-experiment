@@ -612,10 +612,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertIsInstance(fct["functions"], list)
         self.assertTrue(all(isinstance(p, FunctionProto) for p in fct["functions"]))
         self.assertIsInstance(fct["initializers_name"], list)
-        self.assertEqual(
-            fct["initializers_name"],
-            ["weights2", "weights", "bias2", "bias"],
-        )
+        self.assertEqual(fct["initializers_name"], ["weights", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
             all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
@@ -625,7 +622,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqual(proto.output, ["Y"])
         self.assertEqual(
             proto.input,
-            ["X", "weights2", "weights", "bias2", "bias"],
+            ["X", "weights", "bias"],
         )
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
@@ -757,10 +754,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertIsInstance(fct["functions"], list)
         self.assertTrue(all(isinstance(p, FunctionProto) for p in fct["functions"]))
         self.assertIsInstance(fct["initializers_name"], list)
-        self.assertEqual(
-            fct["initializers_name"],
-            ["weights2", "weights", "bias3", "bias22", "bias2", "bias"],
-        )
+        self.assertEqual(fct["initializers_name"], ["weights", "bias2", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
             all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
@@ -768,10 +762,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])
-        self.assertEqual(
-            proto.input,
-            ["X", "weights2", "weights", "bias3", "bias22", "bias2", "bias"],
-        )
+        self.assertEqual(proto.input, ["X", "weights", "bias2", "bias"])
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
         self.assertEqual(4, len(fct["functions"]))
@@ -916,10 +907,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertIsInstance(fct["functions"], list)
         self.assertTrue(all(isinstance(p, FunctionProto) for p in fct["functions"]))
         self.assertIsInstance(fct["initializers_name"], list)
-        self.assertEqual(
-            fct["initializers_name"],
-            ["weights2", "weights", "bias3", "bias22", "bias2", "bias"],
-        )
+        self.assertEqual(fct["initializers_name"], ["weights", "bias2", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
         self.assertTrue(
             all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
@@ -927,10 +915,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])
-        self.assertEqual(
-            proto.input,
-            ["X", "weights2", "weights", "bias3", "bias22", "bias2", "bias"],
-        )
+        self.assertEqual(proto.input, ["X", "weights", "bias2", "bias"])
         self.assertEqual(proto.domain, "mine")
         self.assertEqual(proto.name, "linear")
         self.assertEqual(2, len(fct["functions"]))

@@ -862,7 +862,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return int, value
         if isinstance(value, np.ndarray):
             if value.size < self.SMALL_TENSOR:
-                return (value.dtype, value.shape, tuple(value.ravel().tolist()))
+                return (str(value.dtype), tuple(value.shape), tuple(value.ravel().tolist()))
         return None
 
     def pretty_tensor(self, tensor: Any) -> str:
@@ -2715,6 +2715,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.set_name(name, "make_initializer")
             self._unique_names.add(name)
 
+        if key is None:
+            key = self.make_key(value)
         self.initializers_dict[name] = value
         self._append_initializer_source(name, source, existing=existing)
 
@@ -2755,9 +2757,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if is_constant and parameter_name:
             self.update_node_constant(parameter_name, cst)
 
-        if key is None:
-            key = self.make_key(value)
-        if key not in self._values:
+        if key is not None and key not in self._values:
             self._values[key] = name
         return name
 
@@ -5982,8 +5982,6 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         :param recursive: to overwrite the value provided by the options if True.
         """
-        self._clean_values_cache()
-
         statistics = []
         main_begin = time.perf_counter()
 
@@ -6048,6 +6046,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             )
             self._check(statistics, "B-remove-identity")
+
         if self.optimization_options.remove_unused:
             begin = time.perf_counter()
             n = self.remove_unused()
@@ -6122,6 +6121,19 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             self._check(statistics, "G-remove-unused")
 
+        if self.optimization_options.remove_identity:
+            begin = time.perf_counter()
+            nr, na = self.remove_identity_nodes()
+            statistics.append(
+                dict(
+                    pattern="remove_identity_nodes",
+                    removed=nr,
+                    added=na,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            self._check(statistics, "G-remove-identity")
+
         if self.optimization_options.constant_folding:
             # Second constant removal
             begin = time.perf_counter()
@@ -6156,6 +6168,39 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
                 )
                 self._check(statistics, "Eb-remove-unused")
+
+        if self.optimization_options.remove_identity:
+            begin = time.perf_counter()
+            nr, na = self.remove_duplicated_initializer()
+            statistics.append(
+                dict(
+                    pattern="remove_duplicated_initializer",
+                    removed=nr,
+                    added=na,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            self._check(statistics, "H-remove-duplicated-initializer")
+            statistics.append(
+                dict(
+                    pattern="remove_identity_nodes",
+                    removed=nr,
+                    added=na,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+
+        if self.optimization_options.remove_unused:
+            begin = time.perf_counter()
+            n = self.remove_unused()
+            statistics.append(
+                dict(
+                    pattern="remove_unused",
+                    removed=n,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            self._check(statistics, "H-remove-unused")
 
         if self.optimization_options.order:
             res = self.optimize_order()
@@ -6482,6 +6527,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
 
         self.nodes = [node for i, node in enumerate(self.nodes) if i not in removed]
+        self._refresh_values_cache()
         return start - len(self.nodes)
 
     def compute_constant(
@@ -6857,6 +6903,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"{time.perf_counter() - begin_} seconds"
             )
         stats_cf["n"] = start - len(self.nodes)
+        self._refresh_values_cache()
         return stats_cf
 
     def _clean_values_cache(self):
@@ -6866,6 +6913,34 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         if self._values:
             self._values.clear()
+
+    def _refresh_values_cache(self):
+        """
+        Rebuilds the cache. The cache is used to avoid the creation of new constants
+        while creating a graph. It should be removed the graph is modified.
+        """
+        self._clean_values_cache()
+        for k, v in self.initializers_dict.items():
+            key = self.make_key(v)
+            if key not in self._values:
+                self._values[key] = k
+
+    def remove_duplicated_initializer(self) -> Tuple[int, int]:
+        """Removes duplicated initializers and inserts identity nodes."""
+        self._clean_values_cache()
+        replacements = {}
+        for k, v in self.initializers_dict.items():
+            key = self.make_key(v)
+            if key not in self._values:
+                self._values[key] = k
+            elif key is not None:
+                assert (
+                    k not in replacements
+                ), f"Constant name {k!r} is duplicated{self.get_debug_msg()}"
+                replacements[k] = self._values[key]
+        if replacements:
+            self.rename_names(replacements, with_existing=True)
+        return len(replacements), 0
 
     @classmethod
     def _rename_inputs_in_node(
@@ -7190,6 +7265,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 node.input.extend(new_inputs)
 
         # results
+        self._refresh_values_cache()
         return removed, added
 
     def _position_msg(
@@ -7483,6 +7559,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         # final removal of the unneeded constants
         for o in remove_constants:
             del self.constants_[o]
+        self._refresh_values_cache()
         return memo
 
     @classmethod
@@ -9112,7 +9189,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         new_nodes = []
         for node in nodes:
             assert all(i in replacements for i in node.input), (
-                f"An input from {node.input} is inkonwn input in node "
+                f"An input from {node.input} is unknown in node "
                 f"{node.op_type!r}, name={node.name!r}"
             )
             new_outputs = []
@@ -9500,69 +9577,72 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return self.torch.tensor(np_array.astype(np.float32)).to(self.torch.bfloat16)
         return self.torch.tensor(np_array)
 
-    def rename_names(self, name_to_rename: Dict[str, str]):
+    def rename_names(self, name_to_rename: Dict[str, str], with_existing: bool = False):
         """Renames some names in the graph and its subgraphs."""
         set_inputs = set(_.name for _ in self.inputs)
         set_outputs = set(_.name for _ in self.outputs)
         for k, v in name_to_rename.items():
             assert self.has_name(k), f"Name {k!r} not found{self.get_debug_msg()}"
-            assert not self.has_name(v), f"Name {v!r} already taken{self.get_debug_msg()}"
+            assert with_existing or not self.has_name(
+                v
+            ), f"Name {v!r} already taken{self.get_debug_msg()}"
             assert not self.is_sequence(
                 k
-            ), f"Renaming Not implemented for sequence {k!r}{self.get_debug_msg()}"
+            ), f"Renaming not implemented for sequence {k!r}{self.get_debug_msg()}"
             assert k not in set_outputs, f"Renaming not implemented for output {k!r} yet"
-            if self.has_type(k):
-                self.set_type(v, self.get_type(k))
-            if self.has_shape(k):
-                self.set_shape(v, self.get_shape(k))
-            elif self.has_rank(k):
-                self.set_shape(v, self.get_shape(k))
+            if not with_existing:
+                if self.has_type(k):
+                    self.set_type(v, self.get_type(k))
+                if self.has_shape(k):
+                    self.set_shape(v, self.get_shape(k))
+                elif self.has_rank(k):
+                    self.set_shape(v, self.get_shape(k))
 
-            if k in set_inputs:
-                for inp in self.inputs:
-                    if inp.name == k:
-                        inp.name = v
-                        self.set_name(v, marker="rename_names_input")
-                        break
-                continue
+                if k in set_inputs:
+                    for inp in self.inputs:
+                        if inp.name == k:
+                            inp.name = v
+                            self.set_name(v, marker="rename_names_input")
+                            break
+                    continue
 
-            if k in self.initializers_dict:
-                self.initializers_dict[v] = self.initializers_dict[k]
-                del self.initializers_dict[k]
-            if k in self.initializers_dict_sources:
-                self.initializers_dict_sources[v] = self.initializers_dict_sources[k]
-                del self.initializers_dict_sources[k]
-            if k in self.constants_computed_:
-                self.constants_computed_[v] = self.constants_computed_[k]
-                del self.constants_computed_[k]
-            if k in self.constants_:
-                self.constants_[v] = self.constants_[k]
-                del self.constants_[k]
-            if k in self.constants_node_:
-                self.constants_node_[v] = self.constants_node_[k]
-                del self.constants_node_[k]
-            if k in self._known_torch_value:
-                self._known_torch_value[v] = self._known_torch_value[k]
-                del self._known_torch_value[k]
-            if k in self._known_sequences:
-                self._known_sequences[v] = self._known_sequences[k]
-                del self._known_sequences[k]
-            if k in self._known_value_shape:
-                self._known_value_shape[v] = self._known_value_shape[k]
-                del self._known_value_shape[k]
-            if k in self._registered_users:
-                self._registered_users[v] = self._registered_users[k]
-                del self._registered_users[k]
-            if k in self._parameter_renaming:
-                self._parameter_renaming[v] = self._parameter_renaming[k]
-                del self._parameter_renaming[k]
-            if k in self._parameter_norename:
-                self._parameter_norename.add(v)
+                if k in self.initializers_dict:
+                    self.initializers_dict[v] = self.initializers_dict[k]
+                    del self.initializers_dict[k]
+                if k in self.initializers_dict_sources:
+                    self.initializers_dict_sources[v] = self.initializers_dict_sources[k]
+                    del self.initializers_dict_sources[k]
+                if k in self.constants_computed_:
+                    self.constants_computed_[v] = self.constants_computed_[k]
+                    del self.constants_computed_[k]
+                if k in self.constants_:
+                    self.constants_[v] = self.constants_[k]
+                    del self.constants_[k]
+                if k in self.constants_node_:
+                    self.constants_node_[v] = self.constants_node_[k]
+                    del self.constants_node_[k]
+                if k in self._known_torch_value:
+                    self._known_torch_value[v] = self._known_torch_value[k]
+                    del self._known_torch_value[k]
+                if k in self._known_sequences:
+                    self._known_sequences[v] = self._known_sequences[k]
+                    del self._known_sequences[k]
+                if k in self._known_value_shape:
+                    self._known_value_shape[v] = self._known_value_shape[k]
+                    del self._known_value_shape[k]
+                if k in self._registered_users:
+                    self._registered_users[v] = self._registered_users[k]
+                    del self._registered_users[k]
+                if k in self._parameter_renaming:
+                    self._parameter_renaming[v] = self._parameter_renaming[k]
+                    del self._parameter_renaming[k]
+                if k in self._parameter_norename:
+                    self._parameter_norename.add(v)
 
         to_rename = set(name_to_rename)
 
         def _rename_in_nodes(nodes, to_rename):
-            for node in self.nodes:
+            for node in nodes:
                 if set(node.input) & to_rename:
                     new_input = [name_to_rename.get(i, i) for i in node.input]
                     del node.input[:]
