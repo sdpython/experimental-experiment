@@ -9642,7 +9642,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         to_rename = set(name_to_rename)
 
         def _rename_in_nodes(nodes, to_rename):
-            for node in self.nodes:
+            for node in nodes:
                 if set(node.input) & to_rename:
                     new_input = [name_to_rename.get(i, i) for i in node.input]
                     del node.input[:]
