@@ -2126,6 +2126,37 @@ class TestOnnxExportAten(ExtTestCase):
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_repeat_interleave_symbolic_tensor(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, y):
+                return torch.repeat_interleave(x, y.shape[1], dim=1) * torch.repeat_interleave(
+                    y, x.shape[1], dim=1
+                )
+
+        inputs = (
+            torch.arange(4, dtype=torch.float32).reshape((2, 2)),
+            torch.arange(6, dtype=torch.float32).reshape((2, 3)),
+        )
+        model = Model()
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.float32)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=({0: "A", 1: "B"}, {0: "C"}),
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+            export_options=ExportOptions(decomposition_table="all"),
+        )
+        self.dump_onnx("test_repeat_interleave_symbolic_tensor.onnx", onx)
+        feeds = dict(zip(["x", "y"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
     def test_attention_scale_dot_product_attention(self):
         import torch
 
