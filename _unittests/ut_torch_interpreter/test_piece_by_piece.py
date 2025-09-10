@@ -70,7 +70,7 @@ class TestPieceByPiece(ExtTestCase):
         import torch
 
         x = torch.randn((5, 6))
-        args, kwargs = serialize_args((x,), {}, schema=None, args_names=["x", "flash_args"])
+        args, _kwargs = serialize_args((x,), {}, schema=None, args_names=["x", "flash_args"])
         st = string_type(args, with_shape=True)
         self.assertEqual(st, "(T1s5x6,)")
 

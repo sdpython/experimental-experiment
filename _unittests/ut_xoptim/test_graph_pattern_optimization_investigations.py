@@ -48,7 +48,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
                 patterns=["BinaryInvestigation"], verbose=1
             ),
         )
-        opt_onx, out, err = self.capture(lambda: gr.to_onnx(optimize=True))
+        opt_onx, out, _err = self.capture(lambda: gr.to_onnx(optimize=True))
         self.assertIn("[BinaryInvestigation] Mul(2x2x1024x512, 1x1x1024x512)", out)
         self.assertGreater(len(model.graph.node), len(opt_onx.graph.node))
 
@@ -64,7 +64,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
                 verbose=10,
             ),
         )
-        opt_onx, out, err = self.capture(lambda: gr.to_onnx(optimize=True))
+        _opt_onx, out, _err = self.capture(lambda: gr.to_onnx(optimize=True))
         self.assertIn("save", out)
         assert os.path.exists(
             "test_dump_applied_patterns"

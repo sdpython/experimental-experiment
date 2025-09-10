@@ -276,14 +276,14 @@ def create_compiled_model(
         assert (
             optimize
         ), f"Optimization with onnxscript cannot be disabled with backend={backend!r}."
-        local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic, verbose=verbose)
+        _local_aot_ort, local_ort = make_aot_ort(dynamic=use_dynamic, verbose=verbose)
         return torch.compile(model, backend=local_ort)
 
     if backend == "ort+":
         assert (
             not return_storage
         ), f"return_storage=True not implemented with backend={backend!r}"
-        local_aot_ort, local_ort = make_aot_ort(
+        _local_aot_ort, local_ort = make_aot_ort(
             dynamic=use_dynamic,
             rewrite=True,
             verbose=verbose,
@@ -303,7 +303,7 @@ def create_compiled_model(
         ), f"return_storage=True not implemented with backend={backend!r}"
         os.environ["ONNXRT_CHANGE_REWRITER"] = "1"
 
-        local_aot_ort, local_ort = make_aot_ort(
+        _local_aot_ort, local_ort = make_aot_ort(
             dynamic=use_dynamic,
             rewrite=True,
             verbose=verbose,

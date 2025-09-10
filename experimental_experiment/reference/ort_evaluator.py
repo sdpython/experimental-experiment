@@ -420,7 +420,7 @@ class OrtEval:
         if key in self._cache:
             sess = self._cache[key][1]
         else:
-            self._cache[key] = onx, sess = self._get_sess(node, inputs)
+            self._cache[key] = _onx, sess = self._get_sess(node, inputs)
 
         if self.incremental:
             # Inputs are the inputs of the model not the node.
@@ -453,7 +453,7 @@ class OrtEval:
         if key in self._cache:
             sess = self._cache[key][1]
         else:
-            self._cache[key] = onx, sess = self._get_sess_if(node, name, inputs, results)
+            self._cache[key] = _onx, sess = self._get_sess_if(node, name, inputs, results)
 
         outputs = sess.run(None, feeds)
         return outputs
@@ -467,7 +467,7 @@ class OrtEval:
         if key in self._cache:
             sess = self._cache[key][1]
         else:
-            self._cache[key] = onx, sess = self._get_sess_local(node, inputs)
+            self._cache[key] = _onx, sess = self._get_sess_local(node, inputs)
 
         replace = dict(zip(node.input, sess.input_names))
         if self.incremental:
@@ -696,7 +696,7 @@ class OrtEval:
         if key in self._cache:
             sess = self._cache[key][1]
         else:
-            self._cache[key] = onx, sess = self._get_sess(node, inputs)
+            self._cache[key] = _onx, sess = self._get_sess(node, inputs)
 
         onames = [n for n in node.output if n != ""]
         if self.incremental:

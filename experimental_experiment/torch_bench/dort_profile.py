@@ -209,7 +209,7 @@ def main():
     print(f":time,{np.mean(times)};")
 
     print("--------------------------------------------------------------------------")
-    root, nodes = profile2graph(ps, clean_text=lambda x: "/".join(x.split("/")[-2:]))
+    root, _nodes = profile2graph(ps, clean_text=lambda x: "/".join(x.split("/")[-2:]))
     text = root.to_text()
     print(text)
 

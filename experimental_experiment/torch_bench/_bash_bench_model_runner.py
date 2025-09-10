@@ -401,7 +401,7 @@ class ModelRunner:
         ), f"configuration must be specified for model_name={model_name!r}"
         inputs, kw_inputs, cvt = self._pre_process_inputs(inputs, kw_inputs, dtype, device)
         if inputs2:
-            inputs2, kw_inputs2s, _ = self._pre_process_inputs(
+            inputs2, _kw_inputs2s, _ = self._pre_process_inputs(
                 inputs2, kw_inputs2, dtype, device
             )
         self.attn_impl = attn_impl

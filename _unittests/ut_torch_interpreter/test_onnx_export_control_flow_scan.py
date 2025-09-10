@@ -17,7 +17,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class ScanModel(torch.nn.Module):
             def forward(self, x):
                 init = torch.zeros_like(x[0])
-                carry, out = torch.ops.higher_order.scan(add, [init], [x], [])
+                carry, _out = torch.ops.higher_order.scan(add, [init], [x], [])
                 return carry
 
         x = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32)
@@ -129,7 +129,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         class ScanModel(torch.nn.Module):
             def forward(self, x):
-                carry, out = torch.ops.higher_order.scan(dist, [x], [x], additional_inputs=[])
+                _carry, out = torch.ops.higher_order.scan(dist, [x], [x], additional_inputs=[])
                 return out
 
         x = torch.tensor([[1, 2, 3, -1], [4, 5, 6, -1], [7, 8, 9, -1]], dtype=torch.float32)
@@ -239,7 +239,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class ModuleWithControlFlowLoopScan(torch.nn.Module):
 
             def forward(self, x, y):
-                carry, out = torch.ops.higher_order.scan(dist, [y], [x], additional_inputs=[])
+                _carry, out = torch.ops.higher_order.scan(dist, [y], [x], additional_inputs=[])
                 return out
 
         x_rows = torch.export.Dim("x_rows")
@@ -309,7 +309,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         class ModuleWithControlFlowLoopScan(torch.nn.Module):
 
             def forward(self, x, y):
-                carry, out = torch.ops.higher_order.scan(dist, [y], [x], additional_inputs=[])
+                _carry, out = torch.ops.higher_order.scan(dist, [y], [x], additional_inputs=[])
                 return out
 
         x_rows = torch.export.Dim("x_rows")
