@@ -4,6 +4,7 @@ from collections import Counter
 import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    requires_onnxscript,
     requires_torch,
     skipif_ci_windows,
     hide_stdout,
@@ -33,6 +34,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.9")
+    @requires_onnxscript("0.5")
     def test_controlflow_dynamo(self):
         import torch
 
