@@ -220,7 +220,7 @@ class _GraphBuilderRuntime:
         new_shape = feeds[node.input[1]]
         if isinstance(x, self.torch.Tensor):
             try:
-                return [x.expand(tuple(int(i) for i in new_shape))]
+                return [x.expand(tuple(max(s, int(i)) for s, i in zip(x.shape, new_shape)))]
             except RuntimeError as e:
                 raise RuntimeError(
                     f"Unable to compute the constant, new_shape={new_shape}, "

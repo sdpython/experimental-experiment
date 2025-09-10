@@ -121,7 +121,7 @@ def set_type_shape_unary_op(
         return False
     g.set_type(name, itype or g.get_type(input_name))
     if g.has_shape(input_name):
-        g.set_shape(name, g.get_shape(input_name))
+        g.set_shape(name, g.get_shape(input_name), allow_zero=True)
         return True
     if g.has_rank(input_name):
         g.set_rank(name, g.get_rank(input_name))
@@ -1130,7 +1130,7 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
         sh = list(self.get_shape(node.input[0]))
         for i, o in enumerate(node.output):
             sh[axis] = int(splits[i])
-            self.set_shape(o, tuple(sh))
+            self.set_shape(o, tuple(sh), allow_zero=True)
     elif self.has_rank(node.input[0]):
         rank = self.get_rank(node.input[0])
         for o in node.output:
