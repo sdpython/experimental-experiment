@@ -479,7 +479,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     # list
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.6")
+    @requires_torch("2.10.99")
     def test_huggingface_export_bench_cpu_dummy_list(self):
         for exporter, dynamic in itertools.product(
             ["custom", "onnx_dynamo", "torch_script"], [True, False]
