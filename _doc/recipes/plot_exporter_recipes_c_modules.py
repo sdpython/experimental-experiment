@@ -54,7 +54,7 @@ class AttentionBlock(torch.nn.Module):
         self.register_buffer(name="mask", tensor=torch.tril(input=ones))
 
     def forward(self, x):
-        B, T, C = x.size()
+        _B, T, C = x.size()
 
         query = self.query(x)
         key = self.key(x)

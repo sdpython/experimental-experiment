@@ -169,7 +169,7 @@ class TestOrtEval(ExtTestCase):
             raise unittest.SkipTest(f"Unable to find {model!r} and {inputs!r}.")
         with open(inputs, "rb") as f:
             feeds = pickle.load(f)
-        input_names, values, output_names = feeds
+        input_names, values, _output_names = feeds
 
         from onnxruntime.training.ortmodule.torch_cpp_extensions import (
             aten_op_executor,

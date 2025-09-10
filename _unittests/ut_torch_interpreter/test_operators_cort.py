@@ -2339,7 +2339,7 @@ class TestOperatorsCort(ExtTestCase):
                 )
 
             def forward(self, x, h0, c0):
-                a, b = self.rnn(x, (h0, c0))
+                _a, b = self.rnn(x, (h0, c0))
                 return torch.ones(b[0].shape)
 
         self.assertONNX(

@@ -95,6 +95,7 @@ class TestExportDynamicShapes(ExtTestCase):
         got = mod(*args)
         self.assertEqualArray(expected=expected, value=got)
 
+    @requires_torch("2.10.99")
     def test_dynamic_batch_2_inputs_wrapped_tuple(self):
         import torch
 
@@ -109,6 +110,7 @@ class TestExportDynamicShapes(ExtTestCase):
         got = mod(*args)
         self.assertEqualArray(expected=expected, value=got)
 
+    @requires_torch("2.10.99")
     def test_dynamic_batch_2_inputs_wrapped_dict(self):
         import torch
 

@@ -193,7 +193,7 @@ def dummy_llm(
             )
 
         def forward(self, x):
-            B, T, C = x.shape
+            _B, T, C = x.shape
 
             query = self.query(x)
             key = self.key(x)

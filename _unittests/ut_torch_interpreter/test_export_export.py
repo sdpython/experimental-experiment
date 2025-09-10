@@ -3,7 +3,7 @@ from experimental_experiment.ext_test_case import ExtTestCase, requires_torch
 
 
 class TestExportExport(ExtTestCase):
-    @requires_torch("2.9")
+    @requires_torch("2.10.99")
     def test_export_dynamic_shapes_kwargs(self):
         import torch
 

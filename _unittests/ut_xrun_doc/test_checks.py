@@ -6,7 +6,7 @@ from experimental_experiment.checks import print_import_time
 
 class TestUnitTest(ExtTestCase):
     def test_print_import_time(self):
-        _, out, err = self.capture(lambda: print_import_time())
+        _, out, _err = self.capture(lambda: print_import_time())
         self.assertIn("time to", out)
 
     def test_measure_time(self):

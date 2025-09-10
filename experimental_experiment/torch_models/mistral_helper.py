@@ -105,11 +105,11 @@ def get_mistral_model(
     def generate_example_inputs(batch: int, seq: int, vocab_size: int, with_mask: bool):
         (
             input_ids,
-            token_type_ids,
+            _token_type_ids,
             input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            _sequence_labels,
+            _token_labels,
+            _choice_labels,
         ) = _prepare_config_and_inputs(
             batch_size=batch,
             seq_length=seq,

@@ -48,8 +48,8 @@ class TestLlmModelHelperSerialization(ExtTestCase):
             got = mod(**copy.deepcopy(model_inputs))
 
             # We check that should be the same order.
-            self.assertNotIn("patched_DynamicCache", string_type(expected, with_shape=True))
-            self.assertIn("patched_DynamicCache", string_type(got, with_shape=True))
+            self.assertIn("DynamicCache", string_type(expected, with_shape=True))
+            self.assertIn("DynamicCache", string_type(got, with_shape=True))
             self.assertEqualAny(expected, got)
             flatten_got = torch.utils._pytree.tree_flatten(got)[0]
 

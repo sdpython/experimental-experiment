@@ -2355,6 +2355,40 @@ class TestOnnxExportAten(ExtTestCase):
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_expand(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x.expand(-1, 2)
+
+        model = Model()
+        inputs = (torch.arange(0, 5, dtype=torch.int64).reshape((-1, 1)) % 3,)
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.int64)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_expand.onnx", onx)
+        feeds = dict(
+            zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
+        )
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        ref = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

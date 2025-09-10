@@ -498,7 +498,7 @@ def profile_function(name, export_function, with_args=True, verbose=False, suffi
     with open(f"plot_torch_aot_profile_{name}_{suffix}.txt", "w") as f:
         f.write(raw)
 
-    root, nodes = profile2graph(ps, clean_text=clean_text)
+    root, _nodes = profile2graph(ps, clean_text=clean_text)
     text = root.to_text()
     with open(f"plot_torch_aot_profile_{name}_{suffix}_h.txt", "w") as f:
         f.write(text)

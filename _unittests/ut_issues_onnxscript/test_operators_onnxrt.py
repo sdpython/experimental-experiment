@@ -143,7 +143,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
         if test_backward:
             # forward/backward
             try:
-                local_aot_ort, local_ort = make_aot_ort(dynamic=False)
+                local_aot_ort, _local_ort = make_aot_ort(dynamic=False)
             except AssertionError as e:
                 if "This requires torch>=2.3" in str(e):
                     raise unittest.SkipTest(str(e))
@@ -1963,7 +1963,7 @@ class TestOperatorsOnnxrt(ExtTestCase):
                 )
 
             def forward(self, x, h0, c0):
-                a, b = self.rnn(x, (h0, c0))
+                _a, b = self.rnn(x, (h0, c0))
                 return torch.ones(b[0].shape)
 
         self.assertONNX(

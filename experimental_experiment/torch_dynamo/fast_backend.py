@@ -436,7 +436,7 @@ def _default_export(
         create_input_names(graph_module, args) if rename_inputs else None
     )
 
-    verbose_onnx, verbose_backend = (
+    verbose_onnx, _verbose_backend = (
         verbose if isinstance(verbose, tuple) else (verbose, verbose)
     )
 

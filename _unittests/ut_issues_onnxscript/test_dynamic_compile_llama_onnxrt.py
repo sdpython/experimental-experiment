@@ -51,7 +51,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
         storage = {}
 
         if impl == "onnxrt":
-            local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic, rewrite=True)
+            _local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic, rewrite=True)
             compiled_model = torch.compile(copy.deepcopy(model), backend=local_ort)
         else:
             if impl == "fast":

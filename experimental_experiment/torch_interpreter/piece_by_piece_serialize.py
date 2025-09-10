@@ -107,7 +107,7 @@ def serialize_args(
         is_tensor = False
     else:
         # Let's use pytorch serialization.
-        new_args, spec = torch.utils._pytree.tree_flatten(args)
+        new_args, _spec = torch.utils._pytree.tree_flatten(args)
         n_args = len(new_args)
         is_tensor = False
 

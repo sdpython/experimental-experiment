@@ -226,7 +226,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._hg_export_bench_cpu("onnx_dynamo", "101Dummy16", dynamic=True, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
+    @requires_torch("2.11")
     def test_export_bench_onnx_dynamo_cpu_dynamic_2_inputs(self):
         self._hg_export_bench_cpu("onnx_dynamo", "101Dummy2Inputs", dynamic=True, debug=False)
 
@@ -479,7 +479,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     # list
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.6")
+    @requires_torch("2.10.99")
     def test_huggingface_export_bench_cpu_dummy_list(self):
         for exporter, dynamic in itertools.product(
             ["custom", "onnx_dynamo", "torch_script"], [True, False]

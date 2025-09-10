@@ -216,7 +216,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 matmul = op.MatMul(pos_ids, cast)
                 transpose = op.Transpose(matmul)
-                output, length = g.anyop.ConcatTraining(
+                output, _length = g.anyop.ConcatTraining(
                     transpose,
                     transpose,
                     domain="com.microsoft",
@@ -311,7 +311,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 matmul = op.MatMul(pos_ids, cast)
                 transpose = op.Transpose(matmul)
-                output, length = g.anyop.ConcatTraining(
+                output, _length = g.anyop.ConcatTraining(
                     transpose,
                     transpose,
                     domain="com.microsoft",
@@ -403,7 +403,7 @@ class TestGraphPatternBuilder(ExtTestCase):
 
                 matmul = op.MatMul(pos_ids, cast)
                 transpose = op.Transpose(matmul)
-                output, length = g.anyop.ConcatTraining(
+                output, _length = g.anyop.ConcatTraining(
                     transpose, transpose, domain="com.microsoft", outputs=2
                 )
 

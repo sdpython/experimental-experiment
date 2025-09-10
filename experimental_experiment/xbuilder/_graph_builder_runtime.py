@@ -120,10 +120,9 @@ class _GraphBuilderRuntime:
             if div == 0:
                 return tuple((int(i) if i >= 0 else 0) for i in new_shape)
             return tuple((int(i) if i >= 0 else int(size // div)) for i in new_shape)
-        if all_int_or_str(input_shape):
-            if new_shape == (1, -1):
-                # common case
-                return (1, "*".join(map(str, input_shape)))
+        if all_int_or_str(input_shape) and new_shape == (1, -1):
+            # common case
+            return (1, "*".join(map(str, input_shape)))
 
         st = []
         dt = 1
@@ -158,6 +157,41 @@ class _GraphBuilderRuntime:
         )
         return tuple(nsh)
 
+    def _apply_expand_to_shape(
+        self, input_shape: DYNAMIC_SHAPE, new_shape: STATIC_SHAPE
+    ) -> DYNAMIC_SHAPE:
+        """Returns the shape of the output of a node Reshape."""
+        assert isinstance(
+            input_shape, tuple
+        ), f"unexpected type {type(input_shape)} for input_shape."
+        assert isinstance(
+            new_shape, tuple
+        ), f"unexpected type {type(new_shape)} for input_shape."
+        assert all_int(new_shape), f"unexpected type for a dimension in {new_shape}"
+
+        if -1 not in new_shape and 1 not in new_shape:
+            return new_shape
+
+        assert len(new_shape) >= len(input_shape), (
+            f"inconsistent behaviour, new_shape={new_shape}, "
+            f"input_shape={input_shape}{self.get_debug_msg()}"
+        )
+        if len(input_shape) < len(new_shape):
+            input_shape = (1,) * (len(new_shape) - len(input_shape)) + input_shape
+        nsh = []
+        for i, s in enumerate(new_shape):
+            if s == 1:
+                assert i < len(input_shape), (
+                    f"Unexpected scenario new_shape={new_shape}, "
+                    f"input_shape={input_shape}{self.get_debug_msg()}"
+                )
+                nsh.append(input_shape[i])
+            elif s == 0:
+                nsh.append(0)
+            else:
+                nsh.append(s)
+        return tuple(nsh)
+
     def _apply_transpose(
         self,
         node: NodeProto,
@@ -186,7 +220,7 @@ class _GraphBuilderRuntime:
         new_shape = feeds[node.input[1]]
         if isinstance(x, self.torch.Tensor):
             try:
-                return [x.expand(tuple(int(i) for i in new_shape))]
+                return [x.expand(tuple(max(s, int(i)) for s, i in zip(x.shape, new_shape)))]
             except RuntimeError as e:
                 raise RuntimeError(
                     f"Unable to compute the constant, new_shape={new_shape}, "

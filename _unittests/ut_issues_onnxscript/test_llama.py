@@ -73,7 +73,7 @@ class TestLlama(ExtTestCase):
         import torch
 
         torch._dynamo.reset()
-        local_aot_ort, local_ort = make_aot_ort(dynamic=dynamic)
+        local_aot_ort, _local_ort = make_aot_ort(dynamic=dynamic)
 
         self._assert_model_numerically(
             model,

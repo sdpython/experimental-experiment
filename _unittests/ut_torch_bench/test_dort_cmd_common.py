@@ -25,7 +25,7 @@ class TestDortCmdCommond(ExtTestCase):
     @requires_torch("2.4")
     def test_get_model(self):
         cf = create_configuration_for_benchmark("llama", "small")
-        model, example_args_collection = get_llama_model(**cf)
+        model, _example_args_collection = get_llama_model(**cf)
         for bck in {
             # "ort",
             "custom",
