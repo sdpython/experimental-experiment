@@ -1667,7 +1667,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         register_int: bool = True,
         name: Optional[str] = None,
     ):
-        """Raises an exception if two shapes are not compatabible."""
+        """Raises an exception if two shapes are not compatible."""
         import torch
 
         assert len(old_shape) == len(shape), (

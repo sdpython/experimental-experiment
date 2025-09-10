@@ -158,6 +158,39 @@ class _GraphBuilderRuntime:
         )
         return tuple(nsh)
 
+    def _apply_expand_to_shape(
+        self, input_shape: DYNAMIC_SHAPE, new_shape: STATIC_SHAPE
+    ) -> DYNAMIC_SHAPE:
+        """Returns the shape of the output of a node Reshape."""
+        assert isinstance(
+            input_shape, tuple
+        ), f"unexpected type {type(input_shape)} for input_shape."
+        assert isinstance(
+            new_shape, tuple
+        ), f"unexpected type {type(new_shape)} for input_shape."
+        assert all_int(new_shape), f"unexpected type for a dimension in {new_shape}"
+
+        if -1 not in new_shape and 1 not in new_shape:
+            return new_shape
+
+        st = []
+        dt = 1
+        for s in input_shape:
+            if isinstance(s, str):
+                st.append(s)
+            else:
+                dt *= s
+
+        nsh = []
+        for i, s in enumerate(new_shape):
+            if s == 1:
+                nsh.append(input_shape[i])
+            elif s == 0:
+                nsh.append(0)
+            else:
+                nsh.append(s)
+        return tuple(nsh)
+
     def _apply_transpose(
         self,
         node: NodeProto,

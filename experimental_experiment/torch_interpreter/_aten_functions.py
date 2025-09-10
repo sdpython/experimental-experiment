@@ -2977,33 +2977,47 @@ def aten_expand(
         expanded_n = len(shape) - len(true_shape)
         new_shape = []
         is_static = True
-        for di, (a, b) in enumerate(zip(shape, sizes)):
-            if b == -1:
-                assert isinstance(b, int), (
-                    f"Not implemented when the shape is not fully known, "
-                    f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
-                )
-                if isinstance(a, int):
-                    new_shape.append(a)
+        if expanded_n == 0:
+            for b in sizes:
+                if b == -1:
+                    assert isinstance(b, int), (
+                        f"Not implemented when the shape is not fully known, "
+                        f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
+                    )
+                    new_shape.append(1)
+                    is_static &= False
                 else:
-                    if (
-                        a in g.dynamic_objects
-                        and isinstance(g.dynamic_objects[a], str)
-                        and g.has_name(g.dynamic_objects[a])
-                    ):
-                        new_shape.append(g.dynamic_objects[a])
+                    new_shape.append(b)
+                    is_static &= isinstance(b, int)
+        else:
+            for di, (a, b) in enumerate(zip(shape, sizes)):
+                if b == -1:
+                    assert isinstance(b, int), (
+                        f"Not implemented when the shape is not fully known, "
+                        f"shape={shape} for x as sizes={sizes}{g.get_debug_msg()}"
+                    )
+                    if isinstance(a, int):
+                        new_shape.append(a)
                     else:
-                        # Here the shape is a string, it must be a dynamic shape, not a result.
-                        # example: a = "dyn", b = -1
-                        ds = g.op.Shape(
-                            x, start=di - expanded_n, end=di + 1 - expanded_n, name=name
-                        )
-                        new_shape.append(ds)
-                        g.add_dynamic_object(a, ds)
+                        if (
+                            a in g.dynamic_objects
+                            and isinstance(g.dynamic_objects[a], str)
+                            and g.has_name(g.dynamic_objects[a])
+                        ):
+                            new_shape.append(g.dynamic_objects[a])
+                        else:
+                            # Here the shape is a string,
+                            # it must be a dynamic shape, not a result.
+                            # example: a = "dyn", b = -1
+                            ds = g.op.Shape(
+                                x, start=di - expanded_n, end=di + 1 - expanded_n, name=name
+                            )
+                            new_shape.append(ds)
+                            g.add_dynamic_object(a, ds)
+                        is_static = False
+                else:
+                    new_shape.append(b)
                     is_static = False
-            else:
-                new_shape.append(b)
-                is_static = False
         i_new_shape = (
             np.array(new_shape, dtype=np.int64)
             if is_static
@@ -3583,10 +3597,6 @@ def aten_full(
         g.set_type(res, itype)
         if new_shape:
             g.set_shape(res, new_shape)
-
-    # size = op.Cast(size, to=INT64.dtype)
-    # fill_value = op.Cast(fill_value, to=dtype)
-    # return op.Expand(fill_value, size)
     return res
 
 
@@ -8777,7 +8787,7 @@ def aten_repeat_interleave(
         )
         onehot = np.ones((rkx + 1,), dtype=np.int64)
         onehot[pos_dim + 1] = repeats
-        tiled = g.op.Tile(unsqueezed, onehot, name=name)
+        tiled = g.op.Expand(unsqueezed, onehot, name=name)
 
         if dim < -1:
             dim += rkx
@@ -8825,7 +8835,7 @@ def aten_repeat_interleave(
                 axis=0,
                 name=name,
             )
-            tiled = g.op.Tile(unsqueezed, onehot, name=name)
+            tiled = g.op.Expand(unsqueezed, onehot, name=name)
 
             if dim < -1:
                 dim += rkx

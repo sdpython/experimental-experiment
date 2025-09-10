@@ -1047,6 +1047,41 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
             )
 
 
+def _set_shape_type_op_any_expand(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    "Sets the output shape for node type Reshape."
+    k = node.output[0]
+    if self.has_type(node.input[0]):
+        self.set_type(k, self.get_type(node.input[0]))
+    shape_set = False
+    value = None
+    if self.is_constant(node.input[1]):
+        value = self.get_constant(node.input[1], computed_value=True, as_shape=True, exc=False)
+    if value is None:
+        value = self.value_as_shape(node.input[1])
+    if value is not None:
+        cst = tuple(value)
+        if all_int_or_str(cst):
+            if -1 not in cst and 1 not in cst and 0 not in cst:
+                self.set_shape(k, cst)
+                shape_set = True
+            elif all_int(cst) and self.has_shape(node.input[0]):
+                sh = self.get_shape(node.input[0])
+                new_shape = self._apply_expand_to_shape(sh, cst)
+                if new_shape is not None:
+                    self.set_shape(k, new_shape)
+                    shape_set = True
+
+    if not shape_set:
+        if self.has_shape(node.input[1]):
+            rk = self.get_shape(node.input[1])
+            self.set_rank(k, rk[0])
+        else:
+            assert not self._debug_shape_missing, (
+                f"Unable to compute shape for node: "
+                f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+            )
+
+
 def _set_shape_type_op_any_sign(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     "Sets the output shape for node type Sign."
     set_type_shape_unary_op(self, node.output[0], node.input[0])
@@ -1378,7 +1413,7 @@ _set_shape_type_op_any_known = {
     "Cast": _set_shape_type_op_any_cast,
     "Concat": _set_shape_type_op_any_concat,
     "Conv": _set_shape_type_op_any_conv_max_pool,
-    "Expand": _set_shape_type_op_any_reshape,
+    "Expand": _set_shape_type_op_any_expand,
     "Gather": _set_shape_type_op_any_gather,
     "GatherElements": _set_shape_type_op_any_gather_elements,
     "Gemm": _set_shape_type_op_any_gemm,
