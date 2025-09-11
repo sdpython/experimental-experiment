@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional
+from typing import List, Optional, Tuple, Union
 import numpy as np
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types
@@ -737,3 +737,187 @@ class StaticConcatReshapePattern(PatternOptimization):
         if keep_concat:
             return [concat, *res]
         return res
+
+
+class EditDistanceReshapePattern(PatternOptimization):
+    """
+    Tries to reduce the number of nodes in the sequence Concat + Reshape
+    by replacing one of the dimension by -1 or 0.
+    The pattern tries to align shape information to infer a static shape.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    @classmethod
+    def _prod(cls, sequence):
+        p = 1
+        for s in sequence:
+            if not isinstance(s, int):
+                return None
+            p *= s
+        return p
+
+    @classmethod
+    def _align_shapes(
+        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int]]
+    ) -> Optional[Tuple[int, ...]]:
+        """
+        Compute the edit distance (Levenshtein distance) between two shapes and
+        tries to align them in order to return a reshape argument with only integers.
+        """
+        assert all(
+            isinstance(s, (int, str)) and s != -1 for s in s1
+        ), f"Unsupported shape s1={s1}"
+        assert all(
+            isinstance(s, (int, str)) and s != -1 for s in s2
+        ), f"Unsupported shape s2={s2}"
+
+        eps = 0.5
+        mat = np.full((len(s1) + 1, len(s2) + 1), max(len(s1), len(s2)) + 10, dtype=np.float32)
+        mat[0, 0] = 0
+        predecessor = {}
+        for i in range(1, len(s1) + 1):
+            for j in range(1, len(s2) + 1):
+                c_cmp = mat[i - 1, j - 1] + (
+                    0
+                    if s1[i - 1] == s2[j - 1]
+                    else (
+                        1 if isinstance(s1[i - 1], int) and isinstance(s2[j - 1], int) else eps
+                    )
+                )
+
+                options = [(c_cmp, (1, 1, i - 1, j - 1))]
+
+                for ki in range(1, 5):
+                    if i < ki:
+                        break
+                    ss1 = s1[i - ki : i]
+                    vi = cls._prod(ss1)
+                    for kj in range(1, 5):
+                        if kj == 1 and ki == 1:
+                            continue
+                        if i - ki == 0 and j - kj != 0:
+                            continue
+                        if i - ki != 0 and j - kj == 0:
+                            continue
+                        if j < kj:
+                            break
+                        ss2 = s2[j - kj : j]
+                        vj = cls._prod(ss2)
+                        if vi is None or vj is None:
+                            c1 = sum(isinstance(_, str) for _ in ss1)
+                            c2 = sum(isinstance(_, str) for _ in ss2)
+                            if c1 <= 1 and c2 <= 1:
+                                options.append(
+                                    (mat[i - ki, j - kj] + eps, (ki, kj, i - ki, j - kj))
+                                )
+                        elif vi == vj:
+                            options.append((mat[i - ki, j - kj], (ki, kj, i - ki, j - kj)))
+                mini = min(options)
+                mat[i, j], predecessor[i, j] = mini
+
+        # computed
+        if mat[len(s1), len(s2)] >= 1:
+            # No possible equivalence.
+            return None
+
+        last = predecessor[len(s1), len(s2)]
+        path = []
+        while last[2:] in predecessor:
+            path.append(last)
+            last = predecessor[last[2:]]
+        path.append(last)
+
+        new_shape = []
+        mone = 0
+        for di, dj, pi, pj in reversed(path):
+            sh1, sh2 = s1[pi : pi + di], s2[pj : pj + dj]
+            if all(isinstance(_, int) for _ in sh2):
+                new_shape.extend(sh2)
+            elif all(isinstance(_, int) for _ in sh1):
+                if len(sh2) == 1:
+                    new_shape.append(cls._prod(sh1))
+                else:
+                    return None
+            elif len(sh1) == len(sh2) == 1:
+                # They are equal and both strings
+                if pi == pj and s1[pi] == s2[pj]:
+                    new_shape.append(0)
+                else:
+                    new_shape.append(-1)
+                    mone += 1
+            else:
+                for i in sh2:
+                    if isinstance(i, str):
+                        new_shape.append(-1)
+                        mone += 1
+                    else:
+                        new_shape.append(i)
+
+        if mone > 1:
+            return None
+        return tuple(new_shape)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        sh1 = g.get_shape(node.input[0])
+        sh2 = g.get_shape(node.output[0])
+        aligned_reshape = self._align_shapes(sh1, sh2)
+        if aligned_reshape is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        assert len(aligned_reshape) == g.get_rank(node.output[0]), (
+            f"Issue with input shape {g.get_shape(node.input[0])}, "
+            f"output shape={g.get_shape(node.output[0])}, "
+            f"proposed new_shape {aligned_reshape}"
+        )
+        not_cst = []
+        gen = g.node_before(node.input[1])
+        if gen is None or gen.op_type != "Concat":
+            return self.none(node, inspect.currentframe().f_lineno)
+        for i in gen.input:
+            if g.is_constant(i):
+                cst = g.get_computed_constant(i)
+                if cst is None:
+                    return self.none(node, inspect.currentframe().f_lineno)
+            else:
+                not_cst.append(i)
+
+        if len(not_cst) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        reshape: NodeProto,
+    ) -> List[NodeProto]:
+        aligned_reshape = self._align_shapes(
+            g.get_shape(reshape.input[0]), g.get_shape(reshape.output[0])
+        )
+        new_shape = g.make_initializer(
+            "",
+            np.array(aligned_reshape, dtype=np.int64),
+            source="EditDistanceReshapePattern.m1",
+        )
+        return [
+            g.make_node(
+                "Reshape",
+                [reshape.input[0], new_shape],
+                reshape.output,
+                name=f"{self.__class__.__name__}--{reshape.name}",
+                doc_string=reshape.doc_string,
+            )
+        ]

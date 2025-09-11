@@ -4257,10 +4257,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if 0 in shape_cst:
                         if self.has_shape(node.input[0]):
                             sh = self.get_shape(node.input[0])
-                            assert len(sh) >= len(shape_cst), (
+                            shape_cst_last_zero = shape_cst[
+                                : len(shape_cst) - 1 - shape_cst[::-1].index(0) + 1
+                            ]
+                            assert len(sh) >= len(shape_cst_last_zero), (
                                 f"Shape discrepancies for name={node.input[0]!r} "
                                 f"node.name={node.name!r} "
-                                f"between sh={sh} and shape_cst={shape_cst}"
+                                f"between sh={sh} and shape_cst={shape_cst}, "
+                                f"shape_cst_last_zero={shape_cst_last_zero}"
                                 f"\ncst={cst}{self.get_debug_msg()}"
                             )
                             shape_cst = tuple(
