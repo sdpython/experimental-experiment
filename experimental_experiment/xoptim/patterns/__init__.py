@@ -48,6 +48,7 @@ from .onnx_reshape import (
     Reshape2Of3Pattern,
     ReshapeReshapeBinaryPattern,
     ReshapeReshapePattern,
+    StaticConcatReshapePattern,
 )
 from .onnx_rotary import RotaryConcatPartPattern, RotaryEmbeddingPattern
 from .onnx_sequence import SequenceConstructAtPattern
@@ -162,6 +163,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SplitConcatPattern(verbose=verbose),
         SqueezeAddPattern(verbose=verbose),
         SqueezeUnsqueezePattern(verbose=verbose),
+        StaticConcatReshapePattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
         SwitchReshapeActivationPattern(verbose=verbose),

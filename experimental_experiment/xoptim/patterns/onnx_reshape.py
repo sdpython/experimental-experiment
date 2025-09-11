@@ -551,6 +551,118 @@ class ConcatReshapePattern(PatternOptimization):
         if gen is None or gen.op_type != "Concat":
             return self.none(node, inspect.currentframe().f_lineno)
 
+        op_types = {}
+        for i in gen.input:
+            if g.is_constant(i):
+                cst = g.get_computed_constant(i)
+                if cst is None:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                li = cst.tolist()
+                if -1 in li:
+                    return self.none(node, inspect.currentframe().f_lineno)
+            else:
+                p = g.node_before(i)
+                if p is None:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                op_types[p.op_type] = op_types.get(p.op_type, 0) + 1
+
+        if len(op_types) == 1:
+            # only ony operator
+            op_type = list(op_types)[0]  # noqa: RUF015
+            if op_type != "Shape":
+                return self.none(node, inspect.currentframe().f_lineno)
+            # Then we can replace any of the node by -1.
+        elif len(op_types) == 2:
+            if "Shape" not in set(op_types):
+                return self.none(node, inspect.currentframe().f_lineno)
+            total = sum(op_types.values())
+            if op_types["Shape"] != total - 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        if g.is_used_more_than_once(node.input[1]):
+            # Not really safe to do the replacement.
+            return MatchResult(self, [gen, node], self.apply)
+        return MatchResult(self, [gen, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        concat: NodeProto,
+        reshape: NodeProto,
+    ) -> List[NodeProto]:
+        m1 = g.make_initializer(
+            "",
+            np.array([-1], dtype=np.int64),
+            source="ConcatReshapePattern.m1",
+        )
+        inputs = []
+        done = False
+        last_shape = -1
+        for i in concat.input:
+            if g.is_constant(i):
+                inputs.append(i)
+                continue
+            p = g.node_before(i)
+            if p is None:
+                inputs.append(i)
+                continue
+            if p.op_type != "Shape":
+                inputs.append(m1)
+                done = True
+                continue
+            last_shape = len(inputs)
+            inputs.append(i)
+
+        if not done:
+            # only shape
+            assert last_shape != -1, f"last_shape={last_shape} but done={done}, unexpected"
+            inputs[last_shape] = m1
+
+        keep_concat = g.is_used_more_than_once(concat.output[0])
+        new_output = g.unique_name(f"{concat.output[0]}--concat")
+        res = [
+            g.make_node(
+                "Concat",
+                inputs,
+                [new_output],
+                name=f"{self.__class__.__name__}--{concat.name}",
+                doc_string=concat.doc_string,
+                axis=0,
+            ),
+            g.make_node(
+                "Reshape",
+                [reshape.input[0], new_output],
+                reshape.output,
+                name=f"{self.__class__.__name__}--{reshape.name}",
+                doc_string=concat.doc_string,
+            ),
+        ]
+        if keep_concat:
+            return [concat, *res]
+        return res
+
+
+class StaticConcatReshapePattern(PatternOptimization):
+    """
+    Tries to reduce the number of nodes in the sequence Concat + Reshape
+    by replacing one of the dimension by -1.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+        gen = g.node_before(node.input[1])
+        if gen is None or gen.op_type != "Concat":
+            return self.none(node, inspect.currentframe().f_lineno)
+
         not_cst = []
         for i in gen.input:
             if g.is_constant(i):
