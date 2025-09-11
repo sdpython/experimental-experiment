@@ -868,14 +868,21 @@ class EditDistanceReshapePattern(PatternOptimization):
         if node.op_type != "Reshape" or node.domain != "":
             return self.none()
 
-        if not g.has_shape(node.input[0]) or not g.has_shape(node.output[0]):
-            self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
 
-        aligned_reshape = self._align_shapes(
-            g.get_shape(node.input[0]), g.get_shape(node.output[0])
-        )
+        sh1 = g.get_shape(node.input[0])
+        sh2 = g.get_shape(node.output[0])
+        aligned_reshape = self._align_shapes(sh1, sh2)
         if aligned_reshape is None:
-            self.none(node, inspect.currentframe().f_lineno)
+            return self.none(node, inspect.currentframe().f_lineno)
+        assert len(aligned_reshape) == g.get_rank(node.output[0]), (
+            f"Issue with input shape {g.get_shape(node.input[0])}, "
+            f"output shape={g.get_shape(node.output[0])}, "
+            f"proposed new_shape {aligned_reshape}"
+        )
         not_cst = []
         gen = g.node_before(node.input[1])
         if gen is None or gen.op_type != "Concat":
