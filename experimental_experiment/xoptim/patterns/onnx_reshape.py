@@ -551,7 +551,7 @@ class ConcatReshapePattern(PatternOptimization):
         if gen is None or gen.op_type != "Concat":
             return self.none(node, inspect.currentframe().f_lineno)
 
-        op_types = {}
+        not_cst = []
         for i in gen.input:
             if g.is_constant(i):
                 cst = g.get_computed_constant(i)
@@ -560,25 +560,13 @@ class ConcatReshapePattern(PatternOptimization):
                 li = cst.tolist()
                 if -1 in li:
                     return self.none(node, inspect.currentframe().f_lineno)
+            elif g.has_shape(i) and g.get_shape(i) == (1,):
+                not_cst.append(i)
             else:
-                p = g.node_before(i)
-                if p is None:
-                    return self.none(node, inspect.currentframe().f_lineno)
-                op_types[p.op_type] = op_types.get(p.op_type, 0) + 1
-
-        if len(op_types) == 1:
-            # only ony operator
-            op_type = list(op_types)[0]  # noqa: RUF015
-            if op_type != "Shape":
-                return self.none(node, inspect.currentframe().f_lineno)
-            # Then we can replace any of the node by -1.
-        elif len(op_types) == 2:
-            if "Shape" not in set(op_types):
-                return self.none(node, inspect.currentframe().f_lineno)
-            total = sum(op_types.values())
-            if op_types["Shape"] != total - 1:
                 return self.none(node, inspect.currentframe().f_lineno)
 
+        if len(not_cst) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(node.input[1]):
             # Not really safe to do the replacement.
             return MatchResult(self, [gen, node], self.apply)
@@ -597,26 +585,23 @@ class ConcatReshapePattern(PatternOptimization):
         )
         inputs = []
         done = False
-        last_shape = -1
         for i in concat.input:
             if g.is_constant(i):
                 inputs.append(i)
                 continue
-            p = g.node_before(i)
-            if p is None:
-                inputs.append(i)
-                continue
-            if p.op_type != "Shape":
+            if g.has_shape(i) and g.get_shape(i) == (1,):
+                assert not done, f"-1 was already added, input {i!r} cannot be replaced by -1."
                 inputs.append(m1)
                 done = True
                 continue
-            last_shape = len(inputs)
-            inputs.append(i)
+            raise RuntimeError(
+                f"The pattern was allowed but input {i!r} "
+                f"is not a constant and its shape is not (1,)."
+            )
 
-        if not done:
-            # only shape
-            assert last_shape != -1, f"last_shape={last_shape} but done={done}, unexpected"
-            inputs[last_shape] = m1
+        assert (
+            done
+        ), f"-1 was not inserted, pattern {self.__class__.__name__} should not have matched."
 
         keep_concat = g.is_used_more_than_once(concat.output[0])
         new_output = g.unique_name(f"{concat.output[0]}--concat")
