@@ -4929,8 +4929,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "test",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
-                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TFLOAT, ["N"]),
                 ],
                 [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
                 [onh.from_array(np.array([0], dtype=np.float32), name="zero")],
@@ -5045,8 +5045,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "test",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
-                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TFLOAT, ["N"]),
                 ],
                 [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
                 [
@@ -5200,10 +5200,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["X", "d"], ["Y"]),
                 ],
                 "test",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", "b", "c", "d"]),
-                ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", "b", "d", "c"])],
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "d", "c"])],
                 [
                     onh.from_array(np.array([2], dtype=np.int64), name="I1"),
                     onh.from_array(np.array([1], dtype=np.int64), name="I2"),
@@ -5242,10 +5240,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                     oh.make_node("Reshape", ["X", "d"], ["Y"]),
                 ],
                 "test",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", "b", "c", "d"]),
-                ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", "b", "d", "c"])],
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "d", "c"])],
                 [
                     onh.from_array(np.array([2], dtype=np.int64), name="I1"),
                     onh.from_array(np.array([1], dtype=np.int64), name="I2"),
@@ -5322,11 +5318,11 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "test",
                 [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["a", "b", "c", "d"]),
-                    oh.make_tensor_value_info("m1", TensorProto.FLOAT, ["c", "d"]),
-                    oh.make_tensor_value_info("m2", TensorProto.FLOAT, ["c", "d"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"]),
+                    oh.make_tensor_value_info("m1", TFLOAT, ["c", "d"]),
+                    oh.make_tensor_value_info("m2", TFLOAT, ["c", "d"]),
                 ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, ["a", "b", "c", "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "d"])],
             ),
             opset_imports=[oh.make_operatorsetid("", opset)],
             ir_version=10,
@@ -5364,6 +5360,41 @@ class TestGraphPatternOptimization(ExtTestCase):
             ref = cls(opt_onx)
             zz = ref.run(None, feeds)[0]
             self.assertEqualArray(z, zz)
+
+    def test_static_concat_reshape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["D2"], start=2, end=3),
+                    oh.make_node("Concat", ["I1", "D2"], ["d"], axis=0),
+                    oh.make_node("Reshape", ["X", "d"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 3, "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [6, "d"])],
+                [onh.from_array(np.array([6], dtype=np.int64), name="I1")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        # check_model(model)
+
+        feeds = {"X": np.arange(72).reshape((2, 3, 12)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="StaticConcatReshape", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Reshape"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
 
 
 if __name__ == "__main__":
