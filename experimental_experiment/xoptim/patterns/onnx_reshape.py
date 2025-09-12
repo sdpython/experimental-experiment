@@ -739,7 +739,7 @@ class StaticConcatReshapePattern(PatternOptimization):
         return res
 
 
-class EditDistanceReshapePattern(PatternOptimization):
+class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
     """
     Tries to reduce the number of nodes in the sequence Concat + Reshape
     by replacing one of the dimension by -1 or 0.
@@ -911,7 +911,7 @@ class EditDistanceReshapePattern(PatternOptimization):
         ]
 
 
-class ReshapeIsSqueezePattern(PatternOptimization):
+class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
     """
     Replaces a replaces by a squeeze or unsqueeze pattern if possible.
     It is only available for opset < 18.

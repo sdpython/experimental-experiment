@@ -1,15 +1,17 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
-from ...xbuilder._onnx_helper import element_wise_binary_op_types, unary_like_op_types
+from ...xbuilder._onnx_helper import (
+    element_wise_binary_op_types,
+    element_wise_op_cmp_types,
+    unary_like_op_types,
+)
 from ...xbuilder._shape_helper import all_int
 from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ExpandPattern(PatternOptimization):
-    """
-    Checks that a Expand is really needed.
-    """
+    """Checks that a Expand is really needed."""
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
@@ -61,7 +63,7 @@ class ExpandBroadcastPattern(PatternOptimization):
     do the expansion by broadcasting one input.
     """
 
-    _op_types = element_wise_binary_op_types()
+    _op_types = element_wise_binary_op_types() | element_wise_op_cmp_types()
 
     def match(
         self,

@@ -6,8 +6,8 @@ import onnx.numpy_helper as onh
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xoptim.patterns.onnx_reshape import (
-    EditDistanceReshapePattern as EDRP,
-    ReshapeIsSqueezePattern as RISP,
+    ShapeBasedEditDistanceReshapePattern as EDRP,
+    ShapeBasedReshapeIsSqueezePattern as RISP,
 )
 
 align = EDRP._align_shapes

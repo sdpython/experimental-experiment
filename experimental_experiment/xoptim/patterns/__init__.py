@@ -43,13 +43,13 @@ from .onnx_matmul import (
 from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
     ConcatReshapePattern,
-    EditDistanceReshapePattern,
     ReshapePattern,
     ReduceReshapePattern,
     Reshape2Of3Pattern,
-    ReshapeIsSqueezePattern,
     ReshapeReshapeBinaryPattern,
     ReshapeReshapePattern,
+    ShapeBasedEditDistanceReshapePattern,
+    ShapeBasedReshapeIsSqueezePattern,
     StaticConcatReshapePattern,
 )
 from .onnx_rotary import RotaryConcatPartPattern, RotaryEmbeddingPattern
@@ -133,7 +133,6 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ConcatReshapePattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
-        EditDistanceReshapePattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),
@@ -153,7 +152,8 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         GemmTransposePattern(verbose=verbose),
         MatMulReshape2Of3Pattern(verbose=verbose),
         MulMulMatMulPattern(verbose=verbose),
-        ReshapeIsSqueezePattern(verbose=verbose),
+        ShapeBasedEditDistanceReshapePattern(verbose=verbose),
+        ShapeBasedReshapeIsSqueezePattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
         RotaryEmbeddingPattern(verbose=verbose),
