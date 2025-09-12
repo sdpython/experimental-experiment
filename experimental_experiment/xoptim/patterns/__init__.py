@@ -47,6 +47,7 @@ from .onnx_reshape import (
     ReshapePattern,
     ReduceReshapePattern,
     Reshape2Of3Pattern,
+    ReshapeIsSqueezePattern,
     ReshapeReshapeBinaryPattern,
     ReshapeReshapePattern,
     StaticConcatReshapePattern,
@@ -69,9 +70,7 @@ from .onnx_unsqueeze import (
 
 
 class AlmostDoNothingPattern(PatternOptimization):
-    """
-    Checks that a Expand is really needed.
-    """
+    """Checks that a Expand is really needed."""
 
     n_count = 0
 
@@ -154,6 +153,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         GemmTransposePattern(verbose=verbose),
         MatMulReshape2Of3Pattern(verbose=verbose),
         MulMulMatMulPattern(verbose=verbose),
+        ReshapeIsSqueezePattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
         RotaryEmbeddingPattern(verbose=verbose),

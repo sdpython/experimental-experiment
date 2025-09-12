@@ -274,6 +274,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
         self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
+        self._debug_foldnot = int(os.environ.get("ONNXFOLDNOT", "0"))
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_node_output = os.environ.get("ONNXSTOPOUTPUT", "")
@@ -495,6 +496,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
+        self._debug_foldnot = int(os.environ.get("ONNXFOLDNOT", "0"))
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -6820,6 +6822,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 # this is an initiliazer
                 if self.verbose > 4:
                     print(f"[GraphBuilder-{self._hash()}.constant_folding] initializer: {k}")
+                if self._debug_foldnot and k not in self.initializers_dict:
+                    print(
+                        f"[GraphBuilder.constant_folding.0] unable to fold {k!r} (v is None)"
+                    )
                 continue
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for k={k!r}"
             if self.verbose > 4:
@@ -6829,6 +6835,12 @@ class GraphBuilder(_GraphBuilderRuntime):
                 and v.op_type not in options
                 and (v.domain, v.op_type) not in options
             ):
+                if self._debug_foldnot:
+                    print(
+                        f"[GraphBuilder.constant_folding.P] unable to fold "
+                        f"{v.op_type}{v.input} -> {v.output}  [{v.name}], k={k!r}, "
+                        f"options={options}"
+                    )
                 continue
             # a node
             if all(map(self.is_constant, v.input)):
@@ -6836,6 +6848,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 output, feeds = self.compute_constant(k, exc=False)
                 if output is None:
                     # Evaluation failed.
+                    if self._debug_foldnot:
+                        print(
+                            f"[GraphBuilder.constant_folding.A] unable to fold "
+                            f"{v.op_type}{v.input} -> {v.output}  [{v.name}], k={k!r}"
+                        )
                     assert not self._debug_constant_folding, (
                         f"constant folding unable to fold node [{self.pretty_node(v)}], "
                         f"self.compute_constant(k, exc=False)="
@@ -6879,6 +6896,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                         )
                         stats_cf["new_inits"] += 1
                     else:
+                        if self._debug_foldnot:
+                            print(
+                                f"[GraphBuilder.constant_folding.B] unable to fold "
+                                f"{v.op_type}{v.input} -> {v.output}  [{v.name}]"
+                            )
                         updates[name] = v
                     if self.verbose > 3:
                         print(
@@ -6894,6 +6916,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         for node in self.nodes:
             if self.do_not_remove(node):
                 new_nodes.append(node)
+                if self._debug_foldnot:
+                    print(
+                        f"[GraphBuilder.constant_folding.C] unable to fold "
+                        f"{node.op_type}{node.input} -> {node.output}  [{node.name}]"
+                    )
                 continue
             if tuple(node.output) in node_to_remove:
                 continue

@@ -867,7 +867,6 @@ class EditDistanceReshapePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Reshape" or node.domain != "":
             return self.none()
-
         if not g.has_shape(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_shape(node.output[0]):
@@ -883,19 +882,8 @@ class EditDistanceReshapePattern(PatternOptimization):
             f"output shape={g.get_shape(node.output[0])}, "
             f"proposed new_shape {aligned_reshape}"
         )
-        not_cst = []
         gen = g.node_before(node.input[1])
         if gen is None or gen.op_type != "Concat":
-            return self.none(node, inspect.currentframe().f_lineno)
-        for i in gen.input:
-            if g.is_constant(i):
-                cst = g.get_computed_constant(i)
-                if cst is None:
-                    return self.none(node, inspect.currentframe().f_lineno)
-            else:
-                not_cst.append(i)
-
-        if len(not_cst) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node], self.apply, insert_at=node)
 
@@ -916,6 +904,97 @@ class EditDistanceReshapePattern(PatternOptimization):
             g.make_node(
                 "Reshape",
                 [reshape.input[0], new_shape],
+                reshape.output,
+                name=f"{self.__class__.__name__}--{reshape.name}",
+                doc_string=reshape.doc_string,
+            )
+        ]
+
+
+class ReshapeIsSqueezePattern(PatternOptimization):
+    """
+    Replaces a replaces by a squeeze or unsqueeze pattern if possible.
+    It is only available for opset < 18.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    @classmethod
+    def _squeeze_axes(
+        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int]]
+    ) -> Optional[Tuple[int, ...]]:
+        if s1 == s2:
+            return None, None
+        sh1 = tuple(s for s in s1 if s != 1)
+        sh2 = tuple(s for s in s2 if s != 1)
+        if sh1 != sh2:
+            return None, None
+        if len(s1) < len(s2):
+            op_type = "Unsqueeze"
+            axes = cls._find_unsqueeze_axes(s1, s2)
+        else:
+            op_type = "Squeeze"
+            axes = cls._find_squeeze_axes(s1, s2)
+        if axes is None:
+            return None, None
+        return op_type, axes
+
+    @classmethod
+    def _find_squeeze_axes(
+        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int], ...]
+    ) -> Tuple[int, ...]:
+        sh1 = tuple(s for s in s1 if s != 1)
+        if sh1 != s2:
+            return None
+        return tuple(i for i, s in enumerate(s1) if s == 1)
+
+    @classmethod
+    def _find_unsqueeze_axes(
+        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int], ...]
+    ) -> Tuple[int, ...]:
+        return cls._find_squeeze_axes(s2, s1)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if g.main_opset < 18:
+            return self.none()
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        sh1 = g.get_shape(node.input[0])
+        sh2 = g.get_shape(node.output[0])
+        op_type, _axes = self._squeeze_axes(sh1, sh2)
+        if op_type is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        reshape: NodeProto,
+    ) -> List[NodeProto]:
+        op_type, axes = self._squeeze_axes(
+            g.get_shape(reshape.input[0]), g.get_shape(reshape.output[0])
+        )
+        new_axes = g.make_initializer(
+            "",
+            np.array(axes, dtype=np.int64),
+            source="ReshapeIsSqueezePattern.m1",
+        )
+        return [
+            g.make_node(
+                op_type,
+                [reshape.input[0], new_axes],
                 reshape.output,
                 name=f"{self.__class__.__name__}--{reshape.name}",
                 doc_string=reshape.doc_string,
