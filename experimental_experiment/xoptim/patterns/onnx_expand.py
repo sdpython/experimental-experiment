@@ -1,5 +1,6 @@
 import inspect
-from typing import List, Optional
+from typing import List, Optional, Tuple, Union
+import numpy as np
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import (
     element_wise_binary_op_types,
@@ -209,3 +210,76 @@ class ExpandSwapPattern(PatternOptimization):
             doc_string=node.doc_string,
         )
         return [unary, expand]
+
+
+class ShapeBasedStaticExpandPattern(PatternOptimization):
+    """
+    Compares input and output shapes to tell if the expand
+    can uses a constant as a second input.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    @classmethod
+    def _find_expand_shape(
+        cls, sh1: Tuple[Union[str, int], ...], sh2: Tuple[Union[str, int], ...]
+    ) -> Tuple[int, ...]:
+        expand_shape = []
+        for s1, s2 in zip(sh1, sh2):
+            if s1 == s2:
+                expand_shape.append(1)
+                continue
+            if not isinstance(s1, int) or not isinstance(s2, int):
+                return None
+            expand_shape.append(s2)
+        return tuple(expand_shape)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Expand" or node.domain != "":
+            return self.none()
+        if g.is_constant(node.input[1]):
+            # already done
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        sh1 = g.get_shape(node.input[0])
+        sh2 = g.get_shape(node.output[0])
+        assert len(sh1) == len(
+            sh2
+        ), f"Ranks disagree: shape({node.input[0]})={sh1} and shape({node.output[0]})={sh2}"
+        expand_shape = self._find_expand_shape(sh1, sh2)
+        if expand_shape is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        reshape: NodeProto,
+    ) -> List[NodeProto]:
+        expand_shape = self._find_expand_shape(
+            g.get_shape(reshape.input[0]), g.get_shape(reshape.output[0])
+        )
+        new_shape = g.make_initializer(
+            "",
+            np.array(expand_shape, dtype=np.int64),
+            source="StaticExpandPattern.m1",
+        )
+        return [
+            g.make_node(
+                "Expand",
+                [reshape.input[0], new_shape],
+                reshape.output,
+                name=f"{self.__class__.__name__}--{reshape.name}",
+                doc_string=reshape.doc_string,
+            )
+        ]

@@ -17,7 +17,12 @@ from .onnx_constants import ConstantToInitializerPattern  # noqa: F401
 from .onnx_conv import ConvBiasNullPattern
 from .onnx_dropout import DropoutPattern
 from .onnx_equal import UnsqueezeEqualPattern
-from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
+from .onnx_expand import (
+    ExpandPattern,
+    ExpandBroadcastPattern,
+    ExpandSwapPattern,
+    ShapeBasedStaticExpandPattern,
+)
 from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
 from .onnx_layer_normalization import (
     BatchNormalizationPattern,
@@ -153,6 +158,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         MatMulReshape2Of3Pattern(verbose=verbose),
         MulMulMatMulPattern(verbose=verbose),
         ShapeBasedEditDistanceReshapePattern(verbose=verbose),
+        ShapeBasedStaticExpandPattern(verbose=verbose),
         ShapeBasedReshapeIsSqueezePattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
