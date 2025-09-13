@@ -17,7 +17,12 @@ from .onnx_constants import ConstantToInitializerPattern  # noqa: F401
 from .onnx_conv import ConvBiasNullPattern
 from .onnx_dropout import DropoutPattern
 from .onnx_equal import UnsqueezeEqualPattern
-from .onnx_expand import ExpandPattern, ExpandBroadcastPattern, ExpandSwapPattern
+from .onnx_expand import (
+    ExpandPattern,
+    ExpandBroadcastPattern,
+    ExpandSwapPattern,
+    ShapeBasedStaticExpandPattern,
+)
 from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
 from .onnx_layer_normalization import (
     BatchNormalizationPattern,
@@ -43,12 +48,13 @@ from .onnx_matmul import (
 from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
     ConcatReshapePattern,
-    EditDistanceReshapePattern,
     ReshapePattern,
     ReduceReshapePattern,
     Reshape2Of3Pattern,
     ReshapeReshapeBinaryPattern,
     ReshapeReshapePattern,
+    ShapeBasedEditDistanceReshapePattern,
+    ShapeBasedReshapeIsSqueezePattern,
     StaticConcatReshapePattern,
 )
 from .onnx_rotary import RotaryConcatPartPattern, RotaryEmbeddingPattern
@@ -69,9 +75,7 @@ from .onnx_unsqueeze import (
 
 
 class AlmostDoNothingPattern(PatternOptimization):
-    """
-    Checks that a Expand is really needed.
-    """
+    """Checks that a Expand is really needed."""
 
     n_count = 0
 
@@ -134,7 +138,6 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ConcatReshapePattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
-        EditDistanceReshapePattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),
@@ -154,6 +157,9 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         GemmTransposePattern(verbose=verbose),
         MatMulReshape2Of3Pattern(verbose=verbose),
         MulMulMatMulPattern(verbose=verbose),
+        ShapeBasedEditDistanceReshapePattern(verbose=verbose),
+        ShapeBasedStaticExpandPattern(verbose=verbose),
+        ShapeBasedReshapeIsSqueezePattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
         RotaryEmbeddingPattern(verbose=verbose),

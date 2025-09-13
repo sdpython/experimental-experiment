@@ -3,6 +3,8 @@ from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xbuilder.expression_dimension import (
     Expression,
     parse_expression,
+    simplify_expression,
+    simplify_two_expressions,
 )
 
 
@@ -30,6 +32,21 @@ class TestDimension(ExtTestCase):
         e = parse_expression(expr, dict(s3=8))
         self.assertIsInstance(e, Expression)
         self.assertEqual(repr(e), "Expression('32//s3')")
+
+    def test_simplify_expression(self):
+        self.assertEqual(simplify_expression("x - y + y"), "x")
+        self.assertEqual(simplify_expression("2*x + 3*x - x"), "4*x")
+        self.assertEqual(simplify_expression("a + b - a"), "b")
+        self.assertEqual(simplify_expression("5 + x - 2 + 3"), "x+6")
+        self.assertEqual(simplify_expression("x - x"), "0")
+
+    def test_simplify_expression2(self):
+        self.assertEqual(simplify_expression("5 + x - (2 + 3)"), "x")
+
+    def test_simplify_two_expressions(self):
+        self.assertEqual(
+            simplify_two_expressions("s52+seq_length", "s52+s70"), {"s70": -1, "seq_length": 1}
+        )
 
 
 if __name__ == "__main__":

@@ -2869,10 +2869,10 @@ class TestGraphPatternOptimization(ExtTestCase):
             )
             opt_onx = gr.to_onnx(optimize=True)
             self.assertEqual(
-                ["Mul", "LayerNormalization"],
+                ["LayerNormalization"],
                 [n.op_type for n in opt_onx.graph.node],
             )
-            self.assertEqual(2, len(opt_onx.graph.initializer))
+            self.assertEqual(1, len(opt_onx.graph.initializer))
             new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
             self.assertNotEqual(inputs, new_inputs)
 
@@ -2965,10 +2965,10 @@ class TestGraphPatternOptimization(ExtTestCase):
             )
             opt_onx = gr.to_onnx(optimize=True)
             self.assertEqual(
-                ["Mul", "LayerNormalization"],
+                ["LayerNormalization"],
                 [n.op_type for n in opt_onx.graph.node],
             )
-            self.assertEqual(2, len(opt_onx.graph.initializer))
+            self.assertEqual(1, len(opt_onx.graph.initializer))
             new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
             self.assertNotEqual(inputs, new_inputs)
 
@@ -5422,11 +5422,81 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=False,
             optimization_options=OptimizationOptions(
-                patterns="EditDistanceReshape", verbose=0
+                patterns="ShapeBasedEditDistanceReshape", verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Reshape"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_reshape_is_squeeze_reshape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["D2"]),
+                    oh.make_node("Concat", ["one", "D2", "one"], ["d"], axis=0),
+                    oh.make_node("Reshape", ["X", "d"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 3, "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [1, 2, 3, "d", 1])],
+                [onh.from_array(np.array([1], dtype=np.int64), name="one")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        # check_model(model)
+
+        feeds = {"X": np.arange(72).reshape((2, 3, 12)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="ShapeBasedReshapeIsSqueeze", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Unsqueeze"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_static_expand_reshape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["D2"], start=0, end=-1),
+                    oh.make_node("Concat", ["D2", "two"], ["d"], axis=0),
+                    oh.make_node("Expand", ["X", "d"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, 3, "d", 1])],
+                [oh.make_tensor_value_info("Y", TFLOAT, [2, 3, "d", 2])],
+                [onh.from_array(np.array([2], dtype=np.int64), name="two")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        # check_model(model)
+
+        feeds = {"X": np.arange(72).reshape((2, 3, 12, 1)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="ShapeBasedStaticExpand", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Expand"], [n.op_type for n in opt_onx.graph.node])
         ref = ExtendedReferenceEvaluator(opt_onx)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)

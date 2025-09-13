@@ -180,12 +180,12 @@ def element_wise_binary_op_types() -> Set[str]:
     """
     return {
         "Add",
+        "And",
         "Div",
         "Mul",
-        "Sub",
-        "And",
-        "Or",
         "Mod",
+        "Or",
+        "Sub",
         "Xor",
     }
 
