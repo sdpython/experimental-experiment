@@ -282,6 +282,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_quiet = int(os.environ.get("ONNXQUIET", "0"))
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
+        self._debug_dyn_dim = os.environ.get("ONNXDYNDIM","").split(",")
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -497,6 +498,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
         self._debug_foldnot = int(os.environ.get("ONNXFOLDNOT", "0"))
+        self._debug_dyn_dim = set(os.environ.get("ONNXDYNDIM", "").split(","))
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -1670,12 +1672,15 @@ class GraphBuilder(_GraphBuilderRuntime):
         name: Optional[str] = None,
     ):
         """Raises an exception if two shapes are not compatible."""
-        import torch
-
         assert len(old_shape) == len(shape), (
             f"Rank mismatch between previous shape {old_shape} and "
             f"new shape {shape} (name={name!r}){self.get_debug_msg()}"
         )
+        if self._debug_dyn_dim and (set(old_shape) | set(shape)) & self._debug_dyn_dim:
+            print(
+                f"[GraphBuilder._check_two_shapes_are_compatible] old_shape={old_shape}, "
+                f"shape={shape}, register_int={register_int}, name={name!r}"
+            )
         for d1, d2 in zip(old_shape, shape):
             if isinstance(d1, int) and isinstance(d2, int):
                 assert d1 == d2, (
@@ -1686,13 +1691,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
 
             d1_, d2_ = d1, d2
-            if isinstance(d1, torch.SymInt):
+            if isinstance(d1, self.torch.SymInt):
                 d1 = self._torch_sym_int_to_str(d1)
-            elif isinstance(d1, torch.export.dynamic_shapes._Dim):
+            elif isinstance(d1, self.torch.export.dynamic_shapes._Dim):
                 d1 = self._torch_sym_int_to_str(d1)
-            if isinstance(d2, torch.SymInt):
+            if isinstance(d2, self.torch.SymInt):
                 d2 = self._torch_sym_int_to_str(d2)
-            elif isinstance(d2, torch.export.dynamic_shapes._Dim):
+            elif isinstance(d2, self.torch.export.dynamic_shapes._Dim):
                 d2 = self._torch_sym_int_to_str(d2)
 
             if isinstance(d1, (int, str)) and isinstance(d2, (int, str)):
@@ -1765,6 +1770,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param exc: raise an exception if inconsistency
         :param allow_zero: the shape should not have a value equal to zero
         """
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
         if (self._debug_stop or self._debug_stop_shape) and name in (
             self._debug_stop,
             self._debug_stop_shape,
@@ -1773,8 +1780,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             raise AssertionError(
                 f"Requested stop, name={name!r}, shape={shape}{self.get_debug_msg()}"
             )
-        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
-        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
         assert not shape or not isinstance(shape[0], tuple), f"Unexpected shape {shape}"
         assert "torch.Size" not in str(shape), f"Unexpected shape {shape}"
         for sdim in shape:
@@ -1806,8 +1811,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         # ), f"Zero value in shape {shape} for {name!r}{self.get_debug_msg()}"
         if name in self._known_shapes:
             old_shape = self._known_shapes[name]
+            if self._debug_dyn_dim and self._debug_dyn_dim & (set(shape) | set(old_shape)):
+                print(
+                    f"[GraphBuilder.set_shape] set_shape({name!r}, {shape}), "
+                    f"old_shape={old_shape}"
+                )
             if len(shape) == len(old_shape) and set_if_more_precise:
-                if not self.is_more_precise(shape=shape, base=old_shape):
+                is_more_precise = self.is_more_precise(shape=shape, base=old_shape)
+                if not is_more_precise:
                     if old_shape == (0,) or shape == (0,):
                         if "warnings" not in self._debug_msg:
                             self._debug_msg["warnings"] = []
@@ -1830,6 +1841,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             else:
                 return
 
+        if self._debug_dyn_dim and set(shape) & self._debug_dyn_dim:
+            print(f"[GraphBuilder.set_shape] set_shape({name!r}, {shape})")
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_shape] {name}:{shape}")
         for s in shape:
@@ -3145,11 +3158,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(dim, int):
                 new_new_shape.append(dim)
                 continue
-            dim = dim.replace(" ", "")
-            while dim[0] == "(" and dim[-1] == ")":
-                dim = dim[1:-1]
+            dim = self._simplifies_dynamic_dimension_string(dim)
             new_new_shape.append(dim)
         return tuple(new_new_shape)
+
+    def _simplifies_dynamic_dimension_string(self, dim: str) -> str:
+        dim = dim.replace(" ", "")
+        while dim[0] == "(" and dim[-1] == ")":
+            dim = dim[1:-1]
+        if dim.startswith("0+"):
+            dim = dim[2:]
+        return dim
 
     def register_users(self, name: str, users: Iterable[str]):
         """
@@ -5537,7 +5556,9 @@ class GraphBuilder(_GraphBuilderRuntime):
         model.opset_import.extend(opsets)
         model.functions.extend(self.functions.values())
         model.ir_version = ir_version
-        # rewrite shape informations
+        # Rewrites shape informations, operates replacments
+        # to use as much as possible the dynamic dimension given
+        # by the user.
         self._add_shape_information(model)
 
         # final doc_string
@@ -5601,9 +5622,7 @@ class GraphBuilder(_GraphBuilderRuntime):
     def _rename_dynamic_dimension_inplace(
         self, obj: ValueInfoProto, replacements: Dict[str, str]
     ) -> ValueInfoProto:
-        """
-        Renames dynamic shapes into a proto.
-        """
+        """Renames dynamic shapes into a proto."""
         tensor_type = obj.type.tensor_type
         for d in tensor_type.shape.dim:
             if not d.dim_param:
@@ -5628,6 +5647,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             among each others, if True, the function renames as much as possible by using
             the names the user provides
         """
+        if self._debug_dyn_dim:
+            for k, v in sorted(self.constraints_.items()):
+                if k in self._debug_dyn_dim or v & self._debug_dyn_dim:
+                    print(f"[GraphBuilder._add_shape_information] {k} ~ {sorted(v)}")
 
         def _update(dd_flat, names):
             if dd_flat:

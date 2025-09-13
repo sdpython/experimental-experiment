@@ -253,9 +253,10 @@ class DynamoInterpreter:
             if len(node.users) > 0 and self.builder.has_shape(name):
                 # We should not raise an exception if the result is not used.
                 shape = self.builder.get_shape(name)
+                old_shape = self.builder.verify_dynamic_shape(exp_shape, add=False)
                 self.builder._check_two_shapes_are_compatible(
                     shape,  # new_shape (or shape infered with onnx node)
-                    tuple(exp_shape),  # old_shape
+                    old_shape,  # old_shape
                     name=name,
                     register_int=False,
                 )
