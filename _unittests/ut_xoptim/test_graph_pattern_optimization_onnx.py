@@ -2869,10 +2869,10 @@ class TestGraphPatternOptimization(ExtTestCase):
             )
             opt_onx = gr.to_onnx(optimize=True)
             self.assertEqual(
-                ["Mul", "LayerNormalization"],
+                ["LayerNormalization"],
                 [n.op_type for n in opt_onx.graph.node],
             )
-            self.assertEqual(2, len(opt_onx.graph.initializer))
+            self.assertEqual(1, len(opt_onx.graph.initializer))
             new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
             self.assertNotEqual(inputs, new_inputs)
 
@@ -2965,10 +2965,10 @@ class TestGraphPatternOptimization(ExtTestCase):
             )
             opt_onx = gr.to_onnx(optimize=True)
             self.assertEqual(
-                ["Mul", "LayerNormalization"],
+                ["LayerNormalization"],
                 [n.op_type for n in opt_onx.graph.node],
             )
-            self.assertEqual(2, len(opt_onx.graph.initializer))
+            self.assertEqual(1, len(opt_onx.graph.initializer))
             new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
             self.assertNotEqual(inputs, new_inputs)
 

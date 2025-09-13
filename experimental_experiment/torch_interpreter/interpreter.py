@@ -263,9 +263,7 @@ class DynamoInterpreter:
         return res
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
-        """
-        Retrieves an attribute.
-        """
+        """Retrieves an attribute."""
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.get_attr][{node.name}]")
         try:
@@ -340,9 +338,7 @@ class DynamoInterpreter:
         return node.name
 
     def make_nn_module_with_callable(self, f: Callable) -> "torch.nn.Module":  # noqa: F821
-        """
-        Wraps a function into a nn Module to export it.
-        """
+        """Wraps a function into a nn Module to export it."""
         sig = inspect.signature(f)
         if len(sig.parameters) == 3:
 
@@ -466,8 +462,7 @@ class DynamoInterpreter:
     def placeholder(self, node: "torch.fx.Node"):  # noqa: F821
         """
         placeholder for an input. The interpreter adds an Identity node
-        between the input names he wants and the name it has in the
-        graph module.
+        between the input names he wants and the name it has in the graph module.
         """
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.placeholder][{node.name}]")
@@ -665,9 +660,7 @@ class DynamoInterpreter:
         )
 
     def output(self, node):
-        """
-        Adds an output to the graph.
-        """
+        """Adds an output to the graph."""
         output_name = node.name
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.output][{output_name}]")
@@ -1380,9 +1373,7 @@ class DynamoInterpreter:
         )
 
     def call_function(self, node: "torch.fx.Node") -> Union[str, Tuple[str]]:  # noqa: F821
-        """
-        Called for a function.
-        """
+        """Called for a function."""
         aten_name = self._get_aten_name(node)
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
 
@@ -1557,9 +1548,7 @@ class DynamoInterpreter:
         return res
 
     def call_method(self, node: "torch.fx.Node") -> Union[str, Tuple[str]]:  # noqa: F821
-        """
-        Called for a method.
-        """
+        """Called for a method."""
         method_name = node.target
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_method][{method_name}]")
@@ -2192,17 +2181,13 @@ class DynamoInterpreter:
     def get_submodule_name(
         self, module_name: str, module: "torch.nn.Module"  # noqa: F821
     ) -> str:
-        """
-        Gets a submodule name, simple but unique.
-        """
+        """Gets a submodule name, simple but unique."""
         assert self.submodule_naming, "submodule_naming is null"
         assert self.parameter_naming, "parameter_naming is null"
         return self.submodule_naming(module_name, module)
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
-        """
-        Called for a module.
-        """
+        """Called for a module."""
 
         def raise_msg():
             return (
