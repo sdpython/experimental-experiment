@@ -3107,7 +3107,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         new_shape = []
         for dim, d in enumerate(shape):
             if isinstance(d, (self.torch.SymInt, str, self.WrapDim)):
-                dyn_name = self._get_dynamic_dimension(name, dim)
+                dyn_name = None if name is None else self._get_dynamic_dimension(name, dim)
                 if dyn_name is not None:
                     if add:
                         self.add_dynamic_object(dyn_name, dyn_name, parse=True)
