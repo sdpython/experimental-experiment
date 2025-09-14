@@ -5,6 +5,7 @@ from experimental_experiment.xbuilder.expression_dimension import (
     parse_expression,
     simplify_expression,
     simplify_two_expressions,
+    rename_expression,
 )
 
 
@@ -47,6 +48,9 @@ class TestDimension(ExtTestCase):
         self.assertEqual(
             simplify_two_expressions("s52+seq_length", "s52+s70"), {"s70": -1, "seq_length": 1}
         )
+
+    def test_rename_expression(self):
+        self.assertEqual("B+seq_length", rename_expression("s52+seq_length", {"s52": "B"}))
 
 
 if __name__ == "__main__":

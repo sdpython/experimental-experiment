@@ -91,9 +91,16 @@ def parse_expression(
 
 
 class ExpressionSimplifier(ast.NodeVisitor):
-    def __init__(self):
+    def __init__(self, expr: Optional[str] = None):
         self.coeffs = {}
         self.const = 0
+        self.expr = expr
+        self.success = True
+
+    def get_debug_msg(self) -> str:
+        if self.expr:
+            return f" expression={self.expr!r}"
+        return ""
 
     def visit_BinOp(self, node):
         if isinstance(node.op, ast.Add):
@@ -120,9 +127,12 @@ class ExpressionSimplifier(ast.NodeVisitor):
                     self.coeffs[node.right.id] = 0
                 self.coeffs[node.left.id] += node.right.value
             else:
-                raise NotImplementedError("Only supports coeff * var")
+                # unable to simplify
+                self.success = False
+                return
         else:
-            raise NotImplementedError(f"Unsupported operator {node.op}")
+            self.success = False
+            return
 
     def visit_Name(self, node):
         if node.id not in self.coeffs:
@@ -136,8 +146,11 @@ class ExpressionSimplifier(ast.NodeVisitor):
 def simplify_expression(expr: str) -> str:
     """Simplifies an expression."""
     tree = ast.parse(expr, mode="eval")
-    simp = ExpressionSimplifier()
+    simp = ExpressionSimplifier(expr=expr)
     simp.visit(tree.body)
+    if not simp.success:
+        # visit failed
+        return expr
 
     # Rebuild result
     terms = []
@@ -177,3 +190,29 @@ def simplify_two_expressions(expr1: str, expr2: str) -> str:
             terms[var] = 0
         terms[var] -= coeff
     return {k: v for k, v in terms.items() if v != 0}
+
+
+class RenameTransformer(ast.NodeTransformer):
+    def __init__(self, mapping):
+        super().__init__()
+        self.mapping = mapping
+
+    def visit_Name(self, node):
+        if node.id in self.mapping:
+            return ast.copy_location(ast.Name(id=self.mapping[node.id], ctx=node.ctx), node)
+        return node
+
+
+def rename_expression(expr: str, mapping: Dict[str, str]) -> str:
+    """
+    Renames variables in a Python expression using AST.
+
+    :param expr: Python expression as string
+    :param mapping: Mapping from old names to new names
+    :return: rransformed expression
+    """
+    tree = ast.parse(expr, mode="eval")
+    transformer = RenameTransformer(mapping)
+    new_tree = transformer.visit(tree)
+    ast.fix_missing_locations(new_tree)
+    return ast.unparse(new_tree).replace(" ", "")

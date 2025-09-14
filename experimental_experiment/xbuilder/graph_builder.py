@@ -78,6 +78,7 @@ from .expression_dimension import (
     parse_expression,
     parse_expression_tokens,
     simplify_two_expressions,
+    rename_expression,
 )
 from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
@@ -5621,16 +5622,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
         return obj
 
-    def _add_shape_information(
-        self, model: Union[GraphProto, ModelProto], update_dim_names: bool = True
-    ):
+    def _improves_dynamic_dimension_naming(self):
         """
-        Adds shape information to the model.
-
-        :param model: final onnx model
-        :param update_dim_names: the conversion usually detects many dimension equivalent
-            among each others, if True, the function renames as much as possible by using
-            the names the user provides
+        Improves the naming of the dynamic dimnesion based on what
+        the user gave.
         """
         if self._debug_dyn_dim:
             for k, v in sorted(self.constraints_.items()):
@@ -5669,110 +5664,119 @@ class GraphBuilder(_GraphBuilderRuntime):
                                 if r:
                                     continue
                                 # We add a constraint.
-                                if dim_name in self.constraints_:
-                                    self.constraints_[dim_name].add(sh)
-                                else:
-                                    self.constraints_[dim_name] = {sh}
-                                if sh in self.constraints_:
-                                    self.constraints_[sh].add(dim_name)
-                                else:
-                                    self.constraints_[sh] = {dim_name}
+                                self.add_to_constraints(dim_name, sh)
+                                self.add_to_constraints(sh, dim_name)
 
-        if update_dim_names:
-            _update(self.dynamic_dimensions_source_flat, self.input_names)
-            _update(self.output_dynamic_dimensions_source_flat, self.output_names)
-            self._improve_constraints()
+        _update(self.dynamic_dimensions_source_flat, self.input_names)
+        _update(self.output_dynamic_dimensions_source_flat, self.output_names)
+        self._improve_constraints()
 
-            # Before calling rename_dynamic_dimension, we expand the list.
-            expanded_constraints = {}
-            for k, v in self.constraints_.items():
-                expanded_constraints[k] = v.copy()
-                for i in v:
-                    expanded_constraints[k].add(i)
-                    if i not in expanded_constraints:
-                        expanded_constraints[i] = set()
-                    expanded_constraints[i] |= v
-                    expanded_constraints[i] |= {k}
+        # Before calling rename_dynamic_dimension, we expand the list.
+        expanded_constraints = {}
+        for k, v in self.constraints_.items():
+            expanded_constraints[k] = v.copy()
+            for i in v:
+                expanded_constraints[k].add(i)
+                if i not in expanded_constraints:
+                    expanded_constraints[i] = set()
+                expanded_constraints[i] |= v
+                expanded_constraints[i] |= {k}
 
-            # let's rename unknown input dimension with basic rules.
-            implicit_names = ["batch", "channel"]
-            original = set()
-            for k, v in self.dynamic_dimensions_source.items():
-                if not k.startswith("DYN"):
-                    original.add(k)
-                    continue
-                # We replace it with one implicit name.
-                axis = set(d["axis"] for d in v)
-                if len(axis) == 1:
-                    a = axis.pop()
-                    prefix = (
-                        "scalar"
-                        if a is None
-                        else (
-                            implicit_names[a]
-                            if a < len(implicit_names)
-                            else f"D{a - len(implicit_names)}"
-                        )
+        # let's rename unknown input dimension with basic rules.
+        implicit_names = ["batch", "channel"]
+        original = set()
+        for k, v in self.dynamic_dimensions_source.items():
+            if not k.startswith("DYN"):
+                original.add(k)
+                continue
+            # We replace it with one implicit name.
+            axis = set(d["axis"] for d in v)
+            if len(axis) == 1:
+                a = axis.pop()
+                prefix = (
+                    "scalar"
+                    if a is None
+                    else (
+                        implicit_names[a]
+                        if a < len(implicit_names)
+                        else f"D{a - len(implicit_names)}"
                     )
-                else:
-                    prefix = "g0"
-                    i = 0
-                    while prefix in original:
-                        i += 1
-                        prefix = f"g{i}"
-                if prefix not in expanded_constraints:
-                    expanded_constraints[prefix] = {k}
-                    if k in expanded_constraints:
-                        expanded_constraints[k].add(prefix)
-                    original.add(prefix)
-                    continue
-                n = f"{prefix}_{1}"
-                i = 1
-                while n in expanded_constraints:
-                    i += 1
-                    n = f"{prefix}_{i}"
-                expanded_constraints[n] = {k}
-                if k in expanded_constraints:
-                    expanded_constraints[k].add(n)
-                original.add(n)
-
-            # Let's process the output constraints.
-            assert self.output_dynamic_shapes is None or isinstance(
-                self.output_dynamic_shapes, dict
-            ), (
-                f"Not implemented when output_dynamic_shapes is not a dictionary, "
-                f"output_dynamic_shapes={self.output_dynamic_shapes}."
-            )
-            if self.output_dynamic_shapes is not None:
-                for k, v in self.output_dynamic_shapes.items():
-                    if not self.has_shape(k):
-                        continue
-                    shape = self.get_shape(k)
-                    for axis, dim in v.items():
-                        assert isinstance(dim, self.WrapDim), (
-                            f"Unexpected type {type(dim)} in output_dynamic_shapes="
-                            f"{self.output_dynamic_shapes}"
-                        )
-                        current_name = shape[axis]
-                        new_name = dim.name
-                        if current_name == new_name:
-                            continue
-                        if new_name not in expanded_constraints:
-                            expanded_constraints[new_name] = set()
-                        expanded_constraints[new_name].add(current_name)
-                        if current_name not in expanded_constraints:
-                            expanded_constraints[current_name] = set()
-                        expanded_constraints[current_name].add(new_name)
-
-            # once everything is defined, the rewriting can begin.
-            replacements = rename_dynamic_dimensions(expanded_constraints, original)
-            if self.verbose:
-                print(
-                    f"[GraphBuilder-{self._hash()}._add_shape_information] dynamic shapes "
-                    f"replacements={replacements}"
                 )
-        else:
-            replacements = {}
+            else:
+                prefix = "g0"
+                i = 0
+                while prefix in original:
+                    i += 1
+                    prefix = f"g{i}"
+            if prefix not in expanded_constraints:
+                expanded_constraints[prefix] = {k}
+                if k in expanded_constraints:
+                    expanded_constraints[k].add(prefix)
+                original.add(prefix)
+                continue
+            n = f"{prefix}_{1}"
+            i = 1
+            while n in expanded_constraints:
+                i += 1
+                n = f"{prefix}_{i}"
+            expanded_constraints[n] = {k}
+            if k in expanded_constraints:
+                expanded_constraints[k].add(n)
+            original.add(n)
+
+        # Let's process the output constraints.
+        assert self.output_dynamic_shapes is None or isinstance(
+            self.output_dynamic_shapes, dict
+        ), (
+            f"Not implemented when output_dynamic_shapes is not a dictionary, "
+            f"output_dynamic_shapes={self.output_dynamic_shapes}."
+        )
+        if self.output_dynamic_shapes is not None:
+            for k, v in self.output_dynamic_shapes.items():
+                if not self.has_shape(k):
+                    continue
+                shape = self.get_shape(k)
+                for axis, dim in v.items():
+                    assert isinstance(dim, self.WrapDim), (
+                        f"Unexpected type {type(dim)} in output_dynamic_shapes="
+                        f"{self.output_dynamic_shapes}"
+                    )
+                    current_name = shape[axis]
+                    new_name = dim.name
+                    if current_name == new_name:
+                        continue
+                    if new_name not in expanded_constraints:
+                        expanded_constraints[new_name] = set()
+                    expanded_constraints[new_name].add(current_name)
+                    if current_name not in expanded_constraints:
+                        expanded_constraints[current_name] = set()
+                    expanded_constraints[current_name].add(new_name)
+
+        # once everything is defined, the rewriting can begin.
+        import pprint
+        print("-----------")
+        pprint.pprint(expanded_constraints)
+        pprint.pprint(original)
+        replacements = rename_dynamic_dimensions(expanded_constraints, original)
+        if self.verbose:
+            print(
+                f"[GraphBuilder-{self._hash()}._add_shape_information] dynamic shapes "
+                f"replacements={replacements}"
+            )
+        return replacements
+
+    def _add_shape_information(
+        self, model: Union[GraphProto, ModelProto], update_dim_names: bool = True
+    ):
+        """
+        Adds shape information to the model.
+
+        :param model: final onnx model
+        :param update_dim_names: the conversion usually detects many dimension equivalent
+            among each others, if True, the function renames as much as possible by using
+            the names the user provides
+        """
+        replacements = self._improves_dynamic_dimension_naming()
 
         if len(model.graph.node) == 0:
             raise RuntimeError(
@@ -5845,21 +5849,27 @@ class GraphBuilder(_GraphBuilderRuntime):
                     # adds an equivalence
                     n1, n2 = items[0][0], items[1][0]
                     if n1 not in update:
-                        update[n1] = set(n2)
+                        update[n1] = {n2}
                     else:
                         update[n1].add(n2)
                     if n2 not in update:
-                        update[n2] = set(n1)
+                        update[n2] = {n1}
                     else:
                         update[n2].add(n1)
+                    k2 = rename_expression(k, {n2: n1})
+                    vv2 = rename_expression(v, {n1: n2})
+                    assert k != k2 and vv != vv2
+                    eq = {k, k2, vv, vv2}
+                    for e in eq:
+                        if e not in update:
+                            update[e] = eq
+                        else:
+                            update[e] |= eq
 
             for k, v in update.items():
                 if self._debug_dyn_dim and self._debug_dyn_dim & {k}:
                     print(f"[GraphBuilder._improve_constraints] {k} -> {v}")
-                if k in self.constraints_:
-                    self.constraints_[k] |= v
-                else:
-                    self.constraints_[k] = v
+                self.add_to_constraints(k, v)
 
     def io_names(self):
         """Returns the list of inputs, output for nodes."""
@@ -6034,6 +6044,21 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         statistics = []
         main_begin = time.perf_counter()
+
+        begin = time.perf_counter()
+        replacements = self._improves_dynamic_dimension_naming()
+        if replacements:
+            import pprint
+            pprint.pprint(replacements)
+        statistics.append(
+            dict(
+                pattern="dynamic_dimension_naming",
+                removed=0,
+                added=0,
+                time_in=time.perf_counter() - begin,
+            )
+        )
+        self._check(statistics, "A-dynamic_dimension_naming")
 
         if self.verbose or self.optimization_options.verbose:
             print(
@@ -8969,6 +8994,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         """Returns the outputs of a local function."""
         return self.functions[domain, name].output
 
+    def add_to_constraints(self, dim_name: str, value: Union[str, int, Set[Union[str, int]]]):
+        if dim_name not in self.constraints_:
+            self.constraints_[dim_name] = set()
+        if isinstance(value, set):
+            self.constraints_[dim_name] |= value
+        else:
+            self.constraints_[dim_name].add(value)
+
     def register_constraint_dimension(self, dim_name: str, value: Any):
         """
         Registers a constraint on a dimension.
@@ -8981,9 +9014,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder.register_constraint_dimension] "
                 f"dim_name={dim_name!r}, value={value!r}"
             )
-        if dim_name not in self.constraints_:
-            self.constraints_[dim_name] = set()
-        self.constraints_[dim_name].add(value)
+        self.add_to_constraints(dim_name, value)
 
     def get_registered_constraints(self) -> Dict[str, Set[Union[str, int]]]:
         """Returns the constraints registered so far."""
