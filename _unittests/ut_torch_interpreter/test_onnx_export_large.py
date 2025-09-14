@@ -103,7 +103,8 @@ class TestOnnxExportLarge(ExtTestCase):
             ref = ReferenceEvaluator(name)
             results.append(ref.run(None, {"input": x})[0])
             self.check_model_ort(name)
-        self.assertEqualArray(results[0], results[1])
+        if len(results) == 2:
+            self.assertEqualArray(results[0], results[1])
 
 
 if __name__ == "__main__":

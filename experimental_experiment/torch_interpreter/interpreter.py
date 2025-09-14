@@ -324,10 +324,31 @@ class DynamoInterpreter:
             )
             return None
 
+        if isinstance(init, self.builder.torch.utils._pytree.TreeSpec):
+
+            def print_treespec(rows, spec, indent=0):
+                prefix = "  " * indent
+                rows.append(f"{prefix}Node(type={spec.type}, leaves={spec.num_leaves})")
+                for child in getattr(spec, "children_specs", []):
+                    print_treespec(rows, child, indent + 1)
+
+            rows = []
+            print_treespec(rows, init)
+            msg = "\n".join(rows)
+            raise NotImplementedError(
+                f"Unable to handle type {type(init)} for node.name={node.name!r}"
+                f"\n{msg}\n--{self.builder.get_debug_msg()}"
+            )
+
         parameter_name = (
             self.parameter_naming(node.name, init, node=node, prefix=self.module_name)
             if isinstance(init, self.builder.torch.nn.Parameter)
             else None
+        )
+
+        assert hasattr(init, "shape"), (
+            f"Unexpected type {type(init)} for init={init}, node.name="
+            f"{node.name!r}{self.builder.get_debug_msg()}"
         )
 
         self.builder.make_initializer(

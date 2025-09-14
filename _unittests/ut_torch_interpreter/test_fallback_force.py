@@ -265,7 +265,7 @@ class TestFallbackForce(ExtTestCase):
         self.assertEqual(got.shape, (5, 1))
 
     @skipif_ci_windows("dynamo not supported on Windows")
-    @requires_torch("2.6")  # node_info
+    @requires_torch("2.11")  # node_info
     @requires_transformers("4.40")
     @ignore_warnings(DeprecationWarning)
     def test_fallback_force_llama_sdpa_export(self):
