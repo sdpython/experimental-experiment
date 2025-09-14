@@ -1,6 +1,10 @@
 import os
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    skipif_ci_windows,
+    requires_torch,
+)
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -75,15 +79,7 @@ def return_module_cls_explicit_break():
 
 
 def export_utils(prefix, model, *args, remove_unused=False, constant_folding=True):
-    import torch
-
     names = []
-    name = f"{prefix}_script.onnx"
-    if os.path.exists(name):
-        os.remove(name)
-    torch.onnx.export(model, *args, name, input_names=["input"])
-    names.append(name)
-
     name = f"{prefix}_simple.onnx"
     if os.path.exists(name):
         os.remove(name)
@@ -113,6 +109,7 @@ class TestOnnxExportBreak(ExtTestCase):
         InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
 
     @skipif_ci_windows("not supported yet on Windows")
+    @requires_torch("2.11")
     def test_simple_export_pool(self):
         from onnxruntime import InferenceSession
 

@@ -505,6 +505,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
         self._debug_foldnot = int(os.environ.get("ONNXFOLDNOT", "0"))
         self._debug_dyn_dim = set(os.environ.get("ONNXDYNDIM", "").split(","))
+        if self._debug_dyn_dim == {""}:
+            self._debug_dyn_dim = set()
 
         self.time_evaluation_constants_ = 0
         self.statistics_ = {}
@@ -1674,14 +1676,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Rank mismatch between previous shape {old_shape} and "
             f"new shape {shape} (name={name!r}){self.get_debug_msg()}"
         )
-        if (
-            self._debug_dyn_dim
-            and (set(old_shape) | set(str(_) for _ in shape)) & self._debug_dyn_dim
-        ):
-            print(
-                f"[GraphBuilder._check_two_shapes_are_compatible] old_shape={old_shape}, "
-                f"shape={shape}, register_int={register_int}, name={name!r}"
-            )
+        if self._debug_dyn_dim:
+            try:
+                sshape = set(str(_) for _ in shape)
+            except AttributeError:
+                sshape = set()
+            if (set(old_shape) | sshape) & self._debug_dyn_dim:
+                print(
+                    f"[GraphBuilder._check_two_shapes_are_compatible] old_shape={old_shape}, "
+                    f"shape={shape}, register_int={register_int}, name={name!r}"
+                )
         for d1, d2 in zip(old_shape, shape):
             if isinstance(d1, int) and isinstance(d2, int):
                 assert d1 == d2, (

@@ -17,7 +17,7 @@ class TestTorchOnnxExport2025(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning, FutureWarning))
     @requires_torch("2.5")
     @hide_stdout()
-    @requires_onnxscript("0.5")
+    @requires_onnxscript("0.7")
     def test_fft_c2r(self):
         import torch
         from onnxruntime import InferenceSession
