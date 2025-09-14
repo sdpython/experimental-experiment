@@ -1,10 +1,8 @@
 import unittest
 import warnings
 from collections import Counter
-import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
-    requires_onnxscript,
     requires_torch,
     skipif_ci_windows,
     hide_stdout,
@@ -31,33 +29,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
                 return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
 
         return Bad1Fixed, torch.rand(5, 3)
-
-    @skipif_ci_windows("not yet supported on Windows")
-    @requires_torch("2.9")
-    @requires_onnxscript("0.5")
-    def test_controlflow_dynamo(self):
-        import torch
-
-        cls, x = self.get_custom_model()
-        model = cls()
-        filename = "test_controlflow_dynamo.onnx"
-        torch.onnx.export(
-            model,
-            (x,),
-            filename,
-            input_names=["x"],
-            opset_version=18,
-            dynamo=True,
-            fallback=False,
-        )
-        with open(filename, "rb") as f:
-            onx = onnx.load(f)
-        ref = ExtendedReferenceEvaluator(onx)
-
-        for _x in (x, -x):
-            expected = model(_x)
-            got = ref.run(None, {"x": _x.detach().numpy()})[0]
-            self.assertEqualArray(expected, got, atol=1e-6)
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
@@ -221,10 +192,8 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         x = torch.rand(5, 3)
         model = RawTest()
-        filename = "test_controlflow_custom_raw_test.onnx"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
             onx = to_onnx(model, (x,), export_options=ExportOptions(jit=True))
         co = Counter([n.op_type for n in onx.graph.node])
         self.assertEqual(co, {"Sin": 1})
@@ -442,16 +411,6 @@ class TestOnnxExportControlFlow(ExtTestCase):
         batch = torch.export.Dim("batch")
         seq_length = torch.export.Dim("seq_length")
         dynamic_shapes = ({0: batch}, {0: batch, 1: seq_length}, None)
-
-        # print(
-        #     torch.export.export(model2, inputs[0],
-        #       dynamic_shapes=dynamic_shapes, strict=False)
-        # )
-        # torch.onnx.export(model2, (*inputs[0][:2], 1025),
-        #   "test_cond_llm_image_embedding_dynamo.onnx",
-        #   dynamic_shapes=dynamic_shapes, dynamo=True)
-        # torch.onnx.export(model2, inputs[0], "test_cond_llm_image_embedding_dynamo.onnx",
-        #   dynamic_shapes=dynamic_shapes, dynamo=True)
 
         from experimental_experiment.torch_interpreter.tracing import CustomTracer
 

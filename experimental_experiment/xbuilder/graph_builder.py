@@ -1674,7 +1674,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Rank mismatch between previous shape {old_shape} and "
             f"new shape {shape} (name={name!r}){self.get_debug_msg()}"
         )
-        if self._debug_dyn_dim and (set(old_shape) | set(shape)) & self._debug_dyn_dim:
+        if (
+            self._debug_dyn_dim
+            and (set(old_shape) | set(str(_) for _ in shape)) & self._debug_dyn_dim
+        ):
             print(
                 f"[GraphBuilder._check_two_shapes_are_compatible] old_shape={old_shape}, "
                 f"shape={shape}, register_int={register_int}, name={name!r}"
@@ -5753,10 +5756,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                     expanded_constraints[current_name].add(new_name)
 
         # once everything is defined, the rewriting can begin.
-        import pprint
-        print("-----------")
-        pprint.pprint(expanded_constraints)
-        pprint.pprint(original)
         replacements = rename_dynamic_dimensions(expanded_constraints, original)
         if self.verbose:
             print(
@@ -5777,6 +5776,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             the names the user provides
         """
         replacements = self._improves_dynamic_dimension_naming()
+        if not replacements:
+            return
 
         if len(model.graph.node) == 0:
             raise RuntimeError(
@@ -6049,6 +6050,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         replacements = self._improves_dynamic_dimension_naming()
         if replacements:
             import pprint
+
             pprint.pprint(replacements)
         statistics.append(
             dict(
