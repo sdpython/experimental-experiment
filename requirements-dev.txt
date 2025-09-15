@@ -16,7 +16,7 @@ pytest
 pytest-coverage
 pytest-subtests
 ruff
-scikit-learn>=1.19.0
+scikit-learn>=1.7.0
 skl2onnx
 sphinx
 sphinx-gallery
