@@ -389,7 +389,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_scaled_dot_product_attention_script(self):
         self._scaled_dot_product_attention("script")
 
-    @requires_onnxscript("0.2")
+    @requires_onnxscript("0.7")
     @hide_stdout()
     def test_scaled_dot_product_attention_dynamo(self):
         self._scaled_dot_product_attention("dynamo")
