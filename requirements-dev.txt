@@ -4,9 +4,9 @@ diffusers>=0.30.0
 furo
 matplotlib
 onnx-array-api
-onnx-ir
-onnxscript
-onnx-diagnostic
+onnx-ir>=0.1.9
+onnxscript>=0.5.0
+onnx-diagnostic>=0.7.10
 openpyxl
 packaging
 pandas
@@ -16,7 +16,7 @@ pytest
 pytest-coverage
 pytest-subtests
 ruff
-scikit-learn>=1.4.0
+scikit-learn>=1.19.0
 skl2onnx
 sphinx
 sphinx-gallery
@@ -24,7 +24,7 @@ sphinx-issues
 sphinx-runpython
 tabulate
 timm
-transformers>=4.49
+transformers>=4.56
 tqdm
 wheel
 xlsxwriter==3.2.2
