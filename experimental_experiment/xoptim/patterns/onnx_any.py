@@ -5,9 +5,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SameChildrenPattern(PatternOptimization):
-    """
-    Checks that a Cast is really needed.
-    """
+    """Checks there is no duplicated node doing the same than another one beside."""
 
     @classmethod
     def _cmp(cls, n1: NodeProto, n2: NodeProto) -> bool:
@@ -130,9 +128,8 @@ class SameChildrenPattern(PatternOptimization):
 class IdentityPattern(PatternOptimization):
     """
     Replaces operator such as
-    Div(X, 1), Mul(X, 1), Add(X, 0), Sub(X, 0),
-    Transpose(X, [0, 1, 2, ...])
-    into identity nodes.
+    Div(X, 1), Mul(X, 1), Add(X, 0), Sub(X, 0), Transpose(X, [0, 1, 2, ...])
+    by identity nodes.
     """
 
     @classmethod
@@ -156,7 +153,7 @@ class IdentityPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose", "Slice"}
+            node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose", "Slice", "And", "Or"}
             or node.domain != ""
         ):
             return self.none()
@@ -212,11 +209,19 @@ class IdentityPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             cst = g.get_constant_scalar(node.input[1])
             val = self._any_value_to_scalar(cst)
-            if val == 0 and node.op_type in {"Add", "Sub"}:
-                return MatchResult(self, [node], self.apply, insert_at=node)
-            if val == 1 and node.op_type in {"Mul", "Div"}:
-                return MatchResult(self, [node], self.apply, insert_at=node)
-        elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div"}:
+            if val == 0:
+                if node.op_type in {"Add", "Sub", "Or"}:
+                    return MatchResult(self, [node], self.apply, insert_at=node)
+            elif val is False:
+                if node.op_type in {"Or"}:
+                    return MatchResult(self, [node], self.apply, insert_at=node)
+            elif val == 1:
+                if node.op_type in {"Mul", "Div", "And"}:
+                    return MatchResult(self, [node], self.apply, insert_at=node)
+            elif val is True:
+                if node.op_type in {"And"}:
+                    return MatchResult(self, [node], self.apply, insert_at=node)
+        elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div", "And", "Or"}:
             # less simple case, the tensor is multiplied on its last dimension.
             cst = g.get_computed_constant(node.input[1])
             if cst is None:
@@ -229,9 +234,13 @@ class IdentityPattern(PatternOptimization):
             shape = g.get_shape(node.input[0])
             if shape[-1] != cst.shape[0]:
                 return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"Add", "Sub"} and unique != 0:
+            if node.op_type in {"Add", "Sub", "And"} and unique != 0:
                 return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"Mul", "Div"} and unique != 1:
+            if node.op_type in {"And"} and unique is not True:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if node.op_type in {"Mul", "Div", "Or"} and unique != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if node.op_type in {"Or"} and unique is not False:
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(self, [node], self.apply, insert_at=node)
 

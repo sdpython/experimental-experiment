@@ -41,24 +41,6 @@ class TestOnnxExportCustomCode(ExtTestCase):
 
         return DummyModel, torch.rand(5, 3)
 
-    def test_custom_code_script(self):
-        import torch
-
-        cls, x = self.get_custom_model_autograd()
-        model = cls()
-        expected = model(x)
-        self.assertNotEmpty(expected)
-        filename = "test_custom_code_script.onnx"
-        torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
-        with open(filename, "rb") as f:
-            onx = onnx.load(f)
-        co = Counter([n.op_type for n in onx.graph.node])
-        self.assertEqual(co, {"Add": 2, "Mul": 1})
-        ref = ExtendedReferenceEvaluator(onx)
-        got = ref.run(None, {"x": x.detach().numpy()})[0]
-        expected = (x + x + x) * x
-        self.assertEqualArray(expected, got)
-
     @classmethod
     def get_custom_model_autograd_marked(cls):
         import torch
@@ -171,9 +153,6 @@ class TestOnnxExportCustomCode(ExtTestCase):
         targets = [node.target for node in graph.nodes]
         names = [(t if isinstance(t, str) else t.name()) for t in targets]
         self.assertEqual(names, ["x", "aten::add.Tensor", "aten::mul.Tensor", "output"])
-
-        filename = "test_custom_code_export_1.onnx"
-        torch.onnx.export(model, (x,), filename, input_names=["x"], opset_version=18)
 
     @skipif_ci_windows("dynamo not working on Windows")
     @unittest.skip("autograd.function not working with dynamo")

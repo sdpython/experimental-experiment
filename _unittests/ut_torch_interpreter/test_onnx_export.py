@@ -10,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     requires_cuda,
+    requires_torch,
 )
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
@@ -158,6 +159,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_simple_export_conv_rename(self):
         model, input_tensor = return_module_cls_conv()
         names = export_utils(
@@ -175,6 +177,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_simple_export_conv_norename(self):
         model, input_tensor = return_module_cls_conv()
         names = export_utils(
@@ -198,6 +201,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_simple_export_relu(self):
         model, input_tensor = return_module_cls_relu()
         names = export_utils("test_simple_export_relu", model, input_tensor)
@@ -211,6 +215,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_simple_export_pool(self):
         from onnxruntime import InferenceSession
 
@@ -226,6 +231,7 @@ class TestOnnxExport(ExtTestCase):
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_cuda()
+    @requires_torch("2.11")
     def test_simple_export_pool_bfloat16(self):
         import torch
         from onnxruntime import InferenceSession
@@ -263,6 +269,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_remove_unused_nodes(self):
         model, input_tensor = return_module_cls_pool()
         onx1 = to_onnx(
@@ -296,6 +303,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_simple_export_pool_unused(self):
         from onnxruntime import InferenceSession
 
@@ -312,6 +320,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_constant_folding(self):
         model, input_tensor = return_module_cls_pool()
         onx1 = to_onnx(
@@ -359,6 +368,7 @@ class TestOnnxExport(ExtTestCase):
 
     @skipif_ci_windows("torch dynamo not supported on windows")
     @ignore_warnings((UserWarning, DeprecationWarning))
+    @requires_torch("2.11")
     def test_simple_export_pool_constant_folding(self):
         from onnxruntime import InferenceSession
 

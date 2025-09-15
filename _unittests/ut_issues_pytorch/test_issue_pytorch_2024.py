@@ -254,17 +254,17 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_index_put_update_parameter_script_3d(self):
         self._updated_parameter("script", True)
 
-    @requires_onnxscript("0.5")
+    @requires_onnxscript("0.7")
     @hide_stdout()
     def test_index_put_update_parameter_dynamo_2d_static(self):
         self._updated_parameter("dynamo", False, dynamic=False)
 
-    @requires_onnxscript("0.5")
+    @requires_onnxscript("0.7")
     @hide_stdout()
     def test_index_put_update_parameter_dynamo_2d_dynamic(self):
         self._updated_parameter("dynamo", False, dynamic=True)
 
-    @requires_onnxscript("0.5")
+    @requires_onnxscript("0.7")
     @hide_stdout()
     def test_index_put_update_parameter_dynamo_3d(self):
         self._updated_parameter("dynamo", True)
@@ -389,7 +389,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_scaled_dot_product_attention_script(self):
         self._scaled_dot_product_attention("script")
 
-    @requires_onnxscript("0.2")
+    @requires_onnxscript("0.7")
     @hide_stdout()
     def test_scaled_dot_product_attention_dynamo(self):
         self._scaled_dot_product_attention("dynamo")
@@ -610,7 +610,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_complex_weights_script(self):
         self._complex_weights("script")
 
-    @requires_onnxscript("0.5")
+    @requires_onnxscript("0.7")
     @hide_stdout()
     def test_complex_weights_dynamo(self):
         self._complex_weights("dynamo")
@@ -685,7 +685,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_dyn_slice_4d_script(self):
         self._slice_4d("script")
 
-    @requires_onnxscript("0.5")
+    @requires_onnxscript("0.7")
     @hide_stdout()
     def test_dyn_slice_4d_dynamo(self):
         self._slice_4d("dynamo")

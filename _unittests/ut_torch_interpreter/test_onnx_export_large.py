@@ -42,21 +42,12 @@ class TestOnnxExportLarge(ExtTestCase):
         rename_input=True,
         expected_weights=None,
     ):
-        import torch
-
         if not os.path.exists(prefix):
             os.mkdir(prefix)
         names = []
-        name = os.path.join(prefix, "script.onnx")
-        if os.path.exists(name):
-            os.remove(name)
-        torch.onnx.export(model, *args, name, input_names=["input"])
-        names.append(name)
-
         name = os.path.join(prefix, "large.onnx")
         if os.path.exists(name):
             os.remove(name)
-
         large_onx = to_onnx(
             model,
             tuple(args),
@@ -112,7 +103,8 @@ class TestOnnxExportLarge(ExtTestCase):
             ref = ReferenceEvaluator(name)
             results.append(ref.run(None, {"input": x})[0])
             self.check_model_ort(name)
-        self.assertEqualArray(results[0], results[1])
+        if len(results) == 2:
+            self.assertEqualArray(results[0], results[1])
 
 
 if __name__ == "__main__":

@@ -64,7 +64,7 @@ class OptimizationOptions:
             bool,
             Set[Union[str, Tuple[str, str]]],
             Tuple[Union[str, Tuple[str, str]], ...],
-        ] = ("Transpose", "Cast", "Reshape", "Concat"),
+        ] = ("Transpose", "Cast", "Reshape", "Concat", "Add", "Sub", "Mul", "Div"),
         constant_size: int = 1024,
         constant_fusing: bool = True,
         remove_identity: bool = True,
