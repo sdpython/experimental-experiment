@@ -6,7 +6,7 @@ matplotlib
 onnx-array-api
 onnx-ir
 onnxscript
-git+https://github.com/sdpython/onnx-diagnostic.git
+onnx-diagnostic
 openpyxl
 packaging
 pandas
@@ -17,7 +17,7 @@ pytest-coverage
 pytest-subtests
 ruff
 scikit-learn>=1.4.0
-git+https://github.com/onnx/sklearn-onnx.git
+skl2onnx
 sphinx
 sphinx-gallery
 sphinx-issues
