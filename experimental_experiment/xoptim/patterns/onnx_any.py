@@ -195,54 +195,78 @@ class IdentityPattern(PatternOptimization):
             f"for node type {node.op_type!r} and name {node.name!r}, "
             f"node.input={node.input}"
         )
-        if g.has_rank(node.input[1]) and g.get_rank(node.input[1]) > 1:
-            # No need to go further.
-            return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant(node.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        shape = g.get_constant_shape(node.input[1], exc=False)
-        if shape is None:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if shape in (tuple(), (1,)):
-            # simple case
-            if not g.is_constant_scalar(node.input[1]):
+        if g.is_constant(node.input[1]):
+            if g.has_rank(node.input[1]) and g.get_rank(node.input[1]) > 1:
+                # No need to go further.
                 return self.none(node, inspect.currentframe().f_lineno)
-            cst = g.get_constant_scalar(node.input[1])
-            val = self._any_value_to_scalar(cst)
-            if val == 0:
-                if node.op_type in {"Add", "Sub", "Or"}:
-                    return MatchResult(self, [node], self.apply, insert_at=node)
-            elif val is False:
-                if node.op_type in {"Or"}:
-                    return MatchResult(self, [node], self.apply, insert_at=node)
-            elif val == 1:
-                if node.op_type in {"Mul", "Div", "And"}:
-                    return MatchResult(self, [node], self.apply, insert_at=node)
-            elif val is True:
-                if node.op_type in {"And"}:
-                    return MatchResult(self, [node], self.apply, insert_at=node)
-        elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div", "And", "Or"}:
-            # less simple case, the tensor is multiplied on its last dimension.
-            cst = g.get_computed_constant(node.input[1])
-            if cst is None:
+            shape = g.get_constant_shape(node.input[1], exc=False)
+            if shape is None:
                 return self.none(node, inspect.currentframe().f_lineno)
-            if not self._has_unique_value(cst):
+            if shape in (tuple(), (1,)):
+                # simple case
+                if not g.is_constant_scalar(node.input[1]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                cst = g.get_constant_scalar(node.input[1])
+                val = self._any_value_to_scalar(cst)
+                if val == 0:
+                    if node.op_type in {"Add", "Sub", "Or"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
+                elif val is False:
+                    if node.op_type in {"Or"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
+                elif val == 1:
+                    if node.op_type in {"Mul", "Div", "And"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
+                elif val is True:
+                    if node.op_type in {"And"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
+            elif len(shape) == 1 and node.op_type in {"Add", "Mul", "Sub", "Div", "And", "Or"}:
+                # less simple case, the tensor is multiplied on its last dimension.
+                cst = g.get_computed_constant(node.input[1])
+                if cst is None:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                if not self._has_unique_value(cst):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                unique = cst[0]
+                if not g.has_shape(node.input[0]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                shape = g.get_shape(node.input[0])
+                if shape[-1] != cst.shape[0]:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                if node.op_type in {"Add", "Sub", "And"} and unique != 0:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                if node.op_type in {"And"} and unique is not True:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                if node.op_type in {"Mul", "Div", "Or"} and unique != 1:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                if node.op_type in {"Or"} and unique is not False:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                return MatchResult(self, [node], self.apply, insert_at=node)
+        elif g.is_constant(node.input[0]):
+            if g.has_rank(node.input[0]) and g.get_rank(node.input[0]) > 1:
+                # No need to go further.
                 return self.none(node, inspect.currentframe().f_lineno)
-            unique = cst[0]
-            if not g.has_shape(node.input[0]):
+            shape = g.get_constant_shape(node.input[0], exc=False)
+            if shape is None:
                 return self.none(node, inspect.currentframe().f_lineno)
-            shape = g.get_shape(node.input[0])
-            if shape[-1] != cst.shape[0]:
-                return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"Add", "Sub", "And"} and unique != 0:
-                return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"And"} and unique is not True:
-                return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"Mul", "Div", "Or"} and unique != 1:
-                return self.none(node, inspect.currentframe().f_lineno)
-            if node.op_type in {"Or"} and unique is not False:
-                return self.none(node, inspect.currentframe().f_lineno)
-            return MatchResult(self, [node], self.apply, insert_at=node)
+            if shape in (tuple(), (1,)):
+                # simple case
+                if not g.is_constant_scalar(node.input[0]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                cst = g.get_constant_scalar(node.input[0])
+                val = self._any_value_to_scalar(cst)
+                if val == 0:
+                    if node.op_type in {"Add", "Or"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
+                elif val is False:
+                    if node.op_type in {"Or"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
+                elif val == 1:
+                    if node.op_type in {"Mul", "And"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
+                elif val is True:
+                    if node.op_type in {"And"}:
+                        return MatchResult(self, [node], self.apply, insert_at=node)
 
         return self.none(node, inspect.currentframe().f_lineno)
 
@@ -251,10 +275,19 @@ class IdentityPattern(PatternOptimization):
         g: "GraphBuilder",  # noqa: F821
         node: NodeProto,
     ) -> List[NodeProto]:
+        if g.is_constant(node.input[0]):
+            assert not g.is_constant(node.input[1]), (
+                f"Both inputs are constants, "
+                f"this is one unusual case for node {node.op_type!r}("
+                f"{node.input}) -> {node.output}"
+            )
+            name = node.input[1]
+        else:
+            name = node.input[0]
         return [
             g.make_node(
                 "Identity",
-                [node.input[0]],
+                [name],
                 [node.output[0]],
                 name=f"{self.__class__.__name__}--{node.name}",
             )
