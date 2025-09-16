@@ -275,15 +275,15 @@ class IdentityPattern(PatternOptimization):
         g: "GraphBuilder",  # noqa: F821
         node: NodeProto,
     ) -> List[NodeProto]:
-        if g.is_constant(node.input[0]):
-            assert not g.is_constant(node.input[1]), (
-                f"Both inputs are constants, "
-                f"this is one unusual case for node {node.op_type!r}("
-                f"{node.input}) -> {node.output}"
+        name = node.input[
+            (
+                1
+                if g.is_constant(node.input[0])
+                and g.has_shape(node.input[0])
+                and g.get_shape(node.input[0]) in {(), (1,)}
+                else 0
             )
-            name = node.input[1]
-        else:
-            name = node.input[0]
+        ]
         return [
             g.make_node(
                 "Identity",
