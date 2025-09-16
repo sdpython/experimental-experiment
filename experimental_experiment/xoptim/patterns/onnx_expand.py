@@ -158,6 +158,8 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
         Checks that the binary operations of the two input shapes returns the output_shape.
         Then no Expand node is needed.
         """
+        if max(len(shape_left), len(shape_right)) < len(output_shape):
+            return False
         # Align shapes
         if len(shape_left) < len(shape_right):
             shape_left = (1,) * (len(shape_right) - len(shape_left)) + shape_left
@@ -235,6 +237,11 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
         if self._is_compatible_shapes_for_expand(
             shape_left, shape_right, g.get_shape_renamed(node.output[0])
         ):
+            if self.verbose:
+                print(
+                    f"[ShapeBasedExpandBroadcastPattern.match] {shape_left} "
+                    f"{node.op_type} {shape_right} -> {g.get_shape_renamed(node.output[0])}"
+                )
             return MatchResult(self, [node_left, node_right, node], self.apply)
         return self.none(node, inspect.currentframe().f_lineno)
 

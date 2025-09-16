@@ -65,6 +65,7 @@ class TestGraphPatternOptimizationUtils(ExtTestCase):
 
     def test_is_compatible_shapes_for_expand(self):
         comp = EBP._is_compatible_shapes_for_expand
+        self.assertFalse(comp((), (1,), (1, 2, 3, 4)))
         self.assertTrue(comp((1, 4, "d1"), (4, 1, "d1"), (4, 4, "d1")))
         self.assertFalse(comp((1, 4, "d1"), (4, 1, "d2"), (4, 4, "d3")))
         self.assertFalse(comp((1, 4, "d1"), (4, 1, "d2"), (4, 4, "d2")))
