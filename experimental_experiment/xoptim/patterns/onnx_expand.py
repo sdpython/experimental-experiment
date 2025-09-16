@@ -151,7 +151,9 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
     _op_types = element_wise_binary_op_types() | element_wise_op_cmp_types()
 
     @classmethod
-    def is_compatible_shapes(cls, shape_left: DYNAMIC_SHAPE, shape_right: DYNAMIC_SHAPE, output_shape: DYNAMIC_SHAPE) -> bool:
+    def _is_compatible_shapes_for_expand(
+        cls, shape_left: DYNAMIC_SHAPE, shape_right: DYNAMIC_SHAPE, output_shape: DYNAMIC_SHAPE
+    ) -> bool:
         """
         Checks that the binary operations of the two input shapes returns the output_shape.
         Then no Expand node is needed.
@@ -162,7 +164,7 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
         elif len(shape_left) > len(shape_right):
             shape_right = (1,) * (len(shape_left) - len(shape_right)) + shape_right
 
-        for left, right, out in zip(shape_left, shape_right, outut_shape):
+        for left, right, out in zip(shape_left, shape_right, output_shape):
             if isinstance(left, int):
                 if isinstance(right, int):
                     # static right
@@ -205,44 +207,66 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type not in self._op_type or node.domain != "":
+        if node.op_type not in self._op_types or node.domain != "":
             return self.none()
-        if not g.has_shape(node.output[0]) or not g.has_shape(node.input[0]) or not g.has_shape(node.input[1]):
+        if (
+            not g.has_shape(node.output[0])
+            or not g.has_shape(node.input[0])
+            or not g.has_shape(node.input[1])
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         node_left = g.node_before(node.input[0])
         node_right = g.node_before(node.input[1])
-        before = [None if n is None and n.op_type != "Expand" else n for n in [node_left, node_right]]
+        before = [
+            None if n is None or n.op_type != "Expand" else n for n in [node_left, node_right]
+        ]
         if before == [None, None]:
             return self.none(node, inspect.currentframe().f_lineno)
-        
+
         # At least one expand.
         node_left, node_right = before
-        shape_left = g.get_shape_renamed(node.input[0] if node_left is None else node_left.input[0])
-        shape_right = g.get_shape_renamed(node.input[1] if node_right is None else node_right.input[0])
-        if self.is_compatible_shapes(shape_left, shape_right, g.get_shape_renamed(node.output[0])):
+        shape_left = g.get_shape_renamed(
+            node.input[0] if node_left is None else node_left.input[0]
+        )
+        shape_right = g.get_shape_renamed(
+            node.input[1] if node_right is None else node_right.input[0]
+        )
+        if self._is_compatible_shapes_for_expand(
+            shape_left, shape_right, g.get_shape_renamed(node.output[0])
+        ):
             return MatchResult(self, [node_left, node_right, node], self.apply)
         return self.none(node, inspect.currentframe().f_lineno)
 
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
-        node: NodeProto,
-        next_node: NodeProto,
+        expand_left: NodeProto,
+        expand_right: NodeProto,
+        binary_node: NodeProto,
     ) -> List[NodeProto]:
-        if next_node.input[0] == node.output[0]:
-            inputs = [node.input[0], next_node.input[1]]
-        else:
-            inputs = [next_node.input[0], node.input[0]]
+        nodes = []
+        if expand_left is not None and g.is_used_more_than_once(expand_left.output[0]):
+            nodes.append(expand_left)
+        if expand_right is not None and g.is_used_more_than_once(expand_right.output[0]):
+            nodes.append(expand_right)
+        assert (
+            not binary_node.attribute
+        ), f"Binary operator should not have any attribute, binary_node={binary_node}"
         return [
+            *nodes,
             g.make_node(
-                next_node.op_type,
-                inputs,
-                next_node.output,
-                name=f"{self.__class__.__name__}--{node.name}",
-                doc_string=next_node.doc_string,
-            )
+                binary_node.op_type,
+                [
+                    binary_node.input[0] if expand_left is None else expand_left.input[0],
+                    binary_node.input[1] if expand_right is None else expand_right.input[0],
+                ],
+                binary_node.output,
+                name=f"{self.__class__.__name__}--{binary_node.name}",
+                doc_string=binary_node.doc_string,
+            ),
         ]
+
 
 class ExpandSwapPattern(PatternOptimization):
     """

@@ -5,17 +5,18 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.xoptim.patterns.onnx_expand import (
+    ShapeBasedExpandBroadcastPattern as EBP,
+)
 from experimental_experiment.xoptim.patterns.onnx_reshape import (
     ShapeBasedEditDistanceReshapePattern as EDRP,
     ShapeBasedReshapeIsSqueezePattern as RISP,
 )
 
-align = EDRP._align_shapes
-sqsx = RISP._squeeze_axes
-
 
 class TestGraphPatternOptimizationUtils(ExtTestCase):
     def test_edit_distance_reshape(self):
+        align = EDRP._align_shapes
         self.assertEqual((0, 1024, -1), align(("d1", 4, 256, "d2"), ("d1", 1024, "d2")))
         self.assertEqual((0, 0, 1024), align(("d1", "d2", 4, 256), ("d1", "d2", 1024)))
         self.assertEqual((6, -1), align((2, 3, "d1"), ("a", "d1")))
@@ -29,6 +30,7 @@ class TestGraphPatternOptimizationUtils(ExtTestCase):
         self.assertEqual((0, 196, 2, 32), align(("d1", 196, 64), ("d1", 196, 2, 32)))
 
     def test_reshape_is_squeeze(self):
+        sqsx = RISP._squeeze_axes
         self.assertEqual(("Squeeze", (1,)), sqsx(("d1", 1, 256, "d2"), ("d1", 256, "d2")))
         self.assertEqual(("Squeeze", (1, 2)), sqsx(("d1", 1, 1, 256, "d2"), ("d1", 256, "d2")))
         self.assertEqual(("Unsqueeze", (1,)), sqsx(("d1", 256, "d2"), ("d1", 1, 256, "d2")))
@@ -60,6 +62,19 @@ class TestGraphPatternOptimizationUtils(ExtTestCase):
         )
         got = ref.run(None, inputs)
         self.assertEqual((7, 2, 2, 5), got[0].shape)
+
+    def test_is_compatible_shapes_for_expand(self):
+        comp = EBP._is_compatible_shapes_for_expand
+        self.assertTrue(comp((1, 4, "d1"), (4, 1, "d1"), (4, 4, "d1")))
+        self.assertFalse(comp((1, 4, "d1"), (4, 1, "d2"), (4, 4, "d3")))
+        self.assertFalse(comp((1, 4, "d1"), (4, 1, "d2"), (4, 4, "d2")))
+        self.assertTrue(
+            comp(
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+                (1, 1, 1, "cache_length+seq_length"),
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+            )
+        )
 
 
 if __name__ == "__main__":

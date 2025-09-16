@@ -7,7 +7,12 @@ from ..helpers import (
     dtype_to_tensor_dtype,
     torch_dtype_to_onnx_dtype,
 )
-from ..xbuilder._shape_helper import STATIC_SHAPE, is_static_shape, all_int, all_int_or_str
+from ..xbuilder._shape_helper import (
+    DYNAMIC_SHAPE,
+    is_static_shape,
+    all_int,
+    all_int_or_str,
+)
 
 
 def broadcast_shape(
@@ -17,6 +22,9 @@ def broadcast_shape(
 ) -> DYNAMIC_SHAPE:
     """
     Computes the shape for many broadcasting operators.
+    This function should be used while converting the graph into ONNX
+    because it assumes the broadcast is possible and adds the necessary constraints
+    on the dynamic in the GraphBuilder shapes to make it work.
 
     :param sh1: first shape
     :param sh2: second shape

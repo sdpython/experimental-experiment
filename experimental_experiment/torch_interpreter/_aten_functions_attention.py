@@ -173,7 +173,6 @@ def aten_scaled_dot_product_attention(
         key_transposed_axes[-2],
         key_transposed_axes[-1],
     )
-    key_transposed = g.op.Transpose(key, perm=key_transposed_axes, name=name)
 
     if isinstance(tscale, np.ndarray):
         sc = np.sqrt(tscale).astype(tscale.dtype)
@@ -183,7 +182,8 @@ def aten_scaled_dot_product_attention(
             set_type_shape_unary_op(g, sc, tscale)
 
     query_scaled = g.op.Mul(query, sc, name=name)
-    key_transposed_scaled = g.op.Mul(key_transposed, sc, name=name)
+    key_scaled = g.op.Mul(key, sc, name=name)
+    key_transposed_scaled = g.op.Transpose(key_scaled, perm=key_transposed_axes, name=name)
     mul_qk = g.op.MatMul(query_scaled, key_transposed_scaled, name=name)
 
     itype = g.get_type(query)

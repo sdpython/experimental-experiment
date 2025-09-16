@@ -5057,7 +5057,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
+
         self.assertEqual(len(model.graph.initializer), 2)
         self.assertEqual(set(i.name for i in model.graph.initializer), {"zero", "two"})
         opt_onnx = remove_constants_for_initializers(model, verbose=0)
@@ -5094,7 +5094,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"S1": np.array([5], dtype=np.int64), "S2": np.array([7], dtype=np.int64)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5134,7 +5133,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"S1": np.array([5], dtype=np.int64), "S2": np.array([7], dtype=np.int64)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5172,7 +5170,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"D1": np.array([5], dtype=np.int64), "D2": np.array([7], dtype=np.int64)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5210,7 +5207,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"X": np.arange(30).reshape((2, 1, 3, 5)).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5250,7 +5246,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"X": np.arange(30).reshape((2, 1, 3, 5)).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5377,7 +5372,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"X": np.arange(72).reshape((2, 3, 12)).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5396,7 +5390,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
-    def test_edit_distance_reshape(self):
+    def test_shape_based_edit_distance_reshape(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -5412,7 +5406,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"X": np.arange(72).reshape((2, 3, 12)).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5431,7 +5424,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
-    def test_reshape_is_squeeze_reshape(self):
+    def test_shape_based_reshape_is_squeeze_reshape(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -5447,7 +5440,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"X": np.arange(72).reshape((2, 3, 12)).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5466,7 +5458,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
-    def test_static_expand_reshape(self):
+    def test_shape_based_static_expand_reshape(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -5482,7 +5474,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        # check_model(model)
 
         feeds = {"X": np.arange(72).reshape((2, 3, 12, 1)).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model)
@@ -5497,6 +5488,49 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Expand"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_shape_based_broadcast_expand(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "sh1"], ["Xc"]),
+                    oh.make_node("Reshape", ["X", "sh2"], ["Xr"]),
+                    oh.make_node("Shape", ["X"], ["shape"]),
+                    oh.make_node("Concat", ["shape", "shape"], ["full_shape"], axis=0),
+                    oh.make_node("Expand", ["Xc", "full_shape"], ["Xce"]),
+                    oh.make_node("Expand", ["Xr", "full_shape"], ["Xre"]),
+                    oh.make_node("Add", ["Xce", "Xre"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["d", "d"])],
+                [
+                    onh.from_array(np.array([-1, 1], dtype=np.int64), name="sh1"),
+                    onh.from_array(np.array([1, -1], dtype=np.int64), name="sh2"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": np.arange(3).reshape((3,)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="ShapeBasedExpandBroadcast", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Reshape", "Reshape", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
         ref = ExtendedReferenceEvaluator(opt_onx)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
