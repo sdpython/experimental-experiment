@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xoptim.patterns.onnx_expand import (
     ShapeBasedExpandBroadcastPattern as EBP,
+    ShapeBasedExpandSwapPattern as SBES,
 )
 from experimental_experiment.xoptim.patterns.onnx_reshape import (
     ShapeBasedEditDistanceReshapePattern as EDRP,
@@ -75,6 +76,18 @@ class TestGraphPatternOptimizationUtils(ExtTestCase):
                 (1, 1, 1, "cache_length+seq_length"),
                 ("batch", 1, "seq_length", "cache_length+seq_length"),
             )
+        )
+
+    def test_get_compatible_expand_shape_for_expand_swap(self):
+        mk = SBES._get_compatible_expand_shape_for_expand_swap
+        self.assertEqual(
+            ("batch", 1, "seq_length", "cache_length+seq_length"),
+            mk(
+                ("batch", 1, 1, 1),
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+                (1,),
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+            ),
         )
 
 
