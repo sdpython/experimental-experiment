@@ -21,6 +21,7 @@ from .onnx_expand import (
     ExpandPattern,
     ExpandBroadcastPattern,
     ExpandSwapPattern,
+    ShapeBasedExpandBroadcastPattern,
     ShapeBasedStaticExpandPattern,
 )
 from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
@@ -157,9 +158,10 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         GemmTransposePattern(verbose=verbose),
         MatMulReshape2Of3Pattern(verbose=verbose),
         MulMulMatMulPattern(verbose=verbose),
-        ShapeBasedEditDistanceReshapePattern(verbose=verbose),
-        ShapeBasedStaticExpandPattern(verbose=verbose),
         ShapeBasedReshapeIsSqueezePattern(verbose=verbose),
+        ShapeBasedStaticExpandPattern(verbose=verbose),
+        ShapeBasedEditDistanceReshapePattern(verbose=verbose),
+        ShapeBasedExpandBroadcastPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
         RotaryEmbeddingPattern(verbose=verbose),

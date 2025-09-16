@@ -11,10 +11,10 @@ from ..xbuilder._shape_helper import STATIC_SHAPE, is_static_shape, all_int, all
 
 
 def broadcast_shape(
-    sh1: STATIC_SHAPE,
-    sh2: STATIC_SHAPE,
+    sh1: DYNAMIC_SHAPE,
+    sh2: DYNAMIC_SHAPE,
     graph_builder: Optional["GraphBuilder"] = None,  # noqa: F821
-) -> STATIC_SHAPE:
+) -> DYNAMIC_SHAPE:
     """
     Computes the shape for many broadcasting operators.
 

@@ -7,7 +7,7 @@ from ...xbuilder._onnx_helper import (
     element_wise_op_cmp_types,
     unary_like_op_types,
 )
-from ...xbuilder._shape_helper import all_int
+from ...xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -100,10 +100,7 @@ class ExpandBroadcastPattern(PatternOptimization):
             # Not an element wise operator.
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if next_node.input[0] == node.output[0]:
-            other = next_node.input[1]
-        else:
-            other = next_node.input[0]
+        other = next_node.input[1 if next_node.input[0] == node.output[0] else 0]
 
         if not g.has_shape(other):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -141,6 +138,111 @@ class ExpandBroadcastPattern(PatternOptimization):
             )
         ]
 
+
+class ShapeBasedExpandBroadcastPattern(PatternOptimization):
+    """
+    Similar to
+    :class:`experimental_experiment.xoptim.patterns.onnx_expand.BroadcastPattern`,
+    but it allows dynamic shapes as well. It does not look into the second
+    argument of Expand, it just infers than an expand is not needed for
+    a binary operator following just after.
+    """
+
+    _op_types = element_wise_binary_op_types() | element_wise_op_cmp_types()
+
+    @classmethod
+    def is_compatible_shapes(cls, shape_left: DYNAMIC_SHAPE, shape_right: DYNAMIC_SHAPE, output_shape: DYNAMIC_SHAPE) -> bool:
+        """
+        Checks that the binary operations of the two input shapes returns the output_shape.
+        Then no Expand node is needed.
+        """
+        # Align shapes
+        if len(shape_left) < len(shape_right):
+            shape_left = (1,) * (len(shape_right) - len(shape_left)) + shape_left
+        elif len(shape_left) > len(shape_right):
+            shape_right = (1,) * (len(shape_left) - len(shape_right)) + shape_right
+
+        for left, right, out in zip(shape_left, shape_right, outut_shape):
+            if isinstance(left, int):
+                if isinstance(right, int):
+                    # static right
+                    if left == 1:
+                        if right != out:
+                            return False
+                    elif right == 1:
+                        if left != out:
+                            return False
+                    else:
+                        if left != right or left != out or right != out:
+                            return False
+                else:
+                    # dynamic right
+                    if left == 1:
+                        if right != out:
+                            return False
+                    else:
+                        if left != right or left != out or right != out:
+                            return False
+            else:
+                # dynamic left
+                if isinstance(right, int):
+                    # static right
+                    if right == 1:
+                        if left != out:
+                            return False
+                    else:
+                        if left != right or left != out or right != out:
+                            return False
+                else:
+                    # dynamic right
+                    if left != right or left != out or right != out:
+                        return False
+        return True
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in self._op_type or node.domain != "":
+            return self.none()
+        if not g.has_shape(node.output[0]) or not g.has_shape(node.input[0]) or not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        node_left = g.node_before(node.input[0])
+        node_right = g.node_before(node.input[1])
+        before = [None if n is None and n.op_type != "Expand" else n for n in [node_left, node_right]]
+        if before == [None, None]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        
+        # At least one expand.
+        node_left, node_right = before
+        shape_left = g.get_shape_renamed(node.input[0] if node_left is None else node_left.input[0])
+        shape_right = g.get_shape_renamed(node.input[1] if node_right is None else node_right.input[0])
+        if self.is_compatible_shapes(shape_left, shape_right, g.get_shape_renamed(node.output[0])):
+            return MatchResult(self, [node_left, node_right, node], self.apply)
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+        next_node: NodeProto,
+    ) -> List[NodeProto]:
+        if next_node.input[0] == node.output[0]:
+            inputs = [node.input[0], next_node.input[1]]
+        else:
+            inputs = [next_node.input[0], node.input[0]]
+        return [
+            g.make_node(
+                next_node.op_type,
+                inputs,
+                next_node.output,
+                name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
+            )
+        ]
 
 class ExpandSwapPattern(PatternOptimization):
     """
