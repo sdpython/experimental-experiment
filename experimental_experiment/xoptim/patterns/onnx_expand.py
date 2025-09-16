@@ -158,7 +158,7 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
         Checks that the binary operations of the two input shapes returns the output_shape.
         Then no Expand node is needed.
         """
-        if max(len(shape_left), len(shape_right)) < len(output_shape):
+        if max(len(shape_left), len(shape_right) if shape_right else 0) < len(output_shape):
             return False
         # Align shapes
         if len(shape_left) < len(shape_right):
@@ -243,6 +243,11 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
                     f"{node.op_type} {shape_right} -> {g.get_shape_renamed(node.output[0])}"
                 )
             return MatchResult(self, [node_left, node_right, node], self.apply)
+        # We could end up with the following case.
+        # shape_left   = (1, 1, 'seq_length', 'cache_length + seq_length')
+        # shape_right  = (1, 1, 'seq_length', 'cache_length + seq_length')
+        # output_shape = ('batch', 1, 'seq_length', 'cache_length + seq_length')
+        # When this happes, it could also be caught by another pattern.
         return self.none(node, inspect.currentframe().f_lineno)
 
     def apply(
@@ -386,11 +391,9 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         sh1 = g.get_shape_renamed(node.input[0])
         sh2 = g.get_shape_renamed(node.output[0])
-        assert len(sh1) == len(sh2), (
-            f"Ranks disagree: shape({node.input[0]})={sh1} and shape({node.output[0]})={sh2}, "
-            f"not renamed shapes {self.get_shape(node.input[0])} and "
-            f"{self.get_shape(node.output[0])}"
-        )
+        if len(sh1) != len(sh2):
+            # We ignore that case for the time being.
+            return self.none(node, inspect.currentframe().f_lineno)
         expand_shape = self._find_expand_shape(sh1, sh2)
         if expand_shape is None:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -430,11 +433,47 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
     _op_types = element_wise_binary_op_types() | element_wise_op_cmp_types()
 
     @classmethod
+    def _broadcast_shape(
+        cls,
+        before_expand_shape: DYNAMIC_SHAPE,
+        other_term_shape: DYNAMIC_SHAPE,
+        exc: bool = False,
+    ) -> Optional[DYNAMIC_SHAPE]:
+        if len(before_expand_shape) != len(other_term_shape):
+            d = abs(len(before_expand_shape) - len(other_term_shape))
+            if len(before_expand_shape) < len(other_term_shape):
+                before_expand_shape = (1,) * d + before_expand_shape
+            else:
+                other_term_shape = (1,) * d + other_term_shape
+        if len(before_expand_shape) != len(other_term_shape):
+            assert not exc, (
+                f"Unable to produce a broadcasted shape from "
+                f"{before_expand_shape} and {other_term_shape}"
+            )
+            return None
+        res = []
+        for a, b in zip(before_expand_shape, other_term_shape):
+            if a == b:
+                res.append(a)
+            elif a == 1:
+                res.append(b)
+            elif b == 1:
+                res.append(a)
+            else:
+                assert not exc, (
+                    f"Unable to produce a broadcasted shape from "
+                    f"{before_expand_shape} and {other_term_shape}"
+                )
+                return None
+        return tuple(res)
+
+    @classmethod
     def _get_compatible_expand_shape_for_expand_swap(
         cls,
         before_expand_shape: DYNAMIC_SHAPE,
         expanded_shape: DYNAMIC_SHAPE,
         other_term_shape: DYNAMIC_SHAPE,
+        other_expanded_shape: Optional[DYNAMIC_SHAPE],
         output_shape: DYNAMIC_SHAPE,
     ) -> Optional[DYNAMIC_SHAPE]:
         """
@@ -447,6 +486,7 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
                 ("batch", 1, 1, 1),
                 ("batch", 1, "seq_length", "cache_length+seq_length"),
                 (1,),
+                None,
                 ("batch", 1, "seq_length", "cache_length+seq_length"),
             )
 
@@ -454,16 +494,42 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         )
 
         """
-        if before_expand_shape == expanded_shape or expanded_shape == other_term_shape:
-            # This pattern is not meant for that.
-            return False
-        if output_shape != expanded_shape:
-            return None
-        if not ShapeBasedExpandBroadcastPattern._is_compatible_shapes_for_expand(
-            before_expand_shape, other_term_shape, before_expand_shape
+        if other_expanded_shape is not None and (
+            other_expanded_shape != expanded_shape
+            or expanded_shape != output_shape
+            or len(before_expand_shape) != len(other_term_shape)
         ):
             return None
-        return expanded_shape
+        if before_expand_shape == expanded_shape or expanded_shape == other_term_shape:
+            # This pattern is not meant for that.
+            return None
+        if output_shape != expanded_shape:
+            return None
+        if (
+            other_expanded_shape is None
+            and not ShapeBasedExpandBroadcastPattern._is_compatible_shapes_for_expand(
+                before_expand_shape,
+                other_term_shape,
+                cls._broadcast_shape(before_expand_shape, other_term_shape, exc=True),
+            )
+        ):
+            return None
+        if (
+            other_expanded_shape is not None
+            and not ShapeBasedExpandBroadcastPattern._is_compatible_shapes_for_expand(
+                before_expand_shape,
+                other_term_shape,
+                cls._broadcast_shape(before_expand_shape, other_term_shape, exc=True),
+            )
+        ):
+            return None
+        if other_expanded_shape is None:
+            return "expand_arg"
+        max_dim = cls._broadcast_shape(before_expand_shape, other_term_shape)
+        if max_dim == output_shape:
+            # Expand is not necessary at all.
+            return None
+        return tuple(1 if a == b else 0 for a, b in zip(max_dim, output_shape))
 
     def match(
         self,
@@ -485,34 +551,63 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         before = [
             None if n is None or n.op_type != "Expand" else n for n in [node_left, node_right]
         ]
-        if before == [None, None] or None not in before:
+        if before == [None, None]:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        # Only one expand
+        if None in before:
+            # Only one expand
+            node_left, node_right = before
+            shape_left = g.get_shape_renamed(
+                node.input[0] if node_left is None else node_left.input[0]
+            )
+            shape_right = g.get_shape_renamed(
+                node.input[1] if node_right is None else node_right.input[0]
+            )
+            before_expand_shape = shape_right if node_left is None else shape_left
+            expanded_shape = (
+                g.get_shape_renamed(node_right.output[0])
+                if node_left is None
+                else g.get_shape_renamed(node_left.output[0])
+            )
+            other_term_shape = shape_left if node_left is None else shape_right
+            output_shape = g.get_shape_renamed(node.output[0])
+            if self._get_compatible_expand_shape_for_expand_swap(
+                before_expand_shape, expanded_shape, other_term_shape, None, output_shape
+            ):
+                if self.verbose:
+                    print(
+                        f"[ShapeBasedExpandBroadcastPattern.match.1] {shape_left} "
+                        f"{node.op_type} {shape_right} -> {output_shape}"
+                    )
+                return MatchResult(self, [node_left, node_right, node], self.apply)
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # Both expand.
         node_left, node_right = before
-        shape_left = g.get_shape_renamed(
-            node.input[0] if node_left is None else node_left.input[0]
-        )
-        shape_right = g.get_shape_renamed(
-            node.input[1] if node_right is None else node_right.input[0]
-        )
-        before_expand_shape = shape_right if node_left is None else shape_left
-        expanded_shape = (
-            g.get_shape_renamed(node_right.output[0])
-            if node_left is None
-            else g.get_shape_renamed(node_left.output[0])
-        )
-        other_term_shape = shape_left if node_left is None else shape_right
+        if node_left.input[1] != node_right.input[1]:
+            # It could work in that case if both expand have different
+            # shape argument but the code to make sure it is is not implemented.
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        shape_left = g.get_shape_renamed(node_left.input[0])
+        shape_right = g.get_shape_renamed(node_right.input[0])
         output_shape = g.get_shape_renamed(node.output[0])
-        if self._get_compatible_expand_shape_for_expand_swap(
-            before_expand_shape, expanded_shape, other_term_shape, output_shape
-        ):
+        expand_arg = self._get_compatible_expand_shape_for_expand_swap(
+            shape_left,
+            g.get_shape_renamed(node.input[0]),
+            shape_right,
+            g.get_shape_renamed(node.input[1]),
+            output_shape,
+        )
+        if expand_arg:
             if self.verbose:
                 print(
-                    f"[ShapeBasedExpandBroadcastPattern.match] {shape_left} "
-                    f"{node.op_type} {shape_right} -> {g.get_shape_renamed(node.output[0])}"
+                    f"[ShapeBasedExpandBroadcastPattern.match.2] {shape_left} "
+                    f"{node.op_type} {shape_right} -> {output_shape} with "
+                    f"expand_arg={expand_arg}"
                 )
             return MatchResult(self, [node_left, node_right, node], self.apply)
+
         return self.none(node, inspect.currentframe().f_lineno)
 
     def apply(
@@ -522,10 +617,6 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         expand_right: NodeProto,
         binary_node: NodeProto,
     ) -> List[NodeProto]:
-        assert (expand_right is None) ^ (expand_left is None), (
-            f"One and only one expand is supported but "
-            f"expand_left={expand_left},  expand_right={expand_right}"
-        )
         nodes = []
         if expand_left is not None and g.is_used_more_than_once(expand_left.output[0]):
             nodes.append(expand_left)
@@ -535,8 +626,7 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
             not binary_node.attribute
         ), f"Binary operator should not have any attribute, binary_node={binary_node}"
         new_name = g.unique_name(f"{self.__class__.__name__}_{binary_node.output[0]}")
-        return [
-            *nodes,
+        nodes.append(
             g.make_node(
                 binary_node.op_type,
                 [
@@ -547,6 +637,11 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{binary_node.name}",
                 doc_string=binary_node.doc_string,
             ),
+        )
+
+        # One or two expand, same rewriting as the expand argument is the same.
+        return [
+            *nodes,
             g.make_node(
                 "Expand",
                 [

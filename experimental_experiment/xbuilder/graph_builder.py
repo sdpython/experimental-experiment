@@ -1854,6 +1854,17 @@ class GraphBuilder(_GraphBuilderRuntime):
             if isinstance(s, str) and s not in self.dynamic_objects:
                 self.add_dynamic_object(s, s)
         self._known_shapes[name] = shape
+        if hasattr(self, "replacements_dimensions_"):
+            self.replacements_dimensions_[name] = tuple(
+                (
+                    rename_dynamic_expression(
+                        _, self.replacements_for_replacements_dimensions_
+                    )
+                    if isinstance(_, str)
+                    else _
+                )
+                for _ in shape
+            )
         if set_rank and not self.has_rank(name):
             self.set_rank(name, len(shape))
 
@@ -5797,6 +5808,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if replacements:
             if not hasattr(self, "replacements_"):
                 self.replacements_dimensions_ = {}
+                self.replacements_for_replacements_dimensions_ = replacements
             for k, v in self._known_shapes.items():
                 if v is None:
                     continue
