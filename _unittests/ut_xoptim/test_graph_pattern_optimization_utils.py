@@ -81,11 +81,32 @@ class TestGraphPatternOptimizationUtils(ExtTestCase):
     def test_get_compatible_expand_shape_for_expand_swap(self):
         mk = SBES._get_compatible_expand_shape_for_expand_swap
         self.assertEqual(
-            ("batch", 1, "seq_length", "cache_length+seq_length"),
+            (1, 1, 0, 1),
+            mk(
+                ("batch", 1, 1, 1),
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+                (1, 1, 1, "cache_length+seq_length"),
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+            ),
+        )
+        self.assertEqual(
+            "expand_arg",
             mk(
                 ("batch", 1, 1, 1),
                 ("batch", 1, "seq_length", "cache_length+seq_length"),
                 (1,),
+                None,
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+            ),
+        )
+        self.assertEqual(
+            None,
+            mk(
+                (1, 1, "seq_length", 1),
+                ("batch", 1, "seq_length", "cache_length+seq_length"),
+                (1, 1, 1, "cache_length+seq_length"),
+                None,
                 ("batch", 1, "seq_length", "cache_length+seq_length"),
             ),
         )
