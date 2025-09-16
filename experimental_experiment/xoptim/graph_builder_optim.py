@@ -519,6 +519,10 @@ class GraphBuilderPatternOptimization:
         """Returns the shape of a result."""
         return self.builder.get_shape(name)
 
+    def get_shape_renamed(self, name: str) -> int:
+        """Returns the shape of a result using user dimension name."""
+        return self.builder.get_shape_renamed(name)
+
     def node_before(self, name: str) -> NodeProto:
         """
         Returns the node producing this output.

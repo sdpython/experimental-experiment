@@ -872,14 +872,13 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
         if not g.has_shape(node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        sh1 = g.get_shape(node.input[0])
-        sh2 = g.get_shape(node.output[0])
+        sh1 = g.get_shape_renamed(node.input[0])
+        sh2 = g.get_shape_renamed(node.output[0])
         aligned_reshape = self._align_shapes(sh1, sh2)
         if aligned_reshape is None:
             return self.none(node, inspect.currentframe().f_lineno)
         assert len(aligned_reshape) == g.get_rank(node.output[0]), (
-            f"Issue with input shape {g.get_shape(node.input[0])}, "
-            f"output shape={g.get_shape(node.output[0])}, "
+            f"Issue with input shape {sh1}, output shape={sh2}, "
             f"proposed new_shape {aligned_reshape}"
         )
         gen = g.node_before(node.input[1])
@@ -893,7 +892,7 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
         reshape: NodeProto,
     ) -> List[NodeProto]:
         aligned_reshape = self._align_shapes(
-            g.get_shape(reshape.input[0]), g.get_shape(reshape.output[0])
+            g.get_shape_renamed(reshape.input[0]), g.get_shape_renamed(reshape.output[0])
         )
         new_shape = g.make_initializer(
             "",
@@ -971,8 +970,8 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
         if not g.has_shape(node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        sh1 = g.get_shape(node.input[0])
-        sh2 = g.get_shape(node.output[0])
+        sh1 = g.get_shape_renamed(node.input[0])
+        sh2 = g.get_shape_renamed(node.output[0])
         op_type, _axes = self._squeeze_axes(sh1, sh2)
         if op_type is None:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -984,7 +983,7 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
         reshape: NodeProto,
     ) -> List[NodeProto]:
         op_type, axes = self._squeeze_axes(
-            g.get_shape(reshape.input[0]), g.get_shape(reshape.output[0])
+            g.get_shape_renamed(reshape.input[0]), g.get_shape_renamed(reshape.output[0])
         )
         new_axes = g.make_initializer(
             "",

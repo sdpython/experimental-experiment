@@ -251,11 +251,13 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_shape(node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        sh1 = g.get_shape(node.input[0])
-        sh2 = g.get_shape(node.output[0])
-        assert len(sh1) == len(
-            sh2
-        ), f"Ranks disagree: shape({node.input[0]})={sh1} and shape({node.output[0]})={sh2}"
+        sh1 = g.get_shape_renamed(node.input[0])
+        sh2 = g.get_shape_renamed(node.output[0])
+        assert len(sh1) == len(sh2), (
+            f"Ranks disagree: shape({node.input[0]})={sh1} and shape({node.output[0]})={sh2}, "
+            f"not renamed shapes {self.get_shape(node.input[0])} and "
+            f"{self.get_shape(node.output[0])}"
+        )
         expand_shape = self._find_expand_shape(sh1, sh2)
         if expand_shape is None:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -267,7 +269,7 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
         reshape: NodeProto,
     ) -> List[NodeProto]:
         expand_shape = self._find_expand_shape(
-            g.get_shape(reshape.input[0]), g.get_shape(reshape.output[0])
+            g.get_shape_renamed(reshape.input[0]), g.get_shape_renamed(reshape.output[0])
         )
         new_shape = g.make_initializer(
             "",

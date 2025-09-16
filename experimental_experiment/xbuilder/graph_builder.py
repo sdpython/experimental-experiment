@@ -5635,9 +5635,16 @@ class GraphBuilder(_GraphBuilderRuntime):
         the user gave.
         """
         if self._debug_dyn_dim:
+            print(
+                f"[GraphBuilder._improves_dynamic_dimension_naming] "
+                f"{len(self.constraints_)} constaints"
+            )
             for k, v in sorted(self.constraints_.items()):
                 if k in self._debug_dyn_dim or v & self._debug_dyn_dim:
-                    print(f"[GraphBuilder._add_shape_information] {k} ~ {sorted(v)}")
+                    print(
+                        f"[GraphBuilder._improves_dynamic_dimension_naming] .. "
+                        f"{k} ~ {sorted(v)}"
+                    )
 
         def _update(dd_flat, names):
             if dd_flat:
@@ -5693,7 +5700,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         implicit_names = ["batch", "channel"]
         original = set()
         for k, v in self.dynamic_dimensions_source.items():
-            if not k.startswith("DYN"):
+            if not k.startswith("DYN") and "+" not in k:
                 original.add(k)
                 continue
             # We replace it with one implicit name.
@@ -5731,6 +5738,16 @@ class GraphBuilder(_GraphBuilderRuntime):
                 expanded_constraints[k].add(n)
             original.add(n)
 
+        # some cleaning
+        if (
+            "channel" in original
+            and "channel" not in self.dynamic_dimensions_source
+            and ("cache_length" in original or "seq_length" in original)
+        ):
+            original.remove("channel")
+
+        if self._debug_dyn_dim:
+            print(f"[GraphBuilder._improves_dynamic_dimension_naming] original={original}")
         # Let's process the output constraints.
         assert self.output_dynamic_shapes is None or isinstance(
             self.output_dynamic_shapes, dict
@@ -5766,7 +5783,34 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}._add_shape_information] dynamic shapes "
                 f"replacements={replacements}"
             )
+        if self._debug_dyn_dim:
+            print(
+                f"[GraphBuilder._improves_dynamic_dimension_naming] "
+                f"{len(replacements)} replacements"
+            )
+            for k, v in sorted(replacements.items()):
+                if k in self._debug_dyn_dim or v in self._debug_dyn_dim:
+                    print(
+                        f"[GraphBuilder._improves_dynamic_dimension_naming] .. {k!r} -> {v!r}"
+                    )
+
+        if replacements:
+            if not hasattr(self, "replacements_"):
+                self.replacements_dimensions_ = {}
+            for k, v in self._known_shapes.items():
+                if v is None:
+                    continue
+                self.replacements_dimensions_[k] = tuple(
+                    (rename_dynamic_expression(_, replacements) if isinstance(_, str) else _)
+                    for _ in v
+                )
         return replacements
+
+    def get_shape_renamed(self, name: str) -> DYNAMIC_SHAPE:
+        """Returns the shape of a result using user dimension name."""
+        if hasattr(self, "replacements_dimensions_") and name in self.replacements_dimensions_:
+            return self.replacements_dimensions_[name]
+        return self.get_shape(name)
 
     def _add_shape_information(
         self, model: Union[GraphProto, ModelProto], update_dim_names: bool = True
@@ -6051,11 +6095,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         main_begin = time.perf_counter()
 
         begin = time.perf_counter()
-        replacements = self._improves_dynamic_dimension_naming()
-        if replacements:
-            import pprint
-
-            pprint.pprint(replacements)
+        self._improves_dynamic_dimension_naming()
         statistics.append(
             dict(
                 pattern="dynamic_dimension_naming",
