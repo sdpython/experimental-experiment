@@ -146,6 +146,7 @@ class _GraphBuilderRuntime:
                 nsh.append(s)
                 ttt *= s
 
+        st = [(f"({s})" if set(s) & set("+*/-") else s) for s in st]
         nsh[rep] = (
             "*".join(st)
             if dt == ttt

@@ -22,6 +22,7 @@ from .onnx_expand import (
     ExpandBroadcastPattern,
     ExpandSwapPattern,
     ShapeBasedExpandBroadcastPattern,
+    ShapeBasedExpandBroadcastMatMulPattern,
     ShapeBasedExpandSwapPattern,
     ShapeBasedStaticExpandPattern,
 )
@@ -163,6 +164,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ShapeBasedStaticExpandPattern(verbose=verbose),
         ShapeBasedEditDistanceReshapePattern(verbose=verbose),
         ShapeBasedExpandBroadcastPattern(verbose=verbose),
+        ShapeBasedExpandBroadcastMatMulPattern(verbose=verbose),
         ShapeBasedExpandSwapPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
