@@ -639,7 +639,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            g.main_opset < 24
+            g.main_opset < 23
             or node.op_type != "Split"
             or node.domain != ""
             or len(node.output) != 2
@@ -718,62 +718,78 @@ class RotaryEmbeddingPattern(PatternOptimization):
         nodes = []
         rkx = g.get_rank(x)
         rk = g.get_rank(cache)
-        if rk != 3:
-            if rk == 2:
-                uni = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                if "zero" not in context:
-                    zero = g.unique_name("zero")
-                    g.make_initializer(zero, g.ZERO)
-                    context["zero"] = zero
-                else:
-                    zero = context["zero"]
-                if "shape_e" not in context:
-                    shape_x = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                    shape_e = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                    cst = g.make_initializer(
-                        g.unique_name("cst11"), np.array([1, 1], dtype=np.int64)
-                    )
-                    nodes.extend(
-                        [
-                            g.make_node(
-                                "Shape",
-                                [x],
-                                [shape_x],
-                                start=0,
-                                end=1,
-                                name=f"{self.__class__.__name__}--{cache}",
-                            ),
-                            g.make_node(
-                                "Concat",
-                                [shape_x, cst],
-                                [shape_e],
-                                axis=0,
-                                name=f"{self.__class__.__name__}--{cache}",
-                            ),
-                        ]
-                    )
-                    context["shape_e"] = shape_e
-                else:
-                    shape_e = context["shape_e"]
+        if rk == 2:
+            uni = g.unique_name(f"{self.__class__.__name__}--{cache}")
+            if "zero" not in context:
+                zero = g.unique_name("zero")
+                g.make_initializer(zero, g.ZERO)
+                context["zero"] = zero
+            else:
+                zero = context["zero"]
+            if "shape_e" not in context:
+                shape_x = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                shape_e = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                cst = g.make_initializer(
+                    g.unique_name("cst11"), np.array([1, 1], dtype=np.int64)
+                )
+                nodes.extend(
+                    [
+                        g.make_node(
+                            "Shape",
+                            [x],
+                            [shape_x],
+                            start=0,
+                            end=1,
+                            name=f"{self.__class__.__name__}--{cache}",
+                        ),
+                        g.make_node(
+                            "Concat",
+                            [shape_x, cst],
+                            [shape_e],
+                            axis=0,
+                            name=f"{self.__class__.__name__}--{cache}",
+                        ),
+                    ]
+                )
+                context["shape_e"] = shape_e
+            else:
+                shape_e = context["shape_e"]
 
-                uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                nodes.append(
-                    g.make_node(
-                        "Unsqueeze",
-                        [cache, zero],
-                        [uni],
-                        name=f"{self.__class__.__name__}--{cache}",
-                    )
+            uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
+            nodes.append(
+                g.make_node(
+                    "Unsqueeze",
+                    [cache, zero],
+                    [uni],
+                    name=f"{self.__class__.__name__}--{cache}",
                 )
-                nodes.append(
-                    g.make_node(
-                        "Expand",
-                        [uni, shape_e],
-                        [uni2],
-                        name=f"{self.__class__.__name__}--{cache}",
-                    )
+            )
+            nodes.append(
+                g.make_node(
+                    "Expand",
+                    [uni, shape_e],
+                    [uni2],
+                    name=f"{self.__class__.__name__}--{cache}",
                 )
-                return uni2, nodes
+            )
+            return uni2, nodes
+        if rk == 4:
+            assert g.has_shape(cache), f"Missing shape for {cache!r}"
+            shape = g.get_shape(cache)
+            assert 1 in shape, f"Cache is 4D but it should be 3D, shape={shape}"
+            pos = shape.index(1)
+            uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
+            axis = g.unique_name(f"{self.__class__.__name__}--{cache}-axis")
+            g.make_initializer(axis, np.array([pos], dtype=np.int64))
+            return uni2, [
+                g.make_node(
+                    "Squeeze",
+                    [cache, axis],
+                    [uni2],
+                    name=f"{self.__class__.__name__}--{cache}",
+                )
+            ]
+
         raise NotImplementedError(
             f"preprocess not implemented when rk={rk}, rkx={rkx} for x={x!r} and res={cache!r}"
         )

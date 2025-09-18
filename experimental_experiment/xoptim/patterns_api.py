@@ -52,13 +52,15 @@ class MatchResult:
         types = [n.op_type for n in self.nodes if n is not None]
         if short:
             return f"MatchResult: {self.pattern} replaces {types}"
-        inputs = set()
-        outputs = set()
+        inputs = []
+        outputs = []
+        set_inputs = set()
         for node in self.nodes:
             if node is None:
                 continue
-            inputs |= set(node.input)
-            outputs |= set(node.output)
+            inputs.extend([i for i in node.input if i not in set_inputs])
+            outputs.extend(node.output)
+            set_inputs |= set(node.input)
         return (
             f"MatchResult: {self.pattern} replaces {types}, "
             f"inputs: {inputs}, outputs: {outputs}"

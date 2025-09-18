@@ -1003,7 +1003,7 @@ class GraphBuilderPatternOptimization:
     def _check_graph_nodes(
         self,
         nodes: List[NodeProto],
-        step: str,
+        step: Union[Callable, str],
         iteration: int,
         code: str,
         known: Set[str],
@@ -1030,10 +1030,11 @@ class GraphBuilderPatternOptimization:
                             )
                         ]
                     )
+                    steps = step if isinstance(step, str) else step()
                     raise AssertionError(
-                        f"Unknown input {i!r}, step {step!r} at position {p} "
-                        f"in node {node.op_type!r} "
+                        f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "
                         f"[{node.name}]: {node.input} -> {node.output}, "
+                        f"step\n--\n{steps!r}\n--\n"
                         f"found after = {i in after}\n------\n"
                         f"{assert_text}\n------\n"
                         f"{self.builder.pretty_text()}"
@@ -1075,9 +1076,7 @@ class GraphBuilderPatternOptimization:
         code: str,
         verifies: bool,
     ):
-        """
-        Verifies the graph.
-        """
+        """Verifies the graph."""
         begin = time.perf_counter()
         assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
         known = (
@@ -1427,7 +1426,9 @@ class GraphBuilderPatternOptimization:
                     time_in=time.perf_counter() - begin,
                 )
                 statistics.append(obs)
-                self._check_graph(statistics, str(match), it, "A", self.verifies)
+                self._check_graph(
+                    statistics, lambda _=match: _.to_string(False), it, "A", self.verifies
+                )
 
                 n_added += add
                 n_removed += rem
