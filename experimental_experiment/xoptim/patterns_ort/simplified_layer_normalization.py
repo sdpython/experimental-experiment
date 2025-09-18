@@ -7,7 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SimplifiedLayerNormalizationPattern(PatternOptimization):
-    """Replaces the sequence Transpose, Matmul into FusedMatMul."""
+    """Fuses the nodes equivalent to SimplifiedLayerNormalization."""
 
     def match(
         self,
