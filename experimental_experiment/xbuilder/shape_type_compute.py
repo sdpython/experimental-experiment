@@ -1072,7 +1072,7 @@ def _set_shape_type_op_any_expand(self: "GraphBuilder", node: NodeProto):  # noq
             if -1 not in cst and 1 not in cst and 0 not in cst:
                 self.set_shape(k, cst)
                 shape_set = True
-            elif all_int(cst) and self.has_shape(node.input[0]):
+            elif self.has_shape(node.input[0]):
                 sh = self.get_shape(node.input[0])
                 new_shape = self._apply_expand_to_shape(sh, cst)
                 if new_shape is not None:

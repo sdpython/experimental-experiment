@@ -168,7 +168,6 @@ class _GraphBuilderRuntime:
         assert isinstance(
             new_shape, tuple
         ), f"unexpected type {type(new_shape)} for input_shape."
-        assert all_int(new_shape), f"unexpected type for a dimension in {new_shape}"
 
         if -1 not in new_shape and 1 not in new_shape:
             return new_shape
@@ -190,6 +189,10 @@ class _GraphBuilderRuntime:
             elif s == 0:
                 nsh.append(0)
             else:
+                assert isinstance(s, int) or (i < len(input_shape) and input_shape[i] == 1), (
+                    f"Unable to compute expanded shape at position {i} when trying "
+                    f"to expand shape {input_shape} with {new_shape}{self.get_debug_msg()}"
+                )
                 nsh.append(s)
         return tuple(nsh)
 

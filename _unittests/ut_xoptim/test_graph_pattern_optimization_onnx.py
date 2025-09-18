@@ -5706,6 +5706,94 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_shape_based_expand_cast_where_1(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["batch"], start=0, end=1),
+                    oh.make_node("Concat", ["batch", "o11"], ["exp"], axis=0),
+                    oh.make_node("Expand", ["X", "exp"], ["Xe"]),
+                    oh.make_node("Cast", ["Xe"], ["Xeb"], to=TensorProto.BOOL),
+                    oh.make_node("Where", ["Xeb", "cst", "Xe"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["b", "c"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["b", "b", "c"])],
+                [
+                    onh.from_array(np.array([1, 1], dtype=np.int64), name="o11"),
+                    onh.from_array(np.array([-np.inf], dtype=np.float32), name="cst"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {
+            "X": (np.arange(12).reshape((3, 4)) % 3).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="ShapeBasedExpandCastWhereSwap", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Cast", "Where", "Shape", "Concat", "Expand"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_shape_based_expand_cast_where_2(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["batch"], start=0, end=1),
+                    oh.make_node("Concat", ["batch", "o11"], ["exp"], axis=0),
+                    oh.make_node("Expand", ["X", "exp"], ["Xe"]),
+                    oh.make_node("Cast", ["Xe"], ["Xeb"], to=TensorProto.BOOL),
+                    oh.make_node("Where", ["Xeb", "Xe", "cst"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["b", "c"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["b", "b", "c"])],
+                [
+                    onh.from_array(np.array([1, 1], dtype=np.int64), name="o11"),
+                    onh.from_array(np.array([-np.inf], dtype=np.float32), name="cst"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {
+            "X": (np.arange(12).reshape((3, 4)) % 3).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="ShapeBasedExpandCastWhereSwap", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Cast", "Where", "Shape", "Concat", "Expand"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
