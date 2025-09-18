@@ -1761,13 +1761,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         """Creates a new dimension."""
         if op == "^":
             # very simple trick for the time being
-            if a.endswith(f"^{b}"):
+            if isinstance(a, str) and a.endswith(f"^{b}"):
                 return a
-            if b.startswith(f"{a}^"):
+            if isinstance(b, str) and b.startswith(f"{a}^"):
                 return b
-        if set(a) & set("+/*-^"):
+        if isinstance(a, str) and set(a) & set("+/*-^"):
             a = f"({a})"
-        if set(b) & set("+/*-^"):
+        if isinstance(b, str) and set(b) & set("+/*-^"):
             b = f"({b})"
         return f"{a}{op}{b}"
 

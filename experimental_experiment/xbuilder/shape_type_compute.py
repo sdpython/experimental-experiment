@@ -49,8 +49,10 @@ def broadcast_shape(
     new_shape = []
     for a, b in zip(sh1, sh2):
         if isinstance(a, int):
-            if isinstance(b, int):
-                d = max(a, b)
+            if a == 0:
+                d = 0
+            elif isinstance(b, int):
+                d = max(a, b) if b > 0 else 0
             elif a == 1:
                 d = b
             else:
@@ -60,7 +62,9 @@ def broadcast_shape(
                     graph_builder.register_constraint_dimension(b, a)
         elif isinstance(b, int):
             # a is str
-            if b == 1:
+            if b == 0:
+                d = 0
+            elif b == 1:
                 d = a
             elif b != 1:
                 # a is not int, it is str
