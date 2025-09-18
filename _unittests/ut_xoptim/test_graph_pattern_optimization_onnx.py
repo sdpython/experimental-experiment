@@ -30,6 +30,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_onnx,
     requires_torch,
+    requires_onnxruntime,
     hide_stdout,
 )
 from experimental_experiment.xbuilder.graph_builder import (
@@ -5828,6 +5829,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         check_model(model)
         return model
 
+    @requires_onnxruntime("1.23")
     def test_rms_normalization_model(self):
         for div, dyn in itertools.product([False, True], [False, True]):
             with self.subTest(div=div, dyn=dyn):
@@ -5912,6 +5914,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         check_model(model)
         return model
 
+    @requires_onnxruntime("1.23")
     def test_rms_normalization_model_cast(self):
         for div, dyn in itertools.product([False, True], [False, True]):
             with self.subTest(div=div, dyn=dyn):

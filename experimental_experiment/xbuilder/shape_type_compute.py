@@ -268,14 +268,15 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str) -> bool:
         for a, b in zip(sh1[:-2], sh2[:-2]):
             if all_int((a, b)) or a == b:
                 new_shape.append(max(a, b))
-            elif a == 1:
+                continue
+            if a == 1:
                 new_shape.append(b)
-            elif b == 1:
+                continue
+            if b == 1:
                 new_shape.append(a)
-            else:
-                # unable to decide, falls back to rank
-                g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
-                return True
+                continue
+            # We create a new dimension.
+            new_shape.append(g.make_dimension_name_if_necessary(a, b, "^"))
 
         new_shape.append(sh1[-2])
         new_shape.append(sh2[-1])

@@ -684,11 +684,11 @@ class ShapeBasedExpandBroadcastMatMulPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "MatMul" or node.domain != "":
             return self.none()
-        if (
-            not g.has_shape(node.output[0])
-            or not g.has_shape(node.input[0])
-            or not g.has_shape(node.input[1])
-        ):
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         node_left = g.node_before(node.input[0])
