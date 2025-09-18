@@ -188,6 +188,12 @@ class _GraphBuilderRuntime:
                 nsh.append(input_shape[i])
             elif s == 0:
                 nsh.append(0)
+            elif (
+                i < len(input_shape) and isinstance(s, str) and isinstance(input_shape[i], str)
+            ):
+                if s != input_shape[i]:
+                    return None
+                nsh.append(s)
             else:
                 assert isinstance(s, int) or (i < len(input_shape) and input_shape[i] == 1), (
                     f"Unable to compute expanded shape at position {i} when trying "
