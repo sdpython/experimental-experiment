@@ -49,8 +49,10 @@ def broadcast_shape(
     new_shape = []
     for a, b in zip(sh1, sh2):
         if isinstance(a, int):
-            if isinstance(b, int):
-                d = max(a, b)
+            if a == 0:
+                d = 0
+            elif isinstance(b, int):
+                d = max(a, b) if b > 0 else 0
             elif a == 1:
                 d = b
             else:
@@ -60,7 +62,9 @@ def broadcast_shape(
                     graph_builder.register_constraint_dimension(b, a)
         elif isinstance(b, int):
             # a is str
-            if b == 1:
+            if b == 0:
+                d = 0
+            elif b == 1:
                 d = a
             elif b != 1:
                 # a is not int, it is str
@@ -268,14 +272,15 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str) -> bool:
         for a, b in zip(sh1[:-2], sh2[:-2]):
             if all_int((a, b)) or a == b:
                 new_shape.append(max(a, b))
-            elif a == 1:
+                continue
+            if a == 1:
                 new_shape.append(b)
-            elif b == 1:
+                continue
+            if b == 1:
                 new_shape.append(a)
-            else:
-                # unable to decide, falls back to rank
-                g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
-                return True
+                continue
+            # We create a new dimension.
+            new_shape.append(g.make_dimension_name_if_necessary(a, b, "^"))
 
         new_shape.append(sh1[-2])
         new_shape.append(sh2[-1])
@@ -1072,7 +1077,7 @@ def _set_shape_type_op_any_expand(self: "GraphBuilder", node: NodeProto):  # noq
             if -1 not in cst and 1 not in cst and 0 not in cst:
                 self.set_shape(k, cst)
                 shape_set = True
-            elif all_int(cst) and self.has_shape(node.input[0]):
+            elif self.has_shape(node.input[0]):
                 sh = self.get_shape(node.input[0])
                 new_shape = self._apply_expand_to_shape(sh, cst)
                 if new_shape is not None:

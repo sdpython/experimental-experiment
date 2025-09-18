@@ -239,7 +239,7 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
         ):
             if self.verbose:
                 print(
-                    f"[ShapeBasedExpandBroadcastPattern.match] {shape_left} "
+                    f"[{self.__class__.__name__}.match] {shape_left} "
                     f"{node.op_type} {shape_right} -> {g.get_shape_renamed(node.output[0])}"
                 )
             return MatchResult(self, [node_left, node_right, node], self.apply)
@@ -410,7 +410,7 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
         new_shape = g.make_initializer(
             "",
             np.array(expand_shape, dtype=np.int64),
-            source="StaticExpandPattern.m1",
+            source=f"{self.__class__.__name__}.m1",
         )
         return [
             g.make_node(
@@ -576,7 +576,7 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
             ):
                 if self.verbose:
                     print(
-                        f"[ShapeBasedExpandBroadcastPattern.match.1] {shape_left} "
+                        f"[{self.__class__.__name__}.match.1] {shape_left} "
                         f"{node.op_type} {shape_right} -> {output_shape}"
                     )
                 return MatchResult(self, [node_left, node_right, node], self.apply)
@@ -602,7 +602,7 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         if expand_arg:
             if self.verbose:
                 print(
-                    f"[ShapeBasedExpandBroadcastPattern.match.2] {shape_left} "
+                    f"[{self.__class__.__name__}.match.2] {shape_left} "
                     f"{node.op_type} {shape_right} -> {output_shape} with "
                     f"expand_arg={expand_arg}"
                 )
@@ -651,5 +651,209 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
                 binary_node.output,
                 name=f"{self.__class__.__name__}--{binary_node.name}",
                 doc_string=binary_node.doc_string,
+            ),
+        ]
+
+
+class ShapeBasedExpandBroadcastMatMulPattern(PatternOptimization):
+    """
+    Similar to
+    :class:`experimental_experiment.xoptim.patterns.onnx_expand.ShapeBasedExpandBroadcastPattern`,
+    but works only with MatMul.
+    """
+
+    @classmethod
+    def _is_compatible_shapes_for_expand(
+        cls, shape_left: DYNAMIC_SHAPE, shape_right: DYNAMIC_SHAPE, output_shape: DYNAMIC_SHAPE
+    ) -> bool:
+        """
+        Checks that the binary operations of the two input shapes returns the output_shape.
+        Then no Expand node is needed.
+        """
+        if len(shape_left) < 2 or len(shape_right) < 2 or len(output_shape) < 2:
+            return False
+        return ShapeBasedExpandBroadcastPattern._is_compatible_shapes_for_expand(
+            shape_left[:-2], shape_right[:-2], output_shape[:-2]
+        )
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "MatMul" or node.domain != "":
+            return self.none()
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        node_left = g.node_before(node.input[0])
+        node_right = g.node_before(node.input[1])
+        before = [
+            None if n is None or n.op_type != "Expand" else n for n in [node_left, node_right]
+        ]
+        if before == [None, None]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # At least one expand.
+        node_left, node_right = before
+        shape_left = g.get_shape_renamed(
+            node.input[0] if node_left is None else node_left.input[0]
+        )
+        shape_right = g.get_shape_renamed(
+            node.input[1] if node_right is None else node_right.input[0]
+        )
+        if self._is_compatible_shapes_for_expand(
+            shape_left, shape_right, g.get_shape_renamed(node.output[0])
+        ):
+            if self.verbose:
+                print(
+                    f"[{self.__class__.__name__}.match] {shape_left} "
+                    f"{node.op_type} {shape_right} -> {g.get_shape_renamed(node.output[0])}"
+                )
+            return MatchResult(self, [node_left, node_right, node], self.apply)
+        # We could end up with the following case.
+        # shape_left   = (1, 1, 'seq_length', 'cache_length + seq_length')
+        # shape_right  = (1, 1, 'seq_length', 'cache_length + seq_length')
+        # output_shape = ('batch', 1, 'seq_length', 'cache_length + seq_length')
+        # When this happes, it could also be caught by another pattern.
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        expand_left: NodeProto,
+        expand_right: NodeProto,
+        binary_node: NodeProto,
+    ) -> List[NodeProto]:
+        nodes = []
+        if expand_left is not None and g.is_used_more_than_once(expand_left.output[0]):
+            nodes.append(expand_left)
+        if expand_right is not None and g.is_used_more_than_once(expand_right.output[0]):
+            nodes.append(expand_right)
+        assert (
+            not binary_node.attribute
+        ), f"Binary operator should not have any attribute, binary_node={binary_node}"
+        return [
+            *nodes,
+            g.make_node(
+                binary_node.op_type,
+                [
+                    binary_node.input[0] if expand_left is None else expand_left.input[0],
+                    binary_node.input[1] if expand_right is None else expand_right.input[0],
+                ],
+                binary_node.output,
+                name=f"{self.__class__.__name__}--{binary_node.name}",
+                doc_string=binary_node.doc_string,
+            ),
+        ]
+
+
+class ShapeBasedExpandCastWhereSwapPattern(PatternOptimization):
+    """Rewrites Where(Cast(X), X, cond)."""
+
+    @classmethod
+    def _compatible_shapes(
+        cls,
+        cond: DYNAMIC_SHAPE,
+        cst: DYNAMIC_SHAPE,
+        output: DYNAMIC_SHAPE,
+        before: DYNAMIC_SHAPE,
+    ):
+        if cond != output:
+            return False
+        if len(before) < len(output):
+            before = (1,) * (len(output) - len(before)) + before
+        if len(cst) < len(output):
+            cst = (1,) * (len(output) - len(cst)) + cst
+        out = ShapeBasedExpandSwapPattern._broadcast_shape(before, cst)
+        if len(out) != len(output) or len(out) != len(before):
+            return False
+        return all(not (o != e and o != b) for b, o, e in zip(before, out, output))
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Where" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none()
+        cast_node = g.node_before(node.input[0])
+        if cast_node is None or cast_node.op_type != "Cast" or cast_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if cast_node.input[0] not in node.input[1:]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        expand_node = g.node_before(cast_node.input[0])
+        if expand_node is None or expand_node.op_type != "Expand" or expand_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        nodes = g.next_nodes(cast_node.input[0])
+        if len(nodes) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[2]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(expand_node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        same_index = list(node.input).index(cast_node.input[0])
+        if self._compatible_shapes(
+            g.get_shape_renamed(node.input[0]),
+            g.get_shape_renamed(node.input[3 - same_index]),
+            g.get_shape_renamed(node.output[0]),
+            g.get_shape_renamed(expand_node.input[0]),
+        ):
+            return MatchResult(self, [expand_node, cast_node, node], self.apply)
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        expand_node: NodeProto,
+        cast_node: NodeProto,
+        where_node: NodeProto,
+    ) -> List[NodeProto]:
+        to = g.get_attribute(cast_node, "to").i
+        pos_index = list(where_node.input).index(expand_node.output[0])
+        cast_output = g.unique_name(f"{self.__class__.__name__}_{cast_node.output[0]}")
+        where_output = g.unique_name(f"{self.__class__.__name__}_{where_node.output[0]}")
+        return [
+            g.make_node(
+                cast_node.op_type,
+                [expand_node.input[0]],
+                [cast_output],
+                to=to,
+                name=f"{self.__class__.__name__}--{cast_node.name}",
+                doc_string=cast_node.doc_string,
+            ),
+            g.make_node(
+                where_node.op_type,
+                (
+                    [cast_output, expand_node.input[0], where_node.input[2]]
+                    if pos_index == 1
+                    else [cast_output, where_node.input[1], expand_node.input[0]]
+                ),
+                [where_output],
+                name=f"{self.__class__.__name__}--{where_node.name}",
+                doc_string=where_node.doc_string,
+            ),
+            g.make_node(
+                expand_node.op_type,
+                [where_output, expand_node.input[1]],
+                [where_node.output[0]],
+                name=f"{self.__class__.__name__}--{expand_node.name}",
+                doc_string=expand_node.doc_string,
             ),
         ]

@@ -418,9 +418,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     [n.op_type for n in opt_onx.graph.node],
                 )
 
-                feeds = {
-                    "X": np.arange(20).reshape((5, 4)).astype(np.float32),
-                }
+                feeds = {"X": np.arange(20).reshape((5, 4)).astype(np.float32)}
                 ref1 = ExtendedReferenceEvaluator(model)
                 expected = ref1.run(None, feeds)
 
@@ -507,9 +505,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     [n.op_type for n in opt_onx.graph.node],
                 )
 
-                feeds = {
-                    "X": np.arange(20).reshape((5, 4)).astype(np.float32),
-                }
+                feeds = {"X": np.arange(20).reshape((5, 4)).astype(np.float32)}
                 ref1 = ExtendedReferenceEvaluator(model)
                 expected = ref1.run(None, feeds)
 

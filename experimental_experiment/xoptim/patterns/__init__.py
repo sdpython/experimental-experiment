@@ -22,6 +22,8 @@ from .onnx_expand import (
     ExpandBroadcastPattern,
     ExpandSwapPattern,
     ShapeBasedExpandBroadcastPattern,
+    ShapeBasedExpandBroadcastMatMulPattern,
+    ShapeBasedExpandCastWhereSwapPattern,
     ShapeBasedExpandSwapPattern,
     ShapeBasedStaticExpandPattern,
 )
@@ -32,6 +34,7 @@ from .onnx_layer_normalization import (
     CastLayerNormalizationCastPattern,
     LayerNormalizationPattern,
     LayerNormalizationScalePattern,
+    RMSNormalizationPattern,
 )
 from .onnx_mul import (
     MulMulMulScalarPattern,
@@ -163,8 +166,11 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ShapeBasedStaticExpandPattern(verbose=verbose),
         ShapeBasedEditDistanceReshapePattern(verbose=verbose),
         ShapeBasedExpandBroadcastPattern(verbose=verbose),
+        ShapeBasedExpandBroadcastMatMulPattern(verbose=verbose),
+        ShapeBasedExpandCastWhereSwapPattern(verbose=verbose),
         ShapeBasedExpandSwapPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
+        RMSNormalizationPattern(verbose=verbose),
         RotaryConcatPartPattern(verbose=verbose),
         RotaryEmbeddingPattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),

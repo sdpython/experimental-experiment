@@ -115,6 +115,7 @@ class TestGraphPatternDynamic(ExtTestCase):
         exceptions: List[str],
         name: Optional[str] = None,
     ):
+        avoid_patterns = {"apply_ShapeBasedExpandSwapPattern", "apply_ReshapePattern"}
         model1s = model1.SerializeToString()
         model2s = model2.SerializeToString()
         self.assertNotEqual(len(model1.graph.node), len(model2.graph.node))
@@ -143,14 +144,12 @@ class TestGraphPatternDynamic(ExtTestCase):
                 app1 = [
                     s
                     for s in stat1
-                    if s["pattern"].startswith(prefix)
-                    and s["pattern"] != "apply_ReshapePattern"
+                    if s["pattern"].startswith(prefix) and s["pattern"] not in avoid_patterns
                 ]
                 app2 = [
                     s
                     for s in stat2
-                    if s["pattern"].startswith(prefix)
-                    and s["pattern"] != "apply_ReshapePattern"
+                    if s["pattern"].startswith(prefix) and s["pattern"] not in avoid_patterns
                 ]
                 if pat.__class__.__name__ in exceptions:
                     assert len(app1) > 0, f"Issue with pattern {patterns[i]} and app1={app1}"

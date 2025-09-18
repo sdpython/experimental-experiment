@@ -1755,6 +1755,22 @@ class GraphBuilder(_GraphBuilderRuntime):
         if dim not in self.dynamic_objects:
             self.add_dynamic_object(dim, dim)
 
+    def make_dimension_name_if_necessary(
+        self, a: Union[int, str], b: Union[int, str], op: str
+    ) -> str:
+        """Creates a new dimension."""
+        if op == "^":
+            # very simple trick for the time being
+            if isinstance(a, str) and a.endswith(f"^{b}"):
+                return a
+            if isinstance(b, str) and b.startswith(f"{a}^"):
+                return b
+        if isinstance(a, str) and set(a) & set("+/*-^"):
+            a = f"({a})"
+        if isinstance(b, str) and set(b) & set("+/*-^"):
+            b = f"({b})"
+        return f"{a}{op}{b}"
+
     def set_shape(
         self,
         name: str,
@@ -4141,6 +4157,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             return output_names[0]
         return output_names
 
+    def _another_pass_at_shape_inference(self):
+        for node in self.nodes:
+            if any(not self.has_shape(o) for o in node.output):
+                self._make_node_set_type_shape(node)
+
     def _info_shape_type(self, outputs: List[str]) -> str:
         rows = []
         for o in outputs:
@@ -6108,6 +6129,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         begin = time.perf_counter()
         self._improves_dynamic_dimension_naming()
+        self._another_pass_at_shape_inference()
         statistics.append(
             dict(
                 pattern="dynamic_dimension_naming",
