@@ -433,6 +433,37 @@ def aten_or(
     return res
 
 
+def aten_outer(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    y: T,
+    name="outer",
+) -> T:
+    "outer"
+    assert g.has_rank(x) and g.get_rank(x) == 1, f"rank(x) must be 1{g.get_debug_msg()}"
+    assert g.has_rank(y) and g.get_rank(y) == 1, f"rank(y) must be 1{g.get_debug_msg()}"
+    res = g.op.Mul(
+        g.op.UnsqueezeAnyOpset(x, g.ONE, name=name),
+        g.op.UnsqueezeAnyOpset(y, g.ZERO, name=name),
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        if g.has_shape(x) and g.has_shape(y):
+            shx = g.get_shape(x)
+            shy = g.get_shape(y)
+            g.set_shape(res, shx + shy)
+        else:
+            g.set_shape(res, 2)
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        elif g.has_type(y):
+            g.set_type(res, g.get_type(y))
+    return res
+
+
 def aten_and_(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -11121,48 +11152,95 @@ def aten_unflatten_int(
     name: str = "unflatten_int",
 ) -> T:
     "unflatten --> Reshape"
-    if g.has_shape(x) and is_static_shape(g.get_shape(x)):
-        shape = list(g.get_shape(x))
-        dim = (dim + len(shape)) % len(shape)
-        shape[dim : dim + 1] = sizes
-        return g.op.Reshape(x, np.array(shape, dtype=np.int64), name=name, outputs=outputs)
+    assert isinstance(dim, int), f"dim={dim} is not an int{g.get_debug_msg()}"
+    assert g.has_rank(x), f"rank(x) is missing{g.get_debug_msg()}"
+    if all(isinstance(d, int) for d in sizes):
+        if dim == -1 or dim == g.get_rank(x) - 1:
+            res = g.op.Reshape(
+                x,
+                np.array([*[0 for i in range(g.get_rank(x) - 1)], *sizes], dtype=np.int64),
+                name=name,
+                outputs=outputs,
+            )
+            if sts:
+                g.set_type(res, g.get_type(x))
+                if g.has_shape(x):
+                    sh = list(g.get_shape(x))
+                    if all(i > 0 for i in sizes):
+                        g.set_shape(res, (*sh[:-1], *sizes))
+                    elif isinstance(sh[dim], int):
+                        sh2 = list(sizes)
+                        sh2[sh2.index(-1)] = int(
+                            sh[dim] // np.prod([i for i in sizes if i > 0])
+                        )
+                        g.set_shape(res, (*sh[:-1], *sh2))
+                    else:
+                        g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+                else:
+                    g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+            return res
 
-    if dim == -1:
-        shape = g.op.Shape(x, name=name, end=-1)
-        new_shape = g.op.Concat(shape, np.array(sizes, dtype=np.int64), axis=0, name=name)
+        if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+            shape = list(g.get_shape(x))
+            dim = (dim + len(shape)) % len(shape)
+            shape[dim : dim + 1] = sizes
+            return g.op.Reshape(x, np.array(shape, dtype=np.int64), name=name, outputs=outputs)
+
+        if dim == 0:
+            shape = g.op.Shape(x, name=name, start=1)
+            new_shape = g.op.Concat(np.array(sizes, dtype=np.int64), shape, axis=0, name=name)
+            res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
+            if sts:
+                g.set_type(res, g.get_type(x))
+                if g.has_shape(x):
+                    sh = list(g.get_shape(x))
+                    if all(i > 0 for i in sizes):
+                        g.set_shape(res, (*sh[:-1], *sizes))
+                    elif isinstance(sh[dim], int):
+                        sh2 = list(sizes)
+                        sh2[sh2.index(-1)] = int(
+                            sh[dim] // np.prod([i for i in sizes if i > 0])
+                        )
+                        g.set_shape(res, (*sh[:-1], *sh2))
+                    else:
+                        g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+                else:
+                    g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
+            return res
+
+        shape1 = g.op.Shape(x, end=dim, name=name)
+        shape2 = g.op.Shape(x, start=dim + 1, name=name)
+        new_shape = g.op.Concat(
+            shape1, np.array(sizes, dtype=np.int64), shape2, axis=0, name=name
+        )
         res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
         if sts:
             g.set_type(res, g.get_type(x))
             if g.has_shape(x):
                 sh = list(g.get_shape(x))
-                g.set_shape(res, (*sh[:-1], *sizes))
+                g.set_shape(res, (*sh[:dim], *sizes, *sh[dim + 1 :]))
             elif g.has_rank(x):
                 g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
         return res
 
-    if dim == 0:
-        shape = g.op.Shape(x, name=name, start=1)
-        new_shape = g.op.Concat(np.array(sizes, dtype=np.int64), shape, axis=0, name=name)
-        res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
-        if sts:
-            g.set_type(res, g.get_type(x))
-            if g.has_shape(x):
-                sh = list(g.get_shape(x))
-                g.set_shape(res, (*sizes, *sh[1:]))
-            elif g.has_rank(x):
-                g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
-        return res
-
-    shape1 = g.op.Shape(x, end=dim - 1, name=name)
-    shape2 = g.op.Shape(x, start=dim + 1, name=name)
-    new_shape = g.op.Concat(shape1, np.array(sizes, dtype=np.int64), shape2, axis=0, name=name)
+    # dynamic sizes
+    rkx = g.get_rank(x)
+    concat_inputs = [g.op.Shape(x, end=dim, name=name)] if dim > 0 else []
+    for s in sizes:
+        if isinstance(s, int):
+            concat_inputs.append(np.array([s], dtype=np.int64))
+        else:
+            concat_inputs.append(g.op.UnsqueezeAnyOpset(s, g.ZERO, name=name))
+    if ((dim + rkx) % rkx) + 1 < rkx:
+        concat_inputs.append(g.op.Shape(x, start=dim + 1, name=name))
+    new_shape = g.op.Concat(*concat_inputs, axis=0, name=name)
     res = g.op.Reshape(x, new_shape, name=name, outputs=outputs)
     if sts:
         g.set_type(res, g.get_type(x))
-        if g.has_shape(x):
-            sh = list(g.get_shape(x))
+        if g.has_shape(x) and -1 not in sizes:
+            sh = g.get_shape(x)
             g.set_shape(res, (*sh[:dim], *sizes, *sh[dim + 1 :]))
-        elif g.has_rank(x):
+        else:
             g.set_rank(res, g.get_rank(x) + len(sizes) - 1)
     return res
 
@@ -11283,12 +11361,25 @@ def _aten_upsample_output_size(
     if batch_channel is None:
         batch_channel = g.op.Shape(x, start=0, end=2, name=name)
     if isinstance(output_size, (tuple, list)):
-        assert is_static_shape(output_size), f"output_size={output_size} must be static"
-        rsize = g.make_initializer(
-            "",
-            np.array(output_size, dtype=np.int64),
-            source="_aten_upsample_output_size.rsize",
-        )
+        if is_static_shape(output_size):
+            rsize = g.make_initializer(
+                "",
+                np.array(output_size, dtype=np.int64),
+                source="_aten_upsample_output_size.rsize",
+            )
+        else:
+            concat_inputs = []
+            for o in output_size:
+                if isinstance(o, str):
+                    concat_inputs.append(g.op.UnsqueezeAnyOpset(o, g.ZERO, name=name))
+                elif isinstance(o, int):
+                    concat_inputs.append(np.array([o], dtype=np.int64))
+                else:
+                    raise RuntimeError(
+                        f"Unexpected type {type(o)} in output_size={output_size}"
+                        f"{g.get_debug_msg()}"
+                    )
+            rsize = g.op.Concat(*concat_inputs, axis=0, name=name)
     else:
         assert isinstance(
             output_size, str
