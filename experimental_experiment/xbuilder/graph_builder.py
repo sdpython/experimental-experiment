@@ -3190,7 +3190,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def _simplifies_dynamic_dimension_string(self, dim: str) -> str:
         dim = dim.replace(" ", "")
-        while dim[0] == "(" and dim[-1] == ")":
+        while dim[0] == "(" and dim[-1] == ")" and "(" not in dim[1:-1]:
             dim = dim[1:-1]
         if dim.startswith("0+"):
             dim = dim[2:]
