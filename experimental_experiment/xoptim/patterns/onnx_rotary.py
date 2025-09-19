@@ -2,6 +2,7 @@ import inspect
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 from onnx import NodeProto
+from ...helpers import make_idn
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -192,7 +193,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             if dim_left != cdim_right or dim_right != cdim_left:
                 return self.none(node, inspect.currentframe().f_lineno)
         else:
-            if id(split_left) != id(split_right):
+            if make_idn(split_left) != make_idn(split_right):
                 # not the same split
                 return self.none(node, inspect.currentframe().f_lineno)
             if len(split_left.output) != 2:
@@ -442,7 +443,7 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         use_split = False
         if slice_left.op_type == "Split" == slice_right.op_type:
-            if id(slice_left) != id(slice_right):
+            if make_idn(slice_left) != make_idn(slice_right):
                 return self.none(node, inspect.currentframe().f_lineno)
             use_split = True
 
@@ -555,7 +556,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         if (
             cst_right is not None
             and g.is_used_more_than_once(cst_right.output[0])
-            and (cst_left is None or id(cst_left) != id(cst_right))
+            and (cst_left is None or make_idn(cst_left) != make_idn(cst_right))
         ):
             keep.append(cst_right)
 
@@ -620,9 +621,9 @@ class RotaryConcatPartPattern(PatternOptimization):
             if cst_left is not None:
                 other_nodes.append(cst_left)
         if scatter_right is not None and g.is_used_more_than_once(scatter_right.input[0]):
-            if tr_data_right is not None and id(tr_data_right) != id(tr_data_left):
+            if tr_data_right is not None and make_idn(tr_data_right) != make_idn(tr_data_left):
                 other_nodes.append(tr_data_right)
-            if cst_right is not None and id(cst_right) != id(cst_left):
+            if cst_right is not None and make_idn(cst_right) != make_idn(cst_left):
                 other_nodes.append(cst_right)
         if other_nodes:
             return [*reversed(other_nodes), split, neg, concat]
@@ -702,7 +703,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
             or len(node_after2) != 1
             or node_after1[0].op_type != node_after2[0].op_type
             or node_after1[0].op_type != "Add"
-            or id(node_after1[0]) != id(node_after2[0])
+            or make_idn(node_after1[0]) != make_idn(node_after2[0])
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(

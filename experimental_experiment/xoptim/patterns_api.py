@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import AttributeProto, FunctionProto, ModelProto, NodeProto, TensorProto
+from ..helpers import make_idn
 
 
 def string_to_elem_type(name: str) -> int:
@@ -504,7 +505,7 @@ class EasyPatternOptimization(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
 
             # matching backward
-            key = id(ppred)
+            key = make_idn(ppred)
             if key not in marked:
                 # check for ambiguities
                 amb = self._has_ambiguities(pair_results_names, pred, ppred)
@@ -643,7 +644,7 @@ class EasyPatternOptimization(PatternOptimization):
                         )
                     return self.none(node, inspect.currentframe().f_lineno)
 
-                key = id(pns[0])
+                key = make_idn(pns[0])
                 if key not in marked:
                     marked[key] = ns[0], pns[0]
                     self._update_ambiguities(pair_results_names, ns[0], pns[0])
@@ -652,19 +653,21 @@ class EasyPatternOptimization(PatternOptimization):
                 continue
 
             # Let's remove the nodes already marked.
-            p_marked = [_ for _ in pns if id(_) not in marked]
-            id_marked = [id(marked[id(_)][0]) for _ in pns if id(_) in marked]
+            p_marked = [_ for _ in pns if make_idn(_) not in marked]
+            id_marked = [
+                make_idn(marked[make_idn(_)][0]) for _ in pns if make_idn(_) in marked
+            ]
             assert len(id_marked) + len(p_marked) == len(pns), (
                 f"Unexpected, id_marked={id_marked}, "
-                f"id_p_marked={set(map(id, p_marked))}, "
-                f"pns_ids={set(map(id, pns))}, "
-                f"ns_ids={set(map(id, ns))}, o={o!r}, op={op!r}, "
+                f"id_p_marked={set(map(make_idn, p_marked))}, "
+                f"pns_ids={set(map(make_idn, pns))}, "
+                f"ns_ids={set(map(make_idn, ns))}, o={o!r}, op={op!r}, "
                 f"n.op_type={n.op_type!r}, "
                 f"n.output={n.output}, np.output={pn.output}, "
                 f"ns_types={set(_.op_type for _ in ns)}, "
                 f"pns_types={set(_.op_type for _ in pns)}"
             )
-            free = [_ for _ in ns if id(_) not in id_marked]
+            free = [_ for _ in ns if make_idn(_) not in id_marked]
             if len(p_marked) == 0:
                 # Everything is already marked.
                 continue
@@ -705,7 +708,7 @@ class EasyPatternOptimization(PatternOptimization):
                         )
                     return self.none(node, inspect.currentframe().f_lineno)
 
-                key = id(p_marked[0])
+                key = make_idn(p_marked[0])
                 if key not in marked:
                     marked[key] = free[0], p_marked[0]
                     self._update_ambiguities(
@@ -752,7 +755,7 @@ class EasyPatternOptimization(PatternOptimization):
             missing = []
             for k, v in ec.items():
                 if gc[k] == v == 1:
-                    key = id(ptype_to_node[k])
+                    key = make_idn(ptype_to_node[k])
                     amb = self._has_ambiguities(
                         pair_results_names, gtype_to_node[k], ptype_to_node[k]
                     )
@@ -810,7 +813,7 @@ class EasyPatternOptimization(PatternOptimization):
             if k == "marked":
                 rows.append(f"--marked-- #{len(v)}")
                 for i, tu in v.items():
-                    rows.append(f"  {_p(tu[0])} ~ {_p(tu[1])} [{id(tu[0])}-{i}]")
+                    rows.append(f"  {_p(tu[0])} ~ {_p(tu[1])} [{make_idn(tu[0])}-{i}]")
                 continue
             if k == "hint":
                 rows.append(f"--hint--: {v[0]}")
@@ -1000,7 +1003,7 @@ class EasyPatternOptimization(PatternOptimization):
         if len(node.input) != len(p_node.input):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        check_ids = set(id(n) for n in pat.nodes)
+        check_ids = set(make_idn(n) for n in pat.nodes)
         if self.verbose > 5:
             print(
                 f"[EasyPatternOptimization.match] -- starts with "
@@ -1012,8 +1015,8 @@ class EasyPatternOptimization(PatternOptimization):
 
         pair_results_names = {}
         self._update_ambiguities(pair_results_names, node, p_node)
-        marked = {id(p_node): (node, p_node)}
-        stacked = [id(p_node)]
+        marked = {make_idn(p_node): (node, p_node)}
+        stacked = [make_idn(p_node)]
         iteration = 0
 
         if self.verbose > 5:
@@ -1030,9 +1033,9 @@ class EasyPatternOptimization(PatternOptimization):
         # to avoid infinite loops.
         max_iter = len(pat.nodes) * 2
         while stacked and iteration < max_iter:
-            assert all(id(b[1]) in check_ids for b in marked.values()), (
+            assert all(make_idn(b[1]) in check_ids for b in marked.values()), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
-                f"marked={set(id(b[1]) for b in marked.values())}"
+                f"marked={set(make_idn(b[1]) for b in marked.values())}"
             )
 
             iteration += 1
@@ -1063,15 +1066,15 @@ class EasyPatternOptimization(PatternOptimization):
                         # It is itself.
                         continue
                     for pnn in psuccessors:
-                        if id(pnn) not in marked:
+                        if make_idn(pnn) not in marked:
                             # One unmarked node is consuming the input.
                             # The potential list of candidates.
                             fall_back_candidates = list(zip(n.input, pn.input))
                             break
 
-            assert all(id(b[1]) in check_ids for b in marked.values()), (
+            assert all(make_idn(b[1]) in check_ids for b in marked.values()), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
-                f"marked={set(id(b[1]) for b in marked.values())}"
+                f"marked={set(make_idn(b[1]) for b in marked.values())}"
             )
 
             res = self._match_forward(g, node, pat, marked, pair_results_names, stacked, n, pn)
@@ -1092,9 +1095,9 @@ class EasyPatternOptimization(PatternOptimization):
                         continue
                     break
 
-            assert all(id(b[1]) in check_ids for b in marked.values()), (
+            assert all(make_idn(b[1]) in check_ids for b in marked.values()), (
                 f"At least one id is not part of the pattern ids={check_ids}, "
-                f"marked={set(id(b[1]) for b in marked.values())}"
+                f"marked={set(make_idn(b[1]) for b in marked.values())}"
             )
 
             if self.verbose > 5:
@@ -1120,7 +1123,7 @@ class EasyPatternOptimization(PatternOptimization):
 
         # We order the matched nodes in the same order than the pattern
         # to let next functions to be able to build the matching again.
-        matched_nodes = [marked[id(n)][0] for i, n in enumerate(pat.nodes)]
+        matched_nodes = [marked[make_idn(n)][0] for i, n in enumerate(pat.nodes)]
 
         if not self.validate_attribute_mapping(g, matched_nodes, pat.nodes):
             if self.verbose >= 2:

@@ -1,6 +1,7 @@
 import inspect
 from typing import List, Optional
 from onnx import NodeProto
+from ...helpers import make_idn
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -38,7 +39,10 @@ class SoftmaxGradPattern(PatternOptimization):
         next_nodes = g.next_nodes(mul_node.output[0])
         if len(next_nodes) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if {id(next_nodes[0]), id(next_nodes[1])} != {id(sub_node), id(node)}:
+        if {make_idn(next_nodes[0]), make_idn(next_nodes[1])} != {
+            make_idn(sub_node),
+            make_idn(node),
+        }:
             return self.none(node, inspect.currentframe().f_lineno)
 
         if g.is_used_more_than_once(next_mul_node.output[0]) or g.is_used_more_than_once(
