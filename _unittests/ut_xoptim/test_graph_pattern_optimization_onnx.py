@@ -5730,9 +5730,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             ir_version=10,
         )
 
-        feeds = {
-            "X": (np.arange(12).reshape((3, 4)) % 3).astype(np.float32),
-        }
+        feeds = {"X": (np.arange(12).reshape((3, 4)) % 3).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model, verbose=0)
         z = ref.run(None, feeds)[0]
 
@@ -5774,9 +5772,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             ir_version=10,
         )
 
-        feeds = {
-            "X": (np.arange(12).reshape((3, 4)) % 3).astype(np.float32),
-        }
+        feeds = {"X": (np.arange(12).reshape((3, 4)) % 3).astype(np.float32)}
         ref = ExtendedReferenceEvaluator(model, verbose=0)
         z = ref.run(None, feeds)[0]
 
@@ -5963,6 +5959,41 @@ class TestGraphPatternOptimization(ExtTestCase):
                     )
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected[0], got[0], atol=1e-5)
+
+    def test_concat_twice(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["X", "X"], ["xx"], axis=0),
+                    oh.make_node("Sin", ["xx"], ["xsin"]),
+                    oh.make_node("Cos", ["xsin"], ["xsc"]),
+                    oh.make_node("Cast", ["xsc"], ["Y"], to=TensorProto.FLOAT),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["b", "c"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["b", "c"])],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": (np.arange(12).reshape((3, 4)) % 3).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="ConcatTwiceUnary", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Sin", "Cos", "Cast", "Concat"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
 
 
 if __name__ == "__main__":

@@ -640,7 +640,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            g.main_opset < 23
+            g.main_opset < 24
             or node.op_type != "Split"
             or node.domain != ""
             or len(node.output) != 2

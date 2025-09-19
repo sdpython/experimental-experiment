@@ -2,6 +2,7 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
+from ...xbuilder._onnx_helper import unary_like_op_types
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -110,3 +111,88 @@ class ConcatEmptyPattern(PatternOptimization):
         )
         new_node.attribute.extend(node.attribute)
         return [new_node]
+
+
+class ConcatTwiceUnaryPattern(PatternOptimization):
+    """Sin(Concat(x,x)) -> Concat(Sin(x), Sin(x))."""
+
+    _unary_types = unary_like_op_types()
+
+    @classmethod
+    def _valid_node(
+        cls,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        concat: NodeProto,
+        unary: NodeProto,
+    ):
+        if unary.op_type in cls._unary_types:
+            return True
+        if unary.op_type == "Unsqueeze" and unary.domain == "":
+            if g.is_constant_scalar(unary.input[1]):
+                cst = g.get_constant_scalar(unary.input[1])
+                axis = g.get_attribute(concat, "axis").i
+                if axis == -1 and cst != -1 and cst < g.get_rank(unary.input[0]):
+                    return True
+        return False
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            g.main_opset < 18
+            or node.op_type != "Concat"
+            or node.domain != ""
+            or len(node.input) != 2
+            or node.input[0] != node.input[1]
+        ):
+            return self.none()
+
+        # Let's check what follows.
+        nodes = [n for n in g.next_nodes(node.output[0]) if self._valid_node(g, node, n)]
+        if nodes:
+            return MatchResult(self, [node, nodes[0]], self.apply)
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def remove_set(self, g, node):
+        att = g.get_attribute(node, "axis")
+        axis = att.i
+        rem = set()
+        for idi, i in enumerate(node.input):
+            if not g.has_shape(i):
+                continue
+            shape = g.get_shape(i)
+            if axis < len(shape) and shape[axis] == 0:
+                rem.add(idi)
+        return rem
+
+    def apply(
+        self, g: "GraphBuilder", concat: NodeProto, unary: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        new_name = g.unique_name(f"u{unary.output[0]}")
+        nodes = [
+            g.make_node(
+                unary.op_type,
+                [concat.input[0], *unary.input[1:]],
+                [new_name],
+                name=f"{self.__class__.__name__}--{unary.name}",
+                doc_string=unary.doc_string,
+            ),
+            g.make_node(
+                concat.op_type,
+                [new_name, new_name],
+                [unary.output[0]],
+                name=f"{self.__class__.__name__}--{concat.name}",
+                doc_string=concat.doc_string,
+            ),
+        ]
+        if unary.attribute:
+            nodes[0].attribute.extend(unary.attribute)
+        if concat.attribute:
+            nodes[1].attribute.extend(concat.attribute)
+
+        if g.is_used_more_than_once(concat.output[0]):
+            return [concat, *nodes]
+        return nodes
