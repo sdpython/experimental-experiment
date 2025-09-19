@@ -903,7 +903,7 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
             g.make_node(
                 "Reshape",
                 [reshape.input[0], new_shape],
-                reshape.output,
+                [reshape.output[0]],
                 name=f"{self.__class__.__name__}--{reshape.name}",
                 doc_string=reshape.doc_string,
             )

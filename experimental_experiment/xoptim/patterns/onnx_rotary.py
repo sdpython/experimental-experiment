@@ -2,6 +2,7 @@ import inspect
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 from onnx import NodeProto
+from ...helpers import make_idn
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -192,7 +193,7 @@ class RotaryConcatPartPattern(PatternOptimization):
             if dim_left != cdim_right or dim_right != cdim_left:
                 return self.none(node, inspect.currentframe().f_lineno)
         else:
-            if id(split_left) != id(split_right):
+            if make_idn(split_left) != make_idn(split_right):
                 # not the same split
                 return self.none(node, inspect.currentframe().f_lineno)
             if len(split_left.output) != 2:
@@ -442,7 +443,7 @@ class RotaryConcatPartPattern(PatternOptimization):
 
         use_split = False
         if slice_left.op_type == "Split" == slice_right.op_type:
-            if id(slice_left) != id(slice_right):
+            if make_idn(slice_left) != make_idn(slice_right):
                 return self.none(node, inspect.currentframe().f_lineno)
             use_split = True
 
@@ -555,7 +556,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         if (
             cst_right is not None
             and g.is_used_more_than_once(cst_right.output[0])
-            and (cst_left is None or id(cst_left) != id(cst_right))
+            and (cst_left is None or make_idn(cst_left) != make_idn(cst_right))
         ):
             keep.append(cst_right)
 
@@ -620,9 +621,9 @@ class RotaryConcatPartPattern(PatternOptimization):
             if cst_left is not None:
                 other_nodes.append(cst_left)
         if scatter_right is not None and g.is_used_more_than_once(scatter_right.input[0]):
-            if tr_data_right is not None and id(tr_data_right) != id(tr_data_left):
+            if tr_data_right is not None and make_idn(tr_data_right) != make_idn(tr_data_left):
                 other_nodes.append(tr_data_right)
-            if cst_right is not None and id(cst_right) != id(cst_left):
+            if cst_right is not None and make_idn(cst_right) != make_idn(cst_left):
                 other_nodes.append(cst_right)
         if other_nodes:
             return [*reversed(other_nodes), split, neg, concat]
@@ -639,7 +640,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            g.main_opset < 24
+            g.main_opset < 23
             or node.op_type != "Split"
             or node.domain != ""
             or len(node.output) != 2
@@ -702,7 +703,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
             or len(node_after2) != 1
             or node_after1[0].op_type != node_after2[0].op_type
             or node_after1[0].op_type != "Add"
-            or id(node_after1[0]) != id(node_after2[0])
+            or make_idn(node_after1[0]) != make_idn(node_after2[0])
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(
@@ -718,62 +719,78 @@ class RotaryEmbeddingPattern(PatternOptimization):
         nodes = []
         rkx = g.get_rank(x)
         rk = g.get_rank(cache)
-        if rk != 3:
-            if rk == 2:
-                uni = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                if "zero" not in context:
-                    zero = g.unique_name("zero")
-                    g.make_initializer(zero, g.ZERO)
-                    context["zero"] = zero
-                else:
-                    zero = context["zero"]
-                if "shape_e" not in context:
-                    shape_x = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                    shape_e = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                    cst = g.make_initializer(
-                        g.unique_name("cst11"), np.array([1, 1], dtype=np.int64)
-                    )
-                    nodes.extend(
-                        [
-                            g.make_node(
-                                "Shape",
-                                [x],
-                                [shape_x],
-                                start=0,
-                                end=1,
-                                name=f"{self.__class__.__name__}--{cache}",
-                            ),
-                            g.make_node(
-                                "Concat",
-                                [shape_x, cst],
-                                [shape_e],
-                                axis=0,
-                                name=f"{self.__class__.__name__}--{cache}",
-                            ),
-                        ]
-                    )
-                    context["shape_e"] = shape_e
-                else:
-                    shape_e = context["shape_e"]
+        if rk == 2:
+            uni = g.unique_name(f"{self.__class__.__name__}--{cache}")
+            if "zero" not in context:
+                zero = g.unique_name("zero")
+                g.make_initializer(zero, g.ZERO)
+                context["zero"] = zero
+            else:
+                zero = context["zero"]
+            if "shape_e" not in context:
+                shape_x = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                shape_e = g.unique_name(f"{self.__class__.__name__}--{cache}")
+                cst = g.make_initializer(
+                    g.unique_name("cst11"), np.array([1, 1], dtype=np.int64)
+                )
+                nodes.extend(
+                    [
+                        g.make_node(
+                            "Shape",
+                            [x],
+                            [shape_x],
+                            start=0,
+                            end=1,
+                            name=f"{self.__class__.__name__}--{cache}",
+                        ),
+                        g.make_node(
+                            "Concat",
+                            [shape_x, cst],
+                            [shape_e],
+                            axis=0,
+                            name=f"{self.__class__.__name__}--{cache}",
+                        ),
+                    ]
+                )
+                context["shape_e"] = shape_e
+            else:
+                shape_e = context["shape_e"]
 
-                uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                nodes.append(
-                    g.make_node(
-                        "Unsqueeze",
-                        [cache, zero],
-                        [uni],
-                        name=f"{self.__class__.__name__}--{cache}",
-                    )
+            uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
+            nodes.append(
+                g.make_node(
+                    "Unsqueeze",
+                    [cache, zero],
+                    [uni],
+                    name=f"{self.__class__.__name__}--{cache}",
                 )
-                nodes.append(
-                    g.make_node(
-                        "Expand",
-                        [uni, shape_e],
-                        [uni2],
-                        name=f"{self.__class__.__name__}--{cache}",
-                    )
+            )
+            nodes.append(
+                g.make_node(
+                    "Expand",
+                    [uni, shape_e],
+                    [uni2],
+                    name=f"{self.__class__.__name__}--{cache}",
                 )
-                return uni2, nodes
+            )
+            return uni2, nodes
+        if rk == 4:
+            assert g.has_shape(cache), f"Missing shape for {cache!r}"
+            shape = g.get_shape(cache)
+            assert 1 in shape, f"Cache is 4D but it should be 3D, shape={shape}"
+            pos = shape.index(1)
+            uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
+            axis = g.unique_name(f"{self.__class__.__name__}--{cache}-axis")
+            g.make_initializer(axis, np.array([pos], dtype=np.int64))
+            return uni2, [
+                g.make_node(
+                    "Squeeze",
+                    [cache, axis],
+                    [uni2],
+                    name=f"{self.__class__.__name__}--{cache}",
+                )
+            ]
+
         raise NotImplementedError(
             f"preprocess not implemented when rk={rk}, rkx={rkx} for x={x!r} and res={cache!r}"
         )
@@ -805,28 +822,28 @@ class RotaryEmbeddingPattern(PatternOptimization):
         sin_cache, ex2 = self.preprocess_cache(context, g, split_node.input[0], sin_cache)
         expand_nodes = [*ex1, *ex2]
 
-        tr_name = g.unique_name(f"{self.__class__.__name__}--{split_node.input[0]}")
-        utr_name = g.unique_name(f"{self.__class__.__name__}--{add_node.output[0]}")
+        # tr_name = g.unique_name(f"{self.__class__.__name__}--{split_node.input[0]}")
+        # utr_name = g.unique_name(f"{self.__class__.__name__}--{add_node.output[0]}")
         rotary_nodes = [
-            g.make_node(
-                "Transpose",
-                [split_node.input[0]],
-                [tr_name],
-                perm=[0, 2, 1, 3],
-                name=f"{self.__class__.__name__}--{split_node.name}",
-            ),
+            # g.make_node(
+            #    "Transpose",
+            #    [split_node.input[0]],
+            #    [tr_name],
+            #    perm=[0, 2, 1, 3],
+            #    name=f"{self.__class__.__name__}--{split_node.name}",
+            # ),
             g.make_node(
                 "RotaryEmbedding",
-                [tr_name, cos_cache, sin_cache],
-                [utr_name],
+                [split_node.input[0], cos_cache, sin_cache],  # tr_name
+                [add_node.output[0]],  # [utr_name],
                 name=f"{self.__class__.__name__}--{split_node.name}",
             ),
-            g.make_node(
-                "Transpose",
-                [utr_name],
-                [add_node.output[0]],
-                perm=[0, 2, 1, 3],
-                name=f"{self.__class__.__name__}--{split_node.name}",
-            ),
+            # g.make_node(
+            #    "Transpose",
+            #    [utr_name],
+            #    [add_node.output[0]],
+            #    perm=[0, 2, 1, 3],
+            #    name=f"{self.__class__.__name__}--{split_node.name}",
+            # ),
         ]
         return [*expand_nodes, *rotary_nodes]

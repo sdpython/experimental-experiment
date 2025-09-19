@@ -11,7 +11,7 @@ from onnx import (
     load,
 )
 from onnx.numpy_helper import to_array
-from ..helpers import pretty_onnx, np_dtype_to_tensor_dtype
+from ..helpers import pretty_onnx, np_dtype_to_tensor_dtype, make_idn
 
 
 class OrtEval:
@@ -416,7 +416,7 @@ class OrtEval:
     def _run(self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]) -> List[Any]:
         """Runs a node."""
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = (id(node), *types)
+        key = (make_idn(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:
@@ -449,7 +449,7 @@ class OrtEval:
         else:
             name = "else_branch"
 
-        key = (id(node), name)
+        key = (make_idn(node), name)
         if key in self._cache:
             sess = self._cache[key][1]
         else:
@@ -463,7 +463,7 @@ class OrtEval:
     ) -> List[Any]:
         """Runs a node."""
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = (id(node), *types)
+        key = (make_idn(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:
@@ -692,7 +692,7 @@ class OrtEval:
         from onnxruntime.capi import _pybind_state as ORTC
 
         types = [(None if a is None else (a.dtype, a.shape)) for a in inputs]
-        key = (id(node), *types)
+        key = (make_idn(node), *types)
         if key in self._cache:
             sess = self._cache[key][1]
         else:

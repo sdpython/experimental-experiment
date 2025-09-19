@@ -2,6 +2,7 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
+from ...helpers import make_idn
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -147,7 +148,7 @@ class SplitConcatPattern(PatternOptimization):
             n = g.next_nodes(o)
             if len(n) != 1:
                 return self.none(node, inspect.currentframe().f_lineno)
-            i = id(n[0])
+            i = make_idn(n[0])
             if only_id is None:
                 only_id = i
                 only_node = n[0]

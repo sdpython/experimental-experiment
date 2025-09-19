@@ -49,6 +49,8 @@ from ..helpers import (
     string_type,
     tensor_dtype_to_np_dtype,
     torch_dtype_to_onnx_dtype,
+    make_idn,
+    make_idg,
 )
 from ..reference import ExtendedReferenceEvaluator
 from ._shape_helper import (
@@ -7453,7 +7455,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for i, n in enumerate(self.nodes):
             if n is None:
                 continue
-            pos[id(n)] = i
+            pos[make_idn(n)] = i
             for o in n.output:
                 pos[o] = i
             for o in n.input:
@@ -7561,6 +7563,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     remove_constants.add(o)
             self.nodes[i] = None
 
+        # finding the position and updating the opsets if needed.
         n_existing = []
         for node in new_nodes:
             for i in self._enumerate_inputs_with_subgraph(node):
@@ -7709,7 +7712,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                     insert_position, insert_first_at.get(i, insert_position)
                 )
 
-        assert len(new_nodes) == len(new_nodes_p)
+        assert len(new_nodes) == len(new_nodes_p), (
+            f"Length mismatch between len(new_nodes)={len(new_nodes)} == "
+            f"len(new_nodes_p)={len(new_nodes_p)}"
+        )
         new_nodes_p.sort()
 
         # do the addition
@@ -9306,7 +9312,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         skip_functions = skip_functions or set()
         new_nodes = []
         if verbose:
-            print(f"[_inline_functions_subgraph_iteration] begin with {id(g)}")
+            print(f"[_inline_functions_subgraph_iteration] begin with {make_idg(g)}")
         n_replacements = 0
         for node in g.node:
             for att in node.attribute:
@@ -9354,7 +9360,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if verbose:
             print(
                 f"[_inline_functions_subgraph_iteration] done with "
-                f"{id(g)} and {n_replacements} replacements"
+                f"{make_idg(g)} and {n_replacements} replacements"
             )
         return n_replacements
 
@@ -9426,7 +9432,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_g = self._rename_results_in_subgraph(
                     att.g, replacements=replacements.copy()
                 )
-                if id(new_g) != id(g):
+                if make_idg(new_g) != make_idg(g):
                     diff = True
                     new_atts.append(
                         oh.make_attribute(att.name, new_g)

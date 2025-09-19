@@ -6,7 +6,7 @@ import numpy as np
 from onnx import AttributeProto, GraphProto, NodeProto, TensorProto
 from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
-from ..helpers import from_array_extended
+from ..helpers import from_array_extended, make_idn
 from ..xbuilder._onnx_helper import enumerate_subgraphs
 from ..xbuilder.type_inference import infer_types
 from .patterns_api import MatchResult, PatternOptimization
@@ -127,14 +127,12 @@ class GraphBuilderPatternOptimization:
         yield from self.builder.nodes
 
     def _build(self):
-        """
-        Builds successor and predecessor.
-        """
+        """Builds successors and predecessors."""
         self.positions_ = {}
         self.nodes_ = {}
         self.outputs_ = {o.name for o in self.builder.outputs}
         for i, node in enumerate(self.builder.nodes):
-            key = id(node)
+            key = make_idn(node)
             self.nodes_[key] = node
             self.positions_[key] = i
 
@@ -151,11 +149,11 @@ class GraphBuilderPatternOptimization:
                 if i not in self.successors_:
                     self.successors_[i] = []
                     successors_id[i] = set()
-                if id(k) not in successors_id[i]:
+                if k not in successors_id[i]:
                     # This test avoids the same successor to appear twice if one node
                     # consumes twice the same node.
                     self.successors_[i].append(k)
-                    successors_id[i].add(id(k))
+                    successors_id[i].add(k)
 
             for sub in enumerate_subgraphs(v):
                 g = sub[-1]
@@ -175,24 +173,18 @@ class GraphBuilderPatternOptimization:
                         sub_knowns.add(i)
 
     def get_position(self, node: NodeProto) -> int:
-        return self.positions_[id(node)]
+        return self.positions_[make_idn(node)]
 
     def get_registered_constraints(self) -> Dict[str, Set[Union[str, int]]]:
-        """
-        Returns the constraints registered so far.
-        """
+        """Returns the constraints registered so far."""
         return self.builder.get_registered_constraints()
 
     def is_used_by_subgraph(self, name: str) -> bool:
-        """
-        Tells if a result is used by a subgraphs.
-        """
+        """Tells if a result is used by a subgraphs."""
         return name in self.used_
 
     def is_output(self, name: str) -> bool:
-        """
-        Tells if a result is an output.
-        """
+        """Tells if a result is an output."""
         return name in self.outputs_
 
     def is_used(self, name: str) -> bool:
@@ -225,8 +217,8 @@ class GraphBuilderPatternOptimization:
         Tells if a result is only used by a specific set of nodes.
         """
         next_nodes = self.next_nodes(name)
-        allowed = set(id(n) for n in nodes)
-        return all(id(n) in allowed for n in next_nodes)
+        allowed = set(make_idn(n) for n in nodes)
+        return all(make_idn(n) in allowed for n in next_nodes)
 
     def is_constant(self, name: str) -> bool:
         """
@@ -627,6 +619,7 @@ class GraphBuilderPatternOptimization:
         msg: str = "",
         source: Optional[str] = None,
     ) -> str:
+        """This function may create identity nodes."""
         if not source:
             if isinstance(value, np.ndarray):
                 if value.dtype == np.int64 and value.size < 16:
@@ -767,17 +760,20 @@ class GraphBuilderPatternOptimization:
 
     def apply_match(self, match: MatchResult) -> List[NodeProto]:
         """Applies one match. Returns the new nodes."""
-        idn = [id(n) for n in match.nodes if n is not None]
-
-        assert all(i in self.nodes_ for i in idn), f"One node in {idn} is not referenced"
-
-        positions = {id(n): i for i, n in enumerate(self.builder.nodes)}
-
-        assert all(i in positions for i in idn), f"One node in {idn} is not referenced"
-
-        removed = [positions[i] for i in idn]
-        position_insert = None if match.insert_at is None else positions[id(match.insert_at)]
+        # This steps may add new nodes in the GraphBuilder as some identity nodes
+        # may be created to avoid the duplication of constants.
         new_nodes = match.apply(self, *match.nodes)
+        # It cannot be run before gathering the position of every removed node.
+
+        idn = [make_idn(n) for n in match.nodes if n is not None]
+        assert all(i in self.nodes_ for i in idn), f"One node in {idn} is not referenced."
+        positions = {make_idn(n): i for i, n in enumerate(self.builder.nodes)}
+        assert all(i in positions for i in idn), f"One node in {idn} is not referenced."
+        removed = [positions[i] for i in idn]
+
+        position_insert = (
+            None if match.insert_at is None else positions[make_idn(match.insert_at)]
+        )
 
         if self.verbose >= 10:
             print(
@@ -1003,7 +999,7 @@ class GraphBuilderPatternOptimization:
     def _check_graph_nodes(
         self,
         nodes: List[NodeProto],
-        step: str,
+        step: Union[Callable, str],
         iteration: int,
         code: str,
         known: Set[str],
@@ -1030,10 +1026,11 @@ class GraphBuilderPatternOptimization:
                             )
                         ]
                     )
+                    steps = step if isinstance(step, str) else step()
                     raise AssertionError(
-                        f"Unknown input {i!r}, step {step!r} at position {p} "
-                        f"in node {node.op_type!r} "
+                        f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "
                         f"[{node.name}]: {node.input} -> {node.output}, "
+                        f"step\n--\n{steps!r}\n--\n"
                         f"found after = {i in after}\n------\n"
                         f"{assert_text}\n------\n"
                         f"{self.builder.pretty_text()}"
@@ -1075,9 +1072,7 @@ class GraphBuilderPatternOptimization:
         code: str,
         verifies: bool,
     ):
-        """
-        Verifies the graph.
-        """
+        """Verifies the graph."""
         begin = time.perf_counter()
         assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
         known = (
@@ -1281,7 +1276,7 @@ class GraphBuilderPatternOptimization:
                     for n in match.nodes:
                         if n is None:
                             continue
-                        if id(n) in marked:
+                        if make_idn(n) in marked:
                             # a node is already marked for replacements
                             bypass = True
                             break
@@ -1295,7 +1290,7 @@ class GraphBuilderPatternOptimization:
                     for n in match.nodes:
                         if n is None:
                             continue
-                        marked.add(id(n))
+                        marked.add(make_idn(n))
                     found = True
                     if self.verbose > 2 or pattern.verbose >= 10:
                         print(
@@ -1427,7 +1422,9 @@ class GraphBuilderPatternOptimization:
                     time_in=time.perf_counter() - begin,
                 )
                 statistics.append(obs)
-                self._check_graph(statistics, str(match), it, "A", self.verifies)
+                self._check_graph(
+                    statistics, lambda _=match: _.to_string(False), it, "A", self.verifies
+                )
 
                 n_added += add
                 n_removed += rem

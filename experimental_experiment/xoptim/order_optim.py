@@ -2,6 +2,7 @@ import random
 import time
 from enum import IntEnum
 from typing import Any, Dict, List
+from ..helpers import make_idn
 
 
 class OrderAlgorithm(IntEnum):
@@ -146,7 +147,7 @@ class OrderOptimization:
                 if node is None:
                     i += 1
                     continue
-                if id(node) in done:
+                if make_idn(node) in done:
                     i += 1
                     continue
                 mi, ma = couples[i]
@@ -160,7 +161,7 @@ class OrderOptimization:
                     continue
                 assert mi <= ma, f"needed_at={mi}, first_at={ma}"
                 if mi >= ma - 1:
-                    done.add(id(node))
+                    done.add(make_idn(node))
                     i += 1
                     continue
 
@@ -172,7 +173,7 @@ class OrderOptimization:
                     )
                 n_moved += abs(i - new_position)
                 if i == new_position:
-                    done.add(id(node))
+                    done.add(make_idn(node))
                     i += 1
                     continue
                 if i < new_position:

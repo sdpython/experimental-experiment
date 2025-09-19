@@ -371,9 +371,7 @@ def pretty_onnx(
 
 
 def make_hash(obj: Any) -> str:
-    """
-    Returns a simple hash of ``id(obj)`` in four letter.
-    """
+    """Returns a simple hash of ``id(obj)`` in four letters."""
     aa = id(obj) % (26**3)
     return f"{chr(65 + aa // 26 ** 2)}{chr(65 + (aa // 26) % 26)}{chr(65 + aa % 26)}"
 
@@ -404,7 +402,8 @@ def get_onnx_signature(model: ModelProto) -> Tuple[Tuple[str, Any], ...]:
 
 
 def convert_endian(tensor: TensorProto) -> None:
-    """Call to convert endianness of raw data in tensor.
+    """
+    Calls to convert endianness of raw data in tensor.
 
     Args:
         tensor: TensorProto to be converted.
@@ -779,3 +778,23 @@ def type_info(itype: int, att: str):
     if att == "max":
         return fi.max
     raise ValueError(f"Unexpected value {att!r}")
+
+
+def make_idn(node: NodeProto) -> str:
+    """
+    Creates a unique id for a node hoping collision cannot happen.
+    onnx may reuse sometimes the nodes, ``id(node)`` may not be enough sometimes.
+    """
+    # return f"{id(node)}-{node.op_type}-{node.output[0]}-{node.name}"
+    # id(node) should be enough and faster.
+    return id(node)
+
+
+def make_idg(g: GraphProto) -> str:
+    """
+    Creates a unique id for a graph hoping collision cannot happen.
+    onnx may reuse sometimes the nodes, ``id(node)`` may not be enough sometimes.
+    """
+    # return f"{id(g)}-{len(g.node)}-{len(g.input)}-{len(g.output)}-{g.name}"
+    # id(g) should be enough and faster.
+    return id(g)

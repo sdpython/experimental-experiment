@@ -2,6 +2,7 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
+from ...helpers import make_idn
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -41,7 +42,9 @@ class RotaryEmbeddingPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # cos part
-        mul_node_cos = next_nodes[0] if id(next_nodes[1]) == id(node) else next_nodes[1]
+        mul_node_cos = (
+            next_nodes[0] if make_idn(next_nodes[1]) == make_idn(node) else next_nodes[1]
+        )
         if mul_node_cos.op_type != "Mul" or mul_node_cos.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         add_nodes = g.next_nodes(mul_node_cos.output[0])
@@ -70,7 +73,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         check_node = g.next_nodes(neg_node.output[0])
-        if len(check_node) != 1 or id(check_node[0]) != id(concat_node):
+        if len(check_node) != 1 or make_idn(check_node[0]) != make_idn(concat_node):
             return self.none(node, inspect.currentframe().f_lineno)
         axis = g.get_attribute(concat_node, "axis")
         if axis is None or axis.i not in (-1, 3):
