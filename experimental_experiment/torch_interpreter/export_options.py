@@ -39,7 +39,8 @@ class ExportOptions:
     :param validate_ep: validates the exported program with the given inputs,
         by default the tolerance is ``1e-5``, use a float instead of a boolean
         to change that value
-
+    :param oblivious: use ``torch.fx.experimental._config.patch(backed_size_oblivious=True)``
+        to allow dynamic dimension equal to 1
     The fallback strategy tries the following in order:
 
     .. runpython::
@@ -106,6 +107,7 @@ class ExportOptions:
         allow_untyped_output: bool = False,
         save_ep: Optional[str] = None,
         validate_ep: Union[float, bool] = False,
+        oblivious: bool = False,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -121,6 +123,7 @@ class ExportOptions:
         self.remove_inplace = remove_inplace
         self.allow_untyped_output = allow_untyped_output
         self.validate_ep = validate_ep
+        self.oblivious = oblivious
 
         if strategy is not None:
             assert strategy in self._allowed, (
@@ -253,6 +256,58 @@ class ExportOptions:
                 print("-- DONE -- ")
         return exported_program
 
+    def _export(self, mod, args, kwargs, dynamic_shapes, input_names, exc, verbose):
+        import torch
+        from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
+
+        if exc:
+            return torch.export.export(
+                mod,
+                args,
+                kwargs,
+                dynamic_shapes=use_dyn_not_str(dynamic_shapes),
+                strict=self.strict,
+            )
+        try:
+            return torch.export.export(
+                mod,
+                args,
+                kwargs,
+                dynamic_shapes=use_dyn_not_str(dynamic_shapes),
+                strict=self.strict,
+            )
+        except torch._export.verifier.SpecViolationError:
+            # see issue 128394 on pytorch repo
+            if verbose:
+                print("[ExportOptions.export] torch.export._trace._export")
+            return torch.export._trace._export(
+                mod,
+                args,
+                kwargs,
+                dynamic_shapes=dynamic_shapes,
+                pre_dispatch=False,
+                strict=self.strict,
+            )
+        except torch._dynamo.exc.UserError as e:
+            eee = None
+            if verbose:
+                print("[ExportOptions.export] torch.export.export")
+            try:
+                exported_program = torch.export.export(
+                    mod, args, kwargs, strict=self.strict
+                ).graph
+            except torch._export.verifier.SpecViolationError as ee:
+                exported_program = None
+                eee = ee
+            raise RuntimeError(
+                f"Unable to convert model {type(mod)}, "
+                f"type(args)={type(args)}, type(args[0])="
+                f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
+                f"strict={self.strict}, input_names={input_names}\n--\n"
+                f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
+                f"\n---exported-program---\n{exported_program}"
+            ) from e
+
     def export(
         self,
         mod: Any,
@@ -267,7 +322,6 @@ class ExportOptions:
     ) -> Union["torch.export.ExportedProgram", "torch.fx.GraphModule"]:  # noqa: F821
         """Exports the model into an exported program."""
         import torch
-        from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
         from .tracing import CustomTracer
 
         print_exported_program = os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1")
@@ -472,54 +526,16 @@ class ExportOptions:
         if verbose:
             t0 = time.perf_counter()
             print(f"[ExportOptions.export] export start with strict={self.strict}...")
-        if exc:
-            exported_program = torch.export.export(
-                mod,
-                args,
-                kwargs,
-                dynamic_shapes=use_dyn_not_str(dynamic_shapes),
-                strict=self.strict,
-            )
+
+        if self.oblivious:
+            with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+                exported_program = self._export(
+                    mod, args, kwargs, dynamic_shapes, input_names, exc, verbose
+                )
         else:
-            try:
-                exported_program = torch.export.export(
-                    mod,
-                    args,
-                    kwargs,
-                    dynamic_shapes=use_dyn_not_str(dynamic_shapes),
-                    strict=self.strict,
-                )
-            except torch._export.verifier.SpecViolationError:
-                # see issue 128394 on pytorch repo
-                if verbose:
-                    print("[ExportOptions.export] torch.export._trace._export")
-                exported_program = torch.export._trace._export(
-                    mod,
-                    args,
-                    kwargs,
-                    dynamic_shapes=dynamic_shapes,
-                    pre_dispatch=False,
-                    strict=self.strict,
-                )
-            except torch._dynamo.exc.UserError as e:
-                eee = None
-                if verbose:
-                    print("[ExportOptions.export] torch.export.export")
-                try:
-                    exported_program = torch.export.export(
-                        mod, args, kwargs, strict=self.strict
-                    ).graph
-                except torch._export.verifier.SpecViolationError as ee:
-                    exported_program = None
-                    eee = ee
-                raise RuntimeError(
-                    f"Unable to convert model {type(mod)}, "
-                    f"type(args)={type(args)}, type(args[0])="
-                    f"{type(args[0]) if isinstance(args, tuple) and args else '?'}, "
-                    f"strict={self.strict}, input_names={input_names}\n--\n"
-                    f"dynamic_shapes={dynamic_shapes}\n--\ne={e}\n--\neee={eee}"
-                    f"\n---exported-program---\n{exported_program}"
-                ) from e
+            exported_program = self._export(
+                mod, args, kwargs, dynamic_shapes, input_names, exc, verbose
+            )
 
         if verbose:
             print(f"[ExportOptions.export] export done in {time.perf_counter() - t0}")
