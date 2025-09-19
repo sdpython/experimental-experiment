@@ -822,28 +822,28 @@ class RotaryEmbeddingPattern(PatternOptimization):
         sin_cache, ex2 = self.preprocess_cache(context, g, split_node.input[0], sin_cache)
         expand_nodes = [*ex1, *ex2]
 
-        tr_name = g.unique_name(f"{self.__class__.__name__}--{split_node.input[0]}")
-        utr_name = g.unique_name(f"{self.__class__.__name__}--{add_node.output[0]}")
+        # tr_name = g.unique_name(f"{self.__class__.__name__}--{split_node.input[0]}")
+        # utr_name = g.unique_name(f"{self.__class__.__name__}--{add_node.output[0]}")
         rotary_nodes = [
-            g.make_node(
-                "Transpose",
-                [split_node.input[0]],
-                [tr_name],
-                perm=[0, 2, 1, 3],
-                name=f"{self.__class__.__name__}--{split_node.name}",
-            ),
+            # g.make_node(
+            #    "Transpose",
+            #    [split_node.input[0]],
+            #    [tr_name],
+            #    perm=[0, 2, 1, 3],
+            #    name=f"{self.__class__.__name__}--{split_node.name}",
+            # ),
             g.make_node(
                 "RotaryEmbedding",
-                [tr_name, cos_cache, sin_cache],
-                [utr_name],
+                [split_node.input[0], cos_cache, sin_cache],  # tr_name
+                [add_node.output[0]],  # [utr_name],
                 name=f"{self.__class__.__name__}--{split_node.name}",
             ),
-            g.make_node(
-                "Transpose",
-                [utr_name],
-                [add_node.output[0]],
-                perm=[0, 2, 1, 3],
-                name=f"{self.__class__.__name__}--{split_node.name}",
-            ),
+            # g.make_node(
+            #    "Transpose",
+            #    [utr_name],
+            #    [add_node.output[0]],
+            #    perm=[0, 2, 1, 3],
+            #    name=f"{self.__class__.__name__}--{split_node.name}",
+            # ),
         ]
         return [*expand_nodes, *rotary_nodes]

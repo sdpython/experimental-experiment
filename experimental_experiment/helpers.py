@@ -785,7 +785,9 @@ def make_idn(node: NodeProto) -> str:
     Creates a unique id for a node hoping collision cannot happen.
     onnx may reuse sometimes the nodes, ``id(node)`` may not be enough sometimes.
     """
-    return f"{id(node)}-{node.op_type}-{node.output[0]}-{node.name}"
+    # return f"{id(node)}-{node.op_type}-{node.output[0]}-{node.name}"
+    # id(node) should be enough and faster.
+    return id(node)
 
 
 def make_idg(g: GraphProto) -> str:
@@ -793,4 +795,6 @@ def make_idg(g: GraphProto) -> str:
     Creates a unique id for a graph hoping collision cannot happen.
     onnx may reuse sometimes the nodes, ``id(node)`` may not be enough sometimes.
     """
-    return f"{id(g)}-{len(g.node)}-{len(g.input)}-{len(g.output)}-{g.name}"
+    # return f"{id(g)}-{len(g.node)}-{len(g.input)}-{len(g.output)}-{g.name}"
+    # id(g) should be enough and faster.
+    return id(g)

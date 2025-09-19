@@ -1,12 +1,14 @@
 import inspect
 from typing import List, Optional
 import numpy as np
-from onnx import NodeProto, TensorProto
+from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SqueezeUnsqueezePattern(PatternOptimization):
-    """Replaces the sequence Squeeze, Unsqueeze by Identity."""
+    """
+    Replaces the sequence Squeeze, Unsqueeze by Identity or the other ways around.
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
@@ -17,19 +19,17 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "Unsqueeze" or node.domain != "":
+        if node.op_type not in {"Squeeze", "Unsqueeze"} or node.domain != "":
             return self.none()
         if len(node.input) < 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(node.input[0]) and (
-            not g.has_type(node.input[0])
-            or g.get_type(node.input[0]) != TensorProto.INT64
-            or not g.has_shape(node.input[0])
-            or g.get_shape(node.input[0]) not in (tuple(), (1,))
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
         node_before = g.node_before(node.input[0])
-        if node_before is None or node_before.op_type != "Squeeze" or node_before.domain != "":
+        if (
+            node_before is None
+            or node_before.op_type not in {"Squeeze", "Unsqueeze"}
+            or node_before.op_type == node.op_type
+            or node_before.domain != ""
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
         axes1 = (
             None
@@ -64,18 +64,20 @@ class SqueezeUnsqueezePattern(PatternOptimization):
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
-        node_squ: NodeProto,
-        node_uns: NodeProto,
+        node_first: NodeProto,
+        node_second: NodeProto,
     ) -> List[NodeProto]:
         new_node = g.make_node(
             "Identity",
-            [node_squ.input[0]],
-            [node_uns.output[0]],
-            name=f"{self.__class__.__name__}--{node_uns.name}",
-            doc_string=node_uns.doc_string,
+            [node_first.input[0]],
+            [node_second.output[0]],
+            name=f"{self.__class__.__name__}--{node_first.name}",
+            doc_string=node_first.doc_string,
         )
         return (
-            [node_squ, new_node] if g.is_used_more_than_once(node_uns.input[0]) else [new_node]
+            [node_first, new_node]
+            if g.is_used_more_than_once(node_second.input[0])
+            else [new_node]
         )
 
 

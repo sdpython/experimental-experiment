@@ -619,6 +619,7 @@ class GraphBuilderPatternOptimization:
         msg: str = "",
         source: Optional[str] = None,
     ) -> str:
+        """This function may create identity nodes."""
         if not source:
             if isinstance(value, np.ndarray):
                 if value.dtype == np.int64 and value.size < 16:
@@ -759,19 +760,20 @@ class GraphBuilderPatternOptimization:
 
     def apply_match(self, match: MatchResult) -> List[NodeProto]:
         """Applies one match. Returns the new nodes."""
+        # This steps may add new nodes in the GraphBuilder as some identity nodes
+        # may be created to avoid the duplication of constants.
+        new_nodes = match.apply(self, *match.nodes)
+        # It cannot be run before gathering the position of every removed node.
+
         idn = [make_idn(n) for n in match.nodes if n is not None]
-
         assert all(i in self.nodes_ for i in idn), f"One node in {idn} is not referenced."
-
         positions = {make_idn(n): i for i, n in enumerate(self.builder.nodes)}
-
         assert all(i in positions for i in idn), f"One node in {idn} is not referenced."
-
         removed = [positions[i] for i in idn]
+
         position_insert = (
             None if match.insert_at is None else positions[make_idn(match.insert_at)]
         )
-        new_nodes = match.apply(self, *match.nodes)
 
         if self.verbose >= 10:
             print(
