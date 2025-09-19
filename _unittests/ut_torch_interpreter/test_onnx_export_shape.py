@@ -24,6 +24,7 @@ class TestOnnxExportShape(ExtTestCase):
         processor: str = "CPU",
         output_names: Optional[List[str]] = None,
         constant_folding: bool = False,
+        oblivious: bool = False,
     ) -> str:
         import torch
 
@@ -34,7 +35,9 @@ class TestOnnxExportShape(ExtTestCase):
             torch.onnx.export(model, inputs, filename, dynamo=True)
         else:
             export_options = ExportOptions(
-                decomposition_table="all" if decomposition else None, strict=strict
+                decomposition_table="all" if decomposition else None,
+                strict=strict,
+                oblivious=oblivious,
             )
             opt_options = (
                 OptimizationOptions(
@@ -58,7 +61,7 @@ class TestOnnxExportShape(ExtTestCase):
         return filename
 
     @requires_torch("2.6", "torch.export.Dim.AUTO")
-    def test_shape_DYN(self):
+    def test_shape_AUTO(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -200,6 +203,47 @@ class TestOnnxExportShape(ExtTestCase):
             model,
             xs,
             dynamic_shapes={"x": {0: "num_audios", 1: "num_frames", 2: "num_last"}},
+        )
+        onx = onnx.load(model_path)
+        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
+        self.assertEqual(shape_x, ["num_audios", "num_frames", "num_last"])
+        sess = ExtendedReferenceEvaluator(model_path, verbose=0)
+        feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+        # checking with onnxruntime as well
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-5)
+
+    @requires_torch("2.6", "torch.export.Dim.AUTO")
+    def test_oblivious_dynamic_shapes(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv1d(16, 32, 1)
+
+            def forward(self, x):
+                return self.conv(x) + torch.tensor([1], dtype=x.dtype)
+
+        model = Model()
+        xs = (torch.randn((1, 16, 24)),)
+        expected = model(*xs)
+        model_path = self._call_exporter(
+            "test_shape_named_dynamic_shapes",
+            "custom",
+            model,
+            xs,
+            dynamic_shapes={"x": {0: "num_audios", 1: "num_frames", 2: "num_last"}},
+            oblivious=True,
         )
         onx = onnx.load(model_path)
         shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
