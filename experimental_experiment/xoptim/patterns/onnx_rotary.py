@@ -632,7 +632,7 @@ class RotaryConcatPartPattern(PatternOptimization):
 
 
 class HalfRotaryEmbeddingPattern(PatternOptimization):
-    """Fuses nodes matching operator RotaryEmbedding(23)."""
+    """Fuses nodes matching helf RotaryEmbedding(23)."""
 
     _operator_name = "HalfRotaryEmbedding"
     _domain_name = "intermediate"
