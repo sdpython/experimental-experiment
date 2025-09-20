@@ -1,8 +1,9 @@
 import inspect
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
 from ...helpers import make_idn
+from ...xbuilder import FunctionOptions, GraphBuilder
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -630,8 +631,11 @@ class RotaryConcatPartPattern(PatternOptimization):
         return [*keep, split, neg, concat]
 
 
-class RotaryEmbeddingPattern(PatternOptimization):
+class HalfRotaryEmbeddingPattern(PatternOptimization):
     """Fuses nodes matching operator RotaryEmbedding(23)."""
+
+    _operator_name = "HalfRotaryEmbedding"
+    _domain_name = "intermediate"
 
     def match(
         self,
@@ -639,12 +643,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if (
-            g.main_opset < 24
-            or node.op_type != "Split"
-            or node.domain != ""
-            or len(node.output) != 2
-        ):
+        if node.op_type != "Split" or node.domain != "" or len(node.output) != 2:
             # Not ready in opset 23.
             return self.none()
         split_node = node
@@ -713,88 +712,6 @@ class RotaryEmbeddingPattern(PatternOptimization):
             insert_at=node_after1[0],
         )
 
-    def preprocess_cache(
-        self, context: Dict[str, str], g: "GraphBuilder", x: str, cache: str  # noqa: F821
-    ) -> Tuple[str, List[NodeProto]]:
-        nodes = []
-        rkx = g.get_rank(x)
-        rk = g.get_rank(cache)
-        if rk == 2:
-            uni = g.unique_name(f"{self.__class__.__name__}--{cache}")
-            if "zero" not in context:
-                zero = g.unique_name("zero")
-                g.make_initializer(zero, g.ZERO)
-                context["zero"] = zero
-            else:
-                zero = context["zero"]
-            if "shape_e" not in context:
-                shape_x = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                shape_e = g.unique_name(f"{self.__class__.__name__}--{cache}")
-                cst = g.make_initializer(
-                    g.unique_name("cst11"), np.array([1, 1], dtype=np.int64)
-                )
-                nodes.extend(
-                    [
-                        g.make_node(
-                            "Shape",
-                            [x],
-                            [shape_x],
-                            start=0,
-                            end=1,
-                            name=f"{self.__class__.__name__}--{cache}",
-                        ),
-                        g.make_node(
-                            "Concat",
-                            [shape_x, cst],
-                            [shape_e],
-                            axis=0,
-                            name=f"{self.__class__.__name__}--{cache}",
-                        ),
-                    ]
-                )
-                context["shape_e"] = shape_e
-            else:
-                shape_e = context["shape_e"]
-
-            uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
-            nodes.append(
-                g.make_node(
-                    "Unsqueeze",
-                    [cache, zero],
-                    [uni],
-                    name=f"{self.__class__.__name__}--{cache}",
-                )
-            )
-            nodes.append(
-                g.make_node(
-                    "Expand",
-                    [uni, shape_e],
-                    [uni2],
-                    name=f"{self.__class__.__name__}--{cache}",
-                )
-            )
-            return uni2, nodes
-        if rk == 4:
-            assert g.has_shape(cache), f"Missing shape for {cache!r}"
-            shape = g.get_shape(cache)
-            assert 1 in shape, f"Cache is 4D but it should be 3D, shape={shape}"
-            pos = shape.index(1)
-            uni2 = g.unique_name(f"{self.__class__.__name__}--{cache}")
-            axis = g.unique_name(f"{self.__class__.__name__}--{cache}-axis")
-            g.make_initializer(axis, np.array([pos], dtype=np.int64))
-            return uni2, [
-                g.make_node(
-                    "Squeeze",
-                    [cache, axis],
-                    [uni2],
-                    name=f"{self.__class__.__name__}--{cache}",
-                )
-            ]
-
-        raise NotImplementedError(
-            f"preprocess not implemented when rk={rk}, rkx={rkx} for x={x!r} and res={cache!r}"
-        )
-
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
@@ -817,33 +734,44 @@ class RotaryEmbeddingPattern(PatternOptimization):
             lnames if concat_node.input[0] in mul1_node.input else lnames[::-1]
         )
 
-        context = {}
-        cos_cache, ex1 = self.preprocess_cache(context, g, split_node.input[0], cos_cache)
-        sin_cache, ex2 = self.preprocess_cache(context, g, split_node.input[0], sin_cache)
-        expand_nodes = [*ex1, *ex2]
-
-        # tr_name = g.unique_name(f"{self.__class__.__name__}--{split_node.input[0]}")
-        # utr_name = g.unique_name(f"{self.__class__.__name__}--{add_node.output[0]}")
         rotary_nodes = [
-            # g.make_node(
-            #    "Transpose",
-            #    [split_node.input[0]],
-            #    [tr_name],
-            #    perm=[0, 2, 1, 3],
-            #    name=f"{self.__class__.__name__}--{split_node.name}",
-            # ),
             g.make_node(
-                "RotaryEmbedding",
-                [split_node.input[0], cos_cache, sin_cache],  # tr_name
-                [add_node.output[0]],  # [utr_name],
+                self._operator_name,
+                [split_node.input[0], cos_cache, sin_cache],
+                [add_node.output[0]],
                 name=f"{self.__class__.__name__}--{split_node.name}",
-            ),
-            # g.make_node(
-            #    "Transpose",
-            #    [utr_name],
-            #    [add_node.output[0]],
-            #    perm=[0, 2, 1, 3],
-            #    name=f"{self.__class__.__name__}--{split_node.name}",
-            # ),
+                domain=self._domain_name,
+            )
         ]
-        return [*expand_nodes, *rotary_nodes]
+        nodes_to_return = rotary_nodes
+
+        # Creates the local function
+        if not g.builder.has_local_function(self._operator_name, domain=self._domain_name):
+            self._add_local_function(g.builder)
+        return nodes_to_return
+
+    @classmethod
+    def _add_local_function(cls, g: GraphBuilder):
+        lg = GraphBuilder(g.main_opset, as_function=True)
+        lg.make_tensor_input("X")
+        lg.make_tensor_input("cos_cache")
+        lg.make_tensor_input("sin_cache")
+
+        left, right = lg.op.Split("X", num_outputs=2, axis=-1, name=cls.__name__)
+        right_neg = lg.op.Neg(right, name=cls.__name__)
+        conc = lg.op.Concat(right_neg, left, axis=-1, name=cls.__name__)
+        lg.op.Add(
+            lg.op.Mul("X", "sin_cache", name=cls.__name__),
+            lg.op.Mul(conc, "cos_cache", name=cls.__name__),
+            outputs=["Y"],
+        )
+        lg.make_tensor_output("Y")
+
+        function_options = FunctionOptions(
+            export_as_function=True, name=cls._operator_name, domain=cls._domain_name
+        )
+        g.make_local_function(lg, function_options=function_options)
+        assert g.has_local_function(cls._operator_name, domain=cls._domain_name), (
+            f"The function {cls._domain_name}.{cls._operator_name} "
+            f"was not added to the builder."
+        )

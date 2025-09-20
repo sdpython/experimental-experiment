@@ -5328,13 +5328,13 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes_options=False,
-            optimization_options=OptimizationOptions(patterns="RotaryEmbedding", verbose=0),
+            optimization_options=OptimizationOptions(
+                patterns="HalfRotaryEmbedding", verbose=0
+            ),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.dump_onnx("test_rotary_embedding_2.onnx", opt_onx)
-        if opset < 24:
-            raise unittest.SkipTest(f"opset={opset}, RotaryEmbedding not ready")
-        self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
+        self.assertIn("HalfRotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
 
         feeds = {
             "X": (np.arange(2 * 4 * 6 * 8) / (2 * 4 * 6 * 8))
@@ -5347,10 +5347,10 @@ class TestGraphPatternOptimization(ExtTestCase):
         import onnxruntime
 
         for cls in [
+            lambda m: ExtendedReferenceEvaluator(m, verbose=10),
             lambda m: onnxruntime.InferenceSession(
                 m.SerializeToString(), providers=["CPUExecutionProvider"]
             ),
-            ExtendedReferenceEvaluator,
         ]:
             ref = cls(model)
             z = ref.run(None, feeds)[0]
