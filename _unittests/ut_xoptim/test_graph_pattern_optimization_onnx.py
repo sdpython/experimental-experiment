@@ -5329,7 +5329,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=False,
             optimization_options=OptimizationOptions(
-                patterns="LocalFunctionHalfRotaryEmbedding", verbose=0
+                patterns="FunctionHalfRotaryEmbedding", verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)

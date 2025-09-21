@@ -62,7 +62,7 @@ from .onnx_reshape import (
     ShapeBasedReshapeIsSqueezePattern,
     StaticConcatReshapePattern,
 )
-from .onnx_rotary import RotaryConcatPartPattern, LocalFunctionHalfRotaryEmbeddingPattern
+from .onnx_rotary import RotaryConcatPartPattern, FunctionHalfRotaryEmbeddingPattern
 from .onnx_sequence import SequenceConstructAtPattern
 from .onnx_slice import SliceSlicePattern
 from .onnx_split import SlicesSplitPattern, SplitConcatPattern
@@ -192,6 +192,6 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         UnsqueezeUnsqueezePattern(verbose=verbose),
         # LLM
         RotaryConcatPartPattern(verbose=verbose),
-        LocalFunctionHalfRotaryEmbeddingPattern(verbose=verbose),
+        FunctionHalfRotaryEmbeddingPattern(verbose=verbose),
         RMSNormalizationPattern(verbose=verbose),
     ]

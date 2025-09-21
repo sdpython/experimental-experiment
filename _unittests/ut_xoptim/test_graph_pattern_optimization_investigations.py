@@ -113,7 +113,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["LocalFunctionPackedMatMul"],
+                patterns=["FunctionPackedMatMul"],
                 verbose=0,
                 constant_folding=True,
             ),
@@ -166,7 +166,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["LocalFunctionSplitRotaryMul"],
+                patterns=["FunctionSplitRotaryMul"],
                 verbose=0,
                 constant_folding=True,
             ),
@@ -226,7 +226,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["LocalFunctionSplitRotaryMul"],
+                patterns=["FunctionSplitRotaryMul"],
                 verbose=0,
                 constant_folding=True,
             ),
@@ -283,7 +283,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["LocalFunctionPowTanh"],
+                patterns=["FunctionPowTanh"],
                 verbose=0,
                 constant_folding=True,
             ),

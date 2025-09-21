@@ -22,16 +22,16 @@ def get_investigation_patterns(verbose: int = 0) -> List["PatternOptimization"]:
     """
     from .element_wise import BinaryInvestigation
     from .llm_patterns import (
-        LocalFunctionPackedMatMulPattern,
-        LocalFunctionPowTanhPattern,
-        LocalFunctionSplitRotaryMulPattern,
+        FunctionPackedMatMulPattern,
+        FunctionPowTanhPattern,
+        FunctionSplitRotaryMulPattern,
     )
 
     return [
         BinaryInvestigation(verbose=verbose),
-        LocalFunctionPackedMatMulPattern(verbose=verbose),
-        LocalFunctionPowTanhPattern(verbose=verbose),
-        LocalFunctionSplitRotaryMulPattern(verbose=verbose),
+        FunctionPackedMatMulPattern(verbose=verbose),
+        FunctionPowTanhPattern(verbose=verbose),
+        FunctionSplitRotaryMulPattern(verbose=verbose),
     ]
 
 
@@ -40,11 +40,16 @@ class SimplifyingEasyPatternFunction(EasyPatternOptimization):
     Base class to build investigation patterns.
     See :class:`FunctionPowTanhPattern
     <experimental_experiment.xoptim.patterns_investigation.llm_patterns.FunctionPowTanhPattern>`
-    to see how to use it.
+    to see how to use it. It replaces a subgraph with a local function.
     """
+
+    f_domain = "SimplifyingFunction"
 
     @classmethod
     def f_name(cls) -> str:
+        assert cls.__name__.startswith(
+            "Function"
+        ), f"Pattern class name {cls.__name__!r} should start with 'Function'."
         return cls.__name__.replace("Pattern", "").replace("Function", "")
 
     def post_apply_pattern(self, g, *nodes):
@@ -53,7 +58,7 @@ class SimplifyingEasyPatternFunction(EasyPatternOptimization):
         for pos, p in enumerate(sig.parameters):
             if pos >= 1:
                 inputs.append(p)
-        domain = "SimplifyingFunction"
+        domain = self.f_domain
 
         f_name = self.f_name()
         if not g.builder.has_local_function(f_name, domain=domain):
