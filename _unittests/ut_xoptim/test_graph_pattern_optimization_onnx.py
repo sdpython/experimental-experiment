@@ -5302,7 +5302,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(z, zz)
 
     def test_rotary_embedding_2(self):
-        opset = 23
+        opset = 22
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -5329,7 +5329,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=False,
             optimization_options=OptimizationOptions(
-                patterns="HalfRotaryEmbedding", verbose=0
+                patterns="LocalFunctionHalfRotaryEmbedding", verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
@@ -5347,7 +5347,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         import onnxruntime
 
         for cls in [
-            lambda m: ExtendedReferenceEvaluator(m, verbose=10),
+            lambda m: ExtendedReferenceEvaluator(m, verbose=0),
             lambda m: onnxruntime.InferenceSession(
                 m.SerializeToString(), providers=["CPUExecutionProvider"]
             ),

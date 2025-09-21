@@ -631,8 +631,23 @@ class RotaryConcatPartPattern(PatternOptimization):
         return [*keep, split, neg, concat]
 
 
-class HalfRotaryEmbeddingPattern(PatternOptimization):
-    """Fuses nodes matching helf RotaryEmbedding(23)."""
+class LocalFunctionHalfRotaryEmbeddingPattern(PatternOptimization):
+    """
+    Fuses nodes matching helf RotaryEmbedding(23) into a local function.
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xoptim import GraphBuilderPatternOptimization
+        from experimental_experiment.xoptim.patterns import (
+            LocalFunctionHalfRotaryEmbeddingPattern,
+        )
+
+        pat = LocalFunctionHalfRotaryEmbeddingPattern()
+        g = GraphBuilderPatternOptimization(GraphBuilder(18))
+        print(pat._pattern_to_string(g))
+    """
 
     _operator_name = "HalfRotaryEmbedding"
     _domain_name = "intermediate"

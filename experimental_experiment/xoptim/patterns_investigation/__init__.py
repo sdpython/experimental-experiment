@@ -22,16 +22,16 @@ def get_investigation_patterns(verbose: int = 0) -> List["PatternOptimization"]:
     """
     from .element_wise import BinaryInvestigation
     from .llm_patterns import (
-        FunctionPackedMatMulPattern,
-        FunctionPowTanhPattern,
-        FunctionSplitRotaryMulPattern,
+        LocalFunctionPackedMatMulPattern,
+        LocalFunctionPowTanhPattern,
+        LocalFunctionSplitRotaryMulPattern,
     )
 
     return [
         BinaryInvestigation(verbose=verbose),
-        FunctionPackedMatMulPattern(verbose=verbose),
-        FunctionPowTanhPattern(verbose=verbose),
-        FunctionSplitRotaryMulPattern(verbose=verbose),
+        LocalFunctionPackedMatMulPattern(verbose=verbose),
+        LocalFunctionPowTanhPattern(verbose=verbose),
+        LocalFunctionSplitRotaryMulPattern(verbose=verbose),
     ]
 
 

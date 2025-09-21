@@ -7,10 +7,8 @@ from ..patterns_api import MatchResult, PatternOptimization
 from . import SimplifyingEasyPatternFunction
 
 
-class FunctionPackedMatMulPattern(PatternOptimization):
-    """
-    Replaces multiple MatMul (X,A), (X,B) by (X, concat(A,B))...
-    """
+class LocalFunctionPackedMatMulPattern(PatternOptimization):
+    """Replaces multiple MatMul (X,A), (X,B) by (X, concat(A,B))..."""
 
     def match(
         self,
@@ -156,7 +154,7 @@ class FunctionPackedMatMulPattern(PatternOptimization):
         g.make_local_function(local_g, function_options=function_options)
 
 
-class FunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
+class LocalFunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
     """
     Moves the nodes in match_pattern into a local function.
     This is only applicable when the pattern to match has more than
@@ -168,10 +166,10 @@ class FunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
         from experimental_experiment.xbuilder import GraphBuilder
         from experimental_experiment.xoptim import GraphBuilderPatternOptimization
         from experimental_experiment.xoptim.patterns_investigation.llm_patterns import (
-            FunctionSplitRotaryMulPattern,
+            LocalFunctionSplitRotaryMulPattern,
         )
 
-        pat = FunctionSplitRotaryMulPattern()
+        pat = LocalFunctionSplitRotaryMulPattern()
         g = GraphBuilderPatternOptimization(GraphBuilder(18))
         print(pat._pattern_to_string(g))
     """
@@ -192,7 +190,7 @@ class FunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
         return g.anyop.SplitRotaryMul(X, split1, split2, C1, C2, domain="SimplifyingFunction")
 
 
-class FunctionPowTanhPattern(SimplifyingEasyPatternFunction):
+class LocalFunctionPowTanhPattern(SimplifyingEasyPatternFunction):
     """
     Moves the nodes in match_pattern into a local function.
 
@@ -202,10 +200,10 @@ class FunctionPowTanhPattern(SimplifyingEasyPatternFunction):
         from experimental_experiment.xbuilder import GraphBuilder
         from experimental_experiment.xoptim import GraphBuilderPatternOptimization
         from experimental_experiment.xoptim.patterns_investigation.llm_patterns import (
-            FunctionPowTanhPattern,
+            LocalFunctionPowTanhPattern,
         )
 
-        pat = FunctionPowTanhPattern()
+        pat = LocalFunctionPowTanhPattern()
         g = GraphBuilderPatternOptimization(GraphBuilder(18))
         print(pat._pattern_to_string(g))
     """
