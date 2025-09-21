@@ -633,7 +633,7 @@ class RotaryConcatPartPattern(PatternOptimization):
 
 class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
     """
-    Fuses nodes matching helf RotaryEmbedding(23) into a local function.
+    Fuses nodes matching half RotaryEmbedding(23) into a local function.
 
     .. runpython::
         :showcode:
@@ -784,6 +784,157 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
 
         function_options = FunctionOptions(
             export_as_function=True, name=cls._operator_name, domain=cls._domain_name
+        )
+        g.make_local_function(lg, function_options=function_options)
+        assert g.has_local_function(cls._operator_name, domain=cls._domain_name), (
+            f"The function {cls._domain_name}.{cls._operator_name} "
+            f"was not added to the builder."
+        )
+
+
+class FunctionCausalMaskPattern(PatternOptimization):
+    """
+    Fuses nodes matching CausalMask into a local function.
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xoptim import GraphBuilderPatternOptimization
+        from experimental_experiment.xoptim.patterns import (
+            FunctionCausalMaskPattern,
+        )
+
+        pat = FunctionCausalMaskPattern()
+        g = GraphBuilderPatternOptimization(GraphBuilder(18))
+        print(pat._pattern_to_string(g))
+    """
+
+    _operator_name = "CausalMask"
+    _domain_name = "intermediate"
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "LessOrEqual" or node.domain != "":
+            return self.none()
+
+        sq1 = g.node_before(node.input[0])
+        sq2 = g.node_before(node.input[1])
+        if sq1 is None or sq1.op_type != "Unsqueeze" or len(sq1.input) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if sq2 is None or sq2.op_type != "Unsqueeze" or len(sq2.input) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(sq1.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(sq2.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(sq1.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(sq2.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        axes1 = g.get_computed_constant(sq1.input[1])
+        axes2 = g.get_computed_constant(sq2.input[1])
+        if tuple(axes1) != (0, 1, 2):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if tuple(axes2) != (0, 1, 3):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        rg1 = g.node_before(sq1.input[0])
+        rg2 = g.node_before(sq2.input[0])
+        if rg1 is None or rg1.op_type != "Range" or len(rg1.input) != 3:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if rg2 is None or rg2.op_type != "Range" or len(rg1.input) != 3:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(rg1.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(rg2.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if rg1.input[1] != rg2.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(rg1.input[2]) and g.get_constant_scalar(rg1.input[2]) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(rg1.input[0]) and g.get_constant_scalar(rg1.input[2]) != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(rg2.input[2]) and g.get_constant_scalar(rg2.input[2]) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        # rg1 (0, d, 1)
+        # rg2 (c, d, 1)
+
+        dsq1 = g.node_before(rg2.input[0])
+        dsq2 = g.node_before(rg2.input[1])
+        if dsq1 is None or dsq1.op_type != "Squeeze" or len(dsq1.input) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if dsq2 is None or dsq2.op_type != "Squeeze" or len(dsq2.input) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [dsq1, dsq2, rg1, rg2, sq1, sq2, node], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        dim_squeeze1: NodeProto,
+        dim_squeeze2: NodeProto,
+        range1: NodeProto,
+        range2: NodeProto,
+        rg_unsqueeze1: NodeProto,
+        rg_unsqueeze2: NodeProto,
+        less_or_equal: NodeProto,
+    ) -> List[NodeProto]:
+        nodes_to_return = []
+        if g.is_used_more_than_once(dim_squeeze1.output[0]):
+            nodes_to_return.append(dim_squeeze1)
+        if g.is_used_more_than_once(dim_squeeze2.output[0]):
+            nodes_to_return.append(dim_squeeze2)
+        if g.is_used_more_than_once(range1.output[0]):
+            nodes_to_return.append(range1)
+        if g.is_used_more_than_once(range2.output[0]):
+            nodes_to_return.append(range2)
+        # The matching checks the output of the other nodes are not used more than once.
+        nodes_to_return.append(
+            g.make_node(
+                self._operator_name,
+                [dim_squeeze1.input[0], dim_squeeze2.input[0]],
+                [less_or_equal.output[0]],
+                name=f"{self.__class__.__name__}--{less_or_equal.name}",
+                domain=self._domain_name,
+            )
+        )
+
+        # Creates the local function
+        if not g.builder.has_local_function(self._operator_name, domain=self._domain_name):
+            self._add_local_function(g.builder)
+        return nodes_to_return
+
+    @classmethod
+    def _add_local_function(cls, g: GraphBuilder):
+        lg = GraphBuilder(g.main_opset, as_function=True)
+        lg.make_tensor_input("A")
+        lg.make_tensor_input("B")
+
+        sA = lg.op.Squeeze("A", name=cls.__name__)
+        sB = lg.op.Squeeze("B", name=cls.__name__)
+
+        rg1 = lg.op.Range(lg.ZERO, sB, lg.ONE, name=cls.__name__)
+        rg2 = lg.op.Range(sA, sB, lg.ONE, name=cls.__name__)
+
+        unsq1 = lg.op.Unsqueeze(rg1, np.array([0, 1, 2], dtype=np.int64), name=cls.__name__)
+        unsq2 = lg.op.Unsqueeze(rg2, np.array([0, 1, 3], dtype=np.int64), name=cls.__name__)
+        lg.op.LessOrEqual(unsq1, unsq2, outputs=["mask"], name=cls.__name__)
+
+        lg.make_tensor_output("mask")
+
+        function_options = FunctionOptions(
+            export_as_function=True,
+            name=cls._operator_name,
+            domain=cls._domain_name,
+            move_initializer_to_constant=True,
         )
         g.make_local_function(lg, function_options=function_options)
         assert g.has_local_function(cls._operator_name, domain=cls._domain_name), (

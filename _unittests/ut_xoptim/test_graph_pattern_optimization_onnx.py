@@ -5995,6 +5995,55 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_causal_mask(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["d1"], start=0, end=1),
+                    oh.make_node("Shape", ["X"], ["d2"], start=1, end=2),
+                    oh.make_node("Squeeze", ["d1"], ["nd1"]),
+                    oh.make_node("Squeeze", ["d2"], ["nd2"]),
+                    oh.make_node("Range", ["zero", "nd2", "one"], ["rg1"]),
+                    oh.make_node("Range", ["nd1", "nd2", "one"], ["rg2"]),
+                    oh.make_node("Unsqueeze", ["rg1", "a012"], ["m1"]),
+                    oh.make_node("Unsqueeze", ["rg2", "a013"], ["m2"]),
+                    oh.make_node("LessOrEqual", ["m1", "m2"], ["yc"]),
+                    oh.make_node("Cast", ["yc"], ["Y"], to=TensorProto.INT64),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TensorProto.INT64, [1, 1, "c", "d"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), "zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), "one"),
+                    onh.from_array(np.array([0, 1, 2], dtype=np.int64), "a012"),
+                    onh.from_array(np.array([0, 1, 3], dtype=np.int64), "a013"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": (np.arange(12).reshape((3, 4))).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="FunctionCausalMask", verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Shape", "Shape", "CausalMask", "Cast"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
