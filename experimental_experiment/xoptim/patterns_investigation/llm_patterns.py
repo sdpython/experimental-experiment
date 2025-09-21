@@ -10,6 +10,8 @@ from . import SimplifyingEasyPatternFunction
 class FunctionPackedMatMulPattern(PatternOptimization):
     """Replaces multiple MatMul (X,A), (X,B) by (X, concat(A,B))..."""
 
+    f_domain = SimplifyingEasyPatternFunction.f_domain
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
