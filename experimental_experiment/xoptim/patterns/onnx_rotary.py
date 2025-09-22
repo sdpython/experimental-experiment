@@ -828,8 +828,6 @@ class FunctionCausalMaskPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if sq2 is None or sq2.op_type != "Unsqueeze" or len(sq2.input) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(sq1.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(sq2.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(sq1.input[1]):
@@ -849,10 +847,6 @@ class FunctionCausalMaskPattern(PatternOptimization):
         if rg1 is None or rg1.op_type != "Range" or len(rg1.input) != 3:
             return self.none(node, inspect.currentframe().f_lineno)
         if rg2 is None or rg2.op_type != "Range" or len(rg1.input) != 3:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(rg1.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(rg2.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         if rg1.input[1] != rg2.input[1]:
@@ -888,14 +882,31 @@ class FunctionCausalMaskPattern(PatternOptimization):
         less_or_equal: NodeProto,
     ) -> List[NodeProto]:
         nodes_to_return = []
-        if g.is_used_more_than_once(dim_squeeze1.output[0]):
+        if (
+            g.is_used_more_than_once(dim_squeeze1.output[0])
+            or g.is_used_more_than_once(range1.output[0])
+            or g.is_used_more_than_once(rg_unsqueeze1.output[0])
+        ):
             nodes_to_return.append(dim_squeeze1)
-        if g.is_used_more_than_once(dim_squeeze2.output[0]):
+        if (
+            g.is_used_more_than_once(dim_squeeze2.output[0])
+            or g.is_used_more_than_once(range2.output[0])
+            or g.is_used_more_than_once(rg_unsqueeze2.output[0])
+        ):
             nodes_to_return.append(dim_squeeze2)
-        if g.is_used_more_than_once(range1.output[0]):
+        if g.is_used_more_than_once(range1.output[0]) or g.is_used_more_than_once(
+            rg_unsqueeze1.output[0]
+        ):
             nodes_to_return.append(range1)
-        if g.is_used_more_than_once(range2.output[0]):
+        if g.is_used_more_than_once(range2.output[0]) or g.is_used_more_than_once(
+            rg_unsqueeze2.output[0]
+        ):
             nodes_to_return.append(range2)
+        if g.is_used_more_than_once(rg_unsqueeze1.output[0]):
+            nodes_to_return.append(rg_unsqueeze1)
+        if g.is_used_more_than_once(rg_unsqueeze2.output[0]):
+            nodes_to_return.append(rg_unsqueeze2)
+
         # The matching checks the output of the other nodes are not used more than once.
         nodes_to_return.append(
             g.make_node(
