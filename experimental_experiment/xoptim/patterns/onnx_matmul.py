@@ -1226,3 +1226,45 @@ class SwitchReshapeActivationPattern(PatternOptimization):
         nodes[1].attribute.extend(f_node.attribute)
         nodes[2].attribute.extend(tr_node.attribute)
         return nodes
+
+
+class ShapeBasedMatMulToMulPattern(PatternOptimization):
+    """
+    MatMul can be replaced by Mul with broadcast. It makes it easier
+    to detect optimization pattern with Expand operators.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+        left_first: bool = True,
+    ) -> Optional[MatchResult]:
+        if node.op_type != "MatMul" or node.domain != "":
+            return self.none()
+        if not g.has_shape(node.input[0]) or not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape1 = g.get_shape(node.input[0])
+        shape2 = g.get_shape(node.input[1])
+        if len(shape1) < 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(shape2) < 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if shape1[-1] != 1 or shape2[-2] != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        mm_node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "Mul",
+                mm_node.input,
+                mm_node.output,
+                name=f"{self.__class__.__name__}--{mm_node.name}",
+            )
+        ]

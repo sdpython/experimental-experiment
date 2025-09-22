@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import (
@@ -853,6 +853,88 @@ class ShapeBasedExpandCastWhereSwapPattern(PatternOptimization):
                 expand_node.op_type,
                 [where_output, expand_node.input[1]],
                 [where_node.output[0]],
+                name=f"{self.__class__.__name__}--{expand_node.name}",
+                doc_string=expand_node.doc_string,
+            ),
+        ]
+
+
+class ShapeBasedConcatExpandPattern(PatternOptimization):
+    """Rewrites Expand(X, concat(...)) if possible."""
+
+    @classmethod
+    def _compatible_shapes(
+        cls,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        shape: DYNAMIC_SHAPE,
+        expanded_shape: DYNAMIC_SHAPE,
+        concat_input: Sequence[str],
+    ) -> Optional[int]:
+        if len(shape) != len(expanded_shape) or len(expanded_shape) != len(concat_input):
+            return None
+        position = []
+        for i, (a, b) in enumerate(zip(shape, expanded_shape)):
+            if a == b:
+                continue
+            position.append(i)
+        if len(position) != 1:
+            # It might be Identity but this should be caught by another pattern.
+            return None
+        return position[0]
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Expand" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_constant(node.input[1]):
+            # no need
+            return self.none(node, inspect.currentframe().f_lineno)
+        concat_node = g.node_before(node.input[1])
+        if concat_node is None or concat_node.op_type != "Concat" or concat_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.has_shape(node.input[0]) or not g.has_shape(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape1 = g.get_shape_renamed(node.input[0])
+        shape2 = g.get_shape_renamed(node.output[0])
+        index = self._compatible_shapes(g, shape1, shape2, concat_node.input)
+        if index is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [concat_node, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        concat_node: NodeProto,
+        expand_node: NodeProto,
+    ) -> List[NodeProto]:
+        shape1 = g.get_shape_renamed(expand_node.input[0])
+        shape2 = g.get_shape_renamed(expand_node.output[0])
+        index = self._compatible_shapes(g, shape1, shape2, concat_node.input)
+        init = g.make_initializer("", g.ONE, source="ShapeBasedConcatExpandPattern.1")
+        new_input = [init for i in concat_node.input]
+        new_input[index] = concat_node.input[index]
+        new_name = g.unique_name(concat_node.output[0])
+        return [
+            g.make_node(
+                "Concat",
+                new_input,
+                [new_name],
+                axis=0,
+                name=f"{self.__class__.__name__}--{concat_node.name}",
+                doc_string=concat_node.doc_string,
+            ),
+            g.make_node(
+                "Expand",
+                [expand_node.input[0], new_name],
+                expand_node.output,
                 name=f"{self.__class__.__name__}--{expand_node.name}",
                 doc_string=expand_node.doc_string,
             ),

@@ -1039,10 +1039,6 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if dsq2 is None or dsq2.op_type != "Squeeze" or len(dsq2.input) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(dsq1.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(dsq2.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [dsq1, dsq2, rg1, rg2, sq1, sq2, mul, node], self.apply)
 
@@ -1059,6 +1055,10 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         add: NodeProto,
     ) -> List[NodeProto]:
         nodes_to_return = []
+        if g.is_used_more_than_once(dim_squeeze1.output[0]):
+            nodes_to_return.append(dim_squeeze1)
+        if g.is_used_more_than_once(dim_squeeze2.output[0]):
+            nodes_to_return.append(dim_squeeze2)
 
         # The matching checks the output of the other nodes are not used more than once.
         nodes_to_return.append(

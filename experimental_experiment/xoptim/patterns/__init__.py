@@ -4,7 +4,7 @@ from onnx import NodeProto
 from ..patterns_api import PatternOptimization, MatchResult
 
 # onnx patterns
-from .onnx_any import IdentityPattern, SameChildrenPattern
+from .onnx_any import IdentityPattern, SameChildrenPattern, ShapeBasedIdentityPattern
 from .onnx_cast import (
     CastPattern,
     CastCastBinaryPattern,
@@ -21,6 +21,7 @@ from .onnx_expand import (
     ExpandPattern,
     ExpandBroadcastPattern,
     ExpandSwapPattern,
+    ShapeBasedConcatExpandPattern,
     ShapeBasedExpandBroadcastPattern,
     ShapeBasedExpandBroadcastMatMulPattern,
     ShapeBasedExpandCastWhereSwapPattern,
@@ -46,6 +47,7 @@ from .onnx_matmul import (
     MatMulReshape2Of3Pattern,
     MulMulMatMulPattern,
     ReshapeMatMulReshapePattern,
+    ShapeBasedMatMulToMulPattern,
     SwitchReshapeActivationPattern,
     TransposeMatMulPattern,
     TransposeReshapeMatMulPattern,
@@ -170,11 +172,14 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         MulMulMatMulPattern(verbose=verbose),
         ShapeBasedReshapeIsSqueezePattern(verbose=verbose),
         ShapeBasedStaticExpandPattern(verbose=verbose),
+        ShapeBasedConcatExpandPattern(verbose=verbose),
         ShapeBasedEditDistanceReshapePattern(verbose=verbose),
+        ShapeBasedIdentityPattern(verbose=verbose),
         ShapeBasedExpandBroadcastPattern(verbose=verbose),
         ShapeBasedExpandBroadcastMatMulPattern(verbose=verbose),
         ShapeBasedExpandCastWhereSwapPattern(verbose=verbose),
         ShapeBasedExpandSwapPattern(verbose=verbose),
+        ShapeBasedMatMulToMulPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
         SequenceConstructAtPattern(verbose=verbose),
