@@ -8,9 +8,9 @@ from . import SimplifyingEasyPatternFunction
 
 
 class FunctionPackedMatMulPattern(PatternOptimization):
-    """
-    Replaces multiple MatMul (X,A), (X,B) by (X, concat(A,B))...
-    """
+    """Replaces multiple MatMul (X,A), (X,B) by (X, concat(A,B))..."""
+
+    f_domain = SimplifyingEasyPatternFunction.f_domain
 
     def match(
         self,
@@ -91,7 +91,7 @@ class FunctionPackedMatMulPattern(PatternOptimization):
         perm = list(g.get_attribute(tr_nodes[0], "perm").ints)
         str_perm = "_".join(map(str, perm))
         f_name = f"PackedMatMulReshapeTranspose{len(matmul_nodes)}_{str_perm}"
-        domain = "SimplifyingFunction"
+        domain = self.f_domain
         nodes_to_return = [
             g.make_node(
                 f_name,
@@ -127,33 +127,33 @@ class FunctionPackedMatMulPattern(PatternOptimization):
     def _add_local_function(
         cls, g: GraphBuilder, domain: str, f_name: str, n_nodes: int, rk: int, perm: List[int]
     ):
-        local_g = GraphBuilder(g.main_opset, as_function=True)
-        local_g.make_tensor_input("X")
+        lg = GraphBuilder(g.main_opset, as_function=True)
+        lg.make_tensor_input("X")
         for i in range(n_nodes):
-            local_g.make_tensor_input(f"W{i}")
-        local_g.make_tensor_input("shape")
+            lg.make_tensor_input(f"W{i}")
+        lg.make_tensor_input("shape")
 
-        all_weights = local_g.op.Concat(
+        all_weights = lg.op.Concat(
             *[f"W{i}" for i in range(n_nodes)], axis=-1, name="merge_weights"
         )
-        y = local_g.op.MatMul("X", all_weights, name="packed_matmul")
-        names = local_g.op.Split(
+        y = lg.op.MatMul("X", all_weights, name="packed_matmul")
+        names = lg.op.Split(
             y,
             num_outputs=n_nodes,
             name="split",
             outputs=[f"p{i}" for i in range(n_nodes)],
             axis=-1,
         )
-        reshaped = [local_g.op.Reshape(n, "shape", name="reshape") for n in names]
+        reshaped = [lg.op.Reshape(n, "shape", name="reshape") for n in names]
         _transposed = [
-            local_g.op.Transpose(n, perm=perm, outputs=[f"Z{i}"], name="transpose")
+            lg.op.Transpose(n, perm=perm, outputs=[f"Z{i}"], name="transpose")
             for i, n in enumerate(reshaped)
         ]
         for i in range(n_nodes):
-            local_g.make_tensor_output(f"Z{i}")
+            lg.make_tensor_output(f"Z{i}")
 
         function_options = FunctionOptions(export_as_function=True, name=f_name, domain=domain)
-        g.make_local_function(local_g, function_options=function_options)
+        g.make_local_function(lg, function_options=function_options)
 
 
 class FunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
@@ -189,7 +189,7 @@ class FunctionSplitRotaryMulPattern(SimplifyingEasyPatternFunction):
 
     def apply_pattern(self, g, X, split1, split2, C1, C2):
         assert self.f_name() == "SplitRotaryMul", f"Name mismatch {self.f_name()!r}"
-        return g.anyop.SplitRotaryMul(X, split1, split2, C1, C2, domain="SimplifyingFunction")
+        return g.anyop.SplitRotaryMul(X, split1, split2, C1, C2, domain=self.f_domain)
 
 
 class FunctionPowTanhPattern(SimplifyingEasyPatternFunction):
@@ -216,6 +216,4 @@ class FunctionPowTanhPattern(SimplifyingEasyPatternFunction):
 
     def apply_pattern(self, g, X, three, o_o_four, half, o_height, one):
         assert self.f_name() == "PowTanh", f"Name mismatch {self.f_name()!r}"
-        return g.anyop.PowTanh(
-            X, three, o_o_four, half, o_height, one, domain="SimplifyingFunction"
-        )
+        return g.anyop.PowTanh(X, three, o_o_four, half, o_height, one, domain=self.f_domain)
