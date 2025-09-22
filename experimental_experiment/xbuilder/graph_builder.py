@@ -8397,12 +8397,16 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_name(i.name, f"_update_structures_with_proto_{i}")
             self.set_type(i.name, i.type.tensor_type.elem_type)
             if i.type.tensor_type.shape.dim:
-                assert all(
-                    d.dim_param or d.dim_value for d in i.type.tensor_type.shape.dim
-                ), f"One dimension is not specified in {i.type.tensor_type.shape.dim}, val={i}"
-
                 shape = tuple(
-                    d.dim_param.replace(" ", "") if d.dim_param else d.dim_value
+                    (
+                        d.dim_param.replace(" ", "")
+                        if d.dim_param
+                        else (
+                            d.dim_value
+                            if d.dim_value
+                            else self.unique_dimension_name("UNKNOWNDIM")
+                        )
+                    )
                     for d in i.type.tensor_type.shape.dim
                 )
                 if all(isinstance(s, int) for s in shape) and -1 in shape:
