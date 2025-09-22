@@ -4434,7 +4434,9 @@ def aten_index_Tensor(
         last = g.op.Shape(x, start=-1, name=name)
         ind = g.op.Add(indices[1], g.op.Mul(indices[0], last, name=name), name=name)
         flat = g.op.Gather(
-            g.op.Reshape(x, g.MINUS_ONE, name=name), g.op.Reshape(ind, g.MINUS_ONE, name=name)
+            g.op.Reshape(x, g.MINUS_ONE, name=name),
+            g.op.Reshape(ind, g.MINUS_ONE, name=name),
+            name=name,
         )
         res = g.op.Reshape(flat, g.op.Shape(ind, name=name), name=name, outputs=outputs)
         if not sts:

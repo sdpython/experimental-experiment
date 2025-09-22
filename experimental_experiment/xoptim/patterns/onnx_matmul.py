@@ -1253,18 +1253,72 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if shape1[-1] != 1 or shape2[-2] != 1:
             return self.none(node, inspect.currentframe().f_lineno)
-        return MatchResult(self, [node], self.apply, insert_at=node)
+
+        next_node = g.next_nodes(node.output[0])
+        if len(next_node) == 1 and next_node[0].op_type == "Transpose":
+            transpose = next_node[0]
+            perm = tuple(g.get_attribute(transpose, "perm").ints)
+            n = len(perm)
+            if (
+                g.has_rank(node.input[0])
+                and g.has_rank(node.input[1])
+                and g.get_rank(node.input[0]) >= 2
+                and g.get_rank(node.input[1]) >= 2
+                and perm[:-2] == tuple(range(n - 2))
+                and perm[-2] == n - 1
+                and perm[-1] == n - 2
+            ):
+                return MatchResult(self, [node, transpose], self.apply, insert_at=node)
+        return MatchResult(self, [node, None], self.apply, insert_at=node)
 
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
         mm_node: NodeProto,
+        transpose: Optional[NodeProto],
     ) -> List[NodeProto]:
+        if transpose is None:
+            return [
+                g.make_node(
+                    "Mul",
+                    mm_node.input,
+                    mm_node.output,
+                    name=f"{self.__class__.__name__}--{mm_node.name}",
+                )
+            ]
+        rk1 = g.get_rank(mm_node.input[0])
+        rk2 = g.get_rank(mm_node.input[1])
+        assert rk1 > 2, f"rank({mm_node.input[0]})=={rk1} > 2 - unexpected"
+        assert rk2 > 2, f"rank({mm_node.input[1]})=={rk2} > 2 - unexpected"
+        rsh1 = g.make_initializer(
+            g.unique_name(mm_node.input[0]),
+            np.array([0] * (rk1 - 2) + [1, -1], dtype=np.int64),
+            source=f"{self.__class__.__name__}.1",
+        )
+        rsh2 = g.make_initializer(
+            g.unique_name(mm_node.input[1]),
+            np.array([0] * (rk2 - 2) + [-1, 1], dtype=np.int64),
+            source=f"{self.__class__.__name__}.1",
+        )
+        new1 = g.unique_name(mm_node.input[0])
+        new2 = g.unique_name(mm_node.input[1])
         return [
             g.make_node(
-                "Mul",
-                mm_node.input,
-                mm_node.output,
+                "Reshape",
+                [mm_node.input[0], rsh1],
+                [new1],
                 name=f"{self.__class__.__name__}--{mm_node.name}",
-            )
+            ),
+            g.make_node(
+                "Reshape",
+                [mm_node.input[1], rsh2],
+                [new2],
+                name=f"{self.__class__.__name__}--{mm_node.name}",
+            ),
+            g.make_node(
+                "Mul",
+                [new1, new2],
+                transpose.output,
+                name=f"{self.__class__.__name__}--{mm_node.name}",
+            ),
         ]

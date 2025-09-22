@@ -34,6 +34,7 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
+from onnx.reference.ops.op_reshape import reshape_reference_implementation
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from ..helpers import (
     dtype_to_tensor_dtype,
@@ -6826,7 +6827,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 output = [feeds[v.input[0]]]
             elif v.op_type == "Reshape":
                 # much faster this way
-                output = [feeds[v.input[0]].reshape(tuple(feeds[v.input[1]]))]
+                output = [
+                    reshape_reference_implementation(
+                        feeds[v.input[0]], tuple(feeds[v.input[1]])
+                    )
+                ]
             elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
                 # bypassing onnx.numpy_helper.from_array, too slow
                 output = self._apply_binary_op(v, feeds)

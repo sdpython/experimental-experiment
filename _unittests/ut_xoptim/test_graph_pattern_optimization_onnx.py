@@ -165,7 +165,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(
-                patterns=["UnsqueezeUnsqueeze"], verbose=10
+                patterns=["UnsqueezeUnsqueeze"], verbose=0
             ),
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
@@ -221,7 +221,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Cast"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(patterns=["Cast"], verbose=10),
+            optimization_options=OptimizationOptions(patterns=["Cast"], verbose=0),
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
@@ -242,7 +242,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(
-                patterns=["ReshapeMatMulReshape"], verbose=10
+                patterns=["ReshapeMatMulReshape"], verbose=0
             ),
             infer_shapes_options=True,
         )
@@ -300,9 +300,9 @@ class TestGraphPatternOptimization(ExtTestCase):
                 infer_shapes_options=True,
                 optimization_options=OptimizationOptions(
                     patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
-                    verbose=10,
+                    verbose=0,
                 ),
-                verbose=10,
+                verbose=0,
             )
         )
         s = str(gr.optimization_options)
@@ -446,10 +446,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 model,
                 optimization_options=OptimizationOptions(
                     patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
-                    verbose=10,
+                    verbose=0,
                 ),
                 infer_shapes_options=True,
-                verbose=10,
+                verbose=0,
             )
         )
         s = str(gr.optimization_options)
@@ -6127,7 +6127,7 @@ class TestGraphPatternOptimization(ExtTestCase):
     def test_shaped_based_matmul_to_mul(self):
         model = oh.make_model(
             oh.make_graph(
-                [oh.make_node("Mul", ["X", "Y"], ["Z"])],
+                [oh.make_node("MatMul", ["X", "Y"], ["Z"])],
                 "test",
                 [
                     oh.make_tensor_value_info("X", TFLOAT, ["a", "b", 1]),
@@ -6155,6 +6155,46 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["Mul"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_shaped_based_matmul_to_mul_transpose(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("MatMul", ["X", "Y"], ["Zt"]),
+                    oh.make_node("Transpose", ["Zt"], ["Z"], perm=[0, 2, 1]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b", 1]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, "c"]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, ["a", "c", "b"])],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {
+            "X": np.arange(5).reshape((1, -1, 1)).astype(np.float32),
+            "Y": np.arange(6).reshape((1, 1, -1)).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="ShapeBasedMatMulToMul", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Reshape", "Reshape", "Mul"], [n.op_type for n in opt_onx.graph.node]
+        )
         ref = ExtendedReferenceEvaluator(opt_onx)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
