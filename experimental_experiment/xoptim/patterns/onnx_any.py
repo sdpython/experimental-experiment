@@ -295,3 +295,56 @@ class IdentityPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{node.name}",
             )
         ]
+
+
+class ShapeBasedIdentityPattern(PatternOptimization):
+    """
+    If a slice leads to the same shape and the step is 1 then it is identity.
+    In some cases, just known the same is enough to replace them.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"Transpose", "Slice"} or node.domain != "":
+            return self.none()
+
+        if node.op_type == "Slice":
+            if len(node.input) == 5:
+                steps = node.input[4]
+                if (
+                    not g.is_constant(steps)
+                    or g.get_computed_constant(steps) is None
+                    or set(g.get_computed_constant(steps)) != {1}
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+
+            if not g.has_shape(node.input[0]) or not g.has_shape(node.output[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            shape_i = g.get_shape_renamed(node.input[0])
+            shape_o = g.get_shape_renamed(node.output[0])
+            if shape_i == shape_o:
+                return MatchResult(self, [node], self.apply, insert_at=node)
+
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "Identity",
+                [node.input[0]],
+                [node.output[0]],
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+        ]
