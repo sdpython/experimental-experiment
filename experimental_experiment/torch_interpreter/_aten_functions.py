@@ -2212,6 +2212,67 @@ def aten_detach_(
     return g.make_node("Identity", [x], outputs, name="detach_")
 
 
+def aten_diff(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    n: int = 1,
+    dim: int = -1,
+    prepend: Optional[T] = None,
+    append: Optional[T] = None,
+    name="diff",
+) -> T:
+    "diff"
+    assert isinstance(n, int), f"diff not implemented for type(n)={type(n)}{g.get_debug_msg()}"
+    assert isinstance(
+        dim, int
+    ), f"diff not implemented for type(dim)={type(dim)}{g.get_debug_msg()}"
+    assert prepend is None, f"diff not implemented for prepent={prepend!r}{g.get_debug_msg()}"
+    assert append is None, f"diff not implemented for append={append!r}{g.get_debug_msg()}"
+
+    shape_x = g.get_shape(x) if g.has_shape(x) else None
+    n_elems = shape_x[dim] if shape_x is not None and isinstance(shape_x[dim], int) else -1
+    dim_x = None
+
+    diff_input = x
+    for i in range(n):
+        lag0 = g.op.Slice(
+            diff_input, g.ZERO, g.MINUS_ONE, np.array([dim], dtype=np.int64), name=name
+        )
+        if n_elems > 0:
+            end = np.array([n_elems], dtype=np.int64)
+            n_elems -= 1
+        else:
+            if dim_x is None:
+                dim_x = (
+                    g.op.Shape(x, start=dim, end=dim + 1, name=name)
+                    if dim != -1
+                    else g.op.Shape(x, start=dim, name=name)
+                )
+            end = dim_x
+            if i < n - 1:
+                dim_x = g.op.Sub(dim_x, g.ONE, name=name)
+        lag1 = g.op.Slice(diff_input, g.ONE, end, np.array([1], dtype=np.int64), name=name)
+        if i == n - 1:
+            res = g.op.Sub(lag1, lag0, name=name, outputs=outputs)
+        else:
+            diff_input = g.op.Sub(lag1, lag0, name=name)
+
+    if not sts:
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        if g.has_shape(x):
+            shape = g.get_shape(x)
+            d = shape[dim]
+            new_shape = list(shape)
+            new_shape[dim] = (d - n) if isinstance(d, dim) else f"({new_shape[dim]})-{n}"
+            g.set_shape(res, tuple(new_shape))
+        elif g._has_rank(x):
+            g.set_rank(res, g.get_rank(x))
+    return res
+
+
 def aten_div(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
