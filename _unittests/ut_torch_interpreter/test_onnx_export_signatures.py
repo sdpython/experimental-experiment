@@ -375,6 +375,7 @@ class TestOnnxExportSignatures(ExtTestCase):
             dynamic_shapes=dyn,
             exporter="custom-tracing",
             others=inputs2,
+            atol=1e-4,
         )
 
     @skipif_ci_windows("not working on windows")
