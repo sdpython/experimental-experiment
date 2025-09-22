@@ -2584,6 +2584,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             pass
         elif isinstance(value, np.ndarray):
             pass
+        elif isinstance(value, (np.float16, np.float32, np.float64, np.int64)):
+            value = np.array(value)
         elif isinstance(value, self.torch.Tensor):
             # torch.nn.parameter.Parameter -> np.ndarray
             assert "FakeTensor" not in str(type(value)), (
@@ -7765,7 +7767,12 @@ class GraphBuilder(_GraphBuilderRuntime):
         if itype > 0:
             self.set_type(val.name, itype)
         shape = tuple(
-            d.dim_param if d.dim_param else d.dim_value for d in val.type.tensor_type.shape.dim
+            (
+                d.dim_param.replace(" ", "")
+                if d.dim_param
+                else (d.dim_value if d.dim_value else self.unique_dimension_name("NEWDIM"))
+            )
+            for d in val.type.tensor_type.shape.dim
         )
         if all(isinstance(s, int) for s in shape) and -1 in shape:
             # Some converters uses -1 to specify a dynamic dimension.
@@ -8390,8 +8397,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_name(i.name, f"_update_structures_with_proto_{i}")
             self.set_type(i.name, i.type.tensor_type.elem_type)
             if i.type.tensor_type.shape.dim:
+                assert all(
+                    d.dim_param or d.dim_value for d in i.type.tensor_type.shape.dim
+                ), f"One dimension is not specified in {i.type.tensor_type.shape.dim}, val={i}"
+
                 shape = tuple(
-                    d.dim_param if d.dim_param else d.dim_value
+                    d.dim_param.replace(" ", "") if d.dim_param else d.dim_value
                     for d in i.type.tensor_type.shape.dim
                 )
                 if all(isinstance(s, int) for s in shape) and -1 in shape:
