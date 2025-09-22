@@ -932,8 +932,8 @@ class FunctionCausalMaskPattern(PatternOptimization):
         sA = lg.op.Squeeze("A", name=cls.__name__)
         sB = lg.op.Squeeze("B", name=cls.__name__)
 
-        rg1 = lg.op.Range(lg.ZERO, sB, lg.ONE, name=cls.__name__)
-        rg2 = lg.op.Range(sA, sB, lg.ONE, name=cls.__name__)
+        rg1 = lg.op.Range(lg.ZERO_NO_DIM, sB, lg.ONE_NO_DIM, name=cls.__name__)
+        rg2 = lg.op.Range(sA, sB, lg.ONE_NO_DIM, name=cls.__name__)
 
         unsq1 = lg.op.Unsqueeze(rg1, np.array([0, 1, 2], dtype=np.int64), name=cls.__name__)
         unsq2 = lg.op.Unsqueeze(rg2, np.array([0, 1, 3], dtype=np.int64), name=cls.__name__)
