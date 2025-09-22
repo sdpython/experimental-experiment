@@ -50,6 +50,8 @@ class GraphBuilderPatternOptimization:
     MINUS_ONE = np.array([-1], dtype=np.int64)
     ONE = np.array([1], dtype=np.int64)
     ZERO = np.array([0], dtype=np.int64)
+    # MAXINT for int64, means a slice goes up to the last element
+    END = np.array([9223372036854775807], dtype=np.int64)
 
     def __init__(
         self,
