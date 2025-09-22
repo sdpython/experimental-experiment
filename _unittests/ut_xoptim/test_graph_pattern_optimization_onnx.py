@@ -6124,6 +6124,41 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_shaped_based_matmul_to_mul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [oh.make_node("Mul", ["X", "Y"], ["Z"])],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b", 1]),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, "c"]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, ["a", "b", "c"])],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {
+            "X": np.arange(5).reshape((1, -1, 1)).astype(np.float32),
+            "Y": np.arange(6).reshape((1, 1, -1)).astype(np.float32),
+        }
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(
+                patterns="ShapeBasedMatMulToMul", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Mul"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
