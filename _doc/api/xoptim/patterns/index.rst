@@ -25,6 +25,7 @@
     onnx_reduce
     onnx_reshape
     onnx_rotary
+    onnx_shape
     onnx_slice
     onnx_split
     onnx_sub

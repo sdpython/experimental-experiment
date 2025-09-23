@@ -13,6 +13,7 @@ from ..xbuilder._shape_helper import (
     all_int,
     all_int_or_str,
 )
+from ..xbuilder.expression_dimension import simplify_expression
 
 
 def broadcast_shape(
@@ -854,6 +855,8 @@ def _set_shape_type_op_any_gather(self: "GraphBuilder", node: NodeProto):  # noq
         elif len(sh1) == len(sh2) == 2 and axis == 0:
             new_shape = (*sh2, sh1[-1])
             self.set_shape(node.output[0], new_shape)
+        elif len(sh1) == len(sh2) == 1:
+            self.set_shape(node.output[0], sh2)
         else:
             self.set_rank(node.output[0], len(sh1) + len(sh2) - 1)
     elif self.has_rank(node.input[0]) and self.has_rank(node.input[1]):
@@ -987,6 +990,15 @@ def _set_shape_type_op_any_range(self: "GraphBuilder", node: NodeProto):  # noqa
     )
     self.set_type(node.output[0], types[0])
     self.set_rank(node.output[0], 1)
+    if self.is_constant(node.input[2]) and self.get_constant(node.input[2]) == 1:
+        v1 = self.value_as_shape(node.input[0])
+        v2 = self.value_as_shape(node.input[1])
+        if v1 is not None and v2 is not None:
+            if isinstance(v1, int) and isinstance(v2, int):
+                dim = v2 - v1
+            else:
+                dim = simplify_expression(f"{v2}-({v1})")
+            self.set_shape(node.output[0], (dim,))
 
 
 def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821

@@ -171,9 +171,7 @@ class DynamoInterpreter:
         return flatten_object(x, drop_keys=True)
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
-        """
-        Runs a node: call the approrpiate method based on the node type.
-        """
+        """Runs a node: call the approrpiate method based on the node type."""
         example_value = None
         if hasattr(node, "meta") and "example_value" in node.meta:
             if isinstance(node.target, str) or callable(node.target):

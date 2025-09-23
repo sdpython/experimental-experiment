@@ -71,6 +71,7 @@ from .onnx_rotary import (
     RotaryConcatPartPattern,
 )
 from .onnx_sequence import SequenceConstructAtPattern
+from .onnx_shape import ShapeBasedShapeShapeAddPattern
 from .onnx_slice import SliceSlicePattern
 from .onnx_split import SlicesSplitPattern, SplitConcatPattern
 from .onnx_sub import Sub1MulPattern
@@ -180,6 +181,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ShapeBasedExpandCastWhereSwapPattern(verbose=verbose),
         ShapeBasedExpandSwapPattern(verbose=verbose),
         ShapeBasedMatMulToMulPattern(verbose=verbose),
+        ShapeBasedShapeShapeAddPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
         SequenceConstructAtPattern(verbose=verbose),
