@@ -906,6 +906,12 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
         index = self._compatible_shapes(g, shape1, shape2, concat_node.input)
         if index is None:
             return self.none(node, inspect.currentframe().f_lineno)
+        # checking the other values are not 1
+        if all(
+            (i == index or (g.is_constant(name) and g.get_constant_scalar(name) == 1))
+            for i, name in enumerate(concat_node.input)
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(self, [concat_node, node], self.apply, insert_at=node)
 
@@ -918,9 +924,12 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
         shape1 = g.get_shape_renamed(expand_node.input[0])
         shape2 = g.get_shape_renamed(expand_node.output[0])
         index = self._compatible_shapes(g, shape1, shape2, concat_node.input)
-        init = g.make_initializer("", g.ONE, source="ShapeBasedConcatExpandPattern.1")
-        new_input = [init for i in concat_node.input]
-        new_input[index] = concat_node.input[index]
+        init1 = g.make_initializer(
+            g.unique_name("init7_1"), g.ONE, source="ShapeBasedConcatExpandPattern.1"
+        )
+        new_input = [
+            (iname if i == index else init1) for i, iname in enumerate(concat_node.input)
+        ]
         new_name = g.unique_name(concat_node.output[0])
         return [
             g.make_node(

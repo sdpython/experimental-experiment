@@ -61,6 +61,7 @@ from ._shape_helper import (
     all_int_or_str,
     is_static_dimension,
     is_static_shape,
+    reshape_implementation_with_zero,
 )
 from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import (
@@ -6826,7 +6827,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 output = [feeds[v.input[0]]]
             elif v.op_type == "Reshape":
                 # much faster this way
-                output = [feeds[v.input[0]].reshape(tuple(feeds[v.input[1]]))]
+                output = [
+                    reshape_implementation_with_zero(
+                        feeds[v.input[0]], tuple(feeds[v.input[1]])
+                    )
+                ]
             elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
                 # bypassing onnx.numpy_helper.from_array, too slow
                 output = self._apply_binary_op(v, feeds)
