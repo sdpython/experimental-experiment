@@ -1,3 +1,4 @@
+from itertools import zip_longest
 from typing import Any, Sequence, Tuple, Union
 import numpy as np
 
@@ -5,6 +6,28 @@ STATIC_SHAPE = Tuple[int, ...]
 DYNAMIC_SHAPE = Tuple[
     Union[int, "torch.SymInt", "torch.SymFloat", float, str], ...  # noqa: F821
 ]
+
+
+def reshape_implementation_with_zero(
+    data: Any, shape: Sequence[int], allowzero: int = 0
+) -> Any:
+    """
+    Reshapes an array or a tensor even if the new shape has 0
+    (following onnx specifications).
+    """
+    assert hasattr(data, "reshape"), f"Missing 'reshape' for type {type(data)}"
+    if len(shape) == 0:
+        return data.squeeze()
+    new_shape = (
+        (
+            tuple((o if s == 0 else s) for o, s in zip(data.shape, shape))
+            if len(shape) <= len(data.shape)
+            else tuple((o if s == 0 else s) for o, s in zip_longest(data.shape, shape))
+        )
+        if allowzero == 0
+        else tuple(shape)
+    )
+    return data.reshape(new_shape)
 
 
 def all_int(seq: Sequence[Any]) -> bool:

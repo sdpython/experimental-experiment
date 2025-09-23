@@ -34,7 +34,6 @@ import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
-from onnx.reference.ops.op_reshape import reshape_reference_implementation
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
 from ..helpers import (
     dtype_to_tensor_dtype,
@@ -62,6 +61,7 @@ from ._shape_helper import (
     all_int_or_str,
     is_static_dimension,
     is_static_shape,
+    reshape_implementation_with_zero,
 )
 from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import (
@@ -6828,7 +6828,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             elif v.op_type == "Reshape":
                 # much faster this way
                 output = [
-                    reshape_reference_implementation(
+                    reshape_implementation_with_zero(
                         feeds[v.input[0]], tuple(feeds[v.input[1]])
                     )
                 ]
