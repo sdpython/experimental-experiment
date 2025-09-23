@@ -165,7 +165,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(
-                patterns=["UnsqueezeUnsqueeze"], verbose=0
+                patterns=["UnsqueezeUnsqueeze"], verbose=10
             ),
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
@@ -221,7 +221,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         before = [node for node in origin.graph.node if node.op_type == "Cast"]
         gr = GraphBuilder(
             origin,
-            optimization_options=OptimizationOptions(patterns=["Cast"], verbose=0),
+            optimization_options=OptimizationOptions(patterns=["Cast"], verbose=10),
         )
         res, out, err = self.capture(lambda: gr.optimize_with_patterns())
         self.assertEmpty(err)
@@ -242,7 +242,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             origin,
             optimization_options=OptimizationOptions(
-                patterns=["ReshapeMatMulReshape"], verbose=0
+                patterns=["ReshapeMatMulReshape"], verbose=10
             ),
             infer_shapes_options=True,
         )
@@ -300,9 +300,9 @@ class TestGraphPatternOptimization(ExtTestCase):
                 infer_shapes_options=True,
                 optimization_options=OptimizationOptions(
                     patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
-                    verbose=0,
+                    verbose=10,
                 ),
-                verbose=0,
+                verbose=10,
             )
         )
         s = str(gr.optimization_options)
@@ -446,10 +446,10 @@ class TestGraphPatternOptimization(ExtTestCase):
                 model,
                 optimization_options=OptimizationOptions(
                     patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
-                    verbose=0,
+                    verbose=10,
                 ),
                 infer_shapes_options=True,
-                verbose=0,
+                verbose=10,
             )
         )
         s = str(gr.optimization_options)
