@@ -1,7 +1,7 @@
 import inspect
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import numpy as np
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ...helpers import make_idn
 from ...xbuilder import FunctionOptions, GraphBuilder
 from ..patterns_api import MatchResult, PatternOptimization
@@ -1108,3 +1108,262 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
             f"The function {cls._domain_name}.{cls._operator_name} "
             f"was not added to the builder."
         )
+
+
+class FunctionCosSinCachePattern(PatternOptimization):
+    """
+    Fuses nodes to simplify the creation of cos/sin caches in LLM.
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.xbuilder import GraphBuilder
+        from experimental_experiment.xoptim import GraphBuilderPatternOptimization
+        from experimental_experiment.xoptim.patterns import (
+            FunctionCosSinCachePattern,
+        )
+
+        pat = FunctionCosSinCachePattern()
+        g = GraphBuilderPatternOptimization(GraphBuilder(18))
+        print(pat._pattern_to_string(g))
+    """
+
+    _operator_name = "CosSinCache"
+    _domain_name = "intermediate"
+
+    def _match_branch(
+        self, g: "GraphBuilderPatternOptimization", node: NodeProto  # noqa: F821
+    ) -> Optional[Tuple[NodeProto, NodeProto, NodeProto]]:
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_node = next_nodes[0]
+        if next_node.op_type == "Cast" and next_node.domain == "":
+            cast_node = next_node
+        else:
+            cast_node = None
+            next_node = node
+
+        next_nodes = g.next_nodes(next_node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_node = next_nodes[0]
+        if next_node.op_type != "Unsqueeze" or next_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        unsq_node = next_node
+        if (
+            not g.is_constant(unsq_node.input[1])
+            or g.get_constant_scalar(unsq_node.input[1]) != 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_nodes = g.next_nodes(next_node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_node = next_nodes[0]
+        if next_node.op_type != "Concat" or next_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        concat_node = next_node
+        if concat_node.input[0] != concat_node.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_attribute(concat_node, "axis").i != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return cast_node, unsq_node, concat_node
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Cos" or node.domain != "":
+            return self.none()
+
+        cos = node
+        cos_sin = g.next_nodes(cos.input[0])
+        if len(cos_sin) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        sin = cos_sin[1 if cos.output[0] == cos_sin[0].output[0] else 0]
+
+        # what follows
+        r = self._match_branch(g, cos)
+        if r is None:
+            return r
+        cos_cast, cos_unsqueeze, cos_concat = r
+        r = self._match_branch(g, sin)
+        if r is None:
+            return r
+        sin_cast, sin_unsqueeze, sin_concat = r
+
+        # what is before
+        mul_node = g.node_before(cos.input[0])
+        if (
+            mul_node is None
+            or g.is_used_more_than_once(mul_node.input[0])
+            or mul_node.op_type != "Mul"
+            or mul_node.domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        reshape_node = g.node_before(mul_node.input[1])
+        if (
+            reshape_node is None
+            or g.is_used_more_than_once(reshape_node.input[0])
+            or reshape_node.op_type != "Reshape"
+            or reshape_node.domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(reshape_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(reshape_node.input[1])
+        if tuple(cst) != (0, -1, 1):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cast_node = g.node_before(reshape_node.input[0])
+        if g.is_used_more_than_once(reshape_node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        unsq_node = g.node_before(cast_node.input[0])
+        if (
+            cast_node is None
+            or g.is_used_more_than_once(unsq_node.input[0])
+            or unsq_node.op_type != "Unsqueeze"
+            or unsq_node.domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(unsq_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(unsq_node.input[1])
+        if tuple(cst) != (0, 1):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        range_node = g.node_before(unsq_node.input[0])
+        if (
+            range_node is None
+            or g.is_used_more_than_once(range_node.input[0])
+            or g.is_used_more_than_once(range_node.input[1])
+            or range_node.op_type != "Range"
+            or range_node.domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            not g.is_constant(range_node.input[2])
+            or g.get_constant_scalar(range_node.input[2]) != 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        dim_squeeze1 = g.node_before(range_node.input[0])
+        if (
+            dim_squeeze1 is None
+            or dim_squeeze1.op_type != "Squeeze"
+            or dim_squeeze1.domain != ""
+            or len(dim_squeeze1.input) != 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        dim_squeeze2 = g.node_before(range_node.input[1])
+        if (
+            dim_squeeze2 is None
+            or dim_squeeze2.op_type != "Squeeze"
+            or dim_squeeze2.domain != ""
+            or len(dim_squeeze2.input) != 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(
+            self,
+            [
+                dim_squeeze1,
+                dim_squeeze2,
+                range_node,
+                unsq_node,
+                cast_node,
+                reshape_node,
+                mul_node,
+                cos,
+                cos_cast,
+                cos_unsqueeze,
+                cos_concat,
+                sin,
+                sin_cast,
+                sin_unsqueeze,
+                sin_concat,
+            ],
+            self.apply,
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        dim_squeeze1: NodeProto,
+        dim_squeeze2: NodeProto,
+        range_node: NodeProto,
+        unsq_node: NodeProto,
+        cast_node: NodeProto,
+        reshape_node: NodeProto,
+        mul_node: NodeProto,
+        cos: NodeProto,
+        cos_cast: NodeProto,
+        cos_unsqueeze: NodeProto,
+        cos_concat: NodeProto,
+        sin: NodeProto,
+        sin_cast: NodeProto,
+        sin_unsqueeze: NodeProto,
+        sin_concat: NodeProto,
+    ) -> List[NodeProto]:
+        # Builds the name of the local function.
+        to = None if cos_cast is None else g.get_attribute(cos_cast, "to").i
+        name = self._operator_name if to is None else f"{self._operator_name}_to{to}"
+
+        # The matching checks the output of the other nodes are not used more than once.
+        nodes_to_return = [
+            g.make_node(
+                name,
+                [dim_squeeze1.input[0], dim_squeeze2.input[0], mul_node.input[0]],
+                [cos_concat.output[0], sin_concat.output[0]],
+                name=f"{self.__class__.__name__}--{mul_node.name}",
+                domain=self._domain_name,
+            )
+        ]
+
+        # Creates the local function
+        if not g.builder.has_local_function(name, domain=self._domain_name):
+            self._add_local_function(g.builder, name=name, to=to)
+        return nodes_to_return
+
+    @classmethod
+    def _add_local_function(cls, g: GraphBuilder, name: str, to: Optional[int] = None):
+        lg = GraphBuilder(g.main_opset, as_function=True)
+        lg.make_tensor_input("dim1")
+        lg.make_tensor_input("dim2")
+        lg.make_tensor_input("weights")
+
+        sA = lg.op.Squeeze("dim1", name=name)
+        sB = lg.op.Squeeze("dim2", name=name)
+        rg = lg.op.Range(sA, sB, lg.ONE_NO_DIM, name=name)
+        unsq = lg.op.Unsqueeze(rg, np.array([0, 1], dtype=np.int64), name=name)
+        cast = lg.op.Cast(unsq, to=TensorProto.FLOAT, name=name)
+        resh = lg.op.Reshape(cast, np.array([0, -1, 1], dtype=np.int64), name=name)
+        mul = lg.op.Mul("weights", resh, name=name)
+
+        cos = lg.op.Cos(mul, name=name)
+        sin = lg.op.Sin(mul, name=name)
+        if to is not None:
+            cos = lg.op.Cast(cos, to=to, name=name)
+            sin = lg.op.Cast(sin, to=to, name=name)
+        cos_ = lg.op.Unsqueeze(cos, g.ONE, name=name)
+        sin_ = lg.op.Unsqueeze(sin, g.ONE, name=name)
+        lg.op.Concat(cos_, cos_, axis=-1, name=name, outputs=["cos"])
+        lg.op.Concat(sin_, sin_, axis=-1, name=name, outputs=["sin"])
+
+        lg.make_tensor_output("cos")
+        lg.make_tensor_output("sin")
+
+        function_options = FunctionOptions(
+            export_as_function=True,
+            name=name,
+            domain=cls._domain_name,
+            move_initializer_to_constant=True,
+        )
+        g.make_local_function(lg, function_options=function_options)
+        assert g.has_local_function(
+            name, domain=cls._domain_name
+        ), f"The function {cls._domain_name}.{name} was not added to the builder."

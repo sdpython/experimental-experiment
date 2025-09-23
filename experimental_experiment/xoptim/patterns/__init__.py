@@ -67,6 +67,7 @@ from .onnx_reshape import (
 from .onnx_rotary import (
     FunctionCausalMaskPattern,
     FunctionCausalMaskMulAddPattern,
+    FunctionCosSinCachePattern,
     FunctionHalfRotaryEmbeddingPattern,
     RotaryConcatPartPattern,
 )
@@ -206,6 +207,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         RotaryConcatPartPattern(verbose=verbose),
         FunctionCausalMaskPattern(verbose=verbose),
         FunctionCausalMaskMulAddPattern(verbose=verbose),
+        FunctionCosSinCachePattern(verbose=verbose),
         FunctionHalfRotaryEmbeddingPattern(verbose=verbose),
         RMSNormalizationPattern(verbose=verbose),
     ]

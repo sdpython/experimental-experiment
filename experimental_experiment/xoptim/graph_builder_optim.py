@@ -1007,11 +1007,15 @@ class GraphBuilderPatternOptimization:
         known: Set[str],
         verifies: bool,
         root: bool = False,
+        removed_nodes: Optional[List[NodeProto]] = None,
     ):
+        nodes_id_removed = {id(n) for n in removed_nodes} if removed_nodes else set()
         for p, node in enumerate(nodes):
             assert (
                 node.domain in self.opsets
             ), f"domain {node.domain!r} is not registered in {self.opsets}"
+            if id(node) in nodes_id_removed:
+                continue
             for i in node.input:
                 if i == "":
                     continue
@@ -1028,14 +1032,17 @@ class GraphBuilderPatternOptimization:
                             )
                         ]
                     )
-                    steps = step if isinstance(step, str) else step()
+                    s_removed_nodes = "\n".join(
+                        f"{n.op_type}({n.input})->({n.output})" for n in removed_nodes
+                    )
                     raise AssertionError(
                         f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "
                         f"[{node.name}]: {node.input} -> {node.output}, "
-                        f"step\n--\n{steps!r}\n--\n"
+                        f"step\n--\n{step if isinstance(step, str) else step()!r}\n--\n"
                         f"found after = {i in after}\n------\n"
-                        f"{assert_text}\n------\n"
-                        f"{self.builder.pretty_text()}"
+                        f"{assert_text}\n------\nid(node)={id(node)}, "
+                        f"removed_nodes=\n{s_removed_nodes}"
+                        f"\n{self.builder.pretty_text()}"
                     )
             if node.op_type in {"If", "Loop", "Scan", "SequenceMap"}:
                 for att in node.attribute:
@@ -1073,10 +1080,14 @@ class GraphBuilderPatternOptimization:
         iteration: int,
         code: str,
         verifies: bool,
+        removed_nodes: Optional[List[NodeProto]] = None,
     ):
         """Verifies the graph."""
         begin = time.perf_counter()
-        assert len(self.builder.nodes) > 0, f"The onnx model is empty (step {step}, no node)"
+        assert len(self.builder.nodes) > 0, (
+            f"The onnx model is empty (step "
+            f"{step if isinstance(step, str) else step()!r}, no node)"
+        )
         known = (
             set(n.name for n in self.builder.inputs)
             | set(self.builder.initializers_dict)
@@ -1090,10 +1101,15 @@ class GraphBuilderPatternOptimization:
             known=known,
             verifies=verifies,
             root=True,
+            removed_nodes=removed_nodes,
         )
 
         for o in self.builder.outputs:
-            assert o.name in known, f"Unknown output {o.name!r}, step {step!r}"
+            assert o.name in known, (
+                f"Unknown output {o.name!r}, step "
+                f"{step if isinstance(step, str) else step()!r}\n"
+                f"{self.builder.pretty_text()}"
+            )
 
         if verifies:
             self._check_graph_verifies_whole()
@@ -1376,6 +1392,10 @@ class GraphBuilderPatternOptimization:
                 added_nodes = self.apply_match(match)
                 added_types |= set(n.op_type for n in added_nodes)
 
+                removed_nodes = [
+                    n for n in match.nodes if id(n) not in {id(r) for r in added_nodes}
+                ]
+
                 if self.verbose > 3 or pattern.verbose >= 10:
                     print(
                         f"[GraphBuilderPatternOptimization-"
@@ -1425,7 +1445,12 @@ class GraphBuilderPatternOptimization:
                 )
                 statistics.append(obs)
                 self._check_graph(
-                    statistics, lambda _=match: _.to_string(False), it, "A", self.verifies
+                    statistics,
+                    lambda _=match: _.to_string(False),
+                    it,
+                    "A",
+                    verifies=self.verifies,
+                    removed_nodes=removed_nodes,
                 )
 
                 n_added += add
