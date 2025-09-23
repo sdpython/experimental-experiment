@@ -2817,6 +2817,11 @@ class GraphBuilder(_GraphBuilderRuntime):
     def constant_is_equal_to(self, name, value):
         assert name in self.initializers_dict, f"intializer {name!r} not found."
         cst = self.initializers_dict[name]
+        if isinstance(cst, TensorProto):
+            cst = onh.to_array(cst)
+        if isinstance(value, TensorProto):
+            value = onh.to_array(value)
+
         if isinstance(cst, np.ndarray) and isinstance(value, np.ndarray):
             if cst.dtype != value.dtype:
                 return False
@@ -2824,8 +2829,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return False
             return np.abs(cst - value).max() == 0
 
-        t1 = self.torch.from_array(cst) if isinstance(cst, np.ndarray) else cst
-        t2 = self.torch.from_array(value) if isinstance(value, np.ndarray) else value
+        t1 = self.torch.from_numpy(cst) if isinstance(cst, np.ndarray) else cst
+        t2 = self.torch.from_numpy(value) if isinstance(value, np.ndarray) else value
+        assert hasattr(t1, "dtype"), f"Unexpected type {type(t1)} for name={name!r}"
+        assert hasattr(t2, "dtype"), f"Unexpected type {type(t2)}, {type(value)}"
         if t1.dtype != t2.dtype:
             return False
         if t1.shape != t2.shape:
