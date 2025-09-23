@@ -2287,7 +2287,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if input_name is not None and isinstance(value, self.torch.SymInt):
                 # axis can be None for a scaler.
                 assert name != input_name, (
-                    f"Name {name!r} cannot be defined from itself (axis={axis}), "
+                    f"Name {name!r} (input_name={input_name!r}) "
+                    f"cannot be defined from itself (axis={axis}), "
                     f"value type is {type(value)}{self.get_debug_msg()}"
                 )
                 source = dict(input_name=input_name, axis=axis)
@@ -2848,6 +2849,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return False
             if cst.shape != value.shape:
                 return False
+            if cst.shape == (0,):
+                return True
+            if len(cst.shape) == 0:
+                return cst == value
             return np.abs(cst - value).max() == 0
 
         t1 = self.torch.from_numpy(cst) if isinstance(cst, np.ndarray) else cst
@@ -2858,6 +2863,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             return False
         if t1.shape != t2.shape:
             return False
+        if t1.shape == (0,):
+            return True
+        if len(t1.shape) == 0:
+            return t1 == t2
         return np.abs(t1 - t2).max() == 0
 
     def is_dynamic_shape(
@@ -7673,6 +7682,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.nodes.insert(insert_at + i, n)
                 self._make_node_set_type_shape_constant(n, True)
                 self._make_node_set_type_shape(n)
+                self.simple_update_value_shape_with_node(n)
                 assert (
                     n.domain != ""
                     or any(not self.has_type(o) for o in n.input)
@@ -7790,6 +7800,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self._make_node_set_type_shape_constant(n, True)
             self._make_node_set_type_shape(n)
+            self.simple_update_value_shape_with_node(n)
             assert (
                 n.domain != ""
                 or any(not self.has_type(o) for o in n.input)
@@ -8344,9 +8355,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             set_shape_type_op_any(self, node)
 
     def infer_shapes(self) -> Dict[str, Tuple[DYNAMIC_SHAPE, DYNAMIC_SHAPE]]:
-        """
-        Runs custom shape inference. Returns the updates.
-        """
+        """Runs custom shape inference. Returns the updates."""
         if self.verbose > 1:
             begin = time.perf_counter()
             print("[GraphBuilder.infer_shapes]")

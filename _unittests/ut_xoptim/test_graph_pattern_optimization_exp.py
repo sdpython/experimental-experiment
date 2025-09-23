@@ -422,7 +422,7 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
         model = oh.make_model(
             oh.make_graph(
                 [
-                    oh.make_node("Range", ["zero", "dim", "one"], ["ar"]),
+                    oh.make_node("Range", ["zero", "dim", "onei"], ["ar"]),
                     oh.make_node("Add", ["ar", "one"], ["ad"]),
                     oh.make_node("Reshape", ["ad", "shape1"], ["re"]),
                     oh.make_node("Less", ["ar", "re"], ["le"]),
@@ -441,8 +441,9 @@ class TestGraphPatternOptimizationExp(ExtTestCase):
                 [oh.make_tensor_value_info("Y", TFLOAT, [None, None])],
                 [
                     onh.from_array(np.array([1], dtype=np.int64), name="one"),
-                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
-                    onh.from_array(np.array([1024], dtype=np.int64), name="dim"),
+                    onh.from_array(np.array(1, dtype=np.int64), name="onei"),
+                    onh.from_array(np.array(0, dtype=np.int64), name="zero"),
+                    onh.from_array(np.array(1024, dtype=np.int64), name="dim"),
                     onh.from_array(np.array([0], dtype=np.float32), name="zerof"),
                     onh.from_array(np.array([1024, 1], dtype=np.int64), name="shape1"),
                     onh.from_array(np.array([1024, 1024], dtype=np.int64), name="shape"),

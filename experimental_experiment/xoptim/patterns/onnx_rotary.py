@@ -659,7 +659,6 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != "Split" or node.domain != "" or len(node.output) != 2:
-            # Not ready in opset 23.
             return self.none()
         split_node = node
         rk = None if not g.has_rank(node.input[0]) else g.get_rank(node.input[0])
@@ -790,6 +789,165 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
             f"The function {cls._domain_name}.{cls._operator_name} "
             f"was not added to the builder."
         )
+
+
+class RotaryEmbeddingPattern(PatternOptimization):
+    """Fuses nodes matching RotaryEmbedding(23)."""
+
+    _operator_name = FunctionHalfRotaryEmbeddingPattern._operator_name
+    _domain_name = FunctionHalfRotaryEmbeddingPattern._domain_name
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            g.main_opset < 23
+            or node.op_type != self._operator_name
+            or node.domain != self._domain_name
+        ):
+            # Not ready in opset 23.
+            return self.none()
+        if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) != 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]) or not g.has_shape(node.input[2]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape_cos = g.get_shape(node.input[1])
+        shape_sin = g.get_shape(node.input[2])
+        if shape_cos != shape_sin:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(shape_cos) != 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if shape_cos[1] != 1 or shape_sin[1] != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        concat_cos = g.node_before(node.input[1])
+        if concat_cos is None or concat_cos.op_type != "Concat" or concat_cos.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if concat_cos.input[0] != concat_cos.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_attribute(concat_cos, "axis").i != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        concat_sin = g.node_before(node.input[2])
+        if concat_sin is None or concat_sin.op_type != "Concat" or concat_sin.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if concat_sin.input[0] != concat_sin.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_attribute(concat_sin, "axis").i != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        split_node = g.node_before(node.input[0])
+        if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(split_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(split_node.input[1])
+        if cst.shape != (2,):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        concat_node = next_nodes[0]
+        if concat_node.op_type != "Concat" or concat_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if split_node.output[1] != concat_node.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis = g.get_attribute(concat_node, "axis").i
+        if axis != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(
+            self,
+            [concat_cos, concat_sin, split_node, node, concat_node],
+            self.apply,
+            insert_at=None if g.is_used_more_than_once(concat_cos.output[0]) else concat_node,
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        concat_cos: NodeProto,
+        concat_sin: NodeProto,
+        split_node: NodeProto,
+        half_node: NodeProto,
+        concat_node: NodeProto,
+    ) -> List[NodeProto]:
+        cst = g.get_computed_constant(split_node.input[1])
+        rotary_dim = int(cst[0])
+
+        rotary_nodes = []
+        if g.is_used_more_than_once(concat_cos.output[0]):
+            rotary_nodes.append(concat_cos)
+        if g.is_used_more_than_once(concat_sin.output[0]):
+            rotary_nodes.append(concat_sin)
+
+        cos_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[1]}")
+        sin_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[2]}")
+        cos_expanded = g.unique_name(f"{self.__class__.__name__}--{half_node.input[1]}")
+        sin_expanded = g.unique_name(f"{self.__class__.__name__}--{half_node.input[2]}")
+        batch_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}--dim")
+        shape_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}::Shape")
+        one = g.make_initializer("", g.ONE, source=f"{self.__class__.__name__}.1")
+        ones = g.make_initializer(
+            "", np.array([1, 1], dtype=np.int64), source=f"{self.__class__.__name__}.11"
+        )
+        rotary_nodes.extend(
+            [
+                g.make_node(
+                    "Shape",
+                    [split_node.input[0]],
+                    [batch_name],
+                    start=0,
+                    end=1,
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Concat",
+                    [batch_name, ones],
+                    [shape_name],
+                    axis=0,
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Squeeze",
+                    [concat_cos.input[0], one],
+                    [cos_name],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Squeeze",
+                    [concat_sin.input[0], one],
+                    [sin_name],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Expand",
+                    [cos_name, shape_name],
+                    [cos_expanded],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Expand",
+                    [sin_name, shape_name],
+                    [sin_expanded],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "RotaryEmbedding",
+                    [split_node.input[0], cos_expanded, sin_expanded],
+                    [concat_node.output[0]],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                    rotary_embedding_dim=rotary_dim,
+                ),
+            ]
+        )
+        return rotary_nodes
 
 
 class FunctionCausalMaskPattern(PatternOptimization):
@@ -1133,7 +1291,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
 
     def _match_branch(
         self, g: "GraphBuilderPatternOptimization", node: NodeProto  # noqa: F821
-    ) -> Optional[Tuple[NodeProto, NodeProto, NodeProto]]:
+    ) -> Optional[Tuple[NodeProto, NodeProto]]:
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -1142,33 +1300,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
             cast_node = next_node
         else:
             cast_node = None
-            next_node = node
-
-        next_nodes = g.next_nodes(next_node.output[0])
-        if len(next_nodes) != 1:
-            return self.none(node, inspect.currentframe().f_lineno)
-        next_node = next_nodes[0]
-        if next_node.op_type != "Unsqueeze" or next_node.domain != "":
-            return self.none(node, inspect.currentframe().f_lineno)
-        unsq_node = next_node
-        if (
-            not g.is_constant(unsq_node.input[1])
-            or g.get_constant_scalar(unsq_node.input[1]) != 1
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        next_nodes = g.next_nodes(next_node.output[0])
-        if len(next_nodes) != 1:
-            return self.none(node, inspect.currentframe().f_lineno)
-        next_node = next_nodes[0]
-        if next_node.op_type != "Concat" or next_node.domain != "":
-            return self.none(node, inspect.currentframe().f_lineno)
-        concat_node = next_node
-        if concat_node.input[0] != concat_node.input[1]:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if g.get_attribute(concat_node, "axis").i != -1:
-            return self.none(node, inspect.currentframe().f_lineno)
-        return cast_node, unsq_node, concat_node
+        return cast_node
 
     def match(
         self,
@@ -1186,14 +1318,8 @@ class FunctionCosSinCachePattern(PatternOptimization):
         sin = cos_sin[1 if cos.output[0] == cos_sin[0].output[0] else 0]
 
         # what follows
-        r = self._match_branch(g, cos)
-        if r is None:
-            return r
-        cos_cast, cos_unsqueeze, cos_concat = r
-        r = self._match_branch(g, sin)
-        if r is None:
-            return r
-        sin_cast, sin_unsqueeze, sin_concat = r
+        cos_cast = self._match_branch(g, cos)
+        sin_cast = self._match_branch(g, sin)
 
         # what is before
         mul_node = g.node_before(cos.input[0])
@@ -1218,9 +1344,13 @@ class FunctionCosSinCachePattern(PatternOptimization):
         cst = g.get_computed_constant(reshape_node.input[1])
         if tuple(cst) != (0, -1, 1):
             return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(reshape_node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
 
         cast_node = g.node_before(reshape_node.input[0])
-        if g.is_used_more_than_once(reshape_node.input[0]):
+        if cast_node is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(cast_node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         unsq_node = g.node_before(cast_node.input[0])
         if (
@@ -1280,12 +1410,8 @@ class FunctionCosSinCachePattern(PatternOptimization):
                 mul_node,
                 cos,
                 cos_cast,
-                cos_unsqueeze,
-                cos_concat,
                 sin,
                 sin_cast,
-                sin_unsqueeze,
-                sin_concat,
             ],
             self.apply,
         )
@@ -1301,13 +1427,9 @@ class FunctionCosSinCachePattern(PatternOptimization):
         reshape_node: NodeProto,
         mul_node: NodeProto,
         cos: NodeProto,
-        cos_cast: NodeProto,
-        cos_unsqueeze: NodeProto,
-        cos_concat: NodeProto,
+        cos_cast: Optional[NodeProto],
         sin: NodeProto,
-        sin_cast: NodeProto,
-        sin_unsqueeze: NodeProto,
-        sin_concat: NodeProto,
+        sin_cast: Optional[NodeProto],
     ) -> List[NodeProto]:
         # Builds the name of the local function.
         to = None if cos_cast is None else g.get_attribute(cos_cast, "to").i
@@ -1318,7 +1440,10 @@ class FunctionCosSinCachePattern(PatternOptimization):
             g.make_node(
                 name,
                 [dim_squeeze1.input[0], dim_squeeze2.input[0], mul_node.input[0]],
-                [cos_concat.output[0], sin_concat.output[0]],
+                [
+                    cos_cast.output[0] if to is not None else cos.output[0],
+                    sin_cast.output[0] if to is not None else sin.output[0],
+                ],
                 name=f"{self.__class__.__name__}--{mul_node.name}",
                 domain=self._domain_name,
             )
@@ -1344,15 +1469,14 @@ class FunctionCosSinCachePattern(PatternOptimization):
         resh = lg.op.Reshape(cast, np.array([0, -1, 1], dtype=np.int64), name=name)
         mul = lg.op.Mul("weights", resh, name=name)
 
-        cos = lg.op.Cos(mul, name=name)
-        sin = lg.op.Sin(mul, name=name)
         if to is not None:
-            cos = lg.op.Cast(cos, to=to, name=name)
-            sin = lg.op.Cast(sin, to=to, name=name)
-        cos_ = lg.op.Unsqueeze(cos, g.ONE, name=name)
-        sin_ = lg.op.Unsqueeze(sin, g.ONE, name=name)
-        lg.op.Concat(cos_, cos_, axis=-1, name=name, outputs=["cos"])
-        lg.op.Concat(sin_, sin_, axis=-1, name=name, outputs=["sin"])
+            cos = lg.op.Cos(mul, name=name)
+            sin = lg.op.Sin(mul, name=name)
+            cos = lg.op.Cast(cos, to=to, name=name, outputs=["cos"])
+            sin = lg.op.Cast(sin, to=to, name=name, outputs=["sin"])
+        else:
+            cos = lg.op.Cos(mul, name=name, outputs=["cos"])
+            sin = lg.op.Sin(mul, name=name, outputs=["sin"])
 
         lg.make_tensor_output("cos")
         lg.make_tensor_output("sin")

@@ -70,6 +70,7 @@ from .onnx_rotary import (
     FunctionCosSinCachePattern,
     FunctionHalfRotaryEmbeddingPattern,
     RotaryConcatPartPattern,
+    RotaryEmbeddingPattern,
 )
 from .onnx_sequence import SequenceConstructAtPattern
 from .onnx_shape import ShapeBasedShapeShapeAddPattern
@@ -184,6 +185,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ShapeBasedMatMulToMulPattern(verbose=verbose),
         ShapeBasedShapeShapeAddPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
+        RotaryEmbeddingPattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
         SequenceConstructAtPattern(verbose=verbose),
         SliceSlicePattern(verbose=verbose),
