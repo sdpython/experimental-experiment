@@ -993,9 +993,22 @@ def _set_shape_type_op_any_range(self: "GraphBuilder", node: NodeProto):  # noqa
     if self.is_constant(node.input[2]) and self.get_constant(node.input[2]) == 1:
         v1 = self.value_as_shape(node.input[0])
         v2 = self.value_as_shape(node.input[1])
+        assert not isinstance(
+            v1, tuple
+        ), f"Unexpected tuple for {node.input[0]!r} (v1={v1}){self.get_debug_msg()}"
+        assert not isinstance(
+            v2, tuple
+        ), f"Unexpected tuple for {node.input[1]!r} (v2={v2}){self.get_debug_msg()}"
         if v1 is not None and v2 is not None:
-            if isinstance(v1, int) and isinstance(v2, int):
-                dim = v2 - v1
+            if isinstance(v1, int):
+                if isinstance(v2, int):
+                    dim = v2 - v1
+                elif v1 == 0:
+                    dim = v2
+                else:
+                    dim = simplify_expression(f"{v2}-{v1}")
+            elif v2 == 0:
+                dim = simplify_expression(f"-({v1})")
             else:
                 dim = simplify_expression(f"{v2}-({v1})")
             self.set_shape(node.output[0], (dim,))

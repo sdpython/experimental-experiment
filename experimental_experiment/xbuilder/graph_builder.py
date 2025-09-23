@@ -2769,6 +2769,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             key = self.make_key(value)
         if name in self.initializers_dict:
             assert self.constant_is_equal_to(name, value)
+            if existing:
+                self.initializers_dict[name] = value
         else:
             self.initializers_dict[name] = value
         self._append_initializer_source(name, source, existing=existing)
@@ -2814,9 +2816,28 @@ class GraphBuilder(_GraphBuilderRuntime):
             self._values[key] = name
         return name
 
+    def _shape_type(self, value: Any) -> Tuple[Any, int, STATIC_SHAPE]:
+        if isinstance(value, np.ndarray):
+            return oh.np_dtype_to_tensor_dtype(value.dtype), value.size, value.shape
+        if isinstance(value, self.torch.Tensor):
+            return torch_dtype_to_onnx_dtype(value.dtype), value.nelement(), value.shape
+        if isinstance(value, TensorProto):
+            shape = tuple(value.dims)
+            return value.data_type, np.prod(shape), shape
+        raise TypeError(f"Unsupported type for a constant {type(value)}")
+
     def constant_is_equal_to(self, name, value):
         assert name in self.initializers_dict, f"intializer {name!r} not found."
         cst = self.initializers_dict[name]
+        itype1, size1, shape1 = self._shape_type(cst)
+        itype2, size2, shape2 = self._shape_type(value)
+        if itype1 != itype2 or shape1 != shape2:
+            return False
+
+        if max(size1, size2) >= 30:
+            # No check. Too long.
+            return True
+
         if isinstance(cst, TensorProto):
             cst = onh.to_array(cst)
         if isinstance(value, TensorProto):
@@ -6745,6 +6766,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                     or not self.initializers_dict_sources[name].source
                     else f"##{self.initializers_dict_sources[name].source}"
                 )
+                assert (
+                    src.count("GraphBuilder.compute_constant/from") < 10
+                ), f"Unexpected source={src!r} for initializer {name!r}{self.get_debug_msg()}"
+
                 self.add_initializer(
                     name,
                     v,
