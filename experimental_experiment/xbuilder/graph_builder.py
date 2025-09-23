@@ -2669,7 +2669,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             self.initializers_dict_sources[name].add_source(source)
             return
-        assert name not in self.initializers_dict_sources, (
+        assert existing is None or name not in self.initializers_dict_sources, (
             f"Initializer {name!r} was already added to the model, source={source!r}, "
             f"existing is {self.initializers_dict_sources[name]!r}{self.get_debug_msg()}"
         )
@@ -2688,7 +2688,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape: Optional[Tuple[int, ...]] = None,
         cst: Optional[Any] = None,
         key: Optional[Any] = None,
-        existing: bool = False,
+        existing: Optional[bool] = False,
         allow_empty: bool = False,
         parameter_name: Optional[str] = None,
         source: str = "",
@@ -2767,7 +2767,10 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if key is None:
             key = self.make_key(value)
-        self.initializers_dict[name] = value
+        if name in self.initializers_dict:
+            assert self.constant_is_equal_to(name, value)
+        else:
+            self.initializers_dict[name] = value
         self._append_initializer_source(name, source, existing=existing)
 
         if parameter_name and parameter_name != name:
@@ -2810,6 +2813,24 @@ class GraphBuilder(_GraphBuilderRuntime):
         if key is not None and key not in self._values:
             self._values[key] = name
         return name
+
+    def constant_is_equal_to(self, name, value):
+        assert name in self.initializers_dict, f"intializer {name!r} not found."
+        cst = self.initializers_dict[name]
+        if isinstance(cst, np.ndarray) and isinstance(value, np.ndarray):
+            if cst.dtype != value.dtype:
+                return False
+            if cst.shape != value.shape:
+                return False
+            return np.abs(cst - value).max() == 0
+
+        t1 = self.torch.from_array(cst) if isinstance(cst, np.ndarray) else cst
+        t2 = self.torch.from_array(value) if isinstance(value, np.ndarray) else value
+        if t1.dtype != t2.dtype:
+            return False
+        if t1.shape != t2.shape:
+            return False
+        return np.abs(t1 - t2).max() == 0
 
     def is_dynamic_shape(
         self,

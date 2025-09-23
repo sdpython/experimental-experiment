@@ -167,6 +167,11 @@ class PatternOptimization:
                     # We avoid processing a node which is not used.
                     res = self.match(g, node, matched)
                     if res:
+                        assert node.name.count(self.__class__.__name__) < 10, (
+                            f"The same pattern {self.__class__.__name__} already matched many "
+                            f"times on the same node. Matching conditions may be wrong."
+                            f"\n{node}"
+                        )
                         matched.append(res)
                         yield res
                 elif self.verbose >= 10:
