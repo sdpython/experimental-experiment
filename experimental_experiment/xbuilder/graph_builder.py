@@ -2287,7 +2287,8 @@ class GraphBuilder(_GraphBuilderRuntime):
             if input_name is not None and isinstance(value, self.torch.SymInt):
                 # axis can be None for a scaler.
                 assert name != input_name, (
-                    f"Name {name!r} cannot be defined from itself (axis={axis}), "
+                    f"Name {name!r} (input_name={input_name!r}) "
+                    f"cannot be defined from itself (axis={axis}), "
                     f"value type is {type(value)}{self.get_debug_msg()}"
                 )
                 source = dict(input_name=input_name, axis=axis)
@@ -2669,7 +2670,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             self.initializers_dict_sources[name].add_source(source)
             return
-        assert name not in self.initializers_dict_sources, (
+        assert existing is None or name not in self.initializers_dict_sources, (
             f"Initializer {name!r} was already added to the model, source={source!r}, "
             f"existing is {self.initializers_dict_sources[name]!r}{self.get_debug_msg()}"
         )
@@ -2688,7 +2689,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         shape: Optional[Tuple[int, ...]] = None,
         cst: Optional[Any] = None,
         key: Optional[Any] = None,
-        existing: bool = False,
+        existing: Optional[bool] = False,
         allow_empty: bool = False,
         parameter_name: Optional[str] = None,
         source: str = "",
@@ -2767,7 +2768,12 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if key is None:
             key = self.make_key(value)
-        self.initializers_dict[name] = value
+        if name in self.initializers_dict:
+            assert self.constant_is_equal_to(name, value)
+            if existing:
+                self.initializers_dict[name] = value
+        else:
+            self.initializers_dict[name] = value
         self._append_initializer_source(name, source, existing=existing)
 
         if parameter_name and parameter_name != name:
@@ -2810,6 +2816,58 @@ class GraphBuilder(_GraphBuilderRuntime):
         if key is not None and key not in self._values:
             self._values[key] = name
         return name
+
+    def _shape_type(self, value: Any) -> Tuple[Any, int, STATIC_SHAPE]:
+        if isinstance(value, np.ndarray):
+            return oh.np_dtype_to_tensor_dtype(value.dtype), value.size, value.shape
+        if isinstance(value, self.torch.Tensor):
+            return torch_dtype_to_onnx_dtype(value.dtype), value.nelement(), value.shape
+        if isinstance(value, TensorProto):
+            shape = tuple(value.dims)
+            return value.data_type, np.prod(shape), shape
+        raise TypeError(f"Unsupported type for a constant {type(value)}")
+
+    def constant_is_equal_to(self, name, value):
+        assert name in self.initializers_dict, f"intializer {name!r} not found."
+        cst = self.initializers_dict[name]
+        itype1, size1, shape1 = self._shape_type(cst)
+        itype2, size2, shape2 = self._shape_type(value)
+        if itype1 != itype2 or shape1 != shape2:
+            return False
+
+        if max(size1, size2) >= 30:
+            # No check. Too long.
+            return True
+
+        if isinstance(cst, TensorProto):
+            cst = onh.to_array(cst)
+        if isinstance(value, TensorProto):
+            value = onh.to_array(value)
+
+        if isinstance(cst, np.ndarray) and isinstance(value, np.ndarray):
+            if cst.dtype != value.dtype:
+                return False
+            if cst.shape != value.shape:
+                return False
+            if cst.shape == (0,):
+                return True
+            if len(cst.shape) == 0:
+                return cst == value
+            return np.abs(cst - value).max() == 0
+
+        t1 = self.torch.from_numpy(cst) if isinstance(cst, np.ndarray) else cst
+        t2 = self.torch.from_numpy(value) if isinstance(value, np.ndarray) else value
+        assert hasattr(t1, "dtype"), f"Unexpected type {type(t1)} for name={name!r}"
+        assert hasattr(t2, "dtype"), f"Unexpected type {type(t2)}, {type(value)}"
+        if t1.dtype != t2.dtype:
+            return False
+        if t1.shape != t2.shape:
+            return False
+        if t1.shape == (0,):
+            return True
+        if len(t1.shape) == 0:
+            return t1 == t2
+        return np.abs(t1 - t2).max() == 0
 
     def is_dynamic_shape(
         self,
@@ -6717,6 +6775,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                     or not self.initializers_dict_sources[name].source
                     else f"##{self.initializers_dict_sources[name].source}"
                 )
+                assert (
+                    src.count("GraphBuilder.compute_constant/from") < 10
+                ), f"Unexpected source={src!r} for initializer {name!r}{self.get_debug_msg()}"
+
                 self.add_initializer(
                     name,
                     v,
@@ -7620,6 +7682,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.nodes.insert(insert_at + i, n)
                 self._make_node_set_type_shape_constant(n, True)
                 self._make_node_set_type_shape(n)
+                self.simple_update_value_shape_with_node(n)
                 assert (
                     n.domain != ""
                     or any(not self.has_type(o) for o in n.input)
@@ -7737,6 +7800,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
             self._make_node_set_type_shape_constant(n, True)
             self._make_node_set_type_shape(n)
+            self.simple_update_value_shape_with_node(n)
             assert (
                 n.domain != ""
                 or any(not self.has_type(o) for o in n.input)
@@ -8291,9 +8355,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             set_shape_type_op_any(self, node)
 
     def infer_shapes(self) -> Dict[str, Tuple[DYNAMIC_SHAPE, DYNAMIC_SHAPE]]:
-        """
-        Runs custom shape inference. Returns the updates.
-        """
+        """Runs custom shape inference. Returns the updates."""
         if self.verbose > 1:
             begin = time.perf_counter()
             print("[GraphBuilder.infer_shapes]")

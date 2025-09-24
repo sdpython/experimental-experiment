@@ -44,6 +44,10 @@ class TestDimension(ExtTestCase):
     def test_simplify_expression2(self):
         self.assertEqual(simplify_expression("5 + x - (2 + 3)"), "x")
 
+    def test_simplify_expression3(self):
+        self.assertEqual(simplify_expression("x - 1"), "x-1")
+        self.assertEqual(simplify_expression("1 - x"), "-x+1")
+
     def test_simplify_two_expressions(self):
         self.assertEqual(
             simplify_two_expressions("s52+seq_length", "s52+s70"), {"s70": -1, "seq_length": 1}

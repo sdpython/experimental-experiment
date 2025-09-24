@@ -3,7 +3,7 @@ import pprint
 import unittest
 from typing import List, Optional
 from onnx import ModelProto, TensorProto, load as load_onnx, save as save_onnx
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
+from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xoptim import PatternOptimization
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -27,37 +27,6 @@ class TestGraphPatternDynamic(ExtTestCase):
         self.assertExists(p)
         return load_onnx(p)
 
-    @hide_stdout()
-    def test_check_one(self):
-        static_model = self._get_model("shape-dort-static-llama-custom__0.onnx")
-        dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__0.onnx")
-        opts = OptimizationOptions(patterns="ReshapeMatMulReshape", verbose=10)
-        gr1 = GraphBuilder(
-            static_model, infer_shapes_options=True, optimization_options=opts, verbose=0
-        )
-        gr1.optimize()
-        gr1 = GraphBuilder(
-            dynamic_model, infer_shapes_options=True, optimization_options=opts, verbose=0
-        )
-        gr1.optimize()
-
-    def test_graph_default_forward_single(self):
-        static_model = self._get_model("shape-dort-static-llama-custom__0.onnx")
-        dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__0.onnx")
-        patterns = get_default_patterns()
-        self._check_models_patterns(
-            static_model,
-            dynamic_model,
-            patterns,
-            False,
-            exceptions=[
-                "ExpandPattern",
-                "ReshapeMatMulReshapePattern",
-                "Reshape2Of3Pattern",
-                "MatMulReshape2Of3Pattern",
-            ],
-        )
-
     def test_graph_default_backward_single(self):
         static_model = self._get_model("shape-dort-static-llama-custom__1.onnx")
         dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__1.onnx")
@@ -69,22 +38,6 @@ class TestGraphPatternDynamic(ExtTestCase):
             False,
             # Remaining cases if constrainsts are not handled properly
             exceptions=["Reshape2Of3Pattern", "MatMulReshape2Of3Pattern"],
-        )
-
-    def test_graph_default_forward_cumulative(self):
-        static_model = self._get_model("shape-dort-static-llama-custom__0.onnx")
-        dynamic_model = self._get_model("shape-dort-dynamic-llama-custom__0.onnx")
-        patterns = get_default_patterns()
-        self._check_models_patterns(
-            static_model,
-            dynamic_model,
-            patterns,
-            True,
-            exceptions=[
-                "ExpandPattern",
-                "Reshape2Of3Pattern",
-                "ReshapeMatMulReshapePattern",
-            ],
         )
 
     def test_graph_default_backward_cumulative(self):

@@ -67,10 +67,13 @@ from .onnx_reshape import (
 from .onnx_rotary import (
     FunctionCausalMaskPattern,
     FunctionCausalMaskMulAddPattern,
+    FunctionCosSinCachePattern,
     FunctionHalfRotaryEmbeddingPattern,
     RotaryConcatPartPattern,
+    RotaryEmbeddingPattern,
 )
 from .onnx_sequence import SequenceConstructAtPattern
+from .onnx_shape import ShapeBasedShapeShapeAddPattern
 from .onnx_slice import SliceSlicePattern
 from .onnx_split import SlicesSplitPattern, SplitConcatPattern
 from .onnx_sub import Sub1MulPattern
@@ -180,7 +183,9 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ShapeBasedExpandCastWhereSwapPattern(verbose=verbose),
         ShapeBasedExpandSwapPattern(verbose=verbose),
         ShapeBasedMatMulToMulPattern(verbose=verbose),
+        ShapeBasedShapeShapeAddPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
+        RotaryEmbeddingPattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
         SequenceConstructAtPattern(verbose=verbose),
         SliceSlicePattern(verbose=verbose),
@@ -204,6 +209,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         RotaryConcatPartPattern(verbose=verbose),
         FunctionCausalMaskPattern(verbose=verbose),
         FunctionCausalMaskMulAddPattern(verbose=verbose),
+        FunctionCosSinCachePattern(verbose=verbose),
         FunctionHalfRotaryEmbeddingPattern(verbose=verbose),
         RMSNormalizationPattern(verbose=verbose),
     ]

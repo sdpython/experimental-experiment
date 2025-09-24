@@ -666,7 +666,8 @@ def rename_dynamic_dimensions(
 
 def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
     """
-    Renames variables of an expression.
+    Renames variables inside an expression.
+    The function removes any space.
 
     :param expression: something like ``s15 + seq_length``
     :param replacements: replacements to make
@@ -685,7 +686,7 @@ def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
         return expression
     transformer = RenameVariable()
     new_tree = transformer.visit(tree)
-    return ast.unparse(new_tree)
+    return ast.unparse(new_tree).replace(" ", "")
 
 
 def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:

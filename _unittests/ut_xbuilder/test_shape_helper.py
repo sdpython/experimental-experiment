@@ -114,7 +114,7 @@ class TestShapeHelper(ExtTestCase):
         }
         expression = "s9+seq_length"
         renamed = rename_dynamic_expression(expression, replacements)
-        self.assertEqual(renamed, "cache_length + seq_length")
+        self.assertEqual(renamed, "cache_length+seq_length")
 
 
 if __name__ == "__main__":

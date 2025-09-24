@@ -31,6 +31,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnx,
     requires_torch,
     requires_onnxruntime,
+    has_onnxruntime,
     hide_stdout,
 )
 from experimental_experiment.xbuilder.graph_builder import (
@@ -5301,7 +5302,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
-    def test_rotary_embedding_2(self):
+    def test_rotary_embedding_half(self):
         opset = 22
         model = oh.make_model(
             oh.make_graph(
@@ -5333,7 +5334,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.dump_onnx("test_rotary_embedding_2.onnx", opt_onx)
+        self.dump_onnx("test_rotary_embedding_half.onnx", opt_onx)
         self.assertIn("HalfRotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
 
         feeds = {
@@ -6014,8 +6015,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
                 [oh.make_tensor_value_info("Y", TensorProto.INT64, [1, 1, "c", "d"])],
                 [
-                    onh.from_array(np.array([0], dtype=np.int64), "zero"),
-                    onh.from_array(np.array([1], dtype=np.int64), "one"),
+                    onh.from_array(np.array(0, dtype=np.int64), "zero"),
+                    onh.from_array(np.array(1, dtype=np.int64), "one"),
                     onh.from_array(np.array([0, 1, 2], dtype=np.int64), "a012"),
                     onh.from_array(np.array([0, 1, 3], dtype=np.int64), "a013"),
                 ],
@@ -6063,8 +6064,8 @@ class TestGraphPatternOptimization(ExtTestCase):
                 [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
                 [oh.make_tensor_value_info("Y", TensorProto.INT64, ["a_", "b_", "c_", "d_"])],
                 [
-                    onh.from_array(np.array([0], dtype=np.int64), "zero"),
-                    onh.from_array(np.array([1], dtype=np.int64), "one"),
+                    onh.from_array(np.array(0, dtype=np.int64), "zero"),
+                    onh.from_array(np.array(1, dtype=np.int64), "one"),
                     onh.from_array(np.array([0, 1, 2], dtype=np.int64), "a012"),
                     onh.from_array(np.array([1, 2, 3], dtype=np.int64), "a123"),
                 ],
@@ -6235,6 +6236,85 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(opt_onx)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
+
+    def test_rotary_embedding_full(self):
+        opset = 23
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["m1", "m1"], ["m1x2"], axis=-1),
+                    oh.make_node("Concat", ["m2", "m2"], ["m2x2"], axis=-1),
+                    oh.make_node("Split", ["X", "split"], ["Xh1", "Xh2"], axis=-1),
+                    oh.make_node("Split", ["Xh1"], ["x1", "x2"], axis=-1, num_outputs=2),
+                    oh.make_node("Neg", ["x2"], ["nx2"]),
+                    oh.make_node("Concat", ["nx2", "x1"], ["cc"], axis=-1),
+                    oh.make_node("Mul", ["cc", "m1x2"], ["cm1"]),
+                    oh.make_node("Mul", ["Xh1", "m2x2"], ["cm2"]),
+                    oh.make_node("Add", ["cm1", "cm2"], ["Yh"]),
+                    oh.make_node("Concat", ["Yh", "Xh2"], ["Y"], axis=-1),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"]),
+                    oh.make_tensor_value_info("m1", TFLOAT, [1, 1, "c", "e"]),
+                    oh.make_tensor_value_info("m2", TFLOAT, [1, 1, "c", "e"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "d"])],
+                [onh.from_array(np.array([4, 6], dtype=np.int64), name="split")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", opset)],
+            ir_version=10,
+        )
+
+        shape_x = (2, 2, 3, 10)
+        shape_c = (1, 1, 3, 2)
+        feeds = {
+            "X": ((np.arange(np.prod(shape_x)) + 1) / (np.prod(shape_x) * 10))
+            .reshape(shape_x)
+            .astype(np.float32),
+            "m1": ((np.arange(np.prod(shape_c)) + 1) / np.prod(shape_c) * 10)
+            .reshape(shape_c)
+            .astype(np.float32),
+            "m2": ((np.arange(np.prod(shape_c)) + 1) / np.prod(shape_c) * 10)
+            .reshape(shape_c)
+            .astype(np.float32),
+        }
+        # ExtendedReferenceEvaluator(model, verbose=10).run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.BUILDER,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionHalfRotaryEmbedding", "RotaryEmbedding"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertIn("RotaryEmbeddingPattern--Xh1::Shape", gr._known_value_shape)
+        self.assertEqual(
+            gr._known_value_shape["RotaryEmbeddingPattern--Xh1::Shape"], ("a", 1, 1)
+        )
+        self.dump_onnx("test_rotary_embedding_full.onnx", opt_onx)
+        self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
+
+        import onnxruntime
+
+        for name, cls in [
+            ("ref", lambda m: ExtendedReferenceEvaluator(m, verbose=0)),
+            (
+                "ort",
+                lambda m: onnxruntime.InferenceSession(
+                    m.SerializeToString(), providers=["CPUExecutionProvider"]
+                ),
+            ),
+        ]:
+            with self.subTest(name=name):
+                if name == "ort" and not has_onnxruntime("1.23"):
+                    raise unittest.SkipTest("onnxruntime < 1.23")
+                ref = cls(model)
+                z = ref.run(None, feeds)[0]
+                ref = cls(opt_onx)
+                zz = ref.run(None, feeds)[0]
+                self.assertEqualArray(z, zz, atol=1e-4)
 
 
 if __name__ == "__main__":
