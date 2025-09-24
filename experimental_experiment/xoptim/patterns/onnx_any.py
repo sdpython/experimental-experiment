@@ -128,6 +128,71 @@ class SameChildrenPattern(PatternOptimization):
         return new_nodes
 
 
+class ShapeBasedSameChildrenPattern(PatternOptimization):
+    """
+    Checks there is no duplicated node doing the same than another one beside.
+    :class:`SameChildrenPattern` checks it is exactly the same.
+    This one assumes it is exactly the same in some cases such
+    expand (X, sh1) = expand(X, sh2) if the output shapes are the same.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"Expand", "Reshape"} or node.domain != "":
+            return self.none()
+        next_nodes = g.next_nodes(node.input[0])
+        if len(next_nodes) <= 1:
+            return self.none()
+
+        op_types = {n.op_type for n in next_nodes}
+
+        for op_type in ["Expand", "Reshape"]:
+            if op_type in op_types:
+                selected = [
+                    n
+                    for n in next_nodes
+                    if n.op_type == op_type
+                    and n.input[0] == node.input[0]
+                    and g.has_shape(n.output[0])
+                ]
+                if len(selected) < 2:
+                    continue
+                shapes = [g.get_shape(n.output[0]) for n in selected]
+                if len(set(shapes)) == 1:
+                    return MatchResult(self, selected, self.apply)
+        return self.none(node, inspect.currentframe().f_lineno)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        *nodes: NodeProto,
+    ) -> List[NodeProto]:
+        """
+        The function receives multiple nodes of the same type.
+        We keep one and replace the other by an Identity node.
+        """
+        new_nodes = [
+            nodes[0],
+            *[
+                g.make_node(
+                    "Identity",
+                    [nodes[0].output[0]],
+                    [n.output[0]],
+                    name=f"{self.__class__.__name__}--{n.name}",
+                )
+                for n in nodes[1:]
+            ],
+        ]
+        return new_nodes
+
+
 class IdentityPattern(PatternOptimization):
     """
     Replaces operator such as

@@ -744,7 +744,7 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         lnames = list(names)
         index = 0 if lnames[0] in mul1_node.input else 1
         lnames = [lnames[index], lnames[1 - index]]
-        sin_cache, cos_cache = (
+        cos_cache, sin_cache = (
             lnames if concat_node.input[0] in mul1_node.input else lnames[::-1]
         )
 
@@ -775,8 +775,8 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         right_neg = lg.op.Neg(right, name=cls.__name__)
         conc = lg.op.Concat(right_neg, left, axis=-1, name=cls.__name__)
         lg.op.Add(
-            lg.op.Mul("X", "sin_cache", name=cls.__name__),
-            lg.op.Mul(conc, "cos_cache", name=cls.__name__),
+            lg.op.Mul("X", "cos_cache", name=cls.__name__),
+            lg.op.Mul(conc, "sin_cache", name=cls.__name__),
             outputs=["Y"],
         )
         lg.make_tensor_output("Y")

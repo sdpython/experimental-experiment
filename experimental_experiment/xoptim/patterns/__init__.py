@@ -4,7 +4,12 @@ from onnx import NodeProto
 from ..patterns_api import PatternOptimization, MatchResult
 
 # onnx patterns
-from .onnx_any import IdentityPattern, SameChildrenPattern, ShapeBasedIdentityPattern
+from .onnx_any import (
+    IdentityPattern,
+    SameChildrenPattern,
+    ShapeBasedIdentityPattern,
+    ShapeBasedSameChildrenPattern,
+)
 from .onnx_cast import (
     CastPattern,
     CastCastBinaryPattern,
@@ -183,6 +188,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ShapeBasedExpandCastWhereSwapPattern(verbose=verbose),
         ShapeBasedExpandSwapPattern(verbose=verbose),
         ShapeBasedMatMulToMulPattern(verbose=verbose),
+        ShapeBasedSameChildrenPattern(verbose=verbose),
         ShapeBasedShapeShapeAddPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
         RotaryEmbeddingPattern(verbose=verbose),
