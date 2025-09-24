@@ -6365,6 +6365,112 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_function_cos_sin_cache_float16(self):
+        g = GraphBuilder(18, ir_version=9)
+        dim1 = g.make_tensor_input("dim1", TensorProto.INT64, (1,), is_dimension=False)
+        dim2 = g.make_tensor_input("dim2", TensorProto.INT64, (1,), is_dimension=False)
+        weights = g.make_tensor_input(
+            "weights", TensorProto.FLOAT, (1, 1, "a"), is_dimension=False
+        )
+        m1 = g.op.Reshape(
+            g.op.Cast(
+                g.op.Unsqueeze(
+                    g.op.Range(g.op.Squeeze(dim1), g.op.Squeeze(dim2), g.ONE_NO_DIM),
+                    np.array([0, 1], dtype=np.int64),
+                ),
+                to=onnx.TensorProto.FLOAT,
+            ),
+            np.array([0, -1, 1], dtype=np.int64),
+        )
+        mul = g.op.Mul(weights, m1)
+        cos = g.op.Cast(g.op.Cos(mul), to=onnx.TensorProto.FLOAT16, outputs=["cos_cache"])
+        sin = g.op.Cast(g.op.Sin(mul), to=onnx.TensorProto.FLOAT16, outputs=["sin_cache"])
+        g.make_tensor_output(
+            cos, TensorProto.FLOAT16, (1, "seq", "a"), indexed=False, is_dimension=False
+        )
+        g.make_tensor_output(
+            sin, TensorProto.FLOAT16, (1, "seq", "a"), indexed=False, is_dimension=False
+        )
+        model = g.to_onnx(optimize=False)
+        self.dump_onnx("test_function_cos_sin_cache_float16.onnx", model)
+
+        feeds = {
+            "dim1": np.array([3], dtype=np.int64),
+            "dim2": np.array([6], dtype=np.int64),
+            "weights": self._range(1, 1, 16),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionCosSinCache"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["CosSinCache_to10"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_function_cos_sin_cache_float32(self):
+        g = GraphBuilder(18, ir_version=9)
+        dim1 = g.make_tensor_input("dim1", TensorProto.INT64, (1,), is_dimension=False)
+        dim2 = g.make_tensor_input("dim2", TensorProto.INT64, (1,), is_dimension=False)
+        weights = g.make_tensor_input(
+            "weights", TensorProto.FLOAT, (1, 1, "a"), is_dimension=False
+        )
+        m1 = g.op.Reshape(
+            g.op.Cast(
+                g.op.Unsqueeze(
+                    g.op.Range(g.op.Squeeze(dim1), g.op.Squeeze(dim2), g.ONE_NO_DIM),
+                    np.array([0, 1], dtype=np.int64),
+                ),
+                to=onnx.TensorProto.FLOAT,
+            ),
+            np.array([0, -1, 1], dtype=np.int64),
+        )
+        mul = g.op.Mul(weights, m1)
+        cos = g.op.Cos(mul, outputs=["cos_cache"])
+        sin = g.op.Sin(mul, outputs=["sin_cache"])
+        g.make_tensor_output(
+            cos, TensorProto.FLOAT, (1, "seq", "a"), indexed=False, is_dimension=False
+        )
+        g.make_tensor_output(
+            sin, TensorProto.FLOAT, (1, "seq", "a"), indexed=False, is_dimension=False
+        )
+        model = g.to_onnx(optimize=False)
+        self.dump_onnx("test_function_cos_sin_cache_float32.onnx", model)
+
+        feeds = {
+            "dim1": np.array([3], dtype=np.int64),
+            "dim2": np.array([6], dtype=np.int64),
+            "weights": self._range(1, 1, 16),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionCosSinCache"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["CosSinCache"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
