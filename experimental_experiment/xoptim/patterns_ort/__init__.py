@@ -37,8 +37,7 @@ def get_onnxruntime_patterns(
         ReshapeGemmPattern,
         TransposeFusedMatMulBPattern,
     )
-
-    # from .llm_optim import RotaryEmbeddingPattern
+    from .llm_optim import ContribRotaryEmbeddingPattern
 
     # from .gather_grad import GatherGradPattern
     from .simplified_layer_normalization import (
@@ -51,6 +50,7 @@ def get_onnxruntime_patterns(
         AttentionPattern(verbose=verbose),
         BiasGeluPattern(verbose=verbose),
         BiasSoftmaxPattern(verbose=verbose),
+        ContribRotaryEmbeddingPattern(verbose=verbose),
         GeluOrtPattern(verbose=verbose),
         GeluErfPattern(verbose=verbose),
         FusedConvPattern(verbose=verbose),
@@ -61,7 +61,6 @@ def get_onnxruntime_patterns(
         FusedMatMulTransposePattern(verbose=verbose),
         OrtBatchNormalizationTrainingPattern(verbose=verbose),
         QuickGeluPattern(verbose=verbose),
-        # RotaryEmbeddingPattern(verbose=verbose),
         # GatherGradPattern(verbose=verbose),
         ReshapeGemmPattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),

@@ -2,18 +2,18 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-from ...helpers import make_idn
 from ..patterns_api import MatchResult, PatternOptimization
+from ..patterns.onnx_rotary import FunctionHalfRotaryEmbeddingPattern
 
 
-class RotaryEmbeddingPattern(PatternOptimization):
+class ContribRotaryEmbeddingPattern(PatternOptimization):
     """
-    Fuses the y * cos + (rotary(y) * sin) into RotaryEmbedding(y)
-    where y = transpose(x, [0, 2, 1, 3]).
+    Very similar to
+    :class:`experimental_experimental.xoptim.patterns.onnx_rotary.RotaryEmbeddingPattern`.
     """
 
-    def __init__(self, verbose: int = 0, priority: int = 2):
-        super().__init__(verbose, priority)
+    _operator_name = FunctionHalfRotaryEmbeddingPattern._operator_name
+    _domain_name = FunctionHalfRotaryEmbeddingPattern._domain_name
 
     def match(
         self,
@@ -21,194 +21,188 @@ class RotaryEmbeddingPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "Split" or node.domain != "" or len(node.output) != 2:
+        if node.op_type != self._operator_name or node.domain != self._domain_name:
+            # Not ready in opset 23.
             return self.none()
-
-        axis = g.get_attribute(node, "axis")
-        if axis is None or axis.i not in (-1, 3):
+        if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) != 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]) or not g.has_shape(node.input[2]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape_cos = g.get_shape(node.input[1])
+        shape_sin = g.get_shape(node.input[2])
+        if shape_cos != shape_sin:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(shape_cos) != 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if shape_cos[1] != 1 or shape_sin[1] != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if shape_cos[0] != 1 or shape_sin[0] != 1:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        next_nodes = g.next_nodes(node.input[0])
-        # It should be Split and Mul
-        if len(next_nodes) != 2:
+        concat_cos = g.node_before(node.input[1])
+        if concat_cos is None or concat_cos.op_type != "Concat" or concat_cos.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if concat_cos.input[0] != concat_cos.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_attribute(concat_cos, "axis").i != -1:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        split_node = node
-        tr_node = g.node_before(node.input[0])
-        if tr_node is None or g.is_used_more_than_once(tr_node.input[0]):
+        concat_sin = g.node_before(node.input[2])
+        if concat_sin is None or concat_sin.op_type != "Concat" or concat_sin.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
-        perm = tuple(g.get_attribute(tr_node, "perm").ints)
-        if perm != (0, 2, 1, 3):
+        if concat_sin.input[0] != concat_sin.input[1]:
             return self.none(node, inspect.currentframe().f_lineno)
-
-        # cos part
-        mul_node_cos = (
-            next_nodes[0] if make_idn(next_nodes[1]) == make_idn(node) else next_nodes[1]
-        )
-        if mul_node_cos.op_type != "Mul" or mul_node_cos.domain != "":
-            return self.none(node, inspect.currentframe().f_lineno)
-        add_nodes = g.next_nodes(mul_node_cos.output[0])
-        if len(add_nodes) != 1:
-            return self.none(node, inspect.currentframe().f_lineno)
-        add_node = add_nodes[0]
-        if add_node.op_type != "Add" or add_node.domain != "":
+        if g.get_attribute(concat_sin, "axis").i != -1:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        # sin part
-        spl1 = g.next_nodes(node.output[0])
-        spl2 = g.next_nodes(node.output[1])
-        if len(spl1) != 1 or len(spl2) != 1:
+        if g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if spl1[0].op_type == "Concat":
-            concat_node = spl1[0]
-            neg_node = spl2[0]
-        else:
-            concat_node = spl2[0]
-            neg_node = spl1[0]
-        if (
-            concat_node.op_type != "Concat"
-            or concat_node.domain != ""
-            or neg_node.op_type != "Neg"
-            or neg_node.domain != ""
-        ):
+        split_node = g.node_before(node.input[0])
+        if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
-        check_node = g.next_nodes(neg_node.output[0])
-        if len(check_node) != 1 or make_idn(check_node[0]) != make_idn(concat_node):
+        if not g.has_shape(split_node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        axis = g.get_attribute(concat_node, "axis")
-        if axis is None or axis.i not in (-1, 3):
+        shape_input = g.get_shape(split_node.input[0])
+        if not isinstance(shape_input[1], int):
+            # Not a fixed number of heads.
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(split_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(split_node.input[1])
+        if cst.shape != (2,):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        mul_node_sin = g.next_nodes(concat_node.output[0])
-        if (
-            len(mul_node_sin) != 1
-            or mul_node_sin[0].op_type != "Mul"
-            or mul_node_sin[0].domain != ""
-        ):
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
-        mul_node_sin = mul_node_sin[0]
-        if g.is_used_more_than_once(mul_node_sin.output[0]):
+        concat_node = next_nodes[0]
+        if concat_node.op_type != "Concat" or concat_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
-
-        # final addition
-        if set(add_node.input) != {mul_node_cos.output[0], mul_node_sin.output[0]}:
+        if split_node.output[1] != concat_node.input[1]:
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis = g.get_attribute(concat_node, "axis").i
+        if axis != -1:
             return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(
             self,
-            [tr_node, split_node, neg_node, concat_node, mul_node_cos, mul_node_sin, add_node],
+            [concat_cos, concat_sin, split_node, node, concat_node],
             self.apply,
-            insert_at=split_node,
+            insert_at=None if g.is_used_more_than_once(concat_cos.output[0]) else concat_node,
         )
 
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
-        tr_node: NodeProto,
+        concat_cos: NodeProto,
+        concat_sin: NodeProto,
         split_node: NodeProto,
-        neg_node: NodeProto,
+        half_node: NodeProto,
         concat_node: NodeProto,
-        mul_node_cos: NodeProto,
-        mul_node_sin: NodeProto,
-        add_node: NodeProto,
     ) -> List[NodeProto]:
-        zero = g.make_initializer(
-            "", np.array(0, dtype=np.int64), source="RotaryEmbeddingPattern.zero"
+        cst = g.get_computed_constant(split_node.input[1])
+        rotary_dim = int(cst[0])
+        shape = g.get_shape(split_node.input[0])
+        assert isinstance(shape[1], int), f"Number of heads is not fixed, shape(X)={shape}"
+        num_heads = shape[1]
+
+        rotary_nodes = []
+        if g.is_used_more_than_once(concat_cos.output[0]):
+            rotary_nodes.append(concat_cos)
+        if g.is_used_more_than_once(concat_sin.output[0]):
+            rotary_nodes.append(concat_sin)
+
+        cos_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[1]}")
+        sin_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[2]}")
+        batch_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}--batch")
+        zeroone = g.make_initializer(
+            "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
         )
-        zero1 = g.make_initializer("", g.ZERO, source="RotaryEmbeddingPattern.zero1")
-        mone = g.make_initializer("", g.MINUS_ONE, source="RotaryEmbeddingPattern.mone")
-        one = g.make_initializer(
-            "", np.array(1, dtype=np.int64), source="RotaryEmbeddingPattern.one"
+        one = g.make_initializer("", g.ONE, source=f"{self.__class__.__name__}.1")
+        one_no_dim = g.make_initializer(
+            "", g.ONE_NO_DIM, source=f"{self.__class__.__name__}.1d"
         )
 
-        shape_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        squeezed_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        batch_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        pids_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        known = {tr_node.output[0], concat_node.output[0]}
-        cos = mul_node_cos.input[0 if mul_node_cos.input[1] in known else 1]
-        sin = mul_node_sin.input[0 if mul_node_sin.input[1] in known else 1]
-        expand_shape = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        expand_name = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        cos_shape = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        new_cos_shape = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        cos_reshaped = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
-        sin_reshaped = g.unique_name(f"{self.__class__.__name__}--{tr_node.input[0]}")
+        # position_ids
+        zero_no_dim = g.make_initializer(
+            "", g.ZERO_NO_DIM, source=f"{self.__class__.__name__}.0d"
+        )
+        seq_length = g.unique_name(
+            f"{self.__class__.__name__}--{half_node.input[0]}--seq_length"
+        )
+        seq_length_squeezed = g.unique_name(
+            f"{self.__class__.__name__}--{half_node.input[0]}--seqsq"
+        )
+        exp_shape = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}_pshape")
+        flat_pids = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}_flat_pids")
+        position_ids = g.unique_name(
+            f"{self.__class__.__name__}--{half_node.input[0]}_position_ids"
+        )
 
-        return [
-            g.make_node(
-                "Shape",
-                [tr_node.input[0]],
-                [shape_name],
-                start=2,
-                end=3,
-                name=f"{self.__class__.__name__}--Sh--{split_node.name}",
-            ),
-            g.make_node(
-                "Shape",
-                [tr_node.input[0]],
-                [batch_name],
-                start=0,
-                end=1,
-                name=f"{self.__class__.__name__}--Sh--{split_node.name}",
-            ),
-            g.make_node(
-                "Squeeze",
-                [shape_name, zero1],
-                [squeezed_name],
-                name=f"{self.__class__.__name__}--Ra--{split_node.name}",
-            ),
-            g.make_node(
-                "Range",
-                [zero, squeezed_name, one],
-                [pids_name],
-                name=f"{self.__class__.__name__}--Ra--{split_node.name}",
-            ),
-            g.make_node(
-                "Concat",
-                [batch_name, shape_name],
-                [expand_shape],
-                axis=0,
-                name=f"{self.__class__.__name__}--Co--{split_node.name}",
-            ),
-            g.make_node(
-                "Expand",
-                [pids_name, expand_shape],
-                [expand_name],
-                name=f"{self.__class__.__name__}--Ex--{split_node.name}",
-            ),
-            g.make_node(
-                "Shape",
-                [cos],
-                [cos_shape],
-                start=-1,
-                name=f"{self.__class__.__name__}--ShCos--{split_node.name}",
-            ),
-            g.make_node(
-                "Concat",
-                [mone, cos_shape],
-                [new_cos_shape],
-                axis=0,
-                name=f"{self.__class__.__name__}--CoCos--{split_node.name}",
-            ),
-            g.make_node(
-                "Reshape",
-                [cos, new_cos_shape],
-                [cos_reshaped],
-                name=f"{self.__class__.__name__}--ReshCos--{split_node.name}",
-            ),
-            g.make_node(
-                "Reshape",
-                [sin, new_cos_shape],
-                [sin_reshaped],
-                name=f"{self.__class__.__name__}--ReshSin--{split_node.name}",
-            ),
-            g.make_node(
-                "RotaryEmbedding",
-                [*tr_node.input, expand_name, cos_reshaped, sin_reshaped],
-                add_node.output,
-                domain="com.microsoft",
-                interleaved=0,
-                name=f"{self.__class__.__name__}--Rot--{split_node.name}",
-            ),
-        ]
+        rotary_nodes.extend(
+            [
+                g.make_node(
+                    "Squeeze",
+                    [concat_cos.input[0], zeroone],
+                    [cos_name],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Squeeze",
+                    [concat_sin.input[0], zeroone],
+                    [sin_name],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Shape",
+                    [split_node.input[0]],
+                    [batch_name],
+                    start=0,
+                    end=1,
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Shape",
+                    [split_node.input[0]],
+                    [seq_length],
+                    start=2,
+                    end=3,
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Squeeze",
+                    [seq_length],
+                    [seq_length_squeezed],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Range",
+                    [zero_no_dim, seq_length_squeezed, one_no_dim],
+                    [flat_pids],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Concat",
+                    [batch_name, one],
+                    [exp_shape],
+                    axis=0,
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "Expand",
+                    [flat_pids, exp_shape],
+                    [position_ids],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                ),
+                g.make_node(
+                    "RotaryEmbedding",
+                    [split_node.input[0], position_ids, cos_name, sin_name],
+                    [concat_node.output[0]],
+                    name=f"{self.__class__.__name__}--{half_node.name}",
+                    rotary_embedding_dim=rotary_dim,
+                    num_heads=num_heads,
+                    domain="com.microsoft",
+                ),
+            ]
+        )
+        return rotary_nodes
