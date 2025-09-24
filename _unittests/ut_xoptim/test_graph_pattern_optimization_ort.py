@@ -21,6 +21,7 @@ from experimental_experiment.ext_test_case import (
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
+    InferShapesOptions,
 )
 from experimental_experiment.xoptim import get_pattern_list
 from experimental_experiment.xoptim.patterns_ort.gather_grad import GatherGradPattern
@@ -1259,57 +1260,6 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(expected[0].ravel(), got[0].ravel())
         self.assertEqualArray(expected[0], got[0])
 
-    @unittest.skip("optimizer not ready")
-    def test_rotary_embedding(self):
-        from onnxruntime import InferenceSession
-
-        model = oh.make_model(
-            oh.make_graph(
-                [
-                    oh.make_node("Transpose", ["X"], ["xt"], perm=[0, 2, 1, 3]),
-                    oh.make_node("Split", ["xt"], ["s1", "s2"], num_outputs=2, axis=-1),
-                    oh.make_node("Neg", ["s2"], ["ns2"]),
-                    oh.make_node("Concat", ["ns2", "s1"], ["conc"], axis=-1),
-                    oh.make_node("Mul", ["xt", "cos"], ["xcos"], name="mx"),
-                    oh.make_node("Mul", ["conc", "sin"], ["ysin"], name="my"),
-                    oh.make_node("Add", ["xcos", "ysin"], ["Y"]),
-                ],
-                "dummy",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, [2, 8, 3, 32]),
-                    oh.make_tensor_value_info("cos", TFLOAT, [1, 3, 1, 32]),
-                    oh.make_tensor_value_info("sin", TFLOAT, [1, 3, 1, 32]),
-                ],
-                [oh.make_tensor_value_info("Y", TFLOAT, [2, 3, 8, 32])],
-            ),
-            opset_imports=[oh.make_opsetid("", 18)],
-            ir_version=9,
-        )
-        feeds = {
-            "X": self._range(2, 8, 3, 32),
-            "cos": self._range(1, 3, 1, 32),
-            "sin": self._range(1, 3, 1, 32),
-        }
-        # cap = ExtendedReferenceEvaluator(model, verbose=10)
-        # cap.run(None, feeds)
-        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
-        expected = ref.run(None, feeds)
-
-        gr = GraphBuilder(
-            model,
-            infer_shapes_options=True,
-            optimization_options=OptimizationOptions(patterns=["RotaryEmbedding"], verbose=10),
-        )
-        opt_onx = gr.to_onnx(optimize=True)
-        self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
-
-        opt_ref = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        got = opt_ref.run(None, feeds)
-        self.assertEqualArray(expected[0].ravel(), got[0].ravel())
-        self.assertEqualArray(expected[0], got[0])
-
     def test_skip_simplified_layer_normalization(self):
         from onnxruntime import InferenceSession
 
@@ -1362,6 +1312,74 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         got = opt_ref.run(None, feeds)
         self.assertEqualAny(expected, got)
+
+    def test_contrib_rotary_embedding(self):
+        opset = 20
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["m1", "m1"], ["m1x2"], axis=-1),
+                    oh.make_node("Concat", ["m2", "m2"], ["m2x2"], axis=-1),
+                    oh.make_node("Split", ["X", "split"], ["Xh1", "Xh2"], axis=-1),
+                    oh.make_node("Split", ["Xh1"], ["x1", "x2"], axis=-1, num_outputs=2),
+                    oh.make_node("Neg", ["x2"], ["nx2"]),
+                    oh.make_node("Concat", ["nx2", "x1"], ["cc"], axis=-1),
+                    oh.make_node("Mul", ["cc", "m1x2"], ["cm1"]),
+                    oh.make_node("Mul", ["Xh1", "m2x2"], ["cm2"]),
+                    oh.make_node("Add", ["cm1", "cm2"], ["Yh"]),
+                    oh.make_node("Concat", ["Yh", "Xh2"], ["Y"], axis=-1),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, "c", "d"]),
+                    oh.make_tensor_value_info("m1", TFLOAT, [1, 1, "c", "e"]),
+                    oh.make_tensor_value_info("m2", TFLOAT, [1, 1, "c", "e"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "d"])],
+                [onh.from_array(np.array([4, 6], dtype=np.int64), name="split")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", opset)],
+            ir_version=10,
+        )
+
+        shape_x = (2, 2, 3, 10)
+        shape_c = (1, 1, 3, 2)
+        feeds = {
+            "X": ((np.arange(np.prod(shape_x)) + 1) / (np.prod(shape_x) * 10))
+            .reshape(shape_x)
+            .astype(np.float32),
+            "m1": ((np.arange(np.prod(shape_c)) + 1) / np.prod(shape_c) * 15)
+            .reshape(shape_c)
+            .astype(np.float32),
+            "m2": ((np.arange(np.prod(shape_c)) + 1) / np.prod(shape_c) * 5)
+            .reshape(shape_c)
+            .astype(np.float32),
+        }
+        # ExtendedReferenceEvaluator(model, verbose=10).run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.BUILDER,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionHalfRotaryEmbedding", "ContribRotaryEmbedding"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_contrib_rotary_embedding.onnx", opt_onx)
+        self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
+        self.assertIn("com.microsoft", [n.domain for n in opt_onx.graph.node])
+
+        import onnxruntime
+
+        ref = onnxruntime.InferenceSession(
+            model.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        z = ref.run(None, feeds)[0]
+        ref = onnxruntime.InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz, atol=1e-4)
 
 
 if __name__ == "__main__":
