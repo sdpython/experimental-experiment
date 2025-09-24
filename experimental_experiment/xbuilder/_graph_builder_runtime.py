@@ -142,9 +142,11 @@ class _GraphBuilderRuntime:
             elif s == 0:
                 nsh.append(input_shape[i])
                 ttt *= input_shape[i]
-            else:
+            elif isinstance(s, int):
                 nsh.append(s)
                 ttt *= s
+            else:
+                nsh.append(s)
 
         st = [(f"({s})" if set(s) & set("+*/-") else s) for s in st]
         nsh[rep] = (
