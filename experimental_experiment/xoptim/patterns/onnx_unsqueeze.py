@@ -13,6 +13,58 @@ class SqueezeUnsqueezePattern(PatternOptimization):
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
 
+    def _diff_axes(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        first_node: NodeProto,
+        second_node: NodeProto,
+    ):
+        if first_node.op_type == "Unsqueeze" and len(second_node.input) == 1:
+            return "Squeeze", None
+        axes1 = (
+            None
+            if len(first_node.input) == 1
+            else g.get_computed_constant(first_node.input[1])
+        )
+        axes2 = (
+            None
+            if len(second_node.input) == 1
+            else g.get_computed_constant(second_node.input[1])
+        )
+
+        if (
+            axes1 is None
+            and first_node.op_type == "Squeeze"
+            and g.has_shape(first_node.input[0])
+        ):
+            axes1 = tuple(i for i, a in enumerate(g.get_shape(first_node.input[0])) if a == 1)
+        if (
+            axes2 is None
+            and second_node.op_type == "Squeeze"
+            and g.has_shape(second_node.input[0])
+        ):
+            axes2 = tuple(i for i, a in enumerate(g.get_shape(second_node.input[0])) if a == 1)
+
+        if len(first_node.input) == 2 and axes1 is None:
+            return self.none(second_node, inspect.currentframe().f_lineno)
+        if len(second_node.input) == 2 and axes2 is None:
+            return self.none(second_node, inspect.currentframe().f_lineno)
+        tax1 = tuple(map(int, axes1))
+        tax2 = tuple(map(int, axes2))
+        if tax1 == tax2:
+            if len(axes1) > 1 and tuple(map(int, axes1)) != tuple(
+                range(min(axes1), max(axes1) + 1)
+            ):
+                return self.none(second_node, inspect.currentframe().f_lineno)
+            return "Identity", None
+        if first_node.op_type == "Unsqueeze" and set(tax1) < set(tax2):
+            keep_axes = sorted(set(tax2) - set(tax1))
+            for i in range(len(keep_axes)):
+                m = len([t for t in tax1 if t < keep_axes[i]])
+                keep_axes[i] -= m
+            return "Squeeze", tuple(keep_axes)
+        return self.none(second_node, inspect.currentframe().f_lineno)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -21,8 +73,6 @@ class SqueezeUnsqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type not in {"Squeeze", "Unsqueeze"} or node.domain != "":
             return self.none()
-        if len(node.input) < 2:
-            return self.none(node, inspect.currentframe().f_lineno)
         node_before = g.node_before(node.input[0])
         if (
             node_before is None
@@ -31,29 +81,9 @@ class SqueezeUnsqueezePattern(PatternOptimization):
             or node_before.domain != ""
         ):
             return self.none(node, inspect.currentframe().f_lineno)
-        axes1 = (
-            None
-            if len(node_before.input) == 1
-            else g.get_computed_constant(node_before.input[1])
-        )
-        axes2 = g.get_computed_constant(node.input[1])
-        if axes1 is None:
-            if (
-                axes2 is None
-                or tuple(map(int, axes2)) != (0,)
-                or not g.has_shape(node_before.input[0])
-                or g.get_shape(node_before.input[0]) != (1,)
-            ):
-                return self.none(node, inspect.currentframe().f_lineno)
-        elif axes2 is None:
-            return self.none(node, inspect.currentframe().f_lineno)
-        else:
-            if tuple(map(int, axes1)) != tuple(map(int, axes2)):
-                return self.none(node, inspect.currentframe().f_lineno)
-            if len(axes1) > 1 and tuple(map(int, axes1)) != tuple(
-                range(min(axes1), max(axes1) + 1)
-            ):
-                return self.none(node, inspect.currentframe().f_lineno)
+        diff = self._diff_axes(g, node_before, node)
+        if diff is None:
+            return diff
         return MatchResult(
             self,
             [node_before, node],
@@ -67,13 +97,30 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         node_first: NodeProto,
         node_second: NodeProto,
     ) -> List[NodeProto]:
-        new_node = g.make_node(
-            "Identity",
-            [node_first.input[0]],
-            [node_second.output[0]],
-            name=f"{self.__class__.__name__}--{node_first.name}",
-            doc_string=node_first.doc_string,
-        )
+        diff = self._diff_axes(g, node_first, node_second)
+        assert diff is not None, "Match should not have happened then."
+        op_type, args = diff
+        if args is None:
+            new_node = g.make_node(
+                op_type,
+                [node_first.input[0]],
+                [node_second.output[0]],
+                name=f"{self.__class__.__name__}--{node_first.name}",
+                doc_string=node_first.doc_string,
+            )
+        else:
+            new_axes = g.make_initializer(
+                "",
+                np.array(args, dtype=np.int64),
+                source="SqueezeUnsqueezePattern.apply.new_axes",
+            )
+            new_node = g.make_node(
+                op_type,
+                [node_first.input[0], new_axes],
+                [node_second.output[0]],
+                name=f"{self.__class__.__name__}--{node_first.name}",
+                doc_string=node_first.doc_string,
+            )
         return (
             [node_first, new_node]
             if g.is_used_more_than_once(node_second.input[0])

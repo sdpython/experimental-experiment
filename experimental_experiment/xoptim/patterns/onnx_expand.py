@@ -152,12 +152,17 @@ class ShapeBasedExpandBroadcastPattern(PatternOptimization):
 
     @classmethod
     def _is_compatible_shapes_for_expand(
-        cls, shape_left: DYNAMIC_SHAPE, shape_right: DYNAMIC_SHAPE, output_shape: DYNAMIC_SHAPE
+        cls,
+        shape_left: DYNAMIC_SHAPE,
+        shape_right: DYNAMIC_SHAPE,
+        output_shape: Optional[DYNAMIC_SHAPE],
     ) -> bool:
         """
         Checks that the binary operations of the two input shapes returns the output_shape.
         Then no Expand node is needed.
         """
+        if output_shape is None:
+            return False
         if max(len(shape_left), len(shape_right) if shape_right else 0) < len(output_shape):
             return False
         # Align shapes
@@ -510,7 +515,7 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
             and not ShapeBasedExpandBroadcastPattern._is_compatible_shapes_for_expand(
                 before_expand_shape,
                 other_term_shape,
-                cls._broadcast_shape(before_expand_shape, other_term_shape, exc=True),
+                cls._broadcast_shape(before_expand_shape, other_term_shape, exc=False),
             )
         ):
             return None
@@ -519,7 +524,7 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
             and not ShapeBasedExpandBroadcastPattern._is_compatible_shapes_for_expand(
                 before_expand_shape,
                 other_term_shape,
-                cls._broadcast_shape(before_expand_shape, other_term_shape, exc=True),
+                cls._broadcast_shape(before_expand_shape, other_term_shape, exc=False),
             )
         ):
             return None
@@ -664,12 +669,17 @@ class ShapeBasedExpandBroadcastMatMulPattern(PatternOptimization):
 
     @classmethod
     def _is_compatible_shapes_for_expand(
-        cls, shape_left: DYNAMIC_SHAPE, shape_right: DYNAMIC_SHAPE, output_shape: DYNAMIC_SHAPE
+        cls,
+        shape_left: DYNAMIC_SHAPE,
+        shape_right: DYNAMIC_SHAPE,
+        output_shape: Optional[DYNAMIC_SHAPE],
     ) -> bool:
         """
         Checks that the binary operations of the two input shapes returns the output_shape.
         Then no Expand node is needed.
         """
+        if output_shape is None:
+            return False
         if len(shape_left) < 2 or len(shape_right) < 2 or len(output_shape) < 2:
             return False
         return ShapeBasedExpandBroadcastPattern._is_compatible_shapes_for_expand(
