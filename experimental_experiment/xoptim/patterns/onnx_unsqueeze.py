@@ -31,11 +31,23 @@ class SqueezeUnsqueezePattern(PatternOptimization):
             if len(second_node.input) == 1
             else g.get_computed_constant(second_node.input[1])
         )
+
+        if (
+            axes1 is None
+            and first_node.op_type == "Squeeze"
+            and g.has_shape(first_node.input[0])
+        ):
+            axes1 = tuple(i for i, a in enumerate(g.get_shape(first_node.input[0])) if a == 1)
+        if (
+            axes2 is None
+            and second_node.op_type == "Squeeze"
+            and g.has_shape(second_node.input[0])
+        ):
+            axes2 = tuple(i for i, a in enumerate(g.get_shape(second_node.input[0])) if a == 1)
+
         if len(first_node.input) == 2 and axes1 is None:
             return self.none(second_node, inspect.currentframe().f_lineno)
         if len(second_node.input) == 2 and axes2 is None:
-            return self.none(second_node, inspect.currentframe().f_lineno)
-        if axes1 is None or axes2 is None:
             return self.none(second_node, inspect.currentframe().f_lineno)
         tax1 = tuple(map(int, axes1))
         tax2 = tuple(map(int, axes2))
@@ -46,7 +58,11 @@ class SqueezeUnsqueezePattern(PatternOptimization):
                 return self.none(second_node, inspect.currentframe().f_lineno)
             return "Identity", None
         if first_node.op_type == "Unsqueeze" and set(tax1) < set(tax2):
-            return "Squeeze", sorted(set(tax2) - set(tax1))
+            keep_axes = sorted(set(tax2) - set(tax1))
+            for i in range(len(keep_axes)):
+                m = len([t for t in tax1 if t < keep_axes[i]])
+                keep_axes[i] -= m
+            return "Squeeze", tuple(keep_axes)
         return self.none(second_node, inspect.currentframe().f_lineno)
 
     def match(
