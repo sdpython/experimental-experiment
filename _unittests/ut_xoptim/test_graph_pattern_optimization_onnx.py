@@ -546,7 +546,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes_options=True,
-            optimization_options=OptimizationOptions(patterns=["ReshapeReshape"]),
+            optimization_options=OptimizationOptions(patterns=["ReshapeReshape"], verbose=0),
         )
         s = str(gr.optimization_options)
         self.assertIn("OptimizationOptions(", s)

@@ -2,7 +2,7 @@ import os
 import pprint
 import unittest
 from typing import List, Optional
-from onnx import ModelProto, TensorProto, load as load_onnx, save as save_onnx
+from onnx import ModelProto, TensorProto, load as load_onnx
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xoptim import PatternOptimization
 from experimental_experiment.xbuilder.graph_builder import (
@@ -68,7 +68,11 @@ class TestGraphPatternDynamic(ExtTestCase):
         exceptions: List[str],
         name: Optional[str] = None,
     ):
-        avoid_patterns = {"apply_ShapeBasedExpandSwapPattern", "apply_ReshapePattern"}
+        avoid_patterns = {
+            "apply_ShapeBasedExpandSwapPattern",
+            "apply_ReshapePattern",
+            "apply_ReshapeReshapePattern",
+        }
         model1s = model1.SerializeToString()
         model2s = model2.SerializeToString()
         self.assertNotEqual(len(model1.graph.node), len(model2.graph.node))
@@ -105,9 +109,9 @@ class TestGraphPatternDynamic(ExtTestCase):
                     continue
                 if len(app1) > len(app2):
                     if name:
-                        save_onnx(
-                            gr2.to_onnx(optimize=False),
+                        self.dump_onnx(
                             f"{name}_{pat.__class__.__name__}.onnx",
+                            gr2.to_onnx(optimize=False),
                         )
                     raise AssertionError(
                         f"Discrepancies static/dynamic: i={i}, "

@@ -194,10 +194,17 @@ class ReshapeReshapePattern(PatternOptimization):
         # If it is a constant that should be ok too.
         if not g.has_shape(node.input[0]) or not g.has_shape(next_node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_constant(next_node.input[1]) and not self._applicable_reshape(
-            g.get_shape(node.input[0]),
-            g.get_shape(node.output[0]),
-            g.get_computed_constant(next_node.input[1]),
+        if (
+            g.is_constant(next_node.input[1])
+            and not self._applicable_reshape(
+                g.get_shape(node.input[0]),
+                g.get_shape(node.output[0]),
+                g.get_computed_constant(next_node.input[1]),
+            )
+            and (
+                g.is_constant(node.input[1])
+                or g.get_rank(node.output[0]) != g.get_rank(next_node.output[0])
+            )
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
@@ -217,6 +224,8 @@ class ReshapeReshapePattern(PatternOptimization):
                 new_shape.append(shape1[i])
             elif s > 0:
                 new_shape.append(s)
+            elif m1:
+                return None
             else:
                 # -1
                 m1 = True
@@ -226,7 +235,7 @@ class ReshapeReshapePattern(PatternOptimization):
 
         # something needs to change
         list_att = list(map(int, att))
-        if -1 in list_att and 0 in list_att:
+        if list_att.count(0) > 1 or (-1 in list_att and 0 in list_att):
             return None
         return tuple((-1 if s == 0 else s) for s in list_att)
 
@@ -903,6 +912,9 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
 
         if mone > 1:
             return None
+        assert None not in new_shape, (
+            f"Unexpected inputs: new_shape={new_shape}, shape1={s1}, shape2={s2}"
+        )
         return tuple(new_shape)
 
     def match(
@@ -939,12 +951,6 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
     ) -> List[NodeProto]:
         aligned_reshape = self._align_shapes(
             g.get_shape_renamed(reshape.input[0]), g.get_shape_renamed(reshape.output[0])
-        )
-        print(
-            "*******",
-            g.get_shape_renamed(reshape.input[0]),
-            g.get_shape_renamed(reshape.output[0]),
-            aligned_reshape,
         )
         new_shape = g.make_initializer(
             "",
