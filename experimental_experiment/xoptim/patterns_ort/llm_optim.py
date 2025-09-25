@@ -61,7 +61,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         # If cos_cache[-1] + sin_cache[-1] == X.shape[-1],
         # then there is no split before.
         split_node = g.node_before(node.input[0])
-        if split_node is None:
+        if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             if not g.has_shape(concat_cos.input[0]) or not g.has_shape(concat_sin.input[0]):
                 return self.none(node, inspect.currentframe().f_lineno)
             cos_shape = g.get_shape(concat_cos.input[0])
