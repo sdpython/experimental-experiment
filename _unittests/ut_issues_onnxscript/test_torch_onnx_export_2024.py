@@ -101,9 +101,7 @@ class TestTorchOnnxExport2024(ExtTestCase):
             if past_key_values_length > 0:
                 mask = torch.cat(
                     [
-                        torch.zeros(
-                            tgt_len, past_key_values_length, dtype=dtype, device=device
-                        ),
+                        torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device),
                         mask,
                     ],
                     dim=-1,

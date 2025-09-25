@@ -328,9 +328,7 @@ class CustomTracer(torch.fx.Tracer):
         self._callables[cand] = fn
         return self.create_node("get_attr", cand, args=(), kwargs={})
 
-    def proxy(
-        self, node: torch.fx.Node, cls: type[CustomProxy] = CustomProxy
-    ) -> torch.fx.Proxy:
+    def proxy(self, node: torch.fx.Node, cls: type[CustomProxy] = CustomProxy) -> torch.fx.Proxy:
         """
         Overwrites this method to replace the default Proxy by CustomProxy.
         """
@@ -360,10 +358,7 @@ class CustomTracer(torch.fx.Tracer):
                 if attr_val is p:
                     if n not in parameter_proxy_cache:
                         kwargs = {}
-                        if (
-                            "proxy_factory_fn"
-                            in inspect.signature(self.create_proxy).parameters
-                        ):
+                        if "proxy_factory_fn" in inspect.signature(self.create_proxy).parameters:
                             kwargs["proxy_factory_fn"] = (
                                 None
                                 if not self.param_shapes_constant
@@ -631,11 +626,7 @@ class CustomTracer(torch.fx.Tracer):
         for pos, node in nodes[::-1]:
             if not hasattr(node.target, "name"):
                 continue
-            if (
-                node.target.name() != "aten::copy_"
-                or len(node.args) != 2
-                or len(node.users) == 0
-            ):
+            if node.target.name() != "aten::copy_" or len(node.args) != 2 or len(node.users) == 0:
                 # Not the expected node, not the expected number of arguments
                 # or not used (meaning this is partial inplace modification)
                 continue
@@ -1079,9 +1070,7 @@ class CustomTracer(torch.fx.Tracer):
                 function_name = {torch.exp_: "exp", torch.sigmoid_: "sigmoid"}[n.target]
                 inplace_functions.append((function_name, n.args[1:]))
                 # do the same as before
-                new_node = _macro_new_node_(
-                    n, current_remove, set_item_args, inplace_functions
-                )
+                new_node = _macro_new_node_(n, current_remove, set_item_args, inplace_functions)
                 # next root to use
                 clone = new_node
                 # reset
@@ -1257,9 +1246,7 @@ class CustomTracer(torch.fx.Tracer):
                     # let's replace
                     changed = old_name.replace_all_uses_with(
                         new_name,
-                        delete_user_cb=(
-                            lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)
-                        ),
+                        delete_user_cb=(lambda n, leave=nodes_to_leave: delete_user_cb(n, leave)),
                     )
 
                     assert changed, (

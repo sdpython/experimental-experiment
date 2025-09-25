@@ -64,9 +64,7 @@ class TestShapeHelper(ExtTestCase):
             "seq_length": [{"axis": 1, "input_name": "input_ids"}],
         }
 
-        renamed = rename_dynamic_dimensions(
-            constraints, original=set(dynamic_dimensions_source)
-        )
+        renamed = rename_dynamic_dimensions(constraints, original=set(dynamic_dimensions_source))
         self.assertEqual(
             renamed,
             {

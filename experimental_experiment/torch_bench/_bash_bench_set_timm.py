@@ -420,12 +420,8 @@ class TimmRunner(BenchmarkRunner):
             elif model_name.endswith("QuestionAnswering"):
                 input_dict["start_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
                 input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
-            elif model_name.endswith(
-                ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
-            ):
-                input_dict["labels"] = _rand_int_tensor(
-                    device, 0, vocab_size, (bs, seq_length)
-                )
+            elif model_name.endswith(("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")):
+                input_dict["labels"] = _rand_int_tensor(device, 0, vocab_size, (bs, seq_length))
             elif model_name.endswith("TokenClassification"):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, model.config.num_labels - 1, (bs, seq_length)
@@ -443,13 +439,9 @@ class TimmRunner(BenchmarkRunner):
                     device, 0, vocab_size - 1, (bs, seq_length)
                 )
             elif model_name in cls.EXTRA_MODELS:
-                input_dict["labels"] = _rand_int_tensor(
-                    device, 0, vocab_size, (bs, seq_length)
-                )
+                input_dict["labels"] = _rand_int_tensor(device, 0, vocab_size, (bs, seq_length))
             else:
-                raise NotImplementedError(
-                    f"Class {model_name!r} unsupported for training test "
-                )
+                raise NotImplementedError(f"Class {model_name!r} unsupported for training test ")
 
         return input_dict
 
@@ -554,9 +546,7 @@ class TimmRunner(BenchmarkRunner):
         batch_size: Optional[int] = None,
     ):
         if self.enable_activation_checkpointing:
-            raise NotImplementedError(
-                "Activation checkpointing not implemented for Timm models"
-            )
+            raise NotImplementedError("Activation checkpointing not implemented for Timm models")
 
         is_training = self.training
         use_eval_mode = self.use_eval_mode
@@ -593,9 +583,9 @@ class TimmRunner(BenchmarkRunner):
         batch_size = batch_size or recorded_batch_size
 
         torch.manual_seed(1337)
-        input_tensor = torch.randint(
-            256, size=(batch_size, *input_size), device=self.device
-        ).to(dtype=torch.float32)
+        input_tensor = torch.randint(256, size=(batch_size, *input_size), device=self.device).to(
+            dtype=torch.float32
+        )
         mean = torch.mean(input_tensor)
         std_dev = torch.std(input_tensor)
         example_inputs = (input_tensor - mean) / std_dev

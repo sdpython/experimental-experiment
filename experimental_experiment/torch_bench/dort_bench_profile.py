@@ -232,9 +232,7 @@ def main():
             vs = "after" if v == 0 else "warmup"
             fig, ax = plt.subplots(1, 2, figsize=(10, max(5, n_unique_nodes // 12)))
 
-            plot_ort_profile(
-                dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}"
-            )
+            plot_ort_profile(dfv, ax[0], ax[1], f"profiling {vs} {n_nodes} nodes\n{model_model}")
             fig.tight_layout()
             fig.savefig(f"{model_model}_{vs}.png")
 

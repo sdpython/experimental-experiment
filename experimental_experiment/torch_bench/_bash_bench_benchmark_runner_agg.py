@@ -364,9 +364,7 @@ def merge_benchmark_reports(
                 else:
                     df = df[(df["STEP"] == "last")]
             elif "ERR_export" in df.columns:
-                df = df[
-                    (df["STEP"].isna()) | (df["STEP"] != "export") | ~df["ERR_export"].isna()
-                ]
+                df = df[(df["STEP"].isna()) | (df["STEP"] != "export") | ~df["ERR_export"].isna()]
             else:
                 df = df[(df["STEP"].isna()) | (df["STEP"] != "export")]
         elif "ERR_export" in df.columns:
@@ -563,9 +561,7 @@ def merge_benchmark_reports(
     if verbose:
         print(f"[merge_benchmark_reports] done, shape={df.shape}")
         if output_clean_raw_data:
-            print(
-                f"[merge_benchmark_reports] save clean raw data in {output_clean_raw_data!r}"
-            )
+            print(f"[merge_benchmark_reports] save clean raw data in {output_clean_raw_data!r}")
             df.to_csv(output_clean_raw_data)
         elif verbose > 1 and excel_output:
             nn = f"{excel_output}.raw.csv"
@@ -591,9 +587,7 @@ def merge_benchmark_reports(
     main = pandas.DataFrame(main)
 
     def _applies_subset(suffix, filter_fct):
-        assert (
-            excel_output
-        ), f"excel_output={excel_output} must be specified if broken={broken!r}"
+        assert excel_output, f"excel_output={excel_output} must be specified if broken={broken!r}"
         unique_exporters = set(df["exporter"].dropna())
         excel, ext = os.path.splitext(excel_output)
         for exporter in unique_exporters:
@@ -1023,9 +1017,7 @@ def _build_aggregated_document(
                     dd = cc.astype(float)
                     v[c] = dd
                 except (ValueError, TypeError):
-                    types = [
-                        type(_) for _ in cc if not isinstance(_, float) or not np.isnan(_)
-                    ]
+                    types = [type(_) for _ in cc if not isinstance(_, float) or not np.isnan(_)]
                     if set(types) == {str}:
                         continue
                     co = Counter(types)
@@ -1315,9 +1307,7 @@ def _build_aggregated_document(
         # data_csv.to_csv(export_simple, index=True)
 
         reindexed = nodata_data.set_index(list(not_exporters))
-        reindexed = reindexed.stack(
-            list(range(len(reindexed.columns.names))), future_stack=True
-        )
+        reindexed = reindexed.stack(list(range(len(reindexed.columns.names))), future_stack=True)
         if not isinstance(reindexed, pandas.DataFrame):
             reindexed = reindexed.to_frame()
         reindexed.columns = ["value"]
@@ -1331,13 +1321,11 @@ def _build_aggregated_document(
 
         # We finally create a last page with the buckets only.
         mask_eager = [
-            any(isinstance(_, str) and "speedup in" in _ for _ in row)
-            for row in piv_total.index
+            any(isinstance(_, str) and "speedup in" in _ for _ in row) for row in piv_total.index
         ]
         select_eager = piv_total.loc[mask_eager, :]
         mask_script = [
-            any(isinstance(_, str) and "script in" in _ for _ in row)
-            for row in piv_total.index
+            any(isinstance(_, str) and "script in" in _ for _ in row) for row in piv_total.index
         ]
         select_script = piv_total.loc[mask_script, :]
 

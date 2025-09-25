@@ -90,9 +90,7 @@ class TorchModelContainer(ModelContainer):
         """
         return self._save_external(file_path, all_tensors_to_one_file=all_tensors_to_one_file)
 
-    def load(
-        self, file_path: str, load_large_initializers: bool = True
-    ) -> "TorchModelContainer":
+    def load(self, file_path: str, load_large_initializers: bool = True) -> "TorchModelContainer":
         """
         Loads the large model.
 
@@ -204,9 +202,7 @@ class TorchModelContainer(ModelContainer):
                 proto = proto_from_array(pt, name="dummy")
                 self._stats["time_export_proto_from_array"] += time.perf_counter() - begin
                 tensor_bytes = proto.raw_data
-                assert (
-                    pt.dtype != torch.float32 or len(tensor_bytes) == np.prod(pt.shape) * 4
-                ), (
+                assert pt.dtype != torch.float32 or len(tensor_bytes) == np.prod(pt.shape) * 4, (
                     f"Unexpected size mismatch, buffer size is {len(tensor_bytes)}, "
                     f"but tensor size={np.prod(pt.shape) * 4}, "
                     f"shape={pt.shape}, dtype={pt.dtype}"
@@ -284,9 +280,7 @@ class TorchModelContainer(ModelContainer):
                         np_tensor.detach(),
                         name=tensor.name,
                         dtype=oir.DataType.from_numpy(
-                            tensor_dtype_to_np_dtype(
-                                torch_dtype_to_onnx_dtype(np_tensor.dtype)
-                            )
+                            tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(np_tensor.dtype))
                         ),
                         doc_string=tensor.doc_string,
                         metadata_props=oirs.deserialize_metadata_props(tensor.metadata_props),
@@ -344,9 +338,7 @@ class TorchModelContainer(ModelContainer):
         nodes = []
         for node in proto.node:
             nodes.append(
-                oirs._deserialize_node(
-                    node, scoped_values, value_info, quantization_annotations
-                )
+                oirs._deserialize_node(node, scoped_values, value_info, quantization_annotations)
             )
 
         outputs = []

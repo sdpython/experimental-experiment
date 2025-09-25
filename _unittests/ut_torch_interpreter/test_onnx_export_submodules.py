@@ -181,9 +181,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             inline=False,
         )
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(
-            node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"]
-        )
+        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -207,9 +205,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             verbose=0,
             export_options=ExportOptions(strict=False),
             inline=False,
-            options=OptimizationOptions(
-                patterns="default+onnxruntime", constant_folding=False
-            ),
+            options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=False),
             export_modules_as_functions=True,
         )
         self.dump_onnx("test_dummy_llm_opts.onnx", onx)
@@ -228,9 +224,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             inputs,
             optimize=True,
             verbose=0,
-            options=OptimizationOptions(
-                patterns="default+onnxruntime", constant_folding=False
-            ),
+            options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=False),
         )
         init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
         self.assertEqual(init_names2 & init_names, init_names)
@@ -277,9 +271,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             inline=False,
         )
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(
-            node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"]
-        )
+        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -302,9 +294,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             verbose=0,
             export_options=ExportOptions(strict=False),
             inline=True,
-            options=OptimizationOptions(
-                patterns="default+onnxruntime", constant_folding=False
-            ),
+            options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=False),
             export_modules_as_functions=True,
         )
         self.dump_onnx("test_dummy_llm_opts.onnx", onx)

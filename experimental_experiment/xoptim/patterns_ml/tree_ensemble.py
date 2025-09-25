@@ -214,9 +214,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
                 return cls.get_attribute_value(g, trees[0], name)
             collected = [cls.get_attribute_value(g, t, name) for t in trees]
             if not increment:
-                assert (
-                    first_tree_id is None
-                ), "increment is False but first_tree_id is not None"
+                assert first_tree_id is None, "increment is False but first_tree_id is not None"
                 merged = []
                 for c in collected:
                     merged.extend(c)

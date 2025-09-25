@@ -32,9 +32,7 @@ def _get_session(
         except Exception as e:
             with open("dump_debug_get_session.onnx", "wb") as f:
                 f.write(onx.SerializeToString())
-            raise AssertionError(
-                f"Unable to build session ({str(e)})\n{pretty_onnx(onx)}"
-            ) from e
+            raise AssertionError(f"Unable to build session ({str(e)})\n{pretty_onnx(onx)}") from e
     if callable(impl):
         return impl(onx, verbose=verbose)
     if impl == "ref":
@@ -175,9 +173,7 @@ def onnx_debug_backend(
 
     input_names = create_input_names(graph_module, args) if rename_inputs else None
 
-    verbose_onnx, verbose_backend = (
-        verbose if isinstance(verbose, tuple) else (verbose, verbose)
-    )
+    verbose_onnx, verbose_backend = verbose if isinstance(verbose, tuple) else (verbose, verbose)
 
     patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
 

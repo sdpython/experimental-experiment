@@ -122,9 +122,7 @@ class TestCheckOrtFloat16(ExtTestCase):
                     row["op_name"] = changed
                     break
             rows.append(row)
-            exe_providers.append(
-                (row.get("args_provider", None), row.get("args_op_name", None))
-            )
+            exe_providers.append((row.get("args_provider", None), row.get("args_op_name", None)))
         short_list = [(a, b) for a, b in exe_providers if a is not None and b is not None]
         self.assertEqual(short_list, [("CUDAExecutionProvider", o) for o in expected_names])
 

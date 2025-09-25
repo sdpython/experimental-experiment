@@ -284,9 +284,7 @@ class BenchmarkRunner:
                 if isinstance(obj.conv_states, list)
                 else obj.conv_states.get_device()
             )
-            if ("cuda" in device and cache_device < 0) or (
-                "cpu" in device and cache_device >= 0
-            ):
+            if ("cuda" in device and cache_device < 0) or ("cpu" in device and cache_device >= 0):
                 from transformers.configuration_utils import PretrainedConfig
 
                 config = PretrainedConfig(
@@ -507,9 +505,7 @@ class BenchmarkRunner:
         stats["onnx_n_initializer"] = len(model.graph.initializer)
         stats["onnx_n_sparse_initializer"] = len(model.graph.sparse_initializer)
         stats["onnx_n_functions"] = len(model.functions)
-        stats["onnx_n_sequence"] = len(
-            [n for n in model.graph.node if n.op_type == "Sequence"]
-        )
+        stats["onnx_n_sequence"] = len([n for n in model.graph.node if n.op_type == "Sequence"])
         stats["onnx_n_inputs"] = len(model.graph.input)
         stats["onnx_n_outputs"] = len(model.graph.output)
         stats["onnx_input_names"] = "|".join(i.name for i in model.graph.input)
@@ -709,9 +705,7 @@ class BenchmarkRunner:
                     if os.path.exists(pickled_name):
                         os.remove(pickled_name)
                     if self.verbose:
-                        print(
-                            f"[enumerate_test_models] dumps everything into {pickled_name!r}"
-                        )
+                        print(f"[enumerate_test_models] dumps everything into {pickled_name!r}")
                     pkl = dict(stats=stats, context=context)
                     with open(pickled_name, "wb") as f:
                         pickle.dump(pkl, f)
@@ -743,9 +737,7 @@ class BenchmarkRunner:
                     f"[BenchmarkRunner.benchmark] done model {model_name!r} "
                     f"with exporter={exporter!r} in {total_time}"
                 )
-                print(
-                    f"[BenchmarkRunner.benchmark] filename is {stats.get('filename', '?')!r}"
-                )
+                print(f"[BenchmarkRunner.benchmark] filename is {stats.get('filename', '?')!r}")
 
             # saving stats in a file
             if os.path.exists(stats.get("filename", "NONE")):
@@ -1061,13 +1053,11 @@ class BenchmarkRunner:
                 stats["time_latency_eager_t_max"] - stats["time_latency_eager_t_min"]
             ) / (stats["time_latency_eager_t_med"])
             if len(lats) > 1:
-                stats["time_latency_eager_t_corrt"] = np.corrcoef(
-                    lats, list(range(len(lats)))
-                )[0, 1]
+                stats["time_latency_eager_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
+                    0, 1
+                ]
                 if len(lats) > 2:
-                    stats["time_latency_eager_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[
-                        0, 1
-                    ]
+                    stats["time_latency_eager_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[0, 1]
 
         if self.device.startswith("cuda"):
             stats["mema_gpu_4_after_repeat"] = torch.cuda.max_memory_allocated(device_id)
@@ -1233,9 +1223,7 @@ class BenchmarkRunner:
             del onx_with_shapes.graph.value_info[:]
             if self.verbose > 1:
                 print("[benchmarkrunner.benchmark] do shape inference again")
-            onx_with_shapes = onnx.shape_inference.infer_shapes(
-                onx_with_shapes, data_prop=True
-            )
+            onx_with_shapes = onnx.shape_inference.infer_shapes(onx_with_shapes, data_prop=True)
             if self.verbose > 1:
                 print(f"[benchmarkrunner.benchmark] saves {filename!r}")
             onnx.save(onx_with_shapes, filename, save_as_external_data=False)
@@ -1723,9 +1711,9 @@ class BenchmarkRunner:
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
                     if len(lats) > 1:
-                        stats["time_latency_t_corrt"] = np.corrcoef(
-                            lats, list(range(len(lats)))
-                        )[0, 1]
+                        stats["time_latency_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
+                            0, 1
+                        ]
                     if len(lats) > 2:
                         stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[0, 1]
 
@@ -1966,9 +1954,9 @@ class BenchmarkRunner:
                         stats["time_latency_t_max"] - stats["time_latency_t_min"]
                     ) / (stats["time_latency_t_med"])
                     if len(lats) > 1:
-                        stats["time_latency_t_corrt"] = np.corrcoef(
-                            lats, list(range(len(lats)))
-                        )[0, 1]
+                        stats["time_latency_t_corrt"] = np.corrcoef(lats, list(range(len(lats))))[
+                            0, 1
+                        ]
                     if len(lats) > 2:
                         stats["time_latency_t_corrp"] = np.corrcoef(lats[1:], lats[:-1])[0, 1]
 
@@ -1986,9 +1974,7 @@ class BenchmarkRunner:
 
         if "time_latency" in stats:
             stats["speedup"] = stats["time_latency_eager"] / stats["time_latency"]
-            stats["speedup_med"] = (
-                stats["time_latency_eager_t_med"] / stats["time_latency_t_med"]
-            )
+            stats["speedup_med"] = stats["time_latency_eager_t_med"] / stats["time_latency_t_med"]
             stats["speedup_increase"] = stats["speedup"] - 1
 
         ###############

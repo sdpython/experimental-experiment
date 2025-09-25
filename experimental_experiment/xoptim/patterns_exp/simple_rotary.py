@@ -41,9 +41,7 @@ class SimpleRotaryPattern(PatternOptimization):
             if att is None or att.i != 2:
                 return self.none(node, inspect.currentframe().f_lineno)
 
-        if g.is_used_more_than_once(node.output[0]) or g.is_used_more_than_once(
-            node.output[1]
-        ):
+        if g.is_used_more_than_once(node.output[0]) or g.is_used_more_than_once(node.output[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
         left_node = g.next_node(node.output[0])
@@ -73,9 +71,7 @@ class SimpleRotaryPattern(PatternOptimization):
         if axis != axis_:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(
-            self, [node, neg_node, concat_node], self.apply, insert_at=concat_node
-        )
+        return MatchResult(self, [node, neg_node, concat_node], self.apply, insert_at=concat_node)
 
     def apply(
         self,

@@ -110,9 +110,7 @@ class Opset:
             else:
                 # We assume there is only one outputs.
                 outputs = 1
-        return self.make_node(
-            op_type, *args, outputs=outputs, allow_empty_shape=True, **kwargs
-        )
+        return self.make_node(op_type, *args, outputs=outputs, allow_empty_shape=True, **kwargs)
 
     def make_node(
         self,

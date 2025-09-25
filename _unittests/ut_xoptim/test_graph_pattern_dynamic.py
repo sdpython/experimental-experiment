@@ -82,14 +82,10 @@ class TestGraphPatternDynamic(ExtTestCase):
                     patterns=patterns[: i + 1] if cumulative else patterns[i : i + 1],
                     verbose=0,
                 )
-                gr1 = GraphBuilder(
-                    model1, infer_shapes_options=True, optimization_options=opts
-                )
+                gr1 = GraphBuilder(model1, infer_shapes_options=True, optimization_options=opts)
                 gr1._check([], step="T1")
                 stat1 = gr1.optimize()
-                gr2 = GraphBuilder(
-                    model2, infer_shapes_options=True, optimization_options=opts
-                )
+                gr2 = GraphBuilder(model2, infer_shapes_options=True, optimization_options=opts)
                 gr2._check([], step="T2")
                 stat2 = gr2.optimize()
                 pat = patterns[i]

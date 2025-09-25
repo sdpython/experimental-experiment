@@ -314,9 +314,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 value = self.value_linear(value_states)
 
                 # Perform scaled dot product attention
-                attn_output = F.scaled_dot_product_attention(
-                    query, key, value, scale=self.scale
-                )
+                attn_output = F.scaled_dot_product_attention(query, key, value, scale=self.scale)
                 return attn_output
 
         d_model = 64
@@ -702,9 +700,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         # 3D
 
         class UpdateModel(torch.nn.Module):
-            def forward(
-                self, x: torch.Tensor, update: torch.Tensor, kv_index: torch.LongTensor
-            ):
+            def forward(self, x: torch.Tensor, update: torch.Tensor, kv_index: torch.LongTensor):
                 x = x.clone()
                 x[..., kv_index] = update
                 return x
@@ -800,9 +796,9 @@ class TestIssuesPytorch2024(ExtTestCase):
 
                 def forward(self, update, index1, index2):
                     copy = self.params.clone()
-                    copy[
-                        index1, torch.from_numpy(np.array([1, 2], dtype=np.int64)), index2
-                    ] = update
+                    copy[index1, torch.from_numpy(np.array([1, 2], dtype=np.int64)), index2] = (
+                        update
+                    )
                     return copy
 
             model = UpdateModel()
@@ -852,9 +848,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 input_names=["update", "index1", "index2"],
                 output_names=["updated"],
                 dynamic_shapes=(
-                    {"update": {0: dn}, "index1": {0: dn}, "index2": {0: dn}}
-                    if dynamic
-                    else None
+                    {"update": {0: dn}, "index1": {0: dn}, "index2": {0: dn}} if dynamic else None
                 ),
                 verbose=False,
                 dynamo=True,
@@ -875,9 +869,7 @@ class TestIssuesPytorch2024(ExtTestCase):
                 filename=model_path,
                 export_options=export_options,
                 dynamic_shapes=(
-                    {"update": {0: dn}, "index1": {0: dn}, "index2": {0: dn}}
-                    if dynamic
-                    else None
+                    {"update": {0: dn}, "index1": {0: dn}, "index2": {0: dn}} if dynamic else None
                 ),
                 verbose=0,
                 optimize=True,

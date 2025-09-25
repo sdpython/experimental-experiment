@@ -85,9 +85,7 @@ class TestOrtSession(ExtTestCase):
     def test_ort_value_dlpack_torch(self):
         from onnxruntime.capi.onnxruntime_pybind11_state import OrtValue as C_OrtValue
 
-        torch_arr_input = torch.tensor(
-            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=torch.float32
-        )
+        torch_arr_input = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], dtype=torch.float32)
         shape = torch_arr_input.shape
         ptr = torch_arr_input.data_ptr()
         dlp = torch_arr_input.__dlpack__()

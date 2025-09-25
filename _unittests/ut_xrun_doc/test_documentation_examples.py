@@ -15,9 +15,7 @@ from experimental_experiment.ext_test_case import (
 )
 
 VERBOSE = 0
-ROOT = os.path.realpath(
-    os.path.abspath(os.path.join(experimental_experiment_file, "..", ".."))
-)
+ROOT = os.path.realpath(os.path.abspath(os.path.join(experimental_experiment_file, "..", "..")))
 
 
 def import_source(module_file_path, module_name):

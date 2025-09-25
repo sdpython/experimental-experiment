@@ -159,9 +159,7 @@ def set_type_shape_unary_op_abs(
         elif itype == TensorProto.COMPLEX128:
             rtype = TensorProto.DOUBLE
         else:
-            raise AssertionError(
-                f"Unexpected type {itype} for {input_name!r}{g.get_debug_msg()}"
-            )
+            raise AssertionError(f"Unexpected type {itype} for {input_name!r}{g.get_debug_msg()}")
 
         g.set_type(name, rtype)
         if g.has_shape(input_name):
@@ -206,9 +204,7 @@ def set_type_shape_binary_op(
                 break
         if not dtype and g.as_function:
             return False
-        assert (
-            dtype
-        ), f"Unable to guess type for {name!r} from {input_names}{g.get_debug_msg()}"
+        assert dtype, f"Unable to guess type for {name!r} from {input_names}{g.get_debug_msg()}"
         g.set_type(name, dtype)
 
     # shape
@@ -237,9 +233,7 @@ def set_type_shape_binary_op(
     rank = None
     for input_name in input_names:
         if g.has_rank(input_name):
-            rank = (
-                g.get_rank(input_name) if rank is None else max(rank, g.get_rank(input_name))
-            )
+            rank = g.get_rank(input_name) if rank is None else max(rank, g.get_rank(input_name))
             continue
         if rank is not None:
             rank = None
@@ -495,9 +489,7 @@ def prepare_inputs_homogeneous_operator(
                 shape = g.get_shape(i)
                 shapes.append(shape)
                 if len(shape) == 0:
-                    new_inputs.append(
-                        g.op.Reshape(i, np.array([1], dtype=np.int64), name=name)
-                    )
+                    new_inputs.append(g.op.Reshape(i, np.array([1], dtype=np.int64), name=name))
                     continue
             elif g.has_rank(i) and g.get_rank(i) == 0:
                 new_inputs.append(g.op.Reshape(i, np.array([1], dtype=np.int64), name=name))
@@ -542,9 +534,7 @@ def prepare_inputs_homogeneous_operator(
         res = g.op.Cast(tr, to=itype, outputs=outputs, name=name)
         if outputs is None:
             r = set_type_shape_unary_op(g, res, tr, itype=dtypes_list_not_none[0])
-            assert (
-                r or not g._debug_shape_missing
-            ), f"Unable to compute shape for node {op_type}."
+            assert r or not g._debug_shape_missing, f"Unable to compute shape for node {op_type}."
     return (res, *inputs)
 
 
@@ -628,9 +618,7 @@ def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa:
     )
 
 
-def _set_shape_type_op_any_rotary_embedding(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
-):
+def _set_shape_type_op_any_rotary_embedding(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     "Sets the output shape for node type Cast."
     set_type_shape_unary_op(self, node.output[0], node.input[0])
 
@@ -654,9 +642,7 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
             f"axis={axis}, higher than a shape in {shapes}, "
             f"node={self.pretty_node(node)}{self.get_debug_msg()}"
         )
-        assert all(
-            axis < len(sh) for sh in shapes
-        ), f"Unexpected shape in {shapes}, axis={axis}"
+        assert all(axis < len(sh) for sh in shapes), f"Unexpected shape in {shapes}, axis={axis}"
         dims = [sh[axis] for sh in shapes]
         if all_int(dims):
             new_shape[axis] = sum(dims)
@@ -870,9 +856,7 @@ def _set_shape_type_op_any_gather(self: "GraphBuilder", node: NodeProto):  # noq
         )
 
 
-def _set_shape_type_op_any_gather_elements(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
-):
+def _set_shape_type_op_any_gather_elements(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     "Sets the output shape for node type GatherElements."
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -897,10 +881,9 @@ def _set_shape_type_op_any_gemm(self: "GraphBuilder", node: NodeProto):  # noqa:
     "Sets the output shape for node type Gemm."
     transA = self.get_attribute(node, "transA", exc=False)
     transB = self.get_attribute(node, "transB", exc=False)
-    assert len(node.input) >= 2, (
-        f"Unexpected number of input {node.input} for node "
-        f"{node.op_type} name {node.name!r}"
-    )
+    assert (
+        len(node.input) >= 2
+    ), f"Unexpected number of input {node.input} for node {node.op_type} name {node.name!r}"
     set_type_shape_gemm(
         self,
         node.output[0],
@@ -1153,11 +1136,7 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
     dtype = self.get_type(node.input[0])
     for o in node.output:
         self.set_type(o, dtype)
-    if (
-        self.has_shape(node.input[0])
-        and len(node.input) > 1
-        and self.is_constant(node.input[1])
-    ):
+    if self.has_shape(node.input[0]) and len(node.input) > 1 and self.is_constant(node.input[1]):
         splits = list(self.get_constant(node.input[1]))
         assert len(splits) == len(
             node.output
@@ -1562,9 +1541,7 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
             else:
                 sh2 = ((1,) * (len(sh1) - len(sh2))) + sh2
         prefix = (
-            broadcast_shape(sh1[:-2], sh2[:-2], graph_builder=self)
-            if len(sh1) > 2
-            else tuple()
+            broadcast_shape(sh1[:-2], sh2[:-2], graph_builder=self) if len(sh1) > 2 else tuple()
         )
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
         self.set_shape(name, prefix + new_shape)

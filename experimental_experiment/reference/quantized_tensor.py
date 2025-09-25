@@ -18,9 +18,7 @@ class QuantizedTensor:
 
         self.scale_ = np.array((_max - _min) / (qmax - qmin), dtype=tensor.dtype)
         initial_zero_point = qmin - _min / self.scale_
-        self.zero_point_ = np.array(
-            int(max(qmin, min(qmax, initial_zero_point))), dtype=np.uint8
-        )
+        self.zero_point_ = np.array(int(max(qmin, min(qmax, initial_zero_point))), dtype=np.uint8)
         self.quantized_ = np.maximum(
             0, np.minimum(qmax, (tensor / self.scale_).astype(int) + self.zero_point_)
         ).astype(self.zero_point_.dtype)

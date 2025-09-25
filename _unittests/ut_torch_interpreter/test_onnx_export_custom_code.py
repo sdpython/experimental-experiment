@@ -115,8 +115,7 @@ class TestOnnxExportCustomCode(ExtTestCase):
         self.assertIn("{name: twice, out: True}", res_str)
         targets = [node.target for node in res.nodes]
         names = [
-            (t if isinstance(t, str) else str(t)).split(".")[-1].split(" at ")[0]
-            for t in targets
+            (t if isinstance(t, str) else str(t)).split(".")[-1].split(" at ")[0] for t in targets
         ]
         self.assertEqual(
             names,
@@ -325,9 +324,7 @@ class TestOnnxExportCustomCode(ExtTestCase):
         model = cls()
         expected = model(x)
         registry = torch.onnx.OnnxRegistry()
-        registry.register_op(
-            function=onnxscript_twice, namespace="testlib", op_name="twice_onnx"
-        )
+        registry.register_op(function=onnxscript_twice, namespace="testlib", op_name="twice_onnx")
 
         self.assertNotEmpty(expected)
         filename = "test_custom_code_dynamo_2_fn_registry.onnx"

@@ -408,9 +408,10 @@ class RotaryConcatPartPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if slice_right.op_type == "Neg" and g.node_before(
-            slice_right.input[0]
-        ).op_type not in ("Slice", "Split"):
+        if slice_right.op_type == "Neg" and g.node_before(slice_right.input[0]).op_type not in (
+            "Slice",
+            "Split",
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         if slice_left.op_type == "Neg":
@@ -744,9 +745,7 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         lnames = list(names)
         index = 0 if lnames[0] in mul1_node.input else 1
         lnames = [lnames[index], lnames[1 - index]]
-        cos_cache, sin_cache = (
-            lnames if concat_node.input[0] in mul1_node.input else lnames[::-1]
-        )
+        cos_cache, sin_cache = lnames if concat_node.input[0] in mul1_node.input else lnames[::-1]
 
         rotary_nodes = [
             g.make_node(

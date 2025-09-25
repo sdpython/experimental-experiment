@@ -61,9 +61,7 @@ def random_feed(inputs, batch: int = 10, empty_dimension: int = 1) -> Dict[str, 
         name = inp.name
         if hasattr(inp.type, "tensor_type"):
             typ = inp.type.tensor_type.elem_type
-            shape = tuple(
-                getattr(d, "dim_value", batch) for d in inp.type.tensor_type.shape.dim
-            )
+            shape = tuple(getattr(d, "dim_value", batch) for d in inp.type.tensor_type.shape.dim)
             shape = (shape[0], *[b if b > 0 else empty_dimension for b in shape[1:]])
         else:
             typ = inp.type

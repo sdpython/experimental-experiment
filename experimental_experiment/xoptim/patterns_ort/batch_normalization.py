@@ -86,9 +86,7 @@ class OrtBatchNormalizationTrainingPattern(PatternOptimization):
         # running_mean, running_var
         ns = []
         if bn_node.output[1] not in ("", None) and bn_node.output[2] not in ("", None):
-            momentum = atts.get(
-                "momentum", 0.9
-            )  # this value is defined by onnx specifications
+            momentum = atts.get("momentum", 0.9)  # this value is defined by onnx specifications
             dtype = tensor_dtype_to_np_dtype(g.get_type(bn_node.input[0]))
             mom_name = g.make_initializer(
                 "",

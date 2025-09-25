@@ -48,9 +48,7 @@ class TransposeCastPattern(PatternOptimization):
             cast_node_before = None
 
         if cast_node_before is not None:
-            return MatchResult(
-                self, [cast_node_before, node, None], self.apply, insert_at=node
-            )
+            return MatchResult(self, [cast_node_before, node, None], self.apply, insert_at=node)
 
         cast_node_after = g.next_nodes(node.output[0])
         if (
@@ -64,9 +62,7 @@ class TransposeCastPattern(PatternOptimization):
             cast_node_after = None
 
         if cast_node_after is not None:
-            return MatchResult(
-                self, [None, node, cast_node_after[0]], self.apply, insert_at=node
-            )
+            return MatchResult(self, [None, node, cast_node_after[0]], self.apply, insert_at=node)
 
         return self.none(node, inspect.currentframe().f_lineno)
 

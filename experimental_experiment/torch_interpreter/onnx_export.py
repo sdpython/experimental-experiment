@@ -161,10 +161,9 @@ def _retrieve(
         import torch
 
         value = weights[new_name]
-        assert isinstance(value, torch.Tensor), (
-            f"Unexpected type {type(value)} for input "
-            f"{name!r} mapped to weight {new_name!r}."
-        )
+        assert isinstance(
+            value, torch.Tensor
+        ), f"Unexpected type {type(value)} for input {name!r} mapped to weight {new_name!r}."
         return value
 
     # buffers and constants or lieft tensors
@@ -589,9 +588,7 @@ def _make_builder_interpreter(
             if verbose > 0:
                 print(f"[_make_builder_interpreter] export_options={export_options!r}")
                 print(f"[_make_builder_interpreter] input args={string_type(args, limit=20)}")
-                print(
-                    f"[_make_builder_interpreter] input kwargs={string_type(kwargs, limit=20)}"
-                )
+                print(f"[_make_builder_interpreter] input kwargs={string_type(kwargs, limit=20)}")
                 print(f"[_make_builder_interpreter] dynamic_shapes={dynamic_shapes}")
                 print(
                     f"[_make_builder_interpreter] same_signature={same_signature}, "
@@ -612,9 +609,7 @@ def _make_builder_interpreter(
                 verbose=verbose,
             )
         else:
-            exported_program = export_options.post_process_exported_program(
-                mod, verbose=verbose
-            )
+            exported_program = export_options.post_process_exported_program(mod, verbose=verbose)
             exe_path = "exising-torch.export.ExportProgram"
 
         debug_ep = os.environ.get("PRINT_EXPORTED_PROGRAM", "0")
@@ -865,9 +860,7 @@ def _replacements_dynamic_shapes(
         if verbose > 2:
             print(f"[_replacements_dynamic_shapes] 2> has_args={has_args}")
             print(f"[_replacements_dynamic_shapes] 2> input_names={input_names}")
-            print(
-                f"[_replacements_dynamic_shapes] 2> dict_dynamic_shapes={dict_dynamic_shapes}"
-            )
+            print(f"[_replacements_dynamic_shapes] 2> dict_dynamic_shapes={dict_dynamic_shapes}")
             print(f"[_replacements_dynamic_shapes] 2> new_dynamic_shapes={new_dynamic_shapes}")
         return new_dynamic_shapes
     if verbose > 2:
@@ -904,9 +897,7 @@ def to_onnx(
     return_optimize_report: bool = False,
     filename: Optional[str] = None,
     inline: bool = True,
-    export_modules_as_functions: Union[
-        bool, Set[type["torch.nn.Module"]]  # noqa: F821
-    ] = False,
+    export_modules_as_functions: Union[bool, Set[type["torch.nn.Module"]]] = False,  # noqa: F821
     function_options: Optional[FunctionOptions] = None,
     output_names: Optional[List[str]] = None,
     output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,

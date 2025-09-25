@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Tuple
 import packaging.version as pv
 import torch
 import transformers
+from onnx_diagnostic.helpers import string_type
 
 
 MODEL_NAME = "arnir0/Tiny-LLM"
@@ -32,33 +33,16 @@ model = transformers.AutoModelForCausalLM.from_pretrained(MODEL_NAME)
 # We rewrite the forward method to print the cache dimension.
 
 
-def string_inputs(args, kwargs):
-    def _cache(a):
-        if len(a.key_cache):
-            return f"n_caches={len(a.key_cache)}, shape={a.key_cache[0].shape}"
-        return f"n_caches={len(a.key_cache)}"
-
-    for a in args:
-        if isinstance(a, transformers.cache_utils.DynamicCache):
-            return _cache(a)
-    for k, a in kwargs.items():
-        if isinstance(a, transformers.cache_utils.DynamicCache):
-            return f"{k}={_cache(a)}"
-    return "no_cache"
-
-
 def _forward_(*args, _f=None, **kwargs):
     assert _f is not None
     if hasattr(torch.compiler, "is_exporting") and not torch.compiler.is_exporting():
         # torch.compiler.is_exporting requires torch>=2.7
-        print(string_inputs(args, kwargs))
+        print(string_type([args, kwargs], with_shape=True))
     return _f(*args, **kwargs)
 
 
 keep_model_forward = model.forward
-model.forward = lambda *args, _f=keep_model_forward, **kwargs: _forward_(
-    *args, _f=_f, **kwargs
-)
+model.forward = lambda *args, _f=keep_model_forward, **kwargs: _forward_(*args, _f=_f, **kwargs)
 
 # %%
 # Let's run the model.
@@ -185,21 +169,15 @@ def get_tiny_llm(
         ],
     }
     inputs = dict(
-        input_ids=torch.randint(0, max_token_id, (batch_size, sequence_length2)).to(
-            torch.int64
-        ),
+        input_ids=torch.randint(0, max_token_id, (batch_size, sequence_length2)).to(torch.int64),
         attention_mask=torch.ones((batch_size, sequence_length + sequence_length2)).to(
             torch.int64
         ),
         past_key_values=make_dynamic_cache(
             [
                 (
-                    torch.randn(
-                        batch_size, num_key_value_heads, sequence_length, cache_last_dim
-                    ),
-                    torch.randn(
-                        batch_size, num_key_value_heads, sequence_length, cache_last_dim
-                    ),
+                    torch.randn(batch_size, num_key_value_heads, sequence_length, cache_last_dim),
+                    torch.randn(batch_size, num_key_value_heads, sequence_length, cache_last_dim),
                 )
                 for i in range(n_layers)
             ]

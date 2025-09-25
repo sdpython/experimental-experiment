@@ -120,9 +120,7 @@ assert_almost_equal(res, rest[0, 0].numpy())
 # `im2col <https://caffe.berkeleyvision.org/tutorial/layers/im2col.html>`_.
 
 
-unfold = Unfold(kernel_size=(3, 3), padding=(1, 1))(
-    from_numpy(data[np.newaxis, np.newaxis, ...])
-)
+unfold = Unfold(kernel_size=(3, 3), padding=(1, 1))(from_numpy(data[np.newaxis, np.newaxis, ...]))
 unfold.shape
 
 # %%

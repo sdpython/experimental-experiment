@@ -101,9 +101,7 @@ class OptimizationOptions:
             from ..xoptim import get_pattern
 
             self.patterns = (
-                None
-                if patterns is None
-                else [get_pattern(p, verbose=verbose) for p in patterns]
+                None if patterns is None else [get_pattern(p, verbose=verbose) for p in patterns]
             )
         self.verbose = verbose
         self.recursive = recursive

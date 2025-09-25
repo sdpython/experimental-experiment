@@ -1,11 +1,12 @@
 [tool.black]
-line-length = 95
+line-length = 98
 extend-exclude = '''.*clones*'''
 
 [tool.ruff]
 
 # Exclude a variety of commonly ignored directories.
 exclude = [
+    "_deprecated_examples",
     ".eggs",
     ".git",
     "build",
@@ -14,7 +15,7 @@ exclude = [
     "clones",
 ]
 
-line-length = 95
+line-length = 98
 
 [tool.ruff.lint]
 # see https://docs.astral.sh/ruff/rules/

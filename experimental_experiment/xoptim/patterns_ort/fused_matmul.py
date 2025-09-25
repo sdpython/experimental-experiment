@@ -236,9 +236,7 @@ class FusedMatMulPattern(PatternOptimization):
         )
         new_node.attribute.extend(keep)
         res = [new_node]
-        if node_before_left is not None and g.is_used_more_than_once(
-            node_before_left.output[0]
-        ):
+        if node_before_left is not None and g.is_used_more_than_once(node_before_left.output[0]):
             # This is not efficient on CUDA.
             res.append(node_before_left)
         if node_before_right is not None and g.is_used_more_than_once(

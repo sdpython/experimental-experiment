@@ -63,9 +63,7 @@ class TestDynamoLlamaSdpa3(ExtTestCase):
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug,
                     decompositions=(
-                        filter_decomposition_table()
-                        if decompositions is True
-                        else decompositions
+                        filter_decomposition_table() if decompositions is True else decompositions
                     ),
                 )
             else:

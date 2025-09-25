@@ -158,13 +158,11 @@ class NumpyCode:
     def _make_sure_opsets(self, mi, ma=None):
         if mi is not None and self.opset < mi:
             raise RuntimeError(
-                "Cannot convert operator type %d, opset %d < %d."
-                % (self.op_type, self.opset, mi)
+                "Cannot convert operator type %d, opset %d < %d." % (self.op_type, self.opset, mi)
             )
         if ma is not None and self.opset > ma:
             raise RuntimeError(
-                "Cannot convert operator type %d, opset %d > %d."
-                % (self.op_type, self.opset, mi)
+                "Cannot convert operator type %d, opset %d > %d." % (self.op_type, self.opset, mi)
             )
 
     def _getat(self, name, defval=None, format=None):
@@ -226,9 +224,7 @@ class NumpyCode:
             return val
         if isinstance(val, str):
             return tuple(map(int, val.strip("()[]").replace(" ", "").split(",")))
-        raise NotImplementedError(
-            f"Unable to convert type {type(val)!r} ({val!r}) into tuple."
-        )
+        raise NotImplementedError(f"Unable to convert type {type(val)!r} ({val!r}) into tuple.")
 
     def make_numpy_code(self):
         """
@@ -244,9 +240,7 @@ class NumpyCode:
         if self.domain == "com.microsoft":
             return self._make_numpy_code_others()
 
-        raise NotImplementedError(
-            f"Unable to convert any operator from domain {self.domain!r}."
-        )
+        raise NotImplementedError(f"Unable to convert any operator from domain {self.domain!r}.")
 
     def _make_numpy_code_onnx(self):
         binary_ops = dict(Add="+", Sub="-", Div="/", Mul="*", MatMul="@", Pow="**")
@@ -329,9 +323,7 @@ class NumpyCode:
         if self.op_type == "Cast":
             self._make_sure_inputs(1)
             to = int(self._getat("to", 1))
-            dtype = {TensorProto.DOUBLE: "float64", TensorProto.FLOAT: "float32"}.get(
-                to, "???"
-            )
+            dtype = {TensorProto.DOUBLE: "float64", TensorProto.FLOAT: "float32"}.get(to, "???")
             return f"{outs} = {self.inputs[0]}.astype(numpy.{dtype})"
 
         if self.op_type == "Concat":
@@ -526,8 +518,7 @@ class NumpyCode:
                 )
             elif post_transform == "NONE":
                 rows.append(
-                    "%s%s = %s @ coefs + inter"
-                    % (self.indent, self.outputs[1], self.inputs[0])
+                    "%s%s = %s @ coefs + inter" % (self.indent, self.outputs[1], self.inputs[0])
                 )
             elif post_transform != "NONE":
                 raise NotImplementedError(

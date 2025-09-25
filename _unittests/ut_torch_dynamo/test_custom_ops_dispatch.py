@@ -70,9 +70,7 @@ class TestCustomOpsDispatch(ExtTestCase):
             scale: float = 1.0,
             **kwargs,
         ):
-            assert (
-                len(outputs) == 4
-            ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
+            assert len(outputs) == 4, f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
             assert len(kwargs) == 0, (
                 f"Unexpected kwargs {kwargs} in "
                 f"onnx_scaled_dot_product_efficient_attention{g.get_debug_msg()}"
@@ -122,9 +120,7 @@ class TestCustomOpsDispatch(ExtTestCase):
             scale: float = 1.0,
             **kwargs,
         ):
-            assert (
-                len(outputs) == 4
-            ), f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
+            assert len(outputs) == 4, f"Unexpected number of outputs {outputs}{g.get_debug_msg()}"
             assert len(kwargs) == 0, (
                 f"Unexpected kwargs {kwargs} in "
                 f"onnx_scaled_dot_product_attention_backward{g.get_debug_msg()}"
@@ -132,9 +128,7 @@ class TestCustomOpsDispatch(ExtTestCase):
             t_scale = g.make_initializer("", np.array(scale or 1.0, dtype=np.float32))
             t_dropout_p = g.make_initializer("", np.array(dropout_p, dtype=np.float32))
             t_is_causal = g.make_initializer("", np.array(is_causal, dtype=np.bool_))
-            t_grad_input_mask = g.make_initializer(
-                "", np.array(grad_input_mask, dtype=np.int64)
-            )
+            t_grad_input_mask = g.make_initializer("", np.array(grad_input_mask, dtype=np.int64))
             # onnxruntime fails with type inference failed
             # Let's add some Cast even if not needed.
             dt = g.get_type(grad)
@@ -239,9 +233,7 @@ class TestCustomOpsDispatch(ExtTestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             optimized_mod = torch.compile(model, backend=aot_compiler, fullgraph=True)
-            with dump_onnx(
-                "dort-llama-sdpa-custom-no", folder="dump_sdpa_dis_llama", clean=True
-            ):
+            with dump_onnx("dort-llama-sdpa-custom-no", folder="dump_sdpa_dis_llama", clean=True):
                 output = optimized_mod(input_ids)  # , input_mask)
                 output[0].sum().backward()
 

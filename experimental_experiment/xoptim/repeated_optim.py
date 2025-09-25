@@ -322,9 +322,7 @@ def make_function_from_nodes(
     inputs = sorted(
         k for k in gr.result_names if k not in gr.predecessor or gr.predecessor[k] is None
     )
-    outputs = sorted(
-        k for k in gr.result_names if k not in gr.successors or not gr.successors[k]
-    )
+    outputs = sorted(k for k in gr.result_names if k not in gr.successors or not gr.successors[k])
     return oh.make_function(
         name,
         domain,
@@ -583,9 +581,7 @@ def find_largest_repeated_pattern(
         res = patterns.process(verbose=verbose, name=name)
         if res is not None:
             if verbose:
-                print(
-                    f"[find_largest_repeated_pattern] found a pattern of length {len(res[0])}"
-                )
+                print(f"[find_largest_repeated_pattern] found a pattern of length {len(res[0])}")
             if keep is None or len(keep[0]) < len(res[0]):
                 keep = res
                 all_patterns = [sorted(p.subgraph) for p in patterns.pats]

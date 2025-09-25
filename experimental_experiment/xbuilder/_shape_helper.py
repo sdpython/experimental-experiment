@@ -3,14 +3,10 @@ from typing import Any, Sequence, Tuple, Union
 import numpy as np
 
 STATIC_SHAPE = Tuple[int, ...]
-DYNAMIC_SHAPE = Tuple[
-    Union[int, "torch.SymInt", "torch.SymFloat", float, str], ...  # noqa: F821
-]
+DYNAMIC_SHAPE = Tuple[Union[int, "torch.SymInt", "torch.SymFloat", float, str], ...]  # noqa: F821
 
 
-def reshape_implementation_with_zero(
-    data: Any, shape: Sequence[int], allowzero: int = 0
-) -> Any:
+def reshape_implementation_with_zero(data: Any, shape: Sequence[int], allowzero: int = 0) -> Any:
     """
     Reshapes an array or a tensor even if the new shape has 0
     (following onnx specifications).

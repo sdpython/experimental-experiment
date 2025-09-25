@@ -37,9 +37,7 @@ class TestGraphPatternOptimizationEasy(ExtTestCase):
             # Creates an input tensor with a dimension defined by the onnx model
             # or equals to i + 2 with i being the dimension index.
             # The tensor is kept small to make the test fast.
-            shape = tuple(
-                (d.dim_value if d.dim_value > 0 else i + 2) for i, d in enumerate(ish)
-            )
+            shape = tuple((d.dim_value if d.dim_value > 0 else i + 2) for i, d in enumerate(ish))
             if i.type.tensor_type.elem_type == onnx.TensorProto.FLOAT:
                 feeds[i.name] = np.random.randn(*shape).astype(np.float32)
             elif i.type.tensor_type.elem_type == onnx.TensorProto.FLOAT16:
@@ -140,9 +138,7 @@ class TestGraphPatternOptimizationEasy(ExtTestCase):
                 ),
             )
             opt_onx = gr.to_onnx(optimize=True)
-            self.assertIn(
-                "SoftmaxCrossEntropyLoss", set(n.op_type for n in opt_onx.graph.node)
-            )
+            self.assertIn("SoftmaxCrossEntropyLoss", set(n.op_type for n in opt_onx.graph.node))
             self.assertEqual(0, len(opt_onx.graph.initializer))
             self._check_model(model, opt_onx)
 

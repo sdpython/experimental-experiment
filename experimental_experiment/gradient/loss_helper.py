@@ -576,9 +576,7 @@ def add_loss_output(
             pen_name = current
 
         cst_shape = _unique_name(existing_names, "shapevect")
-        inits.append(
-            from_array_extended(numpy.array([-1, 1], dtype=numpy.int64), name=cst_shape)
-        )
+        inits.append(from_array_extended(numpy.array([-1, 1], dtype=numpy.int64), name=cst_shape))
         loss_reshape = _unique_name(existing_names, "loss_reshape")
         pen_reshape = _unique_name(existing_names, "penalty_reshape")
         nodes.extend(

@@ -218,9 +218,7 @@ def _validate_function(g: FunctionProto, verbose: int = 0, watch: Optional[Set[s
             found.append(node)
         for att in node.attribute:
             if att.type == AttributeProto.GRAPH:
-                found.extend(
-                    _validate_graph(g, existing.copy(), path=[g.name], verbose=verbose)
-                )
+                found.extend(_validate_graph(g, existing.copy(), path=[g.name], verbose=verbose))
         existing |= set(node.output)
         if watch and set(node.output) & watch:
             if verbose:

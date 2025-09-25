@@ -145,10 +145,7 @@ def dynger_backend(
 
     def run(*inputs, gm=exported_mod):
         if verbose:
-            print(
-                f"[dynger_backend] begin execution with "
-                f"{len(exported_mod.graph.nodes)} nodes"
-            )
+            print(f"[dynger_backend] begin execution with {len(exported_mod.graph.nodes)} nodes")
             res = gm(*inputs)
             print("[dynger_backend] done")
             return res

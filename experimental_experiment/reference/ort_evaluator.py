@@ -348,9 +348,7 @@ class OrtEval:
             onnxruntime.capi.onnxruntime_pybind11_state.Fail,
             onnxruntime.capi.onnxruntime_pybind11_state.InvalidGraph,
         ) as e:
-            raise RuntimeError(
-                f"Unable to infer a session due to {e}\n{pretty_onnx(onx)}"
-            ) from e
+            raise RuntimeError(f"Unable to infer a session due to {e}\n{pretty_onnx(onx)}") from e
         return onx, sess
 
     def _get_sess_if(
@@ -435,13 +433,9 @@ class OrtEval:
         outputs = sess.run(None, feeds, run_options=self.run_options)
         return outputs
 
-    def _run_if(
-        self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]
-    ) -> List[Any]:
+    def _run_if(self, node: NodeProto, inputs: List[Any], results: Dict[str, Any]) -> List[Any]:
         """Runs a node if."""
-        assert (
-            not self.incremental
-        ), f"run_if not implemented when incremental={self.incremental}"
+        assert not self.incremental, f"run_if not implemented when incremental={self.incremental}"
         feeds = dict(zip(node.input, inputs))
         feeds.update(results)
         if feeds[node.input[0]]:
@@ -488,9 +482,7 @@ class OrtEval:
         outputs = sess.run(None, feeds)
         return outputs
 
-    def run_dlpack(
-        self, outputs: Optional[List[str]], feed_inputs: Dict[str, Any]
-    ) -> List[Any]:
+    def run_dlpack(self, outputs: Optional[List[str]], feed_inputs: Dict[str, Any]) -> List[Any]:
         """
         Runs the model using :epkg:`run_with_ortvaluevector`.
         It only works with :class:`torch.Tensor`.
@@ -607,9 +599,7 @@ class OrtEval:
         import torch
         from onnxruntime.capi import _pybind_state as ORTC
 
-        DEVICES = {
-            -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
-        }
+        DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 
         if torch.cuda.device_count() > 0:
             for i in range(torch.cuda.device_count()):

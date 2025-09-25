@@ -41,6 +41,7 @@ class ExportOptions:
         to change that value
     :param oblivious: use ``torch.fx.experimental._config.patch(backed_size_oblivious=True)``
         to allow dynamic dimension equal to 1
+
     The fallback strategy tries the following in order:
 
     .. runpython::
@@ -134,9 +135,7 @@ class ExportOptions:
             for k, v in kwargs.items():
                 setattr(self, k, v)
 
-        assert (
-            not self.dynamo or not self.jit
-        ), "jit and dynamo cannot be true at the same time"
+        assert not self.dynamo or not self.jit, "jit and dynamo cannot be true at the same time"
         assert (
             not tracing or not dynamo
         ), f"Both tracing and dynamo are incompatible options in {self!r}"
@@ -240,10 +239,7 @@ class ExportOptions:
                 # We need to run decomposition to fully remove all inplace operations.
                 if verbose:
                     begin = time.perf_counter()
-                    print(
-                        "[ExportOptions.export] use decomposition "
-                        "to remove inplace nodes left"
-                    )
+                    print("[ExportOptions.export] use decomposition to remove inplace nodes left")
                 exported_program = exported_program.run_decompositions({})
                 if verbose:
                     print(
@@ -417,9 +413,7 @@ class ExportOptions:
             return None
 
         if verbose:
-            print(
-                f"[ExportOptions.export] {self!r} - torch.export.export {type(mod).__name__!r}"
-            )
+            print(f"[ExportOptions.export] {self!r} - torch.export.export {type(mod).__name__!r}")
             print(f"[ExportOptions.export] aten_as_function={self.aten_as_function!r}")
             begin = time.perf_counter()
 
@@ -452,9 +446,7 @@ class ExportOptions:
                 print("[ExportOptions.export] torch.jit.trace")
             from torch._export.converter import TS2EPConverter
 
-            jit_model = torch.jit.trace(
-                mod, example_inputs=args, check_trace=False, strict=False
-            )
+            jit_model = torch.jit.trace(mod, example_inputs=args, check_trace=False, strict=False)
             res = TS2EPConverter(jit_model, args, kwargs).convert()
             if self.save_ep:
                 with open(f"{self.save_ep}.jit", "w") as f:
@@ -573,9 +565,7 @@ class ExportOptions:
                 # skipping if the model is too big.
                 torch.export.save(exported_program, f"{self.save_ep}.ep.pt2")
         if isinstance(self.validate_ep, float) or self.validate_ep:
-            self.validate_exported_program(
-                mod, exported_program, args, kwargs, verbose=verbose
-            )
+            self.validate_exported_program(mod, exported_program, args, kwargs, verbose=verbose)
 
         exported_program = self.post_process_exported_program(
             exported_program, verbose=verbose, print_exported_program=print_exported_program
@@ -587,9 +577,7 @@ class ExportOptions:
             )
         return exported_program
 
-    def validate_exported_program(
-        self, model, exported_program, args, kwargs, verbose: int = 0
-    ):
+    def validate_exported_program(self, model, exported_program, args, kwargs, verbose: int = 0):
         """Validates the exported program by running the model."""
         from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 
@@ -611,9 +599,7 @@ class ExportOptions:
         got = exported_program.module()(*(ar or []), **(kws or {}))
         diff = max_diff(expected, got)
         if verbose:
-            print(
-                f"[ExportOptions.validate_exported_program] discrepancies: {string_diff(diff)}"
-            )
+            print(f"[ExportOptions.validate_exported_program] discrepancies: {string_diff(diff)}")
         atol = self.validate_ep if isinstance(self.validate_ep, float) else 1e-5
         assert diff["abs"] <= atol, (
             f"Discrepancies oberseved between the model and the exported program "
@@ -649,10 +635,7 @@ class ExportOptions:
             return modified
         if modified:
             if verbose:
-                print(
-                    f"[ExportOptions.export] inplaces: "
-                    f"{modified} inplaced nodes were removed"
-                )
+                print(f"[ExportOptions.export] inplaces: {modified} inplaced nodes were removed")
             graph.lint()
         return modified
 

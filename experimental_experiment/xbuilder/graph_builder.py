@@ -438,9 +438,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         self.torch = torch
         self.maybe_disable_fake_tensor_mode = _unset_fake_temporarily
-        self.optimization_options = optimization_options or OptimizationOptions(
-            verbose=verbose
-        )
+        self.optimization_options = optimization_options or OptimizationOptions(verbose=verbose)
         self.local_domain = local_domain
         self.as_function = as_function
         self.input_args = args
@@ -549,14 +547,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.current_input = 0
             self._unique_names = set(self.input_names)
 
-        elif isinstance(
-            target_opset_or_existing_proto, (GraphProto, ModelProto, FunctionProto)
-        ):
+        elif isinstance(target_opset_or_existing_proto, (GraphProto, ModelProto, FunctionProto)):
             # loads a model from nothing
             if input_names:
-                raise ValueError(
-                    "input_names must be empty if the input is an existing model."
-                )
+                raise ValueError("input_names must be empty if the input is an existing model.")
             self.current_input = len(self.inputs)
             if isinstance(target_opset_or_existing_proto, GraphProto):
                 assert (
@@ -577,9 +571,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     target_opset_or_existing_proto, infer_shapes_options
                 )
         else:
-            raise NotImplementedError(
-                f"{type(target_opset_or_existing_proto)} is not supported."
-            )
+            raise NotImplementedError(f"{type(target_opset_or_existing_proto)} is not supported.")
 
     def make_subset_builder(
         self,
@@ -797,9 +789,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"Unexpected pos_vv={pos_vv} (type is {type(pos_vv)}), "
                 f"input_name_or_position={input_name_or_position}"
             )
-            self._register_dynamic_object_from_dynamic_shapes_dict(
-                input_name_or_position, pos_vv
-            )
+            self._register_dynamic_object_from_dynamic_shapes_dict(input_name_or_position, pos_vv)
         if not output:
             self.dynamic_dimensions_source_flat = _prefixes
         else:
@@ -1023,10 +1013,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         for k, v in self.opsets.items():
             rows.append(f"opset: {k}: {v}")
         for k, v in self.initializers_dict.items():
-            if (
-                k in self.initializers_dict_sources
-                and self.initializers_dict_sources[k].source
-            ):
+            if k in self.initializers_dict_sources and self.initializers_dict_sources[k].source:
                 t = f"init: {k}: {_v(v)}"
                 rows.append(
                     f"{t}{' '*max(2,70-len(t))} -- {self.initializers_dict_sources[k].source}"
@@ -1231,10 +1218,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             return value
 
         if possible_value is not None:
-            assert isinstance(possible_value, (np.ndarray, self.torch.Tensor, NodeProto)), (
-                f"Unexpected type {type(possible_value)} for a "
-                f"constant{self.get_debug_msg()}"
-            )
+            assert isinstance(
+                possible_value, (np.ndarray, self.torch.Tensor, NodeProto)
+            ), f"Unexpected type {type(possible_value)} for a constant{self.get_debug_msg()}"
             if computed_value and isinstance(possible_value, NodeProto):
                 res, _ = self.compute_constant(name, exc=exc)
                 if res is None:
@@ -1247,10 +1233,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"Multiple output is not allowed but type is {type(res)} "
                     f"for name={name!r}"
                 )
-                assert not multiple_outputs, (
-                    f"get_constants not implemented when multiple_outputs=True, "
-                    f"name={name!r}"
-                )
+                assert (
+                    not multiple_outputs
+                ), f"get_constants not implemented when multiple_outputs=True, name={name!r}"
                 if not isinstance(res, tuple):
                     if self._debug_get_constant:
                         print(f"[GraphBuilder.get_constant]   F: tuple, name={name!r}")
@@ -1878,9 +1863,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if hasattr(self, "replacements_dimensions_"):
             self.replacements_dimensions_[name] = tuple(
                 (
-                    rename_dynamic_expression(
-                        _, self.replacements_for_replacements_dimensions_
-                    )
+                    rename_dynamic_expression(_, self.replacements_for_replacements_dimensions_)
                     if isinstance(_, str)
                     else _
                 )
@@ -2100,9 +2083,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return value
         return None
 
-    def set_value_shape(
-        self, name: str, value: Any, equal_to: Optional[Tuple[str, str]] = None
-    ):
+    def set_value_shape(self, name: str, value: Any, equal_to: Optional[Tuple[str, str]] = None):
         """
         Sets the value for a shape result.
 
@@ -2302,10 +2283,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             _append_to_source(name, input_name, axis, value)
             return None
 
-        assert name not in self.dynamic_objects, (
-            f"Dynamic object {name!r}, value={value!r} "
-            f"is already there{self.get_debug_msg()}"
-        )
+        assert (
+            name not in self.dynamic_objects
+        ), f"Dynamic object {name!r}, value={value!r} is already there{self.get_debug_msg()}"
         if isinstance(value, self.WrapSym):
             value = value.sym
         assert isinstance(
@@ -2390,9 +2370,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             np.array([axis], dtype=np.int64),
             source="GraphBuilder.get_dimension_as_result.axis_name",
         )
-        self.make_node(
-            "Gather", [shape_name, axis_name], [name], name="_get_dimension_as_result"
-        )
+        self.make_node("Gather", [shape_name, axis_name], [name], name="_get_dimension_as_result")
         return name
 
     def make_shape_from_results(self, shape: DYNAMIC_SHAPE, name="") -> str:
@@ -2473,9 +2451,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         "for a shape{self.get_debug_msg()}"
                     )
                     if self.get_rank(name) == 0:
-                        r = self.op.UnsqueezeAnyOpset(
-                            name, self.ZERO, name=f"_mkshape1_{name}"
-                        )
+                        r = self.op.UnsqueezeAnyOpset(name, self.ZERO, name=f"_mkshape1_{name}")
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
                         conc.append(r)
@@ -2517,9 +2493,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         "for a shape{self.get_debug_msg()}"
                     )
                     if self.get_rank(name) == 0:
-                        r = self.op.UnsqueezeAnyOpset(
-                            name, self.ZERO, name=f"_mkshape2_{name}"
-                        )
+                        r = self.op.UnsqueezeAnyOpset(name, self.ZERO, name=f"_mkshape2_{name}")
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
                         conc.append(r)
@@ -2674,9 +2648,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Initializer {name!r} was already added to the model, source={source!r}, "
             f"existing is {self.initializers_dict_sources[name]!r}{self.get_debug_msg()}"
         )
-        assert (
-            not self.check_empty_source or source
-        ), f"source is null for initializer {name!r}"
+        assert not self.check_empty_source or source, f"source is null for initializer {name!r}"
         self.initializers_dict_sources[name] = GraphBuilder.InitializerInfo(
             name, source, same_as=same_as
         )
@@ -2716,15 +2688,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
             shape = (
-                self._get_tensor_shape(value)
-                if is_proto
-                else tuple(int(i) for i in value.shape)
+                self._get_tensor_shape(value) if is_proto else tuple(int(i) for i in value.shape)
             )
         if itype is None:
             itype = (
-                self._get_tensor_type(value)
-                if is_proto
-                else dtype_to_tensor_dtype(value.dtype)
+                self._get_tensor_type(value) if is_proto else dtype_to_tensor_dtype(value.dtype)
             )
         if existing:
             assert allow_empty or len(shape) == 0 or min(shape) > 0, (
@@ -2792,20 +2760,14 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.set_name(parameter_name, marker="parameter_name")
             self.set_shape(parameter_name, self.get_shape(name))
             self.set_type(parameter_name, self.get_type(name))
-            if self.verbose and (
-                self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)
-            ):
+            if self.verbose and (self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)):
                 print(
                     f"[GraphBuilder-{self._hash()}.make_initializer] "
                     f"{name}[{itype}:{shape}] -> {parameter_name}"
                 )
         else:
-            if self.verbose and (
-                self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)
-            ):
-                print(
-                    f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]"
-                )
+            if self.verbose and (self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)):
+                print(f"[GraphBuilder-{self._hash()}.make_initializer] {name}[{itype}:{shape}]")
 
         if cst is None and isinstance(value, NodeProto):
             cst = value
@@ -2887,9 +2849,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             for x in shape
         )
 
-    def is_constant_or_attribute(
-        self, node: NodeProto, input_index: int, att_name: str
-    ) -> bool:
+    def is_constant_or_attribute(self, node: NodeProto, input_index: int, att_name: str) -> bool:
         """
         Tells if an input is a constant or returns true if in an older
         opset, it was named as an attribute.
@@ -2898,9 +2858,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return self.is_constant(node.input[input_index])
         return True
 
-    def get_constant_or_attribute(
-        self, node: NodeProto, input_index: int, att_name: str
-    ) -> Any:
+    def get_constant_or_attribute(self, node: NodeProto, input_index: int, att_name: str) -> Any:
         """
         Tells if an input is a constant or returns true if in an older
         opset, it was named as an attribute.
@@ -3138,11 +3096,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert not isinstance(value, self.torch.SymInt)
             return value
 
-        if (
-            value not in self.dynamic_objects_rev
-            and value not in self._known_value_shape
-            and add
-        ):
+        if value not in self.dynamic_objects_rev and value not in self._known_value_shape and add:
             self.add_dynamic_object(value, value)
             self.add_dynamic_object_rev(value, value)
 
@@ -3348,9 +3302,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             #
             for dim_name, v in self.dynamic_dimensions_source.items():
                 for d in v:
-                    if isinstance(d["input_name"], int) and d["input_name"] == len(
-                        self.inputs
-                    ):
+                    if isinstance(d["input_name"], int) and d["input_name"] == len(self.inputs):
                         d["input_name"] = input_name
                         if shape:
                             axis = d["axis"]
@@ -3364,9 +3316,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                                 f"{self.get_debug_msg()}"
                             )
                             dim_name_axis = self._torch_sym_int_to_str(shape[axis])
-                            if dim_name != dim_name_axis and not isinstance(
-                                dim_name_axis, int
-                            ):
+                            if dim_name != dim_name_axis and not isinstance(dim_name_axis, int):
                                 assert (
                                     dim_name_axis not in self._dynamic_alias
                                     or self._dynamic_alias[dim_name_axis] == dim_name
@@ -3384,8 +3334,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if shape is not None:
             shape = tuple(
-                (sh if sh is not None else self.unique_dimension_name(input_name))
-                for sh in shape
+                (sh if sh is not None else self.unique_dimension_name(input_name)) for sh in shape
             )
         dyn_shape = self.verify_dynamic_shape(shape, name=input_name, add=True)
         self._fill_dynamic_alias(shape, name)
@@ -3472,9 +3421,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             # dynamic_dimensions_source={'dim': [{'axis': 1, 'input_name': 0}]}
             for dim_name, v in self.dynamic_dimensions_source.items():
                 for d in v:
-                    if isinstance(d["input_name"], int) and d["input_name"] == len(
-                        self.inputs
-                    ):
+                    if isinstance(d["input_name"], int) and d["input_name"] == len(self.inputs):
                         d["input_name"] = input_name
                         if shape:
                             axis = d["axis"]
@@ -3675,9 +3622,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         assert (
             self.as_function or not indexed or "_" in name
         ), f"Name {name!r} is not indexed like 'output_0'{self.get_debug_msg()}"
-        assert (is_dimension and "_dim_" in name) or (
-            not is_dimension and "_dim_" not in name
-        ), (
+        assert (is_dimension and "_dim_" in name) or (not is_dimension and "_dim_" not in name), (
             f"Inconsistence for input {name!r}, "
             f"elem_type={elem_type}, shape={shape!r}, "
             f"is_dimension={is_dimension}"
@@ -3749,9 +3694,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         """
         if self.has_type(name) and self.has_rank(name):
             if self.has_shape(name):
-                out = oh.make_tensor_value_info(
-                    name, self.get_type(name), self.get_shape(name)
-                )
+                out = oh.make_tensor_value_info(name, self.get_type(name), self.get_shape(name))
                 if verbose > 1:
                     print(
                         f"[GraphBuilder-{self._hash()}.make_tensor_output] "
@@ -3793,9 +3736,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         elem_type: int,
         name: Optional[str] = None,
     ) -> Optional[DYNAMIC_SHAPE]:
-        assert isinstance(
-            elem_type, int
-        ), f"elem_type must be an integer not {type(elem_type)}"
+        assert isinstance(elem_type, int), f"elem_type must be an integer not {type(elem_type)}"
         assert shape is None or isinstance(
             shape, tuple
         ), f"Shape must be a tuple not {type(shape)}"
@@ -3988,9 +3929,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if inputs[0].startswith("_onx_")
                     else f"{lower}{inputs[0]}"
                 )
-            output_names = (
-                [lower] if outputs == 1 else [f"{lower}_{i}" for i in range(outputs)]
-            )
+            output_names = [lower] if outputs == 1 else [f"{lower}_{i}" for i in range(outputs)]
         return [self.unique_name(o) for o in output_names]
 
     def make_node(
@@ -4137,9 +4076,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         # next
         try:
-            node = oh.make_node(
-                op_type, inputs, output_names, domain=domain, name=name, **kwargs
-            )
+            node = oh.make_node(op_type, inputs, output_names, domain=domain, name=name, **kwargs)
         except TypeError as e:
             iti = [type(i) for i in inputs]
             ito = [type(o) for o in outputs] if isinstance(outputs, (tuple, list)) else outputs
@@ -4266,9 +4203,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     del kwargs["axes"]
         return inputs, kwargs
 
-    def _make_node_set_type_shape_constant(
-        self, node: NodeProto, sts: Optional[Dict[str, Any]]
-    ):
+    def _make_node_set_type_shape_constant(self, node: NodeProto, sts: Optional[Dict[str, Any]]):
         if node.domain != "":
             return
 
@@ -4335,9 +4270,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             ):
                 cst, _ = self.compute_constant(node.input[1], exc=False, only_array=True)
                 if cst is not None:
-                    assert not isinstance(
-                        cst, self.torch._subclasses.fake_tensor.FakeTensor
-                    ), (
+                    assert not isinstance(cst, self.torch._subclasses.fake_tensor.FakeTensor), (
                         f"self.compute_constant returns a FakeTensor for {node.input[1]!r}"
                         f"\n{self.pretty_text()}"
                     )
@@ -4395,9 +4328,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             if self.has_shape(node.input[0]):
                                 sh = self.get_shape(node.input[0])
                                 if is_static_shape(sh):
-                                    self.set_shape(
-                                        node.output[0], _reshape_shape(sh, shape_cst)
-                                    )
+                                    self.set_shape(node.output[0], _reshape_shape(sh, shape_cst))
                                     node.doc_string += ":constant-7a:"
                         else:
                             self.set_shape(node.output[0], shape_cst)
@@ -4480,9 +4411,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return None
 
-    def get_attribute_with_default(
-        self, node: NodeProto, name: str, default_value: Any
-    ) -> Any:
+    def get_attribute_with_default(self, node: NodeProto, name: str, default_value: Any) -> Any:
         """
         Returns an attribute or its default value if missing.
 
@@ -4651,9 +4580,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"easier to see where this node is created but name={name!r} "
                     f"and op_type={node.op_type!r}."
                 )
-                new_inputs = [
-                    renaming[builder._parameter_renaming.get(i, i)] for i in node.input
-                ]
+                new_inputs = [renaming[builder._parameter_renaming.get(i, i)] for i in node.input]
                 new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
                 for o, no in zip(node.output, new_outputs):
                     renaming[o] = no
@@ -4776,10 +4703,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if switch_low_high:
             # Let's try to minimize the time.
             if self.verbose:
-                print(
-                    f"[GraphBuilder-{self._hash()}._build_initializers] "
-                    f"switch low/high order"
-                )
+                print(f"[GraphBuilder-{self._hash()}._build_initializers] switch low/high order")
             initializer = []
             for k, v in init_dict.items():
                 if subset and k not in subset:
@@ -4914,8 +4838,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 res.append(t)
                 continue
             raise TypeError(
-                f"Unable to convert initializer {k!r} with type "
-                f"{type(v)} into a TensorProto."
+                f"Unable to convert initializer {k!r} with type {type(v)} into a TensorProto."
             )
         if self.verbose:
             begin = time.perf_counter()
@@ -5060,8 +4983,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             rows.append(f"       {vv!r}")
                         except AttributeError:
                             rows.append(
-                                f"       ERR*: {type(vv)!r}:"
-                                f"{getattr(vv, 'node', 'node=?')!r}"
+                                f"       ERR*: {type(vv)!r}:{getattr(vv, 'node', 'node=?')!r}"
                             )
             else:
                 try:
@@ -5071,9 +4993,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             if i >= 10000:
                 break
 
-        rows.append(
-            f"dynamic_dimensions_source={pprint.pformat(self.dynamic_dimensions_source)}"
-        )
+        rows.append(f"dynamic_dimensions_source={pprint.pformat(self.dynamic_dimensions_source)}")
         rows.append(
             f"dynamic_dimensions_source_flat="
             f"{pprint.pformat(self.dynamic_dimensions_source_flat)}"
@@ -5087,11 +5007,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         short_sh = {
-            k: (
-                v
-                if (isinstance(v, tuple) and len(v) < 10)
-                else string_type(v, with_shape=True)
-            )
+            k: (v if (isinstance(v, tuple) and len(v) < 10) else string_type(v, with_shape=True))
             for k, v in self._known_value_shape.items()
         }
         rows.append(f"_known_value_shape={pprint.pformat(short_sh)[:10000]}")
@@ -5306,9 +5222,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def _to_onnx_function(self, function_options, opsets, mask_outputs):
         if self._debug_local_function:
-            print(
-                f"[GraphBuilder-{self._hash()}.to_onnx] export_as_function {function_options}"
-            )
+            print(f"[GraphBuilder-{self._hash()}.to_onnx] export_as_function {function_options}")
         if self.verbose:
             print(
                 f"[GraphBuilder-{self._hash()}.to_onnx] make_function "
@@ -5323,10 +5237,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             f"Function domain={function_options.domain!r} cannot be empty."
         )
         key = function_options.domain, function_options.name
-        assert key not in self.functions, (
-            f"The given name {key} is already taken by a local function"
-            f"{self.pretty_text()}"
-        )
+        assert (
+            key not in self.functions
+        ), f"The given name {key} is already taken by a local function{self.pretty_text()}"
         if function_options.move_initializer_to_constant:
             if self._debug_local_function:
                 print(
@@ -5403,9 +5316,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     if hidden & setp:
                         needs_rewrite = True
                         # needs rewrite
-                        new_g = self._rename_inputs_in_subgraph(
-                            att.g, self._parameter_renaming
-                        )
+                        new_g = self._rename_inputs_in_subgraph(att.g, self._parameter_renaming)
 
             if not needs_rewrite:
                 seti = set(node.input)
@@ -5481,9 +5392,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         if values:
             oh.set_model_props(model, values)
 
-    def _get_size(
-        self, t: Union["torch.Tensor", np.ndarray, TensorProto]  # noqa: F821
-    ) -> int:
+    def _get_size(self, t: Union["torch.Tensor", np.ndarray, TensorProto]) -> int:  # noqa: F821
         if hasattr(t, "shape"):
             return np.prod(t.shape) * size_type(t.dtype)
         assert isinstance(t, TensorProto), f"Unexpected type {type(t)}"
@@ -5553,10 +5462,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.initializers_dict.update(update)
                 self.initializers_dict_sources.update(update_source)
 
-        assert len(self.nodes) > 0, (
-            f"The onnx model is empty after optimization (no node)."
-            f"\n{self.get_debug_msg()}"
-        )
+        assert (
+            len(self.nodes) > 0
+        ), f"The onnx model is empty after optimization (no node).{self.get_debug_msg()}"
 
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if mask_outputs is None:
@@ -5664,15 +5572,11 @@ class GraphBuilder(_GraphBuilderRuntime):
             size_initializers=int(
                 sum(
                     np.prod(t.dims)
-                    * size_type(
-                        t.data_type if isinstance(t, TensorProto) else t.values.data_type
-                    )
+                    * size_type(t.data_type if isinstance(t, TensorProto) else t.values.data_type)
                     for t in initializers
                 )
             ),
-            size_large_initializers=sum(
-                self._get_size(t) for t in large_initializers.values()
-            ),
+            size_large_initializers=sum(self._get_size(t) for t in large_initializers.values()),
             n_nodes=len(model.graph.node),
             n_nodes_other_domain=len([n for n in model.graph.node if n.domain != ""]),
             mask_outputs=mask_outputs,
@@ -5887,9 +5791,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             for k, v in sorted(replacements.items()):
                 if k in self._debug_dyn_dim or v in self._debug_dyn_dim:
-                    print(
-                        f"[GraphBuilder._improves_dynamic_dimension_naming] .. {k!r} -> {v!r}"
-                    )
+                    print(f"[GraphBuilder._improves_dynamic_dimension_naming] .. {k!r} -> {v!r}")
 
         if replacements:
             if not hasattr(self, "replacements_"):
@@ -6206,10 +6108,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._check(statistics, "A-dynamic_dimension_naming")
 
         if self.verbose or self.optimization_options.verbose:
-            print(
-                f"[GraphBuilder-{self._hash()}.optimize] "
-                f"start with {len(self.nodes)} nodes"
-            )
+            print(f"[GraphBuilder-{self._hash()}.optimize] start with {len(self.nodes)} nodes")
             if self.verbose > 1:
                 print(
                     f"[GraphBuilder-{self._hash()}.optimize] "
@@ -6538,17 +6437,13 @@ class GraphBuilder(_GraphBuilderRuntime):
                 else:
                     rows.append(f"      NODE: {v:3d} x {k[0]}.{k[1]} -SIG- {k[2]}")
         else:
-            cc = Counter(
-                [self.get_type(i) for i in self.input_names if not self.is_sequence(i)]
-            )
+            cc = Counter([self.get_type(i) for i in self.input_names if not self.is_sequence(i)])
             for k, v in assert_sorted(cc.items()):
                 rows.append(f"         INPUT: {v:3d} x {k}t")
             cc = Counter([self.is_sequence(i) for i in self.input_names])
             for k, v in assert_sorted(cc.items()):
                 rows.append(f"     INPUT-SEQ: {v:3d} x {k}t")
-            cc = Counter(
-                [self.get_type(i) for i in self.output_names if not self.is_sequence(i)]
-            )
+            cc = Counter([self.get_type(i) for i in self.output_names if not self.is_sequence(i)])
             for k, v in assert_sorted(cc.items()):
                 rows.append(f"        OUTPUT: {v:3d} x {k}t")
             cc = Counter([self.is_sequence(i) for i in self.output_names])
@@ -6729,9 +6624,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             f"{i}/{len(self.initializers_dict)}:{k}"
                         )
 
-        self.initializers_dict = {
-            k: v for k, v in self.initializers_dict.items() if k in marked
-        }
+        self.initializers_dict = {k: v for k, v in self.initializers_dict.items() if k in marked}
         self.constants_ = {k: v for k, v in self.constants_.items() if k in marked}
 
         if self.optimization_options.verbose > 2:
@@ -6798,9 +6691,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         v = self.constants_[name]
         # It should not be None but a node as it is not an initializer.
-        assert isinstance(
-            v, NodeProto
-        ), f"Unexpected type {type(v)} for constant name={name!r}"
+        assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for constant name={name!r}"
         if self._debug_get_constant:
             print(f"[GraphBuilder-{self._hash()}.compute_constant] {self.pretty_node(v)}")
 
@@ -6890,9 +6781,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             elif v.op_type == "Reshape":
                 # much faster this way
                 output = [
-                    reshape_implementation_with_zero(
-                        feeds[v.input[0]], tuple(feeds[v.input[1]])
-                    )
+                    reshape_implementation_with_zero(feeds[v.input[0]], tuple(feeds[v.input[1]]))
                 ]
             elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
                 # bypassing onnx.numpy_helper.from_array, too slow
@@ -6999,10 +6888,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}.compute_constant] "
                 f"    - A {name}: {self.pretty_tensor(cst)}"
             )
-        assert not self._debug_constant_folding or cst is not None, (
-            f"Unable to compute constant for node {self.pretty_node(v)}"
-            f"{self.get_debug_msg()}"
-        )
+        assert (
+            not self._debug_constant_folding or cst is not None
+        ), f"Unable to compute constant for node {self.pretty_node(v)}{self.get_debug_msg()}"
         return cst, feeds
 
     def constant_folding(
@@ -7041,9 +6929,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 if self.verbose > 4:
                     print(f"[GraphBuilder-{self._hash()}.constant_folding] initializer: {k}")
                 if self._debug_foldnot and k not in self.initializers_dict:
-                    print(
-                        f"[GraphBuilder.constant_folding.0] unable to fold {k!r} (v is None)"
-                    )
+                    print(f"[GraphBuilder.constant_folding.0] unable to fold {k!r} (v is None)")
                 continue
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for k={k!r}"
             if self.verbose > 4:
@@ -7460,9 +7346,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
                 if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
                     # Hidden inputs must be taken care of.
-                    short_replacements = {
-                        k: replacements[k] for k in repi if k in replacements
-                    }
+                    short_replacements = {k: replacements[k] for k in repi if k in replacements}
                     node_attributes = []
                     for att in node.attribute:
                         node_attributes.append(
@@ -7780,9 +7664,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     insert_position, insert_needed_at.get(i, insert_position)
                 )
             for i in node.output:
-                insert_first_at[i] = min(
-                    insert_position, insert_first_at.get(i, insert_position)
-                )
+                insert_first_at[i] = min(insert_position, insert_first_at.get(i, insert_position))
 
         assert len(new_nodes) == len(new_nodes_p), (
             f"Length mismatch between len(new_nodes)={len(new_nodes)} == "
@@ -8114,9 +7996,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         f"Unexpected value for y={y!r}, i={i!r} in node Gather "
                         f"with inputs={node.input}{self.get_debug_msg()}"
                     )
-                    self.set_value_shape(
-                        node.output[0], (y[ii],) if i.shape == (1,) else y[ii]
-                    )
+                    self.set_value_shape(node.output[0], (y[ii],) if i.shape == (1,) else y[ii])
                     self.set_shape(node.output[0], (1,) if i.shape == (1,) else tuple())
                     node.doc_string += "#SV-Ga7"
                     return True
@@ -8361,14 +8241,10 @@ class GraphBuilder(_GraphBuilderRuntime):
             print("[GraphBuilder.infer_shapes]")
         res = {}
         for node in self.nodes:
-            old_shapes = [
-                (self.get_shape(o) if self.has_shape(o) else None) for o in node.output
-            ]
+            old_shapes = [(self.get_shape(o) if self.has_shape(o) else None) for o in node.output]
             self.simple_update_value_shape_with_node(node)
             self._make_node_set_type_shape(node)
-            new_shapes = [
-                (self.get_shape(o) if self.has_shape(o) else None) for o in node.output
-            ]
+            new_shapes = [(self.get_shape(o) if self.has_shape(o) else None) for o in node.output]
             diff = {}
             for n, a, b in zip(node.output, old_shapes, new_shapes):
                 if a != b:
@@ -8614,14 +8490,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                     )
 
                 if replaced:
-                    self.set_shape(
-                        node.output[0], self.get_shape(node.input[0]), allow_zero=True
-                    )
+                    self.set_shape(node.output[0], self.get_shape(node.input[0]), allow_zero=True)
                     self.set_type(node.output[0], self.get_type(node.input[0]))
                 else:
-                    self.set_shape(
-                        node.output[0], self._get_tensor_shape(node), allow_zero=True
-                    )
+                    self.set_shape(node.output[0], self._get_tensor_shape(node), allow_zero=True)
                     self.set_type(node.output[0], self._get_tensor_type(node))
             elif node.op_type == "ConstantOfShape" and self.is_constant(node.input[0]):
                 exist = self.is_exact_same_constant(node)
@@ -8672,9 +8544,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     self._update_shape_types_with_proto_one_result(available_shapes[o])
 
             if not infer_shapes_options:
-                if any(
-                    (x not in available_shapes and not self.has_type(x)) for x in node.output
-                ):
+                if any((x not in available_shapes and not self.has_type(x)) for x in node.output):
                     # second try
                     self._make_node_set_type_shape(node)
 
@@ -8967,9 +8837,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_inits.append(repl_name)
 
             if self._debug_local_function:
-                print(
-                    f"[GraphBuilder-{self._hash()}.make_local_function] new_inits={new_inits}"
-                )
+                print(f"[GraphBuilder-{self._hash()}.make_local_function] new_inits={new_inits}")
         else:
             new_inits = []
 
@@ -9208,9 +9076,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"dtype={res.dtype}, expected dtype={a.dtype}"
             )
             return res
-        raise AssertionError(
-            f"Unsupported type {type(a)}, unable to convert to a torch.Tensor."
-        )
+        raise AssertionError(f"Unsupported type {type(a)}, unable to convert to a torch.Tensor.")
 
     def inline_functions(self, verbose: int = 0) -> int:
         """
@@ -9247,9 +9113,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         stats = []
         self._check(stats, step="before inline")
         begin = time.perf_counter()
-        inlined = self._inline_functions_iteration(
-            verbose=verbose, skip_functions=skip_functions
-        )
+        inlined = self._inline_functions_iteration(verbose=verbose, skip_functions=skip_functions)
         stats.append(
             dict(
                 pattern="inline",
@@ -9486,9 +9350,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 new_atts.append(
                     oh.make_attribute(
                         att.name,
-                        self._rename_results_in_subgraph(
-                            att.g, replacements=replacements.copy()
-                        ),
+                        self._rename_results_in_subgraph(att.g, replacements=replacements.copy()),
                     )
                     if att.type == AttributeProto.GRAPH
                     else att
@@ -9513,9 +9375,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"att.name={att.name!r}, not implemented with att.type={att.type} "
                     f"(AttributeProto.GRAPHS)"
                 )
-                new_g = self._rename_results_in_subgraph(
-                    att.g, replacements=replacements.copy()
-                )
+                new_g = self._rename_results_in_subgraph(att.g, replacements=replacements.copy())
                 if make_idg(new_g) != make_idg(g):
                     diff = True
                     new_atts.append(
@@ -9636,9 +9496,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.add_constant_node(cst)
             self.update_node_constant(proto.name, cst)
             assert self.has_type(proto.name), f"Type is missing for initializer {proto.name!r}"
-            assert self.has_shape(
-                proto.name
-            ), f"Shape is missing for initializer {proto.name!r}"
+            assert self.has_shape(proto.name), f"Shape is missing for initializer {proto.name!r}"
 
         if to_remove:
             remove = set(to_remove)
@@ -9972,9 +9830,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             elif isinstance(a, (list, tuple)):
                 input_names.extend(self.extract_input_names_from_args(a))
             elif isinstance(a, slice):
-                input_names.extend(
-                    self.extract_input_names_from_args([a.start, a.stop, a.step])
-                )
+                input_names.extend(self.extract_input_names_from_args([a.start, a.stop, a.step]))
         dedup_names = []
         unique = set()
         for i in input_names:

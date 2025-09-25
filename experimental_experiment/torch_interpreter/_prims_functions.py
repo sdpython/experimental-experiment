@@ -176,9 +176,7 @@ def prims_collapse_view(
     name: str = "prims_collapse_view",
 ) -> T:
     "reshape"
-    assert g.has_shape(
-        x
-    ), f"collapse_view not implemented if x has no shape{g.get_debug_msg()}"
+    assert g.has_shape(x), f"collapse_view not implemented if x has no shape{g.get_debug_msg()}"
     shape = g.get_shape(x)
     start = (start + len(shape)) % len(shape)
     end = (end + len(shape)) % len(shape)
@@ -324,9 +322,7 @@ def prims_iota(
     requires_grad: bool = False,
 ) -> T:
     "arange"
-    assert isinstance(
-        length, int
-    ), f"not implemented when length={length!r}{g.get_debug_msg()}"
+    assert isinstance(length, int), f"not implemented when length={length!r}{g.get_debug_msg()}"
     assert isinstance(start, int), f"not implemented when start={start!r}{g.get_debug_msg()}"
     assert isinstance(step, int), f"not implemented when step={step!r}{g.get_debug_msg()}"
     end = start + length * step
@@ -513,9 +509,7 @@ def prims_transpose(
     return res
 
 
-def prims_view_of(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def prims_view_of(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "identity"
     return g.op.Identity(x, outputs=outputs, name="prims_view_of")
 
@@ -545,9 +539,7 @@ def prims_where(
     if not sts:
         g.set_type(res, g.get_type(other))
         if g.has_shape(condition) and g.has_shape(other):
-            shape = broadcast_shape(
-                g.get_shape(condition), g.get_shape(other), graph_builder=g
-            )
+            shape = broadcast_shape(g.get_shape(condition), g.get_shape(other), graph_builder=g)
             g.set_shape(res, shape)
         else:
             g.set_rank(max(g.get_rank(condition), g.get_rank(other)))

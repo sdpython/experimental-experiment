@@ -383,9 +383,7 @@ class DynamoInterpreter:
             and self.example_inputs_ is not None
             and not self.builder.was_inputs_renamed
         ):
-            assert (
-                len(self.builder.input_names) < len(self.flat_example_inputs_) or not users
-            ), (
+            assert len(self.builder.input_names) < len(self.flat_example_inputs_) or not users, (
                 f"Too many inputs already ({len(self.builder.input_names)}), "
                 f"self.current_input_={self.current_input_}, "
                 f"unexpected {name!r}, users={users}, "
@@ -626,9 +624,7 @@ class DynamoInterpreter:
                             users=node.users,
                         )
 
-            if value is None or isinstance(
-                value, self.torch._subclasses.fake_tensor.FakeTensor
-            ):
+            if value is None or isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
                 if ".FakeTensor" in str(type(val)):
                     dtype = val.dtype
                     shape = val.shape
@@ -736,9 +732,7 @@ class DynamoInterpreter:
                         self.builder.set_shape(o, tuple())
                     outputs.append((None, o))
                 else:
-                    self.builder.make_node(
-                        "Identity", [a_name], [o], check=False, name=".output"
-                    )
+                    self.builder.make_node("Identity", [a_name], [o], check=False, name=".output")
                     outputs.append((a_name, o))
 
         val = node.meta.get("val", None)
@@ -916,9 +910,7 @@ class DynamoInterpreter:
     ):
         assert isinstance(axes, list), f"Unexpected type {type(axes)} for axes"
         assert all_int(axes), f"Expected only integer axis but got {axes}"
-        assert len(axes) == len(
-            index_slice
-        ), f"Length mismatch {len(axes)} != {len(index_slice)}"
+        assert len(axes) == len(index_slice), f"Length mismatch {len(axes)} != {len(index_slice)}"
 
         # axes
         aaxes = np.array(axes, dtype=np.int64)
@@ -1240,13 +1232,9 @@ class DynamoInterpreter:
                     if self.builder.has_type(result_name):
                         self.builder.set_type(node.name, self.builder.get_type(result_name))
                     if self.builder.has_shape(result_name):
-                        self.builder.set_shape(
-                            node.name, self.builder.get_shape(result_name)[1:]
-                        )
+                        self.builder.set_shape(node.name, self.builder.get_shape(result_name)[1:])
                     elif self.builder.has_rank(result_name):
-                        self.builder.set_rank(
-                            node.name, self.builder.get_rank(result_name) - 1
-                        )
+                        self.builder.set_rank(node.name, self.builder.get_rank(result_name) - 1)
                 return res
 
         if isinstance(index, slice):
@@ -1418,9 +1406,7 @@ class DynamoInterpreter:
         if fct is None:
             fct, lookup, lookup_names = find_function(aten_name)
         if self.dispatcher is not None:
-            fct = self.dispatcher.fallback(
-                aten_name, fct, node.args, node.kwargs, self.builder
-            )
+            fct = self.dispatcher.fallback(aten_name, fct, node.args, node.kwargs, self.builder)
 
         if fct is None:
             raise FunctionNotFoundError(
@@ -1577,9 +1563,7 @@ class DynamoInterpreter:
         method_name = node.target
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.call_method][{method_name}]")
-        assert isinstance(
-            node.args, tuple
-        ), f"Unexpected type {type(node.args)} for node.args."
+        assert isinstance(node.args, tuple), f"Unexpected type {type(node.args)} for node.args."
 
         fct = None
         if self.dispatcher is not None:
@@ -1639,9 +1623,7 @@ class DynamoInterpreter:
             f"Unexpected type {type(name_fct)} for name_fct={name_fct}"
             f"{self.builder.get_debug_msg()}"
         )
-        assert (
-            "<" not in name_fct
-        ), f"Unexpected name {name_fct!r}{self.builder.get_debug_msg()}"
+        assert "<" not in name_fct, f"Unexpected name {name_fct!r}{self.builder.get_debug_msg()}"
         # Collects inputs
         input_names = self.builder.extract_input_names_from_args(args)
 
@@ -1658,9 +1640,7 @@ class DynamoInterpreter:
                 f"({', '.join(input_names)}) -> {', '.join(output_names)}"
             )
 
-        new_builder = self.builder.make_subset_builder(
-            input_names, name=name_fct, domain=domain
-        )
+        new_builder = self.builder.make_subset_builder(input_names, name=name_fct, domain=domain)
         try:
             res = fct(new_builder, can_set, output_names, *args, **kwargs)
         except AssertionError as e:
@@ -1736,9 +1716,7 @@ class DynamoInterpreter:
                 ("" if val[i] is None else f"{node.name}#{i}") for i in range(n_outputs)
             ]
         else:
-            assert isinstance(
-                node.name, str
-            ), f"Unexpected type {type(node.name)} for node.name"
+            assert isinstance(node.name, str), f"Unexpected type {type(node.name)} for node.name"
             output_names = [node.name]
         return output_names
 
@@ -1789,9 +1767,7 @@ class DynamoInterpreter:
                     f"node.name={node.name}, target={getattr(node, 'target', '?')!r}"
                     f"{self.builder.get_debug_msg()}"
                 )
-                self.builder.make_node(
-                    "Identity", [res], [node.name], name="_check_output_name"
-                )
+                self.builder.make_node("Identity", [res], [node.name], name="_check_output_name")
                 res = node.name
         else:
             raise NotImplementedError(
@@ -1996,8 +1972,7 @@ class DynamoInterpreter:
                             r,
                             itype,
                             shapes=tuple(
-                                tuple(map(self.builder._torch_sym_int_to_str, _.shape))
-                                for _ in v
+                                tuple(map(self.builder._torch_sym_int_to_str, _.shape)) for _ in v
                             ),
                         )
                 else:
@@ -2127,9 +2102,7 @@ class DynamoInterpreter:
             module_name = source_node.target
             if module_name in self.named_modules:
                 module_child = self.named_modules[module_name]
-                interpreter.register_named_modules(
-                    self, None, dict(module_child.named_modules())
-                )
+                interpreter.register_named_modules(self, None, dict(module_child.named_modules()))
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
 

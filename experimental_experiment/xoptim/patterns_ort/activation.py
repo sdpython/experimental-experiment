@@ -46,10 +46,7 @@ class BiasGeluPattern(PatternOptimization):
         add_1 = add_next[0]
         if add_1.op_type != "Add" or add_1.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
-        if (
-            not g.is_constant_scalar(add_1.input[1])
-            or g.get_constant_scalar(add_1.input[1]) != 1
-        ):
+        if not g.is_constant_scalar(add_1.input[1]) or g.get_constant_scalar(add_1.input[1]) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
 
         muls = g.next_nodes(add_1.output[0])
@@ -74,9 +71,7 @@ class BiasGeluPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(
-            self, [add, div, node, add_1, mul, half], self.apply, insert_at=node
-        )
+        return MatchResult(self, [add, div, node, add_1, mul, half], self.apply, insert_at=node)
 
     def apply(
         self,

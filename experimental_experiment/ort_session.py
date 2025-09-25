@@ -117,9 +117,7 @@ class _InferenceSession:
             self.has_onnxruntime_training() if use_training_api is None else use_training_api
         )
 
-        DEVICES = {
-            -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
-        }
+        DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 
         if torch.cuda.device_count() > 0:
             for i in range(torch.cuda.device_count()):

@@ -112,9 +112,7 @@ class TestGraphPatternRepeated(ExtTestCase):
         self.assertEqual(["a3"], pattern._apply_model.output)
         self.assertEqual(["X", "de", "un"], pattern._apply_model.node[0].input)
         self.assertEqual(["a3"], pattern._apply_model.node[0].output)
-        builder = GraphBuilder(
-            onx, optimization_options=OptimizationOptions(patterns=[pattern])
-        )
+        builder = GraphBuilder(onx, optimization_options=OptimizationOptions(patterns=[pattern]))
         self.assertNotEmpty(builder.initializers_dict)
         builder._check([], "test")
         new_onx = builder.to_onnx()

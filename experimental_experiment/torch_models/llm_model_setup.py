@@ -102,9 +102,7 @@ def get_input_cache(
             cache.conv_states = [
                 torch.randn(t.shape).to(torch.float32) for t in cache.conv_states
             ]
-            cache.ssm_states = [
-                torch.randn(t.shape).to(torch.float32) for t in cache.ssm_states
-            ]
+            cache.ssm_states = [torch.randn(t.shape).to(torch.float32) for t in cache.ssm_states]
         else:
             cache.conv_states = torch.randn(cache.conv_states.shape).to(torch.float32)
             cache.ssm_states = torch.randn(cache.ssm_states.shape).to(torch.float32)
@@ -147,9 +145,7 @@ def finalize_llm_setup(
 
     if seq_length_multiple > 1:
         sequence_length = (
-            (sequence_length + seq_length_multiple)
-            // seq_length_multiple
-            * seq_length_multiple
+            (sequence_length + seq_length_multiple) // seq_length_multiple * seq_length_multiple
         )
         sequence_inc = seq_length_multiple
         sequence_length2 = seq_length_multiple
@@ -279,9 +275,7 @@ def finalize_llm_vision_setup(
     if input_kind == LLMInputKind.input_ids:
         dim = (1, 30)
         inputs = dict(input_ids=torch.randint(0, max_token_id, dim).to(torch.int64))
-        shapes = {
-            "input_ids": {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")}
-        }
+        shapes = {"input_ids": {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq_length")}}
     elif input_kind == LLMInputKind.input_ids | LLMInputKind.attention_mask:
         dim = (1, 30)
         inputs = dict(

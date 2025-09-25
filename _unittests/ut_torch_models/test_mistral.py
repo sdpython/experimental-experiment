@@ -113,8 +113,7 @@ class TestMistral(ExtTestCase):
         if assert_counting:
             self._assert_counting_information(
                 local_ort,
-                expected_execution_count=len(example_args_collection)
-                * number_of_captured_graphs,
+                expected_execution_count=len(example_args_collection) * number_of_captured_graphs,
                 number_of_cached_graph_modules=number_of_captured_graphs,
                 number_of_exported_onnx_models_for_all_graph_modules=(1,)
                 * number_of_captured_graphs,

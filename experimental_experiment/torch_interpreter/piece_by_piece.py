@@ -160,7 +160,7 @@ class ModelDiagnoseOutput:
     """
     Contains inputs and outputs, traced results when tracing
     intermediate results. An instance of this class is produced
-    by :func:`experimental_experiment.torch_interpreter.
+    by :mod:`experimental_experiment.torch_interpreter.
     piece_by_piece.trace_execution_piece_by_piece`.
     Example :ref:`l-plot-exporter-exporter-phi35-piece` tells you
     more about how to use this class.
@@ -243,9 +243,7 @@ class ModelDiagnoseOutput:
             for p in self.signature.parameters.values()
             if p.kind in (p.VAR_POSITIONAL, p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
         ]
-        names = [
-            p.name for p in self.signature.parameters.values() if p.kind == p.VAR_POSITIONAL
-        ]
+        names = [p.name for p in self.signature.parameters.values() if p.kind == p.VAR_POSITIONAL]
         self.forward_args = names[0] if names else None
         names = [p.name for p in self.signature.parameters.values() if p.kind == p.VAR_KEYWORD]
         self.forward_kwargs = names[0] if names else None
@@ -318,10 +316,9 @@ class ModelDiagnoseOutput:
         :param with_inputs: show inputs and outputs shapes
         :return: text
         """
-        assert len(self.inputs) == len(self.outputs), (
-            f"Number if inputs / outputs mismatch {len(self.inputs)} != "
-            f"{len(self.outputs)}"
-        )
+        assert len(self.inputs) == len(
+            self.outputs
+        ), f"Number if inputs / outputs mismatch {len(self.inputs)} != {len(self.outputs)}"
         kws = dict(with_shape=with_shape, with_min_max=with_min_max, with_device=with_device)
         indent = "    " * self.level
         if not self.children and not with_inputs and not any(kws.values()):
@@ -457,9 +454,7 @@ class ModelDiagnoseOutput:
 
     def guess_dynamic_shape_object(self, *objs: Any, msg: Optional[Callable] = None) -> Any:
         """Guesses the dynamic shapes for one argument."""
-        assert (
-            len(objs) > 1
-        ), f"Unable to infer shapes with only one object {string_type(objs)}"
+        assert len(objs) > 1, f"Unable to infer shapes with only one object {string_type(objs)}"
         set_types = set(type(o) for o in objs)
         assert (
             len(set_types) == 1
@@ -474,9 +469,7 @@ class ModelDiagnoseOutput:
 
         if isinstance(obj, tuple):
             kl = set(len(o) for o in objs)
-            assert (
-                len(kl) == 1
-            ), f"Unexpected variety of tuple lengths {kl}{msg() if msg else ''}"
+            assert len(kl) == 1, f"Unexpected variety of tuple lengths {kl}{msg() if msg else ''}"
             shapes = []
             for i in range(kl.pop()):
                 shapes.append(self.guess_dynamic_shape_object(*[o[i] for o in objs]))
@@ -484,9 +477,7 @@ class ModelDiagnoseOutput:
 
         if isinstance(obj, list):
             kl = set(len(o) for o in objs)
-            assert (
-                len(kl) == 1
-            ), f"Unexpected variety of list lengths {kl}{msg() if msg else ''}"
+            assert len(kl) == 1, f"Unexpected variety of list lengths {kl}{msg() if msg else ''}"
             shapes = []
             for i in range(kl.pop()):
                 shapes.append(self.guess_dynamic_shape_object(*[o[i] for o in objs]))
@@ -511,9 +502,7 @@ class ModelDiagnoseOutput:
             key_cache = []
             for i in range(kc.pop()):
                 key_cache.append(
-                    self.guess_dynamic_dimensions(
-                        *[CacheKeyValue(o).key_cache[i] for o in objs]
-                    )
+                    self.guess_dynamic_dimensions(*[CacheKeyValue(o).key_cache[i] for o in objs])
                 )
             value_cache = []
             for i in range(vc.pop()):
@@ -545,9 +534,7 @@ class ModelDiagnoseOutput:
 
         # Otherwise.
         s1 = set(len(i[0]) for i in self.inputs)
-        assert (
-            len(s1) == 1
-        ), f"Different numbers of unnamed arguments {s1} for {self.full_name}"
+        assert len(s1) == 1, f"Different numbers of unnamed arguments {s1} for {self.full_name}"
         s2 = set(tuple(sorted(set(i[1]))) for i in self.inputs)
         assert len(s2) == 1, f"Different named arguments {s2} for {self.full_name}"
         args = []
@@ -692,12 +679,8 @@ class ModelDiagnoseOutput:
             annotated = self._annotation_from_type(o)
         if isinstance(annotated, str):
             return f"{annotated} {name}"
-        assert isinstance(
-            annotated, list
-        ), f"unexpected type {type(annotated)} for name={name!r}"
-        return ", ".join(
-            [f"{t} {name}_n{len(annotated)}_{i}" for i, t in enumerate(annotated)]
-        )
+        assert isinstance(annotated, list), f"unexpected type {type(annotated)} for name={name!r}"
+        return ", ".join([f"{t} {name}_n{len(annotated)}_{i}" for i, t in enumerate(annotated)])
 
     def _annotated_output(self):
         outputs = []
@@ -735,9 +718,7 @@ class ModelDiagnoseOutput:
             print(f"-- REGISTER: {self.custom_op_name} - {self.full_name}")
             print(f"   schema_str={schema_str}")
             print(f"   inputs={string_type(self.inputs[0], limit=20)}")
-        assert (
-            "**" not in schema_str
-        ), f"{self.full_name}: '**' is not support in {schema_str!r}"
+        assert "**" not in schema_str, f"{self.full_name}: '**' is not support in {schema_str!r}"
         if verbose > 2:
             print(f"[try_export._register] {self.dot_name} schema_str={schema_str!r}")
 
@@ -831,9 +812,7 @@ class ModelDiagnoseOutput:
                     verbose=verbose,
                     shape_functions=shape_functions,
                 )
-                assert (
-                    sh_fct
-                ), f"{_msg_(i)}\nNo function could be found to produce shape {shape}."
+                assert sh_fct, f"{_msg_(i)}\nNo function could be found to produce shape {shape}."
                 shape_fct[i] = sh_fct
 
         # When a shape is not mapped, it is a constant.
@@ -859,9 +838,7 @@ class ModelDiagnoseOutput:
                 f"  --- flattened_inputs="
                 f"{string_type(flattened_inputs[0], with_shape=True, limit=20)}"
             )
-            print(
-                f"  -- flattened_outputs={string_type(flattened_outputs[0], with_shape=True)}"
-            )
+            print(f"  -- flattened_outputs={string_type(flattened_outputs[0], with_shape=True)}")
             for i in res:
                 print(f"  -- {i}")
         return res
@@ -924,8 +901,7 @@ class ModelDiagnoseOutput:
                             for a, b in zip(shape_o, expected_shape_o)
                             if a not in (0, 111111) and a != b
                         ]
-                        if shape_o != expected_shape_o
-                        and len(shape_o) == len(expected_shape_o)
+                        if shape_o != expected_shape_o and len(shape_o) == len(expected_shape_o)
                         else None
                     )
                     assert not true_diff, (
@@ -1412,9 +1388,7 @@ class ModelDiagnoseOutput:
             setattr(self.model, self.method_name, self.forward_calling_custom_op)
             return self.forward_custom_op_schema
 
-        assert (
-            self.inputs
-        ), f"{self.full_name}: no input found, other inputs should be provided."
+        assert self.inputs, f"{self.full_name}: no input found, other inputs should be provided."
         if all(isinstance(t, torch.Tensor) for t in self.inputs[0]) and all(
             isinstance(t, torch.Tensor) for t in self.outputs[0]
         ):
@@ -1424,9 +1398,7 @@ class ModelDiagnoseOutput:
             )
         self.forward_custom_op_serialize = True
         self.forward_need_serialization = self.forward_custom_op_serialize
-        return self._put_custom_op_inplace_any(
-            verbose=verbose, shape_functions=shape_functions
-        )
+        return self._put_custom_op_inplace_any(verbose=verbose, shape_functions=shape_functions)
 
     def remove_custom_op_inplace(self, verbose: int = 0):
         """
@@ -1561,9 +1533,7 @@ class ModelDiagnoseOutput:
                 f"{string_type(self.inputs[0], with_shape=True, with_min_max=True, limit=20)}"
             )
             print(f"  args={string_type(args, with_shape=True, with_min_max=True, limit=20)}")
-            print(
-                f"kwargs={string_type(kwargs, with_shape=True, with_min_max=True, limit=20)}"
-            )
+            print(f"kwargs={string_type(kwargs, with_shape=True, with_min_max=True, limit=20)}")
             if dynamic_shapes:
                 print(f"   ds0={dynamic_shapes}")
             if ds:
@@ -1984,10 +1954,9 @@ class ModelDiagnoseOutput:
         on a particular op and avoid catching the exception if any.
         """
         allowed = {"fx", "onnx_dynamo", "torch_script", "to_onnx"}
-        assert exporter in allowed, (
-            f"{self.full_name}: unexpected value for exporter={exporter!r} "
-            f"not in {allowed}"
-        )
+        assert (
+            exporter in allowed
+        ), f"{self.full_name}: unexpected value for exporter={exporter!r} not in {allowed}"
         self.verifies(quiet=quiet)
         custom_op_strat = self._do_replace_by_custom_op(replace_by_custom_op)
         if verbose and self.level == 0:
@@ -2495,9 +2464,7 @@ class ModelDiagnoseOutput:
         if self.children:
             stats = []
             for child in self.children:
-                if dispatcher and dispatcher.find_function(
-                    f"diag_lib::{child.custom_op_name}"
-                ):
+                if dispatcher and dispatcher.find_function(f"diag_lib::{child.custom_op_name}"):
                     # No need to export.
                     if verbose:
                         print(
@@ -2703,9 +2670,7 @@ class ModelDiagnoseOutput:
                             dict(feeds=feeds, inputs=self.inputs[i], outputs=self.outputs[i]),
                             f,
                         )
-                    print(
-                        f"[onnx_run_disc] {self.dot_name} saving failing model into {name!r}"
-                    )
+                    print(f"[onnx_run_disc] {self.dot_name} saving failing model into {name!r}")
                     print(
                         f"[onnx_run_disc] {self.dot_name} saving "
                         f"exported program into {ep_name!r}"
@@ -2737,9 +2702,7 @@ class ModelDiagnoseOutput:
                         f"{string_diff(diff)}, model saved into {name!r} and {ep_name!r}"
                         f"\n-- intermediate differences --\n{pprint.pformat(diffs)}"
                     )
-                raise ValueError(
-                    f"{self.full_name}: discrepancies detected: {string_diff(diff)}"
-                )
+                raise ValueError(f"{self.full_name}: discrepancies detected: {string_diff(diff)}")
             diffs.append(diff)
             if verbose:
                 print(f"[onnx_run_disc] {self.dot_name} diff={string_diff(diff)}")

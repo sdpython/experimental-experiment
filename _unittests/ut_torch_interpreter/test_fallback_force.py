@@ -342,9 +342,7 @@ class TestFallbackForce(ExtTestCase):
             input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
         )
         model = model.to("cuda")
-        example_args_collection = [
-            [i.to("cuda") for i in inp] for inp in example_args_collection
-        ]
+        example_args_collection = [[i.to("cuda") for i in inp] for inp in example_args_collection]
 
         expected = model(*example_args_collection[0])
 
@@ -418,9 +416,7 @@ class TestFallbackForce(ExtTestCase):
             input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
         )
         model = model.to("cuda")
-        example_args_collection = [
-            [i.to("cuda") for i in inp] for inp in example_args_collection
-        ]
+        example_args_collection = [[i.to("cuda") for i in inp] for inp in example_args_collection]
 
         expected = model(*example_args_collection[0])
         expected[0].sum().backward()

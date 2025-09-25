@@ -23,9 +23,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
             cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
-                lambda *_, **__: None
-            )
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = lambda *_, **__: None
 
     @classmethod
     def tearDown(cls):
@@ -98,9 +96,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug,
                     decompositions=(
-                        filter_decomposition_table()
-                        if decompositions is True
-                        else decompositions
+                        filter_decomposition_table() if decompositions is True else decompositions
                     ),
                 )
             else:
@@ -193,9 +189,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
+    @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     # @unittest.skip("aten_embedding receives the inputs in the other way")
     def test_llama_model_forward(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
@@ -219,9 +213,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
+    @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     def test_llama_model_backward_forward(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
@@ -244,9 +236,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
+    @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     def test_llama_model_backward_forward_mixed(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
@@ -270,9 +260,7 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
+    @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     def test_llama_model_backward_mixed(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 

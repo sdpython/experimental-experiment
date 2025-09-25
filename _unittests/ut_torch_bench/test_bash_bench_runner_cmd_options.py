@@ -249,9 +249,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
             with self.subTest(exporter=exporter):
                 if exporter == "export":
                     raise unittest.SkipTest("this one does not work")
-                self._export_cmd(
-                    exporter, "101DummyNoneListInt", dynamic=False, check_file=False
-                )
+                self._export_cmd(exporter, "101DummyNoneListInt", dynamic=False, check_file=False)
 
     # dict, none, int
 
@@ -260,9 +258,7 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     def test_eager_none_int_dict(self):
         for exporter in ["eager", "export"]:
             with self.subTest(exporter=exporter):
-                self._export_cmd(
-                    exporter, "101DummyNoneIntDict", dynamic=False, check_file=False
-                )
+                self._export_cmd(exporter, "101DummyNoneIntDict", dynamic=False, check_file=False)
 
     # DynamicCache
 

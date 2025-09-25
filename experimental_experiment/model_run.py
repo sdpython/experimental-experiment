@@ -190,9 +190,7 @@ def model_run(
     # measures the correlation with the previous value
     stats["time_latency_t_corrp"] = np.corrcoef(np_times[1:], np_times[:-1])[0, 1]
     stats["time_latency"] = stats["time_latency_total"] / len(times)
-    stats["time_latency_t_qu"] = "/".join(
-        map(str, np.quantile(np_times, np.arange(11) / 10.0))
-    )
+    stats["time_latency_t_qu"] = "/".join(map(str, np.quantile(np_times, np.arange(11) / 10.0)))
 
     if verbose:
         print(f"[model_run] inference took {stats['time_latency_total']}")

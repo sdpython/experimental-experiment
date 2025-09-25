@@ -148,10 +148,7 @@ def main(args=None):
         conversion = {}
         memory_stats = {}
 
-        print(
-            f"Exporter model with exporter={args.exporter}, "
-            f"n_inputs={len(example_inputs[0])}"
-        )
+        print(f"Exporter model with exporter={args.exporter}, n_inputs={len(example_inputs[0])}")
         if args.exporter == "eager":
             print("[export_model] start benchmark")
             begin = time.perf_counter()
@@ -168,9 +165,7 @@ def main(args=None):
             begin = time.perf_counter()
 
             memory_session = (
-                start_spying_on(cuda=args.device.startswith("cuda"))
-                if args.memory_peak
-                else None
+                start_spying_on(cuda=args.device.startswith("cuda")) if args.memory_peak else None
             )
             print(f"[export_model] start memory peak monitoring {memory_session}")
             proto = common_export(

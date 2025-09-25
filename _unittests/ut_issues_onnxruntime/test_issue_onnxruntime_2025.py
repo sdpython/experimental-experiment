@@ -104,9 +104,7 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(got[0], np.array([5], dtype=np.int64))
 
-        sess = ort.InferenceSession(
-            model.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess = ort.InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess.run(None, feeds)
         self.assertEqualArray(got[0], np.array([5], dtype=np.int64))
 

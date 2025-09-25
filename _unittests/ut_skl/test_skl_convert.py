@@ -30,9 +30,7 @@ class TestSklConvert(ExtTestCase):
         onx = to_onnx(lr, verbose=10)
         self.print_model(onx)
         ref = ExtendedReferenceEvaluator(onx)
-        self.assertEqualArray(
-            lr.predict(X), ref.run(None, {ref.input_names[0]: X})[0], atol=1e-5
-        )
+        self.assertEqualArray(lr.predict(X), ref.run(None, {ref.input_names[0]: X})[0], atol=1e-5)
 
     @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     @ignore_warnings(DeprecationWarning)
@@ -62,9 +60,7 @@ class TestSklConvert(ExtTestCase):
         onx = to_onnx(lr, verbose=10, input_names=["S"])
         self.assertEqual(onx.graph.input[0].name, "S")
         ref = ExtendedReferenceEvaluator(onx)
-        self.assertEqualArray(
-            lr.predict(X), ref.run(None, {ref.input_names[0]: X})[0], atol=1e-5
-        )
+        self.assertEqualArray(lr.predict(X), ref.run(None, {ref.input_names[0]: X})[0], atol=1e-5)
 
     @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     def test_nan_to_euclidean(self):

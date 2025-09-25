@@ -761,9 +761,7 @@ class TestPieceByPiece(ExtTestCase):
             ((torch.randn((6, 6, 6, 6)), cache2), {}),
         ]
 
-        expected_dyn_shapes = (
-            "(({0: DYN, 2: DYN}, [[{0: DYN, 2: DYN}], [{0: DYN, 2: DYN}]]), {})"
-        )
+        expected_dyn_shapes = "(({0: DYN, 2: DYN}, [[{0: DYN, 2: DYN}], [{0: DYN, 2: DYN}]]), {})"
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
         got = (
@@ -1670,9 +1668,7 @@ class TestPieceByPiece(ExtTestCase):
             quiet=0,
             shape_functions={
                 "SubModel": {
-                    0: lambda *args, **kwargs: torch.empty(
-                        (args[1].shape[0], args[0].shape[1])
-                    )
+                    0: lambda *args, **kwargs: torch.empty((args[1].shape[0], args[0].shape[1]))
                 }
             },
         )
@@ -2021,7 +2017,7 @@ class TestPieceByPiece(ExtTestCase):
         This must be fixed before before able to export every submodule.
         """
 
-        with register_additional_serialization_functions():
+        with register_additional_serialization_functions(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,
@@ -2087,7 +2083,7 @@ class TestPieceByPiece(ExtTestCase):
         This must be fixed before before able to export every submodule.
         """
 
-        with register_additional_serialization_functions():
+        with register_additional_serialization_functions(patch_transformers=True):
             ep = diag.try_export(
                 exporter="fx",
                 use_dynamic_shapes=True,

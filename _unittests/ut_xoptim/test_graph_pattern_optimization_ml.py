@@ -179,9 +179,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
         ref = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
         expected = ref.run(None, feeds)[0]
 
-        sess = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess = InferenceSession(opt_onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -314,9 +312,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         from onnxruntime import InferenceSession
 
-        sess2 = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess2 = InferenceSession(opt_onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -457,9 +453,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         from onnxruntime import InferenceSession
 
-        sess2 = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess2 = InferenceSession(opt_onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -596,9 +590,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         from onnxruntime import InferenceSession
 
-        sess2 = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess2 = InferenceSession(opt_onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -740,9 +732,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         from onnxruntime import InferenceSession
 
-        sess2 = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess2 = InferenceSession(opt_onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -875,9 +865,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         from onnxruntime import InferenceSession
 
-        sess2 = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess2 = InferenceSession(opt_onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -1010,9 +998,7 @@ class TestGraphPatternOptimizationMl(ExtTestCase):
 
         from onnxruntime import InferenceSession
 
-        sess2 = InferenceSession(
-            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
+        sess2 = InferenceSession(opt_onx.SerializeToString(), providers=["CPUExecutionProvider"])
         got = sess2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 

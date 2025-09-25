@@ -82,9 +82,7 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
         )
         initializers.append(onh.from_array(np.array(1, dtype=np.int64), name="dim_0_7"))
         initializers.append(onh.from_array(np.array(0, dtype=np.int64), name="val_10"))
-        initializers.append(
-            onh.from_array(np.array(-np.inf, dtype=np.float32), name="val_124")
-        )
+        initializers.append(onh.from_array(np.array(-np.inf, dtype=np.float32), name="val_124"))
         initializers.append(onh.from_array(np.array(0.0, dtype=np.float32), name="val_126"))
         inputs.append(
             oh.make_tensor_value_info(
@@ -191,9 +189,7 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
         nodes.append(
             make_node_extended("Where", ["eq_87", "val_126", "softmax"], ["masked_fill_3"])
         )
-        nodes.append(
-            make_node_extended("MatMul", ["masked_fill_3", "transpose_3"], ["matmul_1"])
-        )
+        nodes.append(make_node_extended("MatMul", ["masked_fill_3", "transpose_3"], ["matmul_1"]))
         nodes.append(
             make_node_extended("Transpose", ["matmul_1"], ["transpose_5"], perm=[0, 2, 1, 3])
         )

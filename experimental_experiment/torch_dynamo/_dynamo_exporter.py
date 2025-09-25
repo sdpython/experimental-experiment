@@ -66,9 +66,7 @@ def _dynamo_export(
     # Cast FX variables if they will result schema-mismatch when searching
     # for ONNX operator. E.g., add(double_tensor, int_tensor) is fine in PyTorch,
     # but ONNX expects add(double_tensor, double_tensor).
-    graph_module = torch.onnx._internal.fx.passes.InsertTypePromotion(
-        context, graph_module
-    ).run()
+    graph_module = torch.onnx._internal.fx.passes.InsertTypePromotion(context, graph_module).run()
 
     # Start the per-node exporting process. It's conceptually a for loop
     # scanning through the nodes in the graph.

@@ -326,8 +326,7 @@ def _SELECTED_FEATURES():
             stat="weight_size_torch",
             new_name="maximum weight size",
             unit="bytes",
-            help="Maximum parameters size, "
-            "useful to guess how much this machine can handle",
+            help="Maximum parameters size, useful to guess how much this machine can handle",
         ),
         dict(
             cat="onnx",
@@ -439,8 +438,7 @@ def _SELECTED_FEATURES():
                 stat=b,
                 new_name=f"speedup/script in {bs}" if s else f"speedup in {bs}",
                 unit="N",
-                help=f"Number of models whose speedup against {ag} "
-                f"falls into this interval",
+                help=f"Number of models whose speedup against {ag} falls into this interval",
                 simple=True,
             )
         )
@@ -651,13 +649,9 @@ def _apply_excel_style(
         if k in {"0raw", "AGG", "AGG2", "0raw_base"}:
             continue
 
-        n_cols = (
-            1 if isinstance(v.index[0], (str, int, np.int64, np.int32)) else len(v.index[0])
-        )
+        n_cols = 1 if isinstance(v.index[0], (str, int, np.int64, np.int32)) else len(v.index[0])
         n_rows = (
-            1
-            if isinstance(v.columns[0], (str, int, np.int64, np.int32))
-            else len(v.columns[0])
+            1 if isinstance(v.columns[0], (str, int, np.int64, np.int32)) else len(v.columns[0])
         )
 
         for i in range(n_cols):
@@ -1044,10 +1038,9 @@ def _reorder_index_level(
 ) -> pandas.DataFrame:
     assert _nonone_(df.index), f"None in {df.index.names}, prefix={prefix!r}"
     assert _nonone_(df.columns), f"None in {df.columns.names}, prefix={prefix!r}"
-    assert set(df.index.names) & set(first_level), (
-        f"Nothing to sort, prefix={prefix!r} "
-        f"df.columns={df.index}, first_level={first_level}"
-    )
+    assert set(df.index.names) & set(
+        first_level
+    ), f"Nothing to sort, prefix={prefix!r} df.columns={df.index}, first_level={first_level}"
 
     c_in = [c for c in first_level if c in set(df.index.names)]
     c_out = [c for c in df.index.names if c not in set(c_in)]
@@ -1105,9 +1098,7 @@ def _create_aggregation_figures(
             n_numerical > 0
         ), f"No numeric column for k={k!r}, dtypes=\n{v.dtypes}"
         assert None not in v.index.names, f"None in v.index.names={v.index.names}, k={k!r}"
-        assert (
-            None not in v.columns.names
-        ), f"None in v.columns.names={v.columns.names}, k={k!r}"
+        assert None not in v.columns.names, f"None in v.columns.names={v.columns.names}, k={k!r}"
 
         if key not in v.index.names:
             v = v.copy()
@@ -1129,9 +1120,7 @@ def _create_aggregation_figures(
         v = v.sort_index(axis=1)
 
         assert None not in v.index.names, f"None in v.index.names={v.index.names}, k={k!r}"
-        assert (
-            None not in v.columns.names
-        ), f"None in v.columns.names={v.columns.names}, k={k!r}"
+        assert None not in v.columns.names, f"None in v.columns.names={v.columns.names}, k={k!r}"
         try:
             gr = v.groupby(key)
         except ValueError as e:
@@ -1174,9 +1163,7 @@ def _create_aggregation_figures(
                 geo_mean = gr.agg(_geo_mean)
             except ValueError as e:
                 if exc:
-                    raise AssertionError(
-                        f"Fails for geo_mean, k={k!r}, v=\n{v.head().T}"
-                    ) from e
+                    raise AssertionError(f"Fails for geo_mean, k={k!r}, v=\n{v.head().T}") from e
                 geo_mean = None
             if geo_mean is not None:
                 stats.append(("GEO-MEAN", geo_mean))
@@ -1246,12 +1233,8 @@ def _create_aggregation_figures(
                 ), f"Unexpected names for df.index.names={df.index.names} (k={k!r})"
                 df = df.to_frame()
                 if df.columns.names == [None]:
-                    df.columns = pandas.MultiIndex.from_arrays(
-                        [("_dummy_",)], names=["_dummy_"]
-                    )
-                    assert _nonone_(
-                        df.columns
-                    ), f"None in {df.columns.names}, k={k!r}, df={df}"
+                    df.columns = pandas.MultiIndex.from_arrays([("_dummy_",)], names=["_dummy_"])
+                    assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, df={df}"
             assert isinstance(df, pandas.DataFrame), f"Unexpected type {type(df)} for k={k!r}"
             assert _nonone_(df.index), f"None in {df.index.names}, k={k!r}"
             assert _nonone_(df.columns), f"None in {df.columns.names}, k={k!r}, df={df}"
@@ -1291,9 +1274,7 @@ def _create_aggregation_figures(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=FutureWarning)
             dfs = dfs.stack(n)
-        assert (
-            None not in dfs.index.names
-        ), f"None in dfs.index.names={dfs.index.names}, n={n!r}"
+        assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}, n={n!r}"
 
     assert None not in dfs.index.names, f"None in dfs.index.names={dfs.index.names}"
     dfs = dfs.sort_index(axis=1).sort_index(axis=0)
@@ -1493,9 +1474,7 @@ def _select_model_metrics(
         for c in stack_levels:
             if c in df.columns.names:
                 with warnings.catch_warnings():
-                    warnings.simplefilter(
-                        "ignore", category=(FutureWarning, PerformanceWarning)
-                    )
+                    warnings.simplefilter("ignore", category=(FutureWarning, PerformanceWarning))
                     df = df.stack(c, dropna=np.nan)
     df = df.sort_index(axis=1)
     return df
@@ -1527,9 +1506,7 @@ def _compute_correlations(
     ], f"Name '_runs_' is already taken in {sorted(df.columns)}"
 
     unique_exporter = df[[*exporter_column, "_runs_"]]
-    n_runs = (
-        unique_exporter.groupby(exporter_column, as_index=False).sum().reset_index(drop=True)
-    )
+    n_runs = unique_exporter.groupby(exporter_column, as_index=False).sum().reset_index(drop=True)
 
     res = {"RUNS": n_runs}
     name_i = [f"{c}_i" for c in exporter_column]
@@ -1792,9 +1769,9 @@ def _process_formulas(
             if "discrepancies_dynamic_abs" in set_columns:
                 col = df["discrepancies_dynamic_abs"] <= 0.1
                 df["status_accuracy_dynamic_rate"] = col.astype(int)
-                df.loc[
-                    df["discrepancies_dynamic_abs"].isna(), "status_accuracy_dynamic_rate"
-                ] = np.nan
+                df.loc[df["discrepancies_dynamic_abs"].isna(), "status_accuracy_dynamic_rate"] = (
+                    np.nan
+                )
                 report_on.append("status_accuracy_dynamic_rate")
             continue
 
@@ -1868,9 +1845,7 @@ def _process_formulas(
                 and len(set(df.exporter)) > 1
             ):
                 expo = (
-                    "export"
-                    if ({"export", "export-nostrict"} & set(df.exporter))
-                    else "compile"
+                    "export" if ({"export", "export-nostrict"} & set(df.exporter)) else "compile"
                 )
                 keep = [*model, *new_keys, "time_export_unbiased"]
                 gr = df[df.exporter == expo][keep].copy()
@@ -2124,9 +2099,7 @@ def _process_formulas(
             err_cols = []
             for c in df.columns:
                 if c.startswith("ERR_") and df[c].dtype in (str, object):
-                    setup = df[c].str.contains(
-                        "Cannot install -r requirements.txt", regex=False
-                    )
+                    setup = df[c].str.contains("Cannot install -r requirements.txt", regex=False)
                     if True in set(setup):
                         add[f"ERR_SETUP_{c[4:]}"] = setup.fillna(0.0).astype(int)
                         report_on.append(f"ERR_SETUP_{c[4:]}")
@@ -2330,16 +2303,12 @@ def build_historical_report(
             sdf = df[df.METRIC.isin(v)]
             if sdf.shape[0] == 0:
                 if verbose:
-                    print(
-                        f"[build_historical_report] empty graph for {k!r}, exporter={exporter}"
-                    )
+                    print(f"[build_historical_report] empty graph for {k!r}, exporter={exporter}")
                 continue
             sdf = sdf.sort_values([*exporter, "suite", "METRIC", "DATE"])
             sdf = sdf[[*exporter, "suite", "METRIC", "DATE", "value"]].copy()
             if verbose:
-                print(
-                    f"[build_historical_report] shape={sdf.shape}, metrics={set(sdf.METRIC)}"
-                )
+                print(f"[build_historical_report] shape={sdf.shape}, metrics={set(sdf.METRIC)}")
                 if verbose > 2:
                     print(sdf.head())
                     print(sdf.tail())

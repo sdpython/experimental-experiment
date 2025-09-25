@@ -39,9 +39,7 @@ def export_utils(
 
         dt = getattr(torch, dtype)
         model = model.to(dt)
-        args = tuple(
-            (i.to(dt) if i.dtype in {torch.float32, torch.float16} else i) for i in args
-        )
+        args = tuple((i.to(dt) if i.dtype in {torch.float32, torch.float16} else i) for i in args)
 
     onx = to_onnx(
         model,
