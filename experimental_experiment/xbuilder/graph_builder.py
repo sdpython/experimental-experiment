@@ -9982,3 +9982,31 @@ class GraphBuilder(_GraphBuilderRuntime):
                 dedup_names.append(i)
                 unique.add(i)
         return dedup_names
+
+    def evaluate_dimension_equality_with_constraints(
+        self, dimension: Union[str, int], *args
+    ) -> bool:
+        """
+        Checks expressions with dimensions.
+
+        First supported expression:
+
+        * ``f("dim", "d1", "+", "d2")  ->  dimension == args[0] + args[2]``
+        """
+        if len(args) == 3:
+            if args[1] == "+":
+                d1, d2 = args[0], args[2]
+                if isinstance(dimension, int) and isinstance(d1, int) and isinstance(d2, int):
+                    return dimension == d1 + d2
+                if isinstance(dimension, str):
+                    exp = f"{d1}+{d2}"
+                    if dimension == exp or (
+                        dimension in self.constraints_ and exp in self.constraints_[dimension]
+                    ):
+                        return True
+                    return False
+
+        raise NotImplementedError(
+            f"Unable to evaluate expression with dimension={dimension!r}, "
+            f"args={args!r}, constraints={self.constraints_}{self.get_debug_msg()}"
+        )

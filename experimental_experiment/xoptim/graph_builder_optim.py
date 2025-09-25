@@ -729,6 +729,20 @@ class GraphBuilderPatternOptimization:
             f"and op_type={op_type!r}."
         )
         name = self.builder.unique_node_name(name)
+        return self._make_node(
+            op_type, inputs, outputs, domain=domain, attributes=attributes, name=name, **kwargs
+        )
+
+    def _make_node(
+        self,
+        op_type: str,
+        inputs: Union[str, List[str]],
+        outputs: Union[int, List[str], str] = 1,
+        domain: str = "",
+        attributes: Optional[List[AttributeProto]] = None,
+        name: Optional[str] = None,
+        **kwargs,
+    ) -> NodeProto:
         if isinstance(outputs, int):
             if outputs == 1:
                 outputs = [self.unique_name(f"{op_type.lower()}-{inputs[0]}")]

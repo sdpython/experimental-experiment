@@ -899,54 +899,25 @@ class RotaryEmbeddingPattern(PatternOptimization):
         )
         rotary_nodes.extend(
             [
-                g.make_node(
-                    "Shape",
-                    [split_node.input[0]],
-                    [batch_name],
-                    start=0,
-                    end=1,
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Concat",
-                    [batch_name, ones],
-                    [shape_name],
-                    axis=0,
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Squeeze",
-                    [concat_cos.input[0], one],
-                    [cos_name],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Squeeze",
-                    [concat_sin.input[0], one],
-                    [sin_name],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Expand",
-                    [cos_name, shape_name],
-                    [cos_expanded],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Expand",
-                    [sin_name, shape_name],
-                    [sin_expanded],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
+                g._make_node("Shape", [split_node.input[0]], [batch_name], start=0, end=1),
+                g._make_node("Concat", [batch_name, ones], [shape_name], axis=0),
+                g._make_node("Squeeze", [concat_cos.input[0], one], [cos_name]),
+                g._make_node("Squeeze", [concat_sin.input[0], one], [sin_name]),
+                g._make_node("Expand", [cos_name, shape_name], [cos_expanded]),
+                g._make_node("Expand", [sin_name, shape_name], [sin_expanded]),
+                g._make_node(
                     "RotaryEmbedding",
                     [split_node.input[0], cos_expanded, sin_expanded],
                     [concat_node.output[0]],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
                     rotary_embedding_dim=rotary_dim,
                 ),
             ]
         )
+        for node in rotary_nodes:
+            if not node.name:
+                node.name = g.builder.unique_node_name(
+                    f"{self.__class__.__name__}--{half_node.name}"
+                )
         return rotary_nodes
 
 
