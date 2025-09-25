@@ -24,7 +24,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         if node.op_type != self._operator_name or node.domain != self._domain_name:
             # Not ready in opset 23.
             return self.none()
-        if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) != 4:
+        if not g.has_shape(node.input[0]) or g.get_rank(node.input[0]) != 4:
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_shape(node.input[1]) or not g.has_shape(node.input[2]):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -57,7 +57,24 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
 
         if g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
+
+        # If cos_cache[-1] + sin_cache[-1] == X.shape[-1],
+        # then there is no split before.
         split_node = g.node_before(node.input[0])
+        if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
+            if not g.has_shape(concat_cos.input[0]) or not g.has_shape(concat_sin.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            cos_shape = g.get_shape(concat_cos.input[0])
+            sin_shape = g.get_shape(concat_sin.input[0])
+            input_shape = g.get_shape(node.input[0])
+            if g.builder.evaluate_dimension_equality_with_constraints(
+                input_shape[-1], cos_shape[-1], "+", sin_shape[-1]
+            ):
+                # No split before, no concat after
+                return MatchResult(
+                    self, [concat_cos, concat_sin, None, node, None], self.apply
+                )
+
         if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_shape(split_node.input[0]):
@@ -100,9 +117,18 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         half_node: NodeProto,
         concat_node: NodeProto,
     ) -> List[NodeProto]:
-        cst = g.get_computed_constant(split_node.input[1])
-        rotary_dim = int(cst[0])
-        shape = g.get_shape(split_node.input[0])
+        if split_node is None:
+            rotary_dim = None
+            shape = g.get_shape(half_node.input[0])
+            main_input = half_node.input[0]
+            main_output = half_node.output[0]
+        else:
+            cst = g.get_computed_constant(split_node.input[1])
+            rotary_dim = int(cst[0])
+            shape = g.get_shape(split_node.input[0])
+            main_input = split_node.input[0]
+            main_output = concat_node.output[0]
+
         assert isinstance(shape[1], int), f"Number of heads is not fixed, shape(X)={shape}"
         num_heads = shape[1]
 
@@ -141,68 +167,33 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
 
         rotary_nodes.extend(
             [
-                g.make_node(
-                    "Squeeze",
-                    [concat_cos.input[0], zeroone],
-                    [cos_name],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
+                g._make_node("Squeeze", [concat_cos.input[0], zeroone], [cos_name]),
+                g._make_node("Squeeze", [concat_sin.input[0], zeroone], [sin_name]),
+                g._make_node("Shape", [main_input], [batch_name], start=0, end=1),
+                g._make_node("Shape", [main_input], [seq_length], start=2, end=3),
+                g._make_node("Squeeze", [seq_length], [seq_length_squeezed]),
+                g._make_node(
+                    "Range", [zero_no_dim, seq_length_squeezed, one_no_dim], [flat_pids]
                 ),
-                g.make_node(
-                    "Squeeze",
-                    [concat_sin.input[0], zeroone],
-                    [sin_name],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Shape",
-                    [split_node.input[0]],
-                    [batch_name],
-                    start=0,
-                    end=1,
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Shape",
-                    [split_node.input[0]],
-                    [seq_length],
-                    start=2,
-                    end=3,
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Squeeze",
-                    [seq_length],
-                    [seq_length_squeezed],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Range",
-                    [zero_no_dim, seq_length_squeezed, one_no_dim],
-                    [flat_pids],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Concat",
-                    [batch_name, one],
-                    [exp_shape],
-                    axis=0,
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "Expand",
-                    [flat_pids, exp_shape],
-                    [position_ids],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                ),
-                g.make_node(
-                    "RotaryEmbedding",
-                    [split_node.input[0], position_ids, cos_name, sin_name],
-                    [concat_node.output[0]],
-                    name=f"{self.__class__.__name__}--{half_node.name}",
-                    rotary_embedding_dim=rotary_dim,
-                    num_heads=num_heads,
-                    domain="com.microsoft",
-                ),
+                g._make_node("Concat", [batch_name, one], [exp_shape], axis=0),
+                g._make_node("Expand", [flat_pids, exp_shape], [position_ids]),
             ]
         )
+        for node in rotary_nodes:
+            if not node.name:
+                node.name = g.builder.unique_node_name(
+                    f"{self.__class__.__name__}--{half_node.name}"
+                )
+
+        kwargs = {} if rotary_dim is None else {"rotary_embedding_dim": rotary_dim}
+        rotary_node = g.make_node(
+            "RotaryEmbedding",
+            [main_input, position_ids, cos_name, sin_name],
+            [main_output],
+            name=f"{self.__class__.__name__}--{half_node.name}",
+            num_heads=num_heads,
+            domain="com.microsoft",
+            **kwargs,
+        )
+        rotary_nodes.append(rotary_node)
         return rotary_nodes
