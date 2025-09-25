@@ -139,9 +139,7 @@ def _get_default_opset_for_domain(domain: str, main_opset: Optional[int] = None)
     return None
 
 
-def choose_consistent_domain_opset(
-    domain: str, opsets: Optional[Dict[str, int]] = None
-) -> int:
+def choose_consistent_domain_opset(domain: str, opsets: Optional[Dict[str, int]] = None) -> int:
     """
     Chooses a compatible opset for a particular domain given
     this existing one. Only works for `ai.onnx.ml`,

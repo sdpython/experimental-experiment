@@ -53,8 +53,7 @@ parsed_args = get_parsed_args(
     model=("llama", "model to benchmark"),
     backend=(
         "eager,inductor,custom",
-        "backend to test, among eager,dynger,inductor,"
-        "ort,ort+,custom,plug,ortmodule,backort,",
+        "backend to test, among eager,dynger,inductor," "ort,ort+,custom,plug,ortmodule,backort,",
         "eager,dynger,inductor,custom,ortmodule",
     ),
     device=("cuda" if check_cuda_availability() else "cpu", "device to test"),
@@ -69,11 +68,11 @@ parsed_args = get_parsed_args(
         "none,default,default+onnxruntime,default+onnxruntime+experimental",
         "optimization patterns to use",
     ),
-    implementation=("eager", "eager or sdpa or both values comma separated value"),
+    implementation=("sdpa", "eager or sdpa or both values comma separated value"),
     with_mask=(1, "with or without a second input (mask"),
     disable_pattern=("none", "pattern or patterns to disable"),
     ort_optimize=(
-        "0,1",
+        "1",
         "enable or disable onnxruntime optimization, by default, tries both",
     ),
     order=("none", "optimization order see class OrderAlgorithm, none by default"),
@@ -342,9 +341,7 @@ if data_collected:
 
     # summary
     cs = [
-        c
-        for c in ["backend", "patterns", "warmup_time", "time", "increase"]
-        if c in df.columns
+        c for c in ["backend", "patterns", "warmup_time", "time", "increase"] if c in df.columns
     ]
     dfs = df[cs]
     filename = f"plot_{prefix}_summary.xlsx"

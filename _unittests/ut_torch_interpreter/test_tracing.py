@@ -81,9 +81,7 @@ class TestTracing(ExtTestCase):
         expected = model(x)
         graph = CustomTracer().trace(model, remove_inplace=False)
         self.assertEqual(
-            len(
-                [node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]
-            ),
+            len([node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]),
             1,
         )
         self.assertIn("(%clone, 3)", str(graph))
@@ -110,9 +108,7 @@ class TestTracing(ExtTestCase):
         expected = model(x)
         graph = CustomTracer().trace(model, remove_inplace=False)
         self.assertEqual(
-            len(
-                [node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]
-            ),
+            len([node for node in graph.nodes if len(node.users) == 0 and node.op != "output"]),
             2,
         )
         self.assertIn("(%clone, 3)", str(graph))

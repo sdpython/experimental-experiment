@@ -47,10 +47,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         node_reciprocal = g.next_node(node_sqrt.output[0])
-        if (
-            node_reciprocal.op_type not in ("Reciprocal", "Div")
-            or node_reciprocal.domain != ""
-        ):
+        if node_reciprocal.op_type not in ("Reciprocal", "Div") or node_reciprocal.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 
         if node_reciprocal.op_type == "Div":
@@ -95,9 +92,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         nname = node_reduce.name
         nodes = []
         epsilon = g.get_computed_constant(node_add.input[1])
-        shape = (
-            g.get_shape(node_reduce.input[0]) if g.has_shape(node_reduce.input[0]) else None
-        )
+        shape = g.get_shape(node_reduce.input[0]) if g.has_shape(node_reduce.input[0]) else None
         axis = g.get_constant_or_attribute(node_reduce, "axes", input_index=1)[0]
         assert shape is None or axis < len(
             shape

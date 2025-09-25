@@ -32,9 +32,7 @@ class _GraphBuilderRuntime:
         expand_axes: List[int],
     ) -> STATIC_SHAPE:
         assert isinstance(shape, tuple), f"Unexpected type {type(shape)} for shape: {shape}"
-        assert isinstance(
-            indices, list
-        ), f"Unexpected type {type(indices)} for index: {indices}"
+        assert isinstance(indices, list), f"Unexpected type {type(indices)} for index: {indices}"
         assert isinstance(axes, list), f"Unexpected type {type(axes)} for index: {axes}"
         assert len(axes) in (
             1,
@@ -94,9 +92,7 @@ class _GraphBuilderRuntime:
         assert isinstance(
             input_shape, tuple
         ), f"unexpected type {type(input_shape)} for input_shape."
-        assert isinstance(
-            new_shape, tuple
-        ), f"unexpected type {type(new_shape)} for input_shape."
+        assert isinstance(new_shape, tuple), f"unexpected type {type(new_shape)} for input_shape."
         assert all_int(new_shape), f"unexpected type for a dimension in {new_shape}"
 
         # handling zeros --> keeps the original dimension
@@ -167,9 +163,7 @@ class _GraphBuilderRuntime:
         assert isinstance(
             input_shape, tuple
         ), f"unexpected type {type(input_shape)} for input_shape."
-        assert isinstance(
-            new_shape, tuple
-        ), f"unexpected type {type(new_shape)} for input_shape."
+        assert isinstance(new_shape, tuple), f"unexpected type {type(new_shape)} for input_shape."
 
         if -1 not in new_shape and 1 not in new_shape:
             return new_shape
@@ -311,9 +305,7 @@ class _GraphBuilderRuntime:
                 saturate = att.i
                 break
         assert to, f"to not here in node {node}"
-        assert (
-            to != 8 and to < 17
-        ), f"Cast not implemented for to={to}, {str_tensor_proto_type()}"
+        assert to != 8 and to < 17, f"Cast not implemented for to={to}, {str_tensor_proto_type()}"
         del saturate
         if isinstance(x, np.ndarray):
             # Type conversion between numpy and torch is not robust.

@@ -33,11 +33,7 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             itype = g.get_type(node.input[2])
 
         node_before = g.node_before(node.input[0])
-        if (
-            node_before is None
-            or node_before.op_type != "ConstantOfShape"
-            or node.domain != ""
-        ):
+        if node_before is None or node_before.op_type != "ConstantOfShape" or node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 
         att = g.get_attribute(node_before, "value", False)
@@ -139,9 +135,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
         equal_node: NodeProto,
     ) -> List[NodeProto]:
         mask = g.get_constant_scalar(equal_node.input[1])
-        assert isinstance(
-            mask, int
-        ), f"Unexpected type {type(mask)} for {equal_node.input[1]!r}"
+        assert isinstance(mask, int), f"Unexpected type {type(mask)} for {equal_node.input[1]!r}"
         new_node = g.make_node(
             "MaskedScatterNDOfShape",
             [scatter_node.input[0], scatter_node.input[1], where_node.input[2]],

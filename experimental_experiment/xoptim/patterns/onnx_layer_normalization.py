@@ -168,9 +168,7 @@ class LayerNormalizationPattern(PatternOptimization):
             )
 
         eps = (
-            g.get_constant_scalar(add.input[1], broadcast=True)
-            if add
-            else 9.999999960041972e-13
+            g.get_constant_scalar(add.input[1], broadcast=True) if add else 9.999999960041972e-13
         )
 
         new_nodes.append(
@@ -243,9 +241,7 @@ class LayerNormalizationScalePattern(PatternOptimization):
         add_node: Optional[NodeProto],
     ) -> List[NodeProto]:
         # scale
-        scale = (
-            mul_node.input[1] if mul_node.input[0] == ln_node.output[0] else mul_node.input[0]
-        )
+        scale = mul_node.input[1] if mul_node.input[0] == ln_node.output[0] else mul_node.input[0]
         new_scale = None
         if g.is_constant_scalar(ln_node.input[1], broadcast=True):
             fscale = g.get_constant_scalar(ln_node.input[1], broadcast=True)
@@ -577,9 +573,7 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
 
         if g.get_rank(node.input[1]) == 1:
             scale_name = g.unique_name(f"{self.__class__.__name__}_scale_{node.input[1]}")
-            scale = g.make_node(
-                "Reshape", [node.input[1], new_shape], [scale_name], name=nname
-            )
+            scale = g.make_node("Reshape", [node.input[1], new_shape], [scale_name], name=nname)
         else:
             scale_name = node.input[1]
             scale = None
@@ -649,10 +643,7 @@ class RMSNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         node_reciprocal = g.next_node(node_sqrt.output[0])
-        if (
-            node_reciprocal.op_type not in ("Reciprocal", "Div")
-            or node_reciprocal.domain != ""
-        ):
+        if node_reciprocal.op_type not in ("Reciprocal", "Div") or node_reciprocal.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 
         if node_reciprocal.op_type == "Div":
@@ -719,9 +710,7 @@ class RMSNormalizationPattern(PatternOptimization):
         nname = node_reduce.name
         nodes = []
         epsilon = g.get_computed_constant(node_add.input[1])
-        shape = (
-            g.get_shape(node_reduce.input[0]) if g.has_shape(node_reduce.input[0]) else None
-        )
+        shape = g.get_shape(node_reduce.input[0]) if g.has_shape(node_reduce.input[0]) else None
         axis = g.get_constant_or_attribute(node_reduce, "axes", input_index=1)[0]
         assert shape is None or axis < len(
             shape

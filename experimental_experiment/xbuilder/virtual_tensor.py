@@ -12,6 +12,4 @@ class VirtualTensor:
         self.shape = shape
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}({self.name!r}, dtype={self.dtype}, shape={self.shape})"
-        )
+        return f"{self.__class__.__name__}({self.name!r}, dtype={self.dtype}, shape={self.shape})"

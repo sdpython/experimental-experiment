@@ -50,9 +50,7 @@ class TestChronosModelHelper(ExtTestCase):
         pprint.pprint(pipeline.model.config)
 
         def rewrite_forward(f, *args, **kwargs):
-            print(
-                f"------------- test_spy_chronos_t5_tiny -- iteration {len(inputs_iteration)}"
-            )
+            print(f"------------- test_spy_chronos_t5_tiny -- iteration {len(inputs_iteration)}")
             print(f"args: {string_type(args, with_shape=True, with_min_max=True)}")
             print(f"kwargs: {string_type(kwargs, with_shape=True, with_min_max=True)}")
             inputs_iteration.append((args, kwargs))

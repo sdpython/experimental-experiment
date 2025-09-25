@@ -46,9 +46,7 @@ class TestOnnxExportAten(ExtTestCase):
         if exporter == "script":
             torch.onnx.export(model, inputs, filename, opset_version=18)
         elif exporter == "dynamo":
-            torch.onnx.export(
-                model, inputs, filename, dynamo=True, dynamic_shapes=dynamic_shapes
-            )
+            torch.onnx.export(model, inputs, filename, dynamo=True, dynamic_shapes=dynamic_shapes)
         else:
             export_options = ExportOptions(
                 decomposition_table="all" if decomposition else None, strict=strict
@@ -194,9 +192,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.randn(1, 2, 3, 4, requires_grad=False)
         expected = model(x)
-        model_path = self._call_exporter(
-            "test_aten_interpolate_bilinear", "custom", model, (x,)
-        )
+        model_path = self._call_exporter("test_aten_interpolate_bilinear", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -404,10 +400,7 @@ class TestOnnxExportAten(ExtTestCase):
                         for l in range(0, shape[3]):  # noqa: E741
                             pos_y = i * cs[0] + j * cs[1] + k * cs[2] + l * cs[3]
                             pos_x = (
-                                i * strides[0]
-                                + j * strides[1]
-                                + k * strides[2]
-                                + l * strides[3]
+                                i * strides[0] + j * strides[1] + k * strides[2] + l * strides[3]
                             )
                             y_flat[pos_y] = x_flat[pos_x]
             return y_flat.reshape(shape)
@@ -469,12 +462,8 @@ class TestOnnxExportAten(ExtTestCase):
                 super().__init__()
                 self.weight = torch.nn.Buffer(torch.tensor([5, 7]).to(torch.float32)) * 2
                 self.bias = torch.nn.Buffer(torch.tensor([4, 5]).to(torch.float32)) * 0.1
-                self.running_mean = (
-                    torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.5
-                )
-                self.running_var = (
-                    torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.6
-                )
+                self.running_mean = torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.5
+                self.running_var = torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.6
 
             def forward(self, x):
                 return torch.batch_norm(
@@ -492,9 +481,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.randn((2, 2, 8, 8), requires_grad=False)
         expected = model(x)
-        model_path = self._call_exporter(
-            "test_aten_batch_norm_notraining", "custom", model, (x,)
-        )
+        model_path = self._call_exporter("test_aten_batch_norm_notraining", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -517,12 +504,8 @@ class TestOnnxExportAten(ExtTestCase):
                 super().__init__()
                 self.weight = torch.nn.Buffer(torch.tensor([5, 7]).to(torch.float32)) * 2
                 self.bias = torch.nn.Buffer(torch.tensor([4, 5]).to(torch.float32)) * 0.1
-                self.running_mean = (
-                    torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.5
-                )
-                self.running_var = (
-                    torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.6
-                )
+                self.running_mean = torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.5
+                self.running_var = torch.nn.Buffer(torch.tensor([1, 4]).to(torch.float32)) * 0.6
 
             def forward(self, x):
                 return torch.batch_norm(
@@ -540,9 +523,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.randn((2, 2, 8, 8), requires_grad=False)
         expected = model(x)
-        model_path = self._call_exporter(
-            "test_aten_batch_norm_training", "custom", model, (x,)
-        )
+        model_path = self._call_exporter("test_aten_batch_norm_training", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -588,9 +569,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.randn((1, 16, 27), requires_grad=False).to(torch.float16)
         expected = model(x)
-        model_path = self._call_exporter(
-            "test_aten_batch_norm_training16", "custom", model, (x,)
-        )
+        model_path = self._call_exporter("test_aten_batch_norm_training16", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -833,9 +812,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(128 * 24 * 56 * 56).reshape((128, 24, 56, 56)).to(torch.float32)
         expected = model(x)
-        model_path = self._call_exporter(
-            "test_aten_index_tensor_2_4_1_1", "custom", model, (x,)
-        )
+        model_path = self._call_exporter("test_aten_index_tensor_2_4_1_1", "custom", model, (x,))
         check_model(model_path)
 
         import onnxruntime
@@ -994,9 +971,7 @@ class TestOnnxExportAten(ExtTestCase):
             torch.zeros((0, 2), dtype=torch.int64),
         )
         expected = model(*xsf)
-        model_path = self._call_exporter(
-            "test_aten_clone_index_Tensor_0_2", "custom", model, xs
-        )
+        model_path = self._call_exporter("test_aten_clone_index_Tensor_0_2", "custom", model, xs)
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xsf]))
         got = sess.run(None, feeds)[0]
@@ -1411,9 +1386,7 @@ class TestOnnxExportAten(ExtTestCase):
                 xs = (
                     torch.arange(2 * 3 * 5)
                     .to(torch.int64)
-                    .reshape(
-                        (2 * 3 * 5,) if rk == 1 else ((2 * 3, 5) if rk == 2 else (2, 3, 5))
-                    ),
+                    .reshape((2 * 3 * 5,) if rk == 1 else ((2 * 3, 5) if rk == 2 else (2, 3, 5))),
                     torch.arange(2 * 3 * 5)[::2].to(torch.int64),
                 )
                 expected = model(*xs)
@@ -1447,9 +1420,7 @@ class TestOnnxExportAten(ExtTestCase):
                 xs = (
                     (torch.arange(2 * 3 * 5) / (2 * 3 * 5))
                     .to(torch.float32)
-                    .reshape(
-                        (2 * 3 * 5,) if rk == 1 else ((2 * 3, 5) if rk == 2 else (2, 3, 5))
-                    ),
+                    .reshape((2 * 3 * 5,) if rk == 1 else ((2 * 3, 5) if rk == 2 else (2, 3, 5))),
                 )
                 expected = model(*xs)
                 model_path = self._call_exporter(
@@ -1667,9 +1638,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         xs = (x, ind1, ind2)
         expected = model(*xs)
-        model_path = self._call_exporter(
-            "test_aten_index_put_no_dimension", "custom", model, xs
-        )
+        model_path = self._call_exporter("test_aten_index_put_no_dimension", "custom", model, xs)
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [to_numpy(x) for x in xs]))
         got = sess.run(None, feeds)[0]
@@ -1701,9 +1670,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         xs = (x, ind1, ind2, values)
         expected = model(*xs)
-        model_path = self._call_exporter(
-            "test_aten_index_put_no_dimension", "custom", model, xs
-        )
+        model_path = self._call_exporter("test_aten_index_put_no_dimension", "custom", model, xs)
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [to_numpy(x) for x in xs]))
         got = sess.run(None, feeds)[0]

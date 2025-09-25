@@ -25,9 +25,7 @@ class TestDynamoLlama(ExtTestCase):
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
             cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
-                lambda *_, **__: None
-            )
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = lambda *_, **__: None
 
     @classmethod
     def tearDown(cls):
@@ -94,9 +92,7 @@ class TestDynamoLlama(ExtTestCase):
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug,
                     decompositions=(
-                        filter_decomposition_table()
-                        if decompositions is True
-                        else decompositions
+                        filter_decomposition_table() if decompositions is True else decompositions
                     ),
                 )
             else:

@@ -80,9 +80,7 @@ class NanEuclidean(torch.nn.Module):
         present_count = present_X @ present_Y.to(X.dtype).T
         distances[present_count == 0] = torch.nan
         # avoid divide by zero
-        present_count = torch.maximum(
-            torch.tensor([1], dtype=present_count.dtype), present_count
-        )
+        present_count = torch.maximum(torch.tensor([1], dtype=present_count.dtype), present_count)
         distances /= present_count
         distances *= X.shape[1]
 
@@ -454,9 +452,7 @@ class TorchKNNImputer(torch.nn.Module):
     def _transform_indicator(self, X):
         if self.add_indicator:
             if not hasattr(self, "indicator_"):
-                raise ValueError(
-                    "Make sure to call _fit_indicator before _transform_indicator"
-                )
+                raise ValueError("Make sure to call _fit_indicator before _transform_indicator")
             raise NotImplementedError(type(self.indicator_))
             # return self.indicator_.transform(X)
         return None
@@ -566,8 +562,8 @@ knn11, Y11 = validate(11, 11, n_nans=1)
 # We need to isolate that part before exporting the model.
 # It is done by replacing it with a custom op.
 # This is automatically done by function
-# :func:`experimental_experiment.torch_interpreter.
-# piece_by_piece.trace_execution_piece_by_piece`.
+# :func:`trace_execution_piece_by_piece
+# <experimental_experiment.torch_interpreter.piece_by_piece.trace_execution_piece_by_piece>`.
 #
 # First step, we create two sets of inputs. A function will use this
 # to infer the dynamic shapes.

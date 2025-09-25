@@ -74,13 +74,9 @@ class TestTorchOnnxExport2025(ExtTestCase):
         ).model_proto
         self.dump_onnx(f"test_of_scaled_dot_product_attention_{opset}.onnx", onx)
         self.assertEqual(["Attention"], [n.op_type for n in onx.graph.node])
-        self.assertEqual(
-            ("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version)
-        )
+        self.assertEqual(("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version))
 
-        feeds = dict(
-            zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs])
-        )
+        feeds = dict(zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs]))
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)

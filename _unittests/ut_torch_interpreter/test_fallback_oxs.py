@@ -50,9 +50,7 @@ class TestFallbackOxs(ExtTestCase):
         y = gr.op.Identity(fct.__wrapped__("X", alpha=2.0), outputs=["Y"])
         mod.op = old_value
 
-        gr.make_tensor_output(
-            y, TensorProto.FLOAT, ("a", "b"), indexed=False, is_dimension=False
-        )
+        gr.make_tensor_output(y, TensorProto.FLOAT, ("a", "b"), indexed=False, is_dimension=False)
         onx = gr.to_onnx()
 
         ext = ExtendedReferenceEvaluator(onx)
@@ -86,9 +84,7 @@ class TestFallbackOxs(ExtTestCase):
 
         mod.op = OxsOpset(gr)
         try:
-            fct.__wrapped__(
-                VarShapeType("X", shape=("a",)), 0, VarShapeType("I", shape=("b",))
-            )
+            fct.__wrapped__(VarShapeType("X", shape=("a",)), 0, VarShapeType("I", shape=("b",)))
         except RuntimeError as e:
             self.assertIn("The function being traced", str(e))
 

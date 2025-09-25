@@ -254,9 +254,7 @@ print(pretty_onnx(onx_inlined))
 onx_optimized = to_onnx(
     llm,
     (input_ids,),
-    options=OptimizationOptions(
-        patterns="default+onnxruntime", constant_folding=True, verbose=2
-    ),
+    options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=True, verbose=2),
 )
 print(pretty_onnx(onx_optimized))
 

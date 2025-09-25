@@ -532,9 +532,7 @@ class TestGraphPatternBuilder(ExtTestCase):
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
                 patterns=[
-                    make_pattern_from_onnx(
-                        "AddAddPattern", model_match, model_apply, verbose=0
-                    )
+                    make_pattern_from_onnx("AddAddPattern", model_match, model_apply, verbose=0)
                 ],
                 verbose=0,
             ),
@@ -981,9 +979,7 @@ class TestGraphPatternBuilder(ExtTestCase):
                 deleted_nodes: List[NodeProto],
                 pattern_nodes: Optional[List[NodeProto]] = None,
             ) -> bool:
-                assert (
-                    len(deleted_nodes) == 2
-                ), f"Unexpected number of nodes in {deleted_nodes}"
+                assert len(deleted_nodes) == 2, f"Unexpected number of nodes in {deleted_nodes}"
                 x, y, z = set(list(deleted_nodes[0].input) + list(deleted_nodes[1].input))
                 if not g.has_shape(x) or not g.has_shape(y) or not g.has_shape(z):
                     return False

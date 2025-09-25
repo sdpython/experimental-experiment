@@ -30,9 +30,7 @@ except FileNotFoundError:
 
 version_str = "0.1.0"
 with open(os.path.join(here, "experimental_experiment/__init__.py"), "r") as f:
-    line = [
-        _ for _ in [_.strip("\r\n ") for _ in f.readlines()] if _.startswith("__version__")
-    ]
+    line = [_ for _ in [_.strip("\r\n ") for _ in f.readlines()] if _.startswith("__version__")]
     if line:
         version_str = line[0].split("=")[1].strip('" ')
 

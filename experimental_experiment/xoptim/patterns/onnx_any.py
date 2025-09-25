@@ -11,9 +11,7 @@ class SameChildrenPattern(PatternOptimization):
     @classmethod
     def _cmp(cls, n1: NodeProto, n2: NodeProto) -> bool:
         "Compares two nodes and say if they are the same."
-        assert make_idn(n1) != make_idn(
-            n2
-        ), f"Two nodes are the same not identical copies {n1}"
+        assert make_idn(n1) != make_idn(n2), f"Two nodes are the same not identical copies {n1}"
         if n1.input != n2.input:
             return False
         if len(n1.output) != len(n2.output):
@@ -131,7 +129,8 @@ class SameChildrenPattern(PatternOptimization):
 class ShapeBasedSameChildrenPattern(PatternOptimization):
     """
     Checks there is no duplicated node doing the same than another one beside.
-    :class:`SameChildrenPattern` checks it is exactly the same.
+    :class:`experimental_experiment.xoptim.patterns.onnx_any.SameChildrenPattern`
+    checks it is exactly the same.
     This one assumes it is exactly the same in some cases such
     expand (X, sh1) = expand(X, sh2) if the output shapes are the same.
     """

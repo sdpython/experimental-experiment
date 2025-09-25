@@ -26,9 +26,7 @@ class FunctionPackedMatMulPattern(PatternOptimization):
         matmul_nodes = [
             n
             for n in side_nodes
-            if n.op_type == "MatMul"
-            and n.input[0] == node.input[0]
-            and g.is_constant(n.input[1])
+            if n.op_type == "MatMul" and n.input[0] == node.input[0] and g.is_constant(n.input[1])
         ]
         if len(matmul_nodes) < 2 or not g.has_rank(matmul_nodes[0].output[0]):
             return self.none(node, inspect.currentframe().f_lineno)

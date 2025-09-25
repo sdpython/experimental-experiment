@@ -53,9 +53,7 @@ class TestIssuesOnnxruntime2024(ExtTestCase):
 
         # not optimized
         input_data = {"v0_0": np.arange(5).astype(np.float64)}
-        proto_issue = onnx.load(
-            os.path.join(os.path.dirname(__file__), "data", "inconsis3.onnx")
-        )
+        proto_issue = onnx.load(os.path.join(os.path.dirname(__file__), "data", "inconsis3.onnx"))
         for i, proto in enumerate([proto_simple, proto_issue]):
             sessopts = ort.SessionOptions()
             sessopts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL

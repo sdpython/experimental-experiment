@@ -50,9 +50,7 @@ class TestPartition(ExtTestCase):
             decompositions=get_decomposition_table(),
         )
 
-        compiled_model = torch.compile(
-            mlp, backend=aot_compiler, dynamic=False, fullgraph=True
-        )
+        compiled_model = torch.compile(mlp, backend=aot_compiler, dynamic=False, fullgraph=True)
 
         got = compiled_model(x)
         self.assertEqualArray(expected, got, atol=1e-5)
@@ -79,9 +77,7 @@ class TestPartition(ExtTestCase):
         expected = mlp(x)
 
         def backend_debug(*args, **kwargs):
-            return onnx_debug_backend(
-                *args, backend="ref", target_opset=18, verbose=1, **kwargs
-            )
+            return onnx_debug_backend(*args, backend="ref", target_opset=18, verbose=1, **kwargs)
 
         support = CustomOperatorSupport(unsupport_dict={}, verbose=2)
 
@@ -100,9 +96,7 @@ class TestPartition(ExtTestCase):
             partition_fn=get_partition_fn(),
         )
 
-        compiled_model = torch.compile(
-            mlp, backend=aot_compiler, dynamic=False, fullgraph=True
-        )
+        compiled_model = torch.compile(mlp, backend=aot_compiler, dynamic=False, fullgraph=True)
 
         got = compiled_model(x)
         self.assertEqualArray(expected, got, atol=1e-5)
@@ -129,9 +123,7 @@ class TestPartition(ExtTestCase):
         expected = mlp(x)
 
         def backend_debug(*args, **kwargs):
-            return onnx_debug_backend(
-                *args, backend="ref", target_opset=18, verbose=1, **kwargs
-            )
+            return onnx_debug_backend(*args, backend="ref", target_opset=18, verbose=1, **kwargs)
 
         support = CustomOperatorSupport(
             unsupport_dict={"torch.ops.aten.sigmoid.default"}, verbose=2
@@ -152,9 +144,7 @@ class TestPartition(ExtTestCase):
             partition_fn=get_partition_fn(),
         )
 
-        compiled_model = torch.compile(
-            mlp, backend=aot_compiler, dynamic=False, fullgraph=True
-        )
+        compiled_model = torch.compile(mlp, backend=aot_compiler, dynamic=False, fullgraph=True)
 
         got = compiled_model(x)
         self.assertEqualArray(expected, got, atol=1e-5)

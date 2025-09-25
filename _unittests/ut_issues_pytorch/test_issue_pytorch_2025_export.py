@@ -27,9 +27,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
         model(*inputs)
 
         AUTO = torch.export.Dim.AUTO
-        ep = torch.export.export(
-            model, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}}
-        )
+        ep = torch.export.export(model, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}})
 
         epo = torch.onnx.export(ep, dynamo=True)
         epo.optimize()
@@ -62,9 +60,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
         model(*inputs)
 
         AUTO = torch.export.Dim.AUTO
-        ep = torch.export.export(
-            model, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}}
-        )
+        ep = torch.export.export(model, inputs, dynamic_shapes={"x": {0: AUTO}, "y": {0: AUTO}})
 
         epo = torch.onnx.export(ep, dynamo=True)
         epo.optimize()

@@ -428,12 +428,8 @@ class HuggingfaceRunner(BenchmarkRunner):
             elif model_name.endswith("QuestionAnswering"):
                 input_dict["start_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
                 input_dict["end_positions"] = _rand_int_tensor(device, 0, seq_length, (bs,))
-            elif model_name.endswith(
-                ("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")
-            ):
-                input_dict["labels"] = _rand_int_tensor(
-                    device, 0, vocab_size, (bs, seq_length)
-                )
+            elif model_name.endswith(("MaskedLM", "HeadModel", "CausalLM", "DoubleHeadsModel")):
+                input_dict["labels"] = _rand_int_tensor(device, 0, vocab_size, (bs, seq_length))
             elif model_name.endswith("TokenClassification"):
                 input_dict["labels"] = _rand_int_tensor(
                     device, 0, model.config.num_labels - 1, (bs, seq_length)
@@ -451,13 +447,9 @@ class HuggingfaceRunner(BenchmarkRunner):
                     device, 0, vocab_size - 1, (bs, seq_length)
                 )
             elif model_name in cls.EXTRA_MODELS:
-                input_dict["labels"] = _rand_int_tensor(
-                    device, 0, vocab_size, (bs, seq_length)
-                )
+                input_dict["labels"] = _rand_int_tensor(device, 0, vocab_size, (bs, seq_length))
             else:
-                raise NotImplementedError(
-                    f"Class {model_name!r} unsupported for training test "
-                )
+                raise NotImplementedError(f"Class {model_name!r} unsupported for training test ")
 
         return input_dict
 
@@ -603,9 +595,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         )
 
     def iter_model_names(self):
-        model_names = list(self.BATCH_SIZE_KNOWN_MODELS.keys()) + list(
-            self.EXTRA_MODELS.keys()
-        )
+        model_names = list(self.BATCH_SIZE_KNOWN_MODELS.keys()) + list(self.EXTRA_MODELS.keys())
         model_names = set(model_names)
         assert model_names, "Empty list of models"
         model_names = sorted(model_names)

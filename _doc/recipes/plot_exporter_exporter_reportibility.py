@@ -209,9 +209,7 @@ print(string_type(inputs, with_shape=True))
 # The function we want to try.
 
 with register_additional_serialization_functions():
-    report = torch._export.tools.report_exportability(
-        model, tuple(), kwargs=inputs, strict=False
-    )
+    report = torch._export.tools.report_exportability(model, tuple(), kwargs=inputs, strict=False)
 
 # %%
 # Let's print the report.

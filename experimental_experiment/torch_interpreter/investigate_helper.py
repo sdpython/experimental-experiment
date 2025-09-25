@@ -106,9 +106,7 @@ def run_fx_node(
         outputs = node.target(*args, **kwargs)
         validate_fx_outputs(node, outputs)
         return outputs
-    raise NotImplementedError(
-        f"node.op={node.op!r} is not implemented, node.name={node.name!r}"
-    )
+    raise NotImplementedError(f"node.op={node.op!r} is not implemented, node.name={node.name!r}")
 
 
 def _pick_result(torch_results: Dict[str, Any], ref: Any) -> Any:
@@ -264,9 +262,7 @@ def run_aligned(
         onnx_results[param_name] = onnx_results[init.name]
 
     torch_results = {
-        k: torch.from_numpy(v.copy())
-        for k, v in onnx_results.items()
-        if not k.startswith("init")
+        k: torch.from_numpy(v.copy()) for k, v in onnx_results.items() if not k.startswith("init")
     }
     last_position = 0
     torch_output_names = None

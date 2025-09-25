@@ -107,9 +107,7 @@ class TestReferenceOps(ExtTestCase):
                 opset_imports=[make_opsetid("", 18), make_opsetid("com.microsoft", 1)],
                 ir_version=9,
             )
-            sess = InferenceSession(
-                model.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
+            sess = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
             a = np.arange(4).reshape(-1, 2).astype(np.float32)
             expected = sess.run(None, {"X": a})
             ref = ExtendedReferenceEvaluator(model)
@@ -141,9 +139,9 @@ class TestReferenceOps(ExtTestCase):
         data = np.zeros(2**4, dtype=np.float32).reshape((2, 2, 2, 2))
         indices = np.array([[[[0]]]], dtype=np.int64)
         updates = np.array([[[[1]]]], dtype=np.float32)
-        y = np.array(
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32
-        ).reshape((2, 2, 2, 2))
+        y = np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32).reshape(
+            (2, 2, 2, 2)
+        )
         ref = ExtendedReferenceEvaluator(model)
         got = ref.run(None, {"data": data, "indices": indices, "updates": updates})
         self.assertEqualArray(y, got[0])

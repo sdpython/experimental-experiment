@@ -100,9 +100,7 @@ class TestEdMistral(ExtTestCase):
             verbose=0,
             return_storage=False,
             rename_inputs=True,
-            dump_prefix=(
-                "test_mistral_cort_dynamic_simple" if __name__ == "__main__" else None
-            ),
+            dump_prefix=("test_mistral_cort_dynamic_simple" if __name__ == "__main__" else None),
         )
         results = compiled_model(*input_tensors)
         self.assertEqualArray(expected[0].detach().numpy(), results[0], atol=1e-5)

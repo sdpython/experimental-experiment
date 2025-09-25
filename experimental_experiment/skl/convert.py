@@ -59,9 +59,7 @@ def to_onnx(
     :param output_names: to rename the output names
     :return: onnx model
     """
-    assert isinstance(
-        model, sklearn.base.BaseEstimator
-    ), f"Unexpected model type {type(model)}"
+    assert isinstance(model, sklearn.base.BaseEstimator), f"Unexpected model type {type(model)}"
     import skl2onnx
 
     if output_names is None:

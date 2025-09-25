@@ -64,8 +64,7 @@ def check_model_ort(
                 save(onx, dump_file)
 
             raise AssertionError(  # noqa: B904
-                f"onnxruntime cannot load the model "
-                f"due to {e}\n{pretty_onnx(onnx.load(onx))}"
+                f"onnxruntime cannot load the model due to {e}\n{pretty_onnx(onnx.load(onx))}"
             )
         return
     try:
@@ -187,9 +186,7 @@ def dummy_llm(
             # torch.nn.Buffer are not fully handled by symbolic tracing
             # Buffer(...)[:Prowy()] is not working
             self.mask = torch.nn.Parameter(
-                torch.tril(
-                    input=torch.ones(size=[context_size, context_size], dtype=torch.float)
-                )
+                torch.tril(input=torch.ones(size=[context_size, context_size], dtype=torch.float))
             )
 
         def forward(self, x):
@@ -208,9 +205,7 @@ def dummy_llm(
 
     class MultiAttentionBlock(torch.nn.Module):
 
-        def __init__(
-            self, embedding_dim: int = 16, num_heads: int = 2, context_size: int = 256
-        ):
+        def __init__(self, embedding_dim: int = 16, num_heads: int = 2, context_size: int = 256):
             super().__init__()
             self.attention = torch.nn.ModuleList(
                 modules=[AttentionBlock(embedding_dim, context_size) for _ in range(num_heads)]
@@ -301,9 +296,7 @@ def dummy_llm(
         LLM()(torch.randint(0, 1024, (2 if dynamic_shapes else 1, 30)).to(torch.int64))
 
         dec = DecoderLayer()
-        x = Embedding()(
-            torch.randint(0, 1024, (2 if dynamic_shapes else 1, 30)).to(torch.int64)
-        )
+        x = Embedding()(torch.randint(0, 1024, (2 if dynamic_shapes else 1, 30)).to(torch.int64))
         dec(x)
         if dynamic_shapes:
             dyn = {

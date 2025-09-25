@@ -64,9 +64,7 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
                 aot_compiler = aot_autograd(
                     fw_compiler=backend_debug,
                     decompositions=(
-                        filter_decomposition_table()
-                        if decompositions is True
-                        else decompositions
+                        filter_decomposition_table() if decompositions is True else decompositions
                     ),
                 )
             else:
@@ -159,9 +157,7 @@ class TestDynamoLlamaSdpa2(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skipIf(
-        True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing"
-    )
+    @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     def test_llama_model_backward_undec(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 

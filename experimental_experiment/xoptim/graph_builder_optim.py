@@ -69,10 +69,7 @@ class GraphBuilderPatternOptimization:
             "CUDA",
             "CPU",
             "CPU,CUDA",
-        }, (
-            f"Unknown processor {processor!r}, "
-            f"if should be string with comma separated value"
-        )
+        }, f"Unknown processor {processor!r}, if should be string with comma separated value"
         self.builder = builder
         self.verbose = max(verbose, int(os.environ.get("LOG_PATTERN_OPTIMIZE", "0")))
         self.patterns = patterns or get_default_patterns(self.verbose)
@@ -748,8 +745,7 @@ class GraphBuilderPatternOptimization:
                 outputs = [self.unique_name(f"{op_type.lower()}-{inputs[0]}")]
             else:
                 outputs = [
-                    self.unique_name(f"{op_type.lower()}-{inputs[0]}-{i}")
-                    for i in range(outputs)
+                    self.unique_name(f"{op_type.lower()}-{inputs[0]}-{i}") for i in range(outputs)
                 ]
         elif isinstance(outputs, str):
             outputs = [self.unique_name(outputs)]
@@ -824,9 +820,7 @@ class GraphBuilderPatternOptimization:
             ), f"Name mismatch {name!r} != {init.output[0]!r}"
             return init
         if isinstance(init, TensorProto):
-            assert (
-                name is None or init.name == name
-            ), f"Name mismatch {name!r} != {init.name!r}"
+            assert name is None or init.name == name, f"Name mismatch {name!r} != {init.name!r}"
             return oh.make_node("Constant", [], [init.name], value=init)
         if isinstance(init, np.ndarray):
             return self._to_cstop(from_array_extended(init, name=name))
@@ -836,9 +830,7 @@ class GraphBuilderPatternOptimization:
             return self._to_cstop(init.detach().cpu().numpy(), name=name)
         raise AssertionError(f"Unexpected type {type(init)}")
 
-    def _save_pattern_as_proto(
-        self, folder: str, match: MatchResult, new_nodes: List[NodeProto]
-    ):
+    def _save_pattern_as_proto(self, folder: str, match: MatchResult, new_nodes: List[NodeProto]):
         assert isinstance(folder, str), f"Unexpected type {type(folder)} for folder."
         if folder and not os.path.exists(folder):
             os.makedirs(folder)
@@ -916,12 +908,10 @@ class GraphBuilderPatternOptimization:
             return None
 
         inputs = [
-            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n))
-            for n in fproto.input
+            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n)) for n in fproto.input
         ]
         outputs = [
-            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n))
-            for n in fproto.output
+            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n)) for n in fproto.output
         ]
 
         model = oh.make_model(
@@ -1001,8 +991,7 @@ class GraphBuilderPatternOptimization:
                 f"assumes it is {self.builder.get_type(val.name)}"
             )
             assert (
-                not self.builder.has_shape(val.name)
-                or self.builder.get_shape(val.name) == shape
+                not self.builder.has_shape(val.name) or self.builder.get_shape(val.name) == shape
             ), (
                 f"Result {val.name!r} has shape {shape} but the builder "
                 f"assumes it is {self.builder.get_shape(val.name)}"

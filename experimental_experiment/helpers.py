@@ -254,9 +254,7 @@ def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
         if d is inspect._empty:
             if p in kwargs:
                 v = kwargs[p]
-                rows.append(
-                    f"{p}={v!r}" if not isinstance(v, enum.IntEnum) else f"{p}={v.name}"
-                )
+                rows.append(f"{p}={v!r}" if not isinstance(v, enum.IntEnum) else f"{p}={v.name}")
             continue
         v = kwargs.get(p, d)
         if d != v:
@@ -324,9 +322,7 @@ def pretty_onnx(
             if len(v.shape) != 1:
                 return f"{att.name}=tensor({tt}, dtype={v.dtype}).reshape({v.shape})"
             return f"{att.name}=tensor({tt}, dtype={v.dtype})"
-        raise NotImplementedError(
-            f"pretty_onnx not implemented yet for AttributeProto={att!r}"
-        )
+        raise NotImplementedError(f"pretty_onnx not implemented yet for AttributeProto={att!r}")
 
     if isinstance(onx, NodeProto):
 

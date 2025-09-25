@@ -104,9 +104,7 @@ class TestBackend(ExtTestCase):
         ]:
             if providers is None:
                 continue
-            new_bck, new_inputs = OrtBackend.replay_dumped_data(
-                "debug_data", providers=providers
-            )
+            new_bck, new_inputs = OrtBackend.replay_dumped_data("debug_data", providers=providers)
             for i in range(len(new_inputs)):
                 v = new_inputs[i]
                 dt = new_bck.onnx_model.graph.input[i]

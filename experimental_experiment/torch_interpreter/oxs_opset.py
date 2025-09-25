@@ -165,9 +165,7 @@ class OxsOpset:
             rank = self.builder.get_rank(name)
             if rank == 0:
                 return True
-        raise RuntimeError(
-            f"Unable to tell if {name!r} is scalar{self.builder.get_debug_msg()}"
-        )
+        raise RuntimeError(f"Unable to tell if {name!r} is scalar{self.builder.get_debug_msg()}")
 
     def Rank(self, name: str) -> int:
         name = name if isinstance(name, str) else name.name

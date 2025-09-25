@@ -32,9 +32,7 @@ class TestDynamoLlamaDynamic(ExtTestCase):
 
         if hasattr(torch._dynamo.variables.misc, "LoggingLoggerVariable"):
             cls._old_value = torch._dynamo.variables.misc.LoggingLoggerVariable.call_method
-            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = (
-                lambda *_, **__: None
-            )
+            torch._dynamo.variables.misc.LoggingLoggerVariable.call_method = lambda *_, **__: None
 
     @classmethod
     def tearDown(cls):

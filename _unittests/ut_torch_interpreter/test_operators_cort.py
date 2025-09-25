@@ -567,47 +567,35 @@ class TestOperatorsCort(ExtTestCase):
         y = torch.randn(3, requires_grad=True).double()
         r = x + y
         print(r.type, r.shape)
-        self.assertONNX(
-            operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     def test_add_left_broadcast(self):
         x = torch.randn(3, requires_grad=True).double()
         y = torch.randn(2, 3, requires_grad=True).double()
-        self.assertONNX(
-            operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     def test_add_size1_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(2, 1, requires_grad=True).double()
-        self.assertONNX(
-            operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     def test_add_size1_right_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(3, requires_grad=True).double()
-        self.assertONNX(
-            operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     def test_add_size1_singleton_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(1, 3, requires_grad=True).double()
-        self.assertONNX(
-            operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_rsub(self):
         x = torch.randn(2, 3, requires_grad=True).double()
-        self.assertONNX(
-            lambda x: 1 - x, (x,), onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: 1 - x, (x,), onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skipIf(not OP_BOOL_SUPPORTED, reason="multiplication of boolean not supported")
     def test_mul_bool(self):
@@ -1274,21 +1262,15 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_exp(self):
         x = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.exp(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.exp(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_sin(self):
         x = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.sin(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.sin(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_cos(self):
         x = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.cos(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.cos(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_tan(self):
         x = torch.randn(3, 4, requires_grad=True)
@@ -1313,16 +1295,12 @@ class TestOperatorsCort(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_asin(self):
         x = torch.rand(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.asin(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.asin(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)
     def test_acos(self):
         x = torch.rand(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.acos(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.acos(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     @unittest.skipIf(
         True,
@@ -1444,9 +1422,7 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_sign(self):
         x = torch.rand(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.sign(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.sign(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_narrow(self):
         x = torch.randn(3, 3, requires_grad=True)
@@ -1459,9 +1435,7 @@ class TestOperatorsCort(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_atan(self):
         x = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.atan(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.atan(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_view_flatten(self):
         x = torch.randn(1, 2, 3, 4, requires_grad=True)
@@ -1704,9 +1678,7 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_reduce_sum_negative_indices(self):
         x = torch.randn(3, 4, requires_grad=True)
-        self.assertONNX(
-            lambda x: x.sum(-1), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.sum(-1), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_randn(self):
         x = torch.randn(1, 2, 3, 4)
@@ -1857,9 +1829,7 @@ class TestOperatorsCort(ExtTestCase):
 
     def test_erf(self):
         x = torch.randn(1, 2, 3, 4)
-        self.assertONNX(
-            lambda x: x.erf(), x, onnx_export=inspect.currentframe().f_code.co_name
-        )
+        self.assertONNX(lambda x: x.erf(), x, onnx_export=inspect.currentframe().f_code.co_name)
 
     def test_dropout_notraining(self):
         x = torch.randn(3, 4, requires_grad=True)
@@ -1923,9 +1893,7 @@ class TestOperatorsCort(ExtTestCase):
 
     @unittest.skipIf(not DYNAMIC_SHAPE_SUPPORTED, reason="dynamic shape")
     def test_nonzero(self):
-        x = torch.tensor(
-            [[[2.0, 2.0], [1.0, 0.0]], [[0.0, 0.0], [1.0, 1.0]]], requires_grad=True
-        )
+        x = torch.tensor([[[2.0, 2.0], [1.0, 0.0]], [[0.0, 0.0], [1.0, 1.0]]], requires_grad=True)
         self.assertONNX(
             lambda x: torch.nonzero(x),
             x,
@@ -2334,9 +2302,7 @@ class TestOperatorsCort(ExtTestCase):
         class LSTMModel(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.rnn = torch.nn.LSTM(
-                    RNN_INPUT_SIZE, RNN_HIDDEN_SIZE, 1, bidirectional=False
-                )
+                self.rnn = torch.nn.LSTM(RNN_INPUT_SIZE, RNN_HIDDEN_SIZE, 1, bidirectional=False)
 
             def forward(self, x, h0, c0):
                 _a, b = self.rnn(x, (h0, c0))
@@ -2521,9 +2487,7 @@ class TestOperatorsCort(ExtTestCase):
                 new_table[k] = v
 
         shape = (9, 2, 15, 4)
-        x = torch.arange(np.prod(shape), requires_grad=True, dtype=torch.float32).reshape(
-            shape
-        )
+        x = torch.arange(np.prod(shape), requires_grad=True, dtype=torch.float32).reshape(shape)
         self.assertONNX(
             lambda x: x[:, :, 4:, :],
             x,
@@ -2573,9 +2537,7 @@ class TestOperatorsCort(ExtTestCase):
         key = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
         value = torch.rand(32, 8, 128, 64, dtype=torch.float16, device="cpu")
         self.assertONNX(
-            lambda q, k, v: torch.nn.functional.scaled_dot_product_attention(
-                q, k, v, scale=2.2
-            ),
+            lambda q, k, v: torch.nn.functional.scaled_dot_product_attention(q, k, v, scale=2.2),
             (query, key, value),
             onnx_export=inspect.currentframe().f_code.co_name,
             test_backward=False,

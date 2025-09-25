@@ -44,9 +44,7 @@ class TestGraphPatternOptimizationInvestigation(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes_options=True,
-            optimization_options=OptimizationOptions(
-                patterns=["BinaryInvestigation"], verbose=1
-            ),
+            optimization_options=OptimizationOptions(patterns=["BinaryInvestigation"], verbose=1),
         )
         opt_onx, out, _err = self.capture(lambda: gr.to_onnx(optimize=True))
         self.assertIn("[BinaryInvestigation] Mul(2x2x1024x512, 1x1x1024x512)", out)

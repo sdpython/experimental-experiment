@@ -204,6 +204,7 @@ epkg_dictionary = {
     "onnx-array-api": "https://sdpython.github.io/doc/onnx-array-api/dev/",
     "onnx-diagnostic": "https://sdpython.github.io/doc/onnx-diagnostic/dev/",
     "onnx-extended": "https://sdpython.github.io/doc/onnx-extended/dev/",
+    "onnx-ir": "https://onnx.ai/ir-py/",
     "onnx-script": "https://github.com/microsoft/onnxscript",
     "onnxscript": "https://github.com/microsoft/onnxscript",
     "onnxscript Tutorial": "https://microsoft.github.io/onnxscript/tutorial/index.html",

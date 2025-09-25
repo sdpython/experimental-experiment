@@ -157,9 +157,7 @@ class TestPieceByPieceBig(ExtTestCase):
                 return res.squeeze(dim=1).to(dist_pot_donors.dtype)
 
             def forward(self, dist_pot_donors, n_neighbors, fit_X_col, mask_fit_X_col):
-                return self._calc_impute(
-                    dist_pot_donors, n_neighbors, fit_X_col, mask_fit_X_col
-                )
+                return self._calc_impute(dist_pot_donors, n_neighbors, fit_X_col, mask_fit_X_col)
 
         class ColProcessor(torch.nn.Module):
             def __init__(self, col, n_neighbors, weights):
@@ -184,9 +182,7 @@ class TestPieceByPieceBig(ExtTestCase):
                 row_missing_chunk = row_missing_idx
                 col_mask = mask[row_missing_chunk, col]
 
-                potential_donors_idx = torch.nonzero(non_missing_fix_X[:, col], as_tuple=True)[
-                    0
-                ]
+                potential_donors_idx = torch.nonzero(non_missing_fix_X[:, col], as_tuple=True)[0]
                 receivers_idx = row_missing_chunk[flatnonzero(col_mask)]
                 dist_subset = dist_chunk[dist_idx_map[receivers_idx]][:, potential_donors_idx]
                 all_nan_dist_mask = torch.isnan(dist_subset).all(axis=1)
@@ -194,9 +190,7 @@ class TestPieceByPieceBig(ExtTestCase):
                 mask_ = (~mask_fit_X[:, col]).to(_fit_X.dtype)
                 mask_sum = mask_.to(X.dtype).sum()
                 col_sum = (_fit_X[mask_ == 1, col]).sum().to(X.dtype)
-                div = torch.where(
-                    mask_sum > 0, mask_sum, torch.tensor([1], dtype=mask_sum.dtype)
-                )
+                div = torch.where(mask_sum > 0, mask_sum, torch.tensor([1], dtype=mask_sum.dtype))
                 X[all_nan_receivers_idx, col] = col_sum / div
                 receivers_idx = receivers_idx[~all_nan_dist_mask]
                 dist_subset = dist_chunk[dist_idx_map[receivers_idx]][:, potential_donors_idx]
@@ -253,9 +247,7 @@ class TestPieceByPieceBig(ExtTestCase):
                 self.dist = NanEuclidean()
                 cols = []
                 for col in range(knn_imputer._fit_X.shape[1]):
-                    cols.append(
-                        ColProcessor(col, knn_imputer.n_neighbors, knn_imputer.weights)
-                    )
+                    cols.append(ColProcessor(col, knn_imputer.n_neighbors, knn_imputer.weights))
                 self.columns = torch.nn.ModuleList(cols)
                 # refactoring
                 self._make_dict_idx_map = MakeDictIdxMap()
@@ -389,9 +381,7 @@ class TestPieceByPieceBig(ExtTestCase):
                 )
             },
             "CalcImpute": {
-                0: lambda *args, **kwargs: torch.empty(
-                    (args[0].shape[0],), dtype=args[0].dtype
-                )
+                0: lambda *args, **kwargs: torch.empty((args[0].shape[0],), dtype=args[0].dtype)
             },
             "SubTopKIndices": {
                 0: lambda *args, **kwargs: torch.empty(
@@ -419,9 +409,7 @@ class TestPieceByPieceBig(ExtTestCase):
                 ),
             },
             "MakeDictIdxMap": {
-                0: lambda *args, **kwargs: torch.empty(
-                    (args[0].shape[0],), dtype=args[1].dtype
-                ),
+                0: lambda *args, **kwargs: torch.empty((args[0].shape[0],), dtype=args[1].dtype),
             },
         }
 
@@ -514,9 +502,7 @@ class TestPieceByPieceBig(ExtTestCase):
             sess = ExtendedReferenceEvaluator(onx, verbose=0)
             got = sess.run(None, feeds)
             d = max_diff(p1, got[0])
-            assert (
-                d["abs"] < 1e-5
-            ), f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
+            assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
 
             model_inputs = (
                 torch.from_numpy(knn_imputer._mask_fit_X),
@@ -531,9 +517,7 @@ class TestPieceByPieceBig(ExtTestCase):
             feeds = dict(zip(input_names, [t.numpy() for t in model_inputs]))
             got = sess.run(None, feeds)
             d = max_diff(p1, got[0])
-            assert (
-                d["abs"] < 1e-5
-            ), f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
+            assert d["abs"] < 1e-5, f"ONNX Discrepancies for size={size} and sizey={sizey}, d={d}"
 
         validate_onnx(5, 10, onx)
         validate_onnx(50, 40, onx)

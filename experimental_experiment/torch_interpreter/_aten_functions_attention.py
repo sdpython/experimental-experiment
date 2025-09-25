@@ -220,9 +220,7 @@ def aten_scaled_dot_product_attention(
         )
 
     if dropout_p != 0:
-        _attn_weight = g.op.Dropout(attn_weight, np.array(dropout_p, dtype=dtype), name=name)[
-            0
-        ]
+        _attn_weight = g.op.Dropout(attn_weight, np.array(dropout_p, dtype=dtype), name=name)[0]
         set_type_shape_unary_op(g, _attn_weight, attn_weight)
         attn_weight = _attn_weight
 
@@ -268,9 +266,7 @@ def _aten__scaled_dot_product_flash_attention_fillin_empty_outputs(
         outputs=None if not outputs[1] else [outputs[1]],
     )
     empty_tensor_float = g.op.ConstantOfShape(
-        g.op.Constant(
-            value=make_tensor("Empty_FLOATS", TensorProto.INT64, [1], [0]), name=name
-        ),
+        g.op.Constant(value=make_tensor("Empty_FLOATS", TensorProto.INT64, [1], [0]), name=name),
         name=name,
         outputs=None if not outputs[2] else [outputs[2]],
     )
@@ -389,10 +385,9 @@ def aten__scaled_dot_product_flash_attention_for_cpu(
         )
         return result, logsumexp
 
-    assert len(outputs) == 8, (
-        f"Unexpected number of outputs {len(outputs)}, "
-        f"outputs={outputs}{g.get_debug_msg()}"
-    )
+    assert (
+        len(outputs) == 8
+    ), f"Unexpected number of outputs {len(outputs)}, outputs={outputs}{g.get_debug_msg()}"
     (
         logsumexp,
         empty_tensor_int,
@@ -467,10 +462,9 @@ def aten__scaled_dot_product_efficient_attention(
     if len(outputs) == 2:
         return result, logsumexp
 
-    assert len(outputs) == 4, (
-        f"Unexpected number of outputs {len(outputs)}, "
-        f"outputs={outputs}{g.get_debug_msg()}"
-    )
+    assert (
+        len(outputs) == 4
+    ), f"Unexpected number of outputs {len(outputs)}, outputs={outputs}{g.get_debug_msg()}"
 
     empty_tensor_int = g.op.Cast(
         g.op.ConstantOfShape(

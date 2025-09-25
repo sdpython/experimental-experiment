@@ -84,9 +84,7 @@ class MulMulMulScalarPattern(PatternOptimization):
         new_value = cst_left * cst_right
         if not isinstance(new_value, np.ndarray):
             new_value = np.array(new_value)
-        new_cst = g.make_initializer(
-            "", new_value, source="MulMulMulScalarPattern.apply.new_cst"
-        )
+        new_cst = g.make_initializer("", new_value, source="MulMulMulScalarPattern.apply.new_cst")
 
         new_node2 = g.make_node(
             op_type,
@@ -187,10 +185,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
             other_node = right
             before_left = g.get_shape(other_node.input[0])
             before_right = g.get_shape(other_node.input[1])
-            if (
-                self.switch_order(shape_left, shape_right, before_left, before_right, choose)
-                == 0
-            ):
+            if self.switch_order(shape_left, shape_right, before_left, before_right, choose) == 0:
                 return self.none(node, inspect.currentframe().f_lineno)
 
         assert choose in (0, 1), f"Unexpected value for choose={choose}"
@@ -327,9 +322,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         if side == 0:
             B, C, A = other_node.input[0], other_node.input[1], node.input[1]
             if case == 1:
-                op1 = g.make_node(
-                    op_type, [B, A], name=f"{self.__class__.__name__}--{node.name}"
-                )
+                op1 = g.make_node(op_type, [B, A], name=f"{self.__class__.__name__}--{node.name}")
                 op2 = g.make_node(
                     op_type,
                     [op1.output[0], C],

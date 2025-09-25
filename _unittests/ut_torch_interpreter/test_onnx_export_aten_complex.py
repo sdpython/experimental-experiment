@@ -122,9 +122,7 @@ class TestOnnxExportComplex(ExtTestCase):
                 x = self._range(4, 5, 5, bias=1)
                 expected = model(x)
                 DYN = torch.export.Dim.DYNAMIC
-                ep = torch.export.export(
-                    model, (x,), dynamic_shapes=({0: DYN, 1: DYN, 2: DYN},)
-                )
+                ep = torch.export.export(model, (x,), dynamic_shapes=({0: DYN, 1: DYN, 2: DYN},))
                 # print(ep)
                 ep = ep.run_decompositions()
                 assert ep
@@ -241,9 +239,7 @@ class TestOnnxExportComplex(ExtTestCase):
                 x = self._range(4, 5, 5, bias=1)
                 expected = model(x)
                 DYN = torch.export.Dim.DYNAMIC
-                ep = torch.export.export(
-                    model, (x,), dynamic_shapes=({0: DYN, 1: DYN, 2: DYN},)
-                )
+                ep = torch.export.export(model, (x,), dynamic_shapes=({0: DYN, 1: DYN, 2: DYN},))
                 # print(ep)
                 ep = ep.run_decompositions()
                 assert ep

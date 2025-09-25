@@ -782,9 +782,7 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
                 c_cmp = mat[i - 1, j - 1] + (
                     0
                     if s1[i - 1] == s2[j - 1]
-                    else (
-                        1 if isinstance(s1[i - 1], int) and isinstance(s2[j - 1], int) else eps
-                    )
+                    else (1 if isinstance(s1[i - 1], int) and isinstance(s2[j - 1], int) else eps)
                 )
 
                 options = [(c_cmp, (1, 1, i - 1, j - 1))]

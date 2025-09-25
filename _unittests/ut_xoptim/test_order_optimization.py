@@ -56,10 +56,7 @@ class TestGraphOrderOptimization(ExtTestCase):
     def _check_ort_cpu_or_cuda(self, onx):
         def cl(text):
             return (
-                text.replace("\n", " ")
-                .replace("  ", " ")
-                .replace("  ", " ")
-                .replace("  ", " ")
+                text.replace("\n", " ").replace("  ", " ").replace("  ", " ").replace("  ", " ")
             )
 
         def s(cond):

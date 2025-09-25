@@ -61,9 +61,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
     def test_scan_2(self):
         import torch
 
-        def add(
-            carry1: torch.Tensor, carry2: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor
-        ):
+        def add(carry1: torch.Tensor, carry2: torch.Tensor, y1: torch.Tensor, y2: torch.Tensor):
             next_carry1 = carry1 + y1
             next_carry2 = carry2 * y2
             return [next_carry1, next_carry2, next_carry1, next_carry2]
@@ -410,9 +408,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
         class Model(torch.nn.Module):
             def forward(self, images, position):
-                return select_when_exporting(dummy_loop, dummy_loop_with_scan)(
-                    images, position
-                )
+                return select_when_exporting(dummy_loop, dummy_loop_with_scan)(images, position)
 
         model = Model()
         x = torch.randn((5, 6))

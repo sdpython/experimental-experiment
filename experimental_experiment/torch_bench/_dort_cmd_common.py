@@ -70,8 +70,7 @@ def get_fused_aten_ops_dispatcher():
                 t_scale,
             ],
             outputs=[
-                g.unique_name(n)
-                for n in ["output", "log_sumexp", "philox_seed", "philox_offset"]
+                g.unique_name(n) for n in ["output", "log_sumexp", "philox_seed", "philox_offset"]
             ],
             operator="_scaled_dot_product_efficient_attention",
             domain="org.pytorch.aten",
@@ -270,9 +269,7 @@ def create_compiled_model(
         dispatcher = None
 
     if backend == "ort":
-        assert (
-            not return_storage
-        ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not return_storage, f"return_storage=True not implemented with backend={backend!r}"
         assert (
             optimize
         ), f"Optimization with onnxscript cannot be disabled with backend={backend!r}."
@@ -280,9 +277,7 @@ def create_compiled_model(
         return torch.compile(model, backend=local_ort)
 
     if backend == "ort+":
-        assert (
-            not return_storage
-        ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not return_storage, f"return_storage=True not implemented with backend={backend!r}"
         _local_aot_ort, local_ort = make_aot_ort(
             dynamic=use_dynamic,
             rewrite=True,
@@ -298,9 +293,7 @@ def create_compiled_model(
         return torch.compile(model, backend=local_ort)
 
     if backend == "plug":
-        assert (
-            not return_storage
-        ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not return_storage, f"return_storage=True not implemented with backend={backend!r}"
         os.environ["ONNXRT_CHANGE_REWRITER"] = "1"
 
         _local_aot_ort, local_ort = make_aot_ort(
@@ -318,15 +311,11 @@ def create_compiled_model(
         return torch.compile(model, backend=local_ort)
 
     if backend == "inductor":
-        assert (
-            not return_storage
-        ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not return_storage, f"return_storage=True not implemented with backend={backend!r}"
         return torch.compile(model, backend="inductor", dynamic=use_dynamic)
 
     if backend == "trt":
-        assert (
-            not return_storage
-        ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not return_storage, f"return_storage=True not implemented with backend={backend!r}"
         assert not use_dynamic, (
             "TensorRT is not implemented when use_dynamic is False. "
             "In that case, inputs should be a list of torch_tensorrt.Input objects. "
@@ -356,9 +345,7 @@ def create_compiled_model(
         return trt_backend(model)
 
     if backend == "eager":
-        assert (
-            not return_storage
-        ), f"return_storage=True not implemented with backend={backend!r}"
+        assert not return_storage, f"return_storage=True not implemented with backend={backend!r}"
         return model
 
     if backend == "custom":

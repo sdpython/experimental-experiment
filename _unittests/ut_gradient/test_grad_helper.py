@@ -53,9 +53,7 @@ class TestGradHelper(ExtTestCase):
         except OrtFail as e:
             with open(f"fail_{name}.onnx", "wb") as f:
                 f.write(onx.SerializeToString())
-            raise AssertionError(
-                "Unable to run onnx graph %r." % ("fail_%s.onnx" % name)
-            ) from e
+            raise AssertionError("Unable to run onnx graph %r." % ("fail_%s.onnx" % name)) from e
         oinf = ReferenceEvaluator(onx, new_ops=new_ops)
         pygot = oinf.run(None, feeds)
         output_names = [o.name for o in onx.graph.output]

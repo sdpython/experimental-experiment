@@ -31,9 +31,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
             "aten_scaled_dot_product_attention_default",
             {n.op_type for n in onx.graph.node},
         )
-        feeds = dict(
-            zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs])
-        )
+        feeds = dict(zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs]))
         # self.dump_onnx("test_scaled_dot_product_attention_not_causal.onnx", onx)
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)[0]
@@ -75,9 +73,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
             "aten_scaled_dot_product_attention_default",
             [n.op_type for n in onx.graph.node],
         )
-        feeds = dict(
-            zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs])
-        )
+        feeds = dict(zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs]))
         # self.dump_onnx("test_scaled_dot_product_attention_causal.onnx", onx)
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)[0]
@@ -116,9 +112,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
             ["aten_scaled_dot_product_attention_default", "Transpose"],
             [n.op_type for n in onx.graph.node],
         )
-        feeds = dict(
-            zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs])
-        )
+        feeds = dict(zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs]))
         self.dump_onnx("test_scaled_dot_product_attention_function_1.onnx", onx)
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)[0]
@@ -185,9 +179,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
             self.assertEqual(["inline"], keys)
             values = [p.value for p in f.metadata_props]
             self.assertEqual(["0"], values)
-        feeds = dict(
-            zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs])
-        )
+        feeds = dict(zip(["query", "key", "value"], [x.detach().cpu().numpy() for x in inputs]))
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)

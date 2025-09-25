@@ -64,9 +64,7 @@ class SimplifyingEasyPatternFunction(EasyPatternOptimization):
         if not g.builder.has_local_function(f_name, domain=domain):
             self._add_local_function(g.builder, domain, f_name, inputs)
 
-    def _add_local_function(
-        self, g: GraphBuilder, domain: str, f_name: str, inputs: List[str]
-    ):
+    def _add_local_function(self, g: GraphBuilder, domain: str, f_name: str, inputs: List[str]):
         local_g = GraphBuilder(g.main_opset, as_function=True)
         local_g.make_tensor_input(inputs)
         last = self.match_pattern(local_g, *inputs)

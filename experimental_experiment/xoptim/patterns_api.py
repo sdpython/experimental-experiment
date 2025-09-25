@@ -39,9 +39,7 @@ class MatchResult:
         self.nodes = nodes
         self.apply = apply
         self.insert_at = insert_at
-        assert hasattr(
-            pattern, "verbose"
-        ), f"Class {type(pattern)} has not attribute 'verbose'"
+        assert hasattr(pattern, "verbose"), f"Class {type(pattern)} has not attribute 'verbose'"
         if pattern.verbose >= 10:
             print(
                 f"[{self.__class__.__name__}.match] MATCH {pattern.__class__.__name__} "
@@ -214,9 +212,7 @@ class PatternOptimization:
           Knowing it makes it faster to rewriter. If not specified, the optimizer
           will automatically determine the position of the new nodes.
         """
-        raise NotImplementedError(
-            f"This function must be overloaded in class {self.__class__}."
-        )
+        raise NotImplementedError(f"This function must be overloaded in class {self.__class__}.")
 
     def _debug_print(self) -> str:
         return ""
@@ -284,6 +280,9 @@ class PatternOptimization:
         raise NotImplementedError(
             f"This function must be overloaded in class {self.__class__.__name__!r}."
         )
+
+    def _pattern_to_string(self, _g: "GraphBuilder"):  # noqa: F821
+        return "Pattern cannot be constructed without the matched nodes."
 
 
 class EasyPatternOptimization(PatternOptimization):
@@ -401,9 +400,7 @@ class EasyPatternOptimization(PatternOptimization):
         return pat
 
     def display_pattern(self, g, fct) -> str:
-        """
-        Shows the pattern to match or to apply.
-        """
+        """Shows the pattern to match or to apply."""
         pat = self._build_pattern(g, fct)
         rows = []
         rows.append(
@@ -659,9 +656,7 @@ class EasyPatternOptimization(PatternOptimization):
 
             # Let's remove the nodes already marked.
             p_marked = [_ for _ in pns if make_idn(_) not in marked]
-            id_marked = [
-                make_idn(marked[make_idn(_)][0]) for _ in pns if make_idn(_) in marked
-            ]
+            id_marked = [make_idn(marked[make_idn(_)][0]) for _ in pns if make_idn(_) in marked]
             assert len(id_marked) + len(p_marked) == len(pns), (
                 f"Unexpected, id_marked={id_marked}, "
                 f"id_p_marked={set(map(make_idn, p_marked))}, "

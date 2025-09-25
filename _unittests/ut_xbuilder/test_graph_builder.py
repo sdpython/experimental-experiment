@@ -351,9 +351,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(fct["initializers_name"], ["weights", "bias2", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
-        self.assertTrue(
-            all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
-        )
+        self.assertTrue(all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values()))
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])
@@ -470,9 +468,7 @@ class TestGraphBuilder(ExtTestCase):
             ["weights", "bias3", "bias2", "bias"],
         )
         self.assertIsInstance(fct["initializers_dict"], dict)
-        self.assertTrue(
-            all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
-        )
+        self.assertTrue(all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values()))
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])
@@ -614,9 +610,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(fct["initializers_name"], ["weights", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
-        self.assertTrue(
-            all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
-        )
+        self.assertTrue(all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values()))
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])
@@ -657,9 +651,7 @@ class TestGraphBuilder(ExtTestCase):
             gf.make_tensor_input("X", None, None, False)
             init = gf.make_initializer("weights", np_weights)
             bias = gf.make_initializer("bias", np_bias)
-            gf.op.Add(
-                gf.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"]
-            )
+            gf.op.Add(gf.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
             gf.make_tensor_output("Y", is_dimension=False, indexed=False)
             self.assertEqualArray(gf.initializers_dict["weights"], np_weights)
 
@@ -756,9 +748,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(fct["initializers_name"], ["weights", "bias2", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
-        self.assertTrue(
-            all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
-        )
+        self.assertTrue(all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values()))
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])
@@ -810,9 +800,7 @@ class TestGraphBuilder(ExtTestCase):
             gf.make_tensor_input("X", None, None, False)
             init = gf.make_initializer("weights", np_weights)
             bias = gf.make_initializer("bias", np_bias)
-            gf.op.Add(
-                gf.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"]
-            )
+            gf.op.Add(gf.op.MatMul("X", init, name="linear"), bias, name="linear", outputs=["Y"])
             gf.make_tensor_output("Y", is_dimension=False, indexed=False)
             self.assertEqualArray(gf.initializers_dict["weights"], np_weights)
 
@@ -909,9 +897,7 @@ class TestGraphBuilder(ExtTestCase):
         self.assertIsInstance(fct["initializers_name"], list)
         self.assertEqual(fct["initializers_name"], ["weights", "bias2", "bias"])
         self.assertIsInstance(fct["initializers_dict"], dict)
-        self.assertTrue(
-            all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values())
-        )
+        self.assertTrue(all(isinstance(p, np.ndarray) for p in fct["initializers_dict"].values()))
         self.assertEqual(len(fct["initializers_name"]), len(fct["initializers_dict"]))
         proto = fct["proto"]
         self.assertEqual(proto.output, ["Y"])

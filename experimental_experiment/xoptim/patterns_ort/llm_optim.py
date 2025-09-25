@@ -71,9 +71,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 input_shape[-1], cos_shape[-1], "+", sin_shape[-1]
             ):
                 # No split before, no concat after
-                return MatchResult(
-                    self, [concat_cos, concat_sin, None, node, None], self.apply
-                )
+                return MatchResult(self, [concat_cos, concat_sin, None, node, None], self.apply)
 
         if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
@@ -145,17 +143,13 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
         )
         one = g.make_initializer("", g.ONE, source=f"{self.__class__.__name__}.1")
-        one_no_dim = g.make_initializer(
-            "", g.ONE_NO_DIM, source=f"{self.__class__.__name__}.1d"
-        )
+        one_no_dim = g.make_initializer("", g.ONE_NO_DIM, source=f"{self.__class__.__name__}.1d")
 
         # position_ids
         zero_no_dim = g.make_initializer(
             "", g.ZERO_NO_DIM, source=f"{self.__class__.__name__}.0d"
         )
-        seq_length = g.unique_name(
-            f"{self.__class__.__name__}--{half_node.input[0]}--seq_length"
-        )
+        seq_length = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}--seq_length")
         seq_length_squeezed = g.unique_name(
             f"{self.__class__.__name__}--{half_node.input[0]}--seqsq"
         )

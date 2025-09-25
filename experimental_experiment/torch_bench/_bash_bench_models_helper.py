@@ -86,9 +86,7 @@ def get_llama_model_layer(
             self.model = LlamaModel(config)
 
         def forward(self, input_ids, attention_mask):
-            model_output = self.model(
-                input_ids, attention_mask=attention_mask, use_cache=False
-            )
+            model_output = self.model(input_ids, attention_mask=attention_mask, use_cache=False)
             return model_output.to_tuple()
 
     def generate_example_inputs(batch: int, seq: int, vocab_size: int):

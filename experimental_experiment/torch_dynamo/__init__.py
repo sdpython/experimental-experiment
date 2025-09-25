@@ -115,8 +115,7 @@ def get_decomposition_table_dynamo(onnx_registry=None):
     """
     Returns the decomposition table needed for the dynamo exporter.
 
-    :param onnx_registry: instance of class
-        ``torch.onnx._internal.exporter.OnnxRegistry``
+    :param onnx_registry: sent to ``create_onnx_friendly_decomposition_table``
 
     The value is:
 
@@ -128,16 +127,11 @@ def get_decomposition_table_dynamo(onnx_registry=None):
 
         pprint.pprint(get_decomposition_table_dynamo())
     """
-    from torch.onnx._internal.fx.decomposition_table import (
+    from torch.onnx._internal.exporter._decomp import (
         create_onnx_friendly_decomposition_table,
     )
 
-    try:
-        from torch.onnx._internal._exporter_legacy import OnnxRegistry
-    except ImportError:
-        from torch.onnx._internal.exporter import OnnxRegistry
-
-    return create_onnx_friendly_decomposition_table(onnx_registry or OnnxRegistry())
+    return create_onnx_friendly_decomposition_table(onnx_registry or set())
 
 
 def filter_decomposition_table(
@@ -227,9 +221,7 @@ def _single_print(v):
     raise TypeError(f"Unexpected type {type(v)}.")
 
 
-def pprint_storage(
-    storage: Any, indent: int = 0, as_list: bool = False
-) -> Union[List[str], str]:
+def pprint_storage(storage: Any, indent: int = 0, as_list: bool = False) -> Union[List[str], str]:
     """
     Pretty print for the storage.
 

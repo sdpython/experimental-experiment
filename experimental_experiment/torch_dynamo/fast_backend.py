@@ -165,9 +165,7 @@ class OrtBackend:
             import onnxruntime
 
             self.run_options = onnxruntime.RunOptions()
-            self.run_options.add_run_config_entry(
-                "disable_synchronize_execution_providers", "1"
-            )
+            self.run_options.add_run_config_entry("disable_synchronize_execution_providers", "1")
         if self.input_names is None:
             self.input_names = [i.name for i in sess.get_inputs()]
         if self.output_names is None:
@@ -185,9 +183,7 @@ class OrtBackend:
                 b = "_dim_" in o.name
                 rk = len(o.shape)
                 dt = self.ORT_STR_TYPE_TO_TENSOR_TYPE[o.type]
-                self.is_dimension_out.append(
-                    (b, rk, None if "_NONE_" in o.name else o.name, dt)
-                )
+                self.is_dimension_out.append((b, rk, None if "_NONE_" in o.name else o.name, dt))
 
     def __call__(self, *inputs):
         if self.dump_first_inputs:
@@ -334,9 +330,7 @@ class OrtBackend:
         elif isinstance(value, torch.Tensor):
             return self.to_tensor_proto(value.detach().cpu().numpy())
         else:
-            raise RuntimeError(
-                f"Unexpected type {type(value)}, unable to convert to TensorProto"
-            )
+            raise RuntimeError(f"Unexpected type {type(value)}, unable to convert to TensorProto")
         return proto
 
     def dump_for_debug(self, folder: str, *inputs, test_case: int = 0):
@@ -432,13 +426,9 @@ def _default_export(
     options=None,
     export_options: Optional[Union[str, ExportOptions]] = None,
 ):
-    input_names = input_names = (
-        create_input_names(graph_module, args) if rename_inputs else None
-    )
+    input_names = input_names = create_input_names(graph_module, args) if rename_inputs else None
 
-    verbose_onnx, _verbose_backend = (
-        verbose if isinstance(verbose, tuple) else (verbose, verbose)
-    )
+    verbose_onnx, _verbose_backend = verbose if isinstance(verbose, tuple) else (verbose, verbose)
 
     if options is None:
         patterns = get_pattern_list(enable_pattern, disable_pattern, verbose=verbose_onnx)
@@ -607,9 +597,7 @@ def onnx_custom_backend(
     providers = ["CPUExecutionProvider"]
     if torch.cuda.device_count() > 0:
         for i in range(torch.cuda.device_count()):
-            DEVICES[i] = ORTC.OrtDevice(
-                ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i
-            )
+            DEVICES[i] = ORTC.OrtDevice(ORTC.OrtDevice.cuda(), ORTC.OrtDevice.default_memory(), i)
         max_device = max(i.get_device() for i in args if hasattr(i, "get_device"))
         if max_device >= 0:
             providers = [("CUDAExecutionProvider", {}), ("CPUExecutionProvider", {})]

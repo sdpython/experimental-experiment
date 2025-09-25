@@ -30,9 +30,7 @@ class TestOnnxTools(ExtTestCase):
                 [oh.make_tensor_value_info("X", TFLOAT, [320, 1280])],
                 [oh.make_tensor_value_info("Z", TFLOAT, [3, 5, 320, 640])],
                 [
-                    onh.from_array(
-                        np.random.rand(3, 5, 1280, 640).astype(np.float32), name="Y"
-                    ),
+                    onh.from_array(np.random.rand(3, 5, 1280, 640).astype(np.float32), name="Y"),
                     onh.from_array(np.array([0], dtype=np.int64), name="zero"),
                     onh.from_array(np.array([1], dtype=np.int64), name="un"),
                     onh.from_array(np.array([1, 320, 1280], dtype=np.int64), name="shape1"),

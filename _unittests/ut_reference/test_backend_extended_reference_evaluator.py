@@ -226,14 +226,10 @@ backend_test.exclude("(test_scatter_with_axis*|test_scatter_without_axis*)")
 
 if onnx_opset_version() < 21:
     # The following tests fail due to a bug in the backend test comparison.
-    backend_test.exclude(
-        "(test_cast_FLOAT_to_STRING|test_castlike_FLOAT_to_STRING|test_strnorm)"
-    )
+    backend_test.exclude("(test_cast_FLOAT_to_STRING|test_castlike_FLOAT_to_STRING|test_strnorm)")
 
     # The following tests fail due to a shape mismatch.
-    backend_test.exclude(
-        "(test_center_crop_pad_crop_axes_hwc_expanded|test_lppool_2d_dilations)"
-    )
+    backend_test.exclude("(test_center_crop_pad_crop_axes_hwc_expanded|test_lppool_2d_dilations)")
 
     # The following tests fail due to a type mismatch.
     backend_test.exclude("(test_eyelike_without_dtype)")

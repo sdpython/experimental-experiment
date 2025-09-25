@@ -72,10 +72,7 @@ class TestGraphPatternCombination(ExtTestCase):
     def _check_ort_cpu_or_cuda(self, onx, model=None):
         def cl(text):
             return (
-                text.replace("\n", " ")
-                .replace("  ", " ")
-                .replace("  ", " ")
-                .replace("  ", " ")
+                text.replace("\n", " ").replace("  ", " ").replace("  ", " ").replace("  ", " ")
             )
 
         def s(cond):
@@ -255,9 +252,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 "dummy",
                 [
                     oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
-                    oh.make_tensor_value_info(
-                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
-                    ),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["batch", "channel", "D128", "D64"]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, ["batch", "channel", "D32", "64"])],
                 [
@@ -310,9 +305,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 "dummy",
                 [
                     oh.make_tensor_value_info("X", TFLOAT, ["D32", "D128"]),
-                    oh.make_tensor_value_info(
-                        "Y", TFLOAT, ["batch", "channel", "D128", "D64"]
-                    ),
+                    oh.make_tensor_value_info("Y", TFLOAT, ["batch", "channel", "D128", "D64"]),
                 ],
                 [oh.make_tensor_value_info("Z", TFLOAT, ["batch", "channel", "D32", "64"])],
                 [
@@ -489,9 +482,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 continue
             options = OptimizationOptions(
                 patterns=(
-                    "default+onnxruntime+experimental"
-                    if experimental
-                    else "default+onnxruntime"
+                    "default+onnxruntime+experimental" if experimental else "default+onnxruntime"
                 ),
                 verbose=0,
                 verifies=False,

@@ -558,9 +558,7 @@ class ExtTestCase(unittest.TestCase):
             if isinstance(expected, dict):
                 for k in expected:
                     self.assertIn(k, value, msg=msg)
-                    self.assertEqualArrayAny(
-                        expected[k], value[k], msg=msg, atol=atol, rtol=rtol
-                    )
+                    self.assertEqualArrayAny(expected[k], value[k], msg=msg, atol=atol, rtol=rtol)
             else:
                 excs = []
                 for i, (e, g) in enumerate(zip(expected, value)):
@@ -929,10 +927,7 @@ def requires_diffusers(
         msg = f"diffusers version {diffusers.__version__} < {version} {msg}"
         return unittest.skip(msg)
     if or_older_than and v > pv.Version(or_older_than):
-        msg = (
-            f"diffusers version {or_older_than} < "
-            f"{diffusers.__version__} < {version} {msg}"
-        )
+        msg = f"diffusers version {or_older_than} < {diffusers.__version__} < {version} {msg}"
         return unittest.skip(msg)
     return lambda x: x
 

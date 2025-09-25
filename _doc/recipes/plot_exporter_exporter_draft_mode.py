@@ -210,7 +210,7 @@ print(string_type(inputs, with_shape=True))
 # The function we want to try.
 
 err = StringIO()
-with redirect_stderr(err), register_additional_serialization_functions():
+with redirect_stderr(err), register_additional_serialization_functions(patch_transformers=True):
     ep = torch.export._draft_export.draft_export(model, tuple(), kwargs=inputs, strict=False)
 
 # %%

@@ -102,8 +102,7 @@ def download_retry_decorator(retry: int = 5) -> Callable:  # type: ignore[arg-ty
                         time.sleep(wait)
                     else:
                         raise RuntimeError(  # noqa: B904
-                            f"Failed to load model {args!r} "
-                            f"with following error(s): {e!r}."
+                            f"Failed to load model {args!r} with following error(s): {e!r}."
                         )
 
         return wrapper
@@ -456,8 +455,7 @@ class ModelRunner:
         config = getattr(model, "config", {})
         to_tuple = not (hasattr(config, "to_tuple") and not config.to_tuple)
         assert (
-            "AlexNet" not in model.__class__.__name__
-            and "Mixer" not in model.__class__.__name__
+            "AlexNet" not in model.__class__.__name__ and "Mixer" not in model.__class__.__name__
         ) or not to_tuple, (
             f"Model {type(model)} does not need to call "
             f"to_tuple, has config={hasattr(model, 'config')}."
@@ -520,9 +518,7 @@ class ModelRunner:
                 )
             elif i.__class__.__name__ == "BaseModelOutput" and hasattr(i, "last_hidden_state"):
                 devices.append(
-                    i.last_hidden_state.get_device()
-                    if i.last_hidden_state is not None
-                    else None
+                    i.last_hidden_state.get_device() if i.last_hidden_state is not None else None
                 )
             elif i.__class__.__name__ == "MambaCache" and hasattr(i, "conv_states"):
                 devices.append(
@@ -1067,9 +1063,7 @@ class ModelRunner:
                 res = torch.compile(self.model, backend=cbf, fullgraph=True)
         else:
             if self.autocast:
-                with torch.autocast(
-                    device_type=self.device, dtype=self.dtype
-                ), torch.no_grad():
+                with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
                     res = torch.compile(self.model, backend=cbff, fullgraph=True)
             else:
                 with torch.no_grad():
@@ -1554,9 +1548,7 @@ class ModelRunner:
         executorch_program = edge_program.to_executorch(ExecutorchBackendConfig(passes=[]))
 
         if verbose:
-            print(
-                f"[ModelRunner._to_executorch] saved {type(executorch_program)} into {name!r}"
-            )
+            print(f"[ModelRunner._to_executorch] saved {type(executorch_program)} into {name!r}")
         with open(name, "wb") as file:
             file.write(executorch_program.buffer)
 
@@ -1694,14 +1686,10 @@ class ModelRunner:
 
         if self.autocast:
             with torch.autocast(device_type=self.device, dtype=self.dtype), torch.no_grad():
-                res = torch.compile(
-                    self.model, backend="onnxrt", fullgraph=True, dynamic=dynamic
-                )
+                res = torch.compile(self.model, backend="onnxrt", fullgraph=True, dynamic=dynamic)
         else:
             with torch.no_grad():
-                res = torch.compile(
-                    self.model, backend="onnxrt", fullgraph=True, dynamic=dynamic
-                )
+                res = torch.compile(self.model, backend="onnxrt", fullgraph=True, dynamic=dynamic)
         return res, None
 
     def get_dynamic_shapes(
@@ -1737,9 +1725,7 @@ class ModelRunner:
         )
 
         batch = torch.export.Dim("batch", min=1, max=1024)
-        seq_length = (
-            (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
-        )
+        seq_length = (torch.export.Dim("seql", min=1, max=131072) * 8) if self.is_lm() else None
         # This default value won't probably work. This should be set up manually.
         cache_length = torch.export.Dim("cachel", min=1, max=131072)
         res = []
@@ -1888,9 +1874,7 @@ class ModelRunner:
             f"kw_inputs={string_type(kw_inputs, limit=20)}"
         )
 
-        assert isinstance(
-            inputs, tuple
-        ), f"Not implemented for type(self.inputs)={type(inputs)}"
+        assert isinstance(inputs, tuple), f"Not implemented for type(self.inputs)={type(inputs)}"
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
         if isinstance(self.model, WrappedModelBase):
             # dynamic shapes are wrapped
@@ -1904,14 +1888,10 @@ class ModelRunner:
                 dyn_inputs.append(None)
                 continue
             if isinstance(inp, int):
-                dyn_inputs.append(
-                    torch.Tensor([inp]).to(torch.int64) if int_to_tensor else inp
-                )
+                dyn_inputs.append(torch.Tensor([inp]).to(torch.int64) if int_to_tensor else inp)
                 continue
             if isinstance(inp, float):
-                dyn_inputs.append(
-                    torch.Tensor([inp]).to(torch.float32) if int_to_tensor else inp
-                )
+                dyn_inputs.append(torch.Tensor([inp]).to(torch.float32) if int_to_tensor else inp)
                 continue
             if i >= len(dynamic_shapes):
                 dyn_inputs.append(inp)
@@ -2053,9 +2033,7 @@ class ModelRunner:
         if inputs is None:
             return self.get_input_shapes(dynamic=dynamic, export=export, inputs=self.inputs)
 
-        assert isinstance(
-            inputs, tuple
-        ), f"Not implemented for type(self.inputs)={type(inputs)}"
+        assert isinstance(inputs, tuple), f"Not implemented for type(self.inputs)={type(inputs)}"
         dynamic_shapes = self.get_dynamic_shapes(dynamic)
         dyn_input_shapes = []
         dyn_values = {}
@@ -2551,9 +2529,7 @@ class ModelRunner:
                     if isinstance(u, tuple):
                         new_inputs.extend(u)
                         continue
-                    raise AssertionError(
-                        f"Unable to process input type {type(u)} in input list"
-                    )
+                    raise AssertionError(f"Unable to process input type {type(u)} in input list")
                 continue
             if i.__class__.__name__ == "DynamicCache":
                 import transformers

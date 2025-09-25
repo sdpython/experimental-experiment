@@ -41,9 +41,7 @@ class TestOnnxExportErrors(ExtTestCase):
         x, cache = torch.rand((2, 4)), CustomCache((2, 4))
         model(x, cache)
         DYN = torch.export.Dim.DYNAMIC
-        torch.export.export(
-            model, (x, cache), dynamic_shapes=({0: DYN}, [[{0: DYN}, {0: DYN}]])
-        )
+        torch.export.export(model, (x, cache), dynamic_shapes=({0: DYN}, [[{0: DYN}, {0: DYN}]]))
 
 
 if __name__ == "__main__":

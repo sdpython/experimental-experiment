@@ -297,11 +297,7 @@ class AttentionPattern(PatternOptimization):
         # val_124 has no predecessor.
 
         node_2_Equal = g.node_before(eq_87)
-        if (
-            node_2_Equal is None
-            or node_2_Equal.op_type != "Equal"
-            or node_2_Equal.domain != ""
-        ):
+        if node_2_Equal is None or node_2_Equal.op_type != "Equal" or node_2_Equal.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         convert_element_type_default = node_2_Equal.input[0]
         ### val_10 = node_2_Equal.input[1]
@@ -391,9 +387,7 @@ class AttentionPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         # last verification, shape, unlikely to happen but still...
-        if not g.has_shape(node_22_Reshape.output[0]) or not g.has_shape(
-            node_3_MatMul.input[0]
-        ):
+        if not g.has_shape(node_22_Reshape.output[0]) or not g.has_shape(node_3_MatMul.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         if g.get_shape(node_3_MatMul.input[0]) != g.get_shape(node_22_Reshape.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)

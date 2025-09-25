@@ -722,9 +722,7 @@ def get_falcon_mamba_7b(
         res["inputs2"]["attention_mask"] = torch.ones(
             res["inputs2"]["input_ids"].shape, dtype=torch.float32, device=device
         )
-        res["inputs2"]["cache_position"] = torch.arange(
-            0, config["conv_kernel"], device=device
-        )
+        res["inputs2"]["cache_position"] = torch.arange(0, config["conv_kernel"], device=device)
     return res
 
 

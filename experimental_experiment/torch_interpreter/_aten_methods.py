@@ -25,9 +25,7 @@ from ._aten_functions import (
 T = str
 
 
-def aten_meth_bool(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_meth_bool(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "cast"
     import torch
 
@@ -75,16 +73,12 @@ def aten_meth_contiguous(
     return g.make_node("Identity", [x], outputs, name=".contiguous")
 
 
-def aten_meth_cos(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_meth_cos(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "cos"
     return aten_cos(g, sts, outputs, x, name=".cos")
 
 
-def aten_meth_cpu(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_meth_cpu(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "identity"
     return g.make_node("Identity", [x], outputs, name="cpu")
 
@@ -259,9 +253,7 @@ def aten_meth_mean(
             "", np.array([dim], dtype=np.int64), source="aten_meth_mean.cst.1"
         )
     elif isinstance(dim, tuple):
-        cst = g.make_initializer(
-            "", np.array(dim, dtype=np.int64), source="aten_meth_mean.cst.2"
-        )
+        cst = g.make_initializer("", np.array(dim, dtype=np.int64), source="aten_meth_mean.cst.2")
     else:
         raise RuntimeError(f"Unexpected type {type(dim)} for dim.")
     res = g.op.ReduceMeanAnyOpset(
@@ -366,9 +358,7 @@ def aten_meth_reshape(
     return res
 
 
-def aten_meth_sin(
-    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T
-) -> T:
+def aten_meth_sin(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     "sin"
     return aten_sin(g, sts, outputs, x, name=".sin")
 
@@ -465,9 +455,7 @@ def aten_meth_to(
             f"Unexpected type for argument {type(a)}, iunput_name={input_name!r} "
             f"args={args}{g.get_debug_msg()}"
         )
-    assert (
-        dtype is not None or device is not None
-    ), "dtype or device cannot be None for method to"
+    assert dtype is not None or device is not None, "dtype or device cannot be None for method to"
 
     if dtype is None:
         return g.op.Identity(input_name, outputs=outputs, name=name)

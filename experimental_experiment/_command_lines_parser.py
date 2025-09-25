@@ -380,9 +380,7 @@ def get_parser_run() -> ArgumentParser:
             """
         ).strip("\n"),
     )
-    parser.add_argument(
-        "--validate", default="", help="validate the output with another model"
-    )
+    parser.add_argument("--validate", default="", help="validate the output with another model")
     return parser
 
 
@@ -497,11 +495,7 @@ def main(argv: Optional[List[Any]] = None):
 
     if argv is None:
         argv = sys.argv[1:]
-    if (
-        len(argv) == 0
-        or (len(argv) <= 1 and argv[0] not in fcts)
-        or argv[-1] in ("--help", "-h")
-    ):
+    if len(argv) == 0 or (len(argv) <= 1 and argv[0] not in fcts) or argv[-1] in ("--help", "-h"):
         if len(argv) < 2:
             parser = get_main_parser()
             parser.parse_args(argv)
@@ -527,6 +521,4 @@ def main(argv: Optional[List[Any]] = None):
     if cmd in fcts:
         fcts[cmd](argv)
     else:
-        raise ValueError(
-            f"Unknown command {cmd!r}, use --help to get the list of known command."
-        )
+        raise ValueError(f"Unknown command {cmd!r}, use --help to get the list of known command.")

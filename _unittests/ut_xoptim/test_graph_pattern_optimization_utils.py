@@ -35,9 +35,7 @@ class TestGraphPatternOptimizationUtils(ExtTestCase):
         self.assertEqual(("Squeeze", (1,)), sqsx(("d1", 1, 256, "d2"), ("d1", 256, "d2")))
         self.assertEqual(("Squeeze", (1, 2)), sqsx(("d1", 1, 1, 256, "d2"), ("d1", 256, "d2")))
         self.assertEqual(("Unsqueeze", (1,)), sqsx(("d1", 256, "d2"), ("d1", 1, 256, "d2")))
-        self.assertEqual(
-            ("Unsqueeze", (1, 2)), sqsx(("d1", 256, "d2"), ("d1", 1, 1, 256, "d2"))
-        )
+        self.assertEqual(("Unsqueeze", (1, 2)), sqsx(("d1", 256, "d2"), ("d1", 1, 1, 256, "d2")))
 
     def test_reshape_zero(self):
         model = oh.make_model(

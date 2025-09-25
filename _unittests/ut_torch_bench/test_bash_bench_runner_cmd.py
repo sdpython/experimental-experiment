@@ -264,9 +264,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     @requires_onnxruntime_training()
     def test_huggingface_export_bench_cort_cpu(self):
-        self._hg_export_bench_cpu(
-            "cort", "101Dummy", process=True, verbose=20, check_file=False
-        )
+        self._hg_export_bench_cpu("cort", "101Dummy", process=True, verbose=20, check_file=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")

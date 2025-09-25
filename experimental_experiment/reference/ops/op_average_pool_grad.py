@@ -28,12 +28,7 @@ class AveragePoolGrad(OpRun):
 
         grad_shape = list(out.shape[:2])
         for i in range(len(kernel_shape)):
-            d = (
-                out.shape[i + 2] * strides[i]
-                + kernel_shape[i]
-                - 1
-                + sum(pads[i * 2 : i * 2 + 2])
-            )
+            d = out.shape[i + 2] * strides[i] + kernel_shape[i] - 1 + sum(pads[i * 2 : i * 2 + 2])
             grad_shape.append(d)
 
         grad = np.zeros(tuple(grad_shape), dtype=out.dtype)
@@ -52,9 +47,7 @@ class AveragePoolGrad(OpRun):
                                 grad.shape[3],
                             )
 
-                            grad[batch, channel, t:b, le:ri] += (
-                                out[batch, channel, i, j] * scale
-                            )
+                            grad[batch, channel, t:b, le:ri] += out[batch, channel, i, j] * scale
         else:
             raise NotImplementedError(
                 f"AveragePoolGrad is not implemented for shape={out.shape}."

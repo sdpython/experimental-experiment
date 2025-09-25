@@ -72,9 +72,7 @@ class MatMulAddPattern(PatternOptimization):
         if last_dim != shape_bias[-1]:
             return self.none(node, inspect.currentframe().f_lineno)
         if len(shape_bias) > 1:
-            shape_node_out = (
-                g.get_shape(node.output[0]) if g.has_shape(node.output[0]) else None
-            )
+            shape_node_out = g.get_shape(node.output[0]) if g.has_shape(node.output[0]) else None
             if shape_node_out is not None:
                 if len(shape_node_out) != len(shape_bias):
                     return self.none(node, inspect.currentframe().f_lineno)
@@ -109,16 +107,8 @@ class MatMulAddPattern(PatternOptimization):
         if g.get_rank(matmul_node.input[0]) > 2:
             rk_bias = g.get_rank(bias2)
             # get k
-            sh1 = (
-                g.get_shape(matmul_node.input[0])
-                if g.has_shape(matmul_node.input[0])
-                else None
-            )
-            sh2 = (
-                g.get_shape(matmul_node.input[1])
-                if g.has_shape(matmul_node.input[1])
-                else None
-            )
+            sh1 = g.get_shape(matmul_node.input[0]) if g.has_shape(matmul_node.input[0]) else None
+            sh2 = g.get_shape(matmul_node.input[1]) if g.has_shape(matmul_node.input[1]) else None
             k = sh1[-1] if sh1 is not None and isinstance(sh1[-1], int) else sh2[0]
             new_shape = g.make_initializer(
                 "",
@@ -190,9 +180,7 @@ class MatMulAddPattern(PatternOptimization):
             outputs = [unshaped]
 
             # last reshape
-            if g.has_shape(matmul_node.input[0]) and all_int(
-                g.get_shape(matmul_node.input[0])
-            ):
+            if g.has_shape(matmul_node.input[0]) and all_int(g.get_shape(matmul_node.input[0])):
                 shape_back = g.make_initializer(
                     "",
                     np.array([*g.get_shape(matmul_node.input[0])[:-1], -1], dtype=np.int64),
@@ -200,9 +188,7 @@ class MatMulAddPattern(PatternOptimization):
                 )
             else:
                 # We extract the shape.
-                that_shape = g.unique_name(
-                    f"{self.__class__.__name__}--{matmul_node.input[0]}"
-                )
+                that_shape = g.unique_name(f"{self.__class__.__name__}--{matmul_node.input[0]}")
                 reshape_nodes.append(
                     g.make_node(
                         "Shape",
@@ -213,9 +199,7 @@ class MatMulAddPattern(PatternOptimization):
                         name=f"{self.__class__.__name__}--{matmul_node.name}",
                     )
                 )
-                shape_back = g.unique_name(
-                    f"{self.__class__.__name__}--{matmul_node.input[0]}"
-                )
+                shape_back = g.unique_name(f"{self.__class__.__name__}--{matmul_node.input[0]}")
                 minus1 = g.make_initializer(
                     "",
                     g.MINUS_ONE,
@@ -453,9 +437,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 # All shapes are different. It is not worth it.
                 return self.none(node, inspect.currentframe().f_lineno)
 
-            if len(next_shape) != len(the_shape_left) and len(next_shape) != len(
-                the_shape_right
-            ):
+            if len(next_shape) != len(the_shape_left) and len(next_shape) != len(the_shape_right):
                 return self.none(node, inspect.currentframe().f_lineno)
 
             if matmul_shape[-1] != next_shape[-1]:
@@ -630,9 +612,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         else:
             if add_left:
                 new_left_name = g.unique_name(f"{self.__class__.__name__}AL_{left_name}")
-                new_sh = (
-                    g.get_shape(next_node.output[0])[:-2] + g.get_shape(node.input[0])[-2:]
-                )
+                new_sh = g.get_shape(next_node.output[0])[:-2] + g.get_shape(node.input[0])[-2:]
                 sh = g.make_initializer(
                     "",
                     np.array(new_sh, dtype=np.int64),
@@ -648,9 +628,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
                 left_name = new_left_name
             if add_right:
                 new_right_name = g.unique_name(f"{self.__class__.__name__}AR_{right_name}")
-                new_sh = (
-                    g.get_shape(next_node.output[0])[:-2] + g.get_shape(node.input[1])[-2:]
-                )
+                new_sh = g.get_shape(next_node.output[0])[:-2] + g.get_shape(node.input[1])[-2:]
                 sh = g.make_initializer(
                     "",
                     np.array(new_sh, dtype=np.int64),
@@ -797,9 +775,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         shape_left = tuple(int(i) for i in g.get_computed_constant(node_before_left.input[1]))
         if not g.is_constant(node_before_right.input[1]):
             return
-        shape_right = tuple(
-            int(i) for i in g.get_computed_constant(node_before_right.input[1])
-        )
+        shape_right = tuple(int(i) for i in g.get_computed_constant(node_before_right.input[1]))
         if not g.is_constant(next_node.input[1]):
             return
         shape_final = tuple(int(i) for i in g.get_computed_constant(next_node.input[1]))
@@ -975,9 +951,7 @@ class TransposeMatMulPattern(PatternOptimization):
         )
         new_node.attribute.extend(keep)
         res = [new_node]
-        if node_before_left is not None and g.is_used_more_than_once(
-            node_before_left.output[0]
-        ):
+        if node_before_left is not None and g.is_used_more_than_once(node_before_left.output[0]):
             # This is not efficient on CUDA.
             res.append(node_before_left)
         if node_before_right is not None and g.is_used_more_than_once(

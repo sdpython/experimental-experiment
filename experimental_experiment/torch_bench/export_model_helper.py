@@ -225,9 +225,7 @@ def common_export(
             dynamic_axes=dynamic_shapes,
         )
     elif exporter == "onnx_dynamo":
-        assert (
-            dynamic_shapes is None
-        ), f"dynamic_shapes={dynamic_shapes} is not implemented yet"
+        assert dynamic_shapes is None, f"dynamic_shapes={dynamic_shapes} is not implemented yet"
         torch.onnx.export(
             model,
             inputs,
@@ -457,9 +455,7 @@ class WrapInferenceSessionForTorch:
             torch.bool: TensorProto.BOOL,
         }
 
-        DEVICES = {
-            -1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)
-        }
+        DEVICES = {-1: ORTC.OrtDevice(ORTC.OrtDevice.cpu(), ORTC.OrtDevice.default_memory(), 0)}
 
         if torch.cuda.device_count() > 0:
             for i in range(torch.cuda.device_count()):
@@ -533,9 +529,7 @@ class WrapInferenceSessionForTorch:
             res = []
             for i in range(len(ortvalues)):
                 res.append(
-                    _from_dlpack(ortvalues[i].to_dlpack())
-                    if ortvalues[i].has_value()
-                    else None
+                    _from_dlpack(ortvalues[i].to_dlpack()) if ortvalues[i].has_value() else None
                 )
             if self.nvtx:
                 self.torch.cuda.nvtx.range_pop()
@@ -693,9 +687,7 @@ def run_onnx_inference(
         print(f"[run_inference] start {warmup} warmup iterations")
 
     if torch_model:
-        expected = [
-            torch_model(*example_inputs[i % len(example_inputs)]) for i in range(warmup)
-        ]
+        expected = [torch_model(*example_inputs[i % len(example_inputs)]) for i in range(warmup)]
 
     got = []
     iterations = []

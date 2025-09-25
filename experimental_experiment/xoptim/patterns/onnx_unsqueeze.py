@@ -22,21 +22,13 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         if first_node.op_type == "Unsqueeze" and len(second_node.input) == 1:
             return "Squeeze", None
         axes1 = (
-            None
-            if len(first_node.input) == 1
-            else g.get_computed_constant(first_node.input[1])
+            None if len(first_node.input) == 1 else g.get_computed_constant(first_node.input[1])
         )
         axes2 = (
-            None
-            if len(second_node.input) == 1
-            else g.get_computed_constant(second_node.input[1])
+            None if len(second_node.input) == 1 else g.get_computed_constant(second_node.input[1])
         )
 
-        if (
-            axes1 is None
-            and first_node.op_type == "Squeeze"
-            and g.has_shape(first_node.input[0])
-        ):
+        if axes1 is None and first_node.op_type == "Squeeze" and g.has_shape(first_node.input[0]):
             axes1 = tuple(i for i, a in enumerate(g.get_shape(first_node.input[0])) if a == 1)
         if (
             axes2 is None

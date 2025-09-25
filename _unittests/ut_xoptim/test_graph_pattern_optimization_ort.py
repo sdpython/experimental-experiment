@@ -1181,9 +1181,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                         "dummy",
                         [
                             oh.make_tensor_value_info("A", TFLOAT, ["a", "b", 8]),
-                            oh.make_tensor_value_info(
-                                "B", TFLOAT, [4, 8] if transB else [8, 4]
-                            ),
+                            oh.make_tensor_value_info("B", TFLOAT, [4, 8] if transB else [8, 4]),
                         ],
                         [oh.make_tensor_value_info("Y", TFLOAT, ["f", "g"])],
                         [onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape")],
@@ -1203,9 +1201,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 gr = GraphBuilder(
                     model,
                     infer_shapes_options=True,
-                    optimization_options=OptimizationOptions(
-                        patterns=["ReshapeGemm"], verbose=0
-                    ),
+                    optimization_options=OptimizationOptions(patterns=["ReshapeGemm"], verbose=0),
                 )
                 opt_onx = gr.to_onnx(optimize=True)
                 self.assertIn("FusedMatMul", [n.op_type for n in opt_onx.graph.node])

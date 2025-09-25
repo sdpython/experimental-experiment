@@ -319,9 +319,7 @@ class TestIssuesPytorch2024Export(ExtTestCase):
 
         def flatten_my_cache(cache):
             flat = [
-                (k, getattr(cache, k))
-                for k in ["key_cache", "value_cache"]
-                if hasattr(cache, k)
+                (k, getattr(cache, k)) for k in ["key_cache", "value_cache"] if hasattr(cache, k)
             ]
             return [f[1] for f in flat], [f[0] for f in flat]
 

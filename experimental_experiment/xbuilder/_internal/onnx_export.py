@@ -233,9 +233,7 @@ def _python_make_node_graph(graph, opsets, indent=0, output_names=None):
     for init in graph.initializer:
         node = make_node("Constant", [], [_rename_var(init.name)], value=init)
         code.append(_python_make_node(node, opsets, indent=indent))
-    assert (
-        len(graph.sparse_initializer) == 0
-    ), "Unable to convert sparse_initilizer into python."
+    assert len(graph.sparse_initializer) == 0, "Unable to convert sparse_initilizer into python."
     for node in list(graph.node):
         code.append(_python_make_node(node, opsets, indent=indent))
     if output_names is not None:
@@ -284,15 +282,11 @@ def _python_make_node_if(node, opsets, indent=0):
     else:
         else_branch, then_branch = atts[1].g, atts[0].g
     code.append(
-        _python_make_node_graph(
-            then_branch, opsets, indent=indent + 1, output_names=node.output
-        )
+        _python_make_node_graph(then_branch, opsets, indent=indent + 1, output_names=node.output)
     )
     code.append(f"{sindent}else:")
     code.append(
-        _python_make_node_graph(
-            else_branch, opsets, indent=indent + 1, output_names=node.output
-        )
+        _python_make_node_graph(else_branch, opsets, indent=indent + 1, output_names=node.output)
     )
     return "\n".join(code)
 
@@ -327,9 +321,7 @@ def _python_make_node(onnx_node, opsets, indent=0):
             return _python_make_node_scan(node, opsets, indent=indent)
         raise RuntimeError(f"Unable to export node type {node.op_type!r} into python.")
 
-    if any(
-        map((hasattr(att, "g") and att.g and att.g.ByteSize() > 0) for att in node.attribute)
-    ):
+    if any(map((hasattr(att, "g") and att.g and att.g.ByteSize() > 0) for att in node.attribute)):
         raise RuntimeError(f"Unable to export node type {node.op_type!r} into python.")
     ops = {
         "Add": "+",
