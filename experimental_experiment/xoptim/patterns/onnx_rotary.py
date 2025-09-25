@@ -1116,9 +1116,9 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         mul = g.node_before(node.input[1])
         if sq1 is None or sq1.op_type != "Unsqueeze" or len(sq1.input) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(sq1.output[0]):
+        if sq1 is None or g.is_used_more_than_once(sq1.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(mul.output[0]):
+        if mul is None or g.is_used_more_than_once(mul.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(sq1.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)

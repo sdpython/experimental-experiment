@@ -3449,10 +3449,12 @@ def aten_flatten_using_ints(
             if end_dim == rk - 1:
                 end_dim = -1
         if end_dim == -1:
+            name = f"{name}f1"
             take = g.op.Shape(x, name=name, start=0, end=start_dim)
             resh = g.op.Concat(take, g.MINUS_ONE, axis=0, name=name)
             return g.op.Reshape(x, resh, outputs=outputs, name=name)
 
+        name = f"{name}f2"
         take1 = g.op.Shape(x, name=name, start=0, end=start_dim)
         take2 = g.op.Shape(x, name=name, start=end_dim + 1)
         resh = g.op.Concat(take1, g.MINUS_ONE, take2, axis=0, name=name)
@@ -3461,8 +3463,10 @@ def aten_flatten_using_ints(
     # start_dim == 0
     if end_dim == -1:
         # Flattens everything
+        name = f"{name}f3"
         res = g.op.Reshape(x, g.MINUS_ONE, outputs=outputs, name=name)
     else:
+        name = f"{name}f4"
         if end_dim < 0:
             assert g.has_rank(
                 x
@@ -4676,9 +4680,9 @@ def aten_index_put(
             return np.arange(shape_x[dim]).astype(np.int64), True
         return (
             g.op.Range(
-                g.ZERO,
+                g.ZERO_NO_DIM,
                 g.op.Gather(shape_x, np.array([dim], dtype=np.int64), name=name),
-                g.ONE,
+                g.ONE_NO_DIM,
                 name=name,
             ),
             True,
@@ -4734,12 +4738,7 @@ def aten_index_put(
                     shape_x = g.op.Shape(x, name=name)
                     n_cols = g.op.GatherElements(shape_x, g.ONE, name=name)
                     size = g.op.Size(x, name=name)
-                    arange_1d = g.op.Range(
-                        np.array(0, dtype=np.int64),
-                        size,
-                        np.array(1, dtype=np.int64),
-                        name=name,
-                    )
+                    arange_1d = g.op.Range(g.ZERO_NO_DIM, size, g.ONE_NO_DIM, name=name)
 
                 ind0, do_expand0 = _make_range_or_cast(ind0, shape_x, static_shape, 0, name)
                 ind1, do_expand1 = _make_range_or_cast(ind1, shape_x, static_shape, 1, name)
@@ -4925,12 +4924,7 @@ def aten_index_put(
                 )
                 stride_2 = g.op.GatherElements(shape_x, np.array([2], dtype=np.int64), name=name)
                 size = g.op.Size(x, name=name)
-                arange_1d = g.op.Range(
-                    np.array(0, dtype=np.int64),
-                    size,
-                    np.array(1, dtype=np.int64),
-                    name=name,
-                )
+                arange_1d = g.op.Range(g.ZERO_NO_DIM, size, g.ONE_NO_DIM, name=name)
 
             ind0, expanded0 = _make_range_or_cast(ind0, shape_x, static_shape, 0, name)
             ind1, expanded1 = _make_range_or_cast(ind1, shape_x, static_shape, 1, name)
@@ -5108,12 +5102,7 @@ def aten_index_put(
                     g.op.Shape(x, start=3, name=name), name=name, keepdims=1
                 )
                 size = g.op.Size(x, name=name)
-                arange_1d = g.op.Range(
-                    np.array(0, dtype=np.int64),
-                    size,
-                    np.array(1, dtype=np.int64),
-                    name=name,
-                )
+                arange_1d = g.op.Range(g.ZERO_NO_DIM, size, g.ONE_NO_DIM, name=name)
 
             ind0, expanded0 = _make_range_or_cast(ind0, shape_x, static_shape, 0, name)
             ind1, expanded1 = _make_range_or_cast(ind1, shape_x, static_shape, 1, name)
@@ -9779,15 +9768,10 @@ def _aten_slice_scatter_dynamic(
             f"{g.get_debug_msg()}"
         )
 
-    shape = g.op.Shape(x, name=name)
-    dim_shape = g.op.Gather(shape, np.array([dim], dtype=np.int64), name=name)
+    shape = g.op.Shape(x, name=name, start=dim, end=dim + 1)
+    dim_shape = g.op.SqueezeAnyOpset(shape, name=name)
 
-    index_1 = g.op.Range(
-        g.ZERO,
-        dim_shape,
-        g.ONE,
-        name=name,
-    )
+    index_1 = g.op.Range(g.ZERO_NO_DIM, dim_shape, g.ONE_NO_DIM, name=name)
     g.set_type(index_1, TensorProto.INT64)
     g.set_rank(index_1, 1)
     assert start is not None, (
