@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types
-from ...xbuilder._shape_helper import all_int
+from ...xbuilder._shape_helper import all_int, DYNAMIC_SHAPE, STATIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -192,7 +192,52 @@ class ReshapeReshapePattern(PatternOptimization):
         # useful. Since 0 is only valid for ONNX, 0 should not be found
         # in a non constant shape used to reshape.
         # If it is a constant that should be ok too.
+        if not g.has_shape(node.input[0]) or not g.has_shape(next_node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if (
+            g.is_constant(next_node.input[1])
+            and not self._applicable_reshape(
+                g.get_shape(node.input[0]),
+                g.get_shape(node.output[0]),
+                g.get_computed_constant(next_node.input[1]),
+            )
+            and (
+                g.is_constant(node.input[1])
+                or g.get_rank(node.output[0]) != g.get_rank(next_node.output[0])
+            )
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
+
+    @classmethod
+    def _applicable_reshape(
+        cls, shape1: DYNAMIC_SHAPE, shape2: DYNAMIC_SHAPE, att: STATIC_SHAPE
+    ) -> Optional[STATIC_SHAPE]:
+        new_shape = []
+        m1 = False
+        for i, s in enumerate(att):
+            if s == 0:
+                if m1:
+                    return None
+                if i >= len(shape1):
+                    return None
+                new_shape.append(shape1[i])
+            elif s > 0:
+                new_shape.append(s)
+            elif m1:
+                return None
+            else:
+                # -1
+                m1 = True
+                new_shape.append(None)
+        if tuple(new_shape) == shape1:
+            return tuple(att)
+
+        # something needs to change
+        list_att = list(map(int, att))
+        if list_att.count(0) > 1 or (-1 in list_att and 0 in list_att):
+            return None
+        return tuple((-1 if s == 0 else s) for s in list_att)
 
     def apply(
         self,
@@ -200,10 +245,11 @@ class ReshapeReshapePattern(PatternOptimization):
         node: NodeProto,
         next_node: NodeProto,
     ) -> List[NodeProto]:
+        same_rank = g.get_rank(node.input[0]) != g.get_rank(next_node.output[0])
         second_input = next_node.input[1]
         pre_nodes = []
         if (
-            g.get_rank(node.input[0]) != g.get_rank(next_node.output[0])
+            same_rank
             and g.get_rank(node.output[0]) == g.get_rank(next_node.output[0])
             and g.is_constant(next_node.input[1])
         ):
@@ -263,6 +309,17 @@ class ReshapeReshapePattern(PatternOptimization):
                             name=f"{next_node.name}--concat",
                         )
                     )
+        elif g.is_constant(next_node.input[1]):
+            cst = tuple(map(int, g.get_computed_constant(next_node.input[1])))
+            cst2 = self._applicable_reshape(
+                g.get_shape(node.input[0]), g.get_shape(node.output[0]), cst
+            )
+            if cst2 != cst:
+                second_input = g.make_initializer(
+                    "",
+                    np.array(cst2, dtype=np.int64),
+                    source="ReshapeReshapePattern.new_shape.3",
+                )
 
         new_node = g.make_node(
             "Reshape",
@@ -760,7 +817,7 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
 
     @classmethod
     def _align_shapes(
-        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int]]
+        cls, s1: DYNAMIC_SHAPE, s2: Tuple[Union[str, int]]
     ) -> Optional[Tuple[int, ...]]:
         """
         Compute the edit distance (Levenshtein distance) between two shapes and
@@ -855,6 +912,9 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
 
         if mone > 1:
             return None
+        assert (
+            None not in new_shape
+        ), f"Unexpected inputs: new_shape={new_shape}, shape1={s1}, shape2={s2}"
         return tuple(new_shape)
 
     def match(
@@ -919,7 +979,7 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
 
     @classmethod
     def _squeeze_axes(
-        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int]]
+        cls, s1: DYNAMIC_SHAPE, s2: Tuple[Union[str, int]]
     ) -> Optional[Tuple[int, ...]]:
         if s1 == s2:
             return None, None
@@ -938,18 +998,14 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
         return op_type, axes
 
     @classmethod
-    def _find_squeeze_axes(
-        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int], ...]
-    ) -> Tuple[int, ...]:
+    def _find_squeeze_axes(cls, s1: DYNAMIC_SHAPE, s2: DYNAMIC_SHAPE) -> Tuple[int, ...]:
         sh1 = tuple(s for s in s1 if s != 1)
         if sh1 != s2:
             return None
         return tuple(i for i, s in enumerate(s1) if s == 1)
 
     @classmethod
-    def _find_unsqueeze_axes(
-        cls, s1: Tuple[Union[str, int], ...], s2: Tuple[Union[str, int], ...]
-    ) -> Tuple[int, ...]:
+    def _find_unsqueeze_axes(cls, s1: DYNAMIC_SHAPE, s2: DYNAMIC_SHAPE) -> Tuple[int, ...]:
         return cls._find_squeeze_axes(s2, s1)
 
     def match(

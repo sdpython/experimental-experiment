@@ -1,4 +1,5 @@
 import contextlib
+from itertools import zip_longest
 from typing import Dict, Generator, List, Tuple
 import numpy as np
 from onnx import NodeProto
@@ -8,6 +9,7 @@ from ..helpers import (
     onnx_dtype_to_torch_dtype,
 )
 from ._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
+from .expression_dimension import simplify_expression
 
 
 @contextlib.contextmanager
@@ -120,41 +122,58 @@ class _GraphBuilderRuntime:
             # common case
             return (1, "*".join(map(str, input_shape)))
 
-        st = []
-        dt = 1
-        for s in input_shape:
-            if isinstance(s, str):
-                st.append(s)
+        mul, div = [], []
+        muli, divi = 1, 1
+        for s, n in zip_longest(input_shape, new_shape):
+            if s is None:
+                s = 1
+            if n is None:
+                n = 1
+            if isinstance(s, str) and isinstance(n, str):
+                if s != n:
+                    mul.append(s)
+                    div.append(n)
+            elif isinstance(s, str):
+                mul.append(s)
+                if n != -1:
+                    divi *= n
             else:
-                dt *= s
+                muli *= s
+                if n != -1:
+                    divi *= n
 
-        rep = None
-        nsh = []
-        ttt = 1
-        for i, s in enumerate(new_shape):
-            if s == -1:
-                rep = i
-                nsh.append(None)
-            elif s == 0:
-                nsh.append(input_shape[i])
-                ttt *= input_shape[i]
-            elif isinstance(s, int):
-                nsh.append(s)
-                ttt *= s
-            else:
-                nsh.append(s)
-
-        st = [(f"({s})" if set(s) & set("+*/-") else s) for s in st]
-        nsh[rep] = (
-            "*".join(st)
-            if dt == ttt
-            else (
-                f"{'*'.join(st)}*{dt // ttt}"
-                if isinstance(dt, int) and isinstance(ttt, int) and dt % ttt == 0
-                else f"{'*'.join(st)}*{dt}/{ttt}"
+        if not mul and not div:
+            assert muli % divi == 0, (
+                f"Inconsistency between input_shape={input_shape} "
+                f"and new_shape={new_shape}{self.get_debug_msg()}"
             )
-        )
-        return tuple(nsh)
+            rest = muli // divi
+        else:
+
+            def _(s):
+                return f"({s})" if set(s) & set("+/-*%()") else s
+
+            if muli != 1:
+                mul.append(str(muli))
+            if divi != 1:
+                div.append(str(divi))
+            if not mul:
+                mul = ["1"]
+            if not div:
+                rest = mul[0] if len(mul) == 1 else f"{'*'.join(f'{_(s)}' for s in mul)}"
+            elif not mul:
+                rest = (
+                    f"1//{_(div[0])}"
+                    if len(div) == 1
+                    else f"1//({'*'.join(f'{_(s)}' for s in div)})"
+                )
+            else:
+                rest = (
+                    f"(({'*'.join(f'{_(s)}' for s in mul)})"
+                    f"//({'*'.join(f'{_(s)}' for s in div)}))"
+                )
+            rest = simplify_expression(rest)
+        return tuple(s if s != -1 else rest for s in new_shape)
 
     def _apply_expand_to_shape(
         self, input_shape: DYNAMIC_SHAPE, new_shape: STATIC_SHAPE

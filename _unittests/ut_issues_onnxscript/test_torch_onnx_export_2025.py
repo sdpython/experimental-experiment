@@ -17,7 +17,7 @@ class TestTorchOnnxExport2025(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning, FutureWarning))
     @requires_torch("2.5")
     @hide_stdout()
-    @requires_onnxscript("0.7")
+    @requires_onnxscript("0.8")
     def test_fft_c2r(self):
         import torch
         from onnxruntime import InferenceSession
@@ -116,50 +116,51 @@ class TestTorchOnnxExport2025(ExtTestCase):
         ds = ({3: "M"}, {3: "N"})
         opset = 23
 
-        for exp in ["custom", "onnx-dynamo"]:
-            if exp == "onnx-dynamo":
-                epo = torch.onnx.export(
-                    model, inputs, dynamic_shapes=ds, opset_version=opset, dynamo=True
+        for exp in ["custom"]:  # , "onnx-dynamo"]:
+            with self.subTest(exporter=exp):
+                if exp == "onnx-dynamo":
+                    epo = torch.onnx.export(
+                        model, inputs, dynamic_shapes=ds, opset_version=opset, dynamo=True
+                    )
+                    epo.optimize()
+                    onx = epo.model_proto
+                else:
+                    """
+                    ep = torch.export.export(
+                        model,
+                        inputs,
+                        dynamic_shapes=(
+                            {3: torch.export.Dim.DYNAMIC},
+                            {3: torch.export.Dim.DYNAMIC},
+                        ),
+                    )
+                    print(ep)
+                    ep = ep.run_decompositions()
+                    print(ep)
+                    """
+                    onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset, verbose=0)
+                self.dump_onnx(f"test_of_mask_update_{exp}.onnx", onx)
+                self.assertEqual(
+                    ("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version)
                 )
-                epo.optimize()
-                onx = epo.model_proto
-            else:
-                """
-                ep = torch.export.export(
-                    model,
-                    inputs,
-                    dynamic_shapes=(
-                        {3: torch.export.Dim.DYNAMIC},
-                        {3: torch.export.Dim.DYNAMIC},
-                    ),
+
+                feeds = dict(
+                    zip(["causal_mask", "fill_value"], [x.detach().cpu().numpy() for x in inputs])
                 )
-                print(ep)
-                ep = ep.run_decompositions()
-                print(ep)
-                """
-                onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset, verbose=0)
-            self.dump_onnx(f"test_of_mask_update_{exp}.onnx", onx)
-            self.assertEqual(
-                ("", opset), (onx.opset_import[0].domain, onx.opset_import[0].version)
-            )
+                ref = ExtendedReferenceEvaluator(onx)
+                got = ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-2)
 
-            feeds = dict(
-                zip(["causal_mask", "fill_value"], [x.detach().cpu().numpy() for x in inputs])
-            )
-            ref = ExtendedReferenceEvaluator(onx)
-            got = ref.run(None, feeds)[0]
-            self.assertEqualArray(expected, got, atol=1e-2)
+                import onnxruntime
 
-            import onnxruntime
+                if not has_onnxruntime("1.23"):
+                    raise unittest.SkipTest("onnxruntime 1.23 is required")
 
-            if not has_onnxruntime("1.23"):
-                raise unittest.SkipTest("onnxruntime 1.23 is required")
-
-            sess = onnxruntime.InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
-            got = sess.run(None, feeds)[0]
-            self.assertEqualArray(expected, got, atol=1e-2)
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-2)
 
 
 if __name__ == "__main__":

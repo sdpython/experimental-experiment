@@ -18,6 +18,11 @@ from experimental_experiment.xbuilder.graph_builder import (
     OptimizationOptions,
 )
 
+try:
+    import experimental_experiment.xoptim.patterns_ort.attentions as attentions
+except ImportError:
+    attentions = None
+
 TFLOAT = TensorProto.FLOAT
 TINT64 = TensorProto.INT64
 
@@ -214,6 +219,7 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
         )
         return model
 
+    @unittest.skipIf(attentions is None, "no attention pattern to test")
     @requires_cuda("Attention 4D not available on CPU")
     def test_attention_pattern_1_4d_cuda(self):
         model = self._get_model_attention_1()
@@ -253,6 +259,7 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
         self.assertEqualArray(expected[0].ravel(), got[0].ravel(), atol=0.1)
         self.assertEqualArray(expected[0], got[0], atol=0.1)
 
+    @unittest.skipIf(attentions is None, "no attention pattern to test")
     @requires_onnxruntime("1.23")
     def test_attention_pattern_1_4d_cpu(self):
         model = self._get_model_attention_1()
@@ -279,6 +286,7 @@ class TestGraphPatternOptimizationOrtAttention(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertIn("Attention", [n.op_type for n in opt_onx.graph.node])
+        self.dump_onnx("test_attention_pattern_1_4d_cpu.onnx", opt_onx)
 
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)

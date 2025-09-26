@@ -1001,6 +1001,26 @@ class TestGraphBuilder(ExtTestCase):
         got = ref3.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test__apply_reshape_to_shape(self):
+        g = GraphBuilder(18)
+        cases = [
+            (("batch", "cache+seq"), (-1,), ("batch*(cache+seq)",)),
+            (("s44", 1, "s9"), (0, -1, 1), ("s44", "s9", 1)),
+            ((44, 1, 9), (0, -1, 1), (44, 9, 1)),
+            (("s23",), (-1, 1, 1, 1), ("s23", 1, 1, 1)),
+            (("seq_length",), (1, 1, -1, 1), (1, 1, "seq_length", 1)),
+            (("s31+seq_length",), (1, 1, 1, -1), (1, 1, 1, "s31+seq_length")),
+            (
+                ("s23", 1, "seq_length", "s31+seq_length"),
+                (-1,),
+                ("s23*seq_length*(s31+seq_length)",),
+            ),
+            (("s44", 16, 1), (0, 1, -1), ("s44", 1, 16)),
+        ]
+        for s1, s2, expected in cases:
+            with self.subTest(case=(s1, s2, expected)):
+                self.assertEqual(expected, g._apply_reshape_to_shape(s1, s2))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

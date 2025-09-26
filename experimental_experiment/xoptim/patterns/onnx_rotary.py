@@ -4,6 +4,7 @@ import numpy as np
 from onnx import NodeProto, TensorProto
 from ...helpers import make_idn
 from ...xbuilder import FunctionOptions, GraphBuilder
+from ...xbuilder._shape_helper import STATIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -877,8 +878,20 @@ class RotaryEmbeddingPattern(PatternOptimization):
         half_node: NodeProto,
         concat_node: NodeProto,
     ) -> List[NodeProto]:
-        cst = g.get_computed_constant(split_node.input[1])
-        rotary_dim = int(cst[0])
+
+        if split_node is None:
+            rotary_dim = None
+            shape = g.get_shape(half_node.input[0])
+            main_input = half_node.input[0]
+            main_output = half_node.output[0]
+        else:
+            cst = g.get_computed_constant(split_node.input[1])
+            rotary_dim = int(cst[0])
+            shape = g.get_shape(split_node.input[0])
+            main_input = split_node.input[0]
+            main_output = concat_node.output[0]
+        assert isinstance(shape[1], int), f"Number of heads is not fixed, shape(X)={shape}"
+        num_heads = shape[1]
 
         rotary_nodes = []
         if g.is_used_more_than_once(concat_cos.output[0]):
@@ -906,9 +919,10 @@ class RotaryEmbeddingPattern(PatternOptimization):
                 g._make_node("Expand", [sin_name, shape_name], [sin_expanded]),
                 g._make_node(
                     "RotaryEmbedding",
-                    [split_node.input[0], cos_expanded, sin_expanded],
-                    [concat_node.output[0]],
+                    [main_input, cos_expanded, sin_expanded],
+                    [main_output],
                     rotary_embedding_dim=rotary_dim,
+                    num_heads=num_heads,
                 ),
             ]
         )
@@ -1116,9 +1130,9 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         mul = g.node_before(node.input[1])
         if sq1 is None or sq1.op_type != "Unsqueeze" or len(sq1.input) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(sq1.output[0]):
+        if sq1 is None or g.is_used_more_than_once(sq1.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(mul.output[0]):
+        if mul is None or g.is_used_more_than_once(mul.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(sq1.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -1332,41 +1346,50 @@ class FunctionCosSinCachePattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(unsq_node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
-        cst = g.get_computed_constant(unsq_node.input[1])
-        if tuple(cst) != (0, 1):
+        cst_position_ids = g.get_computed_constant(unsq_node.input[1])
+        if tuple(cst_position_ids) not in ((0, 1), (1,)):
+            # unsqueeze before position ids
+            # (0, 1) -> input is a scalar
+            # (1, ) -> input is a tensor with position_ids
             return self.none(node, inspect.currentframe().f_lineno)
 
         range_node = g.node_before(unsq_node.input[0])
-        if (
-            range_node is None
-            or g.is_used_more_than_once(range_node.input[0])
+        if range_node is None:
+            if cst_position_ids != (1,):
+                return self.none(node, inspect.currentframe().f_lineno)
+        elif (
+            g.is_used_more_than_once(range_node.input[0])
             or g.is_used_more_than_once(range_node.input[1])
             or range_node.op_type != "Range"
             or range_node.domain != ""
         ):
             return self.none(node, inspect.currentframe().f_lineno)
-        if (
+        if range_node is not None and (
             not g.is_constant(range_node.input[2])
             or g.get_constant_scalar(range_node.input[2]) != 1
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        dim_squeeze1 = g.node_before(range_node.input[0])
-        if (
-            dim_squeeze1 is None
-            or dim_squeeze1.op_type != "Squeeze"
-            or dim_squeeze1.domain != ""
-            or len(dim_squeeze1.input) != 1
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
-        dim_squeeze2 = g.node_before(range_node.input[1])
-        if (
-            dim_squeeze2 is None
-            or dim_squeeze2.op_type != "Squeeze"
-            or dim_squeeze2.domain != ""
-            or len(dim_squeeze2.input) != 1
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
+        if range_node:
+            dim_squeeze1 = g.node_before(range_node.input[0])
+            if (
+                dim_squeeze1 is None
+                or dim_squeeze1.op_type != "Squeeze"
+                or dim_squeeze1.domain != ""
+                or len(dim_squeeze1.input) != 1
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+            dim_squeeze2 = g.node_before(range_node.input[1])
+            if (
+                dim_squeeze2 is None
+                or dim_squeeze2.op_type != "Squeeze"
+                or dim_squeeze2.domain != ""
+                or len(dim_squeeze2.input) != 1
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            dim_squeeze1 = None
+            dim_squeeze2 = None
 
         return MatchResult(
             self,
@@ -1403,13 +1426,24 @@ class FunctionCosSinCachePattern(PatternOptimization):
     ) -> List[NodeProto]:
         # Builds the name of the local function.
         to = None if cos_cast is None else g.get_attribute(cos_cast, "to").i
+        cst_position_ids = tuple(g.get_computed_constant(unsq_node.input[1]))
         name = self._operator_name if to is None else f"{self._operator_name}_to{to}"
+        if cst_position_ids != (0, 1):
+            suffix = "".join(map(str, cst_position_ids))
+            name = f"{name}_p{suffix}"
+            assert (
+                range_node is None and dim_squeeze1 is None and dim_squeeze2 is None
+            ), "position_ids comes from the input not from a Range node"
 
         # The matching checks the output of the other nodes are not used more than once.
         nodes_to_return = [
             g.make_node(
                 name,
-                [dim_squeeze1.input[0], dim_squeeze2.input[0], mul_node.input[0]],
+                (
+                    [dim_squeeze1.input[0], dim_squeeze2.input[0], mul_node.input[0]]
+                    if range_node
+                    else [unsq_node.input[0], mul_node.input[0]]
+                ),
                 [
                     cos_cast.output[0] if to is not None else cos.output[0],
                     sin_cast.output[0] if to is not None else sin.output[0],
@@ -1421,20 +1455,38 @@ class FunctionCosSinCachePattern(PatternOptimization):
 
         # Creates the local function
         if not g.builder.has_local_function(name, domain=self._domain_name):
-            self._add_local_function(g.builder, name=name, to=to)
+            self._add_local_function(
+                g.builder,
+                name=name,
+                to=to,
+                cst_position_ids=cst_position_ids,
+                has_range_node=range_node is not None,
+            )
         return nodes_to_return
 
     @classmethod
-    def _add_local_function(cls, g: GraphBuilder, name: str, to: Optional[int] = None):
+    def _add_local_function(
+        cls,
+        g: GraphBuilder,
+        name: str,
+        to: Optional[int] = None,
+        cst_position_ids: Optional[STATIC_SHAPE] = None,
+        has_range_node: bool = True,
+    ):
         lg = GraphBuilder(g.main_opset, as_function=True)
-        lg.make_tensor_input("dim1")
-        lg.make_tensor_input("dim2")
+        lg.make_tensor_input("dim1" if has_range_node else "position_ids")
+
+        if has_range_node:
+            lg.make_tensor_input("dim2")
+            sA = lg.op.Squeeze("dim1", name=name)
+            sB = lg.op.Squeeze("dim2", name=name)
+            rg = lg.op.Range(sA, sB, lg.ONE_NO_DIM, name=name)
+        else:
+            rg = "position_ids"
+
         lg.make_tensor_input("weights")
 
-        sA = lg.op.Squeeze("dim1", name=name)
-        sB = lg.op.Squeeze("dim2", name=name)
-        rg = lg.op.Range(sA, sB, lg.ONE_NO_DIM, name=name)
-        unsq = lg.op.Unsqueeze(rg, np.array([0, 1], dtype=np.int64), name=name)
+        unsq = lg.op.Unsqueeze(rg, np.array(cst_position_ids, dtype=np.int64), name=name)
         cast = lg.op.Cast(unsq, to=TensorProto.FLOAT, name=name)
         resh = lg.op.Reshape(cast, np.array([0, -1, 1], dtype=np.int64), name=name)
         mul = lg.op.Mul("weights", resh, name=name)

@@ -129,7 +129,7 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqual(shape_x, ["batch", ""])
         for obs in onx.graph.value_info:
             shape = tuple((d.dim_param or d.dim_value) for d in obs.type.tensor_type.shape.dim)
-            self.assertIn(shape, (("batch*2", 1024), ("batch", 2, 1024)))
+            self.assertIn(shape, (("batch*2048//1024", 1024), ("batch", 2, 1024)))
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
