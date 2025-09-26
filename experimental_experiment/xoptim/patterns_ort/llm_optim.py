@@ -37,6 +37,8 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         if shape_cos[1] != 1 or shape_sin[1] != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         if shape_cos[0] != 1 or shape_sin[0] != 1:
+            # batch size is not 1 because position_ids was involved in the
+            # computation of cos/sin caches.
             return self.none(node, inspect.currentframe().f_lineno)
 
         concat_cos = g.node_before(node.input[1])

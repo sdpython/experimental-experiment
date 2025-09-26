@@ -123,8 +123,8 @@ class ExpressionSimplifier(ast.NodeVisitor):
                     self.coeffs[node.right.id] = 0
                 self.coeffs[node.right.id] += node.left.value
             elif isinstance(node.right, ast.Constant) and isinstance(node.left, ast.Name):
-                if node.right.id not in self.coeffs:
-                    self.coeffs[node.right.id] = 0
+                if node.left.id not in self.coeffs:
+                    self.coeffs[node.left.id] = 0
                 self.coeffs[node.left.id] += node.right.value
             else:
                 # unable to simplify
