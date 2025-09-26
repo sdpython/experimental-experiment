@@ -912,9 +912,9 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
 
         if mone > 1:
             return None
-        assert None not in new_shape, (
-            f"Unexpected inputs: new_shape={new_shape}, shape1={s1}, shape2={s2}"
-        )
+        assert (
+            None not in new_shape
+        ), f"Unexpected inputs: new_shape={new_shape}, shape1={s1}, shape2={s2}"
         return tuple(new_shape)
 
     def match(

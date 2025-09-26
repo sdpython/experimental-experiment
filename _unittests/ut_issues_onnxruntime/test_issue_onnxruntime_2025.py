@@ -21,9 +21,10 @@ class TestIssuesOnnxruntime2025(ExtTestCase):
 
         # not optimized
         input_data = {"v5_0": np.random.rand(55, 7, 1, 40).astype(np.float32)}
-        proto_issue = onnx.load(
-            os.path.join(os.path.dirname(__file__), "data", "inconsis20730.onnx")
-        )
+        filename = os.path.join(os.path.dirname(__file__), "data", "inconsis20730.onnx")
+        if not os.path.exists(filename):
+            raise unittest.SkipTest(f"File {filename!r} not found.")
+        proto_issue = onnx.load(filename)
         for i, proto in enumerate([proto_issue]):
             sessopts = ort.SessionOptions()
             sessopts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
