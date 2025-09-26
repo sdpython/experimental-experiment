@@ -550,6 +550,8 @@ def _make_builder_interpreter(
         )
         export_options = ExportOptions(aten_as_function=aten_as_function)
 
+    stat_time_export = 0
+    begin = time.perf_counter()
     mask_outputs = None
     if isinstance(mod, torch.fx.GraphModule):
         exe_path = "exising-torch.fx.GraphModule"
@@ -701,6 +703,7 @@ def _make_builder_interpreter(
             for k in constants:
                 mapping[k] = k, False
 
+    stat_time_export = time.perf_counter() - begin
     builder = GraphBuilder(
         target_opset,
         input_names=input_names,
@@ -755,7 +758,15 @@ def _make_builder_interpreter(
         default_values=_default_values_from_sig(mod),
         exe_path=f"{exe_path}-export_options={export_options}",
     )
+
+    # hidden trick to get some information about time processing
+    interpreter._stat_time_export_and_post_processing = stat_time_export
+    if export_options is not None:
+        for k in dir(export_options):
+            if k.startswith("_stat_time"):
+                setattr(interpreter, k, getattr(export_options, k))
     attr = getattr(export_options, "_last_working", None)
+
     if attr:
         # Tweak to retrieve that information
         interpreter._working_export_options = attr
@@ -1001,6 +1012,9 @@ def to_onnx(
     add_stats = {}
     t = time.perf_counter()
     add_stats["time_export_graph_module"] = t - begin
+    for k in dir(interpreter):
+        if k.startswith("_stat_time"):
+            add_stats[k[1:]] = getattr(interpreter, k)
     winning_opt = getattr(interpreter, "_working_export_options", None)
     if winning_opt:
         add_stats["onnx_export_options_strict"] = 1 if winning_opt.strict else 0

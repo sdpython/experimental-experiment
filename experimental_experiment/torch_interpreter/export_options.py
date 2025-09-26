@@ -520,14 +520,18 @@ class ExportOptions:
             print(f"[ExportOptions.export] export start with strict={self.strict}...")
 
         if self.oblivious:
+            begin = time.perf_counter()
             with torch.fx.experimental._config.patch(backed_size_oblivious=True):
                 exported_program = self._export(
                     mod, args, kwargs, dynamic_shapes, input_names, exc, verbose
                 )
+            self._stat_time_torch_export_export_oblivious = time.perf_counter() - begin
         else:
+            begin = time.perf_counter()
             exported_program = self._export(
                 mod, args, kwargs, dynamic_shapes, input_names, exc, verbose
             )
+            self._stat_time_torch_export_export_ = time.perf_counter() - begin
 
         if verbose:
             print(f"[ExportOptions.export] export done in {time.perf_counter() - t0}")
@@ -563,13 +567,19 @@ class ExportOptions:
                 print(f"[ExportOptions.export] model size {size / 2**20} Mb")
             if size < 2**30:
                 # skipping if the model is too big.
+                begin = time.perf_counter()
                 torch.export.save(exported_program, f"{self.save_ep}.ep.pt2")
+                self._stat_time_torch_export_save = time.perf_counter() - begin
         if isinstance(self.validate_ep, float) or self.validate_ep:
+            begin = time.perf_counter()
             self.validate_exported_program(mod, exported_program, args, kwargs, verbose=verbose)
+            self._stat_time_validate_exported_program = time.perf_counter() - begin
 
+        begin = time.perf_counter()
         exported_program = self.post_process_exported_program(
             exported_program, verbose=verbose, print_exported_program=print_exported_program
         )
+        self._stat_time_post_process_exported_program = time.perf_counter() - begin
         if verbose:
             print(
                 f"[ExportOptions.export] done with no decomposition "
