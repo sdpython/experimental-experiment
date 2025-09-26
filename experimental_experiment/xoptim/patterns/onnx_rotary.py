@@ -878,8 +878,20 @@ class RotaryEmbeddingPattern(PatternOptimization):
         half_node: NodeProto,
         concat_node: NodeProto,
     ) -> List[NodeProto]:
-        cst = g.get_computed_constant(split_node.input[1])
-        rotary_dim = int(cst[0])
+
+        if split_node is None:
+            rotary_dim = None
+            shape = g.get_shape(half_node.input[0])
+            main_input = half_node.input[0]
+            main_output = half_node.output[0]
+        else:
+            cst = g.get_computed_constant(split_node.input[1])
+            rotary_dim = int(cst[0])
+            shape = g.get_shape(split_node.input[0])
+            main_input = split_node.input[0]
+            main_output = concat_node.output[0]
+        assert isinstance(shape[1], int), f"Number of heads is not fixed, shape(X)={shape}"
+        num_heads = shape[1]
 
         rotary_nodes = []
         if g.is_used_more_than_once(concat_cos.output[0]):
@@ -907,9 +919,10 @@ class RotaryEmbeddingPattern(PatternOptimization):
                 g._make_node("Expand", [sin_name, shape_name], [sin_expanded]),
                 g._make_node(
                     "RotaryEmbedding",
-                    [split_node.input[0], cos_expanded, sin_expanded],
-                    [concat_node.output[0]],
+                    [main_input, cos_expanded, sin_expanded],
+                    [main_output],
                     rotary_embedding_dim=rotary_dim,
+                    num_heads=num_heads,
                 ),
             ]
         )

@@ -6297,7 +6297,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ],
                 "test",
                 [
-                    oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, "c", "d"]),
                     oh.make_tensor_value_info("m1", TFLOAT, [1, 1, "c", "e"]),
                     oh.make_tensor_value_info("m2", TFLOAT, [1, 1, "c", "e"]),
                 ],
