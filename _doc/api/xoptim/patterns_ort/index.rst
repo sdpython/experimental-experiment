@@ -9,7 +9,6 @@
 
     activation
     activation_grad
-    attention_patterns
     batch_normalization
     fused_conv
     fused_matmul
