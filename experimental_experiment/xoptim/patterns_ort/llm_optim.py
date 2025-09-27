@@ -105,9 +105,9 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         # a default value.
         common = self._find_common_ancestor(g, concat_cos, concat_sin)
         if (
-            common is None
-            or common[0].op_type.startswith("CosSinCache")
-            or common[0].domain != ""
+            common is not None
+            and common[0].op_type.startswith("CosSinCache")
+            and common[0].domain == self._domain_name
         ):
             # Finally, we need to check if position_ids exists or it is given
             # a default value.
@@ -146,8 +146,11 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         for _it in range(5):
             anc_cos = g.node_before(anc_cos.input[0])
             anc_sin = g.node_before(anc_sin.input[0])
+            if anc_cos is None or anc_sin is None:
+                return None
             if id(anc_cos) == id(anc_sin):
                 nodes.append(anc_cos)
+                print(nodes)
                 return nodes[::-1]
             nodes.extend([anc_cos, anc_sin])
         return None
@@ -162,7 +165,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         concat_node: NodeProto,
         *prefix_nodes: Sequence[NodeProto],
     ) -> List[NodeProto]:
-        assert prefix_nodes is None, "Not yet implemented with prefix_nodes= ..."
+        assert not prefix_nodes, "Not yet implemented with prefix_nodes= ..."
         if split_node is None:
             rotary_dim = None
             shape = g.get_shape(half_node.input[0])
