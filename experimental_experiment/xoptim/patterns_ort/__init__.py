@@ -5,7 +5,7 @@ def get_onnxruntime_patterns(
     verbose: int = 0,
 ) -> List["PatternOptimization"]:  # noqa: F821
     """
-    Returns a default list of optimization patterns for onnxruntime.
+    Returns a default list of optimization patterns for :epkg:`onnxruntime`.
     It is equal to the following list.
 
     .. runpython::
