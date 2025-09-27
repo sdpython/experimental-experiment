@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional
+from typing import List, Optional, Sequence
 import numpy as np
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
@@ -36,10 +36,10 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if shape_cos[1] != 1 or shape_sin[1] != 1:
             return self.none(node, inspect.currentframe().f_lineno)
-        if shape_cos[0] != 1 or shape_sin[0] != 1:
-            # batch size is not 1 because position_ids was involved in the
-            # computation of cos/sin caches.
-            return self.none(node, inspect.currentframe().f_lineno)
+        # if shape_cos[0] != 1 or shape_sin[0] != 1:
+        # batch size is not 1 because position_ids was involved in the
+        # computation of cos/sin caches.
+        #    return self.none(node, inspect.currentframe().f_lineno)
 
         concat_cos = g.node_before(node.input[1])
         if concat_cos is None or concat_cos.op_type != "Concat" or concat_cos.domain != "":
@@ -101,12 +101,56 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         if axis != -1:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        # Finally, we need to check if position_ids exists or it is given
+        # a default value.
+        common = self._find_common_ancestor(g, concat_cos, concat_sin)
+        if (
+            common is None
+            or common[0].op_type.startswith("CosSinCache")
+            or common[0].domain != ""
+        ):
+            # Finally, we need to check if position_ids exists or it is given
+            # a default value.
+            cos_sin = common[0]
+            if not g.has_shape(cos_sin.input[0]) or not g.has_shape(cos_sin.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            position_ids_shape = g.get_shape(cos_sin.input[0])
+            weights_shape = g.get_shape(cos_sin.input[0])
+            if (
+                len(position_ids_shape) != 2
+                or len(weights_shape) != 3
+                or position_ids_shape[0] != weights_shape[0]
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            # Then we need to add those nodes to the matched nodes.
+            return MatchResult(
+                self, [concat_cos, concat_sin, split_node, node, concat_node, *common], self.apply
+            )
+
         return MatchResult(
             self,
             [concat_cos, concat_sin, split_node, node, concat_node],
             self.apply,
             insert_at=None if g.is_used_more_than_once(concat_cos.output[0]) else concat_node,
         )
+
+    def _find_common_ancestor(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        concat_cos: NodeProto,
+        concat_sin: NodeProto,
+    ) -> Optional[List[NodeProto]]:
+        anc_cos, anc_sin = concat_cos, concat_sin
+        nodes = []
+        for _it in range(5):
+            anc_cos = g.node_before(anc_cos.input[0])
+            anc_sin = g.node_before(anc_sin.input[0])
+            if id(anc_cos) == id(anc_sin):
+                nodes.append(anc_cos)
+                return nodes[::-1]
+            nodes.extend([anc_cos, anc_sin])
+        return None
 
     def apply(
         self,
@@ -116,7 +160,9 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         split_node: NodeProto,
         half_node: NodeProto,
         concat_node: NodeProto,
+        *prefix_nodes: Sequence[NodeProto],
     ) -> List[NodeProto]:
+        assert prefix_nodes is None, "Not yet implemented with prefix_nodes= ..."
         if split_node is None:
             rotary_dim = None
             shape = g.get_shape(half_node.input[0])
