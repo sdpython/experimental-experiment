@@ -114,8 +114,8 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             cos_sin = common[0]
             if not g.has_shape(cos_sin.input[0]) or not g.has_shape(cos_sin.input[1]):
                 return self.none(node, inspect.currentframe().f_lineno)
-            position_ids_shape = g.get_shape(cos_sin.input[0])
-            weights_shape = g.get_shape(cos_sin.input[0])
+            position_ids_shape = g.get_shape_renamed(cos_sin.input[0])
+            weights_shape = g.get_shape_renamed(cos_sin.input[1])
             if (
                 len(position_ids_shape) != 2
                 or len(weights_shape) != 3
@@ -150,7 +150,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 return None
             if id(anc_cos) == id(anc_sin):
                 nodes.append(anc_cos)
-                print(nodes)
                 return nodes[::-1]
             nodes.extend([anc_cos, anc_sin])
         return None
