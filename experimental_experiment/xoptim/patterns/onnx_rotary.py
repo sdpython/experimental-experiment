@@ -1337,12 +1337,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
         if g.is_used_more_than_once(cast_node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         unsq_node = g.node_before(cast_node.input[0])
-        if (
-            cast_node is None
-            or g.is_used_more_than_once(unsq_node.input[0])
-            or unsq_node.op_type != "Unsqueeze"
-            or unsq_node.domain != ""
-        ):
+        if unsq_node is None or unsq_node.op_type != "Unsqueeze" or unsq_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(unsq_node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -1360,6 +1355,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
         elif (
             g.is_used_more_than_once(range_node.input[0])
             or g.is_used_more_than_once(range_node.input[1])
+            or g.is_used_more_than_once(unsq_node.input[0])
             or range_node.op_type != "Range"
             or range_node.domain != ""
         ):

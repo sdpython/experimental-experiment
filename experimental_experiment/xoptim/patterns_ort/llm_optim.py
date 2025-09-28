@@ -73,7 +73,9 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 input_shape[-1], cos_shape[-1], "+", sin_shape[-1]
             ):
                 # No split before, no concat after
-                return MatchResult(self, [concat_cos, concat_sin, None, node, None], self.apply)
+                return MatchResult(
+                    self, [None, concat_cos, concat_sin, None, node, None], self.apply
+                )
 
         if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
@@ -105,14 +107,33 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         # a default value.
         common = self._find_common_ancestor(g, concat_cos, concat_sin)
         if (
-            common is not None
+            common
+            and common[0].op_type == "Mul"
+            and {"Sin", "Cos"} & set(n.op_type for n in common)
+        ):
+            # pattern FunctionCosSinCache has yet to be triggered first.
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if (
+            common
             and common[0].op_type.startswith("CosSinCache")
             and common[0].domain == self._domain_name
         ):
-            # Finally, we need to check if position_ids exists or it is given
+            # Finally, we need to check if position_ids exists or if it is given
             # a default value.
             cos_sin = common[0]
             if not g.has_shape(cos_sin.input[0]) or not g.has_shape(cos_sin.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            expand_node = g.node_before(cos_sin.input[1])
+            if expand_node is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            shape_expand = g.builder.value_as_shape(expand_node.input[1])
+            if shape_expand is None or len(shape_expand) != 3 or shape_expand[1:] != (1, 1):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if not g.has_shape(expand_node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            wei_shape = g.get_shape(expand_node.input[0])
+            if wei_shape[0] != 1:
                 return self.none(node, inspect.currentframe().f_lineno)
             position_ids_shape = g.get_shape_renamed(cos_sin.input[0])
             weights_shape = g.get_shape_renamed(cos_sin.input[1])
@@ -125,12 +146,14 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
 
             # Then we need to add those nodes to the matched nodes.
             return MatchResult(
-                self, [concat_cos, concat_sin, split_node, node, concat_node, *common], self.apply
+                self,
+                [expand_node, concat_cos, concat_sin, split_node, node, concat_node, *common],
+                self.apply,
             )
 
         return MatchResult(
             self,
-            [concat_cos, concat_sin, split_node, node, concat_node],
+            [None, concat_cos, concat_sin, split_node, node, concat_node],
             self.apply,
             insert_at=None if g.is_used_more_than_once(concat_cos.output[0]) else concat_node,
         )
@@ -157,6 +180,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
+        expand_node: Optional[NodeProto],
         concat_cos: NodeProto,
         concat_sin: NodeProto,
         split_node: NodeProto,
@@ -164,7 +188,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         concat_node: NodeProto,
         *prefix_nodes: Sequence[NodeProto],
     ) -> List[NodeProto]:
-        assert not prefix_nodes, "Not yet implemented with prefix_nodes= ..."
         if split_node is None:
             rotary_dim = None
             shape = g.get_shape(half_node.input[0])
@@ -186,8 +209,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         if g.is_used_more_than_once(concat_sin.output[0]):
             rotary_nodes.append(concat_sin)
 
-        cos_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[1]}")
-        sin_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[2]}")
         batch_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}--batch")
         zeroone = g.make_initializer(
             "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
@@ -199,20 +220,65 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         zero_no_dim = g.make_initializer(
             "", g.ZERO_NO_DIM, source=f"{self.__class__.__name__}.0d"
         )
-        seq_length = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}--seq_length")
-        seq_length_squeezed = g.unique_name(
-            f"{self.__class__.__name__}--{half_node.input[0]}--seqsq"
-        )
-        exp_shape = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}_pshape")
-        flat_pids = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}_flat_pids")
-        position_ids = g.unique_name(
-            f"{self.__class__.__name__}--{half_node.input[0]}_position_ids"
-        )
 
-        rotary_nodes.extend(
-            [
-                g._make_node("Squeeze", [concat_cos.input[0], zeroone], [cos_name]),
-                g._make_node("Squeeze", [concat_sin.input[0], zeroone], [sin_name]),
+        added_nodes = []
+        if prefix_nodes:
+            assert expand_node is not None, "expand node is missing, pattern should not match"
+            assert prefix_nodes[0].op_type.startswith(
+                "CosSinCache"
+            ), f"Unexpected first node {prefix_nodes[0]}"
+            cos_sin = prefix_nodes[0]
+            position_ids = cos_sin.input[0]
+            (max_ids, max_ids_1, new_positions_ids, cos_out, sin_out, range_ids) = [
+                g.unique_name(f"{self.__class__.__name__}--{position_ids}") for i in range(6)
+            ]
+            zero = g.make_initializer("", g.ZERO, source=f"{self.__class__.__name__}.0")
+            added_nodes = [
+                g._make_node("ReduceMax", [position_ids], [max_ids], keepdims=0),
+                g._make_node("Add", [max_ids, one_no_dim], [max_ids_1]),
+                g._make_node("Range", [zero_no_dim, max_ids_1, one_no_dim], [range_ids]),
+                g._make_node("Unsqueeze", [range_ids, zero], [new_positions_ids]),
+                g._make_node(
+                    cos_sin.op_type,
+                    [new_positions_ids, expand_node.input[0]],
+                    [cos_out, sin_out],
+                    domain=cos_sin.domain,
+                ),
+            ]
+            cos_cur, sin_cur = cos_out, sin_out
+            for i in range(1, len(prefix_nodes), 2):
+                ncos, nsin = prefix_nodes[i : i + 2]
+                if ncos.op_type == "Concat":
+                    break
+                rcos, rsin = [
+                    g.unique_name(f"{self.__class__.__name__}--{position_ids}") for i in range(2)
+                ]
+                added_nodes.extend(
+                    [
+                        g._make_node(ncos.op_type, [cos_cur, *ncos.input[1:]], [rcos]),
+                        g._make_node(ncos.op_type, [sin_cur, *nsin.input[1:]], [rsin]),
+                    ]
+                )
+                cos_cur, sin_cur = rcos, rsin
+            cos_input, sin_input = cos_cur, sin_cur
+            range_nodes = []
+        else:
+            assert expand_node is None, f"Unexpected expand node {expand_node}"
+            position_ids = g.unique_name(
+                f"{self.__class__.__name__}--{half_node.input[0]}_position_ids"
+            )
+            seq_length = g.unique_name(
+                f"{self.__class__.__name__}--{half_node.input[0]}--seq_length"
+            )
+            seq_length_squeezed = g.unique_name(
+                f"{self.__class__.__name__}--{half_node.input[0]}--seqsq"
+            )
+            exp_shape = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}_pshape")
+            flat_pids = g.unique_name(
+                f"{self.__class__.__name__}--{half_node.input[0]}_flat_pids"
+            )
+            cos_input, sin_input = concat_cos.input[0], concat_sin.input[0]
+            range_nodes = [
                 g._make_node("Shape", [main_input], [batch_name], start=0, end=1),
                 g._make_node("Shape", [main_input], [seq_length], start=2, end=3),
                 g._make_node("Squeeze", [seq_length], [seq_length_squeezed]),
@@ -221,6 +287,16 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 ),
                 g._make_node("Concat", [batch_name, one], [exp_shape], axis=0),
                 g._make_node("Expand", [flat_pids, exp_shape], [position_ids]),
+            ]
+
+        cos_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[1]}")
+        sin_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[2]}")
+        rotary_nodes.extend(
+            [
+                *added_nodes,
+                g._make_node("Squeeze", [cos_input, zeroone], [cos_name]),
+                g._make_node("Squeeze", [sin_input, zeroone], [sin_name]),
+                *range_nodes,
             ]
         )
         for node in rotary_nodes:
