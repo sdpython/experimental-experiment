@@ -995,6 +995,8 @@ def _set_shape_type_op_any_range(self: "GraphBuilder", node: NodeProto):  # noqa
             else:
                 dim = simplify_expression(f"{v2}-({v1})")
             self.set_shape(node.output[0], (dim,))
+            return
+    self.set_shape(node.output[0], (self.unique_dimension_name("NEWDIM_range"),))
 
 
 def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821
@@ -1458,9 +1460,7 @@ _set_shape_type_op_any_known = {
 
 
 def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    """
-    Sets the shape and type if it can.
-    """
+    """Sets the shape and type if it can."""
     if node.op_type.startswith("Reduce"):
         _set_shape_type_op_any_reduce(self, node)
     elif node.op_type in _set_shape_type_op_any_known:
@@ -1517,6 +1517,26 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
+    elif node.domain:
+        if self.has_local_function(node.name, domain=node.domain):
+            local_function = self.get_local_function(node.name, domain=node.domain)
+            assert (
+                local_function is not None
+            ), f"Missing local function for node {(node.domain, node.name)}"
+            raise NotImplementedError("Not yet implemented")
+        else:
+            assert node.domain not in {
+                "ai.onnx.ml",
+                "intermediate",
+                "ai.onnx.complex",
+                "com.microsoft",
+                "local_domain",
+                "SimplifyingFunction",
+                "onnx_extended.ortops.optim.cuda",
+            }, (
+                f"Unable to find a function computing the output shape of node "
+                f"{(node.domain, node.name)}{self.get_debug_msg()}"
+            )
 
 
 def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
