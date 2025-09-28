@@ -1517,26 +1517,6 @@ def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
-    elif node.domain:
-        if self.has_local_function(node.name, domain=node.domain):
-            local_function = self.get_local_function(node.name, domain=node.domain)
-            assert (
-                local_function is not None
-            ), f"Missing local function for node {(node.domain, node.name)}"
-            raise NotImplementedError("Not yet implemented")
-        else:
-            assert node.domain not in {
-                "ai.onnx.ml",
-                "intermediate",
-                "ai.onnx.complex",
-                "com.microsoft",
-                "local_domain",
-                "SimplifyingFunction",
-                "onnx_extended.ortops.optim.cuda",
-            }, (
-                f"Unable to find a function computing the output shape of node "
-                f"{(node.domain, node.name)}{self.get_debug_msg()}"
-            )
 
 
 def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
@@ -1590,9 +1570,7 @@ def set_type_shape_tree_ensemble(self: "GraphBuilder", node: NodeProto):  # noqa
 
 
 def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    """
-    Sets the shape and type if it can.
-    """
+    """Sets the shape and type if it can."""
     if node.domain == "ai.onnx.ml":
         if node.op_type == "TreeEnsembleRegressor":
             set_type_shape_tree_ensemble(self, node)
@@ -1603,6 +1581,59 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     if node.op_type in _set_shape_type_op_any_custom:
         _set_shape_type_op_any_custom[node.op_type](self, node)
         return
+    if self.has_local_function(node.op_type, domain=node.domain, builder=True):
+        local_function = self.get_local_function(node.op_type, domain=node.domain, builder=True)
+        assert (
+            local_function is not None
+        ), f"Missing local function for node {(node.domain, node.op_type)}"
+        assert isinstance(local_function, self.__class__), (
+            f"Unexpected type {type(local_function)} "
+            f"for node {(node.domain, node.op_type)} "
+            f"and the local_function it refers to{self.get_debug_msg()}"
+        )
+        shapes = [self.get_shape(i) if self.has_shape(i) else None for i in node.input]
+        if None in shapes:
+            # Nothing we can do.
+            return
+        local_shapes = [
+            local_function.get_shape(i) if local_function.has_shape(i) else None
+            for i in local_function.input_names
+        ]
+        assert len(shapes) == len(local_shapes), (
+            f"Mismatch between the number of inputs, node has {node.input}, "
+            f"function has {local_function.input_names}{self.get_debug_msg()}"
+        )
+        if local_shapes != shapes:
+            local_function.reset_types_and_shapes()
+            for ni, i, sh in zip(node.input, local_function.input_names, shapes):
+                if self.has_type(ni):
+                    local_function.set_type(i, self.get_type(ni))
+                local_function.set_shape(i, sh)
+            local_function.infer_shapes()
+        assert len(local_function.output_names) == len(node.output), (
+            f"Mismatch between the number of outputs, node has {node.output}, "
+            f"function has {local_function.output_names}{self.get_debug_msg()}"
+        )
+        for o, lo in zip(node.output, local_function.output_names):
+            if local_function.has_type(lo):
+                self.set_type(o, local_function.get_type(lo))
+            if local_function.has_shape(lo):
+                self.set_shape(o, local_function.get_shape(lo))
+            elif local_function.has_rank(lo):
+                self.set_rank(o, local_function.get_rank(lo))
+        return
+    assert node.domain not in {
+        "ai.onnx.ml",
+        "intermediate",
+        "ai.onnx.complex",
+        "com.microsoft",
+        "local_domain",
+        "SimplifyingFunction",
+        "onnx_extended.ortops.optim.cuda",
+    }, (
+        f"Unable to find a function computing the output shape of node "
+        f"{(node.domain, node.op_type)}{self.get_debug_msg()}"
+    )
     assert not self._debug_shape_missing, (
         f"No function to compute shape for node: "
         f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"

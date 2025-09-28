@@ -1619,6 +1619,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return res
 
+    def reset_types_and_shapes(self):
+        """Removes shapes, and types if not an initializer."""
+        for k in self._known_names:
+            if self.is_constant(k):
+                continue
+            if self.has_type(k):
+                del self._known_types[k]
+            if self.has_shape(k):
+                del self._known_shapes[k]
+            if self.has_rank(k):
+                del self._known_ranks[k]
+            if k in self._known_value_shape:
+                del self._known_value_shape[k]
+
     def set_shapes_types(
         self,
         name: Union[str, "torch.fx.Node"],  # noqa: F821
@@ -5388,7 +5402,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
             }
             if filtered:
-                values["_known_value_shapes"] = self._format_dict(filtered)
+                values["_known_value_shape"] = self._format_dict(filtered)
         if values:
             oh.set_model_props(model, values)
 
@@ -8224,15 +8238,15 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def _make_node_set_type_shape(self, node: NodeProto):
         """Updates shapes for a node."""
-        if node.domain != "":
+        if node.domain == "":
             node.doc_string += "#Io1"
-            set_shape_type_custom(self, node)
-        else:
-            if node.input and not self.has_type(node.input[0]):
-                # It is probably coming from an inlined function.
-                return
-            node.doc_string += "#Io2"
             set_shape_type_op_any(self, node)
+        else:
+            # Missing type means it is probably coming from an inlined function.
+            node.doc_string += (
+                "#Io3" if node.input and not self.has_type(node.input[0]) else "#Io2"
+            )
+            set_shape_type_custom(self, node)
 
     def infer_shapes(self) -> Dict[str, Tuple[DYNAMIC_SHAPE, DYNAMIC_SHAPE]]:
         """Runs custom shape inference. Returns the updates."""
@@ -9020,12 +9034,18 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.functions_builder[key] = builder
         return f.domain, f.name
 
-    def has_local_function(self, name: str, domain: str = "") -> bool:
+    def has_local_function(self, name: str, domain: str = "", builder: bool = False) -> bool:
         """Checks if a local function exists."""
+        if builder:
+            return (domain, name) in self.functions_builder
         return (domain, name) in self.functions
 
-    def get_local_function(self, name: str, domain: str = "") -> FunctionProto:
+    def get_local_function(
+        self, name: str, domain: str = "", builder: bool = False
+    ) -> FunctionProto:
         """Returns a local function."""
+        if builder:
+            return self.functions_builder[domain, name]
         return self.functions[domain, name]
 
     def get_local_function_outputs(self, name: str, domain: str = "") -> List[str]:
