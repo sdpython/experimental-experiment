@@ -429,7 +429,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         _opsets: Optional[Dict[str, int]] = None,
         _context: Optional[Set[str]] = None,
-        _parent: Optional["GraphBuilder"] = None,
+        _parent: Optional[Union["GraphBuilder", Tuple["GraphBuilder", NodeProto]]] = None,
     ):
         import torch
         from . import TEMPLATE_TYPE
@@ -470,7 +470,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.check_empty_source = check_empty_source
         self.user_defined_output_names = output_names or []
         self._context = _context or set()
-        self._parent = _parent
+        if isinstance(_parent, tuple):
+            self._parent = _parent[0]
+            self._parent_node = _parent[1]
+        else:
+            self._parent = _parent
 
         self.nodes = []
         self.initializers_dict = {}
@@ -546,7 +550,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.input_names = input_names or []
             self.current_input = 0
             self._unique_names = set(self.input_names)
-
         elif isinstance(target_opset_or_existing_proto, (GraphProto, ModelProto, FunctionProto)):
             # loads a model from nothing
             if input_names:
@@ -1968,7 +1971,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return is_static_shape(shape) and min(shape) >= 0
         return True
 
-    def has_type(self, name: str) -> bool:
+    def has_type(self, name: str) -> Union[bool, int]:
         """Tells if a result has a type. This should be always true."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if name not in self._known_types:
@@ -6010,26 +6013,38 @@ class GraphBuilder(_GraphBuilderRuntime):
         stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
 
     def _import_context_from_parent_graph(self, name: str):
+        if self.has_type(name) and self.has_shape(name):
+            return
         if not self._parent:
             return
-        if self.has_name(name):
+        if not self.has_name(name):
             # We cannot overwrite a local result.
-            return
+            self.set_name(name, marker="optimize_node_subgraphs_inplace")
         g = self._parent
-        self.set_name(name, marker="optimize_node_subgraphs_inplace")
-        if g.has_shape(name):
-            self.set_shape(name, g.get_shape(name), allow_zero=True)
-        elif g.has_rank(name):
-            self.set_rank(name, g.get_rank(name))
-        if g.has_type(name):
-            self.set_type(name, g.get_type(name))
-        if name in g.constants_:
-            self.constants_[name] = g.constants_[name]
-        if name in g.constants_node_:
-            self.constants_node_[name] = g.constants_node_[name]
-        if name in g._known_value_shape:
-            self._known_value_shape[name] = g._known_value_shape[name]
-        if name in g._parameter_norename:
+        parent_name, name = name, name
+        if self._parent_node:
+            # Coming from a Scan, If, Loop, Node
+            if name in self.input_names:
+                position = self.input_names.index(name)
+                assert position < len(self._parent_node.input), (
+                    f"No corresponding input name for {name!r} in node {self._parent_node}"
+                    f"{self.get_debug_msg()}"
+                )
+                parent_name = self._parent_node.input[position]
+
+        if g.has_shape(parent_name):
+            self.set_shape(name, g.get_shape(parent_name), allow_zero=True)
+        elif g.has_rank(parent_name):
+            self.set_rank(name, g.get_rank(parent_name))
+        if g.has_type(parent_name):
+            self.set_type(name, g.get_type(parent_name))
+        if parent_name in g.constants_:
+            self.constants_[name] = g.constants_[parent_name]
+        if parent_name in g.constants_node_:
+            self.constants_node_[name] = g.constants_node_[parent_name]
+        if parent_name in g._known_value_shape:
+            self._known_value_shape[name] = g._known_value_shape[parent_name]
+        if parent_name in g._parameter_norename:
             self._parameter_norename.add(name)
 
     def optimize_node_subgraphs_inplace(self, node: NodeProto, context: Set[str]):
@@ -6050,7 +6065,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 verbose=max(self.verbose - 1, 0),
                 _opsets=self.opsets,
                 _context=context,
-                _parent=self,
+                _parent=(self, node),
             )
             assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
             # We need to populate whatever exists.
