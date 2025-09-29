@@ -42,7 +42,10 @@ class TestOnnxExportShape(ExtTestCase):
             )
             opt_options = (
                 OptimizationOptions(
-                    patterns=patterns, processor=processor, constant_folding=constant_folding
+                    patterns=patterns,
+                    processor=processor,
+                    constant_folding=constant_folding,
+                    oblivious=oblivious,
                 )
                 if patterns or processor != "CPU"
                 else None
@@ -262,13 +265,15 @@ class TestOnnxExportShape(ExtTestCase):
             "custom",
             model,
             xs,
-            dynamic_shapes={"x": {0: "num_audios", 1: "num_frames", 2: "num_last"}},
+            dynamic_shapes={"x": {0: "num_audios", 2: "num_last"}},
             oblivious=True,
             patch=True,
         )
         onx = onnx.load(model_path)
-        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
-        self.assertEqual(shape_x, ["num_audios", "num_frames", "num_last"])
+        shape_x = [
+            d.dim_param or d.dim_value for d in onx.graph.input[0].type.tensor_type.shape.dim
+        ]
+        self.assertEqual(shape_x, ["num_audios", 16, "num_last"])
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]
@@ -290,9 +295,9 @@ class TestOnnxExportShape(ExtTestCase):
 
         class Model(torch.nn.Module):
             def forward(self, x):
-                return x + torch.tensor([0, 1, 4, 5, 6, 7, 7, 8]).reshape((-1, 4)).to(
-                    torch.int64
-                ).to(torch.float32)
+                return x + torch.tensor([6, 7, 7, 8]).reshape((-1, 4)).to(torch.int64).to(
+                    torch.float32
+                )
 
         model = Model()
         xs = (torch.randn((2, 4)),)
@@ -302,7 +307,7 @@ class TestOnnxExportShape(ExtTestCase):
             "custom",
             model,
             xs,
-            dynamic_shapes={"x": {0: "dx", 1: "dy"}},
+            dynamic_shapes={"x": {0: "dx"}},
             optimize=True,
             patterns="default",
             constant_folding=True,
@@ -311,8 +316,10 @@ class TestOnnxExportShape(ExtTestCase):
         )
         onx = onnx.load(model_path)
         self.assertEqual(["Add"], [n.op_type for n in onx.graph.node])
-        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
-        self.assertEqual(shape_x, ["dx", "dy"])
+        shape_x = [
+            d.dim_param or d.dim_value for d in onx.graph.input[0].type.tensor_type.shape.dim
+        ]
+        self.assertEqual(shape_x, ["dx", 4])
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]

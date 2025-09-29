@@ -13,6 +13,7 @@ from .onnx_any import (
 from .onnx_cast import (
     CastPattern,
     CastCastBinaryPattern,
+    CastCastPattern,
     CastOpCastPattern,
     ComputationCastOpCastPattern,
 )
@@ -150,6 +151,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         CastLayerNormalizationCastPattern(verbose=verbose),
         CastPattern(verbose=verbose),
         CastCastBinaryPattern(verbose=verbose),
+        CastCastPattern(verbose=verbose),
         CastOpCastPattern(verbose=verbose),
         ClipClipPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
