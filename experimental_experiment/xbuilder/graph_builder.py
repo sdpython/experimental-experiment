@@ -8889,6 +8889,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         if new_domain not in self.opsets:
             self.opsets[new_domain] = 1
+        locf = self.get_local_function(new_name, new_domain)
+        b = self.get_local_function(new_name, new_domain, builder=True)
         if self._debug_local_function:
             print(
                 f"[GraphBuilder-{self._hash()}.make_local_function] "
@@ -8899,13 +8901,11 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}.make_local_function] "
                 f"new_domain={new_domain!r}, new_name={new_name!r}"
             )
-            locf = self.get_local_function(new_name, new_domain)
             print(
                 f"[GraphBuilder-{self._hash()}.make_local_function] "
                 f"check proto {locf.domain}.{onx.name}({', '.join(locf.input)}) -> "
                 f"{', '.join(locf.output)}"
             )
-            b = self.get_local_function(new_name, new_domain, builder=True)
             if len(b.input_names) < len(locf.input):
                 print(
                     f"[GraphBuilder-{self._hash()}.make_local_function] "
