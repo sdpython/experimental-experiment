@@ -196,15 +196,13 @@ class TestGraphPatternBuilder(ExtTestCase):
         # A dummy model is used if not present (not implemented yet).
 
         class RotaryEmbeddingPattern(EasyPatternOptimization):
-            """
-            Fusion for Rotary.
-            """
+            """Fusion for Rotary."""
 
             def match_pattern(
                 self,
                 g,
-                x: "INT64",  # noqa: F821
-                pos_ids: "FLOAT",  # noqa: F821
+                x: "FLOAT",  # noqa: F821
+                pos_ids: "INT64",  # noqa: F821
                 axis: "INT64",  # noqa: F821
             ):
                 # original code: the code does verifies the constant yet
@@ -291,15 +289,13 @@ class TestGraphPatternBuilder(ExtTestCase):
         # A dummy model is used if not present (not implemented yet).
 
         class RotaryEmbeddingPattern(EasyPatternOptimization):
-            """
-            Fusion for Rotary.
-            """
+            """Fusion for Rotary."""
 
             def match_pattern(
                 self,
                 g,
-                x: "INT64",  # noqa: F821
-                pos_ids: "FLOAT",  # noqa: F821
+                x: "FLOAT",  # noqa: F821
+                pos_ids: "INT64",  # noqa: F821
                 axis: "INT64",  # noqa: F821
             ):
                 # original code: the code does verifies the constant yet

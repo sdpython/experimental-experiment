@@ -1730,7 +1730,7 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
                 self.set_rank(o, local_function_builder.get_rank(lo))
         return
 
-    assert node.op_type in {"GatherGrad", "SoftmaxGrad"} or node.domain not in {
+    assert node.op_type in {"GatherGrad", "SoftmaxGrad", "ConcatTraining"} or node.domain not in {
         "ai.onnx.ml",
         "intermediate",
         "ai.onnx.complex",
