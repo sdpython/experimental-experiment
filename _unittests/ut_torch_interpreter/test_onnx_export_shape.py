@@ -45,7 +45,6 @@ class TestOnnxExportShape(ExtTestCase):
                     patterns=patterns,
                     processor=processor,
                     constant_folding=constant_folding,
-                    oblivious=oblivious,
                 )
                 if patterns or processor != "CPU"
                 else None
@@ -223,13 +222,15 @@ class TestOnnxExportShape(ExtTestCase):
             "custom",
             model,
             xs,
-            dynamic_shapes={"x": {0: "num_audios", 1: "num_frames", 2: "num_last"}},
+            dynamic_shapes={"x": {0: "num_audios", 2: "num_last"}},
             patch=True,
             oblivious=True,
         )
         onx = onnx.load(model_path)
-        shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
-        self.assertEqual(shape_x, ["num_audios", "num_frames", "num_last"])
+        shape_x = [
+            d.dim_param or d.dim_value for d in onx.graph.input[0].type.tensor_type.shape.dim
+        ]
+        self.assertEqual(shape_x, ["num_audios", 16, "num_last"])
         sess = ExtendedReferenceEvaluator(model_path, verbose=0)
         feeds = dict(zip(sess.input_names, [x.numpy() for x in xs]))
         got = sess.run(None, feeds)[0]

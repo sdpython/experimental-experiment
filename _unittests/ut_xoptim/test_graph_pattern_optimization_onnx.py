@@ -6714,6 +6714,44 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_squeeze_div_unsqueeze(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["d"], start=0, end=1),
+                    oh.make_node("Squeeze", ["d"], ["d0"]),
+                    oh.make_node("Div", ["d0", "two"], ["d1"]),
+                    oh.make_node("Unsqueeze", ["d1", "zero"], ["e"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("e", TINT64, [])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array(2, dtype=np.int64), name="two"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": np.arange(12).reshape((3, 4)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns="SqueezeBinaryUnsqueeze", verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Shape", "Unsqueeze", "Div"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

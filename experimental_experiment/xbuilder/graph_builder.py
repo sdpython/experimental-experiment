@@ -5050,7 +5050,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         reminaing_ranks = {
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
         }
-        rows.append(f"_known_ranks={pprint.pformat(reminaing_ranks )[:10000]}")
+        rows.append(f"_known_ranks (with no shape)={pprint.pformat(reminaing_ranks )[:10000]}")
 
         rows.append("--PARAMETERS--")
         rows.append("_parameter_renaming=")

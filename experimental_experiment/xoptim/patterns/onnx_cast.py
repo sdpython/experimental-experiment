@@ -103,17 +103,20 @@ class CastCastPattern(PatternOptimization):
         middle_type = g.get_attribute(cast1, "to").i
         final_type = g.get_attribute(cast2, "to").i
         one_type = self._one_cast(itype, middle_type, final_type)
+        extend = [cast1] if g.is_used_more_than_once(cast1.output[0]) else []
         if one_type == itype:
             return [
+                *extend,
                 g.make_node(
                     "Identity",
                     cast1.input,
                     cast2.output,
                     name=f"{self.__class__.__name__}--{cast2.name}",
                     doc_string=cast2.doc_string,
-                )
+                ),
             ]
         return [
+            *extend,
             g.make_node(
                 "Cast",
                 cast1.input,
@@ -121,7 +124,7 @@ class CastCastPattern(PatternOptimization):
                 to=one_type,
                 name=f"{self.__class__.__name__}--{cast2.name}",
                 doc_string=cast2.doc_string,
-            )
+            ),
         ]
 
 

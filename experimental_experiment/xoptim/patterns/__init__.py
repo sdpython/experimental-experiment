@@ -90,6 +90,7 @@ from .onnx_transpose import (
 )
 from .onnx_unsqueeze import (
     SqueezeUnsqueezePattern,
+    SqueezeBinaryUnsqueezePattern,
     UnsqueezeUnsqueezePattern,
     SqueezeAddPattern,
 )
@@ -201,6 +202,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SoftmaxCrossEntropyLossCastPattern(verbose=verbose),
         SplitConcatPattern(verbose=verbose),
         SqueezeAddPattern(verbose=verbose),
+        SqueezeBinaryUnsqueezePattern(verbose=verbose),
         SqueezeUnsqueezePattern(verbose=verbose),
         StaticConcatReshapePattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),

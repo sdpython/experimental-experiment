@@ -252,3 +252,76 @@ class SqueezeAddPattern(PatternOptimization):
         if g.is_used_more_than_once(add.input[0]):
             new_nodes = [squeeze1, *new_nodes]
         return new_nodes
+
+
+class SqueezeBinaryUnsqueezePattern(PatternOptimization):
+    """Replaces the sequence Squeeze Binary Unsqueeze) by Binary."""
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Unsqueeze" or node.domain != "" or g.builder.main_opset < 13:
+            return self.none()
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        scalar = g.get_constant_scalar(node.input[1])
+        if scalar != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        binary = g.node_before(node.input[0])
+        if binary is None or binary.op_type not in {"Add", "Div", "Mul", "Sub"}:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(binary.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(binary.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(binary.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(binary.input[1]) != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        squeeze = g.node_before(binary.input[0])
+        if squeeze is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(squeeze.input) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(squeeze.input[0]):
+            print("-------")
+            print(g.builder.get_debug_msg())
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(squeeze.input[0]) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [squeeze, binary, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        squeeze_node: NodeProto,
+        binary_node: NodeProto,
+        unsqueeze_node: NodeProto,
+    ) -> List[NodeProto]:
+        new_name = g.unique_name(f"{self.__class__.__name__}_{binary_node.input[1]}")
+        new_nodes = [
+            g.make_node(
+                "Unsqueeze",
+                [binary_node.input[1], unsqueeze_node.input[1]],
+                [new_name],
+                name=f"{self.__class__.__name__}--{unsqueeze_node.name}",
+                doc_string=unsqueeze_node.doc_string,
+            ),
+            g.make_node(
+                binary_node.op_type,
+                [squeeze_node.input[0], new_name],
+                [unsqueeze_node.output[0]],
+                name=f"{self.__class__.__name__}--{binary_node.name}",
+                doc_string=binary_node.doc_string,
+            ),
+        ]
+        return new_nodes
