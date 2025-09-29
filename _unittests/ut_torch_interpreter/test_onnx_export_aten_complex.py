@@ -64,10 +64,8 @@ class TestOnnxExportComplex(ExtTestCase):
                 expected = model(x)
                 DYN = torch.export.Dim.DYNAMIC
                 ep = torch.export.export(model, (x,), dynamic_shapes=({0: DYN, 1: DYN},))
-                # print(ep)
                 ep = ep.run_decompositions()
-                assert ep
-                # print(ep)
+                assert ep, "ep is none"
 
                 # No decomposition.
                 onx = to_onnx(
@@ -76,6 +74,7 @@ class TestOnnxExportComplex(ExtTestCase):
                     dynamic_shapes=({0: "batch", 1: "length"},),
                     target_opset=opset,
                 )
+                # self.dump_onnx(f"test_fft_simple_1_{n}_{dim}_{norm}.onnx", onx)
                 self.assertEqual(onx.opset_import[0].domain, "")
                 self.assertEqual(onx.opset_import[0].version, opset)
                 # self.print_model(onx)

@@ -1569,10 +1569,9 @@ class GraphBuilderPatternOptimization:
                 verbose=max(self.verbose - 1, 0),
                 _opsets=self.opsets,
                 _context=context,
+                _parent=self,
             )
             assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
-            # We need to populate whatever exists.
-            self._move_context_to_other_builder(context, g)
             g.optimize()
 
             renaming = {}

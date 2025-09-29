@@ -6009,27 +6009,28 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert not shadow, f"Shadowing names were found ({shadow})."
         stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
 
-    def _move_context_to_other_builder(self, context: Sequence[str], g: "GraphBuilder"):
-        if context:
-            for k in context:
-                if g.has_name(k):
-                    # We cannot overwrite a local result.
-                    continue
-                g.set_name(k, marker="optimize_node_subgraphs_inplace")
-                if self.has_shape(k):
-                    g.set_shape(k, self.get_shape(k), allow_zero=True)
-                elif self.has_rank(k):
-                    g.set_rank(k, self.get_rank(k))
-                if self.has_type(k):
-                    g.set_type(k, self.get_type(k))
-                if k in self.constants_:
-                    g.constants_[k] = self.constants_[k]
-                if k in self.constants_node_:
-                    g.constants_node_[k] = self.constants_node_[k]
-                if k in self._known_value_shape:
-                    g._known_value_shape[k] = self._known_value_shape[k]
-                if k in self._parameter_norename:
-                    g._parameter_norename.add(k)
+    def _import_context_from_parent_graph(self, name: str):
+        if not self._parent:
+            return
+        if self.has_name(name):
+            # We cannot overwrite a local result.
+            return
+        g = self._parent
+        self.set_name(name, marker="optimize_node_subgraphs_inplace")
+        if g.has_shape(name):
+            self.set_shape(name, g.get_shape(name), allow_zero=True)
+        elif g.has_rank(name):
+            self.set_rank(name, g.get_rank(name))
+        if g.has_type(name):
+            self.set_type(name, g.get_type(name))
+        if name in g.constants_:
+            self.constants_[name] = g.constants_[name]
+        if name in g.constants_node_:
+            self.constants_node_[name] = g.constants_node_[name]
+        if name in g._known_value_shape:
+            self._known_value_shape[name] = g._known_value_shape[name]
+        if name in g._parameter_norename:
+            self._parameter_norename.add(name)
 
     def optimize_node_subgraphs_inplace(self, node: NodeProto, context: Set[str]):
         """Optimizes the subgraphs for a node."""
@@ -6049,10 +6050,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 verbose=max(self.verbose - 1, 0),
                 _opsets=self.opsets,
                 _context=context,
+                _parent=self,
             )
             assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
             # We need to populate whatever exists.
-            self._move_context_to_other_builder(context, g)
             g.optimize()
 
             renaming = {}
@@ -8350,6 +8351,12 @@ class GraphBuilder(_GraphBuilderRuntime):
             else {}
         )
 
+        if self._parent:
+            # This is a subgraph. Let's import information about
+            # the missing inputs.
+            for i in self.inputs:
+                self._import_context_from_parent_graph(i)
+
         for i in self.inputs + self.outputs:
             self.set_name(i.name, f"_update_structures_with_proto_{i}")
             self.set_type(i.name, i.type.tensor_type.elem_type)
@@ -8402,6 +8409,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         need_identity_removal = False
         new_nodes = []
         for node in self.nodes:
+            if self._parent:
+                # This is a subgraph, let's import information from
+                # the parent graph.
+                for i in node.input:
+                    self._import_context_from_parent_graph(i)
+
+            # ready to add the node
             self._unique_names |= set(node.output)
             shape_set = self.simple_update_value_shape_with_node(node)
             if node.name:
