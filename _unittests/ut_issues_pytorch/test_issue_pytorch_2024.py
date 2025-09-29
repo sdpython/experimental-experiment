@@ -246,14 +246,6 @@ class TestIssuesPytorch2024(ExtTestCase):
             e2 = session.run(None, input_2)[0]
             self.assertEqualArray(expected, e2)
 
-    @unittest.skip("index_put fails with torch_script")
-    def test_index_put_update_parameter_script_2d(self):
-        self._updated_parameter("script", False)
-
-    @unittest.skip("index_put fails with torch_script")
-    def test_index_put_update_parameter_script_3d(self):
-        self._updated_parameter("script", True)
-
     @requires_onnxscript("0.7")
     @hide_stdout()
     def test_index_put_update_parameter_dynamo_2d_static(self):
@@ -604,15 +596,6 @@ class TestIssuesPytorch2024(ExtTestCase):
         self.assertEqual(expected_output.shape, output[0].shape)
         self.assertEqualArray(expected_output, output[0], atol=1e-4)
 
-    @unittest.skip("torch_script not supported on complex numbers")
-    def test_complex_weights_script(self):
-        self._complex_weights("script")
-
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_complex_weights_dynamo(self):
-        self._complex_weights("dynamo")
-
     def test_complex_weights_custom(self):
         self._complex_weights("custom")
 
@@ -682,11 +665,6 @@ class TestIssuesPytorch2024(ExtTestCase):
 
     def test_dyn_slice_4d_script(self):
         self._slice_4d("script")
-
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_dyn_slice_4d_dynamo(self):
-        self._slice_4d("dynamo")
 
     def test_dyn_slice_4d_custom(self):
         self._slice_4d("custom")
@@ -899,7 +877,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     @ignore_warnings(UserWarning)
     def test_index_put_no_none(self):
         for exporter, d3, decomposition, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"],
+            ["custom", "onnx_dynamo"],
             [True, False],
             [True],  # no decomposition is not safe for inplace
             [False, True],

@@ -322,7 +322,8 @@ def set_type_shape_reduce_op(
     assert keepdim in {None, 0, 1}, f"keepdim={keepdim!r} must be in {{0, 1}}"
     if keepdim is None:
         keepdim = 1
-    g.set_type(name, g.get_type(x))
+    if g.has_type(x):
+        g.set_type(name, g.get_type(x))
     if axes is None:
         g.set_shape(name, ((1,) * g.get_rank(x)) if keepdim else tuple())
     elif not g.has_shape(x):
@@ -1460,9 +1461,7 @@ _set_shape_type_op_any_known = {
 
 
 def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    """
-    Sets the shape and type if it can.
-    """
+    """Sets the shape and type if it can."""
     if node.op_type.startswith("Reduce"):
         _set_shape_type_op_any_reduce(self, node)
     elif node.op_type in _set_shape_type_op_any_known:
@@ -1552,11 +1551,6 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
         self.set_rank(name, max(self.get_rank(x), self.get_rank(y)))
 
 
-_set_shape_type_op_any_custom = {
-    "FusedMatMul": set_type_shape_fused_matmul,
-}
-
-
 def set_type_shape_tree_ensemble(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     self.set_type(node.output[0], self.get_type(node.input[0]))
     n_targets = self.get_attribute(node, "n_targets", exc=False)
@@ -1571,10 +1565,115 @@ def set_type_shape_tree_ensemble(self: "GraphBuilder", node: NodeProto):  # noqa
         self.set_rank(node.output[0], 2)
 
 
+def set_type_shape_to_complex(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    if self.has_type(node.input[0]):
+        dtype = self.get_type(node.input[0])
+        mapping = {
+            TensorProto.FLOAT: TensorProto.COMPLEX64,
+            TensorProto.DOUBLE: TensorProto.COMPLEX128,
+        }
+        assert (
+            dtype in mapping
+        ), f"Unexpected type {dtype} for node {node.op_type}{self.get_debug_msg()}"
+        self.set_type(node.output[0], mapping[dtype])
+    if self.has_shape(node.input[0]):
+        self.set_shape(node.output[0], self.get_shape(node.input[0][:-1]))
+    elif self.has_rank(node.input[0]):
+        self.set_rank(node.output[0], self.get_rank(input[0]) - 1)
+    return True
+
+
+def set_type_shape_complex_module(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    if self.has_type(node.input[0]):
+        dtype = self.get_type(node.input[0])
+        mapping = {
+            TensorProto.COMPLEX64: TensorProto.FLOAT,
+            TensorProto.COMPLEX128: TensorProto.DOUBLE,
+        }
+        assert (
+            dtype in mapping
+        ), f"Unexpected type {dtype} for node {node.op_type}{self.get_debug_msg()}"
+        self.set_type(node.output[0], mapping[dtype])
+    if self.has_shape(node.input[0]):
+        self.set_shape(node.output[0], self.get_shape(node.input[0]))
+    elif self.has_rank(node.input[0]):
+        self.set_rank(node.output[0], self.get_rank(input[0]))
+    return True
+
+
+def set_type_shape_shared_input(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    set_type_shape_binary_op(self, node.output[0], *node.input[:2])
+    set_type_shape_binary_op(self, node.output[1], *node.input[::2])
+
+
+def set_type_shape_scatter_nd_of_shape(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    if self.has_type(node.input[2]):
+        self.set_type(node.output[0], self.get_type(node.input[2]))
+    value = self.value_as_shape(node.input[0])
+    if value is not None:
+        self.set_shape(node.output[0], tuple(value))
+
+
+def set_type_shape_tri_matrix(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    if self.has_type(node.input[1]):
+        self.set_type(node.output[0], self.get_type(node.input[1]))
+    value = self.value_as_shape(node.input[0])
+    if value is not None:
+        self.set_shape(node.output[0], tuple(value))
+
+
+def set_type_shape_transpose_2d_cast_fp16(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], TensorProto.FLOAT16)
+    if self.has_shape(node.input[0]):
+        shape = self.get_shape(node.input[0])
+        self.set_shape(node.output[0], shape[::-1])
+
+
+def set_type_shape_transpose_2d_cast_fp32(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    self.set_type(node.output[0], TensorProto.FLOAT)
+    if self.has_shape(node.input[0]):
+        shape = self.get_shape(node.input[0])
+        self.set_shape(node.output[0], shape[::-1])
+
+
+_set_shape_type_op_any_custom = {
+    "AddAdd": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "AddMul": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "AddSharedInput": set_type_shape_shared_input,
+    "BiasGelu": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
+    "BiasSoftmax": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
+    "ComplexModule": set_type_shape_complex_module,
+    "FastGelu": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
+    "FusedMatMul": set_type_shape_fused_matmul,
+    "FusedConv": _set_shape_type_op_any_conv_max_pool,
+    "Gelu": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
+    "MaskedScatterNDOfShape": set_type_shape_scatter_nd_of_shape,
+    "MulAdd": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "MulMul": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "MulSharedInput": set_type_shape_shared_input,
+    "MulSigmoid": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "MulMulSigmoid": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "MulSub": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "QuickGelu": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
+    "Rotary": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
+    "RotaryEmbedding": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
+    "ScatterNDOfShape": set_type_shape_scatter_nd_of_shape,
+    "SkipLayerNormalization": lambda g, node: set_type_shape_unary_op(
+        g, node.output[0], node.input[0]
+    ),
+    "SkipSimplifiedLayerNormalization": lambda g, node: set_type_shape_unary_op(
+        g, node.output[0], node.input[0]
+    ),
+    "SubMul": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "ToComplex": set_type_shape_to_complex,
+    "Transpose2DCastFP16": set_type_shape_transpose_2d_cast_fp16,
+    "Transpose2DCastFP32": set_type_shape_transpose_2d_cast_fp32,
+    "TriMatrix": set_type_shape_tri_matrix,
+}
+
+
 def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    """
-    Sets the shape and type if it can.
-    """
+    """Sets the shape and type if it can."""
     if node.domain == "ai.onnx.ml":
         if node.op_type == "TreeEnsembleRegressor":
             set_type_shape_tree_ensemble(self, node)
@@ -1585,6 +1684,67 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
     if node.op_type in _set_shape_type_op_any_custom:
         _set_shape_type_op_any_custom[node.op_type](self, node)
         return
+    if self.has_local_function(node.op_type, domain=node.domain, builder=True):
+        local_function_builder = self.get_local_function(
+            node.op_type, domain=node.domain, builder=True
+        )
+        assert (
+            local_function_builder is not None
+        ), f"Missing local function for node {(node.domain, node.op_type)}"
+        assert isinstance(local_function_builder, self.__class__), (
+            f"Unexpected type {type(local_function_builder)} "
+            f"for node {(node.domain, node.op_type)} "
+            f"and the local_function it refers to{self.get_debug_msg()}"
+        )
+        shapes = [self.get_shape(i) if self.has_shape(i) else None for i in node.input]
+        if None in shapes:
+            # Nothing we can do.
+            return
+        proto_local_function = self.get_local_function(node.op_type, domain=node.domain)
+        local_shapes = [
+            local_function_builder.get_shape(i) if local_function_builder.has_shape(i) else None
+            for i in proto_local_function.input
+        ]
+        # The builder creating the local function may have less inputs because
+        # when exported to FunctionProto, constants were promoted as inputs.
+        assert len(shapes) == len(local_shapes), (
+            f"Mismatch between the number of inputs, node '{node.domain}.{node.op_type}' "
+            f"has {node.input}, function has {proto_local_function.input}{self.get_debug_msg()}"
+        )
+        if local_shapes != shapes:
+            local_function_builder.reset_types_and_shapes()
+            for ni, i, sh in zip(node.input, proto_local_function.input, shapes):
+                if self.has_type(ni):
+                    local_function_builder.set_type(i, self.get_type(ni))
+                local_function_builder.set_shape(i, sh)
+            local_function_builder.infer_shapes()
+        assert len(local_function_builder.output_names) == len(node.output), (
+            f"Mismatch between the number of outputs, node has {node.output}, "
+            f"function has {local_function_builder.output_names}{self.get_debug_msg()}"
+        )
+        for o, lo in zip(node.output, local_function_builder.output_names):
+            if local_function_builder.has_type(lo):
+                self.set_type(o, local_function_builder.get_type(lo))
+            if local_function_builder.has_shape(lo):
+                self.set_shape(o, local_function_builder.get_shape(lo))
+            elif local_function_builder.has_rank(lo):
+                self.set_rank(o, local_function_builder.get_rank(lo))
+        return
+
+    assert node.op_type in {"GatherGrad", "SoftmaxGrad", "ConcatTraining"} or node.domain not in {
+        "ai.onnx.ml",
+        "intermediate",
+        "ai.onnx.complex",
+        "com.microsoft",
+        "local_domain",
+        "SimplifyingFunction",
+        "onnx_extended.ortops.optim.cuda",
+    }, (
+        f"Unable to find a function computing the output shape of node "
+        f"{(node.domain, node.op_type)}, list of functions is "
+        f"{sorted(self.functions)}, list of functions with graph is "
+        f"{sorted(self.functions_builder)}{self.get_debug_msg()}"
+    )
     assert not self._debug_shape_missing, (
         f"No function to compute shape for node: "
         f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"

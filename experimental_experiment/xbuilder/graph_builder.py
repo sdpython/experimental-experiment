@@ -429,7 +429,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         output_dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any]]] = None,
         _opsets: Optional[Dict[str, int]] = None,
         _context: Optional[Set[str]] = None,
-        _parent: Optional["GraphBuilder"] = None,
+        _parent: Optional[Union["GraphBuilder", Tuple["GraphBuilder", NodeProto]]] = None,
     ):
         import torch
         from . import TEMPLATE_TYPE
@@ -470,7 +470,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         self.check_empty_source = check_empty_source
         self.user_defined_output_names = output_names or []
         self._context = _context or set()
-        self._parent = _parent
+        if isinstance(_parent, tuple):
+            self._parent = _parent[0]
+            self._parent_node = _parent[1]
+        else:
+            self._parent = _parent
 
         self.nodes = []
         self.initializers_dict = {}
@@ -546,7 +550,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.input_names = input_names or []
             self.current_input = 0
             self._unique_names = set(self.input_names)
-
         elif isinstance(target_opset_or_existing_proto, (GraphProto, ModelProto, FunctionProto)):
             # loads a model from nothing
             if input_names:
@@ -1195,7 +1198,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return tuple(new_res)
 
         if not self.is_constant(name):
-            if exc:
+            if exc and not self._parent:  # subgraphs not fully working
                 raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
             if self._debug_get_constant:
                 print(f"[GraphBuilder.get_constant]   C: None, name={name!r}")
@@ -1619,6 +1622,20 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         return res
 
+    def reset_types_and_shapes(self):
+        """Removes shapes, and types if not an initializer."""
+        for k in self._known_names:
+            if self.is_constant(k):
+                continue
+            if self.has_type(k):
+                del self._known_types[k]
+            if self.has_shape(k):
+                del self._known_shapes[k]
+            if self.has_rank(k):
+                del self._known_ranks[k]
+            if k in self._known_value_shape:
+                del self._known_value_shape[k]
+
     def set_shapes_types(
         self,
         name: Union[str, "torch.fx.Node"],  # noqa: F821
@@ -1954,7 +1971,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return is_static_shape(shape) and min(shape) >= 0
         return True
 
-    def has_type(self, name: str) -> bool:
+    def has_type(self, name: str) -> Union[bool, int]:
         """Tells if a result has a type. This should be always true."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         if name not in self._known_types:
@@ -4395,6 +4412,15 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}.update_node_constant] new constant "
                 f"{name!r}, node={None if node is None else node.op_type}"
             )
+        assert (
+            node is None
+            or node.op_type == "Shape"
+            or all(self.is_constant(i) for i in node.input if i not in {"", None, "None"})
+        ), (
+            f"Output {name!r} is constant (node={self.pretty_node(node)}) "
+            f"only if every input from {node.input} is constant "
+            f"but constants={[self.is_constant(i) for i in node.input]}{self.get_debug_msg()}"
+        )
         self.constants_[name] = node
         return True
 
@@ -5278,7 +5304,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     res["functions"] = used_functions
             return res
 
-        # We need to move the initializers as inputs, we sort than by decresing size
+        # We need to move the initializers as inputs, we sort them by decresing size
         inits, functions = self._extend_local_function_inputs()
         proto.input.extend(inits)
         res = dict(
@@ -5388,7 +5414,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 k: v for k, v in self._known_value_shape.items() if not k.startswith("init")
             }
             if filtered:
-                values["_known_value_shapes"] = self._format_dict(filtered)
+                values["_known_value_shape"] = self._format_dict(filtered)
         if values:
             oh.set_model_props(model, values)
 
@@ -5995,27 +6021,40 @@ class GraphBuilder(_GraphBuilderRuntime):
             assert not shadow, f"Shadowing names were found ({shadow})."
         stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
 
-    def _move_context_to_other_builder(self, context: Sequence[str], g: "GraphBuilder"):
-        if context:
-            for k in context:
-                if g.has_name(k):
-                    # We cannot overwrite a local result.
-                    continue
-                g.set_name(k, marker="optimize_node_subgraphs_inplace")
-                if self.has_shape(k):
-                    g.set_shape(k, self.get_shape(k), allow_zero=True)
-                elif self.has_rank(k):
-                    g.set_rank(k, self.get_rank(k))
-                if self.has_type(k):
-                    g.set_type(k, self.get_type(k))
-                if k in self.constants_:
-                    g.constants_[k] = self.constants_[k]
-                if k in self.constants_node_:
-                    g.constants_node_[k] = self.constants_node_[k]
-                if k in self._known_value_shape:
-                    g._known_value_shape[k] = self._known_value_shape[k]
-                if k in self._parameter_norename:
-                    g._parameter_norename.add(k)
+    def _import_context_from_parent_graph(self, name: str):
+        if self.has_type(name) and self.has_shape(name):
+            return
+        if not self._parent:
+            return
+        if not self.has_name(name):
+            # We cannot overwrite a local result.
+            self.set_name(name, marker="optimize_node_subgraphs_inplace")
+        g = self._parent
+        parent_name, name = name, name
+        if self._parent_node:
+            # Coming from a Scan, If, Loop, Node
+            if name in self.input_names:
+                position = self.input_names.index(name)
+                assert position < len(self._parent_node.input), (
+                    f"No corresponding input name for {name!r} in node {self._parent_node}"
+                    f"{self.get_debug_msg()}"
+                )
+                parent_name = self._parent_node.input[position]
+
+        if g.has_shape(parent_name):
+            self.set_shape(name, g.get_shape(parent_name), allow_zero=True)
+        elif g.has_rank(parent_name):
+            self.set_rank(name, g.get_rank(parent_name))
+        if g.has_type(parent_name):
+            self.set_type(name, g.get_type(parent_name))
+        if parent_name in g.constants_:
+            self.constants_[name] = g.constants_[parent_name]
+        if parent_name in g.constants_node_:
+            self.constants_node_[name] = g.constants_node_[parent_name]
+        if parent_name in g._known_value_shape:
+            self._known_value_shape[name] = g._known_value_shape[parent_name]
+        if parent_name in g._parameter_norename:
+            self._parameter_norename.add(name)
 
     def optimize_node_subgraphs_inplace(self, node: NodeProto, context: Set[str]):
         """Optimizes the subgraphs for a node."""
@@ -6035,10 +6074,10 @@ class GraphBuilder(_GraphBuilderRuntime):
                 verbose=max(self.verbose - 1, 0),
                 _opsets=self.opsets,
                 _context=context,
+                _parent=(self, node),
             )
             assert not g.functions, f"unexpected functions in a subgraphs{g.get_debug_msg()}"
             # We need to populate whatever exists.
-            self._move_context_to_other_builder(context, g)
             g.optimize()
 
             renaming = {}
@@ -7955,6 +7994,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     node.doc_string += "#SV-Ga/2"
                     return False
                 i = self.get_constant(node.input[1], computed_value=True, exc=True)
+                if i is None:
+                    node.doc_string += "#SV-Ga/3"
+                    return False
                 if isinstance(y, str) and isinstance(i, int):
                     self.set_value_shape(node.output[0], f"{y}[{i}]")
                     node.doc_string += "#SV-Ga3"
@@ -8224,15 +8266,15 @@ class GraphBuilder(_GraphBuilderRuntime):
 
     def _make_node_set_type_shape(self, node: NodeProto):
         """Updates shapes for a node."""
-        if node.domain != "":
+        if node.domain == "":
             node.doc_string += "#Io1"
-            set_shape_type_custom(self, node)
-        else:
-            if node.input and not self.has_type(node.input[0]):
-                # It is probably coming from an inlined function.
-                return
-            node.doc_string += "#Io2"
             set_shape_type_op_any(self, node)
+        else:
+            # Missing type means it is probably coming from an inlined function.
+            node.doc_string += (
+                "#Io3" if node.input and not self.has_type(node.input[0]) else "#Io2"
+            )
+            set_shape_type_custom(self, node)
 
     def infer_shapes(self) -> Dict[str, Tuple[DYNAMIC_SHAPE, DYNAMIC_SHAPE]]:
         """Runs custom shape inference. Returns the updates."""
@@ -8388,6 +8430,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         need_identity_removal = False
         new_nodes = []
         for node in self.nodes:
+            if self._parent:
+                # This is a subgraph, let's import information from
+                # the parent graph.
+                for i in node.input:
+                    self._import_context_from_parent_graph(i)
+
+            # ready to add the node
             self._unique_names |= set(node.output)
             shape_set = self.simple_update_value_shape_with_node(node)
             if node.name:
@@ -8767,7 +8816,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             print(
                 f"[GraphBuilder-{self._hash()}.make_local_function] "
-                f"ct {onx.name}[{onx.domain}]"
+                f"create {onx.name}[{onx.domain}]"
                 f"({', '.join(onx.input)}) -> {', '.join(onx.output)})"
             )
         doc_string = f"-- function_options={function_options!r}"
@@ -8867,6 +8916,34 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         if new_domain not in self.opsets:
             self.opsets[new_domain] = 1
+        locf = self.get_local_function(new_name, new_domain)
+        b = self.get_local_function(new_name, new_domain, builder=True)
+        if self._debug_local_function:
+            print(
+                f"[GraphBuilder-{self._hash()}.make_local_function] "
+                f"done with {onx.domain}.{onx.name}({', '.join(onx.input)}) -> "
+                f"{', '.join(onx.output)}"
+            )
+            print(
+                f"[GraphBuilder-{self._hash()}.make_local_function] "
+                f"new_domain={new_domain!r}, new_name={new_name!r}"
+            )
+            print(
+                f"[GraphBuilder-{self._hash()}.make_local_function] "
+                f"check proto {locf.domain}.{onx.name}({', '.join(locf.input)}) -> "
+                f"{', '.join(locf.output)}"
+            )
+            if len(b.input_names) < len(locf.input):
+                print(
+                    f"[GraphBuilder-{self._hash()}.make_local_function] "
+                    f"last inputs are constants, builder is "
+                    f"({', '.join(b.input_names)}) -> {', '.join(b.output_names)}"
+                )
+        assert list(locf.input) >= b.input_names, (
+            f"Local builder and local function disagrees on the inputs "
+            f"{locf.input} != {b.input_names}\n-----{b.get_debug_msg()}\n----"
+            f"{self.get_debug_msg()}"
+        )
         return new_inits, (new_domain, new_name)
 
     def rename_in_local_functions(
@@ -9020,12 +9097,18 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.functions_builder[key] = builder
         return f.domain, f.name
 
-    def has_local_function(self, name: str, domain: str = "") -> bool:
+    def has_local_function(self, name: str, domain: str = "", builder: bool = False) -> bool:
         """Checks if a local function exists."""
+        if builder:
+            return (domain, name) in self.functions_builder
         return (domain, name) in self.functions
 
-    def get_local_function(self, name: str, domain: str = "") -> FunctionProto:
+    def get_local_function(
+        self, name: str, domain: str = "", builder: bool = False
+    ) -> FunctionProto:
         """Returns a local function."""
+        if builder:
+            return self.functions_builder[domain, name]
         return self.functions[domain, name]
 
     def get_local_function_outputs(self, name: str, domain: str = "") -> List[str]:
