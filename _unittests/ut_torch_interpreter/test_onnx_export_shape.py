@@ -25,6 +25,7 @@ class TestOnnxExportShape(ExtTestCase):
         output_names: Optional[List[str]] = None,
         constant_folding: bool = False,
         oblivious: bool = False,
+        patch: bool = False,
     ) -> str:
         import torch
 
@@ -46,18 +47,35 @@ class TestOnnxExportShape(ExtTestCase):
                 if patterns or processor != "CPU"
                 else None
             )
-            to_onnx(
-                model,
-                inputs,
-                filename=filename,
-                export_options=export_options,
-                verbose=verbose,
-                optimize=optimize,
-                options=opt_options,
-                dynamic_shapes=dynamic_shapes,
-                output_names=output_names,
-                output_dynamic_shapes=output_dynamic_shapes,
-            )
+            if patch:
+                from onnx_diagnostic.torch_export_patches import torch_export_patches
+
+                with torch_export_patches():
+                    to_onnx(
+                        model,
+                        inputs,
+                        filename=filename,
+                        export_options=export_options,
+                        verbose=verbose,
+                        optimize=optimize,
+                        options=opt_options,
+                        dynamic_shapes=dynamic_shapes,
+                        output_names=output_names,
+                        output_dynamic_shapes=output_dynamic_shapes,
+                    )
+            else:
+                to_onnx(
+                    model,
+                    inputs,
+                    filename=filename,
+                    export_options=export_options,
+                    verbose=verbose,
+                    optimize=optimize,
+                    options=opt_options,
+                    dynamic_shapes=dynamic_shapes,
+                    output_names=output_names,
+                    output_dynamic_shapes=output_dynamic_shapes,
+                )
         return filename
 
     @requires_torch("2.6", "torch.export.Dim.AUTO")
@@ -244,6 +262,7 @@ class TestOnnxExportShape(ExtTestCase):
             xs,
             dynamic_shapes={"x": {0: "num_audios", 1: "num_frames", 2: "num_last"}},
             oblivious=True,
+            patch=True,
         )
         onx = onnx.load(model_path)
         shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]

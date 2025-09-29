@@ -4677,12 +4677,13 @@ class GraphBuilder(_GraphBuilderRuntime):
             )
             itype = self.get_type(k)
             shape = self.get_shape(k)
-            assert not is_static_shape(shape) or shape == v.shape, (
+            vshape = v.shape if hasattr(v, "shape") else tuple(v.dims)  # TensorProto
+            assert not is_static_shape(shape) or shape == vshape, (
                 f"Unexpected shape for initializer {k!r}, shape={shape!r}, itype={itype}, "
                 f"initializer shape={v.shape}, dtype={v.dtype}, "
                 f"{self.get_debug_msg()}"
             )
-            shape = v.shape
+            shape = vshape
             size = np.prod(shape) * self.elem_size(itype)
             if size < external_threshold:
                 new_inits[k] = v

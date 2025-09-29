@@ -1426,7 +1426,7 @@ class GraphBuilderPatternOptimization:
             for p in self.patterns
             if p.__class__.__name__ in {"SameChildrenPattern", "ShapedBasedSameChildren"}
         }
-        if same_children_pattern_names and self.verbose >= 0:
+        if same_children_pattern_names and self.verbose > 0:
             print(
                 f"[GraphBuilderPatternOptimization-"
                 f"{self.builder._hash()}.optimize]"
