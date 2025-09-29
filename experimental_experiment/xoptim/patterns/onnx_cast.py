@@ -77,7 +77,7 @@ class CastCastPattern(PatternOptimization):
         if node.op_type != "Cast" or node.domain != "":
             return self.none()
         cast_before = g.node_before(node.input[0])
-        if cast_before.op_type != "Cast" or cast_before.domain != "":
+        if cast_before is None or cast_before.op_type != "Cast" or cast_before.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_type(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
