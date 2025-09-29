@@ -8351,12 +8351,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             else {}
         )
 
-        if self._parent:
-            # This is a subgraph. Let's import information about
-            # the missing inputs.
-            for i in self.inputs:
-                self._import_context_from_parent_graph(i)
-
         for i in self.inputs + self.outputs:
             self.set_name(i.name, f"_update_structures_with_proto_{i}")
             self.set_type(i.name, i.type.tensor_type.elem_type)

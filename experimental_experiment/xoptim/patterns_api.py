@@ -363,6 +363,7 @@ class EasyPatternOptimization(PatternOptimization):
             itype = string_to_elem_type(ann)
             g2.make_tensor_input(name, itype, None, False, marker=f"_build_pattern2_{name}")
 
+        self.add_local_functions_to_builder(g2)
         output = fct(g2, *args, **kwargs)
         if isinstance(output, str):
             g2.make_tensor_output(output, 0, None, is_dimension=False)
@@ -374,6 +375,12 @@ class EasyPatternOptimization(PatternOptimization):
         )
         pat._build()
         return pat
+
+    def add_local_functions_to_builder(self, g2: "GraphBuilder"):  # noqa: F821
+        """
+        Adds missing local functions ot understand the applied pattern.
+        There is none by default but there some pattern may need to overwrite this.
+        """
 
     def _get_match_pattern(
         self,

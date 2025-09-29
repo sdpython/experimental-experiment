@@ -1651,6 +1651,7 @@ _set_shape_type_op_any_custom = {
     "MulMul": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
     "MulSharedInput": set_type_shape_shared_input,
     "MulSigmoid": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "MulMulSigmoid": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
     "MulSub": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
     "QuickGelu": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
     "Rotary": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
@@ -1723,7 +1724,8 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
             elif local_function.has_rank(lo):
                 self.set_rank(o, local_function.get_rank(lo))
         return
-    assert node.op_type in {"GatherGrad"} or node.domain not in {
+
+    assert node.op_type in {"GatherGrad", "SoftmaxGrad"} or node.domain not in {
         "ai.onnx.ml",
         "intermediate",
         "ai.onnx.complex",

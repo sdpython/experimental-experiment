@@ -52,17 +52,21 @@ class SimplifyingEasyPatternFunction(EasyPatternOptimization):
         ), f"Pattern class name {cls.__name__!r} should start with 'Function'."
         return cls.__name__.replace("Pattern", "").replace("Function", "")
 
-    def post_apply_pattern(self, g, *nodes):
+    @property
+    def input_names(self) -> List[str]:
         sig = inspect.signature(self.match_pattern)
         inputs = []
         for pos, p in enumerate(sig.parameters):
             if pos >= 1:
                 inputs.append(p)
+        return inputs
+
+    def post_apply_pattern(self, g, *nodes):
         domain = self.f_domain
 
         f_name = self.f_name()
         if not g.builder.has_local_function(f_name, domain=domain):
-            self._add_local_function(g.builder, domain, f_name, inputs)
+            self._add_local_function(g.builder, domain, f_name, self.input_names)
 
     def _add_local_function(self, g: GraphBuilder, domain: str, f_name: str, inputs: List[str]):
         local_g = GraphBuilder(g.main_opset, as_function=True)
@@ -72,3 +76,8 @@ class SimplifyingEasyPatternFunction(EasyPatternOptimization):
 
         function_options = FunctionOptions(export_as_function=True, name=f_name, domain=domain)
         g.make_local_function(local_g, function_options=function_options)
+
+    def add_local_functions_to_builder(self, g2: GraphBuilder):
+        self._add_local_function(
+            g2, domain=self.f_domain, f_name=self.f_name(), inputs=self.input_names
+        )
