@@ -6,6 +6,7 @@ import numpy as np
 import onnx
 import onnx.helper as oh
 from onnx.checker import check_model
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
@@ -1789,12 +1790,13 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*inputs)
 
-        onx = to_onnx(
-            model,
-            inputs,
-            dynamic_shapes=({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"}),
-            verbose=0,
-        )
+        with torch_export_patches():
+            onx = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"}),
+                verbose=0,
+            )
         self.dump_onnx("test_getitem_index_put.onnx", onx)
         feeds = dict(zip(["x", "ind1", "ind2"], [x.detach().cpu().numpy() for x in inputs]))
         ref = ExtendedReferenceEvaluator(onx, verbose=0)

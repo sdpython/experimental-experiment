@@ -221,6 +221,8 @@ class TestOnnxExportShape(ExtTestCase):
             model,
             xs,
             dynamic_shapes={"x": {0: "num_audios", 1: "num_frames", 2: "num_last"}},
+            patch=True,
+            oblivious=True,
         )
         onx = onnx.load(model_path)
         shape_x = [d.dim_param for d in onx.graph.input[0].type.tensor_type.shape.dim]
@@ -305,6 +307,7 @@ class TestOnnxExportShape(ExtTestCase):
             patterns="default",
             constant_folding=True,
             verbose=0,
+            patch=True,
         )
         onx = onnx.load(model_path)
         self.assertEqual(["Add"], [n.op_type for n in onx.graph.node])
