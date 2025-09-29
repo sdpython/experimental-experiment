@@ -1198,7 +1198,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return tuple(new_res)
 
         if not self.is_constant(name):
-            if exc:
+            if exc and not self._parent:  # subgraphs not fully working
                 raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
             if self._debug_get_constant:
                 print(f"[GraphBuilder.get_constant]   C: None, name={name!r}")
@@ -4412,6 +4412,15 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}.update_node_constant] new constant "
                 f"{name!r}, node={None if node is None else node.op_type}"
             )
+        assert (
+            node is None
+            or node.op_type == "Shape"
+            or all(self.is_constant(i) for i in node.input if i not in {"", None, "None"})
+        ), (
+            f"Output {name!r} is constant (node={self.pretty_node(node)}) "
+            f"only if every input from {node.input} is constant "
+            f"but constants={[self.is_constant(i) for i in node.input]}{self.get_debug_msg()}"
+        )
         self.constants_[name] = node
         return True
 
@@ -7985,6 +7994,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     node.doc_string += "#SV-Ga/2"
                     return False
                 i = self.get_constant(node.input[1], computed_value=True, exc=True)
+                if i is None:
+                    node.doc_string += "#SV-Ga/3"
+                    return False
                 if isinstance(y, str) and isinstance(i, int):
                     self.set_value_shape(node.output[0], f"{y}[{i}]")
                     node.doc_string += "#SV-Ga3"
