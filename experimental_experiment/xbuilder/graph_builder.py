@@ -5292,7 +5292,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     res["functions"] = used_functions
             return res
 
-        # We need to move the initializers as inputs, we sort than by decresing size
+        # We need to move the initializers as inputs, we sort them by decresing size
         inits, functions = self._extend_local_function_inputs()
         proto.input.extend(inits)
         res = dict(
@@ -8789,7 +8789,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 )
             print(
                 f"[GraphBuilder-{self._hash()}.make_local_function] "
-                f"ct {onx.name}[{onx.domain}]"
+                f"create {onx.name}[{onx.domain}]"
                 f"({', '.join(onx.input)}) -> {', '.join(onx.output)})"
             )
         doc_string = f"-- function_options={function_options!r}"
@@ -8889,6 +8889,34 @@ class GraphBuilder(_GraphBuilderRuntime):
         )
         if new_domain not in self.opsets:
             self.opsets[new_domain] = 1
+        if self._debug_local_function:
+            print(
+                f"[GraphBuilder-{self._hash()}.make_local_function] "
+                f"done with {onx.domain}.{onx.name}({', '.join(onx.input)}) -> "
+                f"{', '.join(onx.output)}"
+            )
+            print(
+                f"[GraphBuilder-{self._hash()}.make_local_function] "
+                f"new_domain={new_domain!r}, new_name={new_name!r}"
+            )
+            locf = self.get_local_function(new_name, new_domain)
+            print(
+                f"[GraphBuilder-{self._hash()}.make_local_function] "
+                f"check proto {locf.domain}.{onx.name}({', '.join(locf.input)}) -> "
+                f"{', '.join(locf.output)}"
+            )
+            b = self.get_local_function(new_name, new_domain, builder=True)
+            if len(b.input_names) < len(locf.input):
+                print(
+                    f"[GraphBuilder-{self._hash()}.make_local_function] "
+                    f"last inputs are constants, builder is "
+                    f"({', '.join(b.input_names)}) -> {', '.join(b.output_names)}"
+                )
+        assert list(locf.input) >= b.input_names, (
+            f"Local builder and local function disagrees on the inputs "
+            f"{locf.input} != {b.input_names}\n-----{b.get_debug_msg()}\n----"
+            f"{self.get_debug_msg()}"
+        )
         return new_inits, (new_domain, new_name)
 
     def rename_in_local_functions(

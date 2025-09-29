@@ -1684,12 +1684,14 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         _set_shape_type_op_any_custom[node.op_type](self, node)
         return
     if self.has_local_function(node.op_type, domain=node.domain, builder=True):
-        local_function = self.get_local_function(node.op_type, domain=node.domain, builder=True)
+        local_function_builder = self.get_local_function(
+            node.op_type, domain=node.domain, builder=True
+        )
         assert (
-            local_function is not None
+            local_function_builder is not None
         ), f"Missing local function for node {(node.domain, node.op_type)}"
-        assert isinstance(local_function, self.__class__), (
-            f"Unexpected type {type(local_function)} "
+        assert isinstance(local_function_builder, self.__class__), (
+            f"Unexpected type {type(local_function_builder)} "
             f"for node {(node.domain, node.op_type)} "
             f"and the local_function it refers to{self.get_debug_msg()}"
         )
@@ -1697,32 +1699,35 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         if None in shapes:
             # Nothing we can do.
             return
+        proto_local_function = self.get_local_function(node.op_type, domain=node.domain)
         local_shapes = [
-            local_function.get_shape(i) if local_function.has_shape(i) else None
-            for i in local_function.input_names
+            local_function_builder.get_shape(i) if local_function_builder.has_shape(i) else None
+            for i in proto_local_function.input
         ]
+        # The builder creating the local function may have less inputs because
+        # when exported to FunctionProto, constants were promoted as inputs.
         assert len(shapes) == len(local_shapes), (
-            f"Mismatch between the number of inputs, node has {node.input}, "
-            f"function has {local_function.input_names}{self.get_debug_msg()}"
+            f"Mismatch between the number of inputs, node '{node.domain}.{node.op_type}' "
+            f"has {node.input}, function has {proto_local_function.input}{self.get_debug_msg()}"
         )
         if local_shapes != shapes:
-            local_function.reset_types_and_shapes()
-            for ni, i, sh in zip(node.input, local_function.input_names, shapes):
+            local_function_builder.reset_types_and_shapes()
+            for ni, i, sh in zip(node.input, proto_local_function.input, shapes):
                 if self.has_type(ni):
-                    local_function.set_type(i, self.get_type(ni))
-                local_function.set_shape(i, sh)
-            local_function.infer_shapes()
-        assert len(local_function.output_names) == len(node.output), (
+                    local_function_builder.set_type(i, self.get_type(ni))
+                local_function_builder.set_shape(i, sh)
+            local_function_builder.infer_shapes()
+        assert len(local_function_builder.output_names) == len(node.output), (
             f"Mismatch between the number of outputs, node has {node.output}, "
-            f"function has {local_function.output_names}{self.get_debug_msg()}"
+            f"function has {local_function_builder.output_names}{self.get_debug_msg()}"
         )
-        for o, lo in zip(node.output, local_function.output_names):
-            if local_function.has_type(lo):
-                self.set_type(o, local_function.get_type(lo))
-            if local_function.has_shape(lo):
-                self.set_shape(o, local_function.get_shape(lo))
-            elif local_function.has_rank(lo):
-                self.set_rank(o, local_function.get_rank(lo))
+        for o, lo in zip(node.output, local_function_builder.output_names):
+            if local_function_builder.has_type(lo):
+                self.set_type(o, local_function_builder.get_type(lo))
+            if local_function_builder.has_shape(lo):
+                self.set_shape(o, local_function_builder.get_shape(lo))
+            elif local_function_builder.has_rank(lo):
+                self.set_rank(o, local_function_builder.get_rank(lo))
         return
 
     assert node.op_type in {"GatherGrad", "SoftmaxGrad"} or node.domain not in {
