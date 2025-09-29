@@ -1361,7 +1361,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.dump_onnx("test_contrib_rotary_embedding.onnx", opt_onx)
+        self.dump_onnx("test_contrib_rotary_embedding_concat_after.onnx", opt_onx)
         self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
         self.assertIn("com.microsoft", [n.domain for n in opt_onx.graph.node])
 
@@ -1427,7 +1427,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.dump_onnx("test_contrib_rotary_embedding.onnx", opt_onx)
+        self.dump_onnx("test_contrib_rotary_embedding_no_concat_after.onnx", opt_onx)
         self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
         self.assertIn("Concat", [n.op_type for n in opt_onx.graph.node])
         self.assertIn("com.microsoft", [n.domain for n in opt_onx.graph.node])
@@ -1443,6 +1443,179 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz, atol=1e-4)
+
+    def test_contrib_rotary_embedding_concat_after_position_ids(self):
+        opset = 20
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["position_ids"], ["batch"], start=0, end=1),
+                    oh.make_node("Concat", ["batch", "init11"], ["new_shape"], axis=0),
+                    oh.make_node("Unsqueeze", ["weights", "init01"], ["weights_u"]),
+                    oh.make_node("Expand", ["weights_u", "new_shape"], ["weights_expanded"]),
+                    oh.make_node("Unsqueeze", ["position_ids", "one"], ["pids1"]),
+                    oh.make_node("Cast", ["pids1"], ["cids"], to=TensorProto.FLOAT),
+                    oh.make_node("Reshape", ["cids", "init0_11"], ["resh"]),
+                    oh.make_node("Mul", ["weights_expanded", "resh"], ["milti"]),
+                    oh.make_node("Cos", ["milti"], ["m1s"]),
+                    oh.make_node("Sin", ["milti"], ["m2s"]),
+                    oh.make_node("Unsqueeze", ["m1s", "one"], ["m1"]),
+                    oh.make_node("Unsqueeze", ["m2s", "one"], ["m2"]),
+                    oh.make_node("Concat", ["m1", "m1"], ["m1x2"], axis=-1),
+                    oh.make_node("Concat", ["m2", "m2"], ["m2x2"], axis=-1),
+                    oh.make_node("Split", ["X", "split"], ["Xh1", "Xh2"], axis=-1),
+                    oh.make_node("Split", ["Xh1"], ["x1", "x2"], axis=-1, num_outputs=2),
+                    oh.make_node("Neg", ["x2"], ["nx2"]),
+                    oh.make_node("Concat", ["nx2", "x1"], ["cc"], axis=-1),
+                    oh.make_node("Mul", ["cc", "m2x2"], ["cm1"]),
+                    oh.make_node("Mul", ["Xh1", "m1x2"], ["cm2"]),
+                    oh.make_node("Add", ["cm1", "cm2"], ["Yh"]),
+                    oh.make_node("Concat", ["Yh", "Xh2"], ["Y"], axis=-1),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, "c", "d"]),
+                    oh.make_tensor_value_info("position_ids", TINT64, ["a", "e"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "d"])],
+                [
+                    onh.from_array(np.array([4, 6], dtype=np.int64), name="split"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                    onh.from_array(np.array([0, -1, 1], dtype=np.int64), name="init0_11"),
+                    onh.from_array(np.array(1, dtype=np.int64), name="one_no_dim"),
+                    onh.from_array(np.array([0.1, 0.2], dtype=np.float32), name="weights"),
+                    onh.from_array(np.array([0, 1], dtype=np.int64), name="init01"),
+                    onh.from_array(np.array([1, 1], dtype=np.int64), name="init11"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", opset)],
+            ir_version=10,
+        )
+
+        shape_x = (2, 2, 3, 10)
+        feeds = {
+            "X": ((np.arange(np.prod(shape_x)) + 1) / (np.prod(shape_x) * 10))
+            .reshape(shape_x)
+            .astype(np.float32),
+            "position_ids": np.array([[1, 3, 6], [2, 4, 7]], dtype=np.int64),
+        }
+        ExtendedReferenceEvaluator(model, verbose=0).run(None, feeds)
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.BUILDER,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionCosSinCache", "FunctionHalfRotaryEmbedding"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_contrib_rotary_embedding_concat_after_position_ids0.onnx", opt_onx)
+        ref = self.make_inference_session(model)
+        z = ref.run(None, feeds)[0]
+        sess = self.make_inference_session(opt_onx)
+        zz = sess.run(None, feeds)[0]
+        self.assertEqualArray(z, zz, atol=1e-4)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.BUILDER,
+            optimization_options=OptimizationOptions(
+                patterns=[
+                    "FunctionCosSinCache",
+                    "FunctionHalfRotaryEmbedding",
+                    "ContribRotaryEmbedding",
+                ],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_contrib_rotary_embedding_concat_after_position_ids.onnx", opt_onx)
+        self.assertIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
+        self.assertIn("com.microsoft", [n.domain for n in opt_onx.graph.node])
+        sess = self.make_inference_session(opt_onx)
+        zz = sess.run(None, feeds)[0]
+        self.assertEqualArray(z, zz, atol=1e-4)
+
+    def test_contrib_rotary_embedding_concat_after_position_ids_no_match(self):
+        opset = 20
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["position_ids"], ["batch"], start=0, end=1),
+                    oh.make_node("Concat", ["batch", "init11"], ["new_shape"], axis=0),
+                    oh.make_node("Unsqueeze", ["weights", "init01"], ["weights_u"]),
+                    oh.make_node("Expand", ["weights_u", "new_shape"], ["weights_expanded"]),
+                    oh.make_node("Unsqueeze", ["position_ids", "one"], ["pids1"]),
+                    oh.make_node("Cast", ["pids1"], ["cids"], to=TensorProto.FLOAT),
+                    oh.make_node("Reshape", ["cids", "init0_11"], ["resh"]),
+                    oh.make_node("Mul", ["weights_expanded", "resh"], ["milti"]),
+                    oh.make_node("Cos", ["milti"], ["m1s"]),
+                    oh.make_node("Sin", ["milti"], ["m2s"]),
+                    oh.make_node("Unsqueeze", ["m1s", "one"], ["m1"]),
+                    oh.make_node("Unsqueeze", ["m2s", "one"], ["m2"]),
+                    oh.make_node("Concat", ["m1", "m1"], ["m1x2"], axis=-1),
+                    oh.make_node("Concat", ["m2", "m2"], ["m2x2"], axis=-1),
+                    oh.make_node("Split", ["X", "split"], ["Xh1", "Xh2"], axis=-1),
+                    oh.make_node("Split", ["Xh1"], ["x1", "x2"], axis=-1, num_outputs=2),
+                    oh.make_node("Neg", ["x2"], ["nx2"]),
+                    oh.make_node("Concat", ["nx2", "x1"], ["cc"], axis=-1),
+                    oh.make_node("Mul", ["cc", "m1x2"], ["cm1"]),
+                    oh.make_node("Mul", ["Xh1", "m2x2"], ["cm2"]),
+                    oh.make_node("Add", ["cm1", "cm2"], ["Yh"]),
+                    oh.make_node("Concat", ["Yh", "Xh2"], ["Y"], axis=-1),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, "c", "d"]),
+                    oh.make_tensor_value_info("position_ids", TINT64, ["a", "e"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "d"])],
+                [
+                    onh.from_array(np.array([4, 6], dtype=np.int64), name="split"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                    onh.from_array(np.array([0, -1, 1], dtype=np.int64), name="init0_11"),
+                    onh.from_array(np.array(1, dtype=np.int64), name="one_no_dim"),
+                    onh.from_array(np.array([0.1, 0.2], dtype=np.float32), name="weights"),
+                    onh.from_array(np.array([0, 1], dtype=np.int64), name="init01"),
+                    onh.from_array(np.array([1, 1], dtype=np.int64), name="init11"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", opset)],
+            ir_version=10,
+        )
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.BUILDER,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionCosSinCache", "FunctionHalfRotaryEmbedding"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx(
+            "test_contrib_rotary_embedding_concat_after_position_ids_no_match.onnx", opt_onx
+        )
+
+        shape_x = (2, 2, 3, 10)
+        feeds = {
+            "X": ((np.arange(np.prod(shape_x)) + 1) / (np.prod(shape_x) * 10))
+            .reshape(shape_x)
+            .astype(np.float32),
+            "position_ids": np.array([[1, 3, 6], [2, 4, 7]], dtype=np.int64),
+        }
+        ExtendedReferenceEvaluator(model, verbose=0).run(None, feeds)
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.BUILDER,
+            optimization_options=OptimizationOptions(
+                patterns=[
+                    "FunctionCosSinCache",
+                    "FunctionHalfRotaryEmbedding",
+                    "ContribRotaryEmbedding",
+                ],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertNotIn("RotaryEmbedding", [n.op_type for n in opt_onx.graph.node])
 
 
 if __name__ == "__main__":

@@ -679,6 +679,13 @@ class ExtTestCase(unittest.TestCase):
                 raise
             raise AssertionError(msg) from e
 
+    def make_inference_session(self, proto: "ModelProto") -> "InferenceSession":  # noqa: F821
+        import onnxruntime
+
+        return onnxruntime.InferenceSession(
+            proto.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+
 
 def get_figure(ax):
     """Returns the figure of a matplotlib figure."""

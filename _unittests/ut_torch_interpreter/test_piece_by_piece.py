@@ -770,6 +770,7 @@ class TestPieceByPiece(ExtTestCase):
             .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
             .replace("_DimHint(type=DYN)", "DYN")
             .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
+            .replace("DimHint(DYNAMIC)", "DYN")
         )
         print(got)
         self.assertEqual(expected_dyn_shapes, got)
@@ -859,6 +860,7 @@ class TestPieceByPiece(ExtTestCase):
             .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
             .replace("_DimHint(type=DYN)", "DYN")
             .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
+            .replace("DimHint(DYNAMIC)", "DYN")
         )
         self.assertEqual(expected_dyn_shapes, got)
 
@@ -1217,6 +1219,7 @@ class TestPieceByPiece(ExtTestCase):
             .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
             .replace("_DimHint(type=DYN)", "DYN")
             .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
+            .replace("DimHint(DYNAMIC)", "DYN")
         )
         self.assertEqual(sds, "(({0: DYN},), {'y': {0: DYN}})")
         choose = choose_kwargs_for_dynamic_shapes(*ds, diag.forward_positioned_parameter_names)
@@ -1226,6 +1229,7 @@ class TestPieceByPiece(ExtTestCase):
             .replace("<_DimHintType.DYNAMIC: 3>", "DYN")
             .replace("_DimHint(type=DYN)", "DYN")
             .replace("_DimHint(type=DYN, min=None, max=None, _factory=True)", "DYN")
+            .replace("DimHint(DYNAMIC)", "DYN")
         )
         self.assertEqual(schoose, "{'y': {0: DYN}, 'x': {0: DYN}}")
         ep = diag.try_export(

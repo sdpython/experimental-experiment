@@ -995,6 +995,8 @@ def _set_shape_type_op_any_range(self: "GraphBuilder", node: NodeProto):  # noqa
             else:
                 dim = simplify_expression(f"{v2}-({v1})")
             self.set_shape(node.output[0], (dim,))
+            return
+    self.set_shape(node.output[0], (self.unique_dimension_name("NEWDIM_range"),))
 
 
 def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821
