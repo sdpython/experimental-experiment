@@ -345,7 +345,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                     return obj.node
                 i = obj.node._expr
                 if "sympy" in str(type(i)):
-                    return str(i).replace(",", ";").replace(" ", "")
+                    return str(i).replace(" ", "")
                 return None
             raise AssertionError(f"Unexpected type {type(obj)} to convert into string")
 
@@ -1656,7 +1656,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         if hasattr(value, "node") and isinstance(value.node, SymNode):
             # '_expr' is safer than expr
-            return str(value.node._expr).replace(",", ";").replace(" ", "")
+            return str(value.node._expr).replace(" ", "")
 
         try:
             val_int = int(value)
@@ -3069,7 +3069,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         value = None
         try:
             # don't use 'expr'
-            dyn_val = str(d.node._expr).replace(",", ";").replace(" ", "")
+            dyn_val = str(d.node._expr).replace(" ", "")
             value = dyn_val
         except AttributeError:
             pass
@@ -3517,7 +3517,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 return obj.node
             i = obj.node._expr
             if "sympy" in str(type(i)):
-                return str(i).replace(",", ";").replace(" ", "")
+                return str(i).replace(" ", "")
             if exc:
                 raise AssertionError(
                     f"Object has {type(obj)} but could not find a dynamic interpretation"

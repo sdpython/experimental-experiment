@@ -773,12 +773,12 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
                     # conf_f1=(d,s,stride) = (
                     #   s - (stride if d % stride == 0 else d % stride)) // 2
                     # )
-                    pads[i] = f"conf_f1({input_dim};{effective_kernel_shape[i]};{stride})"
+                    pads[i] = f"conf_f1({input_dim},{effective_kernel_shape[i]},{stride})"
                     # conf_f2=(d,s,stride) = (
                     #   s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
                     # )
                     pads[i + n_input_dims] = (
-                        f"conf_f2({input_dim};{effective_kernel_shape[i]};{stride})"
+                        f"conf_f2({input_dim},{effective_kernel_shape[i]},{stride})"
                     )
 
     require_kernel_shape = node.op_type in {"MaxPool"}
@@ -814,7 +814,7 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
         #       (stride - 1) * (ceil_mode == 1)
         #   ) // stride + 1 + ...
         output_size = (
-            f"conf_f3({input_size};{effective_kernel_shape[i]};{strides[i]};{ceil_mode})"
+            f"conf_f3({input_size},{effective_kernel_shape[i]},{strides[i]},{ceil_mode})"
         )
         output_shape.append(output_size)
 
