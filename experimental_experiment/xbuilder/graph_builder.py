@@ -7633,6 +7633,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         needed_at, first_at = self._needed_at_first_at()
 
         # First loop to check positions are ok otherwise move a node or two.
+        needs_sort = False
         N = len(self.nodes)
         inode = 0
         while inode < len(new_nodes):
@@ -7655,74 +7656,92 @@ class GraphBuilder(_GraphBuilderRuntime):
                 name in self.nodes[pos].output
             ), f"Name {name!r} should be at node position {pos}"
             new_position = self._move_node_position(pos)
-            assert new_position, (
-                f"Node at position {pos} cannot be moved.\n----\n"
-                f"{self._position_msg([node])}"
-                f"\n-------\n{self._position_msg(new_nodes)}"
-            )
+            if not new_position:
+                needs_sort = True
+                position_to_insert = mini[0]
+                if self.verbose > 1:
+                    print(
+                        f"[GraphBuilder.insert_and_remove_nodes] needs full sort "
+                        f"to add new nodes at because node at position {pos} "
+                        f"cannot be moved.\n----\n{self._position_msg([node])}"
+                        f"\n-------\n{self._position_msg(new_nodes)}"
+                    )
+                break
             needed_at, first_at = self._needed_at_first_at()
 
-        # guess the position to insert the nodes at
-        # the order of the new nodes is consistent but it may have to be changed
-        # if it does not fit the existing order
-        insert_needed_at = {}
-        insert_first_at = {}
-        N = len(self.nodes)
-        inserted_at = []
-        new_nodes_p = []
-        for init, node in enumerate(new_nodes):
-            if node.input:
-                min_position = max(first_at.get(i, -1) for i in node.input) + 1
-            else:
-                # a constant node
-                min_position = 0
-            max_position = min(needed_at.get(o, N) for o in node.output)
+        if needs_sort:
+            # Requires full sort.
+            self.nodes = [node for node in self.nodes if node is not None]
+            pos = min(len(self.nodes), position_to_insert)
+            self.nodes = [*self.nodes[:pos], *new_nodes, *self.nodes[pos:]]
+            self.topological_sort()
+            new_nodes_p = [(None, None, n) for n in new_nodes]
+        else:
+            # guess the position to insert the nodes at
+            # the order of the new nodes is consistent but it may have to be changed
+            # if it does not fit the existing order
+            insert_needed_at = {}
+            insert_first_at = {}
+            N = len(self.nodes)
+            inserted_at = []
+            new_nodes_p = []
+            for init, node in enumerate(new_nodes):
+                if node.input:
+                    min_position = max(first_at.get(i, -1) for i in node.input) + 1
+                else:
+                    # a constant node
+                    min_position = 0
+                max_position = min(needed_at.get(o, N) for o in node.output)
 
-            assert min_position <= max_position, (
-                f"Unable to insert node {self.pretty_node(node)}, "
-                f"min_position={min_position}, max_position={max_position}, "
-                f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
-                f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}, "
-                f"inserted_at={inserted_at}\n{self._position_msg([node])}"
-                f"\n-------\n{self._position_msg(new_nodes)}"
-            )
-
-            if node.input:
-                local_min_position = max(insert_first_at.get(i, -1) for i in node.input)
-            else:
-                # a constant node
-                local_min_position = 0
-            local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
-
-            assert local_min_position <= local_max_position, (
-                f"Unable to insert node {self.pretty_node(node)}, "
-                f"local_min_position={local_min_position}, "
-                f"local_max_position={local_max_position}, "
-                f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
-                f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}"
-            )
-
-            insert_position = max(min_position, local_min_position)
-
-            new_nodes_p.append((insert_position, init, node))
-            for i in node.input:
-                insert_needed_at[i] = min(
-                    insert_position, insert_needed_at.get(i, insert_position)
+                assert min_position <= max_position, (
+                    f"Unable to insert node {self.pretty_node(node)}, "
+                    f"min_position={min_position}, max_position={max_position}, "
+                    f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
+                    f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}, "
+                    f"inserted_at={inserted_at}\n{self._position_msg([node])}"
+                    f"\n-------\n{self._position_msg(new_nodes)}"
                 )
-            for i in node.output:
-                insert_first_at[i] = min(insert_position, insert_first_at.get(i, insert_position))
 
-        assert len(new_nodes) == len(new_nodes_p), (
-            f"Length mismatch between len(new_nodes)={len(new_nodes)} == "
-            f"len(new_nodes_p)={len(new_nodes_p)}"
-        )
-        new_nodes_p.sort()
+                if node.input:
+                    local_min_position = max(insert_first_at.get(i, -1) for i in node.input)
+                else:
+                    # a constant node
+                    local_min_position = 0
+                local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
 
-        # do the addition
+                assert local_min_position <= local_max_position, (
+                    f"Unable to insert node {self.pretty_node(node)}, "
+                    f"local_min_position={local_min_position}, "
+                    f"local_max_position={local_max_position}, "
+                    f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
+                    f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}"
+                )
+
+                insert_position = max(min_position, local_min_position)
+
+                new_nodes_p.append((insert_position, init, node))
+                for i in node.input:
+                    insert_needed_at[i] = min(
+                        insert_position, insert_needed_at.get(i, insert_position)
+                    )
+                for i in node.output:
+                    insert_first_at[i] = min(
+                        insert_position, insert_first_at.get(i, insert_position)
+                    )
+
+            assert len(new_nodes) == len(new_nodes_p), (
+                f"Length mismatch between len(new_nodes)={len(new_nodes)} == "
+                f"len(new_nodes_p)={len(new_nodes_p)}"
+            )
+            new_nodes_p.sort()
+
+            # do the addition
+            for p, _, n in reversed(new_nodes_p):
+                assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
+                self.nodes.insert(p, n)
+
+        # finalization
         init_nams = {}
-        for p, _, n in reversed(new_nodes_p):
-            assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
-            self.nodes.insert(p, n)
         for _, _, n in new_nodes_p:
             if n.output[0] in init_nams:
                 continue
@@ -7744,6 +7763,52 @@ class GraphBuilder(_GraphBuilderRuntime):
             del self.constants_[o]
         self._refresh_values_cache()
         return memo
+
+    def topological_sort(self):
+        """
+        Reorders the nodes in order to make sure no node is using an output
+        created by a node after.
+        """
+        # Gathering IO
+        self.nodes = [node for node in self.nodes if node is not None]
+        output_index_node = {name: -1 for name in self.input_names}  # noqa: C420
+        output_index_node.update({name: -1 for name in self.initializers_dict})  # noqa: C420
+        ios = {}
+        for i, node in enumerate(self.nodes):
+            unique = set(node.input)
+            subgraphs = [att.g for att in node.attribute if att.type == AttributeProto.GRAPH]
+            for sub in subgraphs:
+                unique |= set(self._get_hidden_inputs(sub))
+            ios[i] = unique
+            for o in node.output:
+                output_index_node[o] = i
+        # Begin sorting
+        new_order = [0 for i in range(len(self.nodes))]
+        it = 0
+        while it < len(self.nodes) + 1:
+            changes = 0
+            for i in range(len(self.nodes)):
+                inputs = ios[i]
+                if inputs:
+                    indices = [output_index_node[o] for o in inputs]
+                    minis = [new_order[i] for i in indices if i >= 0]
+                    if minis:
+                        mini = max(minis) + 1
+                        if mini > new_order[i]:
+                            changes += 1
+                            new_order[i] = mini
+            if changes == 0:
+                break
+            it += 1
+        assert it < len(self.nodes), (
+            f"{it} (with {len(self.nodes)}) iterations were necessary to sort the graph. "
+            f"There may be a cycle.{self.get_debug_msg()}"
+        )
+
+        sorted_nodes = [
+            node for _, __, node in sorted(zip(new_order, range(len(self.nodes)), self.nodes))
+        ]
+        self.nodes = sorted_nodes
 
     @classmethod
     def _clean_shapes(cls, proto: Union[GraphProto, ModelProto]):
