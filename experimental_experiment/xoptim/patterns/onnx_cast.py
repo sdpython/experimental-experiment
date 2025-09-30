@@ -6,9 +6,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class CastPattern(PatternOptimization):
-    """
-    Checks that a Cast is really needed.
-    """
+    """Checks that a Cast is really needed."""
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
@@ -49,6 +47,85 @@ class CastPattern(PatternOptimization):
             doc_string=node.doc_string,
         )
         return [new_node]
+
+
+class CastCastPattern(PatternOptimization):
+    """Checks that two consecutive cast can be avoided."""
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def _one_cast(self, t1: int, t2: int, t3: int) -> int:
+        if t1 == t3:
+            if t2 == t1:
+                return t1
+            if t1 in {TensorProto.FLOAT, TensorProto.FLOAT16, TensorProto.BFLOAT16}:
+                if t2 in {TensorProto.FLOAT, TensorProto.DOUBLE}:
+                    return t1
+        elif t3 == t2:
+            return t2
+        elif t1 == t2:
+            return t3
+        return 0
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Cast" or node.domain != "":
+            return self.none()
+        cast_before = g.node_before(node.input[0])
+        if cast_before is None or cast_before.op_type != "Cast" or cast_before.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_type(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        itype = g.get_type(cast_before.input[0])
+        middle_type = g.get_attribute(cast_before, "to").i
+        final_type = g.get_attribute(node, "to").i
+        if not self._one_cast(itype, middle_type, final_type):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(
+            self,
+            [cast_before, node],
+            self.apply,
+            insert_at=None if g.is_used_more_than_once(node.input[0]) else node,
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        cast1: NodeProto,
+        cast2: NodeProto,
+    ) -> List[NodeProto]:
+        itype = g.get_type(cast1.input[0])
+        middle_type = g.get_attribute(cast1, "to").i
+        final_type = g.get_attribute(cast2, "to").i
+        one_type = self._one_cast(itype, middle_type, final_type)
+        extend = [cast1] if g.is_used_more_than_once(cast1.output[0]) else []
+        if one_type == itype:
+            return [
+                *extend,
+                g.make_node(
+                    "Identity",
+                    cast1.input,
+                    cast2.output,
+                    name=f"{self.__class__.__name__}--{cast2.name}",
+                    doc_string=cast2.doc_string,
+                ),
+            ]
+        return [
+            *extend,
+            g.make_node(
+                "Cast",
+                cast1.input,
+                cast2.output,
+                to=one_type,
+                name=f"{self.__class__.__name__}--{cast2.name}",
+                doc_string=cast2.doc_string,
+            ),
+        ]
 
 
 class CastCastBinaryPattern(PatternOptimization):
@@ -137,9 +214,7 @@ class CastCastBinaryPattern(PatternOptimization):
 
 
 class CastOpCastPattern(PatternOptimization):
-    """
-    Removes two cast surrounding another operator.
-    """
+    """Removes two cast surrounding another operator."""
 
     _dtypes_allowed = {
         TensorProto.FLOAT16,

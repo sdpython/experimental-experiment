@@ -435,8 +435,8 @@ def rewrite_dynamic_shapes(dynamic_shapes: Any) -> Any:
     if isinstance(dynamic_shapes, str):
         import torch
 
-        assert hasattr(torch.export.Dim, "AUTO"), "This functionality requires pytorch>=2.6."
-        return torch.export.Dim.AUTO
+        assert hasattr(torch.export.Dim, "DYNAMIC"), "This functionality requires pytorch>=2.6."
+        return torch.export.Dim.DYNAMIC
     return dynamic_shapes
 
 

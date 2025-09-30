@@ -13,6 +13,7 @@ from .onnx_any import (
 from .onnx_cast import (
     CastPattern,
     CastCastBinaryPattern,
+    CastCastPattern,
     CastOpCastPattern,
     ComputationCastOpCastPattern,
 )
@@ -89,6 +90,7 @@ from .onnx_transpose import (
 )
 from .onnx_unsqueeze import (
     SqueezeUnsqueezePattern,
+    SqueezeBinaryUnsqueezePattern,
     UnsqueezeUnsqueezePattern,
     SqueezeAddPattern,
 )
@@ -150,6 +152,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         CastLayerNormalizationCastPattern(verbose=verbose),
         CastPattern(verbose=verbose),
         CastCastBinaryPattern(verbose=verbose),
+        CastCastPattern(verbose=verbose),
         CastOpCastPattern(verbose=verbose),
         ClipClipPattern(verbose=verbose),
         ComputationCastOpCastPattern(verbose=verbose),
@@ -199,6 +202,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SoftmaxCrossEntropyLossCastPattern(verbose=verbose),
         SplitConcatPattern(verbose=verbose),
         SqueezeAddPattern(verbose=verbose),
+        SqueezeBinaryUnsqueezePattern(verbose=verbose),
         SqueezeUnsqueezePattern(verbose=verbose),
         StaticConcatReshapePattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
