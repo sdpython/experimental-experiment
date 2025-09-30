@@ -1131,6 +1131,190 @@ class GraphBuilderPatternOptimization:
         """Tells if a node can be removed."""
         return self.builder.do_not_remove(node)
 
+    def _optimize_matching_step(
+        self,
+        it: int,
+        patterns_list: List[PatternOptimization],
+        n_applied,
+        stop_after,
+        statistics,
+        priorities,
+        current_priority_index,
+    ):
+        found = False
+        marked = set()
+        matches = []
+        durations = {}
+        continue_optimization = True
+        for pattern in patterns_list:
+            if not continue_optimization:
+                break
+            if pattern.priority > priorities[current_priority_index]:
+                # skipping that pattern
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] skips "
+                        f"{pattern.__class__.__name__}, "
+                        f"pattern.priority={pattern.priority}, "
+                        f"current_priority_index={current_priority_index}, "
+                        f"priorities[current_priority_index]="
+                        f"{priorities[current_priority_index]} "
+                        f"priorities={priorities}"
+                    )
+                continue
+            begin = time.perf_counter()
+            before = len(matches)
+
+            # loop over the nodes
+            for match in pattern.enumerate_matches(self):
+                # bypass this node if the name contains some specific name
+                fail_match = False
+                for n in match.nodes:
+                    if n and self.do_not_remove(n):
+                        fail_match = True
+                        break
+                if fail_match:
+                    continue
+
+                # checks that a node is not already part of another pattern
+                bypass = False
+                for n in match.nodes:
+                    if n is None:
+                        continue
+                    if make_idn(n) in marked:
+                        # a node is already marked for replacements
+                        bypass = True
+                        break
+                if bypass:
+                    if self.verbose >= 9 or pattern.verbose >= 10:
+                        print(
+                            f"[{self.__class__.__name__}.match] OVERLAP "
+                            f"match={match} #marked: {len(marked)})"
+                        )
+                    continue
+                for n in match.nodes:
+                    if n is None:
+                        continue
+                    marked.add(make_idn(n))
+                found = True
+                if self.verbose > 2 or pattern.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] match={match}"
+                    )
+                matches.append((pattern, match))
+                if stop_after > 0 and len(matches) + n_applied >= stop_after:
+                    continue_optimization = False
+                    if self.verbose > 0 or pattern.verbose >= 10:
+                        print(
+                            f"[GraphBuilderPatternOptimization-"
+                            f"{self.builder._hash()}.optimize] "
+                            f"stop after with "
+                            f"{len(matches)} as stop_after={stop_after} "
+                            f"and n_applied={n_applied}"
+                        )
+                    break
+
+            # matches contains all the matchs
+            d = time.perf_counter() - begin
+            statistics.append(
+                dict(
+                    pattern=f"match_{pattern}",
+                    iteration=it,
+                    instances=len(matches) - before,
+                    time_in=d,
+                    match_index=len(matches),
+                )
+            )
+            durations[pattern.__class__.__name__] = (
+                durations.get(pattern.__class__.__name__, 0) + d
+            )
+
+        return found, matches, durations, continue_optimization
+
+    def _optimize_apply_step(self, it: int, matches: List[MatchResult], statistics):
+        added_types = set()
+        n_added = 0
+        n_removed = 0
+        applied_patterns = []
+
+        # loop over patterns
+        for im, (pattern, match) in enumerate(matches):
+            if self.verbose > 3 or pattern.verbose >= 10:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                    f"apply {match.to_string(short=False)}"
+                )
+
+            begin = time.perf_counter()
+            added_nodes = self.apply_match(match)
+            added_types |= set(n.op_type for n in added_nodes)
+
+            removed_nodes = [n for n in match.nodes if id(n) not in {id(r) for r in added_nodes}]
+
+            if self.verbose > 3 or pattern.verbose >= 10:
+                print(
+                    f"[GraphBuilderPatternOptimization-"
+                    f"{self.builder._hash()}.optimize] - add "
+                    f"{[n.op_type for n in added_nodes]}"
+                )
+            add = len(added_nodes)
+            added_outputs = set()
+            for n in added_nodes:
+                added_outputs |= set(n.output)
+
+            rem = len([n for n in match.nodes if n is not None])
+            removed_outputs = set()
+            for n in match.nodes:
+                if n is None:
+                    continue
+                removed_outputs |= set(n.output)
+
+            full_removed = set(i for i in removed_outputs if i not in added_outputs)
+            for i in full_removed:
+                assert not self.is_output(i), (
+                    f"Output {i!r} must not be removed, added_outputs={added_outputs},"
+                    f"removed_outputs={removed_outputs}, pattern={pattern}"
+                )
+
+            if self.verbose > 3 or pattern.verbose >= 10:
+                print(
+                    f"[GraphBuilderPatternOptimization-"
+                    f"{self.builder._hash()}.optimize] done "
+                    f"{match}: -{rem} +{add} nodes"
+                )
+                if full_removed and (self.verbose > 4 or pattern.verbose >= 10):
+                    print(
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] "
+                        f"removed outputs {full_removed}"
+                    )
+
+            obs = dict(
+                pattern=f"apply_{pattern}",
+                added=add,
+                removed=rem,
+                iteration=it,
+                match_index=im,
+                instances=1,
+                time_in=time.perf_counter() - begin,
+            )
+            statistics.append(obs)
+            self._check_graph(
+                statistics,
+                lambda _=match: _.to_string(False),
+                it,
+                "A",
+                verifies=self.verifies,
+                removed_nodes=removed_nodes,
+            )
+
+            n_added += add
+            n_removed += rem
+            applied_patterns.append(pattern)
+        return applied_patterns, added_types, n_added, n_removed
+
     def optimize(
         self,
         max_iter=-1,
@@ -1154,7 +1338,7 @@ class GraphBuilderPatternOptimization:
         or `max_iter` is reached. By default, it is equal to the number of nodes.
         An iteration is:
 
-        ::
+        .. code-block:: python
 
             matches = []
 
@@ -1237,6 +1421,17 @@ class GraphBuilderPatternOptimization:
         begin_all = time.perf_counter()
         statistics = []
         self._check_graph(statistics, "-", -1, "0", False)
+        same_children_pattern_names = {
+            p.__class__.__name__
+            for p in self.patterns
+            if p.__class__.__name__ in {"SameChildrenPattern", "ShapedBasedSameChildren"}
+        }
+        if same_children_pattern_names and self.verbose > 0:
+            print(
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}.optimize]"
+                f" same children={same_children_pattern_names}"
+            )
 
         n_applied = 0
         last_it = 0
@@ -1259,94 +1454,15 @@ class GraphBuilderPatternOptimization:
                 )
 
             # detects patterns
-            found = False
-            marked = set()
-            matches = []
-            durations = {}
-            for pattern in self.patterns:
-                if not continue_optimization:
-                    break
-                if pattern.priority > priorities[current_priority_index]:
-                    # skipping that pattern
-                    if self.verbose >= 10:
-                        print(
-                            f"[GraphBuilderPatternOptimization-"
-                            f"{self.builder._hash()}.optimize] skips "
-                            f"{pattern.__class__.__name__}, "
-                            f"pattern.priority={pattern.priority}, "
-                            f"current_priority_index={current_priority_index}, "
-                            f"priorities[current_priority_index]="
-                            f"{priorities[current_priority_index]} "
-                            f"priorities={priorities}"
-                        )
-                    continue
-                begin = time.perf_counter()
-                before = len(matches)
-
-                # loop over the nodes
-                for match in pattern.enumerate_matches(self):
-                    # bypass this node if the name contains some specific name
-                    fail_match = False
-                    for n in match.nodes:
-                        if n and self.do_not_remove(n):
-                            fail_match = True
-                            break
-                    if fail_match:
-                        continue
-
-                    # checks that a node is not already part of another pattern
-                    bypass = False
-                    for n in match.nodes:
-                        if n is None:
-                            continue
-                        if make_idn(n) in marked:
-                            # a node is already marked for replacements
-                            bypass = True
-                            break
-                    if bypass:
-                        if self.verbose >= 9 or pattern.verbose >= 10:
-                            print(
-                                f"[{self.__class__.__name__}.match] OVERLAP "
-                                f"match={match} #marked: {len(marked)})"
-                            )
-                        continue
-                    for n in match.nodes:
-                        if n is None:
-                            continue
-                        marked.add(make_idn(n))
-                    found = True
-                    if self.verbose > 2 or pattern.verbose >= 10:
-                        print(
-                            f"[GraphBuilderPatternOptimization-"
-                            f"{self.builder._hash()}.optimize] match={match}"
-                        )
-                    matches.append((pattern, match))
-                    if stop_after > 0 and len(matches) + n_applied >= stop_after:
-                        continue_optimization = False
-                        if self.verbose > 0 or pattern.verbose >= 10:
-                            print(
-                                f"[GraphBuilderPatternOptimization-"
-                                f"{self.builder._hash()}.optimize] "
-                                f"stop after with "
-                                f"{len(matches)} as stop_after={stop_after} "
-                                f"and n_applied={n_applied}"
-                            )
-                        break
-
-                # matches contains all the matchs
-                d = time.perf_counter() - begin
-                statistics.append(
-                    dict(
-                        pattern=f"match_{pattern}",
-                        iteration=it,
-                        instances=len(matches) - before,
-                        time_in=d,
-                        match_index=len(matches),
-                    )
-                )
-                durations[pattern.__class__.__name__] = (
-                    durations.get(pattern.__class__.__name__, 0) + d
-                )
+            found, matches, durations, continue_optimization = self._optimize_matching_step(
+                it,
+                self.patterns,
+                n_applied,
+                stop_after,
+                statistics,
+                priorities,
+                current_priority_index,
+            )
 
             if self.verbose > 0 and matches:
                 if durations:
@@ -1380,87 +1496,10 @@ class GraphBuilderPatternOptimization:
                     )
 
             # applies patterns (they must be disjoined)
-
-            added_types = set()
-            n_added = 0
-            n_removed = 0
-
-            # loop over patterns
-            for im, (pattern, match) in enumerate(matches):
-                if self.verbose > 3 or pattern.verbose >= 10:
-                    print(
-                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
-                        f"apply {match.to_string(short=False)}"
-                    )
-
-                begin = time.perf_counter()
-                added_nodes = self.apply_match(match)
-                added_types |= set(n.op_type for n in added_nodes)
-
-                removed_nodes = [
-                    n for n in match.nodes if id(n) not in {id(r) for r in added_nodes}
-                ]
-
-                if self.verbose > 3 or pattern.verbose >= 10:
-                    print(
-                        f"[GraphBuilderPatternOptimization-"
-                        f"{self.builder._hash()}.optimize] - add "
-                        f"{[n.op_type for n in added_nodes]}"
-                    )
-                add = len(added_nodes)
-                added_outputs = set()
-                for n in added_nodes:
-                    added_outputs |= set(n.output)
-
-                rem = len([n for n in match.nodes if n is not None])
-                removed_outputs = set()
-                for n in match.nodes:
-                    if n is None:
-                        continue
-                    removed_outputs |= set(n.output)
-
-                full_removed = set(i for i in removed_outputs if i not in added_outputs)
-                for i in full_removed:
-                    assert not self.is_output(i), (
-                        f"Output {i!r} must not be removed, added_outputs={added_outputs},"
-                        f"removed_outputs={removed_outputs}, pattern={pattern}"
-                    )
-
-                if self.verbose > 3 or pattern.verbose >= 10:
-                    print(
-                        f"[GraphBuilderPatternOptimization-"
-                        f"{self.builder._hash()}.optimize] done "
-                        f"{match}: -{rem} +{add} nodes"
-                    )
-                    if full_removed and (self.verbose > 4 or pattern.verbose >= 10):
-                        print(
-                            f"[GraphBuilderPatternOptimization-"
-                            f"{self.builder._hash()}.optimize] "
-                            f"removed outputs {full_removed}"
-                        )
-
-                obs = dict(
-                    pattern=f"apply_{pattern}",
-                    added=add,
-                    removed=rem,
-                    iteration=it,
-                    match_index=im,
-                    instances=1,
-                    time_in=time.perf_counter() - begin,
-                )
-                statistics.append(obs)
-                self._check_graph(
-                    statistics,
-                    lambda _=match: _.to_string(False),
-                    it,
-                    "A",
-                    verifies=self.verifies,
-                    removed_nodes=removed_nodes,
-                )
-
-                n_added += add
-                n_removed += rem
-                n_applied += 1
+            applied_patterns, added_types, n_added, n_removed = self._optimize_apply_step(
+                it, matches, statistics
+            )
+            n_applied += len(applied_patterns)
 
             if self.verbose > 2:
                 print(
@@ -1510,6 +1549,70 @@ class GraphBuilderPatternOptimization:
                     time_in=time.perf_counter() - begin,
                 )
             )
+
+            applied_patterns_names = {p.__class__.__name__ for p in applied_patterns}
+            # If SameChildrenPattern is detected, it could go quite far, so
+            # let's speed it up by running a short loop.
+            if applied_patterns_names & same_children_pattern_names:
+                if self.verbose > 0:
+                    print(
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] reapply "
+                        f"{applied_patterns_names & same_children_pattern_names}"
+                    )
+                n_added, n_removed, p_applied, itsame = 0, 0, 0, 0
+                begin = time.perf_counter()
+                while applied_patterns_names & same_children_pattern_names:
+                    same_patterns = [
+                        p
+                        for p in applied_patterns
+                        if p.__class__.__name__ in same_children_pattern_names
+                    ]
+                    found, matches, durations, continue_optimization = (
+                        self._optimize_matching_step(
+                            it,
+                            same_patterns,
+                            n_applied,
+                            stop_after,
+                            statistics,
+                            priorities,
+                            current_priority_index,
+                        )
+                    )
+                    applied_patterns, added_types, _added, _removed = self._optimize_apply_step(
+                        it, matches, statistics
+                    )
+                    n_added += _added
+                    n_removed += _removed
+                    if remove_identity and "Identity" in added_types:
+                        id_removed, id_added = self.builder.remove_identity_nodes()
+                        n_added += id_added
+                        n_removed += id_removed
+                    self._build()
+                    self._check_graph(
+                        statistics, "apply_same_children_pattern", it, "S", self.verifies
+                    )
+                    p_applied += len(applied_patterns)
+                    applied_patterns_names = {p.__class__.__name__ for p in applied_patterns}
+                    itsame += 1
+                n_applied += p_applied
+                statistics.append(
+                    dict(
+                        pattern="apply_same_children_pattern",
+                        iteration=it,
+                        added=n_added,
+                        removed=n_removed,
+                        time_in=time.perf_counter() - begin,
+                    )
+                )
+                if self.verbose > 0:
+                    print(
+                        f"[GraphBuilderPatternOptimization-"
+                        f"{self.builder._hash()}.optimize] n_added={n_added}, "
+                        f"n_removed={n_removed}, n_applied={n_applied} "
+                        f"applied patterns, "
+                        f"{len(self.builder.nodes)} nodes left with {itsame} iterations"
+                    )
 
             # next iteration
 

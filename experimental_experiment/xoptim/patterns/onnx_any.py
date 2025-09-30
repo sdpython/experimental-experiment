@@ -220,7 +220,8 @@ class IdentityPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            node.op_type not in {"Add", "Mul", "Div", "Sub", "Transpose", "Slice", "And", "Or"}
+            node.op_type
+            not in {"Add", "Mul", "Div", "Sub", "Transpose", "Slice", "And", "Or", "Expand"}
             or node.domain != ""
         ):
             return self.none()
@@ -254,6 +255,17 @@ class IdentityPattern(PatternOptimization):
             perm = list(g.get_attribute(node, "perm").ints)
             expected = list(range(len(perm)))
             if perm != expected:
+                return self.none(node, inspect.currentframe().f_lineno)
+            return MatchResult(self, [node], self.apply, insert_at=node)
+
+        if node.op_type == "Expand":
+            if not g.is_constant(node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            value = g.get_computed_constant(node.input[1])
+            if value is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            unique = set(value)
+            if unique != {1}:
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(self, [node], self.apply, insert_at=node)
 

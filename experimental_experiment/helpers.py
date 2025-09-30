@@ -5,6 +5,7 @@ import inspect
 import sys
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
+import ml_dtypes
 from onnx import (
     AttributeProto,
     FunctionProto,
@@ -75,7 +76,7 @@ def size_type(dtype: Any) -> int:
         return 8
     if dtype == np.float32 or dtype == np.float32 or dtype == np.int32:
         return 4
-    if dtype == np.float16 or dtype == np.int16:
+    if dtype == np.float16 or dtype == np.int16 or dtype == ml_dtypes.bfloat16:
         return 2
     if dtype == np.int8 or dtype == np.uint8:
         return 1

@@ -6,10 +6,13 @@ import numpy as np
 import onnx
 import onnx.helper as oh
 from onnx.checker import check_model
+from onnx_diagnostic.torch_export_patches import torch_export_patches
+from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_cuda,
+    requires_onnx_diagnostic,
     requires_torch,
     ignore_warnings,
 )
@@ -1774,6 +1777,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    @requires_onnx_diagnostic("0.7.13")
     def test_index_Tensor_21_2(self):
         import torch
 
@@ -1789,13 +1793,50 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*inputs)
 
-        onx = to_onnx(
-            model,
-            inputs,
-            dynamic_shapes=({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"}),
-            verbose=0,
+        with torch_export_patches():
+            onx = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"}),
+                verbose=0,
+            )
+        self.dump_onnx("test_index_Tensor_21_2.onnx", onx)
+        feeds = dict(zip(["x", "ind1", "ind2"], [x.detach().cpu().numpy() for x in inputs]))
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
-        self.dump_onnx("test_getitem_index_put.onnx", onx)
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+    @requires_onnx_diagnostic("0.7.13")
+    def test_index_Tensor_21_2_oblivious(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, ind1, ind2):
+                return x[ind1, ind2]
+
+        inputs = (
+            torch.randn(2, 1024),
+            torch.tensor([[0, 1]], dtype=torch.int64).T,
+            torch.arange(1024, dtype=torch.int64),
+        )
+        model = Model()
+        expected = model(*inputs)
+
+        dynshapes = ({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"})
+        with torch_export_patches(verbose=10), torch.fx.experimental._config.patch(
+            backed_size_oblivious=True
+        ):
+            ep = torch.export.export(model, inputs, dynamic_shapes=use_dyn_not_str(dynshapes))
+            onx = to_onnx(ep, dynamic_shapes=dynshapes, verbose=0)
+        self.dump_onnx("test_index_Tensor_21_2_oblivious.onnx", onx)
         feeds = dict(zip(["x", "ind1", "ind2"], [x.detach().cpu().numpy() for x in inputs]))
         ref = ExtendedReferenceEvaluator(onx, verbose=0)
         got = ref.run(None, feeds)[0]
@@ -1829,7 +1870,7 @@ class TestOnnxExportAten(ExtTestCase):
             verbose=0,
             options=OptimizationOptions(patterns="default", verbose=0),
         )
-        self.dump_onnx("test_cast_cast.onnx", onx)
+        self.dump_onnx("test_cast_cast_float.onnx", onx)
         op_types = [n.op_type for n in onx.graph.node]
         self.assertEqual(["Add", "Cast", "Cast"], op_types)
 
@@ -1853,7 +1894,7 @@ class TestOnnxExportAten(ExtTestCase):
             verbose=0,
             options=OptimizationOptions(patterns="default", verbose=0),
         )
-        self.dump_onnx("test_cast_cast.onnx", onx)
+        self.dump_onnx("test_cast_cast_int.onnx", onx)
         op_types = [n.op_type for n in onx.graph.node]
         self.assertEqual(["Cast", "Add", "Cast"], op_types)
 
