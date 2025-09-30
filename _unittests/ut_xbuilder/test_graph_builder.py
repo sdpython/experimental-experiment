@@ -13,6 +13,10 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xbuilder import GraphBuilder, FunctionOptions
 from experimental_experiment.xbuilder.model_container import TorchModelContainer
 
+TFLOAT = TensorProto.FLOAT
+TFLOAT16 = TensorProto.FLOAT16
+TINT64 = TensorProto.INT64
+
 
 class TestGraphBuilder(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
@@ -1020,6 +1024,75 @@ class TestGraphBuilder(ExtTestCase):
         for s1, s2, expected in cases:
             with self.subTest(case=(s1, s2, expected)):
                 self.assertEqual(expected, g._apply_reshape_to_shape(s1, s2))
+
+    def test_topological_order(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Equal", ["I", "B"], ["eq1"]),
+                    oh.make_node("Not", ["eq1"], ["neq1"]),
+                    oh.make_node("Where", ["neq1", "I", "zeroi"], ["ind"]),
+                    oh.make_node("Unsqueeze", ["ind", "one"], ["flat_ind"]),
+                    oh.make_node("LogSoftmax", ["X"], ["logX"], axis=1),
+                    oh.make_node("GatherElements", ["logX", "flat_ind"], ["gx"], axis=1),
+                    oh.make_node("Squeeze", ["gx", "one"], ["flat_gx"]),
+                    oh.make_node("Neg", ["flat_gx"], ["neg_gx"]),
+                    oh.make_node("Where", ["neq1", "neg_gx", "zerof"], ["w2"]),
+                    oh.make_node("Cast", ["w2"], ["w2f"], to=TFLOAT),
+                    oh.make_node("Cast", ["neq1"], ["neq1f"], to=TFLOAT),
+                    oh.make_node(
+                        "ReduceSum",
+                        ["w2f"],
+                        ["red1"],
+                        keepdims=0,
+                        noop_with_empty_axes=0,
+                    ),
+                    oh.make_node(
+                        "ReduceSum",
+                        ["neq1f"],
+                        ["red2"],
+                        keepdims=0,
+                        noop_with_empty_axes=0,
+                    ),
+                    oh.make_node("Cast", ["red1"], ["red1_16"], to=TFLOAT16),
+                    oh.make_node("Cast", ["red2"], ["red2_16"], to=TFLOAT16),
+                    oh.make_node("Div", ["red1_16", "red2_16"], ["Y"]),
+                ],
+                "name",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT16, ["A", "B"]),
+                    oh.make_tensor_value_info("I", TINT64, ["A"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT16, [])],
+                [
+                    onh.from_array(np.array([-100], dtype=np.int64), name="B"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                    onh.from_array(np.array([0], dtype=np.float16), name="zerof"),
+                    onh.from_array(np.array([0], dtype=np.int64), name="zeroi"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+        )
+        feeds = dict(
+            X=np.arange(12).reshape((3, 4)).astype(np.float16),
+            I=np.array([2, 1, 0], dtype=np.int64),
+        )
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(model)
+        onx = gr.to_onnx()
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
+
+        gr = GraphBuilder(model)
+        gr.nodes = gr.nodes[::-1]
+        gr.topological_sort()
+        onx = gr.to_onnx()
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
 
 
 if __name__ == "__main__":

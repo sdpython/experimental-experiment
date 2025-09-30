@@ -268,7 +268,7 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Unsqueeze" or node.domain != "" or g.builder.main_opset < 13:
             return self.none()
-        if not g.is_constant(node.input[1]):
+        if not g.is_constant_scalar(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         scalar = g.get_constant_scalar(node.input[1])
         if scalar != 0:
