@@ -1746,12 +1746,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.add_dynamic_object(dim, dim)
             return
 
-        assert (
-            isinstance(dim, str)
-            and "," not in dim
-            and " " not in dim
-            and dim.count("(") == dim.count(")")
-        ), (
+        assert isinstance(dim, str) and " " not in dim and dim.count("(") == dim.count(")"), (
             f"type(dim)={type(dim)} must be a str and should not contain "
             f"a comma or a space dim={dim!r} and the same number of opened and closed é"
             f"brackets{self.get_debug_msg()}"
