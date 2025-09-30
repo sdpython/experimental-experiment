@@ -1044,7 +1044,9 @@ class GraphBuilderPatternOptimization:
                         ]
                     )
                     s_removed_nodes = "\n".join(
-                        f"{n.op_type}({n.input})->({n.output})" for n in removed_nodes
+                        f"{n.op_type}({n.input})->({n.output})"
+                        for n in removed_nodes
+                        if n is not None
                     )
                     raise AssertionError(
                         f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "

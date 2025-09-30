@@ -6752,6 +6752,45 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_swap_expand_reshape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["batch"], start=0, end=1),
+                    oh.make_node("Concat", ["batch", "init11"], ["shape"], axis=0),
+                    oh.make_node("Expand", ["weight", "shape"], ["resh"]),
+                    oh.make_node("Reshape", ["resh", "stat"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 1, 4])],
+                [
+                    onh.from_array(np.array([1, 1], dtype=np.int64), name="init11"),
+                    onh.from_array(np.array([0, 1, -1], dtype=np.int64), name="stat"),
+                    onh.from_array(
+                        np.array([2, 3, 4, 5], dtype=np.float32).reshape((1, 4, 1)), name="weight"
+                    ),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": np.arange(12).reshape((3, 4)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns="SwapExpandReshape", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Shape", "Concat", "Expand"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

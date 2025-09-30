@@ -301,6 +301,10 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                         g._make_node(ncos.op_type, [sin_cur, *nsin.input[1:]], [rsin]),
                     ]
                 )
+                if ncos.attribute:
+                    added_nodes[-2].attribute.extend(ncos.attribute)
+                if nsin.attribute:
+                    added_nodes[-1].attribute.extend(nsin.attribute)
                 cos_cur, sin_cur = rcos, rsin
             cos_input, sin_input = cos_cur, sin_cur
             range_nodes = []
