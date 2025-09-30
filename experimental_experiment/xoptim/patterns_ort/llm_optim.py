@@ -72,10 +72,22 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             if g.builder.evaluate_dimension_equality_with_constraints(
                 input_shape[-1], cos_shape[-1], "+", sin_shape[-1]
             ):
-                # No split before, no concat after
-                return MatchResult(
-                    self, [None, concat_cos, concat_sin, None, node, None], self.apply
+                # No split before, no concat after but there could be still position ids
+                return self._match_last_part(
+                    g,
+                    concat_cos,
+                    concat_sin,
+                    None,
+                    node,
+                    None,
+                    comment="path with no split before, no concat after",
                 )
+                # return MatchResult(
+                #    self,
+                #    [None, concat_cos, concat_sin, None, node, None],
+                #    self.apply,
+                #    comment="path with no split before, no concat after",
+                # )
 
         if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
@@ -102,6 +114,27 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         axis = g.get_attribute(concat_node, "axis").i
         if axis != -1:
             return self.none(node, inspect.currentframe().f_lineno)
+
+        return self._match_last_part(
+            g,
+            concat_cos,
+            concat_sin,
+            split_node,
+            node,
+            concat_node,
+            comment="path with split before, concat after",
+        )
+
+    def _match_last_part(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        concat_cos: NodeProto,
+        concat_sin: NodeProto,
+        split_node: Optional[NodeProto],
+        node: NodeProto,
+        concat_node: Optional[NodeProto],
+        comment: str,
+    ) -> Optional[MatchResult]:
 
         # Finally, we need to check if position_ids exists or it is given
         # a default value.
@@ -152,6 +185,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 self,
                 [expand_node, concat_cos, concat_sin, split_node, node, concat_node, *common],
                 self.apply,
+                comment=f"{comment} / with CosSinCache",
             )
 
         return MatchResult(
@@ -159,6 +193,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             [None, concat_cos, concat_sin, split_node, node, concat_node],
             self.apply,
             insert_at=None if g.is_used_more_than_once(concat_cos.output[0]) else concat_node,
+            comment=f"{comment} / without CosSinCache",
         )
 
     def _find_common_ancestor(

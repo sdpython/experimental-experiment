@@ -45,6 +45,12 @@ class GraphBuilderPatternOptimization:
         the users can check every pattern dumped as a :epkg:`FunctionProto`
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
+
+    Environment variable ``DROPPATTERN`` allows to drop a pattern to see if
+    it is causing some damage to the model (bugs).
+    There can be several separated by a comma.
+    ``PATTERN`` increases the verbosity for a particular pattern.
+    ``LOG_PATTERN_OPTIMIZE`` overwrites the verbosity.
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -82,11 +88,15 @@ class GraphBuilderPatternOptimization:
         # no constant can replace an existing one.
         # _build method should not change it.
         self._cache_computed_constant = {}
+        drop_patterns = os.environ.get("DROPPATTERN", "")
+        if drop_patterns:
+            todrop = set(drop_patterns.split(","))
+            if self.verbose:
+                print(f"[GraphBuilderPatternOptimization] dropping patterns {todrop}")
+            self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
 
     def has_processor(self, processor: str) -> bool:
-        """
-        Checks the process is on the list of used processors.
-        """
+        """Checks the process is on the list of used processors."""
         return processor in self.processor
 
     def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
@@ -214,17 +224,13 @@ class GraphBuilderPatternOptimization:
         return len(suc) > 1
 
     def is_used_only_by(self, name, *nodes: List[NodeProto]) -> bool:
-        """
-        Tells if a result is only used by a specific set of nodes.
-        """
+        """Tells if a result is only used by a specific set of nodes."""
         next_nodes = self.next_nodes(name)
         allowed = set(make_idn(n) for n in nodes)
         return all(make_idn(n) in allowed for n in next_nodes)
 
     def is_constant(self, name: str) -> bool:
-        """
-        Tells if a result is a constant.
-        """
+        """Tells if a result is a constant."""
         return self.builder.is_constant(name)
 
     def is_constant_scalar(

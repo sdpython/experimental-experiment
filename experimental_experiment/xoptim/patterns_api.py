@@ -26,6 +26,7 @@ class MatchResult:
     :param nodes: nodes to be replaced
     :param apply: node computing the replacements
     :param insert_at: insert the new nodes at this point if specified
+    :param comment: additional information about the match
     """
 
     def __init__(
@@ -34,6 +35,7 @@ class MatchResult:
         nodes: List[NodeProto],
         apply: Callable,
         insert_at: Optional[NodeProto] = None,
+        comment: Optional[str] = None,
     ):
         self.pattern = pattern
         self.nodes = nodes
@@ -44,7 +46,7 @@ class MatchResult:
             print(
                 f"[{self.__class__.__name__}.match] MATCH {pattern.__class__.__name__} "
                 f"with {len(nodes)} nodes and types "
-                f"{[n.op_type for n in nodes if n is not None]}"
+                f"{[n.op_type for n in nodes if n is not None]} - [{comment or ''}]"
             )
 
     def to_string(self, short: bool = True) -> str:
@@ -301,9 +303,7 @@ class EasyPatternOptimization(PatternOptimization):
         self._debug_ambiguities = int(os.environ.get("AMBIGUITIES", 0)) == 1
 
     def add_validate_param(self, key: str, value: Any):
-        """
-        Stores a value to retrieve when apply_pattern is called.
-        """
+        """Stores a value to retrieve when apply_pattern is called."""
         self._validate_parameters[key] = value
 
     def get_validate_param(self, key: str) -> Any:
@@ -318,9 +318,7 @@ class EasyPatternOptimization(PatternOptimization):
         *args: List[str],
         **kwargs: Dict[str, Any],
     ):
-        """
-        Builds the pattern to match.
-        """
+        """Builds the pattern to match."""
         raise NotImplementedError(
             f"Class {self.__class__.__name__!r} must overwrite method match_pattern."
         )
