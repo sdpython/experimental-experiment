@@ -211,7 +211,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             if anc_cos is None or anc_sin is None:
                 return None
             if anc_cos.input[0] == anc_sin.input[0] and id(anc_cos) == id(anc_sin):
-                if cos_name != anc_cos.output[0] or sin_name != anc_cos.output[1]:
+                if cos_name != anc_cos.output[0] or sin_name != anc_sin.output[0]:
                     # cos/sin were switched, the pattern should not match at all.
                     return []
                 nodes.append(anc_cos)
