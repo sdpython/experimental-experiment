@@ -135,7 +135,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         concat_node: Optional[NodeProto],
         comment: str,
     ) -> Optional[MatchResult]:
-
         # Finally, we need to check if position_ids exists or it is given
         # a default value.
         common = self._find_common_ancestor(g, concat_cos, concat_sin)
@@ -210,8 +209,12 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             anc_sin = g.node_before(sin_name)
             if anc_cos is None or anc_sin is None:
                 return None
-            if anc_cos.input[0] == anc_sin.input[0] and id(anc_cos) == id(anc_sin):
-                if cos_name != anc_cos.output[0] or sin_name != anc_sin.output[0]:
+            if (
+                anc_cos.input[0] == anc_sin.input[0]
+                and id(anc_cos) == id(anc_sin)
+                and len(anc_cos.output) == 2
+            ):
+                if cos_name != anc_cos.output[0] or sin_name != anc_cos.output[1]:
                     # cos/sin were switched, the pattern should not match at all.
                     return []
                 nodes.append(anc_cos)
