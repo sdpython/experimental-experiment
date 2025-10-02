@@ -72,10 +72,22 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             if g.builder.evaluate_dimension_equality_with_constraints(
                 input_shape[-1], cos_shape[-1], "+", sin_shape[-1]
             ):
-                # No split before, no concat after
-                return MatchResult(
-                    self, [None, concat_cos, concat_sin, None, node, None], self.apply
+                # No split before, no concat after but there could be still position ids
+                return self._match_last_part(
+                    g,
+                    concat_cos,
+                    concat_sin,
+                    None,
+                    node,
+                    None,
+                    comment="path with no split before, no concat after",
                 )
+                # return MatchResult(
+                #    self,
+                #    [None, concat_cos, concat_sin, None, node, None],
+                #    self.apply,
+                #    comment="path with no split before, no concat after",
+                # )
 
         if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
@@ -103,6 +115,26 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         if axis != -1:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        return self._match_last_part(
+            g,
+            concat_cos,
+            concat_sin,
+            split_node,
+            node,
+            concat_node,
+            comment="path with split before, concat after",
+        )
+
+    def _match_last_part(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        concat_cos: NodeProto,
+        concat_sin: NodeProto,
+        split_node: Optional[NodeProto],
+        node: NodeProto,
+        concat_node: Optional[NodeProto],
+        comment: str,
+    ) -> Optional[MatchResult]:
         # Finally, we need to check if position_ids exists or it is given
         # a default value.
         common = self._find_common_ancestor(g, concat_cos, concat_sin)
@@ -152,6 +184,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 self,
                 [expand_node, concat_cos, concat_sin, split_node, node, concat_node, *common],
                 self.apply,
+                comment=f"{comment} / with CosSinCache",
             )
 
         return MatchResult(
@@ -159,6 +192,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             [None, concat_cos, concat_sin, split_node, node, concat_node],
             self.apply,
             insert_at=None if g.is_used_more_than_once(concat_cos.output[0]) else concat_node,
+            comment=f"{comment} / without CosSinCache",
         )
 
     def _find_common_ancestor(
@@ -175,7 +209,11 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             anc_sin = g.node_before(sin_name)
             if anc_cos is None or anc_sin is None:
                 return None
-            if anc_cos.input[0] == anc_sin.input[0] and id(anc_cos) == id(anc_sin):
+            if (
+                anc_cos.input[0] == anc_sin.input[0]
+                and id(anc_cos) == id(anc_sin)
+                and len(anc_cos.output) == 2
+            ):
                 if cos_name != anc_cos.output[0] or sin_name != anc_cos.output[1]:
                     # cos/sin were switched, the pattern should not match at all.
                     return []
@@ -210,10 +248,12 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         assert isinstance(shape[1], int), f"Number of heads is not fixed, shape(X)={shape}"
         num_heads = shape[1]
 
-        rotary_nodes = []
-        if g.is_used_more_than_once(concat_cos.output[0]):
+        used_twice_cos = g.is_used_more_than_once(concat_cos.output[0])
+        used_twice_sin = g.is_used_more_than_once(concat_sin.output[0])
+        rotary_nodes = [expand_node, *prefix_nodes] if used_twice_cos or used_twice_sin else []
+        if used_twice_cos:
             rotary_nodes.append(concat_cos)
-        if g.is_used_more_than_once(concat_sin.output[0]):
+        if used_twice_sin:
             rotary_nodes.append(concat_sin)
 
         batch_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}--batch")
@@ -266,6 +306,10 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                         g._make_node(ncos.op_type, [sin_cur, *nsin.input[1:]], [rsin]),
                     ]
                 )
+                if ncos.attribute:
+                    added_nodes[-2].attribute.extend(ncos.attribute)
+                if nsin.attribute:
+                    added_nodes[-1].attribute.extend(nsin.attribute)
                 cos_cur, sin_cur = rcos, rsin
             cos_input, sin_input = cos_cur, sin_cur
             range_nodes = []

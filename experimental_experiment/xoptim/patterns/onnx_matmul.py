@@ -1265,14 +1265,14 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         assert rk1 > 2, f"rank({mm_node.input[0]})=={rk1} > 2 - unexpected"
         assert rk2 > 2, f"rank({mm_node.input[1]})=={rk2} > 2 - unexpected"
         rsh1 = g.make_initializer(
-            g.unique_name(mm_node.input[0]),
+            g.unique_name(f"{mm_node.input[0]}-ZEROS"),
             np.array([0] * (rk1 - 2) + [1, -1], dtype=np.int64),
-            source=f"{self.__class__.__name__}.1",
+            source=f"{self.__class__.__name__}.0",
         )
         rsh2 = g.make_initializer(
-            g.unique_name(mm_node.input[1]),
+            g.unique_name(f"{mm_node.input[1]}-ZEROS"),
             np.array([0] * (rk2 - 2) + [-1, 1], dtype=np.int64),
-            source=f"{self.__class__.__name__}.1",
+            source=f"{self.__class__.__name__}.0",
         )
         new1 = g.unique_name(mm_node.input[0])
         new2 = g.unique_name(mm_node.input[1])

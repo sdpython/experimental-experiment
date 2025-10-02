@@ -565,7 +565,7 @@ class ExportOptions:
             size = torch_model_size(mod)
             if verbose:
                 print(f"[ExportOptions.export] model size {size / 2**20} Mb")
-            if size < 2**30:
+            if size < 2**22:
                 # skipping if the model is too big.
                 begin = time.perf_counter()
                 torch.export.save(exported_program, f"{self.save_ep}.ep.pt2")

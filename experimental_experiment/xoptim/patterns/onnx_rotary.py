@@ -952,7 +952,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
         print(pat._pattern_to_string(g))
     """
 
-    _operator_name = "CausalMask"
+    _operator_names = ["CausalMask", "ShiftedCausalMask"]
     _domain_name = "intermediate"
 
     def match(
@@ -961,17 +961,22 @@ class FunctionCausalMaskPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "LessOrEqual" or node.domain != "":
+        if node.op_type not in {"LessOrEqual", "Greater"} or node.domain != "":
             return self.none()
 
         sq1 = g.node_before(node.input[0])
         sq2 = g.node_before(node.input[1])
         if sq1 is None or sq1.op_type != "Unsqueeze" or len(sq1.input) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if sq2 is None or sq2.op_type != "Unsqueeze" or len(sq2.input) != 2:
+        if sq2 is None or sq2.op_type not in {"Unsqueeze", "Sub"} or len(sq2.input) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(sq2.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
+        if sq2.op_type == "Sub":
+            sub2 = sq2
+            sq2 = g.node_before(sub2.input[0])
+            if sq2 is None or sq2.op_type != "Unsqueeze" or len(sq2.input) != 2:
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            sub2 = None
         if not g.is_constant(sq1.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(sq2.input[1]):
@@ -1010,7 +1015,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
         if dsq2 is None or dsq2.op_type != "Squeeze" or len(dsq2.input) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(self, [dsq1, dsq2, rg1, rg2, sq1, sq2, node], self.apply)
+        return MatchResult(self, [dsq1, dsq2, rg1, rg2, sq1, sq2, sub2, node], self.apply)
 
     def apply(
         self,
@@ -1021,8 +1026,11 @@ class FunctionCausalMaskPattern(PatternOptimization):
         range2: NodeProto,
         rg_unsqueeze1: NodeProto,
         rg_unsqueeze2: NodeProto,
+        sub2: NodeProto,
         less_or_equal: NodeProto,
     ) -> List[NodeProto]:
+        version = 0 if sub2 is None else 1
+        operator_name = self._operator_names[version]
         nodes_to_return = []
         if (
             g.is_used_more_than_once(dim_squeeze1.output[0])
@@ -1046,14 +1054,17 @@ class FunctionCausalMaskPattern(PatternOptimization):
             nodes_to_return.append(range2)
         if g.is_used_more_than_once(rg_unsqueeze1.output[0]):
             nodes_to_return.append(rg_unsqueeze1)
+        if sub2 is not None and g.is_used_more_than_once(sub2.output[0]):
+            nodes_to_return.append(sub2)
         if g.is_used_more_than_once(rg_unsqueeze2.output[0]):
             nodes_to_return.append(rg_unsqueeze2)
 
         # The matching checks the output of the other nodes are not used more than once.
+        sub_inputs = [sub2.input[1]] if sub2 is not None else []
         nodes_to_return.append(
             g.make_node(
-                self._operator_name,
-                [dim_squeeze1.input[0], dim_squeeze2.input[0]],
+                operator_name,
+                [dim_squeeze1.input[0], dim_squeeze2.input[0], *sub_inputs],
                 [less_or_equal.output[0]],
                 name=f"{self.__class__.__name__}--{less_or_equal.name}",
                 domain=self._domain_name,
@@ -1061,15 +1072,17 @@ class FunctionCausalMaskPattern(PatternOptimization):
         )
 
         # Creates the local function
-        if not g.builder.has_local_function(self._operator_name, domain=self._domain_name):
-            self._add_local_function(g.builder)
+        if not g.builder.has_local_function(operator_name, domain=self._domain_name):
+            self._add_local_function(g.builder, version)
         return nodes_to_return
 
     @classmethod
-    def _add_local_function(cls, g: GraphBuilder):
+    def _add_local_function(cls, g: GraphBuilder, version: int):
         lg = GraphBuilder(g.main_opset, as_function=True)
         lg.make_tensor_input("A")
         lg.make_tensor_input("B")
+        if version == 1:
+            lg.make_tensor_input("shift")
 
         sA = lg.op.Squeeze("A", name=cls.__name__)
         sB = lg.op.Squeeze("B", name=cls.__name__)
@@ -1079,21 +1092,25 @@ class FunctionCausalMaskPattern(PatternOptimization):
 
         unsq1 = lg.op.Unsqueeze(rg1, np.array([0, 1, 2], dtype=np.int64), name=cls.__name__)
         unsq2 = lg.op.Unsqueeze(rg2, np.array([0, 1, 3], dtype=np.int64), name=cls.__name__)
-        lg.op.LessOrEqual(unsq1, unsq2, outputs=["mask"], name=cls.__name__)
+        if version == 0:
+            lg.op.LessOrEqual(unsq1, unsq2, outputs=["mask"], name=cls.__name__)
+        else:
+            sub = lg.op.Sub(unsq2, "shift", name=cls.__name__)
+            lg.op.Greater(unsq1, sub, outputs=["mask"], name=cls.__name__)
 
         lg.make_tensor_output("mask")
 
+        operator_name = cls._operator_names[version]
         function_options = FunctionOptions(
             export_as_function=True,
-            name=cls._operator_name,
+            name=operator_name,
             domain=cls._domain_name,
             move_initializer_to_constant=True,
         )
         g.make_local_function(lg, function_options=function_options)
-        assert g.has_local_function(cls._operator_name, domain=cls._domain_name), (
-            f"The function {cls._domain_name}.{cls._operator_name} "
-            f"was not added to the builder."
-        )
+        assert g.has_local_function(
+            operator_name, domain=cls._domain_name
+        ), f"The function {cls._domain_name}.{operator_name} was not added to the builder."
 
 
 class FunctionCausalMaskMulAddPattern(PatternOptimization):

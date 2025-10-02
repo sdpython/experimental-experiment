@@ -958,3 +958,62 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
                 doc_string=expand_node.doc_string,
             ),
         ]
+
+
+class SwapExpandReshapePattern(PatternOptimization):
+    """Checks if Expand + Reshape can be swapped."""
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        expand_node = g.node_before(node.input[0])
+        if expand_node is None or expand_node.op_type != "Expand" or expand_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(expand_node.input[0]) or g.get_rank(expand_node.input[0]) != 3:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cst = g.get_computed_constant(node.input[1])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = g.builder.value_as_shape(expand_node.input[1])
+        if shape is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if tuple(cst) != (0, 1, -1) or shape[1:] != (1, 1):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [expand_node, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        expand_node: NodeProto,
+        reshape_node: NodeProto,
+    ) -> List[NodeProto]:
+        new_name = g.unique_name(reshape_node.output[0])
+        return [
+            g.make_node(
+                "Reshape",
+                [expand_node.input[0], reshape_node.input[1]],
+                [new_name],
+                name=f"{self.__class__.__name__}--{reshape_node.name}",
+                doc_string=reshape_node.doc_string,
+            ),
+            g.make_node(
+                "Expand",
+                [new_name, expand_node.input[1]],
+                reshape_node.output,
+                name=f"{self.__class__.__name__}--{expand_node.name}",
+                doc_string=expand_node.doc_string,
+            ),
+        ]

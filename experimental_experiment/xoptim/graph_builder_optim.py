@@ -45,6 +45,12 @@ class GraphBuilderPatternOptimization:
         the users can check every pattern dumped as a :epkg:`FunctionProto`
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
+
+    Environment variable ``DROPPATTERN`` allows to drop a pattern to see if
+    it is causing some damage to the model (bugs).
+    There can be several separated by a comma.
+    ``PATTERN`` increases the verbosity for a particular pattern.
+    ``LOG_PATTERN_OPTIMIZE`` overwrites the verbosity.
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -82,11 +88,15 @@ class GraphBuilderPatternOptimization:
         # no constant can replace an existing one.
         # _build method should not change it.
         self._cache_computed_constant = {}
+        drop_patterns = os.environ.get("DROPPATTERN", "")
+        if drop_patterns:
+            todrop = set(drop_patterns.split(","))
+            if self.verbose:
+                print(f"[GraphBuilderPatternOptimization] dropping patterns {todrop}")
+            self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
 
     def has_processor(self, processor: str) -> bool:
-        """
-        Checks the process is on the list of used processors.
-        """
+        """Checks the process is on the list of used processors."""
         return processor in self.processor
 
     def pretty_text(self, add_fx_graph: bool = False, recursive: bool = True) -> str:
@@ -214,17 +224,13 @@ class GraphBuilderPatternOptimization:
         return len(suc) > 1
 
     def is_used_only_by(self, name, *nodes: List[NodeProto]) -> bool:
-        """
-        Tells if a result is only used by a specific set of nodes.
-        """
+        """Tells if a result is only used by a specific set of nodes."""
         next_nodes = self.next_nodes(name)
         allowed = set(make_idn(n) for n in nodes)
         return all(make_idn(n) in allowed for n in next_nodes)
 
     def is_constant(self, name: str) -> bool:
-        """
-        Tells if a result is a constant.
-        """
+        """Tells if a result is a constant."""
         return self.builder.is_constant(name)
 
     def is_constant_scalar(
@@ -619,6 +625,7 @@ class GraphBuilderPatternOptimization:
         external: bool = False,
         msg: str = "",
         source: Optional[str] = None,
+        give_unique: bool = True,
     ) -> str:
         """This function may create identity nodes."""
         if not source:
@@ -630,7 +637,7 @@ class GraphBuilderPatternOptimization:
                 else:
                     source = "GraphBuilderPatternOptimization.make_initializer.0"
         new_name = self.builder.make_initializer(
-            name, value, external=external, msg=msg, source=source
+            name, value, external=external, msg=msg, source=source, give_unique=give_unique
         )
         return new_name
 
@@ -772,7 +779,9 @@ class GraphBuilderPatternOptimization:
             proto.attribute.extend(attributes)
         return proto
 
-    def apply_match(self, match: MatchResult) -> List[NodeProto]:
+    def apply_match(
+        self, match: MatchResult, stats: Optional[List[Dict[str, Any]]] = None
+    ) -> List[NodeProto]:
         """Applies one match. Returns the new nodes."""
         # This steps may add new nodes in the GraphBuilder as some identity nodes
         # may be created to avoid the duplication of constants.
@@ -803,7 +812,9 @@ class GraphBuilderPatternOptimization:
                     continue
                 print(f"  + {node.op_type}: {node.input} -> {node.output}")
 
-        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed, debug=match)
+        self.builder.insert_and_remove_nodes(
+            position_insert, new_nodes, removed, debug=match, stats=stats
+        )
         if self.verbose >= 10:
             print(
                 f"[GraphBuilderPatternOptimization-"
@@ -1037,17 +1048,27 @@ class GraphBuilderPatternOptimization:
                             )
                         ]
                     )
+                    found = "not found after"
+                    for pfind, n2 in enumerate(nodes):
+                        if i in n2.output:
+                            found = f"input {i!r} found at position {pfind}"
+                    foundr = "not found in removed nodes"
+                    for pfind, n2 in enumerate(removed_nodes):
+                        if i in n2.output:
+                            foundr = f"input {i!r} found at position {pfind} in removed nodes"
                     s_removed_nodes = "\n".join(
-                        f"{n.op_type}({n.input})->({n.output})" for n in removed_nodes
+                        f"{n.op_type}({n.input})->({n.output})"
+                        for n in removed_nodes
+                        if n is not None
                     )
                     raise AssertionError(
                         f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "
                         f"[{node.name}]: {node.input} -> {node.output}, "
                         f"step\n--\n{step if isinstance(step, str) else step()!r}\n--\n"
-                        f"found after = {i in after}\n------\n"
-                        f"{assert_text}\n------\nid(node)={id(node)}, "
+                        f"found after={i in after} (details={found!r}, {foundr!r})"
+                        f"\n------\n{assert_text}\n------\nid(node)={id(node)}, "
                         f"removed_nodes=\n{s_removed_nodes}"
-                        f"\n{self.builder.pretty_text()}"
+                        f"\n------\n{self.builder.pretty_text()}"
                     )
             if node.op_type in {"If", "Loop", "Scan", "SequenceMap"}:
                 for att in node.attribute:
@@ -1233,7 +1254,9 @@ class GraphBuilderPatternOptimization:
 
         return found, matches, durations, continue_optimization
 
-    def _optimize_apply_step(self, it: int, matches: List[MatchResult], statistics):
+    def _optimize_apply_step(
+        self, it: int, matches: List[MatchResult], statistics: List[Dict[str, Any]]
+    ):
         added_types = set()
         n_added = 0
         n_removed = 0
@@ -1248,7 +1271,7 @@ class GraphBuilderPatternOptimization:
                 )
 
             begin = time.perf_counter()
-            added_nodes = self.apply_match(match)
+            added_nodes = self.apply_match(match, stats=statistics)
             added_types |= set(n.op_type for n in added_nodes)
 
             removed_nodes = [n for n in match.nodes if id(n) not in {id(r) for r in added_nodes}]

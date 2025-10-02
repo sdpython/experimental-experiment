@@ -33,6 +33,7 @@ from .onnx_expand import (
     ShapeBasedExpandCastWhereSwapPattern,
     ShapeBasedExpandSwapPattern,
     ShapeBasedStaticExpandPattern,
+    SwapExpandReshapePattern,
 )
 from .onnx_functions import GeluPattern, LeakyReluPattern, SoftmaxCrossEntropyLossCastPattern
 from .onnx_layer_normalization import (
@@ -206,6 +207,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SqueezeUnsqueezePattern(verbose=verbose),
         StaticConcatReshapePattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
+        SwapExpandReshapePattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
         SwitchReshapeActivationPattern(verbose=verbose),
         TransposeEqualReshapePattern(verbose=verbose),
