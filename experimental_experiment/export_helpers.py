@@ -12,8 +12,13 @@ def _guard_or(a: "BoolLikeType", default: bool) -> bool:  # noqa: F821
     return result if result is not None else default
 
 
-def torch_export(*args, **kwargs):
+def torch_export(*args, backed_size_oblivious: bool = False, **kwargs):
     """Wrapper around :func:`torch.export.export`."""
+
+    if backed_size_oblivious:
+        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+            ep = torch.export.export(*args, **kwargs)
+        return ep
 
     value = torch.fx.experimental.symbolic_shapes.ShapeEnv._init.__kwdefaults__[
         "specialize_zero_one"
@@ -23,7 +28,8 @@ def torch_export(*args, **kwargs):
     )
     torch.fx.experimental.symbolic_shapes._guard_or = _guard_or
 
-    ep = torch.export.export(*args, **kwargs)
+    with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+        ep = torch.export.export(*args, **kwargs)
 
     torch.fx.experimental.symbolic_shapes._guard_or = _torch_guard_or
     torch.fx.experimental.symbolic_shapes.ShapeEnv._init.__kwdefaults__["specialize_zero_one"] = (

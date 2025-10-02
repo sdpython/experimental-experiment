@@ -65,7 +65,7 @@ def dynger_backend(
             print(f"[dynger_backend] use existing {type(graph_module)}")
         exported_mod = graph_module
     else:
-        from ..export_helper import torch_export
+        from ..export_helpers import torch_export
 
         exported_mod = torch_export(graph_module, tuple(args), dynamic_shapes=dynamic_shapes)
 
