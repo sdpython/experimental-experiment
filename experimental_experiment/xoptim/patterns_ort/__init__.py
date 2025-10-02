@@ -43,6 +43,7 @@ def get_onnxruntime_patterns(
         SimplifiedLayerNormalizationPattern,
         SkipLayerNormalizationPattern,
         SkipSimplifiedLayerNormalizationPattern,
+        SkipSimplifiedLayerNormalizationMulPattern,
     )
 
     return [
@@ -64,6 +65,7 @@ def get_onnxruntime_patterns(
         SimplifiedLayerNormalizationPattern(verbose=verbose),
         SkipLayerNormalizationPattern(verbose=verbose),
         SkipSimplifiedLayerNormalizationPattern(verbose=verbose),
+        SkipSimplifiedLayerNormalizationMulPattern(verbose=verbose),
         SoftmaxGradPattern(verbose=verbose),
         TransposeFusedMatMulBPattern(verbose=verbose),
     ]

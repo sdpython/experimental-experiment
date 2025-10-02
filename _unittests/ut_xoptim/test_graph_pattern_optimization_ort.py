@@ -1309,6 +1309,85 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         got = opt_ref.run(None, feeds)
         self.assertEqualAny(expected, got)
 
+    def test_skip_simplified_layer_normalization_mul(self):
+        from onnxruntime import InferenceSession
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "skip"], ["xs"]),
+                    oh.make_node(
+                        "SimplifiedLayerNormalization",
+                        ["xs", "scale"],
+                        ["ym"],
+                        epsilon=1e-1,
+                        axis=-1,
+                    ),
+                    oh.make_node("Mul", ["ym", "weights"], ["a"]),
+                    oh.make_node("Add", ["a", "weights"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["batch", "cache", 192]),
+                    oh.make_tensor_value_info("skip", TFLOAT, ["batch", "cache", 192]),
+                ],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["batch", "cache", 192]),
+                    oh.make_tensor_value_info("xs", TFLOAT, ["batch", "cache", 192]),
+                ],
+                [
+                    onh.from_array(np.ones(192, dtype=np.float32), name="scale"),
+                    onh.from_array(self._range(192, bias=1000), name="weights"),
+                ],
+            ),
+            opset_imports=[
+                oh.make_opsetid("", 18),
+                oh.make_opsetid("com.microsoft", 1),
+            ],
+            ir_version=9,
+        )
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SkipSimplifiedLayerNormalization"]
+            ),
+        )
+        self.dump_onnx("test_skip_simplified_layer_normalization_mul0.onnx", model)
+        model2 = gr.to_onnx(optimize=True)
+        feeds = {"X": self._range(2, 128, 192, bias=0.001), "skip": self._range(2, 128, 192)}
+        self.dump_onnx("test_skip_simplified_layer_normalization_mul1.onnx", model2)
+
+        ref = InferenceSession(model.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected = ref.run(None, feeds)
+        ref2 = InferenceSession(model2.SerializeToString(), providers=["CPUExecutionProvider"])
+        expected2 = ref2.run(None, feeds)
+        self.assertEqualAny(expected, expected2)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=[
+                    "SkipSimplifiedLayerNormalization",
+                    "SkipSimplifiedLayerNormalizationMul",
+                ],
+                verbose=0,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["SkipSimplifiedLayerNormalization", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.dump_onnx("test_skip_simplified_layer_normalization_mul.onnx", opt_onx)
+        opt_ref = InferenceSession(
+            opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = opt_ref.run(None, feeds)
+
+        self.assertEqualArray(expected2[1], got[1])
+        self.assertEqualArray(expected2[0], got[0])
+
     def test_contrib_rotary_embedding_concat_after(self):
         opset = 20
         model = oh.make_model(
