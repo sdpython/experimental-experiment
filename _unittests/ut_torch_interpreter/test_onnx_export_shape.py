@@ -364,6 +364,49 @@ class TestOnnxExportShape(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
+    def test_dynamic_01_dimension(self):
+        import torch
+        from experimental_experiment.export_helpers import torch_export
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x @ torch.arange(x.shape[1], dtype=torch.float32).reshape((-1, 1))
+
+        model = Model()
+        x = torch.arange(6, dtype=torch.float32).reshape((-1, 3))
+        expected = model(x)
+        DYN = torch.export.Dim.DYNAMIC
+        ds = ({0: DYN, 1: DYN},)
+        ep = torch.export.export(model, (x,), dynamic_shapes=ds)
+        y = ep.module()(x)
+        self.assertEqualArray(expected, y)
+
+        # 0
+        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+            ep = torch.export.export(
+                model, (torch.empty((0, 3), dtype=torch.float32),), dynamic_shapes=ds
+            )
+        y = ep.module()(x)
+        self.assertEqualArray(expected, y)
+
+        # 1
+        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+            ep = torch.export.export(
+                model, (torch.zeros((1, 3), dtype=torch.float32),), dynamic_shapes=ds
+            )
+        y = ep.module()(x)
+        self.assertEqualArray(expected, y)
+
+        # w 1
+        ep = torch_export(model, (torch.empty((1, 3), dtype=torch.float32),), dynamic_shapes=ds)
+        y = ep.module()(x)
+        self.assertEqualArray(expected, y)
+
+        # w 0
+        ep = torch_export(model, (torch.empty((0, 3), dtype=torch.float32),), dynamic_shapes=ds)
+        y = ep.module()(x)
+        self.assertEqualArray(expected, y)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

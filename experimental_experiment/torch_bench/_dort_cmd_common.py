@@ -2,6 +2,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import TensorProto
+from ..export_helper import torch_export
 from ._dort_cmd_common_models import (
     _create_configuration_for_benchmark_llama,
     _create_configuration_for_benchmark_mistral,
@@ -334,7 +335,7 @@ def create_compiled_model(
                 if self.trt is None:
                     if self.verbose:
                         print("[create_compiled_model] run torch.export.export")
-                    exp_program = torch.export.export(self.model, args)
+                    exp_program = torch_export(self.model, args)
                     if self.verbose:
                         print("[create_compiled_model] run torch_tensorrt.dynamo.compile")
                     self.trt = torch_tensorrt.dynamo.compile(exp_program, args)

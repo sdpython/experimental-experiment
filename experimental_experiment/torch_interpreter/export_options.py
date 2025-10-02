@@ -4,6 +4,7 @@ import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type
+from ..export_helpers import torch_export
 from ..helpers import string_sig, get_sig_kwargs
 from ._torch_helper import make_copy
 from ._doc_ import TorchOpOverload
@@ -262,7 +263,7 @@ class ExportOptions:
         from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 
         if exc:
-            return torch.export.export(
+            return torch_export(
                 mod,
                 args,
                 kwargs,
@@ -270,7 +271,7 @@ class ExportOptions:
                 strict=self.strict,
             )
         try:
-            return torch.export.export(
+            return torch_export(
                 mod,
                 args,
                 kwargs,
@@ -294,9 +295,7 @@ class ExportOptions:
             if verbose:
                 print("[ExportOptions.export] torch.export.export")
             try:
-                exported_program = torch.export.export(
-                    mod, args, kwargs, strict=self.strict
-                ).graph
+                exported_program = torch_export(mod, args, kwargs, strict=self.strict).graph
             except torch._export.verifier.SpecViolationError as ee:
                 exported_program = None
                 eee = ee
