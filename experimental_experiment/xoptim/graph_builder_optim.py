@@ -625,6 +625,7 @@ class GraphBuilderPatternOptimization:
         external: bool = False,
         msg: str = "",
         source: Optional[str] = None,
+        give_unique: bool = True,
     ) -> str:
         """This function may create identity nodes."""
         if not source:
@@ -636,7 +637,7 @@ class GraphBuilderPatternOptimization:
                 else:
                     source = "GraphBuilderPatternOptimization.make_initializer.0"
         new_name = self.builder.make_initializer(
-            name, value, external=external, msg=msg, source=source, give_unique=True
+            name, value, external=external, msg=msg, source=source, give_unique=give_unique
         )
         return new_name
 

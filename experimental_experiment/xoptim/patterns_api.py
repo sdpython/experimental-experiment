@@ -1163,9 +1163,7 @@ class EasyPatternOptimization(PatternOptimization):
         return MatchResult(self, matched_nodes, self.apply)
 
     def apply_pattern(self, g: "GraphBuilder", *args, **kwargs):  # noqa: F821
-        """
-        Applies the replacement.
-        """
+        """Applies the replacement."""
         raise NotImplementedError(
             f"Class {self.__class__.__name__!r} must overwrite method 'apply_pattern'."
         )
@@ -1289,6 +1287,7 @@ class EasyPatternOptimization(PatternOptimization):
                         new_outputs[0],
                         value,
                         source=f"EasyPatternOptimization.constant/from({new_outputs[0]})",
+                        give_unique=False,
                     )
                     assert name == new_outputs[0], f"Name mismatch {name} != {new_outputs[0]}"
                     continue
