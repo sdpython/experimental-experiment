@@ -207,6 +207,11 @@ class ExportOptions:
         Run decompositions, remove inplace operations.
         The graph is modified inplace.
         """
+        if verbose:
+            print(
+                f"[ExportOptions.export] post_process_exported_program "
+                f"with decomposition_table={self.decomposition_table}"
+            )
         if self.decomposition_table:
             if verbose:
                 begin = time.perf_counter()
@@ -520,6 +525,8 @@ class ExportOptions:
             print(f"[ExportOptions.export] export start with strict={self.strict}...")
 
         if self.oblivious:
+            if verbose:
+                print("[ExportOptions.export] export with backed_size_oblivious=True")
             begin = time.perf_counter()
             with torch.fx.experimental._config.patch(backed_size_oblivious=True):
                 exported_program = self._export(

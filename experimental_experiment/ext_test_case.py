@@ -686,6 +686,11 @@ class ExtTestCase(unittest.TestCase):
             proto.SerializeToString(), providers=["CPUExecutionProvider"]
         )
 
+    def string_type(self, *args, **kwargs):
+        from onnx_diagnostic.helpers import string_type
+
+        return string_type(*args, **kwargs)
+
 
 def get_figure(ax):
     """Returns the figure of a matplotlib figure."""
