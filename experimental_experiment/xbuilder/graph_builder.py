@@ -6009,7 +6009,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                             )
             known |= set(node.output)
 
-    def _check(self, stats: List, step: str, shadowing: bool = False):
+    def _check(self, stats: List[Dict[str, Any]], step: str, shadowing: bool = False):
         begin = time.perf_counter()
         assert (
             len(self.nodes) > 0
@@ -7521,6 +7521,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         removed: List[int],
         opsets: Optional[Dict[str, int]] = None,
         debug: Optional[Any] = None,
+        stats: Optional[Dict[str, Any]] = None,
     ) -> List[NodeProto]:
         """
         Inserts new nodes and removes others.
@@ -7531,6 +7532,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param removed: list of nodes to removed (based on their positions)
         :param opsets: opsets used
         :param debug: anything added to exception messages
+        :param stats: to get information about time processing
         :return: list of removed nodes
         """
         assert insert_at is None or not removed or min(removed) <= insert_at, (
@@ -7669,7 +7671,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             self.nodes = [node for node in self.nodes if node is not None]
             pos = min(len(self.nodes), position_to_insert)
             self.nodes = [*self.nodes[:pos], *new_nodes, *self.nodes[pos:]]
-            self.topological_sort()
+            self.topological_sort(stats)
             new_nodes_p = [(None, None, n) for n in new_nodes]
         else:
             # guess the position to insert the nodes at
@@ -7759,12 +7761,13 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._refresh_values_cache()
         return memo
 
-    def topological_sort(self):
+    def topological_sort(self, stats: Optional[List[Dict[str, Any]]] = None):
         """
         Reorders the nodes in order to make sure no node is using an output
         created by a node after.
         """
         # Gathering IO
+        begin = time.perf_counter()
         self.nodes = [node for node in self.nodes if node is not None]
         output_index_node = {name: -1 for name in self.input_names}  # noqa: C420
         output_index_node.update({name: -1 for name in self.initializers_dict})  # noqa: C420
@@ -7804,6 +7807,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             node for _, __, node in sorted(zip(new_order, range(len(self.nodes)), self.nodes))
         ]
         self.nodes = sorted_nodes
+        if stats:
+            stats.append(dict(pattern="topological_sort", time_in=time.perf_counter() - begin))
+        self._check(stats or [], "topological_sort")
 
     @classmethod
     def _clean_shapes(cls, proto: Union[GraphProto, ModelProto]):

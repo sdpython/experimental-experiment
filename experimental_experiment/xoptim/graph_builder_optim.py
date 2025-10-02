@@ -778,7 +778,9 @@ class GraphBuilderPatternOptimization:
             proto.attribute.extend(attributes)
         return proto
 
-    def apply_match(self, match: MatchResult) -> List[NodeProto]:
+    def apply_match(
+        self, match: MatchResult, stats: Optional[List[Dict[str, Any]]] = None
+    ) -> List[NodeProto]:
         """Applies one match. Returns the new nodes."""
         # This steps may add new nodes in the GraphBuilder as some identity nodes
         # may be created to avoid the duplication of constants.
@@ -809,7 +811,9 @@ class GraphBuilderPatternOptimization:
                     continue
                 print(f"  + {node.op_type}: {node.input} -> {node.output}")
 
-        self.builder.insert_and_remove_nodes(position_insert, new_nodes, removed, debug=match)
+        self.builder.insert_and_remove_nodes(
+            position_insert, new_nodes, removed, debug=match, stats=stats
+        )
         if self.verbose >= 10:
             print(
                 f"[GraphBuilderPatternOptimization-"
@@ -1043,6 +1047,14 @@ class GraphBuilderPatternOptimization:
                             )
                         ]
                     )
+                    found = "not found after"
+                    for pfind, n2 in enumerate(nodes):
+                        if i in n2.output:
+                            found = f"input {i!r} found at position {pfind}"
+                    foundr = "not found in removed nodes"
+                    for pfind, n2 in enumerate(removed_nodes):
+                        if i in n2.output:
+                            foundr = f"input {i!r} found at position {pfind} in removed nodes"
                     s_removed_nodes = "\n".join(
                         f"{n.op_type}({n.input})->({n.output})"
                         for n in removed_nodes
@@ -1052,10 +1064,10 @@ class GraphBuilderPatternOptimization:
                         f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "
                         f"[{node.name}]: {node.input} -> {node.output}, "
                         f"step\n--\n{step if isinstance(step, str) else step()!r}\n--\n"
-                        f"found after = {i in after}\n------\n"
-                        f"{assert_text}\n------\nid(node)={id(node)}, "
+                        f"found after={i in after} (details={found!r}, {foundr!r})"
+                        f"\n------\n{assert_text}\n------\nid(node)={id(node)}, "
                         f"removed_nodes=\n{s_removed_nodes}"
-                        f"\n{self.builder.pretty_text()}"
+                        f"\n------\n{self.builder.pretty_text()}"
                     )
             if node.op_type in {"If", "Loop", "Scan", "SequenceMap"}:
                 for att in node.attribute:
@@ -1241,7 +1253,9 @@ class GraphBuilderPatternOptimization:
 
         return found, matches, durations, continue_optimization
 
-    def _optimize_apply_step(self, it: int, matches: List[MatchResult], statistics):
+    def _optimize_apply_step(
+        self, it: int, matches: List[MatchResult], statistics: List[Dict[str, Any]]
+    ):
         added_types = set()
         n_added = 0
         n_removed = 0
@@ -1256,7 +1270,7 @@ class GraphBuilderPatternOptimization:
                 )
 
             begin = time.perf_counter()
-            added_nodes = self.apply_match(match)
+            added_nodes = self.apply_match(match, stats=statistics)
             added_types |= set(n.op_type for n in added_nodes)
 
             removed_nodes = [n for n in match.nodes if id(n) not in {id(r) for r in added_nodes}]

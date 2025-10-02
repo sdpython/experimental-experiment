@@ -248,10 +248,12 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         assert isinstance(shape[1], int), f"Number of heads is not fixed, shape(X)={shape}"
         num_heads = shape[1]
 
-        rotary_nodes = []
-        if g.is_used_more_than_once(concat_cos.output[0]):
+        used_twice_cos = g.is_used_more_than_once(concat_cos.output[0])
+        used_twice_sin = g.is_used_more_than_once(concat_sin.output[0])
+        rotary_nodes = [expand_node, *prefix_nodes] if used_twice_cos or used_twice_sin else []
+        if used_twice_cos:
             rotary_nodes.append(concat_cos)
-        if g.is_used_more_than_once(concat_sin.output[0]):
+        if used_twice_sin:
             rotary_nodes.append(concat_sin)
 
         batch_name = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}--batch")
