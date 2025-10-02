@@ -2542,6 +2542,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         parameter_name: Optional[str] = None,
         source: str = "",
         allow_empty: bool = False,
+        give_unique: bool = False,
     ) -> str:
         """
         Adds an initializer to the graph.
@@ -2560,6 +2561,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param source: any additional information, this field is usually used to
             let the number know where the initializer was created.
         :param allow_empty: allow_empty value
+        :param give_unique: give a unique name
         :return: name of the initializer
         """
         if external:
@@ -2615,15 +2617,18 @@ class GraphBuilder(_GraphBuilderRuntime):
             itype = _get_type(value.dtype)
             shape = tuple(value.shape)
 
-        if name == "":
-            sh = "x".join(map(str, shape))
-            size = np.prod(value.size()) if hasattr(value, "detach") else value.size
-            sh2 = (
-                "_".join(map(str, value.ravel().tolist()))
-                if size <= 5 and value.dtype == np.int64
-                else ""
-            )
-            name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
+        if name == "" or give_unique:
+            if name:
+                name = self.unique_name(name)
+            else:
+                sh = "x".join(map(str, shape))
+                size = np.prod(value.size()) if hasattr(value, "detach") else value.size
+                sh2 = (
+                    "_".join(map(str, value.ravel().tolist()))
+                    if size <= 5 and value.dtype == np.int64
+                    else ""
+                )
+                name = self.unique_name(f"init{itype}_s{sh}_{sh2}")
 
         self.add_initializer(
             name,

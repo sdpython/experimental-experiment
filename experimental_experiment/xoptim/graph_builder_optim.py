@@ -636,7 +636,7 @@ class GraphBuilderPatternOptimization:
                 else:
                     source = "GraphBuilderPatternOptimization.make_initializer.0"
         new_name = self.builder.make_initializer(
-            name, value, external=external, msg=msg, source=source
+            name, value, external=external, msg=msg, source=source, give_unique=True
         )
         return new_name
 

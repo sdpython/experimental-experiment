@@ -384,7 +384,7 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
         other = []
         nodes = []
         for i in node.input[1:]:
-            name = g.unique_name(f"{self.__class__.__name__}_{i}")
+            name = g.unique_name(f"{self.__class__.__name__}_{i}::C{itype}")
             other.append(name)
             nodes.append(
                 g.make_node(
@@ -723,9 +723,9 @@ class RMSNormalizationPattern(PatternOptimization):
         if shape is not None and isinstance(shape[axis], int):
             # a constant
             scale = g.make_initializer(
-                "",
+                "ONES",
                 np.array([1] * shape[axis], dtype=dtype),
-                source="RMSNormalization.apply.scale",
+                source="RMSNormalization.apply.scale.1",
             )
         else:
             sh = g.make_node("Shape", [input_name], name=f"{self.__class__.__name__}--{nname}")
