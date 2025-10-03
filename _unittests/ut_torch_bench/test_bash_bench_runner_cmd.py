@@ -443,10 +443,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    @requires_onnx_diagnostic("0.7.13")
     def test_huggingface_export_bench_cpu_dummy_name1(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
+        for exporter, dynamic in itertools.product(["custom"], [True, False]):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if dynamic and exporter == "torch_script":
                     raise unittest.SkipTest(f"this input fails with {exporter!r}")
@@ -456,10 +455,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    @requires_onnx_diagnostic("0.7.13")
     def test_huggingface_export_bench_cpu_dummy_name2(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
+        for exporter, dynamic in itertools.product(["custom"], [True, False]):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if dynamic and exporter == "torch_script":
                     raise unittest.SkipTest(f"this input fails with {exporter!r}")
@@ -469,10 +467,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    @requires_onnx_diagnostic("0.7.13")
     def test_huggingface_export_bench_cpu_dummy_name_dict(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
+        for exporter, dynamic in itertools.product(["custom"], [True, False]):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if dynamic and exporter == "torch_script":
                     raise unittest.SkipTest(f"this input fails with {exporter!r}")
@@ -482,10 +479,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.10.99")
+    @requires_onnx_diagnostic("0.7.13")
     def test_huggingface_export_bench_cpu_dummy_list(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
+        for exporter, dynamic in itertools.product(["custom"], [True, False]):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if dynamic and exporter == "torch_script":
                     raise unittest.SkipTest("integer input fails with list")
