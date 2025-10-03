@@ -1,6 +1,10 @@
 import itertools
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    ignore_warnings,
+    requires_onnx_diagnostic,
+)
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
@@ -223,6 +227,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @ignore_warnings(UserWarning)
+    @requires_onnx_diagnostic("0.7.13")
     def test_scan_cdist_dynamic(self):
         import torch
 
@@ -293,6 +298,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @ignore_warnings(UserWarning)
+    @requires_onnx_diagnostic("0.7.13")
     def test_scan_cdist_dynamic_inline(self):
         import torch
 
@@ -362,6 +368,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @requires_onnx_diagnostic("0.7.13")
     def test_scan_loop_inplace(self):
         import torch
 

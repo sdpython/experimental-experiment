@@ -382,7 +382,7 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqualArray(expected, y)
 
         # 0
-        with torch.fx.experimental._config.patch(backed_size_backed_size_oblivious=True):
+        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
             ep = torch.export.export(
                 model, (torch.empty((0, 3), dtype=torch.float32),), dynamic_shapes=ds
             )
@@ -390,7 +390,7 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqualArray(expected, y)
 
         # 1
-        with torch.fx.experimental._config.patch(backed_size_backed_size_oblivious=True):
+        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
             ep = torch.export.export(
                 model, (torch.zeros((1, 3), dtype=torch.float32),), dynamic_shapes=ds
             )
@@ -402,7 +402,7 @@ class TestOnnxExportShape(ExtTestCase):
             model,
             (torch.empty((1, 3), dtype=torch.float32),),
             dynamic_shapes=ds,
-            backed_size_backed_size_oblivious="auto",
+            backed_size_oblivious="auto",
         )
         y = ep.module()(x)
         self.assertEqualArray(expected, y)
@@ -412,7 +412,7 @@ class TestOnnxExportShape(ExtTestCase):
             model,
             (torch.empty((0, 3), dtype=torch.float32),),
             dynamic_shapes=ds,
-            backed_size_backed_size_oblivious="auto",
+            backed_size_oblivious="auto",
         )
         y = ep.module()(x)
         self.assertEqualArray(expected, y)
