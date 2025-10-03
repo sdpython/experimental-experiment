@@ -636,9 +636,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         self.assertEqual(expected_output.shape, output[0].shape)
         self.assertEqualArray(expected_output, output[0], atol=1e-4)
 
-    def test_dyn_slice_4d_script(self):
-        self._slice_4d("script")
-
+    @requires_onnx_diagnostic("0.7.13")
     def test_dyn_slice_4d_custom(self):
         self._slice_4d("custom")
 

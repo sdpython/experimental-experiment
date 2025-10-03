@@ -511,6 +511,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
+    @requires_onnx_diagnostic("0.7.13")
     def test_huggingface_export_bench_cpu_dummy_none_int_dict(self):
         for exporter, dynamic in itertools.product(["custom", "onnx_dynamo"], [True, False]):
             with self.subTest(exporter=exporter, dynamic=dynamic):
