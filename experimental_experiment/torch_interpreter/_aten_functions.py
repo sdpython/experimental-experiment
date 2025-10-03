@@ -4296,10 +4296,20 @@ def aten_index_add(
             axis += len(shape_x)
         dx = [s for i, s in enumerate(shape_x) if i != axis]
         dv = [s for i, s in enumerate(shape_v) if i != axis]
-        assert dx == dv, (
-            f"index_add not implemented for shape(x)={shape_x}, "
-            f"shape(values)={shape_v}, axis={axis}{g.get_debug_msg()}"
-        )
+        if dx != dv:
+            shape_x2 = g.get_shape_renamed(x)
+            shape_v2 = g.get_shape_renamed(values)
+            if axis < 0:
+                axis += len(shape_x2)
+            dx2 = [s for i, s in enumerate(shape_x2) if i != axis]
+            dv2 = [s for i, s in enumerate(shape_v2) if i != axis]
+            assert g.CONTINUE or dx2 == dv2, (
+                f"index_add not implemented for shape(x)={shape_x}, "
+                f"shape(values)={shape_v}, renamed shape(x)={shape_x2}, "
+                f"renamed shape(values)={shape_v2}, "
+                f"axis={axis}{g.get_debug_msg()}"
+            )
+
         name = f"{name}.B"
         new_shape = np.array([1] * g.get_rank(values), dtype=np.int64)
         new_shape[axis] = -1

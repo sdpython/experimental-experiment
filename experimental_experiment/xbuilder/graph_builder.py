@@ -512,6 +512,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
         self._debug_foldnot = int(os.environ.get("ONNXFOLDNOT", "0"))
         self._debug_dyn_dim = set(os.environ.get("ONNXDYNDIM", "").split(","))
+        self.CONTINUE = int(os.environ.get("CONTINUE", "0"))
         if self._debug_dyn_dim == {""}:
             self._debug_dyn_dim = set()
 
@@ -2591,7 +2592,8 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         key = self.make_key(value)
         if key and key in self._values:
-            if name == "":
+            # exception with obivous names
+            if name in {"", "ONES", "ZEROS", "ZERO", "ONE"}:
                 assert not parameter_name, (
                     f"Empty name cannot be used with parameter_name={parameter_name!r}, "
                     f"key={key!r}"

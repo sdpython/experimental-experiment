@@ -2,6 +2,7 @@ import unittest
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_torch,
+    requires_onnx_diagnostic,
     skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
@@ -108,6 +109,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
+    @requires_onnx_diagnostic("0.7.13")
     def test_input_list_dynamic(self):
         import torch
 

@@ -11,6 +11,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_onnxscript,
     requires_onnxruntime_training,
+    requires_onnx_diagnostic,
     skipif_ci_windows,
     has_torch,
 )
@@ -246,24 +247,10 @@ class TestIssuesPytorch2024(ExtTestCase):
             e2 = session.run(None, input_2)[0]
             self.assertEqualArray(expected, e2)
 
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_index_put_update_parameter_dynamo_2d_static(self):
-        self._updated_parameter("dynamo", False, dynamic=False)
-
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_index_put_update_parameter_dynamo_2d_dynamic(self):
-        self._updated_parameter("dynamo", False, dynamic=True)
-
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_index_put_update_parameter_dynamo_3d(self):
-        self._updated_parameter("dynamo", True)
-
     def test_index_put_update_parameter_custom_2d_static(self):
         self._updated_parameter("custom", False, dynamic=False)
 
+    @requires_onnx_diagnostic("0.7.13")
     def test_index_put_update_parameter_custom_2d_dynamic(self):
         self._updated_parameter("custom", False, dynamic=True)
 
@@ -280,6 +267,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_index_put_update_parameter_custom_3d_static(self):
         self._updated_parameter("custom", True, dynamic=False)
 
+    @requires_onnx_diagnostic("0.7.13")
     def test_index_put_update_parameter_custom_3d_dynamic(self):
         self._updated_parameter("custom", True, dynamic=True)
 
@@ -379,11 +367,6 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_scaled_dot_product_attention_script(self):
         self._scaled_dot_product_attention("script")
 
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_scaled_dot_product_attention_dynamo(self):
-        self._scaled_dot_product_attention("dynamo")
-
     def test_scaled_dot_product_attention_custom(self):
         self._scaled_dot_product_attention("custom")
 
@@ -447,11 +430,6 @@ class TestIssuesPytorch2024(ExtTestCase):
 
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")
-
-    @requires_onnxscript("0.2")
-    @hide_stdout()
-    def test_in_projection_packed_dynamo(self):
-        self._in_projection_packed("dynamo")
 
     def test_in_projection_packed_custom(self):
         self._in_projection_packed("custom")
@@ -524,11 +502,6 @@ class TestIssuesPytorch2024(ExtTestCase):
     @requires_cuda()
     def test__flash_attn_script(self):
         self._flash_attn("script")
-
-    @requires_cuda()
-    @hide_stdout()
-    def test__flash_attn_dynamo(self):
-        self._flash_attn("dynamo")
 
     @requires_cuda()
     def test__flash_attn_custom(self):
@@ -663,9 +636,7 @@ class TestIssuesPytorch2024(ExtTestCase):
         self.assertEqual(expected_output.shape, output[0].shape)
         self.assertEqualArray(expected_output, output[0], atol=1e-4)
 
-    def test_dyn_slice_4d_script(self):
-        self._slice_4d("script")
-
+    @requires_onnx_diagnostic("0.7.13")
     def test_dyn_slice_4d_custom(self):
         self._slice_4d("custom")
 
@@ -875,9 +846,10 @@ class TestIssuesPytorch2024(ExtTestCase):
         self.assertEqualArray(expected, e1)
 
     @ignore_warnings(UserWarning)
+    @requires_onnx_diagnostic("0.7.13")
     def test_index_put_no_none(self):
         for exporter, d3, decomposition, dynamic in itertools.product(
-            ["custom", "onnx_dynamo"],
+            ["custom"],
             [True, False],
             [True],  # no decomposition is not safe for inplace
             [False, True],

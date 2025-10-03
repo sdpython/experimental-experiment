@@ -14,6 +14,7 @@ import onnx
 import torch
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type, string_sig
 from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
+from ..export_helpers import torch_export
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
 from ._torch_helper import make_copy
@@ -1568,11 +1569,12 @@ class ModelDiagnoseOutput:
 
         if quiet:
             try:
-                ep = torch.export.export(
+                ep = torch_export(
                     model_to_export,
                     args,
                     kwargs=kwargs,
                     dynamic_shapes=ds,
+                    verbose=verbose,
                     **(exporter_kwargs or {}),
                 )
                 self.exporter_status = StatusExport(
@@ -1626,11 +1628,12 @@ class ModelDiagnoseOutput:
                         )
                 return self.exporter_status, None
         else:
-            ep = torch.export.export(
+            ep = torch_export(
                 model_to_export,
                 args,
                 kwargs=kwargs,
                 dynamic_shapes=ds,
+                verbose=verbose,
                 **(exporter_kwargs or {}),
             )
             self.exporter_status = StatusExport(
@@ -2367,11 +2370,12 @@ class ModelDiagnoseOutput:
                     f"outputs={string_type(child.outputs[0], with_shape=True)}"
                 )
             child.put_custom_op_inplace(verbose=verbose, shape_functions=shape_functions)
-        ep_report = torch.export.export(
+        ep_report = torch_export(
             self.model,
             args,
             kwargs=kwargs,
             dynamic_shapes=ds,
+            verbose=verbose,
             **(exporter_kwargs or {}),
         )
         assert ep_report is not None, f"No result for {self.full_name}"

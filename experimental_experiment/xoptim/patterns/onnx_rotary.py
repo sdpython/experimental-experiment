@@ -1404,6 +1404,10 @@ class FunctionCosSinCachePattern(PatternOptimization):
             dim_squeeze1 = None
             dim_squeeze2 = None
 
+        if (sin_cast is None) != (cos_cast is None):
+            # cast issue
+            return self.none(node, inspect.currentframe().f_lineno)
+
         return MatchResult(
             self,
             [
@@ -1438,7 +1442,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
         sin_cast: Optional[NodeProto],
     ) -> List[NodeProto]:
         # Builds the name of the local function.
-        to = None if cos_cast is None else g.get_attribute(cos_cast, "to").i
+        to = None if (cos_cast is None or sin_cast is None) else g.get_attribute(cos_cast, "to").i
         cst_position_ids = tuple(g.get_computed_constant(unsq_node.input[1]))
         name = self._operator_name if to is None else f"{self._operator_name}_to{to}"
         if cst_position_ids != (0, 1):

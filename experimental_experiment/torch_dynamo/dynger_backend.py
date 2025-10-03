@@ -65,9 +65,9 @@ def dynger_backend(
             print(f"[dynger_backend] use existing {type(graph_module)}")
         exported_mod = graph_module
     else:
-        exported_mod = torch.export.export(
-            graph_module, tuple(args), dynamic_shapes=dynamic_shapes
-        )
+        from ..export_helpers import torch_export
+
+        exported_mod = torch_export(graph_module, tuple(args), dynamic_shapes=dynamic_shapes)
 
     if verbose >= 10:
 

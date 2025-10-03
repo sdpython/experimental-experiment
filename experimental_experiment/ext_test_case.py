@@ -798,6 +798,18 @@ def has_torch(version: str) -> bool:
     return pv.Version(torch.__version__) >= pv.Version(version)
 
 
+def has_onnx_diagnostic(version: str) -> bool:
+    "Returns True if torch verions is higher."
+    import packaging.version as pv
+
+    try:
+        import onnx_diagnostic
+    except ImportError:
+        return False
+
+    return pv.Version(onnx_diagnostic.__version__) >= pv.Version(version)
+
+
 def requires_onnx_diagnostic(version: str, msg: str = "") -> Callable:
     """Skips a unit test if :epkg:`onnx-diagnostic` is not recent enough."""
     import packaging.version as pv

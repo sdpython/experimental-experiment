@@ -4,6 +4,7 @@ import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type
+from ..export_helpers import torch_export
 from ..helpers import string_sig, get_sig_kwargs
 from ._torch_helper import make_copy
 from ._doc_ import TorchOpOverload
@@ -39,8 +40,10 @@ class ExportOptions:
     :param validate_ep: validates the exported program with the given inputs,
         by default the tolerance is ``1e-5``, use a float instead of a boolean
         to change that value
-    :param oblivious: use ``torch.fx.experimental._config.patch(backed_size_oblivious=True)``
-        to allow dynamic dimension equal to 1
+    :param backed_size_oblivious: use
+        ``torch.fx.experimental._config.patch(backed_size_oblivious=True)``
+        to allow dynamic dimension equal to 1, this class calls
+        :func:`experimental_experiment.export_helpers.torch_export`
 
     The fallback strategy tries the following in order:
 
@@ -108,7 +111,7 @@ class ExportOptions:
         allow_untyped_output: bool = False,
         save_ep: Optional[str] = None,
         validate_ep: Union[float, bool] = False,
-        oblivious: bool = False,
+        backed_size_oblivious: Union[bool, str] = "auto",
     ):
         self.strict = strict
         self.fallback = fallback
@@ -124,7 +127,7 @@ class ExportOptions:
         self.remove_inplace = remove_inplace
         self.allow_untyped_output = allow_untyped_output
         self.validate_ep = validate_ep
-        self.oblivious = oblivious
+        self.backed_size_oblivious = backed_size_oblivious
 
         if strategy is not None:
             assert strategy in self._allowed, (
@@ -257,25 +260,39 @@ class ExportOptions:
                 print("-- DONE -- ")
         return exported_program
 
-    def _export(self, mod, args, kwargs, dynamic_shapes, input_names, exc, verbose):
+    def _export(
+        self,
+        mod,
+        args,
+        kwargs,
+        dynamic_shapes,
+        input_names,
+        exc,
+        verbose,
+        backed_size_oblivious=False,
+    ):
         import torch
         from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 
         if exc:
-            return torch.export.export(
+            return torch_export(
                 mod,
                 args,
                 kwargs,
                 dynamic_shapes=use_dyn_not_str(dynamic_shapes),
                 strict=self.strict,
+                backed_size_oblivious=backed_size_oblivious,
+                verbose=verbose,
             )
         try:
-            return torch.export.export(
+            return torch_export(
                 mod,
                 args,
                 kwargs,
                 dynamic_shapes=use_dyn_not_str(dynamic_shapes),
                 strict=self.strict,
+                backed_size_oblivious=backed_size_oblivious,
+                verbose=verbose,
             )
         except torch._export.verifier.SpecViolationError:
             # see issue 128394 on pytorch repo
@@ -294,8 +311,13 @@ class ExportOptions:
             if verbose:
                 print("[ExportOptions.export] torch.export.export")
             try:
-                exported_program = torch.export.export(
-                    mod, args, kwargs, strict=self.strict
+                exported_program = torch_export(
+                    mod,
+                    args,
+                    kwargs,
+                    strict=self.strict,
+                    backed_size_oblivious=backed_size_oblivious,
+                    verbose=verbose,
                 ).graph
             except torch._export.verifier.SpecViolationError as ee:
                 exported_program = None
@@ -524,21 +546,23 @@ class ExportOptions:
             t0 = time.perf_counter()
             print(f"[ExportOptions.export] export start with strict={self.strict}...")
 
-        if self.oblivious:
-            if verbose:
-                print("[ExportOptions.export] export with backed_size_oblivious=True")
-            begin = time.perf_counter()
-            with torch.fx.experimental._config.patch(backed_size_oblivious=True):
-                exported_program = self._export(
-                    mod, args, kwargs, dynamic_shapes, input_names, exc, verbose
-                )
-            self._stat_time_torch_export_export_oblivious = time.perf_counter() - begin
-        else:
-            begin = time.perf_counter()
-            exported_program = self._export(
-                mod, args, kwargs, dynamic_shapes, input_names, exc, verbose
+        if verbose:
+            print(
+                f"[ExportOptions.export] export with "
+                f"backed_size_oblivious={self.backed_size_oblivious}"
             )
-            self._stat_time_torch_export_export_ = time.perf_counter() - begin
+        begin = time.perf_counter()
+        exported_program = self._export(
+            mod,
+            args,
+            kwargs,
+            dynamic_shapes,
+            input_names,
+            exc,
+            verbose,
+            backed_size_oblivious=self.backed_size_oblivious,
+        )
+        self._stat_time_torch_export_export_oblivious = time.perf_counter() - begin
 
         if verbose:
             print(f"[ExportOptions.export] export done in {time.perf_counter() - t0}")

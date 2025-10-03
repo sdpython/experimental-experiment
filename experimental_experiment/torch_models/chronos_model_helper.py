@@ -24,7 +24,7 @@ def get_chronos_t5_tiny(
     :param common_dynamic_shapes: if True returns dynamic shapes as well
     :param fixed_prediction_length: freeze the number of predictions in the model,
         it is no longer an input
-    :return: dicionary
+    :return: dictionary
 
     See `chronos_t5_tiny <https://huggingface.co/amazon/chronos-t5-tiny>`_.
 
