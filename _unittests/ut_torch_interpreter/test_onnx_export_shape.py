@@ -398,12 +398,22 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqualArray(expected, y)
 
         # w 1
-        ep = torch_export(model, (torch.empty((1, 3), dtype=torch.float32),), dynamic_shapes=ds)
+        ep = torch_export(
+            model,
+            (torch.empty((1, 3), dtype=torch.float32),),
+            dynamic_shapes=ds,
+            backed_size_oblivious="auto",
+        )
         y = ep.module()(x)
         self.assertEqualArray(expected, y)
 
         # w 0
-        ep = torch_export(model, (torch.empty((0, 3), dtype=torch.float32),), dynamic_shapes=ds)
+        ep = torch_export(
+            model,
+            (torch.empty((0, 3), dtype=torch.float32),),
+            dynamic_shapes=ds,
+            backed_size_oblivious="auto",
+        )
         y = ep.module()(x)
         self.assertEqualArray(expected, y)
 

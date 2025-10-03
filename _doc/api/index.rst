@@ -29,6 +29,7 @@ API
     args
     bench_run
     checks
+    export_helpers
     ext_test_case
     helpers
     memory_peak

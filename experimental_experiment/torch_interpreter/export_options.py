@@ -40,8 +40,10 @@ class ExportOptions:
     :param validate_ep: validates the exported program with the given inputs,
         by default the tolerance is ``1e-5``, use a float instead of a boolean
         to change that value
-    :param oblivious: use ``torch.fx.experimental._config.patch(backed_size_oblivious=True)``
-        to allow dynamic dimension equal to 1
+    :param backed_size_oblivious: use
+        ``torch.fx.experimental._config.patch(backed_size_oblivious=True)``
+        to allow dynamic dimension equal to 1, this class calls
+        :func:`experimental_experiment.export_helpers.torch_export`
 
     The fallback strategy tries the following in order:
 
@@ -109,7 +111,7 @@ class ExportOptions:
         allow_untyped_output: bool = False,
         save_ep: Optional[str] = None,
         validate_ep: Union[float, bool] = False,
-        oblivious: bool = False,
+        backed_size_oblivious: Union[bool, str] = "auto",
     ):
         self.strict = strict
         self.fallback = fallback
@@ -125,7 +127,7 @@ class ExportOptions:
         self.remove_inplace = remove_inplace
         self.allow_untyped_output = allow_untyped_output
         self.validate_ep = validate_ep
-        self.oblivious = oblivious
+        self.backed_size_oblivious = backed_size_oblivious
 
         if strategy is not None:
             assert strategy in self._allowed, (
@@ -542,7 +544,10 @@ class ExportOptions:
             print(f"[ExportOptions.export] export start with strict={self.strict}...")
 
         if verbose:
-            print(f"[ExportOptions.export] export with backed_size_oblivious={self.oblivious}")
+            print(
+                f"[ExportOptions.export] export with "
+                f"backed_size_oblivious={self.backed_size_oblivious}"
+            )
         begin = time.perf_counter()
         exported_program = self._export(
             mod,
@@ -552,7 +557,7 @@ class ExportOptions:
             input_names,
             exc,
             verbose,
-            backed_size_oblivious=self.oblivious,
+            backed_size_oblivious=self.backed_size_oblivious,
         )
         self._stat_time_torch_export_export_oblivious = time.perf_counter() - begin
 
