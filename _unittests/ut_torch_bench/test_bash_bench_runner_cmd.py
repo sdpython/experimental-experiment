@@ -10,6 +10,7 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_onnxruntime_training,
     requires_torch,
+    requires_onnx_diagnostic,
     skipif_ci_linux,
     is_windows,
 )
@@ -217,11 +218,13 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
+    @requires_onnx_diagnostic("0.7.13")
     def test_export_bench_custom_cpu_dynamic_1_input_dummy16(self):
         self._hg_export_bench_cpu("custom", "101Dummy16", dynamic=True, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
+    @requires_onnx_diagnostic("0.7.13")
     def test_export_bench_onnx_dynamo_cpu_dynamic_1_input_dummy16(self):
         self._hg_export_bench_cpu("onnx_dynamo", "101Dummy16", dynamic=True, debug=False)
 
@@ -237,6 +240,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
+    @requires_onnx_diagnostic("0.7.13")
     def test_export_bench_custom_cpu_dynamic_2_inputs(self):
         self._hg_export_bench_cpu("custom", "101Dummy2Inputs", dynamic=True, debug=False)
 

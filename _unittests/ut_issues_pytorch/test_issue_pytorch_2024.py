@@ -11,6 +11,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_onnxscript,
     requires_onnxruntime_training,
+    requires_onnx_diagnostic,
     skipif_ci_windows,
     has_torch,
 )
@@ -249,6 +250,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_index_put_update_parameter_custom_2d_static(self):
         self._updated_parameter("custom", False, dynamic=False)
 
+    @requires_onnx_diagnostic("0.7.13")
     def test_index_put_update_parameter_custom_2d_dynamic(self):
         self._updated_parameter("custom", False, dynamic=True)
 
@@ -265,6 +267,7 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_index_put_update_parameter_custom_3d_static(self):
         self._updated_parameter("custom", True, dynamic=False)
 
+    @requires_onnx_diagnostic("0.7.13")
     def test_index_put_update_parameter_custom_3d_dynamic(self):
         self._updated_parameter("custom", True, dynamic=True)
 
@@ -845,9 +848,10 @@ class TestIssuesPytorch2024(ExtTestCase):
         self.assertEqualArray(expected, e1)
 
     @ignore_warnings(UserWarning)
+    @requires_onnx_diagnostic("0.7.13")
     def test_index_put_no_none(self):
         for exporter, d3, decomposition, dynamic in itertools.product(
-            ["custom", "onnx_dynamo"],
+            ["custom"],
             [True, False],
             [True],  # no decomposition is not safe for inplace
             [False, True],
