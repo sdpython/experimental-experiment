@@ -235,6 +235,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
+    @requires_onnx_diagnostic("0.7.13")
     def test_export_bench_custom_cpu_dynamic_1_input(self):
         self._hg_export_bench_cpu("custom", "101Dummy", dynamic=True)
 
