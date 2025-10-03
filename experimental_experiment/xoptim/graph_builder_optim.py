@@ -1050,11 +1050,11 @@ class GraphBuilderPatternOptimization:
                     )
                     found = "not found after"
                     for pfind, n2 in enumerate(nodes):
-                        if i in n2.output:
+                        if n2 is not None and i in n2.output:
                             found = f"input {i!r} found at position {pfind}"
                     foundr = "not found in removed nodes"
                     for pfind, n2 in enumerate(removed_nodes):
-                        if i in n2.output:
+                        if n2 is not None and i in n2.output:
                             foundr = f"input {i!r} found at position {pfind} in removed nodes"
                     s_removed_nodes = "\n".join(
                         f"{n.op_type}({n.input})->({n.output})"

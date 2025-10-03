@@ -18,6 +18,7 @@ def torch_export(
     *args,
     backed_size_oblivious: Union[bool, str] = False,
     oblivious: Union[bool, str] = False,
+    verbose: int = 0,
     **kwargs,
 ):
     """
@@ -29,6 +30,8 @@ def torch_export(
     """
 
     if backed_size_oblivious == "half":
+        if verbose:
+            print(f"[torch_export] backed_size_oblivious={backed_size_oblivious!r}")
         value = _tds.ShapeEnv._init.__kwdefaults__["specialize_zero_one"]
         _tds.ShapeEnv._init.__kwdefaults__["specialize_zero_one"] = False
         _tds._guard_or = _guard_or
@@ -41,35 +44,48 @@ def torch_export(
         return ep
 
     if backed_size_oblivious == "auto":
-        kws = kwargs.get("kwargs", None)
-        ds = kwargs.get("dynamic_shapes", None)
+        if verbose:
+            print(f"[torch_export] backed_size_oblivious={backed_size_oblivious!r}")
+        ds = kwargs.get("dynamic_shapes", {})
         if not ds:
             # Unable to predict, calling the second recursively
             # to let the stacktrace keep a trace of it.
-            return torch_export(*args, backed_size_oblivious=False, **kwargs)
+            if verbose:
+                print("[torch_export] no dynamic shapes, back to default behaviour")
+            return torch_export(*args, backed_size_oblivious=False, verbose=verbose, **kwargs)
+        kws = args[2] if len(args) > 2 else kwargs.get("kwargs", {})
+        ags = args[1] if len(args) > 1 else kwargs.get("args", tuple())
         if isinstance(ds, tuple):
-            inputs = args[1] if len(args) > 1 else kwargs.get("args", None)
-            if not inputs:
+            if not ags:
                 # Unable to predict, calling the second recursively
                 # to let the stacktrace keep a trace of it.
-                return torch_export(*args, backed_size_oblivious=False, **kwargs)
+                if verbose:
+                    print(
+                        f"[torch_export] dynamic_shapes={ds}, "
+                        f"args is empty, back to default behaviour"
+                    )
+                return torch_export(*args, backed_size_oblivious=False, verbose=verbose, **kwargs)
             assert not kws, (
                 f"args and kwargs are specified for this call and dynamic_shapes are {ds}, "
                 f"this is not implemented yet."
             )
-            ars = inputs
-        else:
-            assert not kws
-            ars = tuple()
 
         from onnx_diagnostic.export.dynamic_shapes import CoupleInputsDynamicShapes
 
-        cpl = CoupleInputsDynamicShapes(ars, kws, ds)
+        cpl = CoupleInputsDynamicShapes(ags, kws, ds)
         backed_size_oblivious = cpl.invalid_dimensions_for_export()
+        if verbose:
+            print(f"[torch_export] inferred backed_size_oblivious={backed_size_oblivious!r}")
 
     if backed_size_oblivious:
+        if verbose:
+            print(
+                f"[torch_export] export starts with backed_size_oblivious={backed_size_oblivious}"
+            )
         with torch.fx.experimental._config.patch(backed_size_oblivious=True):
             ep = torch.export.export(*args, **kwargs)
         return ep
 
+    if verbose:
+        print(f"[torch_export] export starts with backed_size_oblivious={backed_size_oblivious}")
     return torch.export.export(*args, **kwargs)

@@ -1574,6 +1574,7 @@ class ModelDiagnoseOutput:
                     args,
                     kwargs=kwargs,
                     dynamic_shapes=ds,
+                    verbose=verbose,
                     **(exporter_kwargs or {}),
                 )
                 self.exporter_status = StatusExport(
@@ -1632,6 +1633,7 @@ class ModelDiagnoseOutput:
                 args,
                 kwargs=kwargs,
                 dynamic_shapes=ds,
+                verbose=verbose,
                 **(exporter_kwargs or {}),
             )
             self.exporter_status = StatusExport(
@@ -2373,6 +2375,7 @@ class ModelDiagnoseOutput:
             args,
             kwargs=kwargs,
             dynamic_shapes=ds,
+            verbose=verbose,
             **(exporter_kwargs or {}),
         )
         assert ep_report is not None, f"No result for {self.full_name}"

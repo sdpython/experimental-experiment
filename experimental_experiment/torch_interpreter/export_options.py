@@ -282,6 +282,7 @@ class ExportOptions:
                 dynamic_shapes=use_dyn_not_str(dynamic_shapes),
                 strict=self.strict,
                 backed_size_oblivious=backed_size_oblivious,
+                verbose=verbose,
             )
         try:
             return torch_export(
@@ -291,6 +292,7 @@ class ExportOptions:
                 dynamic_shapes=use_dyn_not_str(dynamic_shapes),
                 strict=self.strict,
                 backed_size_oblivious=backed_size_oblivious,
+                verbose=verbose,
             )
         except torch._export.verifier.SpecViolationError:
             # see issue 128394 on pytorch repo
@@ -315,6 +317,7 @@ class ExportOptions:
                     kwargs,
                     strict=self.strict,
                     backed_size_oblivious=backed_size_oblivious,
+                    verbose=verbose,
                 ).graph
             except torch._export.verifier.SpecViolationError as ee:
                 exported_program = None
