@@ -27,6 +27,7 @@ class TestOnnxExportAtenAsFunction(ExtTestCase):
             decomposition_table="all" if decomposition else None,
             strict=strict,
             aten_as_function=True,
+            backed_size_oblivious=False,
         )
         to_onnx(
             model,

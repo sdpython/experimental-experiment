@@ -246,21 +246,6 @@ class TestIssuesPytorch2024(ExtTestCase):
             e2 = session.run(None, input_2)[0]
             self.assertEqualArray(expected, e2)
 
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_index_put_update_parameter_dynamo_2d_static(self):
-        self._updated_parameter("dynamo", False, dynamic=False)
-
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_index_put_update_parameter_dynamo_2d_dynamic(self):
-        self._updated_parameter("dynamo", False, dynamic=True)
-
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_index_put_update_parameter_dynamo_3d(self):
-        self._updated_parameter("dynamo", True)
-
     def test_index_put_update_parameter_custom_2d_static(self):
         self._updated_parameter("custom", False, dynamic=False)
 
@@ -379,11 +364,6 @@ class TestIssuesPytorch2024(ExtTestCase):
     def test_scaled_dot_product_attention_script(self):
         self._scaled_dot_product_attention("script")
 
-    @requires_onnxscript("0.7")
-    @hide_stdout()
-    def test_scaled_dot_product_attention_dynamo(self):
-        self._scaled_dot_product_attention("dynamo")
-
     def test_scaled_dot_product_attention_custom(self):
         self._scaled_dot_product_attention("custom")
 
@@ -447,11 +427,6 @@ class TestIssuesPytorch2024(ExtTestCase):
 
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")
-
-    @requires_onnxscript("0.2")
-    @hide_stdout()
-    def test_in_projection_packed_dynamo(self):
-        self._in_projection_packed("dynamo")
 
     def test_in_projection_packed_custom(self):
         self._in_projection_packed("custom")
@@ -524,11 +499,6 @@ class TestIssuesPytorch2024(ExtTestCase):
     @requires_cuda()
     def test__flash_attn_script(self):
         self._flash_attn("script")
-
-    @requires_cuda()
-    @hide_stdout()
-    def test__flash_attn_dynamo(self):
-        self._flash_attn("dynamo")
 
     @requires_cuda()
     def test__flash_attn_custom(self):

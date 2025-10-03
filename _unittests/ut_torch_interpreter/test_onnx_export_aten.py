@@ -52,7 +52,9 @@ class TestOnnxExportAten(ExtTestCase):
             torch.onnx.export(model, inputs, filename, dynamo=True, dynamic_shapes=dynamic_shapes)
         else:
             export_options = ExportOptions(
-                decomposition_table="all" if decomposition else None, strict=strict
+                decomposition_table="all" if decomposition else None,
+                strict=strict,
+                backed_size_oblivious=False,
             )
             opt_options = (
                 OptimizationOptions(patterns=patterns, processor=processor)
