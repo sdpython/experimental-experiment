@@ -24,7 +24,7 @@ class TestOnnxExportShape(ExtTestCase):
         processor: str = "CPU",
         output_names: Optional[List[str]] = None,
         constant_folding: bool = False,
-        oblivious: bool = False,
+        backed_size_oblivious: bool = False,
         patch: bool = False,
     ) -> str:
         import torch
@@ -38,7 +38,7 @@ class TestOnnxExportShape(ExtTestCase):
             export_options = ExportOptions(
                 decomposition_table="all" if decomposition else None,
                 strict=strict,
-                oblivious=oblivious,
+                backed_size_oblivious=backed_size_oblivious,
             )
             opt_options = (
                 OptimizationOptions(
@@ -224,7 +224,7 @@ class TestOnnxExportShape(ExtTestCase):
             xs,
             dynamic_shapes={"x": {0: "num_audios", 2: "num_last"}},
             patch=True,
-            oblivious=True,
+            backed_size_oblivious=True,
         )
         onx = onnx.load(model_path)
         shape_x = [
@@ -247,7 +247,7 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-5)
 
     @requires_torch("2.6", "torch.export.Dim.AUTO")
-    def test_oblivious_dynamic_shapes(self):
+    def test_backed_size_oblivious_dynamic_shapes(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -267,7 +267,7 @@ class TestOnnxExportShape(ExtTestCase):
             model,
             xs,
             dynamic_shapes={"x": {0: "num_audios", 2: "num_last"}},
-            oblivious=True,
+            backed_size_oblivious=True,
             patch=True,
         )
         onx = onnx.load(model_path)
@@ -382,7 +382,7 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqualArray(expected, y)
 
         # 0
-        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+        with torch.fx.experimental._config.patch(backed_size_backed_size_oblivious=True):
             ep = torch.export.export(
                 model, (torch.empty((0, 3), dtype=torch.float32),), dynamic_shapes=ds
             )
@@ -390,7 +390,7 @@ class TestOnnxExportShape(ExtTestCase):
         self.assertEqualArray(expected, y)
 
         # 1
-        with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+        with torch.fx.experimental._config.patch(backed_size_backed_size_oblivious=True):
             ep = torch.export.export(
                 model, (torch.zeros((1, 3), dtype=torch.float32),), dynamic_shapes=ds
             )
@@ -402,7 +402,7 @@ class TestOnnxExportShape(ExtTestCase):
             model,
             (torch.empty((1, 3), dtype=torch.float32),),
             dynamic_shapes=ds,
-            backed_size_oblivious="auto",
+            backed_size_backed_size_oblivious="auto",
         )
         y = ep.module()(x)
         self.assertEqualArray(expected, y)
@@ -412,7 +412,7 @@ class TestOnnxExportShape(ExtTestCase):
             model,
             (torch.empty((0, 3), dtype=torch.float32),),
             dynamic_shapes=ds,
-            backed_size_oblivious="auto",
+            backed_size_backed_size_oblivious="auto",
         )
         y = ep.module()(x)
         self.assertEqualArray(expected, y)

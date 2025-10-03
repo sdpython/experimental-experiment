@@ -17,7 +17,6 @@ def _guard_or(a: "BoolLikeType", default: bool) -> bool:  # noqa: F821
 def torch_export(
     *args,
     backed_size_oblivious: Union[bool, str] = False,
-    oblivious: Union[bool, str] = False,
     verbose: int = 0,
     **kwargs,
 ):
