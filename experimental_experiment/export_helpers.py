@@ -71,6 +71,9 @@ def torch_export(
 
         from onnx_diagnostic.export.dynamic_shapes import CoupleInputsDynamicShapes
 
+        if not kws and len(ags) != len(ds) and len(ds) == 1 and len(ds[0]) == len(ags):
+            ds = ds[0]
+
         cpl = CoupleInputsDynamicShapes(ags, kws, ds)
         backed_size_oblivious = cpl.invalid_dimensions_for_export()
         if verbose:

@@ -1,7 +1,7 @@
 numpy
 ml_dtypes
 onnx>=1.16.0
-onnx-diagnostic>=0.7.10  # 0.7.7 needed for transformers>=4.55.1, 0.7.10 ~ transformers>=4.56
+onnx-diagnostic>=0.7.13
 # onnxruntime-training; sys_platform == 'linux' and python_version < "3.12"
 # onnxruntime; sys_platform != 'linux' or python_version >= "3.12"
 onnxruntime

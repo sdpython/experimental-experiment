@@ -1779,7 +1779,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_index_Tensor_21_2(self):
         import torch
 
@@ -1816,7 +1816,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_index_Tensor_21_2_oblivious(self):
         import torch
 
