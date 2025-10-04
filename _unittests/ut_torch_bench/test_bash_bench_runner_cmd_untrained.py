@@ -213,7 +213,6 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         import torch
         data = get_untrained_model_with_inputs("arnir0/Tiny-LLM", verbose=0)
         model, inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
-        print(inputs, use_dyn_not_str(ds))
         expected = model(**torch_deepcopy(inputs))
         with torch_export_patches(patch_transformers=True):
             ep = torch.export.export(model, (), kwargs=inputs, dynamic_shapes=use_dyn_not_str(ds))
