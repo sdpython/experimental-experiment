@@ -211,6 +211,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @requires_onnx_diagnostic("0.7.14")
     def test_export_tiny_llm(self):
         import torch
+
         data = get_untrained_model_with_inputs("arnir0/Tiny-LLM", verbose=0)
         model, inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
         expected = model(**torch_deepcopy(inputs))
