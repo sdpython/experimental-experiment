@@ -967,6 +967,9 @@ def to_onnx(
     Other debugging options are available, see :class:`GraphBuiler
     <experimental_experiment.xbuilder.GraphBuilder>`.
     """
+    if kwargs is None and isinstance(args, dict):
+        kwargs = args
+        args = tuple()
     assert export_options is None or isinstance(
         export_options, ExportOptions
     ), f"Unexpected type {type(export_options)} for export_options"

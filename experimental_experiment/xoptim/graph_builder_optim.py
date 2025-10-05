@@ -1387,6 +1387,7 @@ class GraphBuilderPatternOptimization:
         but it guarantees the local structure when applying the rewriting was
         not altered by another one.
         """
+        _b = lambda b: (1 if b else 0)  # noqa: E731
         if self.recursive and recursive:
             if self.verbose > 0:
                 print(
@@ -1419,6 +1420,7 @@ class GraphBuilderPatternOptimization:
                 )
 
         continue_optimization = True
+        stop_after_cond = False
         priorities = list(sorted(set(p.priority for p in self.patterns)))  # noqa: C413
         assert priorities, "list of priority is null."
         if max_iter == -1:
@@ -1464,7 +1466,7 @@ class GraphBuilderPatternOptimization:
         last_it = 0
         current_priority_index = 0
         for it in range(max_iter):
-            if not continue_optimization:
+            if not continue_optimization or stop_after_cond:
                 if self.verbose > 0:
                     print(
                         f"[GraphBuilderPatternOptimization-"
@@ -1472,6 +1474,7 @@ class GraphBuilderPatternOptimization:
                         f"continue_optimization={continue_optimization}"
                     )
                 break
+            continue_optimization = False
             if self.verbose > 0:
                 print(
                     f"[GraphBuilderPatternOptimization-"
@@ -1481,7 +1484,12 @@ class GraphBuilderPatternOptimization:
                 )
 
             # detects patterns
-            found, matches, durations, continue_optimization = self._optimize_matching_step(
+            if self.verbose >= 10:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                    f"it={it}C{continue_optimization} - matching_step"
+                )
+            found, matches, durations, cont_opt = self._optimize_matching_step(
                 it,
                 self.patterns,
                 n_applied,
@@ -1490,6 +1498,8 @@ class GraphBuilderPatternOptimization:
                 priorities,
                 current_priority_index,
             )
+            if not cont_opt:
+                stop_after_cond = True
 
             if self.verbose > 0 and matches:
                 if durations:
@@ -1523,10 +1533,24 @@ class GraphBuilderPatternOptimization:
                     )
 
             # applies patterns (they must be disjoined)
+            if self.verbose >= 10:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                    f"it={it}C{_b(continue_optimization)}F{_b(found)} - apply_step with "
+                    f"{len(matches)} matches"
+                )
             applied_patterns, added_types, n_added, n_removed = self._optimize_apply_step(
                 it, matches, statistics
             )
             n_applied += len(applied_patterns)
+            if applied_patterns:
+                continue_optimization = True
+            if self.verbose >= 10:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                    f"it={it}C{_b(continue_optimization)}F{_b(found)} - done with "
+                    f"{len(applied_patterns)} applied patterns"
+                )
 
             if self.verbose > 2:
                 print(
@@ -1536,6 +1560,12 @@ class GraphBuilderPatternOptimization:
                 )
 
             if remove_duplicated_shape:
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - "
+                        f"remove_duplicated_shape"
+                    )
                 # remove unnecessary identity nodes
                 begin = time.perf_counter()
                 id_removed, id_added = self.builder.remove_duplicated_shape_nodes()
@@ -1549,8 +1579,21 @@ class GraphBuilderPatternOptimization:
                     )
                 )
                 self._check_graph(statistics, "remove_duplicated_shape", it, "B", self.verifies)
+                if id_removed > 0:
+                    continue_optimization = True
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - "
+                        f"remove_duplicated_shape done"
+                    )
 
             if remove_identity and (it < 3 or "Identity" in added_types):
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_identity"
+                    )
                 # remove unnecessary identity nodes
                 begin = time.perf_counter()
                 id_removed, id_added = self.builder.remove_identity_nodes()
@@ -1564,8 +1607,20 @@ class GraphBuilderPatternOptimization:
                     )
                 )
                 self._check_graph(statistics, "remove_identity", it, "B", self.verifies)
+                if id_removed > 0:
+                    continue_optimization = True
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_identity done"
+                    )
 
             if remove_unused:
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_unused"
+                    )
                 # remove unused nodes
                 begin = time.perf_counter()
                 id_removed = self.builder.remove_unused()
@@ -1579,6 +1634,13 @@ class GraphBuilderPatternOptimization:
                     )
                 )
                 self._check_graph(statistics, "remove_unused", it, "B", self.verifies)
+                if id_removed > 0:
+                    continue_optimization = True
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_unused done"
+                    )
 
             # rebuild the graph structure
 
@@ -1596,6 +1658,11 @@ class GraphBuilderPatternOptimization:
             # If SameChildrenPattern is detected, it could go quite far, so
             # let's speed it up by running a short loop.
             if applied_patterns_names & same_children_pattern_names:
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - same_pattern"
+                    )
                 if self.verbose > 0:
                     print(
                         f"[GraphBuilderPatternOptimization-"
@@ -1647,6 +1714,8 @@ class GraphBuilderPatternOptimization:
                         time_in=time.perf_counter() - begin,
                     )
                 )
+                if p_applied > 0:
+                    continue_optimization = True
                 if self.verbose > 0:
                     print(
                         f"[GraphBuilderPatternOptimization-"
@@ -1655,6 +1724,11 @@ class GraphBuilderPatternOptimization:
                         f"applied patterns, "
                         f"{len(self.builder.nodes)} nodes left with {itsame} iterations"
                     )
+                if self.verbose >= 10:
+                    print(
+                        f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                        f"it={it}C{_b(continue_optimization)}F{_b(found)} - same_pattern done"
+                    )
 
             # next iteration
 
@@ -1662,9 +1736,8 @@ class GraphBuilderPatternOptimization:
             if not found:
                 # No match, increase the priority.
                 current_priority_index += 1
-                if current_priority_index >= len(priorities):
+                if current_priority_index >= len(priorities) and not continue_optimization:
                     # There is priority left to explore.
-                    continue_optimization = len(matches) > 0
                     if self.verbose > 0:
                         print(
                             f"[GraphBuilderPatternOptimization-"
@@ -1673,12 +1746,20 @@ class GraphBuilderPatternOptimization:
                             f"priorities={priorities}"
                         )
                     break
+                if current_priority_index >= len(priorities):
+                    current_priority_index = len(priorities) - 1
                 if self.verbose > 0:
                     print(
                         f"[GraphBuilderPatternOptimization-"
                         f"{self.builder._hash()}.optimize] increase priority "
                         f"to {priorities[current_priority_index]}"
                     )
+
+            if self.verbose >= 10:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                    f"it={it}C{_b(continue_optimization)}F{_b(found)} - next"
+                )
 
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all
