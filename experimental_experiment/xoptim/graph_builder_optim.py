@@ -1748,6 +1748,8 @@ class GraphBuilderPatternOptimization:
                     break
                 if current_priority_index >= len(priorities):
                     current_priority_index = len(priorities) - 1
+                else:
+                    continue_optimization = True
                 if self.verbose > 0:
                     print(
                         f"[GraphBuilderPatternOptimization-"

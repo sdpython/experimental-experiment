@@ -317,6 +317,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @hide_stdout()
     def test_reshape_matmul_reshape_dynamic_1(self):
         model = oh.make_model(
             oh.make_graph(
@@ -352,7 +353,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             optimization_options=OptimizationOptions(
-                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"], verbose=10
             ),
             infer_shapes_options=True,
         )
