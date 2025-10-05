@@ -71,11 +71,31 @@ def torch_export(
 
         from onnx_diagnostic.export.dynamic_shapes import CoupleInputsDynamicShapes
 
-        if not kws and len(ds) == 1 and len(ds[0]) == len(ags):
+        if not kws and isinstance(ds, tuple) and len(ds) == 1 and len(ds[0]) == len(ags):
             ds = ds[0]
+        if (
+            not kws
+            and isinstance(ds, dict)
+            and len(ags) == 1
+            and all(isinstance(k, int) for k in ds)
+        ):
+            ds = (ds,)
 
-        cpl = CoupleInputsDynamicShapes(ags, kws, ds)
-        backed_size_oblivious = cpl.invalid_dimensions_for_export()
+        if not ds or (ags and None in ags):
+            backed_size_oblivious = False
+        else:
+            try:
+                cpl = CoupleInputsDynamicShapes(ags, kws, ds)
+                backed_size_oblivious = cpl.invalid_dimensions_for_export()
+            except AssertionError as e:
+                from onnx_diagnostic.helpers import string_type
+
+                raise AssertionError(
+                    f"Unable to guess backed_size_oblivious with "
+                    f"ags={string_type(ags,with_shape=True)}, "
+                    f"kws={string_type(kws,with_shape=True)}, "
+                    f"ds={string_type(ds,with_shape=True)}"
+                ) from e
         if verbose:
             print(f"[torch_export] inferred backed_size_oblivious={backed_size_oblivious!r}")
 
