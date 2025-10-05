@@ -4,6 +4,10 @@ import logging
 import os
 import unittest
 import onnx
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
+from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+from onnx_diagnostic.torch_export_patches import torch_export_patches
+from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -154,14 +158,14 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
         self._untrained_export("custom-dec", "Phi2LM_1Layer", verbose=1, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_custom_tiny_llm_cpu(self):
         self._untrained_export("custom", "TinyLLM", verbose=1, debug=False)
 
@@ -176,7 +180,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.9")
     @requires_transformers("4.49.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_export_cpu_dynamic(self):
         self._untrained_export(
             "export-nostrict",
@@ -190,7 +194,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_export_cpu_diag(self):
         self._untrained_export(
             "export-nostrict",
@@ -204,7 +208,22 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
+    def test_export_tiny_llm(self):
+        import torch
+
+        data = get_untrained_model_with_inputs("arnir0/Tiny-LLM", verbose=0)
+        model, inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        expected = model(**torch_deepcopy(inputs))
+        with torch_export_patches(patch_transformers=True):
+            ep = torch.export.export(model, (), kwargs=inputs, dynamic_shapes=use_dyn_not_str(ds))
+        got = ep.module()(**inputs)
+        self.assertEqualArray(expected, got)
+
+    @ignore_warnings((DeprecationWarning, UserWarning))
+    @requires_torch("2.7.9999")
+    @requires_transformers("4.49.9999")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_export_cpu_custom(self):
         self._untrained_export(
             "custom",
@@ -218,7 +237,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_export_cpu_custom_sdpa(self):
         self._untrained_export(
             "custom",
@@ -233,7 +252,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.49.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_export_cpu_custom_torchrt(self):
         self._untrained_export(
             "custom",
@@ -249,7 +268,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.55.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_export_cpu_whisper(self):
         self._untrained_export(
             "export-nostrict",
@@ -263,7 +282,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.55.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_custom_cpu_whisper(self):
         self._untrained_export(
             "custom",
@@ -279,7 +298,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")
     @requires_transformers("4.55.9999")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_custom_cpu_phi35(self):
         self._untrained_export(
             "custom",
