@@ -830,6 +830,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             constant_size=constant_size,
             constant_fusing=False,
             remove_identity=False,
+            remove_duplicated_shape=False,
             patterns=None,
         )
         g = GraphBuilder(
@@ -6530,6 +6531,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         return gro.optimize(
             max_iter=self.optimization_options.max_iter,
             remove_identity=self.optimization_options.remove_identity,
+            remove_duplicated_shape=self.optimization_options.remove_duplicated_shape,
             stop_after=self.optimization_options.stop_after,
             recursive=recursive,
         )
@@ -7448,6 +7450,32 @@ class GraphBuilder(_GraphBuilderRuntime):
         # results
         self._refresh_values_cache()
         return removed, added
+
+    def remove_duplicated_shape_nodes(self):
+        """
+        Replaces duplicated operator Shape.
+        If one of them return the same output, it is replace by an identity node.
+        """
+        cache = {}
+        changes = {}
+        for i, node in enumerate(self.nodes):
+            if node.op_type == "Shape" and node.domain == "":
+                value = self.value_as_shape(node.output[0])
+                if value is not None:
+                    if value not in cache:
+                        cache[value] = node.output[0]
+                    else:
+                        changes[i] = oh.make_node(
+                            "Identity",
+                            [cache[value]],
+                            [node.output[0]],
+                            name="remove_duplicated_shape_nodes",
+                            doc_string=node.doc_string,
+                        )
+        if changes:
+            for i, n in changes.items():
+                self.nodes[i] = n
+        return len(changes), len(changes)
 
     def _position_msg(
         self, nodes: List[NodeProto], around: Optional[Tuple[int, int]] = None

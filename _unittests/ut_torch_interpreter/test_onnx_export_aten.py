@@ -15,6 +15,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnx_diagnostic,
     requires_torch,
     ignore_warnings,
+    hide_stdout,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -1817,6 +1818,7 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-2)
 
     @requires_onnx_diagnostic("0.7.14")
+    @hide_stdout()
     def test_index_Tensor_21_2_oblivious(self):
         import torch
 

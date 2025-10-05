@@ -317,6 +317,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @hide_stdout()
     def test_reshape_matmul_reshape_dynamic_1(self):
         model = oh.make_model(
             oh.make_graph(
@@ -352,7 +353,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             optimization_options=OptimizationOptions(
-                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"],
+                patterns=["Cast", "ReshapeMatMulReshape", "UnsqueezeUnsqueeze"], verbose=10
             ),
             infer_shapes_options=True,
         )
@@ -6468,11 +6469,67 @@ class TestGraphPatternOptimization(ExtTestCase):
         gr = GraphBuilder(
             model,
             infer_shapes_options=True,
-            optimization_options=OptimizationOptions(patterns=["SameChildren"], verbose=0),
+            optimization_options=OptimizationOptions(
+                patterns=["SameChildren"], verbose=0, remove_duplicated_shape=False
+            ),
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
             ["Shape", "Shape", "Expand", "Expand", "Mul"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["ShapeBasedSameChildren"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Shape", "Expand", "Mul"], [n.op_type for n in opt_onx.graph.node])
+
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @hide_stdout()
+    def test_shape_based_same_children_remove_duplicated_shape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Shape", ["X"], ["sh1"]),
+                    oh.make_node("Shape", ["X"], ["sh2"]),
+                    oh.make_node("Expand", ["Y", "sh1"], ["y1"]),
+                    oh.make_node("Expand", ["Y", "sh2"], ["y2"]),
+                    oh.make_node("Mul", ["y1", "y2"], ["Z"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2, 3, 4]), _mkv_("Y", TFLOAT, ["a", 1, 3, 4])],
+                [_mkv_("Z", TFLOAT, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {"X": self._range(2, 3, 4), "Y": self._range(1, 3, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SameChildren"],
+                remove_duplicated_shape=True,
+                verbose=10,
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Shape", "Expand", "Mul"],
             [n.op_type for n in opt_onx.graph.node],
         )
 
