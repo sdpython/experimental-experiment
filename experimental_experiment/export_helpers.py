@@ -33,7 +33,6 @@ def torch_export(
     or not. It can be ``'auto'`` to let select automatically the best
     mode. It can be ``'half'`` to disable some non oblivious exceptions.
     """
-
     if backed_size_oblivious == "half":
         if verbose:
             print(f"[torch_export] backed_size_oblivious={backed_size_oblivious!r}")
@@ -59,6 +58,22 @@ def torch_export(
     if backed_size_oblivious == "auto":
         if verbose:
             print(f"[torch_export] backed_size_oblivious={backed_size_oblivious!r}")
+
+        if (
+            not kwargs
+            and isinstance(dynamic_shapes, tuple)
+            and len(dynamic_shapes) == 1
+            and len(dynamic_shapes[0]) == len(args)
+        ):
+            dynamic_shapes = dynamic_shapes[0]
+        if (
+            not kwargs
+            and isinstance(dynamic_shapes, dict)
+            and len(args) == 1
+            and all(isinstance(k, int) for k in dynamic_shapes)
+        ):
+            dynamic_shapes = (dynamic_shapes,)
+
         if not dynamic_shapes:
             # Unable to predict, calling the second recursively
             # to let the stacktrace keep a trace of it.
@@ -103,21 +118,6 @@ def torch_export(
 
         from onnx_diagnostic.export.dynamic_shapes import CoupleInputsDynamicShapes
 
-        if (
-            not kwargs
-            and isinstance(dynamic_shapes, tuple)
-            and len(dynamic_shapes) == 1
-            and len(dynamic_shapes[0]) == len(args)
-        ):
-            dynamic_shapes = dynamic_shapes[0]
-        if (
-            not kwargs
-            and isinstance(dynamic_shapes, dict)
-            and len(args) == 1
-            and all(isinstance(k, int) for k in dynamic_shapes)
-        ):
-            dynamic_shapes = (dynamic_shapes,)
-
         if not dynamic_shapes or (args and None in args):
             backed_size_oblivious = False
         else:
@@ -133,6 +133,16 @@ def torch_export(
                     f"kwargs={string_type(kwargs,with_shape=True)}, "
                     f"dynamic_shapes={string_type(dynamic_shapes,with_shape=True)}"
                 ) from e
+
+        if (
+            not kwargs
+            and isinstance(args, tuple)
+            and isinstance(dynamic_shapes, tuple)
+            and dynamic_shapes
+            and (dynamic_shapes[0] is None or isinstance(dynamic_shapes[0], dict))
+        ):
+            dynamic_shapes = (dynamic_shapes,)
+
         if verbose:
             print(f"[torch_export] inferred backed_size_oblivious={backed_size_oblivious!r}")
 
