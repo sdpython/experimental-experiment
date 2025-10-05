@@ -7459,17 +7459,18 @@ class GraphBuilder(_GraphBuilderRuntime):
         cache = {}
         changes = {}
         for i, node in enumerate(self.nodes):
-            if node.op_type == "Shape":
+            if node.op_type == "Shape" and node.domain == "":
                 value = self.value_as_shape(node.output[0])
                 if value is not None:
                     if value not in cache:
                         cache[value] = node.output[0]
                     else:
-                        changes[i] = self.make_node(
+                        changes[i] = oh.make_node(
                             "Identity",
                             [cache[value]],
                             [node.output[0]],
                             name="remove_duplicated_shape_nodes",
+                            doc_string=node.doc_string,
                         )
         if changes:
             for i, n in changes.items():
