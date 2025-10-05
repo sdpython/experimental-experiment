@@ -22,9 +22,10 @@ def torch_export(
     dynamic_shapes: Optional[Union[Dict[str, Any], Tuple[Any, ...], List[Any]]] = None,
     strict: bool = False,
     preserve_module_call_signature: Tuple[str, ...] = (),
-    prefer_deferred_runtime_asserts_over_guards: bool = False,
+    # prefer_deferred_runtime_asserts_over_guards: bool = False,  # torch==2.9
     backed_size_oblivious: Union[bool, str] = False,
     verbose: int = 0,
+    **other_kwargs,
 ):
     """
     Wrapper around :func:`torch.export.export`.
@@ -48,7 +49,7 @@ def torch_export(
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
                 preserve_module_call_signature=preserve_module_call_signature,
-                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
+                **other_kwargs,
             )
 
         _tds._guard_or = _torch_guard_or
@@ -71,9 +72,9 @@ def torch_export(
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
                 preserve_module_call_signature=preserve_module_call_signature,
-                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                 backed_size_oblivious=False,
                 verbose=verbose,
+                **other_kwargs,
             )
 
         if isinstance(dynamic_shapes, tuple):
@@ -92,9 +93,9 @@ def torch_export(
                     dynamic_shapes=dynamic_shapes,
                     strict=strict,
                     preserve_module_call_signature=preserve_module_call_signature,
-                    prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                     backed_size_oblivious=False,
                     verbose=verbose,
+                    **other_kwargs,
                 )
             assert not kwargs, (
                 f"args and kwargs are specified for this call and dynamic_shapes "
@@ -146,7 +147,7 @@ def torch_export(
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
                 preserve_module_call_signature=preserve_module_call_signature,
-                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
+                **other_kwargs,
             )
         return ep
 
@@ -159,5 +160,5 @@ def torch_export(
         dynamic_shapes=dynamic_shapes,
         strict=strict,
         preserve_module_call_signature=preserve_module_call_signature,
-        prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
+        **other_kwargs,
     )
