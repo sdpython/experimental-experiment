@@ -1343,6 +1343,7 @@ class GraphBuilderPatternOptimization:
         max_iter=-1,
         remove_identity: bool = True,
         remove_unused: bool = True,
+        remove_duplicated_shape: bool = True,
         stop_after: int = -1,
         recursive: bool = True,
     ) -> List[Dict[str, Any]]:
@@ -1352,6 +1353,9 @@ class GraphBuilderPatternOptimization:
         :param max_iter: maximum number of iterations
         :param remove_identity: remove identity nodes, it is better to keep it True,
             not doing it might prevent other patterns to find a set of nodes to optimize
+        :param remove_unused: remove unused nodes
+        :param remove_duplicated_shape: remove duplicated operator shape
+            if they produce the same output
         :param sopt_after: stop after this number of replacements (to debug),
             -1 not to stop
         :param recursive: to overwrites the value provided by the options
@@ -1530,6 +1534,21 @@ class GraphBuilderPatternOptimization:
                     f"{self.builder._hash()}.optimize] done all: "
                     f"-{n_removed} +{n_added} nodes"
                 )
+
+            if remove_duplicated_shape:
+                # remove unnecessary identity nodes
+                begin = time.perf_counter()
+                id_removed, id_added = self.builder.remove_duplicated_shape_nodes()
+                statistics.append(
+                    dict(
+                        pattern="remove_duplicated_shape",
+                        iteration=it,
+                        added=id_added,
+                        removed=id_removed,
+                        time_in=time.perf_counter() - begin,
+                    )
+                )
+                self._check_graph(statistics, "remove_duplicated_shape", it, "B", self.verifies)
 
             if remove_identity and (it < 3 or "Identity" in added_types):
                 # remove unnecessary identity nodes

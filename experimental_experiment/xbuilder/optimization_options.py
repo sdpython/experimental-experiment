@@ -14,6 +14,8 @@ class OptimizationOptions:
     :param constant_size: all node Constant above this threshold should be
         defined as initializer
     :param remove_identity: remove identity nodes
+    :param remove_duplicated_shape: remove duplicated operator Shape
+        if they produce the same output
     :param patterns: list of pattern optimization to apply to the graph,
         it looks a a specific subsequence of nodes in a graph
         and do some replacements,
@@ -68,6 +70,7 @@ class OptimizationOptions:
         constant_size: int = 1024,
         constant_fusing: bool = True,
         remove_identity: bool = True,
+        remove_duplicated_shape: bool = True,
         patterns: Union[str, List["PatternOptimization"]] = "default",  # noqa: F821
         max_iter: int = -1,
         recursive: bool = True,
@@ -83,6 +86,7 @@ class OptimizationOptions:
             set(constant_folding) if isinstance(constant_folding, tuple) else constant_folding
         )
         self.remove_identity = remove_identity
+        self.remove_duplicated_shape = remove_duplicated_shape
         self.constant_size = constant_size
         self.constant_fusing = constant_fusing
         self.stop_after = stop_after
