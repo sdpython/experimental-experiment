@@ -105,7 +105,13 @@ def torch_export(
 
         ags, kws, ds = args, kwargs, dynamic_shapes
 
-        if ags and isinstance(ds, tuple) and len(ds) == 1 and len(ds[0]) == len(ags):
+        if (
+            ags
+            and isinstance(ds, tuple)
+            and len(ds) == 1
+            and len(ds[0]) == len(ags)
+            and isinstance(ds[0], tuple)
+        ):
             ds = ds[0]
 
         if not ds or (args and None in ags):
