@@ -94,6 +94,7 @@ class GraphBuilderPatternOptimization:
             if self.verbose:
                 print(f"[GraphBuilderPatternOptimization] dropping patterns {todrop}")
             self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
+        self._debug_step = os.environ.get("PATTERNSTEP", "0") in (1, "1", "True", True, "true")
 
     def has_processor(self, processor: str) -> bool:
         """Checks the process is on the list of used processors."""
@@ -1467,7 +1468,7 @@ class GraphBuilderPatternOptimization:
         current_priority_index = 0
         for it in range(max_iter):
             if not continue_optimization or stop_after_cond:
-                if self.verbose > 0:
+                if self.verbose > 0 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-"
                         f"{self.builder._hash()}.optimize] stops at iteration {it}: "
@@ -1475,7 +1476,7 @@ class GraphBuilderPatternOptimization:
                     )
                 break
             continue_optimization = False
-            if self.verbose > 0:
+            if self.verbose > 0 or self._debug_step:
                 print(
                     f"[GraphBuilderPatternOptimization-"
                     f"{self.builder._hash()}.optimize] iteration {it}: "
@@ -1484,10 +1485,10 @@ class GraphBuilderPatternOptimization:
                 )
 
             # detects patterns
-            if self.verbose >= 10:
+            if self.verbose >= 10 or self._debug_step:
                 print(
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
-                    f"it={it}C{continue_optimization} - matching_step"
+                    f"it={it}C{_b(continue_optimization)} - matching_step"
                 )
             found, matches, durations, cont_opt = self._optimize_matching_step(
                 it,
@@ -1498,10 +1499,17 @@ class GraphBuilderPatternOptimization:
                 priorities,
                 current_priority_index,
             )
+
+            if self.verbose >= 10 or self._debug_step:
+                print(
+                    f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
+                    f"it={it}C{_b(continue_optimization)} - matching_step done {len(matches)}"
+                )
+
             if not cont_opt:
                 stop_after_cond = True
 
-            if self.verbose > 0 and matches:
+            if (self.verbose > 0 or self._debug_step) and matches:
                 if durations:
                     rev = max([(v, k) for k, v in durations.items()])
                     revs = f"{rev[-1]}:{rev[0]:.3f}"
@@ -1533,7 +1541,7 @@ class GraphBuilderPatternOptimization:
                     )
 
             # applies patterns (they must be disjoined)
-            if self.verbose >= 10:
+            if self.verbose >= 10 or self._debug_step:
                 print(
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - apply_step with "
@@ -1545,14 +1553,14 @@ class GraphBuilderPatternOptimization:
             n_applied += len(applied_patterns)
             if applied_patterns:
                 continue_optimization = True
-            if self.verbose >= 10:
+            if self.verbose >= 10 or self._debug_step:
                 print(
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - done with "
                     f"{len(applied_patterns)} applied patterns"
                 )
 
-            if self.verbose > 2:
+            if self.verbose > 2 or self._debug_step:
                 print(
                     f"[GraphBuilderPatternOptimization-"
                     f"{self.builder._hash()}.optimize] done all: "
@@ -1560,7 +1568,7 @@ class GraphBuilderPatternOptimization:
                 )
 
             if remove_duplicated_shape:
-                if self.verbose >= 10:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - "
@@ -1581,15 +1589,15 @@ class GraphBuilderPatternOptimization:
                 self._check_graph(statistics, "remove_duplicated_shape", it, "B", self.verifies)
                 if id_removed > 0:
                     continue_optimization = True
-                if self.verbose >= 10:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - "
-                        f"remove_duplicated_shape done"
+                        f"remove_duplicated_shape done -{n_removed} +{n_added} nodes"
                     )
 
-            if remove_identity and (it < 3 or "Identity" in added_types):
-                if self.verbose >= 10:
+            if remove_identity:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_identity"
@@ -1609,14 +1617,15 @@ class GraphBuilderPatternOptimization:
                 self._check_graph(statistics, "remove_identity", it, "B", self.verifies)
                 if id_removed > 0:
                     continue_optimization = True
-                if self.verbose >= 10:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_identity done"
+                        f" -{n_removed} +{n_added} nodes"
                     )
 
             if remove_unused:
-                if self.verbose >= 10:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_unused"
@@ -1636,10 +1645,11 @@ class GraphBuilderPatternOptimization:
                 self._check_graph(statistics, "remove_unused", it, "B", self.verifies)
                 if id_removed > 0:
                     continue_optimization = True
-                if self.verbose >= 10:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - remove_unused done"
+                        f" -{n_removed} +{n_added} nodes"
                     )
 
             # rebuild the graph structure
@@ -1658,12 +1668,12 @@ class GraphBuilderPatternOptimization:
             # If SameChildrenPattern is detected, it could go quite far, so
             # let's speed it up by running a short loop.
             if applied_patterns_names & same_children_pattern_names:
-                if self.verbose >= 10:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - same_pattern"
                     )
-                if self.verbose > 0:
+                if self.verbose > 0 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-"
                         f"{self.builder._hash()}.optimize] reapply "
@@ -1716,7 +1726,7 @@ class GraphBuilderPatternOptimization:
                 )
                 if p_applied > 0:
                     continue_optimization = True
-                if self.verbose > 0:
+                if self.verbose > 0 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-"
                         f"{self.builder._hash()}.optimize] n_added={n_added}, "
@@ -1724,7 +1734,7 @@ class GraphBuilderPatternOptimization:
                         f"applied patterns, "
                         f"{len(self.builder.nodes)} nodes left with {itsame} iterations"
                     )
-                if self.verbose >= 10:
+                if self.verbose >= 10 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                         f"it={it}C{_b(continue_optimization)}F{_b(found)} - same_pattern done"
@@ -1738,7 +1748,7 @@ class GraphBuilderPatternOptimization:
                 current_priority_index += 1
                 if current_priority_index >= len(priorities) and not continue_optimization:
                     # There is priority left to explore.
-                    if self.verbose > 0:
+                    if self.verbose > 0 or self._debug_step:
                         print(
                             f"[GraphBuilderPatternOptimization-"
                             f"{self.builder._hash()}.optimize] stops "
@@ -1750,14 +1760,14 @@ class GraphBuilderPatternOptimization:
                     current_priority_index = len(priorities) - 1
                 else:
                     continue_optimization = True
-                if self.verbose > 0:
+                if self.verbose > 0 or self._debug_step:
                     print(
                         f"[GraphBuilderPatternOptimization-"
                         f"{self.builder._hash()}.optimize] increase priority "
                         f"to {priorities[current_priority_index]}"
                     )
 
-            if self.verbose >= 10:
+            if self.verbose >= 10 or self._debug_step:
                 print(
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - next"
