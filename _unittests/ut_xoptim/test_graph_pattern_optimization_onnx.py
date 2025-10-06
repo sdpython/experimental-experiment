@@ -2260,6 +2260,41 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_same_children_pattern_from_input(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xy1"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["X"], ["xy2"], to=TensorProto.FLOAT16),
+                    oh.make_node("Add", ["xy1", "xy2"], ["Z"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2, 3, 4])],
+                [_mkv_("Z", TFLOAT16, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {"X": self._range(2, 3, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SameChildrenFromInput"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Cast", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
     def test_same_children_pattern_3(self):
         model = oh.make_model(
             oh.make_graph(

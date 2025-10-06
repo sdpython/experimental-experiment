@@ -7,6 +7,7 @@ from ..patterns_api import PatternOptimization, MatchResult
 from .onnx_any import (
     IdentityPattern,
     SameChildrenPattern,
+    SameChildrenFromInputPattern,
     ShapeBasedIdentityPattern,
     ShapeBasedSameChildrenPattern,
 )
@@ -197,6 +198,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ReshapeReshapePattern(verbose=verbose),
         RotaryEmbeddingPattern(verbose=verbose),
         SameChildrenPattern(verbose=verbose),
+        SameChildrenFromInputPattern(verbose=verbose),
         SequenceConstructAtPattern(verbose=verbose),
         SliceSlicePattern(verbose=verbose),
         SlicesSplitPattern(verbose=verbose),

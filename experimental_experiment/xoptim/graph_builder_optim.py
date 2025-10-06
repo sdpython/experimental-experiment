@@ -1454,7 +1454,8 @@ class GraphBuilderPatternOptimization:
         same_children_pattern_names = {
             p.__class__.__name__
             for p in self.patterns
-            if p.__class__.__name__ in {"SameChildrenPattern", "ShapedBasedSameChildren"}
+            if p.__class__.__name__
+            in {"SameChildrenPattern", "ShapedBasedSameChildren", "SameChildrenFromInputPattern"}
         }
         if same_children_pattern_names and self.verbose > 0:
             print(
