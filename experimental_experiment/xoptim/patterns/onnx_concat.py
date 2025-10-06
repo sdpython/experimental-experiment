@@ -117,6 +117,7 @@ class ConcatTwiceUnaryPattern(PatternOptimization):
     """Sin(Concat(x,x)) -> Concat(Sin(x), Sin(x))."""
 
     _unary_types = unary_like_op_types()
+    _binary_types_scalar_cst = {"Mul", "Add", "Div", "Sub"}
 
     @classmethod
     def _valid_node(
@@ -133,6 +134,8 @@ class ConcatTwiceUnaryPattern(PatternOptimization):
                 axis = g.get_attribute(concat, "axis").i
                 if axis == -1 and cst != -1 and cst < g.get_rank(unary.input[0]):
                     return True
+        if unary.op_type in cls._binary_types_scalar_cst and g.is_constant_scalar(unary.input[1]):
+            return True
         return False
 
     def match(
