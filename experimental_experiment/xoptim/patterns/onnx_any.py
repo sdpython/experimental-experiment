@@ -39,7 +39,9 @@ class SameChildrenPattern(PatternOptimization):
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) <= 1:
             return self.none()
+        return self._match_with_nodes(g, node, next_nodes)
 
+    def _match_with_nodes(self, g, node, next_nodes):
         if len(next_nodes) == 2:
             n1, n2 = next_nodes
             if n1.op_type != n2.op_type or n1.op_type == "Identity":
@@ -124,6 +126,29 @@ class SameChildrenPattern(PatternOptimization):
                     )
                 )
         return new_nodes
+
+
+class SameChildrenFromInputPattern(SameChildrenPattern):
+    """
+    Checks there is no duplicated node doing the same than another
+    one beside and taking a model input as input.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if not node.input:
+            return self.none()
+        node_before = g.node_before(node.input[0])
+        if node_before is not None:
+            return self.none()
+        next_nodes = g.next_nodes(node.input[0])
+        if len(next_nodes) <= 1:
+            return self.none()
+        return self._match_with_nodes(g, node, next_nodes)
 
 
 class ShapeBasedSameChildrenPattern(PatternOptimization):
