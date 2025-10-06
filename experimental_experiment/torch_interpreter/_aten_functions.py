@@ -2211,7 +2211,7 @@ def aten_diff(
     assert isinstance(
         dim, int
     ), f"diff not implemented for type(dim)={type(dim)}{g.get_debug_msg()}"
-    assert prepend is None, f"diff not implemented for prepent={prepend!r}{g.get_debug_msg()}"
+    assert prepend is None, f"diff not implemented for prepend={prepend!r}{g.get_debug_msg()}"
     assert append is None, f"diff not implemented for append={append!r}{g.get_debug_msg()}"
 
     diff_input = x
