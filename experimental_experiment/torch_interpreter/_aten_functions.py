@@ -4868,18 +4868,119 @@ def aten_index_put(
             f"{g.get_debug_msg()}"
         )
 
+    # generic simple case: all indices have rank 1
+    rk1s = []
+    for ind in indices:
+        rk1s.append(
+            ind is None
+            or (
+                g.has_rank(ind)
+                and g.get_rank(ind) == 1
+                and g.get_type(ind) in {TensorProto.INT64, TensorProto.INT32}
+            )
+        )
+
+    assert all(rk1s) and len(rk1s) == g.get_rank(x), (
+        f"input_put not implemented for indices={indices}, "
+        f"where rk1s={rk1s}, rank(x)={g.get_rank(x)}{g.get_debug_msg()}"
+    )
+    shape_x = g.op.Shape(x, name=name)
+    exped = []
+    fixed = []
+    reshape_value_shape2 = []
+    expand_value_shape = []
+    for i, ind in enumerate(indices):
+        ind, expanded = _make_range_or_cast(ind, shape_x, False, i, name)
+        if expanded:
+            exped.append((i, ind))
+            expand_value_shape.append(g.op.Shape(x, start=i, end=i + 1, name=name))
+            reshape_value_shape2.append(g.ONE)
+        else:
+            expand_value_shape.append(g.ONE)
+            reshape_value_shape2.append(g.op.Shape(ind, name=name))
+            fixed.append((i, ind))
+
+    reshape_value_shape1 = np.ones(len(indices), dtype=np.int64)
+    if fixed:
+        reshape_value_shape1[fixed[-1][0]] = -1
+    if all(isinstance(t, np.ndarray) for t in reshape_value_shape2):
+        reshape_value_shape2 = np.hstack(reshape_value_shape2)
+    if all(isinstance(t, np.ndarray) for t in expand_value_shape):
+        expand_value_shape = np.hstack(expand_value_shape)
+    if len(fixed) <= 1:
+        reshape_value_shape1 = None
+
+    name = f"{name}G{g.get_rank(x)}f{len(fixed)}e{len(exped)}G"
+
+    def _mkstride(g, x, i, name):
+        if i >= g.get_rank(x) - 1:
+            return g.ONE
+        if i == g.get_rank(x) - 2:
+            return g.op.Shape(x, start=i + 1, name=name)
+        return g.op.ReduceProd(g.op.Shape(x, start=i + 1, name=name), name=name, keepdims=1)
+
+    shape = [1] * (g.get_rank(x) + 1)
+    mfixed = []
+    if fixed:
+        new_shape = np.array(shape, dtype=np.int64)
+        new_shape[-1] = -1
+        mfixed = [
+            g.op.Reshape(g.op.Mul(_mkstride(g, x, i, name), f), new_shape, name=name)
+            for i, f in fixed
+        ]
+
+    mexped = []
+    for i, e in exped:
+        new_shape = np.array(shape, dtype=np.int64)
+        new_shape[i] = -1
+        mexped.append(g.op.Reshape(g.op.Mul(_mkstride(g, x, i, name), e), new_shape, name=name))
+
+    # final sum
+    unflat = None
+    for a in [*mfixed, *mexped]:
+        if unflat is None:
+            unflat = a
+            continue
+        unflat = g.op.Add(unflat, a, name=name)
+
+    # value_shape
+    expanded_values = values
+    expanded_values = g.op.Reshape(
+        expanded_values,
+        (
+            g.op.Concat(*reshape_value_shape1, axis=0, name=name)
+            if isinstance(reshape_value_shape1, list)
+            else reshape_value_shape1
+        ),
+        name=name,
+    )
+    expanded_values = g.op.Expand(
+        expanded_values,
+        (
+            g.op.Concat(*expand_value_shape, axis=0, name=name)
+            if isinstance(expand_value_shape, list)
+            else expand_value_shape
+        ),
+        name=name,
+    )
+    flat_ind = g.op.Reshape(unflat, g.MINUS_ONE, name=name)
+    expanded_values = g.op.Reshape(expanded_values, g.MINUS_ONE, name=name)
+    flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+    scat_kwargs = {"reduction": "add"} if accumulate else {}
+    flat_up_x = g.op.ScatterElements(flat_x, flat_ind, expanded_values, name=name, **scat_kwargs)
+
+    g.set_type(flat_up_x, g.get_type(x))
+    res = g.op.Reshape(flat_up_x, shape_x, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+    """
     if len(indices) == 3:
         # copy[index, middle, indices] = update.transpose(1, 0)
         # index_put.default(args = (%clone, [%kv_index, %arange], %view), kwargs = {})
         ind0, ind1, ind2 = indices
         if (
             (
-                ind0 is None
-                or (
-                    g.has_rank(ind0)
-                    and g.get_rank(ind0) == 1
-                    and g.get_type(ind0) in {TensorProto.INT64, TensorProto.INT32}
-                )
             )
             and (
                 ind1 is None
@@ -4940,7 +5041,8 @@ def aten_index_put(
             ind1, expanded1 = _make_range_or_cast(ind1, shape_x, static_shape, 1, name)
             ind2, expanded2 = _make_range_or_cast(ind2, shape_x, static_shape, 2, name)
 
-            if expanded0 or expanded1 or expanded2:
+            expands = int(expanded0) + int(expanded1) + int(expanded2)
+            if expands >= 2:
                 ind0_ = g.op.Reshape(ind0, np.array([-1, 1, 1], dtype=np.int64), name=name)
                 ind1_ = g.op.Reshape(ind1, np.array([1, -1, 1], dtype=np.int64), name=name)
                 ind2_ = g.op.Reshape(ind2, np.array([1, 1, -1], dtype=np.int64), name=name)
@@ -4981,7 +5083,33 @@ def aten_index_put(
                     ind2_,
                     name=name,
                 )
-            else:
+            elif expands == 1 and expanded0:
+                ind0_ = g.op.Reshape(ind0, np.array([-1, 1], dtype=np.int64), name=name)
+                ind12 = g.op.Reshape(
+                    g.op.Add(
+                        g.op.Mul(ind1, stride_2, name=name),
+                        ind2,
+                        name=name,
+                    ),
+                    np.array([1, -1]),
+                    name=name,
+                )
+                indices_3d = g.op.Add(
+                    g.op.Mul(ind0_, stride_1, name=name),
+                    ind12,
+                    name=name,
+                )
+                expanded = g.op.Expand(
+                    g.op.Reshape(values, np.array([1, -1], dtype=np.int64), name=name),
+                    g.op.Concat(
+                        g.op.Shape(x, start=0, end=1, name=name),
+                        np.array([1, 1], dtype=np.int64),
+                        axis=0,
+                        name=name,
+                    ),
+                    name=name,
+                )
+            elif expands == 0:
                 expanded = values
                 indices_3d = g.op.Add(
                     g.op.Add(
@@ -4991,6 +5119,11 @@ def aten_index_put(
                     ),
                     ind2,
                     name=name,
+                )
+            else:
+                raise NotImplementedError(
+                    f"Case expands={(expanded0, expanded1, expanded2)} "
+                    f"not supported yet{g.get_debug_msg()}"
                 )
 
             indices_1d = g.op.GatherElements(
@@ -5265,6 +5398,7 @@ def aten_index_put(
     raise AssertionError(
         f"No implementation for index_put when indices={indices}{g.get_debug_msg()}"
     )
+    """
 
 
 def aten_index_put_(
