@@ -1887,7 +1887,6 @@ class TestOnnxExportAten(ExtTestCase):
                 index2 = torch.tensor([3, 4], dtype=torch.int64)
                 feeds = dict(zip(["update", "index1", "index2"], (update, index1, index2)))
                 expected = Model(dimension)(**feeds)
-                print(expected)
                 onx = to_onnx(
                     Model(dimension),
                     kwargs=feeds,
@@ -1901,9 +1900,8 @@ class TestOnnxExportAten(ExtTestCase):
                 )
                 self.dump_onnx(f"test_index_put_dynamic_{dimension}.onnx", onx)
                 feeds = {k: v.detach().cpu().numpy() for k, v in feeds.items()}
-                ref = ExtendedReferenceEvaluator(onx, verbose=10)
+                ref = ExtendedReferenceEvaluator(onx, verbose=0)
                 got = ref.run(None, feeds)[0]
-                print(got)
                 self.assertEqualArray(expected, got, atol=1e-2)
 
                 import onnxruntime

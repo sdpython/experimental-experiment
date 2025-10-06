@@ -268,6 +268,9 @@ class _GraphBuilderRuntime:
         feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
         x = feeds[node.input[0]]
+        if len(node.input) == 1:
+            # No axis.
+            return [x.squeeze()]
         axis = feeds[node.input[1]]
         if len(axis.shape) == 0:
             return [np.squeeze(x, (int(axis),))]
