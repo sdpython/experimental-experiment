@@ -4691,7 +4691,7 @@ def aten_index_put(
         return (
             g.op.Range(
                 g.ZERO_NO_DIM,
-                g.op.Gather(shape_x, np.array([dim], dtype=np.int64), name=name),
+                g.op.SqueezeAnyOpset(g.op.Shape(x, start=dim, end=dim + 1, name=name), name=name),
                 g.ONE_NO_DIM,
                 name=name,
             ),
@@ -4945,15 +4945,16 @@ def aten_index_put(
 
     # value_shape
     expanded_values = values
-    expanded_values = g.op.Reshape(
-        expanded_values,
-        (
-            g.op.Concat(*reshape_value_shape1, axis=0, name=name)
-            if isinstance(reshape_value_shape1, list)
-            else reshape_value_shape1
-        ),
-        name=name,
-    )
+    if reshape_value_shape1 is not None:
+        expanded_values = g.op.Reshape(
+            expanded_values,
+            (
+                g.op.Concat(*reshape_value_shape1, axis=0, name=name)
+                if isinstance(reshape_value_shape1, list)
+                else reshape_value_shape1
+            ),
+            name=name,
+        )
     expanded_values = g.op.Expand(
         expanded_values,
         (
