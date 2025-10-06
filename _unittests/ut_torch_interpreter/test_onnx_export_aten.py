@@ -1704,6 +1704,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*inputs)
 
+        # static
         onx = to_onnx(model, inputs, dynamic_shapes=({3: "M"}, {3: "N"}), verbose=0)
         self.dump_onnx("test_getitem_index_put1.onnx", onx)
         feeds = dict(zip(["x", "value"], [x.detach().cpu().numpy() for x in inputs]))
@@ -1853,6 +1854,63 @@ class TestOnnxExportAten(ExtTestCase):
         )
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
+
+    def test_index_put_dynamic(self):
+        import torch
+
+        for dimension in [3, 4, 2]:
+            with self.subTest(dimension=dimension):
+
+                class Model(torch.nn.Module):
+
+                    def __init__(self, dimension):
+                        super().__init__()
+                        self.params = torch.zeros(
+                            (4, 5)
+                            if dimension == 2
+                            else ((2, 4, 5) if dimension == 3 else (1, 1, 4, 5))
+                        )
+                        self.dimension = dimension
+
+                    def forward(self, update, index1, index2):
+                        copy = self.params.clone()
+                        if self.dimension == 2:
+                            copy[index1, index2] = update
+                        elif self.dimension == 3:
+                            copy[:, index1, index2] = update
+                        else:
+                            copy[:, :, index1, index2] = update
+                        return copy
+
+                update = (torch.arange(2) + 10).reshape((2,)).to(torch.float32)
+                index1 = torch.tensor([1, 2], dtype=torch.int64)
+                index2 = torch.tensor([3, 4], dtype=torch.int64)
+                feeds = dict(zip(["update", "index1", "index2"], (update, index1, index2)))
+                expected = Model(dimension)(**feeds)
+                onx = to_onnx(
+                    Model(dimension),
+                    kwargs=feeds,
+                    dynamic_shapes={
+                        "update": {0: "dn"},
+                        "index1": {0: "dn"},
+                        "index2": {0: "dn"},
+                    },
+                    verbose=0,
+                    options=OptimizationOptions(patterns=None, verbose=0),
+                )
+                self.dump_onnx(f"test_index_put_dynamic_{dimension}.onnx", onx)
+                feeds = {k: v.detach().cpu().numpy() for k, v in feeds.items()}
+                ref = ExtendedReferenceEvaluator(onx, verbose=0)
+                got = ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-2)
+
+                import onnxruntime
+
+                sess = onnxruntime.InferenceSession(
+                    onx.SerializeToString(), providers=["CPUExecutionProvider"]
+                )
+                got = sess.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-2)
 
     def test_cast_cast_float(self):
         import torch

@@ -1330,6 +1330,13 @@ class CustomTracer(torch.fx.Tracer):
                                 )
                             continue
 
+                    if not exc and node_target_name == "aten::index_put_":
+                        if verbose:
+                            print(
+                                f"[CustomTracer.remove_inplace] "
+                                f"unable to remove (9) {node_target_name!r}"
+                            )
+                        return -1
                     assert (
                         node_target_name in {"aten::copy_", "aten::fill_.Tensor"}
                         and len(node.args) == 2
