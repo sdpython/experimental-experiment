@@ -270,7 +270,7 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "SkipSimplifiedLayerNormalization" or node.domain != "com.microsoft":
+        if (node.op_type, node.domain) != ("SkipSimplifiedLayerNormalization", "com.microsoft"):
             return self.none()
         if (len(node.output) > 1 and node.output[1]) or (len(node.output) > 2 and node.output[2]):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -322,12 +322,85 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
                 )
 
         new_node = g.make_node(
-            "SkipSimplifiedLayerNormalization",
+            skip_simp_node.op_type,
             [*skip_simp_node.input[:2], cst_name],
             [mul_node.output[0], *skip_simp_node.output[1:]],
             name=f"{self.__class__.__name__}--{skip_simp_node.name}",
-            domain="com.microsoft",
+            domain=skip_simp_node.domain,
         )
         if skip_simp_node.attribute:
             new_node.attribute.extend(skip_simp_node.attribute)
+        return [new_node]
+
+
+class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
+    """
+    Replaces the sequence SimplifiedLayerNormalization + Mul
+    by SimplifiedLayerNormalization.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (node.op_type, node.domain) != ("SimplifiedLayerNormalization", ""):
+            return self.none()
+        if len(node.input) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        mul_nodes = g.next_nodes(node.output[0])
+        if len(mul_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        mul_node = mul_nodes[0]
+        if mul_node.op_type != "Mul" or mul_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        index_cst = 1 if mul_node.input[0] == node.output[0] else 0
+        if not g.has_shape(mul_node.input[index_cst]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_shape_renamed(node.input[1]) != g.get_shape_renamed(mul_node.input[index_cst]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(mul_node.input[index_cst]):
+            # not supported yet
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node, mul_node], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        simp_node: NodeProto,
+        mul_node: NodeProto,
+    ) -> List[NodeProto]:
+        index_cst = 1 if mul_node.input[0] == simp_node.output[0] else 0
+        cst_skip = g.get_computed_constant(simp_node.input[1])
+        if cst_skip.min() == cst_skip.max() == 1:
+            cst_name = mul_node.input[index_cst]
+        else:
+            cst2 = g.get_computed_constant(mul_node.input[index_cst])
+            if cst2.min() == cst2.max() == 1:
+                cst_name = simp_node.input[1]
+            else:
+                cst2 = g.get_computed_constant(mul_node.input[index_cst])
+                new_cst = cst_skip * cst2
+                cst_name = g.make_initializer(
+                    f"{simp_node.input[1]}__{mul_node.input[index_cst]}",
+                    new_cst,
+                    source=f"{self.__class__.__name__}.gamma",
+                )
+
+        new_node = g.make_node(
+            simp_node.op_type,
+            [simp_node.input[0], cst_name],
+            [mul_node.output[0], *simp_node.output[1:]],
+            name=f"{self.__class__.__name__}--{simp_node.name}",
+            domain=simp_node.domain,
+        )
+        if simp_node.attribute:
+            new_node.attribute.extend(simp_node.attribute)
         return [new_node]

@@ -41,6 +41,7 @@ def get_onnxruntime_patterns(
     # from .gather_grad import GatherGradPattern
     from .simplified_layer_normalization import (
         SimplifiedLayerNormalizationPattern,
+        SimplifiedLayerNormalizationMulPattern,
         SkipLayerNormalizationPattern,
         SkipSimplifiedLayerNormalizationPattern,
         SkipSimplifiedLayerNormalizationMulPattern,
@@ -64,6 +65,7 @@ def get_onnxruntime_patterns(
         # GatherGradPattern(verbose=verbose),
         ReshapeGemmPattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),
+        SimplifiedLayerNormalizationMulPattern(verbose=verbose),
         SkipLayerNormalizationPattern(verbose=verbose),
         SkipSimplifiedLayerNormalizationPattern(verbose=verbose),
         SkipSimplifiedLayerNormalizationMulPattern(verbose=verbose),
