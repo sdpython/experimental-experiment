@@ -52,6 +52,33 @@ class ReshapePattern(PatternOptimization):
         return [new_node]
 
 
+class ShapedBasedReshapePattern(ReshapePattern):
+    """Checks that a Reshape is really needed based on the input shape."""
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(node.input[1])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = tuple(cst)
+        if cst[-1] != -1 or set(cst[:-1]) != {0}:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) != len(cst):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+
 class ReduceReshapePattern(PatternOptimization):
     """
     Replaces the sequence Reduce* Reshape if reshape is only
@@ -166,6 +193,23 @@ class ReshapeReshapePattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if next_node.input[0] != node.output[0]:
             return self.none(node, inspect.currentframe().f_lineno)
+
+        if g.is_constant(next_node.input[1]) and g.is_constant(node.input[1]):
+            # handles the case where shape1 == (0, 0, a, b) and shape2 == (0, 0, -1)
+            cst1 = g.get_computed_constant(node.input[1])
+            cst2 = g.get_computed_constant(next_node.input[1])
+            if cst1 is None or cst2 is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            cst1 = tuple(cst1)
+            cst2 = tuple(cst2)
+            if cst1 and cst2 and cst1[0] == cst2[0]:
+                i = 0
+                while i < min(len(cst1), len(cst2)) and cst1[i] == cst2[i]:
+                    i += 1
+                expe = (0,) * i + (-1,)
+                if expe == cst2 and len(cst2) <= len(cst1):
+                    return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
+
         if g.is_constant(node.input[1]):
             cst = g.get_computed_constant(node.input[1])
             if -1 in cst.tolist():
@@ -175,6 +219,7 @@ class ReshapeReshapePattern(PatternOptimization):
                 cst = g.get_computed_constant(next_node.input[1])
                 if cst.min() <= 0:
                     return self.none(node, inspect.currentframe().f_lineno)
+
         if (
             not g.has_rank(node.input[0])
             or not g.has_rank(next_node.output[0])
@@ -194,6 +239,7 @@ class ReshapeReshapePattern(PatternOptimization):
         # If it is a constant that should be ok too.
         if not g.has_shape(node.input[0]) or not g.has_shape(next_node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
+
         if (
             g.is_constant(next_node.input[1])
             and not self._applicable_reshape(
@@ -236,7 +282,9 @@ class ReshapeReshapePattern(PatternOptimization):
         # something needs to change
         list_att = list(map(int, att))
         if list_att.count(0) > 1 or (-1 in list_att and 0 in list_att):
-            return None
+            if list_att[-1] != -1:
+                return None
+            return tuple(list_att)
         return tuple((-1 if s == 0 else s) for s in list_att)
 
     def apply(

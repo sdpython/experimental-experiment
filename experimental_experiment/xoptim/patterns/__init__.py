@@ -70,6 +70,7 @@ from .onnx_reshape import (
     ReshapeReshapePattern,
     ShapeBasedEditDistanceReshapePattern,
     ShapeBasedReshapeIsSqueezePattern,
+    ShapedBasedReshapePattern,
     StaticConcatReshapePattern,
 )
 from .onnx_rotary import (
@@ -193,6 +194,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ShapeBasedExpandCastWhereSwapPattern(verbose=verbose),
         ShapeBasedExpandSwapPattern(verbose=verbose),
         ShapeBasedMatMulToMulPattern(verbose=verbose),
+        ShapedBasedReshapePattern(verbose=verbose),
         ShapeBasedSameChildrenPattern(verbose=verbose),
         ShapeBasedShapeShapeAddPattern(verbose=verbose),
         ReshapeReshapePattern(verbose=verbose),
