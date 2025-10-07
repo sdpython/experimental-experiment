@@ -36,10 +36,14 @@ class SameChildrenPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        next_nodes = g.next_nodes(node.output[0])
-        if len(next_nodes) <= 1:
-            return self.none()
-        return self._match_with_nodes(g, node, next_nodes)
+        for i in range(len(node.output)):
+            next_nodes = g.next_nodes(node.output[i])
+            if len(next_nodes) <= 1:
+                continue
+            res = self._match_with_nodes(g, node, next_nodes)
+            if res is not None:
+                return res
+        return self.none()
 
     def _match_with_nodes(self, g, node, next_nodes):
         if len(next_nodes) == 2:

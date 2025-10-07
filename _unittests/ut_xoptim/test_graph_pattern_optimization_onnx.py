@@ -526,6 +526,47 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_reshape_reshape_3d_shape_based(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xr"]),
+                    oh.make_node("Reshape", ["xr", "shape2"], ["xrr"]),
+                    oh.make_node("Add", ["xrr", "one"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b", "c"])],
+                [_mkv_("Y", TFLOAT, ["a", "b", "c"])],
+                [
+                    onh.from_array(np.array([0, 0, 2, -1], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 3, 8)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["ReshapeReshape", "ShapedBasedReshape"], verbose=0
+            ),
+        )
+        s = str(gr.optimization_options)
+        self.assertIn("OptimizationOptions(", s)
+        self.assertIn("ReshapeReshapePattern", s)
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
     def test_reshape_reshape_zero(self):
         model = oh.make_model(
             oh.make_graph(
