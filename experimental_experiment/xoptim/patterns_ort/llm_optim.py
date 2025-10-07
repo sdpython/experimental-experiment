@@ -22,7 +22,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if node.op_type != self._operator_name or node.domain != self._domain_name:
-            # Not ready in opset 23.
             return self.none()
         if not g.has_shape(node.input[0]) or g.get_rank(node.input[0]) != 4:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -368,3 +367,59 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         )
         rotary_nodes.append(rotary_node)
         return rotary_nodes
+
+
+class ContribRotaryEmbedding3DPattern(PatternOptimization):
+    """
+    Extension to
+    :class:`experimental_experimental.xoptim.patterns_ort.llm_optim.ContribRotaryEmbeddingPattern`,
+    turn the operator into a 3D operator including the transpose.
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "RotaryEmbedding" or node.domain != "com.microsoft":
+            return self.none()
+        transpose = g.node_before(node.input[0])
+        if transpose is None or transpose.op_type != "Transpose" or transpose.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        perm = tuple(g.get_attribute(transpose, "perm").ints)
+        if perm != (0, 2, 1, 3):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [transpose, node], self.apply, insert_at=node)
+
+    def apply(
+        self, g: "GraphBuilder", transpose: NodeProto, rotary: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        last_dim = g.unique_name(f"{transpose.input[0]}::Shape3")
+        new_shape2 = g.unique_name(f"{transpose.input[0]}::Shape+1")
+        new_shape = g.make_initializer(
+            "", np.array([0, 0, -1], dtype=np.int64), source=f"{self.__class__.__name__}.00_1"
+        )
+        reshaped = g.unique_name(f"{transpose.input[0]}::3D")
+        rot_name = g.unique_name(f"{transpose.input[0]}::3Dr")
+        reshaped2 = g.unique_name(f"{transpose.input[0]}::4D")
+        nodes = [
+            g._make_node("Reshape", [transpose.input[0], new_shape], [reshaped]),
+            g._make_node(
+                rotary.op_type, [reshaped, *rotary.input[1:]], [rot_name], domain=rotary.domain
+            ),
+            g._make_node("Shape", [transpose.input[0]], [last_dim], start=3),
+            g._make_node("Concat", [new_shape, last_dim], [new_shape2], axis=0),
+            g._make_node("Reshape", [rot_name, new_shape2], [reshaped2]),
+            g._make_node("Transpose", [reshaped2], [rotary.output[0]], perm=[0, 2, 1, 3]),
+        ]
+        if rotary.attribute:
+            nodes[1].attribute.extend(rotary.attribute)
+        for node in nodes:
+            if not node.name:
+                node.name = g.builder.unique_node_name(
+                    f"{self.__class__.__name__}--{rotary.name}"
+                )
+        return nodes
