@@ -4823,7 +4823,8 @@ def aten_index_put(
                 g.get_rank(x) > 2
                 and g.get_rank(x) > g.get_rank(values)
                 and g.get_rank(values) > 0
-                and g.get_rank(ind0) == g.get_rank(ind1) == 1
+                and (ind0 is None or g.get_rank(ind0) == 1)
+                and (ind1 is None or g.get_rank(ind1) == 1)
             ), (
                 f"No implementation for index_put when indices={indices}, "
                 f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
@@ -4831,6 +4832,13 @@ def aten_index_put(
                 f"{g._get_shape_(ind1)}, {g._get_shape_(values)}"
                 f"{g.get_debug_msg()}"
             )
+            if g.has_shape(x) and is_static_shape(g.get_shape(x)):
+                static_shape = True
+                shape_x = np.array(g.get_shape(x), dtype=np.int64)
+            else:
+                static_shape = False
+                shape_x = g.op.Shape(x, name=name)
+            ind0, _ = _make_range_or_cast(ind0, shape_x, static_shape, 0, name)
             rk_values = g.get_rank(values)
             n_cols = g.op.Shape(x, name=name, start=-rk_values, end=-rk_values + 1)
             indices_1d = g.op.Reshape(

@@ -2528,6 +2528,42 @@ class TestOnnxExportAten(ExtTestCase):
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_aten_index_put_mixed_dimensions(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, index, update):
+                copy = x.clone()
+                copy[:, index] = update
+                return copy
+
+        model = Model()
+        x = (torch.arange(12) + 10).reshape((1, 3, 4)).to(torch.float32)
+        index = torch.tensor([0, 1], dtype=torch.int64)
+        update = (torch.arange(8) + 10).reshape((1, 2, 4)).to(torch.float32)
+        expected = model(x, index, update)
+        model_path = self._call_exporter(
+            "test_aten_index_put_mixed_dimensions",
+            "custom",
+            model,
+            (x, index, update),
+            strict=False,
+            dynamic_shapes=({1: "b", 2: "c"}, {0: "d"}, {1: "f", 2: "g"}),
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(
+            zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
