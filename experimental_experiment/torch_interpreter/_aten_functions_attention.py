@@ -23,10 +23,8 @@ def _attention_scale(g: GraphBuilder, query: T, name: str = "_attention_scale") 
             scale = 1.0 / (float(last) ** 0.5)
             return np.array([scale], dtype=tensor_dtype_to_np_dtype(g.get_type(query)))
 
-    shape = g.op.Shape(query, name=name)
-    last = g.op.Gather(shape, g.MINUS_ONE, name=name)
-    itype = g.get_type(query)
-    clast = g.op.Cast(last, to=itype, name=name)
+    last = g.op.Shape(query, start=-1, name=name)
+    clast = g.op.Cast(last, to=g.get_type(query), name=name)
     return g.op.Reciprocal(g.op.Sqrt(clast, name=name), name=name)
 
 
