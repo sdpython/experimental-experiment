@@ -541,9 +541,7 @@ class ExportOptions:
             return gm
 
         if verbose:
-            print(
-                f"[ExportOptions.export] torch_export strict={self.strict}, verbose={verbose}"
-            )
+            print(f"[ExportOptions.export] torch_export strict={self.strict}, verbose={verbose}")
             print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
             print(f"[ExportOptions.export] args={string_type(args, limit=20)}")
             print(f"[ExportOptions.export] kwargs={string_type(kwargs, limit=20)}")
