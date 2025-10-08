@@ -24,6 +24,7 @@ def torch_export(
     preserve_module_call_signature: Tuple[str, ...] = (),
     # prefer_deferred_runtime_asserts_over_guards: bool = False,  # torch==2.9
     backed_size_oblivious: Union[bool, str] = False,
+    prefer_deferred_runtime_asserts_over_guards: bool = False,
     verbose: int = 0,
     **other_kwargs,
 ):
@@ -49,6 +50,7 @@ def torch_export(
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
                 preserve_module_call_signature=preserve_module_call_signature,
+                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                 **other_kwargs,
             )
 
@@ -72,6 +74,7 @@ def torch_export(
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
                 preserve_module_call_signature=preserve_module_call_signature,
+                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                 backed_size_oblivious=False,
                 verbose=verbose,
                 **other_kwargs,
@@ -93,6 +96,7 @@ def torch_export(
                     dynamic_shapes=dynamic_shapes,
                     strict=strict,
                     preserve_module_call_signature=preserve_module_call_signature,
+                    prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                     backed_size_oblivious=False,
                     verbose=verbose,
                     **other_kwargs,
@@ -147,6 +151,7 @@ def torch_export(
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
                 preserve_module_call_signature=preserve_module_call_signature,
+                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                 **other_kwargs,
             )
         return ep
@@ -160,5 +165,6 @@ def torch_export(
         dynamic_shapes=dynamic_shapes,
         strict=strict,
         preserve_module_call_signature=preserve_module_call_signature,
+        prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
         **other_kwargs,
     )
