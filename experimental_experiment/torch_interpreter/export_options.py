@@ -44,6 +44,8 @@ class ExportOptions:
         ``torch.fx.experimental._config.patch(backed_size_oblivious=True)``
         to allow dynamic dimension equal to 1, this class calls
         :func:`experimental_experiment.export_helpers.torch_export`
+    :param prefer_deferred_runtime_asserts_over_guards:
+        see func:`torch.export.export`
 
     The fallback strategy tries the following in order:
 
@@ -112,6 +114,7 @@ class ExportOptions:
         save_ep: Optional[str] = None,
         validate_ep: Union[float, bool] = False,
         backed_size_oblivious: Union[bool, str] = "auto",
+        prefer_deferred_runtime_asserts_over_guards: bool = False,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -128,6 +131,9 @@ class ExportOptions:
         self.allow_untyped_output = allow_untyped_output
         self.validate_ep = validate_ep
         self.backed_size_oblivious = backed_size_oblivious
+        self.prefer_deferred_runtime_asserts_over_guards = (
+            prefer_deferred_runtime_asserts_over_guards
+        )
 
         if strategy is not None:
             assert strategy in self._allowed, (
@@ -270,6 +276,7 @@ class ExportOptions:
         exc,
         verbose,
         backed_size_oblivious=False,
+        prefer_deferred_runtime_asserts_over_guards=False,
     ):
         import torch
         from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
@@ -282,6 +289,7 @@ class ExportOptions:
                 dynamic_shapes=use_dyn_not_str(dynamic_shapes),
                 strict=self.strict,
                 backed_size_oblivious=backed_size_oblivious,
+                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                 verbose=verbose,
             )
         try:
@@ -292,6 +300,7 @@ class ExportOptions:
                 dynamic_shapes=use_dyn_not_str(dynamic_shapes),
                 strict=self.strict,
                 backed_size_oblivious=backed_size_oblivious,
+                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                 verbose=verbose,
             )
         except torch._export.verifier.SpecViolationError:
@@ -309,7 +318,7 @@ class ExportOptions:
         except torch._dynamo.exc.UserError as e:
             eee = None
             if verbose:
-                print("[ExportOptions.export] torch.export.export")
+                print("[ExportOptions.export] torch_export")
             try:
                 exported_program = torch_export(
                     mod,
@@ -317,6 +326,7 @@ class ExportOptions:
                     kwargs,
                     strict=self.strict,
                     backed_size_oblivious=backed_size_oblivious,
+                    prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                     verbose=verbose,
                 ).graph
             except torch._export.verifier.SpecViolationError as ee:
@@ -440,7 +450,9 @@ class ExportOptions:
             return None
 
         if verbose:
-            print(f"[ExportOptions.export] {self!r} - torch.export.export {type(mod).__name__!r}")
+            print(
+                f"[ExportOptions.export] {self!r} - torch._dynamo.export {type(mod).__name__!r}"
+            )
             print(f"[ExportOptions.export] aten_as_function={self.aten_as_function!r}")
             begin = time.perf_counter()
 
@@ -529,10 +541,7 @@ class ExportOptions:
             return gm
 
         if verbose:
-            print(
-                f"[ExportOptions.export] torch.export.export "
-                f"strict={self.strict}, verbose={verbose}"
-            )
+            print(f"[ExportOptions.export] torch_export strict={self.strict}, verbose={verbose}")
             print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
             print(f"[ExportOptions.export] args={string_type(args, limit=20)}")
             print(f"[ExportOptions.export] kwargs={string_type(kwargs, limit=20)}")
@@ -561,6 +570,7 @@ class ExportOptions:
             exc,
             verbose,
             backed_size_oblivious=self.backed_size_oblivious,
+            prefer_deferred_runtime_asserts_over_guards=self.prefer_deferred_runtime_asserts_over_guards,
         )
         self._stat_time_torch_export_export_oblivious = time.perf_counter() - begin
 
