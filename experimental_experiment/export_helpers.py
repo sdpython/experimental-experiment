@@ -35,6 +35,15 @@ def torch_export(
     or not. It can be ``'auto'`` to let select automatically the best
     mode. It can be ``'half'`` to disable some non oblivious exceptions.
     """
+    export_kwargs = {}
+    if prefer_deferred_runtime_asserts_over_guards:
+        export_kwargs["prefer_deferred_runtime_asserts_over_guards"] = (
+            prefer_deferred_runtime_asserts_over_guards
+        )
+    if preserve_module_call_signature:
+        export_kwargs["preserve_module_call_signature"] = preserve_module_call_signature
+
+    export_kwargs.update(other_kwargs)
     if backed_size_oblivious == "half":
         if verbose:
             print(f"[torch_export] backed_size_oblivious={backed_size_oblivious!r}")
@@ -44,14 +53,7 @@ def torch_export(
 
         with torch.fx.experimental._config.patch(backed_size_oblivious=True):
             ep = torch.export.export(
-                mod,
-                args,
-                kwargs,
-                dynamic_shapes=dynamic_shapes,
-                strict=strict,
-                preserve_module_call_signature=preserve_module_call_signature,
-                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
-                **other_kwargs,
+                mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=strict, **export_kwargs
             )
 
         _tds._guard_or = _torch_guard_or
@@ -73,11 +75,9 @@ def torch_export(
                 kwargs,
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
-                preserve_module_call_signature=preserve_module_call_signature,
-                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                 backed_size_oblivious=False,
                 verbose=verbose,
-                **other_kwargs,
+                **export_kwargs,
             )
 
         if isinstance(dynamic_shapes, tuple):
@@ -95,11 +95,9 @@ def torch_export(
                     kwargs,
                     dynamic_shapes=dynamic_shapes,
                     strict=strict,
-                    preserve_module_call_signature=preserve_module_call_signature,
-                    prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
                     backed_size_oblivious=False,
                     verbose=verbose,
-                    **other_kwargs,
+                    **export_kwargs,
                 )
             assert not kwargs, (
                 f"args and kwargs are specified for this call and dynamic_shapes "
@@ -145,26 +143,12 @@ def torch_export(
             )
         with torch.fx.experimental._config.patch(backed_size_oblivious=True):
             ep = torch.export.export(
-                mod,
-                args,
-                kwargs,
-                dynamic_shapes=dynamic_shapes,
-                strict=strict,
-                preserve_module_call_signature=preserve_module_call_signature,
-                prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
-                **other_kwargs,
+                mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=strict, **export_kwargs
             )
         return ep
 
     if verbose:
         print(f"[torch_export] export starts with backed_size_oblivious={backed_size_oblivious}")
     return torch.export.export(
-        mod,
-        args,
-        kwargs,
-        dynamic_shapes=dynamic_shapes,
-        strict=strict,
-        preserve_module_call_signature=preserve_module_call_signature,
-        prefer_deferred_runtime_asserts_over_guards=prefer_deferred_runtime_asserts_over_guards,
-        **other_kwargs,
+        mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=strict, **export_kwargs
     )
