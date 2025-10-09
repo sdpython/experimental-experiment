@@ -180,9 +180,7 @@ def string_type(
 
 
 def string_signature(sig: Any) -> str:
-    """
-    Displays the signature of a functions.
-    """
+    """Displays the signature of a functions."""
 
     def _k(p, kind):
         for name in dir(p):
@@ -234,8 +232,8 @@ def get_sig_kwargs(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
 
 def string_sig(f: Callable, kwargs: Optional[Dict[str, Any]] = None) -> str:
     """
-    Displays the signature of a functions if the default
-    if the given value is different from
+    Displays the signature of a function. Parameters are displayed
+    if the given value is different from the default one.
     """
     if hasattr(f, "__init__") and kwargs is None:
         fct = f.__init__
@@ -661,6 +659,29 @@ def rename_dynamic_dimensions(
     return replacements
 
 
+class SimpleSimpliflyTransformer(ast.NodeTransformer):
+    def visit_BinOp(self, node):
+        self.generic_visit(node)
+        if isinstance(node.op, ast.BitXor):
+            if (
+                isinstance(node.left, ast.Name)
+                and isinstance(node.right, ast.Name)
+                and node.left.id == node.right.id
+            ):
+                return node.left
+        if isinstance(node.op, ast.Add):
+            if isinstance(node.left, ast.Constant) and node.left.value == 0:
+                return node.right
+            if isinstance(node.right, ast.Constant) and node.right.value == 0:
+                return node.left
+        if isinstance(node.op, ast.Mult):
+            if isinstance(node.left, ast.Constant) and node.left.value == 1:
+                return node.right
+            if isinstance(node.right, ast.Constant) and node.right.value == 1:
+                return node.left
+        return node
+
+
 def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
     """
     Renames variables inside an expression.
@@ -682,8 +703,10 @@ def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
     except SyntaxError:
         return expression
     transformer = RenameVariable()
-    new_tree = transformer.visit(tree)
-    return ast.unparse(new_tree).replace(" ", "")
+    simplify = SimpleSimpliflyTransformer()
+    new_tree = simplify.visit(transformer.visit(tree))
+    res = ast.unparse(new_tree).replace(" ", "")
+    return res
 
 
 def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:
