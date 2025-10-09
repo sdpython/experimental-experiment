@@ -11,6 +11,7 @@
 
 
     onnx_any
+    onnx_attention
     onnx_cast
     onnx_clip
     onnx_constants

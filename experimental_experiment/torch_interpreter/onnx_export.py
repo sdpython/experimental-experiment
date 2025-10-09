@@ -440,26 +440,27 @@ def rewrite_dynamic_shapes(dynamic_shapes: Any) -> Any:
     return dynamic_shapes
 
 
-def get_default_aten_as_function(target_opset: int) -> Tuple[str]:
+def get_default_aten_as_function(target_opset: Optional[int] = None) -> Tuple[str]:
     """
     Returns the list of aten functions to export as local functions
-    depending on this opset.
+    depending on this opset. If the opset is not specified,
+    it returns a minimum of functions to keep.
+
+    .. runpython::
+        :showcode:
+
+        import pprint
+        from experimental_experiment.torch_interpreter.onnx_export import (
+            get_default_aten_as_function,
+        )
+        pprint.pprint(get_default_aten_as_function(23))
     """
     return (
-        (
-            "aten.index_copy.default",
-            "aten.index_put.default",
-            "aten.scaled_dot_product_attention.default",
-            "aten.setitem",
-            operator.setitem,
-        )
-        if target_opset < 23
-        else (
-            "aten.index_copy.default",
-            "aten.index_put.default",
-            "aten.setitem",
-            operator.setitem,
-        )
+        "aten.index_copy.default",
+        "aten.index_put.default",
+        # "aten.scaled_dot_product_attention.default",
+        "aten.setitem",
+        operator.setitem,
     )
 
 

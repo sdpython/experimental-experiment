@@ -1325,8 +1325,9 @@ class GraphBuilder(_GraphBuilderRuntime):
             return value
 
         if isinstance(value, self.torch.Tensor):
-            v = value.detach().cpu()
-            self.constants_computed_[name] = v
+            with self.maybe_disable_fake_tensor_mode():
+                v = value.detach().cpu()
+                self.constants_computed_[name] = v
             assert not multiple_outputs, f"Multiple output is not allowed for name={name!r}"
             if self._debug_get_constant:
                 print(

@@ -599,7 +599,7 @@ def dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
 
 def np_dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
     """
-    Converts a tnumpy dtype into a onnx element type.
+    Converts a numpy dtype into a onnx element type.
 
     :param to: dtype
     :return: onnx type
