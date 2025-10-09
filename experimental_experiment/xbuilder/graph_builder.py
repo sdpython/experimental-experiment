@@ -1766,6 +1766,8 @@ class GraphBuilder(_GraphBuilderRuntime):
         """Creates a new dimension."""
         if op == "^":
             # very simple trick for the time being
+            if a == b:
+                return a
             if isinstance(a, str) and a.endswith(f"^{b}"):
                 return a
             if isinstance(b, str) and b.startswith(f"{a}^"):

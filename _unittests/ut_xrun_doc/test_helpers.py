@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
-from experimental_experiment.helpers import string_type, string_sig
+from experimental_experiment.helpers import string_type, string_sig, rename_dynamic_expression
 
 
 class TestHelpers(ExtTestCase):
@@ -45,6 +45,13 @@ class TestHelpers(ExtTestCase):
 
         ssig = string_sig(A(1, c=8))
         self.assertEqual(ssig, "A(a=1, c=8)")
+
+    def test_rename_dynamic_expression(self):
+        self.assertEqual("batch", rename_dynamic_expression("batch^batch", {}))
+        self.assertEqual("batch", rename_dynamic_expression("batch+0", {}))
+        self.assertEqual("batch", rename_dynamic_expression("0+batch", {}))
+        self.assertEqual("batch", rename_dynamic_expression("1*batch", {}))
+        self.assertEqual("batch", rename_dynamic_expression("batch*1", {}))
 
 
 if __name__ == "__main__":

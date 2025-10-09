@@ -72,7 +72,7 @@ class ShapedBasedReshapePattern(ReshapePattern):
         if cst is None:
             return self.none(node, inspect.currentframe().f_lineno)
         cst = tuple(cst)
-        if cst[-1] != -1 or set(cst[:-1]) != {0}:
+        if cst[-1] == 0 or set(cst[:-1]) != {0}:
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) != len(cst):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -200,14 +200,16 @@ class ReshapeReshapePattern(PatternOptimization):
             cst2 = g.get_computed_constant(next_node.input[1])
             if cst1 is None or cst2 is None:
                 return self.none(node, inspect.currentframe().f_lineno)
-            cst1 = tuple(cst1)
-            cst2 = tuple(cst2)
+            cst1 = tuple(map(int, cst1))
+            cst2 = tuple(map(int, cst2))
             if cst1 and cst2 and cst1[0] == cst2[0]:
                 i = 0
-                while i < min(len(cst1), len(cst2)) and cst1[i] == cst2[i]:
+                while i < min(len(cst1), len(cst2)) and cst1[i] == cst2[i] and cst1[i] >= 0:
                     i += 1
                 expe = (0,) * i + (-1,)
                 if expe == cst2 and len(cst2) <= len(cst1):
+                    return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
+                if i < len(cst2) and min(cst2[i:]) > 0:
                     return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
         if g.is_constant(node.input[1]):
@@ -873,10 +875,10 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
         """
         assert all(
             isinstance(s, (int, str)) and s != -1 for s in s1
-        ), f"Unsupported shape s1={s1}"
+        ), f"Unsupported shape s1={s1!r}"
         assert all(
             isinstance(s, (int, str)) and s != -1 for s in s2
-        ), f"Unsupported shape s2={s2}"
+        ), f"Unsupported shape s2={s2!r}"
 
         eps = 0.5
         mat = np.full((len(s1) + 1, len(s2) + 1), max(len(s1), len(s2)) + 10, dtype=np.float32)
