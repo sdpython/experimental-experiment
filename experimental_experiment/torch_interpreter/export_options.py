@@ -31,7 +31,12 @@ class ExportOptions:
     :param aten_as_function: keeps aten function as local function to keep a faithful
         translation of the fx graph, it can also be a set of function name the export
         should export as local function such as
-        ``torch.ops.aten.scaled_dot_product_attention``
+        ``torch.ops.aten.scaled_dot_product_attention``, the default value
+        :func:`get_default_aten_as_function
+        <experimental_experiment.torch_interpreter.onnx_export.get_default_aten_as_function>`
+        returns a default list of functions to keep as function depending on this opset,
+        if no value is specified, this defaults to the whatever the function mentioned above
+        returns
     :param allow_untyped_output: allows output with no shape and/or no type
     :param save_ep: to save the exported program, it True, it will save the
         graph as well ``<save_ep>.graph``, it dumps them as text,
@@ -104,11 +109,7 @@ class ExportOptions:
         ] = None,
         strategy: Optional[str] = None,
         dynamo: bool = False,
-        aten_as_function: Union[bool, Set[Any]] = (
-            "aten.scaled_dot_product_attention.default",
-            "aten.index_put.default",
-            "aten.index_copy.default",
-        ),
+        aten_as_function: Optional[Union[bool, Set[Any]]] = None,
         remove_inplace: bool = True,
         allow_untyped_output: bool = False,
         save_ep: Optional[str] = None,
@@ -134,6 +135,13 @@ class ExportOptions:
         self.prefer_deferred_runtime_asserts_over_guards = (
             prefer_deferred_runtime_asserts_over_guards
         )
+        if aten_as_function is None:
+            from experimental_experiment.torch_interpreter.onnx_export import (
+                get_default_aten_as_function,
+            )
+
+            aten_as_function = get_default_aten_as_function()
+        self.aten_as_function = aten_as_function
 
         if strategy is not None:
             assert strategy in self._allowed, (

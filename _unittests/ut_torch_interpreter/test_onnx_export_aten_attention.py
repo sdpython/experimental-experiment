@@ -107,7 +107,15 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         ds1 = {0: "batch", 1: "seq_length", 2: "cache_length", 3: "last_dim"}
         ds = (ds1, ds1, ds1)
 
-        onx = to_onnx(model, inputs, dynamic_shapes=ds, inline=False)
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            inline=False,
+            export_options=ExportOptions(
+                aten_as_function={"aten.scaled_dot_product_attention.default"}
+            ),
+        )
         self.assertEqual(
             ["aten_scaled_dot_product_attention_default", "Transpose"],
             [n.op_type for n in onx.graph.node],
@@ -154,7 +162,14 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         ds1 = {0: "batch", 1: "seq_length", 2: "cache_length", 3: "last_dim"}
         ds = (ds1, ds1, ds1)
 
-        onx = to_onnx(model, inputs, dynamic_shapes=ds)
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            export_options=ExportOptions(
+                aten_as_function={"aten.scaled_dot_product_attention.default"}
+            ),
+        )
         self.dump_onnx("test_scaled_dot_product_attention_function_2.onnx", onx)
         self.assertEqual(
             [
@@ -245,7 +260,19 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         ds = (ds1, ds1, ds1)
         for opset in [24, 18]:
             with self.subTest(opset=opset):
-                onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset)
+                onx = to_onnx(
+                    model,
+                    inputs,
+                    dynamic_shapes=ds,
+                    target_opset=opset,
+                    export_options=(
+                        ExportOptions(
+                            aten_as_function={"aten.scaled_dot_product_attention.default"}
+                        )
+                        if opset < 24
+                        else None
+                    ),
+                )
                 self.dump_onnx(f"test_scaled_dot_product_attention_{opset}.onnx", onx)
                 if opset >= 24:
                     self.assertEqual(

@@ -11,6 +11,7 @@ from .onnx_any import (
     ShapeBasedIdentityPattern,
     ShapeBasedSameChildrenPattern,
 )
+from .onnx_attention import FunctionAttentionPattern
 from .onnx_cast import (
     CastPattern,
     CastCastBinaryPattern,
@@ -223,6 +224,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         UnsqueezeUnsqueezePattern(verbose=verbose),
         # LLM
         RotaryConcatPartPattern(verbose=verbose),
+        FunctionAttentionPattern(verbose=verbose),
         FunctionCausalMaskPattern(verbose=verbose),
         FunctionCausalMaskMulAddPattern(verbose=verbose),
         FunctionCosSinCachePattern(verbose=verbose),

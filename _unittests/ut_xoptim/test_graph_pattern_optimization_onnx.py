@@ -6973,6 +6973,66 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_local_function_attention(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Mul", ["query", "scale_sqrt"], ["query_scaled"]),
+                    oh.make_node("Mul", ["keys", "scale_sqrt"], ["keys_scaled"]),
+                    oh.make_node(
+                        "Transpose", ["keys_scaled"], ["keys_scaled_t"], perm=[0, 1, 3, 2]
+                    ),
+                    oh.make_node("MatMul", ["query_scaled", "key_scaled_t"], ["qk"]),
+                    oh.make_node("Where", ["mask", "zero", "minfty"], ["bias"]),
+                    oh.make_node("Add", ["qk", "bias"], ["qkb"]),
+                    oh.make_node("Softmax", ["qkb"], ["qkbs"], axis=-1),
+                    oh.make_node("IsNaN", ["qkbs"], ["nans"]),
+                    oh.make_node("Where", ["nans", "zero", "qkbs"], ["filt"]),
+                    oh.make_node("MatMul", ["filt", "values"], ["Y"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("query", TFLOAT, ["aq", "bq", "cq", "dq"]),
+                    oh.make_tensor_value_info("keys", TFLOAT, ["ak", "bk", "ck", "dk"]),
+                    oh.make_tensor_value_info("values", TFLOAT, ["av", "bv", "cv", "dv"]),
+                    oh.make_tensor_value_info("mask", TensorProto.BOOL, ["am", "bm", "cm", "dm"]),
+                    oh.make_tensor_value_info("scale_sqrt", TFLOAT, [1]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["ay", "by", "cy", "dy"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([-np.inf], dtype=np.float32), name="minfty"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        query = np.random.randn(32, 8, 128, 64).astype(np.float32)
+        keys = np.random.randn(32, 8, 128, 64).astype(np.float32)
+        values = np.random.randn(32, 8, 128, 64).astype(np.float32)
+        mask = np.random.rand(32, 8, 128, 64) >= 0.5
+
+        feeds = dict(
+            query=query,
+            keys=keys,
+            values=values,
+            mask=mask,
+            scale_sqrt=np.array([0.1**0.5], dtype=np.float32),
+        )
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns="FunctionAttention", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["LocalAttention"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
