@@ -128,7 +128,7 @@ class FunctionAttentionPattern(PatternOptimization):
         nodes_to_return = attention_nodes
 
         # Creates the local function
-        if not g.builder.has_local_function(self._operator_name, domain=self._domain_name):
+        if not g.builder.has_local_function(name, domain=self._domain_name):
             self._add_local_function(g.builder, name, itype=itype)
         return nodes_to_return
 
