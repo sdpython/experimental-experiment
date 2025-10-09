@@ -7571,6 +7571,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param stats: to get information about time processing
         :return: list of removed nodes
         """
+        begin = time.perf_counter()
         assert insert_at is None or not removed or min(removed) <= insert_at, (
             f"The position {insert_at} must be higher than the position "
             f"of the removed nodes {removed}"
@@ -7657,6 +7658,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"{self.get_debug_msg()}"
                 )
             self.nodes = [n for n in self.nodes if n is not None]
+            if stats:
+                stats.append(
+                    dict(
+                        pattern="insert_and_remove_nodes",
+                        time_in=time.perf_counter() - begin,
+                        exit_point="insert_at",
+                    )
+                )
             return memo
 
         self.nodes = [n for n in self.nodes if n is not None]
@@ -7795,6 +7804,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         for o in remove_constants:
             del self.constants_[o]
         self._refresh_values_cache()
+        if stats:
+            stats.append(
+                dict(
+                    pattern="insert_and_remove_nodes",
+                    time_in=time.perf_counter() - begin,
+                    exit_point="topological_sort" if needs_sort else "positions",
+                )
+            )
         return memo
 
     def topological_sort(self, stats: Optional[List[Dict[str, Any]]] = None):
