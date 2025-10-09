@@ -2,7 +2,9 @@ import inspect
 from typing import List, Optional, Sequence
 import numpy as np
 from onnx import NodeProto
+from ...helpers import tensor_dtype_to_np_dtype
 from ..patterns_api import MatchResult, PatternOptimization
+from ..patterns.onnx_attention import FunctionAttentionPattern
 from ..patterns.onnx_rotary import FunctionHalfRotaryEmbeddingPattern
 
 
@@ -422,4 +424,138 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
                 node.name = g.builder.unique_node_name(
                     f"{self.__class__.__name__}--{rotary.name}"
                 )
+        return nodes
+
+
+class MultiHeadAttention3DPattern(PatternOptimization):
+    """Merges multiple nodes into MultiHeadAttention."""
+
+    _prefix_operator_name = f"{FunctionAttentionPattern._operator_name}_to"
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            not node.op_type.startswith(self._prefix_operator_name)
+            or node.domain != FunctionAttentionPattern._domain_name
+            or len(node.input) != 5
+        ):
+            return self.none()
+        if not g.is_constant_scalar(node.input[4]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        q_transpose = g.node_before(node.input[0])
+        expected_perm = (0, 2, 1, 3)
+        if (
+            q_transpose is None
+            or q_transpose.op_type != "Transpose"
+            or tuple(g.get_attribute(q_transpose, "perm").ints) != expected_perm
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(q_transpose.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = g.get_shape(q_transpose.input[0])
+        if not isinstance(shape[2], int):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        k_concat = g.node_before(node.input[1])
+        if (
+            k_concat is None
+            or k_concat.op_type != "Concat"
+            or g.get_attribute(k_concat, "axis").i != -2
+            or len(k_concat.input) != 2
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        k_transpose = g.node_before(k_concat.input[1])
+        if (
+            k_transpose is None
+            or k_transpose.op_type != "Transpose"
+            or tuple(g.get_attribute(k_transpose, "perm").ints) != expected_perm
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        v_concat = g.node_before(node.input[2])
+        if (
+            v_concat is None
+            or v_concat.op_type != "Concat"
+            or g.get_attribute(v_concat, "axis").i != -2
+            or len(v_concat.input) != 2
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        v_transpose = g.node_before(v_concat.input[1])
+        if (
+            v_transpose is None
+            or v_transpose.op_type != "Transpose"
+            or tuple(g.get_attribute(v_transpose, "perm").ints) != expected_perm
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        transposes = g.next_nodes(node.output[0])
+        if len(transposes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        transpose = transposes[0]
+        if (
+            transpose is None
+            or transpose.op_type != "Transpose"
+            or tuple(g.get_attribute(transpose, "perm").ints) != expected_perm
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        for n in [q_transpose, k_transpose, v_transpose, node]:
+            if g.is_used_more_than_once(n.output[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(
+            self,
+            [q_transpose, k_transpose, k_concat, v_transpose, v_concat, node, transpose],
+            self.apply,
+        )
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        q_transpose: NodeProto,
+        k_transpose: NodeProto,
+        k_concat: NodeProto,
+        v_transpose: NodeProto,
+        v_concat: NodeProto,
+        attention: NodeProto,
+        transpose: NodeProto,
+    ) -> List[NodeProto]:
+        query = q_transpose.input[0]
+        keys = k_transpose.input[0]
+        values = v_transpose.input[0]
+        mask = attention.input[3]
+        past_keys = k_concat.input[0]
+        past_values = v_concat.input[0]
+        attention_bias = g.unique_name(f"{self.__class__.__name__}--{mask}")
+        num_heads = g.get_shape(query)[2]
+        scale = float(g.get_constant_scalar(attention.input[4])) ** 2
+        dtype = tensor_dtype_to_np_dtype(g.get_type(mask))
+        zero = g.make_initializer(
+            "", np.array([0], dtype=dtype), source=f"{self.__class__.__name__}.0"
+        )
+        minfty = g.make_initializer(
+            "", np.array([-np.inf], dtype=dtype), source=f"{self.__class__.__name__}._inf"
+        )
+
+        nodes = [
+            g._make_node(
+                "Where",
+                [mask, zero, minfty],
+                [attention_bias],
+                name=f"{self.__class__.__name__}--{attention.name}",
+            ),
+            g._make_node(
+                "MultiHeadAttention",
+                [query, keys, values, "", "", attention_bias, past_keys, past_values],
+                [attention.output[0], k_concat.output[0], v_concat.output[0]],
+                num_heads=num_heads,
+                scale=scale,
+                name=f"{self.__class__.__name__}--{attention.name}",
+            ),
+        ]
         return nodes

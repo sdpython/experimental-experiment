@@ -391,14 +391,17 @@ class GraphBuilderPatternOptimization:
             self.builder.torch.float64,
             self.builder.torch.bfloat16,
         }:
-            return float(value)
+            with self.builder.maybe_disable_fake_tensor_mode():
+                return float(value)
         if value.dtype in {
             self.builder.torch.complex64,
             self.builder.torch.complex128,
         }:
-            return complex(value)
+            with self.builder.maybe_disable_fake_tensor_mode():
+                return complex(value)
 
-        return int(value)
+        with self.builder.maybe_disable_fake_tensor_mode():
+            return int(value)
 
     def get_computed_constant(self, name: str, statistics: Optional[List[str]] = None) -> Any:
         """Returns the value for the constant `name`."""

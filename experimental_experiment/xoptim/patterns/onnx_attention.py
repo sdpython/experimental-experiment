@@ -88,6 +88,10 @@ class FunctionAttentionPattern(PatternOptimization):
         if mat_qkv.op_type != "MatMul":
             return self.none(node, inspect.currentframe().f_lineno)
 
+        for n in [mul1, mul2, transpose, mat_qk, where_node, add_node, isnan, where2]:
+            if g.is_used_more_than_once(n.output[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+
         return MatchResult(
             self,
             [mul1, mul2, transpose, mat_qk, where_node, add_node, node, isnan, where2, mat_qkv],
