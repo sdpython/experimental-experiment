@@ -1638,6 +1638,41 @@ def set_type_shape_transpose_2d_cast_fp32(self: "GraphBuilder", node: NodeProto)
         self.set_shape(node.output[0], shape[::-1])
 
 
+def set_type_shape_multi_head_attention(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+    itype = self.get_type(node.input[0])
+    for o in node.output:
+        self.set_type(o, itype)
+    if (
+        self.has_shape(node.input[0])
+        and self.has_shape(node.input[1])
+        and self.has_shape(node.input[2])
+    ):
+        assert (
+            self.get_rank(node.input[0]) == 3
+        ), f"rank(query)={self.get_rank(node.input[0])} != 3{self.get_debug_msg()}"
+        q_shape, _k_shape, _v_shape = [self.get_shape(i) for i in node.input[:3]]
+        pk_shape = (
+            self.get_shape(node.input[6])
+            if len(node.input) > 6 and node.input[6] and self.has_shape(node.input[6])
+            else None
+        )
+        self.set_shape(node.output[0], q_shape)
+        d1, d2 = q_shape[1], pk_shape[2]
+        if isinstance(d1, int) and isinstance(d2, int):
+            d = d1 + d2
+        else:
+            d = simplify_expression(f"({d1})+({d2})")
+        shape = (*pk_shape[:2], d, pk_shape[-1])
+        for o in node.output[1:]:
+            if o:
+                self.set_shape(o, shape)
+    else:
+        self.set_rank(node.output[0], 3)
+        for o in node.output[1:]:
+            if o:
+                self.set_rank(o, 4)
+
+
 _set_shape_type_op_any_custom = {
     "AddAdd": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
     "AddMul": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
@@ -1655,6 +1690,7 @@ _set_shape_type_op_any_custom = {
     "MulSharedInput": set_type_shape_shared_input,
     "MulSigmoid": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
     "MulMulSigmoid": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
+    "MultiHeadAttention": set_type_shape_multi_head_attention,
     "MulSub": lambda g, node: set_type_shape_binary_op(g, node.output[0], *node.input),
     "QuickGelu": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),
     "Rotary": lambda g, node: set_type_shape_unary_op(g, node.output[0], node.input[0]),

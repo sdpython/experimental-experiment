@@ -428,7 +428,11 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
 
 
 class MultiHeadAttention3DPattern(PatternOptimization):
-    """Merges multiple nodes into MultiHeadAttention."""
+    """
+    Merges multiple nodes into MultiHeadAttention. It assumes pattern
+    :class:`experimental_experiment.xoptim.patterns.onnx_attention.FunctionAttentionPattern`
+    was triggered before.
+    """
 
     _prefix_operator_name = f"{FunctionAttentionPattern._operator_name}_to"
 
@@ -504,6 +508,12 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        if (
+            not g.has_shape(q_transpose.input[0])
+            or g.get_rank(q_transpose.input[0]) != 4
+            or not isinstance(g.get_shape(q_transpose.input[0])[-1], int)
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
         for n in [q_transpose, k_transpose, v_transpose, node]:
             if g.is_used_more_than_once(n.output[0]):
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -531,31 +541,50 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         mask = attention.input[3]
         past_keys = k_concat.input[0]
         past_values = v_concat.input[0]
-        attention_bias = g.unique_name(f"{self.__class__.__name__}--{mask}")
         num_heads = g.get_shape(query)[2]
+
         scale = float(g.get_constant_scalar(attention.input[4])) ** 2
-        dtype = tensor_dtype_to_np_dtype(g.get_type(mask))
+        dtype = tensor_dtype_to_np_dtype(g.get_type(query))
         zero = g.make_initializer(
             "", np.array([0], dtype=dtype), source=f"{self.__class__.__name__}.0"
         )
         minfty = g.make_initializer(
             "", np.array([-np.inf], dtype=dtype), source=f"{self.__class__.__name__}._inf"
         )
+        init_00_1 = g.make_initializer(
+            "", np.array([0, 0, -1], dtype=np.int64), source=f"{self.__class__.__name__}.00_1"
+        )
+        last = g.get_shape(query)[-1]
+        init_00_1l = g.make_initializer(
+            "",
+            np.array([0, 0, -1, last], dtype=np.int64),
+            source=f"{self.__class__.__name__}.00_1l",
+        )
+
+        r_query = g.unique_name(f"{self.__class__.__name__}--{query}")
+        r_keys = g.unique_name(f"{self.__class__.__name__}--{keys}")
+        r_values = g.unique_name(f"{self.__class__.__name__}--{values}")
+        attention_bias = g.unique_name(f"{self.__class__.__name__}--{mask}")
+        r_output = g.unique_name(f"{self.__class__.__name__}--{transpose.output[0]}")
 
         nodes = [
-            g._make_node(
-                "Where",
-                [mask, zero, minfty],
-                [attention_bias],
-                name=f"{self.__class__.__name__}--{attention.name}",
-            ),
+            g._make_node("Reshape", [query, init_00_1], [r_query]),
+            g._make_node("Reshape", [keys, init_00_1], [r_keys]),
+            g._make_node("Reshape", [values, init_00_1], [r_values]),
+            g._make_node("Where", [mask, zero, minfty], [attention_bias]),
             g._make_node(
                 "MultiHeadAttention",
-                [query, keys, values, "", "", attention_bias, past_keys, past_values],
-                [attention.output[0], k_concat.output[0], v_concat.output[0]],
+                [r_query, r_keys, r_values, "", "", attention_bias, past_keys, past_values],
+                [r_output, k_concat.output[0], v_concat.output[0]],
                 num_heads=num_heads,
                 scale=scale,
-                name=f"{self.__class__.__name__}--{attention.name}",
+                domain="com.microsoft",
             ),
+            g._make_node("Reshape", [r_output, init_00_1l], [transpose.output[0]]),
         ]
+        for node in nodes:
+            if not node.name:
+                node.name = g.builder.unique_node_name(
+                    f"{self.__class__.__name__}--{attention.name}"
+                )
         return nodes

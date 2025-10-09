@@ -6417,7 +6417,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                         o[k] = 0
                     o[k] = max(o[k], v)
                     continue
-                if k in {"algo", "value"} and k not in o:
+                if k in {"algo", "value", "exit_point"} and k not in o:
                     o[k] = []
                 assert k in o, f"Missing k={k!r} from statistics={statistics!r}"
                 o[k].append(v)
@@ -7526,10 +7526,10 @@ class GraphBuilder(_GraphBuilderRuntime):
         first_at = {}
         for i, node in enumerate(self.nodes):
             for name in node.input:
-                if name not in needed_at:
+                if name and name not in needed_at:
                     needed_at[name] = i
             for name in node.output:
-                if name not in first_at:
+                if name and name not in first_at:
                     first_at[name] = i
         return needed_at, first_at
 
@@ -7571,6 +7571,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         :param stats: to get information about time processing
         :return: list of removed nodes
         """
+        begin = time.perf_counter()
         assert insert_at is None or not removed or min(removed) <= insert_at, (
             f"The position {insert_at} must be higher than the position "
             f"of the removed nodes {removed}"
@@ -7657,6 +7658,14 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"{self.get_debug_msg()}"
                 )
             self.nodes = [n for n in self.nodes if n is not None]
+            if stats:
+                stats.append(
+                    dict(
+                        pattern="insert_and_remove_nodes",
+                        time_in=time.perf_counter() - begin,
+                        exit_point="insert_at",
+                    )
+                )
             return memo
 
         self.nodes = [n for n in self.nodes if n is not None]
@@ -7672,7 +7681,7 @@ class GraphBuilder(_GraphBuilderRuntime):
         while inode < len(new_nodes):
             node = new_nodes[inode]
             if node.input:
-                min_position = max(first_at.get(i, -1) for i in node.input) + 1
+                min_position = max(first_at.get(i, -1) for i in node.input if i) + 1
             else:
                 # a constant node
                 min_position = 0
@@ -7683,7 +7692,7 @@ class GraphBuilder(_GraphBuilderRuntime):
                 continue
 
             # trouble, let's assume one move is ok.
-            mini = max((first_at.get(i, -1), i) for i in node.input)
+            mini = max((first_at.get(i, -1), i) for i in node.input if i)
             pos, name = mini
             assert (
                 name in self.nodes[pos].output
@@ -7713,17 +7722,23 @@ class GraphBuilder(_GraphBuilderRuntime):
             # guess the position to insert the nodes at
             # the order of the new nodes is consistent but it may have to be changed
             # if it does not fit the existing order
+            def err_msg():
+                lines = []
+                for n in new_nodes:
+                    first = " - ".join([str(first_at.get(i, ".")) for i in n.input if i])
+                    need = " - ".join([str(needed_at.get(i, ".")) for i in n.output if i])
+                    lines.append(f"{first} -> {need} -- {self.pretty_node(n)}")
+                return "\n".join(lines)
+
             insert_needed_at = {}
             insert_first_at = {}
             N = len(self.nodes)
             inserted_at = []
             new_nodes_p = []
             for init, node in enumerate(new_nodes):
-                if node.input:
-                    min_position = max(first_at.get(i, -1) for i in node.input) + 1
-                else:
-                    # a constant node
-                    min_position = 0
+                min_position = (
+                    (max(first_at.get(i, -1) for i in node.input if i) + 1) if node.input else 0
+                )
                 max_position = min(needed_at.get(o, N) for o in node.output)
 
                 assert min_position <= max_position, (
@@ -7735,11 +7750,9 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"\n-------\n{self._position_msg(new_nodes)}"
                 )
 
-                if node.input:
-                    local_min_position = max(insert_first_at.get(i, -1) for i in node.input)
-                else:
-                    # a constant node
-                    local_min_position = 0
+                local_min_position = (
+                    max(insert_first_at.get(i, -1) for i in node.input if i) if node.input else 0
+                )
                 local_max_position = min(insert_needed_at.get(o, N) for o in node.output)
 
                 assert local_min_position <= local_max_position, (
@@ -7748,19 +7761,35 @@ class GraphBuilder(_GraphBuilderRuntime):
                     f"local_max_position={local_max_position}, "
                     f"len(nodes)={len(self.nodes)}, previous insertions={inserted_at}, "
                     f"insert_needed_at={insert_needed_at}, insert_first_at={insert_first_at}"
+                    f"\n----\n{err_msg()}\n---\n"
+                    f"insert_needed_at={insert_needed_at}\n"
+                    f"insert_first_at={insert_first_at}"
                 )
 
                 insert_position = max(min_position, local_min_position)
 
+                assert insert_position <= max_position, (
+                    f"Insertion will fail, for output {o!r} from node\n"
+                    f"{self.pretty_node(node)}\nbecause insert_position="
+                    f"{insert_position}, local_min_position={local_min_position}, "
+                    f"local_max_position={local_max_position}, "
+                    f"min_position={min_position}, max_position={max_position}"
+                    f"\n----\n{err_msg()}\n---\n"
+                    f"insert_needed_at={insert_needed_at}\n"
+                    f"insert_first_at={insert_first_at}"
+                )
+
                 new_nodes_p.append((insert_position, init, node))
                 for i in node.input:
-                    insert_needed_at[i] = min(
-                        insert_position, insert_needed_at.get(i, insert_position)
-                    )
+                    if i:
+                        insert_needed_at[i] = min(
+                            insert_position, insert_needed_at.get(i, insert_position)
+                        )
                 for i in node.output:
-                    insert_first_at[i] = min(
-                        insert_position, insert_first_at.get(i, insert_position)
-                    )
+                    if i:
+                        insert_first_at[i] = min(
+                            insert_position, insert_first_at.get(i, insert_position)
+                        )
 
             assert len(new_nodes) == len(new_nodes_p), (
                 f"Length mismatch between len(new_nodes)={len(new_nodes)} == "
@@ -7795,6 +7824,14 @@ class GraphBuilder(_GraphBuilderRuntime):
         for o in remove_constants:
             del self.constants_[o]
         self._refresh_values_cache()
+        if stats:
+            stats.append(
+                dict(
+                    pattern="insert_and_remove_nodes",
+                    time_in=time.perf_counter() - begin,
+                    exit_point="topological_sort" if needs_sort else "positions",
+                )
+            )
         return memo
 
     def topological_sort(self, stats: Optional[List[Dict[str, Any]]] = None):
