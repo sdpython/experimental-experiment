@@ -428,7 +428,11 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
 
 
 class MultiHeadAttention3DPattern(PatternOptimization):
-    """Merges multiple nodes into MultiHeadAttention."""
+    """
+    Merges multiple nodes into MultiHeadAttention. It assumes pattern
+    :class:`experimental_experiment.xoptim.patterns.onnx_attention.FunctionAttentionPattern`
+    was triggered before.
+    """
 
     _prefix_operator_name = f"{FunctionAttentionPattern._operator_name}_to"
 
@@ -552,7 +556,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             g._make_node(
                 "MultiHeadAttention",
                 [query, keys, values, "", "", attention_bias, past_keys, past_values],
-                [attention.output[0], k_concat.output[0], v_concat.output[0]],
+                [transpose.output[0], k_concat.output[0], v_concat.output[0]],
                 num_heads=num_heads,
                 scale=scale,
                 name=f"{self.__class__.__name__}--{attention.name}",
