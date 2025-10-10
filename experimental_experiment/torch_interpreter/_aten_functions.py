@@ -4306,7 +4306,8 @@ def aten_index_add(
             assert g.CONTINUE or dx2 == dv2, (
                 f"index_add not implemented for shape(x)={shape_x}, "
                 f"shape(values)={shape_v}, renamed shape(x)={shape_x2}, "
-                f"renamed shape(values)={shape_v2}, "
+                f"renamed shape(values)={shape_v2}, x={x!r}, "
+                f"indices={indices!r}, values={values!r}, "
                 f"axis={axis}{g.get_debug_msg()}"
             )
 
