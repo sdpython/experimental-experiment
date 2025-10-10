@@ -257,11 +257,15 @@ class ExportOptions:
                     f"[ExportOptions.export] done remove inplace in "
                     f"{time.perf_counter() - begin}, modified={modified}"
                 )
-            if modified <= -1:
+            need_dec = self.need_run_decompositions(exported_program)
+            if need_dec or modified <= -1:
                 # We need to run decomposition to fully remove all inplace operations.
                 if verbose:
                     begin = time.perf_counter()
-                    print("[ExportOptions.export] use decomposition to remove inplace nodes left")
+                    print(
+                        "[ExportOptions.export] use decomposition to remove inplace nodes left"
+                        f"[modified={modified}, need_dec={need_dec}]"
+                    )
                 exported_program = exported_program.run_decompositions({})
                 if verbose:
                     print(
@@ -273,6 +277,16 @@ class ExportOptions:
                 print(exported_program)
                 print("-- DONE -- ")
         return exported_program
+
+    def need_run_decompositions(self, exported_program) -> bool:
+        """Final check to see if we need to run decompositions."""
+        from .tracing import CustomTracer
+
+        for node in exported_program.graph.nodes:
+            target_name = CustomTracer.get_node_target_name(node, exc=False)
+            if target_name == "aten::index_copy_":
+                return True
+        return False
 
     def _export(
         self,

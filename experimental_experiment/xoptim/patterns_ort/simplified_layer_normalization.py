@@ -351,6 +351,9 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
+        cst_skip = g.get_computed_constant(node.input[1])
+        if cst_skip is None:
+            return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         mul_nodes = g.next_nodes(node.output[0])
