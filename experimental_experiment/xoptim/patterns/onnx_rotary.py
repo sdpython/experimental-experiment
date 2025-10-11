@@ -1453,7 +1453,24 @@ class FunctionCosSinCachePattern(PatternOptimization):
             ), "position_ids comes from the input not from a Range node"
 
         # The matching checks the output of the other nodes are not used more than once.
+        keep_nodes = []
+        if g.is_used_more_than_once(reshape_node.output[0]):
+            keep_nodes.extend(
+                [
+                    n
+                    for n in [
+                        dim_squeeze1,
+                        dim_squeeze2,
+                        range_node,
+                        unsq_node,
+                        cast_node,
+                        reshape_node,
+                    ]
+                    if n
+                ]
+            )
         nodes_to_return = [
+            *keep_nodes,
             g.make_node(
                 name,
                 (
@@ -1467,7 +1484,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
                 ],
                 name=f"{self.__class__.__name__}--{mul_node.name}",
                 domain=self._domain_name,
-            )
+            ),
         ]
 
         # Creates the local function

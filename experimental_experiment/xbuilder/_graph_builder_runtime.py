@@ -4,6 +4,7 @@ from typing import Dict, Generator, List, Tuple
 import numpy as np
 from onnx import NodeProto
 from ..helpers import (
+    string_type,
     tensor_dtype_to_np_dtype,
     dtype_to_tensor_dtype,
     onnx_dtype_to_torch_dtype,
@@ -357,6 +358,10 @@ class _GraphBuilderRuntime:
             ttype = tensor_dtype_to_np_dtype(itype)
             if node.op_type == "Sqrt":
                 return [np.sqrt(x).astype(ttype)]
+            if node.op_type == "Exp":
+                return [np.exp(x).astype(ttype)]
+            if node.op_type == "Reciprocal":
+                return [(np.array([1], dtype=x.dtype) / x).to(ttype)]
             raise AssertionError(
                 f"Not implemented for op_type={node.op_type!r}, node={node}, feeds={feeds}"
             )
@@ -364,8 +369,13 @@ class _GraphBuilderRuntime:
         ttype = onnx_dtype_to_torch_dtype(itype)
         if node.op_type == "Sqrt":
             return [self.torch.sqrt(x).to(ttype)]
+        if node.op_type == "Exp":
+            return [self.torch.exp(x).to(ttype)]
+        if node.op_type == "Reciprocal":
+            return [(self.torch.tensor([1], dtype=x.dtype) / x).to(ttype)]
         raise AssertionError(
-            f"Not implemented for op_type={node.op_type!r}, node={node}, feeds={feeds}"
+            f"Not implemented for op_type={node.op_type!r}, node={node}, "
+            f"feeds={string_type(feeds, with_shape=True)}"
         )
 
     def _apply_trilu(
@@ -423,6 +433,8 @@ class _GraphBuilderRuntime:
                 return [a - b]
             if node.op_type == "Div":
                 return [a / b]
+            if node.op_type == "Pow":
+                return [a**b]
             raise AssertionError(f"{node.op_type!r} not implemented")
         except RuntimeError as e:
             raise AssertionError(

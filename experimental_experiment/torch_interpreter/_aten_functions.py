@@ -4288,29 +4288,6 @@ def aten_index_add(
             return res
 
         # axis > 0:
-        assert g.has_shape(x), f"missing shape for {x!r}{g.get_debug_msg()}"
-        assert g.has_shape(values), f"missing shape for {values!r}{g.get_debug_msg()}"
-        shape_x = g.get_shape(x)
-        shape_v = g.get_shape(values)
-        if axis < 0:
-            axis += len(shape_x)
-        dx = [s for i, s in enumerate(shape_x) if i != axis]
-        dv = [s for i, s in enumerate(shape_v) if i != axis]
-        if dx != dv:
-            shape_x2 = g.get_shape_renamed(x)
-            shape_v2 = g.get_shape_renamed(values)
-            if axis < 0:
-                axis += len(shape_x2)
-            dx2 = [s for i, s in enumerate(shape_x2) if i != axis]
-            dv2 = [s for i, s in enumerate(shape_v2) if i != axis]
-            assert g.CONTINUE or dx2 == dv2, (
-                f"index_add not implemented for shape(x)={shape_x}, "
-                f"shape(values)={shape_v}, renamed shape(x)={shape_x2}, "
-                f"renamed shape(values)={shape_v2}, x={x!r}, "
-                f"indices={indices!r}, values={values!r}, "
-                f"axis={axis}{g.get_debug_msg()}"
-            )
-
         name = f"{name}.B"
         new_shape = np.array([1] * g.get_rank(values), dtype=np.int64)
         new_shape[axis] = -1
