@@ -1,6 +1,6 @@
 import ast
 from typing import Any, Dict, Optional
-from .expressions import simplify_expression
+from .simplify_expressions import simplify_expression
 
 
 class Expression:

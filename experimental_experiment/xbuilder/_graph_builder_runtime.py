@@ -10,7 +10,7 @@ from ..helpers import (
     onnx_dtype_to_torch_dtype,
 )
 from ..xshape._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
-from ..xshape.expressions import simplify_expression
+from ..xshape.simplify_expressions import simplify_expression
 
 
 @contextlib.contextmanager

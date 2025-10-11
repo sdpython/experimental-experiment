@@ -13,7 +13,7 @@ from ..xshape._shape_helper import (
     all_int,
     all_int_or_str,
 )
-from ..xshape.expressions import simplify_expression
+from ..xshape.simplify_expressions import simplify_expression
 
 
 def broadcast_shape(
