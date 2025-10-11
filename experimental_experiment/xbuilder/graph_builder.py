@@ -6836,10 +6836,22 @@ class GraphBuilder(_GraphBuilderRuntime):
                 output = [
                     reshape_implementation_with_zero(feeds[v.input[0]], tuple(feeds[v.input[1]]))
                 ]
-            elif v.op_type in {"Mul", "Add", "Sub", "Div"}:
+            elif v.op_type in {
+                "Add",
+                "Div",
+                "Mul",
+                "Sub",
+            }:
                 # bypassing onnx.numpy_helper.from_array, too slow
                 output = self._apply_binary_op(v, feeds)
-            elif v.op_type in {"Sqrt"}:
+            elif (
+                v.op_type == "Pow"
+                and self.has_type(v.input[0])
+                and self.has_type(v.input[1])
+                and self.get_type(v.input[0]) == self.get_type(v.input[1])
+            ):
+                output = self._apply_binary_op(v, feeds)
+            elif v.op_type in {"Exp", "Reciprocal", "Sqrt"}:
                 # bypassing onnx.numpy_helper.from_array, too slow
                 output = self._apply_unary_function(v, feeds)
             elif hasattr(self, f"_apply_{v.op_type.lower()}"):

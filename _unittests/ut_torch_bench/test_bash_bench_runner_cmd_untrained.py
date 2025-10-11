@@ -218,7 +218,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
         with torch_export_patches(patch_transformers=True):
             ep = torch.export.export(model, (), kwargs=inputs, dynamic_shapes=use_dyn_not_str(ds))
         got = ep.module()(**inputs)
-        self.assertEqualArray(expected, got)
+        self.assertEqualAny(expected, got)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.7.9999")

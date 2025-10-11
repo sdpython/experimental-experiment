@@ -9,7 +9,7 @@ class OptimizationOptions:
     :param remove_unused: remove all unused nodes, this must be true if
         pattern optimization is enabled
     :param constant_folding: folds constant as much as possible,
-        it can be true or set of operator types if it must be restricted to
+        it can be true or a set of operator types if it must be restricted to
         a subset of operators
     :param constant_size: all node Constant above this threshold should be
         defined as initializer
@@ -66,7 +66,21 @@ class OptimizationOptions:
             bool,
             Set[Union[str, Tuple[str, str]]],
             Tuple[Union[str, Tuple[str, str]], ...],
-        ] = ("Transpose", "Cast", "Reshape", "Concat", "Add", "Sub", "Mul", "Div"),
+        ] = (
+            "Transpose",
+            "Cast",
+            "Reshape",
+            "Concat",
+            "Add",
+            "Sub",
+            "Mul",
+            "Div",
+            "Unsqueeze",
+            "Squeeze",
+            "Exp",
+            "Sqrt",
+            "Reciprocal",
+        ),
         constant_size: int = 1024,
         constant_fusing: bool = True,
         remove_identity: bool = True,

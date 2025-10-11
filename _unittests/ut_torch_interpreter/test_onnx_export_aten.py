@@ -112,7 +112,6 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected.to(int), got.astype(int))
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_index_put_3d_nd_case_1(self):
         import torch
 
@@ -145,7 +144,6 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_index_put_3d_nd_case_2(self):
         import torch
 
@@ -178,7 +176,6 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_interpolate_bilinear(self):
         import torch
 
@@ -211,7 +208,6 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_nonzero_1(self):
         import torch
 
@@ -239,7 +235,6 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_nonzero_1_d3(self):
         import torch
 
@@ -267,7 +262,6 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_nonzero_1_d1(self):
         import torch
 
@@ -295,7 +289,6 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_nonzero_tuple(self):
         import torch
 
@@ -326,7 +319,6 @@ class TestOnnxExportAten(ExtTestCase):
         for a, b in zip(expected, got):
             self.assertEqualArray(a, b, atol=1e-5)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_nonzero_tuple_d3(self):
         import torch
 
@@ -357,7 +349,6 @@ class TestOnnxExportAten(ExtTestCase):
         for a, b in zip(expected, got):
             self.assertEqualArray(a, b, atol=1e-5)
 
-    @skipif_ci_windows("not working on windows")
     def test_aten_nonzero_tuple_d1(self):
         import torch
 
@@ -2561,6 +2552,111 @@ class TestOnnxExportAten(ExtTestCase):
         feeds = dict(
             zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
         )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_index_copy_0(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, indices, update):
+                return x.index_copy(0, indices, update)
+
+        model = Model()
+        inputs = (
+            torch.zeros((5, 3), dtype=torch.float32),
+            torch.tensor([0, 4, 2, 1], dtype=torch.int64),
+            torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=torch.float32),
+        )
+        expected = model(*inputs)
+        DYN = torch.export.Dim.DYNAMIC
+        model_path = self._call_exporter(
+            "test_aten_index_copy_0",
+            "custom",
+            model,
+            inputs,
+            strict=False,
+            dynamic_shapes=({0: DYN, 1: DYN}, {0: DYN}, {0: DYN, 1: DYN}),
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [i.numpy() for i in inputs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_index_copy_1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, indices, update):
+                return x.index_copy(1, indices, update)
+
+        model = Model()
+        inputs = (
+            torch.zeros((5, 7), dtype=torch.float32),
+            torch.tensor([0, 4, 2, 1], dtype=torch.int64),
+            torch.arange(20, dtype=torch.float32).reshape((5, 4)),
+        )
+        expected = model(*inputs)
+        DYN = torch.export.Dim.DYNAMIC
+        model_path = self._call_exporter(
+            "test_aten_index_copy_1",
+            "custom",
+            model,
+            inputs,
+            strict=False,
+            dynamic_shapes=({0: DYN, 1: DYN}, {0: DYN}, {0: DYN, 1: DYN}),
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [i.numpy() for i in inputs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_index_copy_1_3d(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, indices, update):
+                return x.index_copy(1, indices, update)
+
+        model = Model()
+        inputs = (
+            torch.zeros((5, 7, 3), dtype=torch.float32),
+            torch.tensor([0, 4, 2, 1], dtype=torch.int64),
+            torch.arange(60, dtype=torch.float32).reshape((5, 4, 3)),
+        )
+        expected = model(*inputs)
+        DYN = torch.export.Dim.DYNAMIC
+        model_path = self._call_exporter(
+            "test_aten_index_copy_1_3d",
+            "custom",
+            model,
+            inputs,
+            strict=False,
+            dynamic_shapes=({0: DYN, 1: DYN}, {0: DYN}, {0: DYN, 1: DYN}),
+        )
+        check_model(model_path)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            model_path, sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [i.numpy() for i in inputs]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 

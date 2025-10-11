@@ -351,6 +351,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 *range_nodes,
             ]
         )
+        rotary_nodes = [n for n in rotary_nodes if n]
         for node in rotary_nodes:
             if not node.name:
                 node.name = g.builder.unique_node_name(
