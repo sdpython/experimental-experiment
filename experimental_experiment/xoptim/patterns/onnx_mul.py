@@ -3,7 +3,7 @@ from enum import IntEnum
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-from ...xbuilder._shape_helper import DYNAMIC_SHAPE
+from ...xshape._shape_helper import DYNAMIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 

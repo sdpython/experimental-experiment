@@ -8,8 +8,8 @@ from ..helpers import (
     dtype_to_tensor_dtype,
     onnx_dtype_to_torch_dtype,
 )
-from ._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
-from .expression_dimension import simplify_expression
+from ..xshape._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
+from ..xshape.expressions import simplify_expression
 
 
 @contextlib.contextmanager

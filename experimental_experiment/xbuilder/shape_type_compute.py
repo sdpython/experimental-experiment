@@ -7,13 +7,13 @@ from ..helpers import (
     dtype_to_tensor_dtype,
     torch_dtype_to_onnx_dtype,
 )
-from ..xbuilder._shape_helper import (
+from ..xshape._shape_helper import (
     DYNAMIC_SHAPE,
     is_static_shape,
     all_int,
     all_int_or_str,
 )
-from ..xbuilder.expression_dimension import simplify_expression
+from ..xshape.expressions import simplify_expression
 
 
 def broadcast_shape(

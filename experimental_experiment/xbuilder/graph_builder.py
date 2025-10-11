@@ -42,8 +42,6 @@ from ..helpers import (
     string_sig,
     onnx_dtype_to_torch_dtype,
     pretty_onnx,
-    rename_dynamic_dimensions,
-    rename_dynamic_expression,
     size_type,
     string_signature,
     string_type,
@@ -52,8 +50,9 @@ from ..helpers import (
     make_idn,
     make_idg,
 )
+from ..xshape.expressions import rename_dynamic_dimensions, rename_dynamic_expression
 from ..reference import ExtendedReferenceEvaluator
-from ._shape_helper import (
+from ..xshape._shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
     _reshape_shape,
@@ -76,13 +75,12 @@ from ._onnx_helper import (
 )
 from .model_container import TorchModelContainer, proto_from_array, _get_type
 from .optimization_options import OptimizationOptions
-from .expression_dimension import (
-    Expression,
-    parse_expression,
+from ..xshape.expressions import (
     parse_expression_tokens,
     simplify_two_expressions,
     rename_expression,
 )
+from ..xshape.expressions_torch import Expression, parse_expression
 from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
 from .virtual_tensor import VirtualTensor

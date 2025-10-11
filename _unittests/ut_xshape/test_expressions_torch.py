@@ -1,7 +1,6 @@
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.xshape.expressions import Expression
-from experimental_experiment.xshape.expressions_torch import parse_expression
+from experimental_experiment.xshape.expressions_torch import parse_expression, Expression
 
 
 class TestDimension(ExtTestCase):

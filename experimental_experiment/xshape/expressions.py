@@ -2,27 +2,6 @@ import ast
 from typing import Dict, Optional, Set
 
 
-class Expression:
-    """
-    A formula using dimension.
-
-    :param expr: a string
-    :param parsed: parsed tree (from :func:`ast.parse`)
-    """
-
-    def __init__(self, expr: str, parsed: Optional[ast.Expression] = None):
-        self.expr = expr
-        self.parsed = parsed
-
-    def __repr__(self):
-        "usual"
-        return f"{self.__class__.__name__}({self.expr!r})"
-
-    def isidentifier(self):
-        "Tells if this expression is a single dimension or an expression."
-        return self.expr.isidentifier
-
-
 class ExpressionSimplifier(ast.NodeVisitor):
     """Simplifies expression such as ``2*x-x``."""
 

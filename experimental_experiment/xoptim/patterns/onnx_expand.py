@@ -7,7 +7,7 @@ from ...xbuilder._onnx_helper import (
     element_wise_op_cmp_types,
     unary_like_op_types,
 )
-from ...xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
+from ...xshape._shape_helper import all_int, DYNAMIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 

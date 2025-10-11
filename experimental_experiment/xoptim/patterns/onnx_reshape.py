@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from onnx import NodeProto
 from ...xbuilder._onnx_helper import element_wise_binary_op_types
-from ...xbuilder._shape_helper import all_int, DYNAMIC_SHAPE, STATIC_SHAPE
+from ...xshape._shape_helper import all_int, DYNAMIC_SHAPE, STATIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 
