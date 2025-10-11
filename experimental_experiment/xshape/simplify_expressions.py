@@ -1,5 +1,10 @@
 import ast
-from typing import Optional
+from collections import Counter
+from typing import List, Optional, Tuple
+
+
+def _dump_node(n: ast.AST) -> str:
+    return ast.dump(n, include_attributes=False)
 
 
 class _Common:
@@ -25,7 +30,101 @@ class CommonTransformer(ast.NodeTransformer, _Common):
         _Common.__init__(self, expr)
 
 
-class ExpressionSimplifier(CommonVisitor):
+class SimpleSimpliflyTransformer(CommonTransformer):
+    """Simplifies expressions such as ``batch^batch``, ``x+0``, ``x*1``."""
+
+    def visit_BinOp(self, node):
+        self.generic_visit(node)
+        if isinstance(node.op, ast.BitXor):
+            if (
+                isinstance(node.left, ast.Name)
+                and isinstance(node.right, ast.Name)
+                and node.left.id == node.right.id
+            ):
+                return node.left
+        if isinstance(node.op, ast.Add):
+            if isinstance(node.left, ast.Constant) and node.left.value == 0:
+                return node.right
+            if isinstance(node.right, ast.Constant) and node.right.value == 0:
+                return node.left
+        if isinstance(node.op, ast.Mult):
+            if isinstance(node.left, ast.Constant) and node.left.value == 1:
+                return node.right
+            if isinstance(node.right, ast.Constant) and node.right.value == 1:
+                return node.left
+        return node
+
+
+class MulDivCancellerTransformer(CommonTransformer):
+    """Simplifies ``2*x//2`` into ``x``."""
+
+    @classmethod
+    def _flatten_mul_div(cls, node: ast.AST) -> Tuple[List[ast.AST], List[ast.AST]]:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+            lnum, lden = cls._flatten_mul_div(node.left)
+            rnum, rden = cls._flatten_mul_div(node.right)
+            return lnum + rnum, lden + rden
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.FloorDiv):
+            lnum, lden = cls._flatten_mul_div(node.left)
+            rnum, rden = cls._flatten_mul_div(node.right)
+            return lnum + rden, lden + rnum
+        return [node], []
+
+    @classmethod
+    def _rebuild_from_factors(cls, numer: List[ast.AST], denom: List[ast.AST]) -> ast.AST:
+        def _product(factors: List[ast.AST]) -> ast.AST:
+            if not factors:
+                return ast.Constant(value=1)
+            node = factors[0]
+            for f in factors[1:]:
+                node = ast.BinOp(left=node, op=ast.Mult(), right=f)
+            return node
+
+        numer_node = _product(numer)
+        if not denom:
+            return numer_node
+        denom_node = _product(denom)
+        return ast.BinOp(left=numer_node, op=ast.FloorDiv(), right=denom_node)
+
+    def visit_BinOp(self, node: ast.BinOp) -> ast.AST:
+        node = self.generic_visit(node)
+
+        if not (isinstance(node, ast.BinOp) and (isinstance(node.op, (ast.Mult, ast.FloorDiv)))):
+            return node
+
+        numer, denom = self._flatten_mul_div(node)
+
+        numer_keys = [_dump_node(n) for n in numer]
+        denom_keys = [_dump_node(d) for d in denom]
+
+        num_counter = Counter(numer_keys)
+        den_counter = Counter(denom_keys)
+
+        common_keys = set(num_counter.keys()) & set(den_counter.keys())
+        for k in common_keys:
+            cancel = min(num_counter[k], den_counter[k])
+            num_counter[k] -= cancel
+            den_counter[k] -= cancel
+
+        remaining_numer = []
+        needed_num = dict(num_counter)
+        for n, k in zip(numer, numer_keys):
+            if needed_num.get(k, 0) > 0:
+                remaining_numer.append(n)
+                needed_num[k] -= 1
+
+        remaining_denom = []
+        needed_den = dict(den_counter)
+        for d, k in zip(denom, denom_keys):
+            if needed_den.get(k, 0) > 0:
+                remaining_denom.append(d)
+                needed_den[k] -= 1
+
+        new_node = self._rebuild_from_factors(remaining_numer, remaining_denom)
+        return ast.copy_location(new_node, node)
+
+
+class ExpressionSimplifierVisitor(CommonVisitor):
     """Simplifies expression such as ``2*x-x``."""
 
     def __init__(self, expr: Optional[str] = None):
@@ -41,7 +140,7 @@ class ExpressionSimplifier(CommonVisitor):
         elif isinstance(node.op, ast.Sub):
             self.visit(node.left)
             # negate the right side
-            neg = ExpressionSimplifier()
+            neg = ExpressionSimplifierVisitor()
             neg.visit(node.right)
             for v, c in neg.coeffs.items():
                 if v not in self.coeffs:
@@ -75,42 +174,19 @@ class ExpressionSimplifier(CommonVisitor):
         self.const += node.value
 
 
-class SimpleSimpliflyTransformer(CommonTransformer):
-    """Simplifies expressions such as ``batch^batch``, ``x+0``, ``x*1``."""
-
-    def visit_BinOp(self, node):
-        self.generic_visit(node)
-        if isinstance(node.op, ast.BitXor):
-            if (
-                isinstance(node.left, ast.Name)
-                and isinstance(node.right, ast.Name)
-                and node.left.id == node.right.id
-            ):
-                return node.left
-        if isinstance(node.op, ast.Add):
-            if isinstance(node.left, ast.Constant) and node.left.value == 0:
-                return node.right
-            if isinstance(node.right, ast.Constant) and node.right.value == 0:
-                return node.left
-        if isinstance(node.op, ast.Mult):
-            if isinstance(node.left, ast.Constant) and node.left.value == 1:
-                return node.right
-            if isinstance(node.right, ast.Constant) and node.right.value == 1:
-                return node.left
-        return node
-
-
 def simplify_expression(expr: str) -> str:
     """Simplifies an expression."""
     tree = ast.parse(expr, mode="eval")
-    SimpleSimpliflyTransformer()
-    simp = ExpressionSimplifier(expr=expr)
-    simp.visit(tree.body)
-    if not simp.success:
-        # visit failed
-        return expr
+    transformers = [
+        SimpleSimpliflyTransformer(expr=expr),
+        MulDivCancellerTransformer(expr=expr),
+    ]
+    for tr in transformers:
+        tree = tr.visit(tree)
 
-    # Rebuild result
+    ast.fix_missing_locations(tree.body)
+    simp = ExpressionSimplifierVisitor(expr=expr)
+    simp.visit(tree.body)
     terms = []
     for var, coeff in simp.coeffs.items():
         if coeff == 0:
@@ -129,9 +205,9 @@ def simplify_expression(expr: str) -> str:
 
 def simplify_two_expressions(expr1: str, expr2: str) -> str:
     """Simplifies an expression exp1 == exp2."""
-    simp1 = ExpressionSimplifier()
+    simp1 = ExpressionSimplifierVisitor(expr1)
     simp1.visit(ast.parse(expr1, mode="eval").body)
-    simp2 = ExpressionSimplifier()
+    simp2 = ExpressionSimplifierVisitor(expr2)
     simp2.visit(ast.parse(expr2, mode="eval").body)
 
     terms = {}
