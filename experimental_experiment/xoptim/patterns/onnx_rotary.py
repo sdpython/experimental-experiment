@@ -4,7 +4,7 @@ import numpy as np
 from onnx import NodeProto, TensorProto
 from ...helpers import make_idn
 from ...xbuilder import FunctionOptions, GraphBuilder
-from ...xbuilder._shape_helper import STATIC_SHAPE
+from ...xshape._shape_helper import STATIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 

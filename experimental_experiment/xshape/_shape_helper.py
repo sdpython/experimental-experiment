@@ -77,7 +77,7 @@ def compatible_shapes(sh1: DYNAMIC_SHAPE, sh2: DYNAMIC_SHAPE) -> bool:
     .. runpython::
         :showcode:
 
-        from experimental_experiment.xbuilder._shape_helper import compatible_shapes
+        from experimental_experiment.xshape._shape_helper import compatible_shapes
 
         print(compatible_shapes((1, 2), (1, 2)))  # True
         print(compatible_shapes((1, 2), (1, "D2")))  # True
@@ -123,7 +123,7 @@ def compatible_dimensions(*dims: Sequence[Union[int, str]]) -> bool:
     .. runpython::
         :showcode:
 
-        from experimental_experiment.xbuilder._shape_helper import compatible_dimensions
+        from experimental_experiment.xshape._shape_helper import compatible_dimensions
 
         print(compatible_dimensions(1, 1))  # True
         print(compatible_dimensions(1, 2))  # False

@@ -284,7 +284,7 @@ class ExportOptions:
 
         for node in exported_program.graph.nodes:
             target_name = CustomTracer.get_node_target_name(node, exc=False)
-            if target_name == "aten::index_copy_":
+            if target_name in {"aten::index_copy_", "aten::silu_backward"}:
                 return True
         return False
 

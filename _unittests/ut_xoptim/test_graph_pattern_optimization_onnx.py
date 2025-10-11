@@ -43,7 +43,7 @@ from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
 from experimental_experiment.xoptim.patterns import ConstantToInitializerPattern
-from experimental_experiment.xbuilder._shape_helper import (
+from experimental_experiment.xshape._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
 )

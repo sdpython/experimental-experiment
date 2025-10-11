@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional, Tuple, Union
 import numpy as np
 from onnx import NodeProto
-from ...xbuilder._shape_helper import is_static_shape
+from ...xshape._shape_helper import is_static_shape
 from ..patterns_api import MatchResult, PatternOptimization
 
 

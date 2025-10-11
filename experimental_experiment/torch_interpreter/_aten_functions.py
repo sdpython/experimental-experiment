@@ -21,7 +21,7 @@ from ..helpers import (
     torch_dtype_to_onnx_dtype,
     type_info,
 )
-from ..xbuilder._shape_helper import (
+from ..xshape._shape_helper import (
     all_float,
     all_int,
     all_int_or_float,
