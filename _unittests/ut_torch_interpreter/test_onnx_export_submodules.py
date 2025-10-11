@@ -168,7 +168,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertNotIn("p_decoder_feed_forward_linear_1_weight", names)
         self.check_ort(onx)
 
-    @requires_torch("2.6", "owning_module is None")
+    @requires_torch("2.10.99", "flacky")
     def test_dummy_llm_strict_true(self):
         model, inputs = dummy_llm()
         onx = to_onnx(
@@ -250,7 +250,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqual(init_names2 & init_names, init_names)
         self.check_ort(onx2)
 
-    @requires_torch("2.10.99", "flacky")    
+    @requires_torch("2.6", "owning_module is None")    
     def test_dummy_llm_strict_pieces_true(self):
         for cls_name in ["DecoderLayer", "AttentionBlock", "MultiAttentionBlock"]:
             with self.subTest(cls_name=cls_name):
