@@ -250,7 +250,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqual(init_names2 & init_names, init_names)
         self.check_ort(onx2)
 
-    @requires_torch("2.6", "owning_module is None")    
+    @requires_torch("2.6", "owning_module is None")
     def test_dummy_llm_strict_pieces_true(self):
         for cls_name in ["DecoderLayer", "AttentionBlock", "MultiAttentionBlock"]:
             with self.subTest(cls_name=cls_name):
