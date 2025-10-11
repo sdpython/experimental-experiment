@@ -75,12 +75,8 @@ from ._onnx_helper import (
 )
 from .model_container import TorchModelContainer, proto_from_array, _get_type
 from .optimization_options import OptimizationOptions
-from ..xshape.rename_expressions import (
-    rename_expression, parse_expression_tokens
-)
-from ..xshape.simplify_expressions import (    
-    simplify_two_expressions
-)
+from ..xshape.rename_expressions import rename_expression, parse_expression_tokens
+from ..xshape.simplify_expressions import simplify_two_expressions
 from ..xshape.expressions_torch import Expression, parse_expression
 from .graph_builder_opset import Opset
 from ._graph_builder_runtime import _GraphBuilderRuntime
