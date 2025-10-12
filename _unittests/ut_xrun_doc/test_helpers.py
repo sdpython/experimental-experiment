@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.helpers import string_type, string_sig
-from experimental_experiment.xshape.rename_expression import rename_dynamic_expression
+from experimental_experiment.xshape.rename_expressions import rename_dynamic_expression
 
 
 class TestHelpers(ExtTestCase):
