@@ -25,7 +25,7 @@ def _unset_fake_temporarily() -> Generator:
             torch._C._set_dispatch_mode(old)
 
 
-class _GraphBuilderRuntime:
+class _BuilderRuntime:
 
     def _apply_slice_to_shape(
         self,

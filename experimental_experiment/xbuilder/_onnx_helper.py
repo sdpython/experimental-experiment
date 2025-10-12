@@ -1,4 +1,4 @@
-from typing import Dict, Iterator, Optional, Set, Tuple, Union
+from typing import Dict, Iterator, Optional, Tuple, Union
 import numpy as np
 from onnx import (
     AttributeProto,
@@ -163,111 +163,6 @@ def choose_consistent_domain_opset(domain: str, opsets: Optional[Dict[str, int]]
     return _get_default_opset_for_domain(domain)
 
 
-def element_wise_binary_op_types() -> Set[str]:
-    """
-    Returns the list of element-wise operators.
-
-    .. runpython::
-        :showcode:
-
-        import pprint
-        from experimental_experiment.xbuilder._onnx_helper import (
-            element_wise_binary_op_types,
-        )
-        pprint.pprint(element_wise_binary_op_types())
-    """
-    return {
-        "Add",
-        "And",
-        "Div",
-        "Mul",
-        "Mod",
-        "Or",
-        "Sub",
-        "Xor",
-    }
-
-
-def element_wise_op_cmp_types() -> Set[str]:
-    """
-    Returns the list of element-wise operators
-    doing comparisons.
-
-    .. runpython::
-        :showcode:
-
-        import pprint
-        from experimental_experiment.xbuilder._onnx_helper import element_wise_op_cmp_types
-        pprint.pprint(element_wise_op_cmp_types())
-    """
-    return {
-        "Equal",
-        "Greater",
-        "GreaterOrEqual",
-        "Less",
-        "LessOrEqual",
-    }
-
-
-def unary_like_op_types() -> Set[str]:
-    """
-    Returns the list of unary *like* operators.
-    They do not change the shape. They may change the type.
-
-    .. runpython::
-        :showcode:
-
-        import pprint
-        from experimental_experiment.xbuilder._onnx_helper import unary_like_op_types
-        pprint.pprint(unary_like_op_types())
-    """
-    return {
-        "Abs",
-        "Acos",
-        "Acosh",
-        "Asin",
-        "Asinh",
-        "Atan",
-        "Atanh",
-        "BitShift",
-        "Cast",
-        "CastLike",
-        "Ceil",
-        "Celu",
-        "Clip",
-        "Cos",
-        "Cosh",
-        "DequantizeLinear",
-        "DynamicQuantizeLinear",
-        "Elu",
-        "Erf",
-        "Exp",
-        "IsInf",
-        "Log",
-        "LogSoftmax",
-        "Neg",
-        "Not",
-        "PRelu",
-        "QuantizeLinear",
-        "Reciprocal",
-        "Relu",
-        "Round",
-        "Selu",
-        "Sigmoid",
-        "Sign",
-        "Sin",
-        "Sinh",
-        "Softmax",
-        "SoftmaxCrossEntropyLoss",
-        "Softplus",
-        "Softsign",
-        "Sqrt",
-        "Tan",
-        "Tanh",
-        "ThresholdRelu",
-    }
-
-
 def same_function_proto(
     f1: FunctionProto, f2: FunctionProto, verbose: int = 0
 ) -> Union[str, bool]:
@@ -336,9 +231,7 @@ def same_function_proto(
 
 
 def clean_shapes(proto: Union[GraphProto, ModelProto]):
-    """
-    Cleans all shapes inplace.
-    """
+    """Cleans all shapes inplace."""
     if isinstance(proto, ModelProto):
         clean_shapes(proto.graph)
         return

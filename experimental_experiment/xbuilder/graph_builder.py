@@ -63,13 +63,13 @@ from ..xshape._shape_helper import (
     reshape_implementation_with_zero,
 )
 from ..xshape.shape_type_compute import set_shape_type_op_any, set_shape_type_custom
+from ..xshape._graph_builder_runtime import _BuilderRuntime
+from ..xshape._onnx_helper import element_wise_binary_op_types, element_wise_op_cmp_types
 from ._onnx_helper import (
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,
     choose_consistent_domain_opset,
     compatible_opsets,
-    element_wise_binary_op_types,
-    element_wise_op_cmp_types,
     same_function_proto,
     unary_like_op_types,
 )
@@ -79,7 +79,6 @@ from ..xshape.rename_expressions import rename_expression, parse_expression_toke
 from ..xshape.simplify_expressions import simplify_two_expressions
 from ..xshape.expressions_torch import Expression, parse_expression
 from .graph_builder_opset import Opset
-from ._graph_builder_runtime import _GraphBuilderRuntime
 from .virtual_tensor import VirtualTensor
 
 
@@ -177,7 +176,7 @@ class InferShapesOptions(IntEnum):
     BUILDER = 8
 
 
-class GraphBuilder(_GraphBuilderRuntime):
+class GraphBuilder(_BuilderRuntime):
     """
     Simplifies the creation of a model.
 

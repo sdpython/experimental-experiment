@@ -5,7 +5,6 @@
     :maxdepth: 1
     :caption: modules
 
-    _graph_builder_runtime
     _onnx_helper
     graph_builder
     graph_builder_opset

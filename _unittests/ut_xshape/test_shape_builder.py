@@ -105,6 +105,57 @@ class TestShapeBuilder(ExtTestCase):
         self.assertEqual(builder._known_value_shape, {})
         self.assertEqual(builder._output_names, ["Z"])
 
+    def test_reshape_reshape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xr"]),
+                    oh.make_node("Reshape", ["xr", "shape2"], ["xrr"]),
+                    oh.make_node("Add", ["xrr", "one"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b", "c"])],
+                [_mkv_("Y", TFLOAT, ["a", "b", "c"])],
+                [
+                    onh.from_array(np.array([0, 0, 2, -1], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="shape2"),
+                    onh.from_array(np.array([1], dtype=np.float32), name="one"),
+                ],
+            )
+        )
+        onnx.shape_inference.infer_shapes(model)
+        builder = BasicShapeBuilder()
+        builder.run_model(model)
+        self.assertEqual(builder._input_names, ["X"])
+        self.assertEqual(
+            builder._known_ranks,
+            {"X": 3, "Y": 3, "xr": 4, "xrr": 3},
+        )
+        self.assertEqual(
+            builder._known_shapes,
+            {
+                "X": ("a", "b", "c"),
+                "Y": ("a", "b", "c"),
+                "xr": ("a", "b", 2, "((c)//(2))"),
+                "xrr": ("a", "b", "c"),
+            },
+        )
+        self.assertEqual(
+            builder._known_types,
+            {"X": 1, "Y": 1, "xr": 1, "xrr": 1},
+        )
+        self.assertEqualAny(
+            builder.constants_computed_,
+            {"shape1": np.array([0, 0, 2, -1]), "shape2": np.array([0, 0, -1])},
+        )
+        self.assertEqual(builder.constraints_, {})
+        self.assertEqual(
+            builder.dynamic_dimensions_,
+            {"a": {"a"}, "b": {"b"}, "c": {"c"}},
+        )
+        self.assertEqual(builder._known_value_shape, {})
+        self.assertEqual(builder._output_names, ["Y"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

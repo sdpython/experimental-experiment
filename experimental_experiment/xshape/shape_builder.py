@@ -8,8 +8,14 @@ from onnx.external_data_helper import uses_external_data
 from onnx_diagnostic.helpers import string_type
 from ..helpers import make_hash
 from ._shape_helper import DYNAMIC_SHAPE, is_static_shape
+from ._builder_runtime import _BuilderRuntime
 from .rename_expressions import parse_expression_tokens
 from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
+from ._onnx_helper import (
+    element_wise_binary_op_types,
+    element_wise_op_cmp_types,
+    unary_like_op_types,
+)
 
 
 def str_tensor_proto_type() -> str:
@@ -34,6 +40,10 @@ def str_tensor_proto_type() -> str:
 
 class ShapeBuilder:
     """API for a class computing shapes in an ONNX model."""
+
+    _op_type_element_wise_types = element_wise_binary_op_types()
+    _op_type_element_wise_cmp_types = element_wise_op_cmp_types()
+    _op_type_unary_like = unary_like_op_types()
 
     def get_shape(self, name: str) -> DYNAMIC_SHAPE:
         raise NotImplementedError(f"not overloaded in {self.__class__.__name__!r}")
@@ -131,7 +141,7 @@ class ShapeBuilder:
         return res
 
 
-class BasicShapeBuilder(ShapeBuilder):
+class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime):
     """
     Implements a basic class doing shape inference in an ONNX model.
 
@@ -141,6 +151,7 @@ class BasicShapeBuilder(ShapeBuilder):
     * ``ONNXSTOPTYPE=<name>``: raises an exception when ``name`` receives a type.
     * ``ONNXDYNDIM=<name>``: raises an exception when dimension ``name`` is used
     * ``ONNXCST=1``: shows which constant is requested
+    * ``ONNXSHAPECOMPUTE=1``: raises an exception when a shape is missing
     """
 
     def __init__(self, verbose: int = 0):
@@ -163,6 +174,7 @@ class BasicShapeBuilder(ShapeBuilder):
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
         self._debug_dyn_dim = set(os.environ.get("ONNXDYNDIM", "").split(","))
         self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
+        self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_msg = []
 
     def is_constant(self, name: str) -> bool:
