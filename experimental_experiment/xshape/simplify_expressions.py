@@ -142,6 +142,9 @@ class ExpressionSimplifierVisitor(CommonVisitor):
             # negate the right side
             neg = ExpressionSimplifierVisitor()
             neg.visit(node.right)
+            if not neg.success:
+                self.success = False
+                return
             for v, c in neg.coeffs.items():
                 if v not in self.coeffs:
                     self.coeffs[v] = 0
@@ -187,6 +190,8 @@ def simplify_expression(expr: str) -> str:
     ast.fix_missing_locations(tree.body)
     simp = ExpressionSimplifierVisitor(expr=expr)
     simp.visit(tree.body)
+    if not simp.success:
+        return expr
     terms = []
     for var, coeff in simp.coeffs.items():
         if coeff == 0:

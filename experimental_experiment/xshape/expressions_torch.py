@@ -21,13 +21,11 @@ class Expression:
 
     def isidentifier(self):
         "Tells if this expression is a single dimension or an expression."
-        return self.expr.isidentifiers
+        return self.expr.isidentifier
 
 
 def parse_expression(
-    expr: str,
-    context: Optional[Dict[str, Any]] = None,
-    exc: bool = True,
+    expr: str, context: Optional[Dict[str, Any]] = None, exc: bool = True
 ) -> Expression:
     """
     Parses an expression involving dimensions.
@@ -49,7 +47,8 @@ def parse_expression(
     ), f"Unexpected type {type(expr)} for expr={expr!r} and context={context}"
     if context is None:
         context = {}
-    st = ast.parse(simplify_expression(expr), mode="eval")
+    simplified = simplify_expression(expr)
+    st = ast.parse(simplified, mode="eval")
     for node in ast.walk(st):
         if isinstance(node, ast.Name):
             if node.id in {"Max", "Min", "CeilToInt", "IntTrueDiv", "Mod"}:
