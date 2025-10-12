@@ -16,7 +16,7 @@ class TestShapeBuilder(ExtTestCase):
     def test_shape_builder(self):
         builder = ShapeBuilder()
         for me in dir(builder):
-            if me.startswith("get_"):
+            if me.startswith("get_") and not me.startswith("get_att"):
                 self.assertRaise(lambda me=me: getattr(builder, me)(""), NotImplementedError)
             if me.startswith("set_"):
                 self.assertRaise(
@@ -58,6 +58,52 @@ class TestShapeBuilder(ExtTestCase):
         onnx.shape_inference.infer_shapes(model)
         builder = BasicShapeBuilder()
         builder.run_model(model)
+        self.assertEqual(builder._input_names, ["X", "Y"])
+        self.assertEqual(
+            builder._known_ranks,
+            {"X": 2, "Y": 4, "Z": 4, "xm": 3, "xm1": 3, "xm2": 3, "xm2c": 3, "xu1": 3, "xu2": 4},
+        )
+        self.assertEqual(
+            builder._known_shapes,
+            {
+                "X": ("D32", "D128"),
+                "Y": ("batch", "channel", "D128", "D64"),
+                "Z": (3, 5, 32, 64),
+                "xm": (15, 32, 64),
+                "xm1": (1, 32, 128),
+                "xm2": (15, 128, 64),
+                "xm2c": (15, 128, 64),
+                "xu1": (1, "D32", "D128"),
+                "xu2": (1, 1, "D32", "D128"),
+            },
+        )
+        self.assertEqual(
+            builder._known_types,
+            {"X": 1, "Y": 1, "Z": 1, "xm": 1, "xm1": 1, "xm2": 1, "xm2c": 1, "xu1": 1, "xu2": 1},
+        )
+        self.assertEqualAny(
+            builder.constants_computed_,
+            {
+                "shape1": np.array([1, 32, 128], dtype=np.int64),
+                "shape2": np.array([15, 128, 64], dtype=np.int64),
+                "shape3": np.array([3, 5, 32, 64], dtype=np.int64),
+                "un": np.array([1], dtype=np.int64),
+                "zero": np.array([0], dtype=np.int64),
+            },
+        )
+        self.assertEqual(builder.constraints_, {})
+        self.assertEqual(
+            builder.dynamic_dimensions_,
+            {
+                "D128": {"D128"},
+                "D32": {"D32"},
+                "D64": {"D64"},
+                "batch": {"batch"},
+                "channel": {"channel"},
+            },
+        )
+        self.assertEqual(builder._known_value_shape, {})
+        self.assertEqual(builder._output_names, ["Z"])
 
 
 if __name__ == "__main__":

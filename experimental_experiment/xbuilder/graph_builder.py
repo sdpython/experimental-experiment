@@ -1460,9 +1460,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self.verbose > 5:
                 print(f"[GraphBuilder-{self._hash()}.set_rank] (again) {name}:{value}")
             return
-        assert (
-            name not in self._known_ranks
-        ), f"Name {name!r} already exists{self.get_debug_msg()}"
         self._known_ranks[name] = value
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_rank] {name}:{value}")
@@ -1746,7 +1743,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         assert isinstance(dim, str) and " " not in dim and dim.count("(") == dim.count(")"), (
             f"type(dim)={type(dim)} must be a str and should not contain "
-            f"a comma or a space dim={dim!r} and the same number of opened and closed é"
+            f"a comma or a space dim={dim!r} and the same number of opened and closed "
             f"brackets{self.get_debug_msg()}"
         )
         for token in parse_expression_tokens(dim):
@@ -1993,7 +1990,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{name}:{s}"
         return f"{name}:?"
 
-    def get_shape(self, name: str) -> int:
+    def get_shape(self, name: str) -> DYNAMIC_SHAPE:
         """Returns the shape of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_shapes, (

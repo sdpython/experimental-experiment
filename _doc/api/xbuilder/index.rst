@@ -7,15 +7,11 @@
 
     _graph_builder_runtime
     _onnx_helper
-    _shape_helper
-    expression_dimension
     graph_builder
     graph_builder_opset
     model_container
     optimization_options
     reverse_graph_builder
-    shape_type_compute
-    type_inference
 
 GraphBuilder
 ++++++++++++

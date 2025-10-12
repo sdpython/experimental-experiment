@@ -8,7 +8,7 @@ from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
 from ..helpers import from_array_extended, make_idn
 from ..xbuilder._onnx_helper import enumerate_subgraphs
-from ..xbuilder.type_inference import infer_types
+from ..xshape.type_inference import infer_types
 from .patterns_api import MatchResult, PatternOptimization
 from .patterns import get_default_patterns
 

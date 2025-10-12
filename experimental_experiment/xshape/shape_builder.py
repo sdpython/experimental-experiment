@@ -1,10 +1,35 @@
+import os
 import pprint
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
+import numpy as np
 import onnx
+import onnx.numpy_helper as onh
+from onnx.external_data_helper import uses_external_data
 from onnx_diagnostic.helpers import string_type
 from ..helpers import make_hash
-from ._shape_helper import DYNAMIC_SHAPE
+from ._shape_helper import DYNAMIC_SHAPE, is_static_shape
+from .rename_expressions import parse_expression_tokens
 from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
+
+
+def str_tensor_proto_type() -> str:
+    """
+    Returns the following string:
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.xshape.shape_builder import str_tensor_proto_type
+
+        print(str_tensor_proto_type())
+    """
+    mapping = [
+        (getattr(onnx.TensorProto, att), att)
+        for att in dir(onnx.TensorProto)
+        if att.upper() == att and isinstance(getattr(onnx.TensorProto, att), int)
+    ]
+    mapping.sort()
+    return ", ".join(f"{k}:{v}" for k, v in mapping)
 
 
 class ShapeBuilder:
@@ -31,24 +56,418 @@ class ShapeBuilder:
     def _hash(self) -> str:
         return make_hash(self)
 
+    def get_attribute(
+        self, node: onnx.NodeProto, att_name: str, exc: bool = True
+    ) -> Optional[onnx.AttributeProto]:
+        """Returns an attribute for a node."""
+        for att in node.attribute:
+            if att.name == att_name:
+                return att
+        assert not exc, (
+            f"Unable to find attribute {att_name!r} for node "
+            f"type {node.op_type!r} in node {node}"
+        )
+        return None
+
+    def get_attribute_with_default(
+        self, node: onnx.NodeProto, name: str, default_value: Any
+    ) -> Any:
+        """
+        Returns an attribute or its default value if missing.
+
+        :param node: node
+        :param name: attribute name
+        :param default_value: default value
+        :return: value
+        """
+        for att in node.attribute:
+            if att.name == name:
+                if att.type == onnx.AttributeProto.INT:
+                    return att.i
+                if att.type == onnx.AttributeProto.INTS:
+                    return list(att.ints)
+                if att.type == onnx.AttributeProto.FLOAT:
+                    return att.f
+                if att.type == onnx.AttributeProto.FLOATS:
+                    return list(att.floats)
+                if att.type == onnx.AttributeProto.STRING:
+                    return att.s
+                raise TypeError(
+                    f"Not implemented for attribute name {att.name!r}, attribute={att}"
+                )
+        return default_value
+
+    def get_attributes_with_default(
+        self, node: onnx.NodeProto, **default_values
+    ) -> Dict[str, Any]:
+        """
+        Returns int or float attributes. If missing, the default value is returned
+        if it is not None.
+
+        :param node: node
+        :param default_values: default values
+        """
+        res = {}
+        for att in node.attribute:
+            if att.name in default_values:
+                if att.type == onnx.AttributeProto.INT:
+                    res[att.name] = att.i
+                elif att.type == onnx.AttributeProto.INTS:
+                    res[att.name] = list(att.ints)
+                elif att.type == onnx.AttributeProto.FLOAT:
+                    res[att.name] = att.f
+                elif att.type == onnx.AttributeProto.FLOATS:
+                    res[att.name] = list(att.floats)
+                elif att.type == onnx.AttributeProto.STRING:
+                    res[att.name] = att.s
+                else:
+                    raise TypeError(
+                        f"Not implemented for attribute name {att.name!r}, attribute={att}"
+                    )
+        for k, v in default_values.items():
+            if k not in res and v is not None:
+                res[k] = v
+        res = {k: v for k, v in res.items() if v is not None}
+        return res
+
 
 class BasicShapeBuilder(ShapeBuilder):
-    """Implements a basic class doing shape inference in an ONNX model."""
+    """
+    Implements a basic class doing shape inference in an ONNX model.
 
-    def __init__(self):
+    A couple of environment variables can be set to help debugging any issue.
+
+    * ``ONNXSTOPSHAPE=<name>``: raises an exception when ``name`` receives a shape.
+    * ``ONNXSTOPTYPE=<name>``: raises an exception when ``name`` receives a type.
+    * ``ONNXDYNDIM=<name>``: raises an exception when dimension ``name`` is used
+    * ``ONNXCST=1``: shows which constant is requested
+    """
+
+    def __init__(self, verbose: int = 0):
+        self.verbose = verbose
         self._input_names = []
         self._output_names = []
         self._known_shapes = {}
         self._known_ranks = {}
         self._known_types = {}
         self.constraints_ = {}
+        self.dynamic_dimensions_ = {}
+        self.constants_ = {}
         #
         self._known_value_shape = {}
-        self.constants_ = {}
-        self._known_torch_value = {}
+        self.constants_computed_ = {}
         # self.dynamic_dimensions_source={}
         # self.dynamic_dimensions_source_flat={}
         # self._dynamic_examples={}
+        self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
+        self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
+        self._debug_dyn_dim = set(os.environ.get("ONNXDYNDIM", "").split(","))
+        self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
+        self._debug_msg = []
+
+    def is_constant(self, name: str) -> bool:
+        """Tells if a result is a constant."""
+        return name in self.constants_
+
+    def get_constant(
+        self,
+        name: str,
+        exc: bool = True,
+        computed_value: bool = False,
+        as_shape: bool = False,
+        multiple_outputs: bool = False,
+    ) -> Union[np.ndarray, onnx.NodeProto]:
+        """
+        The method returns the constant *name*. It is a tensor (numpy array)
+        or a NodeProto which must be evaluated.
+        If *computed_value* is True, the NodeProto is evaluated with the
+        ReferenceEvaluator.
+
+        :param name: constant name
+        :param exc: raise an exception if anything is impossible to do
+        :param computed_value: compute the value if not a constant
+        :param as_shape: returns a tuple for a shape
+        :param multiple_outputs: allow multiple outputs
+        :return: value
+        """
+        assert self.is_constant(name), f"{name!r} is not a constant{self.get_debug_msg()}"
+
+        if as_shape:
+            assert not multiple_outputs, "multiple outputs not allowed with as_shape=True"
+            res = self.get_constant(name, exc, computed_value=computed_value, as_shape=False)
+            if res is None:
+                assert not exc, (
+                    f"No constant for name={name!r}, exc={exc}, "
+                    f"computed_value={computed_value}, as_shape={as_shape}, "
+                    f"multiple_outputs={multiple_outputs}{self.get_debug_msg()}"
+                )
+                if self._debug_get_constant:
+                    print(f"[ShapeBuilder-{self._hash()}.get_constant] FAIL(1) name={name!r}")
+                return None
+            assert multiple_outputs or not isinstance(
+                res, tuple
+            ), f"Multiple outputs is not allowed but type is {type(res)} for name={name!r}"
+            new_res = []
+            for i in res:
+                new_res.append(i if isinstance(i, str) else int(i))
+            return tuple(new_res)
+
+        if name in self.constants_computed_:
+            value = self.constants_computed_[name]
+            assert value is not None, f"Constant is empty for name={name!r}"
+            assert multiple_outputs or not isinstance(
+                value, tuple
+            ), f"Multiple output is not allowed but type is {type(value)} for name={name!r}"
+            assert (
+                not exc or value is not None
+            ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
+            return value
+
+        possible_value = self.constants_[name]
+
+        if isinstance(possible_value, onnx.TensorProto):
+            if uses_external_data(possible_value):
+                assert not exc, (
+                    f"Tensor is using external data, data_type={possible_value.data_type}, "
+                    f"dims={possible_value.dims}"
+                )
+                return None
+            v = onh.to_array(possible_value)
+            assert not multiple_outputs, f"Multiple outputs is not allowed for name={name!r}"
+            self.constants_computed_[name] = v
+            return v
+
+        assert isinstance(
+            possible_value, onnx.TensorProto
+        ), f"Unexpected type {type(possible_value)} for a constant{self.get_debug_msg()}"
+        res, _ = self.compute_constant(name, exc=exc)
+        if res is None:
+            # The constant is too big to be computed.
+            if self._debug_get_constant:
+                print(f"[ShapeBuilder-{self._hash()}.get_constant] FAIL(2) name={name!r}")
+            return None
+
+        assert multiple_outputs or not isinstance(
+            res, tuple
+        ), f"Multiple outputs is not allowed but type is {type(res)} for name={name!r}"
+        assert (
+            not multiple_outputs
+        ), f"get_constants not implemented when multiple_outputs=True, name={name!r}"
+        if not isinstance(res, tuple):
+            return res
+
+        if len(res) == 1:
+            assert multiple_outputs or not isinstance(
+                value, tuple
+            ), f"Multiple output is not allowed but type is {type(value)} for name={name!r}"
+            assert (
+                not exc or res[0] is not None
+            ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
+            return res[0]
+
+        index = list(possible_value.output).index(name)
+        value = res[index]
+        assert value is not None, f"Constant is empty for name={name!r}"
+        assert multiple_outputs or not isinstance(
+            value, tuple
+        ), f"Multiple outputs is not allowed but type is {type(value)} for name={name!r}"
+        assert (
+            not exc or value is not None
+        ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
+        return value
+
+    def set_constant(self, name: str, value: Union[onnx.TensorProto, onnx.NodeProto]) -> bool:
+        """Tells if a result is a constant."""
+        assert (
+            name not in self.constants_
+        ), f"Constant {name!r} is already defined{self.get_debug_msg()}"
+        self.constants_[name] = value
+
+    def has_type(self, name: str) -> Union[bool, int]:
+        """Tells if a result has a type. This should be always true."""
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        if name not in self._known_types:
+            return False
+        # If the type is undefined, then it has no type.
+        return self._known_types[name]
+
+    def get_type(self, name: str) -> int:
+        """Returns the type of a result."""
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert name in self._known_types, (
+            f"Type is unknown for result {name!r}, "
+            f"known_types={self._known_types}{self.get_debug_msg()}."
+        )
+        return self._known_types[name]
+
+    def set_type(self, name: str, dtype: int, exc: bool = True) -> bool:
+        """
+        Sets the shape for a result. It is exists, it checks the new shape
+        is equal to the existing one.
+
+        :param name: name
+        :param dtype: element type (an integer, ONNX), 0 (unknonw is a possible value)
+        :param exc: raises an exception
+        :return: returns True if there is no type conflict
+        """
+        assert (
+            not name or name != self._debug_stop_type
+        ), f"Requested stop, name={name!r}, dtype={dtype}{self.get_debug_msg()}"
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert isinstance(dtype, int), f"Unexpected type {type(dtype)} for dtype."
+        int_type = dtype
+        if name in self._known_types:
+            # 0 is undefined
+            if self._known_types[name] != 0 and int_type != self._known_types[name]:
+                if exc:
+                    raise RuntimeError(
+                        f"Type for name {name!r} already exists and it is different, "
+                        f"known is {self._known_types[name]} != {int_type} (new) - "
+                        f"(mapping={str_tensor_proto_type()}){self.get_debug_msg()}"
+                    )
+                if "warnings" not in self._debug_msg:
+                    self._debug_msg["warnings"] = []
+                self._debug_msg["warnings"].append(
+                    f"Type for name {name!r} already exists and it is different, "
+                    f"known is {self._known_types[name]} != {int_type} (new) - "
+                )
+                if self.verbose:
+                    print(
+                        f"Type for name {name!r} already exists and it is different, "
+                        f"known is {self._known_types[name]} != {int_type} (new)"
+                    )
+                return False
+
+        if self.verbose > 5:
+            print(f"[ShapeBuilder-{self._hash()}.set_type] {name}:{int_type}")
+        self._known_types[name] = int_type
+        return True
+
+    def has_rank(self, name: str) -> bool:
+        """Tells if a result has a rank."""
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        return name in self._known_ranks
+
+    def get_rank(self, name: str) -> int:
+        """Returns the rank of a result."""
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert name in self._known_ranks, (
+            f"rank is unknown for result {name!r}, has_shape={self.has_shape(name)}, "
+            f"has_rank={self.has_rank(name)}, "
+            f"known_ranks={self._known_ranks}{self.get_debug_msg()}"
+        )
+        return self._known_ranks[name]
+
+    def set_rank(self, name: str, value: int) -> bool:
+        """
+        Sets the rank for a result.
+
+        :param name: result name
+        :param value: rank
+        :return: True if there is no rank conflict
+        """
+        assert (
+            not self._debug_stop_shape or name != self._debug_stop_shape
+        ), f"Requested stop, name={name!r}, rank={value}"
+        assert isinstance(value, int), f"Unexpected rank type {type(value)} for {name!r}"
+        assert not isinstance(value, bool), f"Unexpected rank type {type(value)} for {name!r}"
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        if name in self._known_ranks:
+            assert value == self._known_ranks[name], (
+                f"Inconsistent ranks for {name!r}, previous value is "
+                f"{self._known_ranks[name]}, new value is {value}{self.get_debug_msg()}"
+            )
+            if self.verbose > 5:
+                print(f"[ShapeBuilder-{self._hash()}.set_rank] (again) {name}:{value}")
+            return True
+        self._known_ranks[name] = value
+        if self.verbose > 5:
+            print(f"[ShapeBuilder-{self._hash()}.set_rank] {name}:{value}")
+        return True
+
+    def has_shape(self, name: str, full=False) -> bool:
+        """
+        Tells if a result has a shape.
+        If *full* is True, it returns True if the shape exists and if it
+        is a static shape with all dimensions > 0.
+        """
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        if name not in self._known_shapes:
+            return False
+        if full:
+            shape = self._known_shapes[name]
+            return is_static_shape(shape) and min(shape) >= 0
+        return True
+
+    def get_shape(self, name: str) -> DYNAMIC_SHAPE:
+        """Returns the shape of a result."""
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert name in self._known_shapes, (
+            f"Shape is unknown for result {name!r}, "
+            f"known_shapes={self._known_shapes}{self.get_debug_msg()}"
+        )
+        return self._known_shapes[name]
+
+    def register_dynamic_objects_from_dim(self, dim: str):
+        """Registers all the dynamic objects required in a dimension."""
+        assert isinstance(dim, str) and " " not in dim and dim.count("(") == dim.count(")"), (
+            f"type(dim)={type(dim)} must be a str and should not contain "
+            f"a comma or a space dim={dim!r} and the same number of opened and closed "
+            f"brackets{self.get_debug_msg()}"
+        )
+        for token in parse_expression_tokens(dim):
+            if token not in self.dynamic_dimensions_:
+                self.add_dynamic_dimension(token)
+
+    def add_dynamic_dimension(self, name: str):
+        """Adds a dynamic dimension."""
+        assert (
+            name not in self.dynamic_dimensions_
+        ), f"Dynamic dimension {name!r}{self.get_debug_msg()}"
+        self.dynamic_dimensions_[name] = {name}
+
+    def set_shape(self, name: str, shape: DYNAMIC_SHAPE, exc: bool = False, **_kwargs):
+        """
+        Sets the shape for a result. It is exists, it checks the new shape
+        is equal to the existing one.
+
+        :param name: result name
+        :param shape: shape
+        :param exc: raise an exception if inconsistency
+        """
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert isinstance(shape, tuple), f"Unexpected shape type {type(shape)}"
+        assert (
+            not name or name != self._debug_stop_shape
+        ), f"Requested stop, name={name!r}, shape={shape}{self.get_debug_msg()}"
+        assert not shape or not isinstance(shape[0], tuple), f"Unexpected shape {shape}"
+        for sdim in shape:
+            if not isinstance(sdim, str):
+                continue
+            self.register_dynamic_objects_from_dim(sdim)
+        if name in self._known_shapes:
+            old_shape = self._known_shapes[name]
+            if self._debug_dyn_dim and self._debug_dyn_dim & (set(shape) | set(old_shape)):
+                print(
+                    f"[ShapeBuilder.set_shape] set_shape({name!r}, {shape}), "
+                    f"old_shape={old_shape}"
+                )
+            if shape != old_shape:
+                if exc:
+                    raise RuntimeError(
+                        f"Name {name!r} already exists and its shape different "
+                        f"{old_shape} (old) != {shape}{self.get_debug_msg()}"
+                    )
+                return False
+            return True
+
+        if self._debug_dyn_dim and set(shape) & self._debug_dyn_dim:
+            print(f"[ShapeBuilder.set_shape] set_shape({name!r}, {shape})")
+        if self.verbose > 5:
+            print(f"[ShapeBuilder-{self._hash()}.set_shape] {name}:{shape}")
+        self._known_shapes[name] = shape
+        if not self.has_rank(name):
+            self.set_rank(name, len(shape))
 
     def get_debug_msg(self, limit: int = 1000) -> str:
         """
@@ -151,19 +570,6 @@ class BasicShapeBuilder(ShapeBuilder):
             k: v for k, v in self._known_ranks.items() if k not in self._known_shapes
         }
         rows.append(f"_known_ranks (with no shape)={pprint.pformat(reminaing_ranks )[:10000]}")
-
-        rows.append("--TORCH-SHAPES--")
-        for kk, vv in self._known_torch_value.items():
-            rows.append(
-                f"    {kk}: {vv} --- "
-                f"{self.get_type(kk) if self.has_type(kk) else ''}:"
-                f"{self.get_rank(kk) if self.has_rank(kk) else ''}:"
-                f"{self.get_shape(kk) if self.has_shape(kk) else ''}:"
-            )
-            if len(rows) > limit:
-                rows.append("...")
-                break
-
         return "\n".join(rows)
 
     def run_node(self, node: onnx.NodeProto):
@@ -172,6 +578,9 @@ class BasicShapeBuilder(ShapeBuilder):
         and types.
         """
         self._make_node_set_type_shape(node)
+        if all(self.is_constant(i) for i in node.input):
+            for o in node.output:
+                self.set_constant(o, node)
 
     def run_value_info(self, info: onnx.ValueInfoProto, is_input: bool):
         """Fills ShapeBuilder with information coming from an input or output."""
@@ -197,6 +606,10 @@ class BasicShapeBuilder(ShapeBuilder):
             )
         assert isinstance(model, onnx.GraphProto), f"Unexpected type {type(model)} for model"
         graph = model
+        for i in graph.initializer:
+            self.set_constant(i.name, i)
+        for i in graph.sparse_initializer:
+            self.set_constant(i.name, i)
         for i in graph.input:
             self.run_value_info(i, True)
         for node in graph.node:
