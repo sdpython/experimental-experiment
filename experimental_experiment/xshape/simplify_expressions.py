@@ -124,6 +124,17 @@ class MulDivCancellerTransformer(CommonTransformer):
         return ast.copy_location(new_node, node)
 
 
+class SimplifyParensTransformer(CommonTransformer):
+    """To simplify parenthesis."""
+
+    def visit_BinOp(self, node):
+        self.generic_visit(node)
+        return node
+
+    def visit_Expr(self, node):
+        return self.generic_visit(node)
+
+
 class ExpressionSimplifierVisitor(CommonVisitor):
     """Simplifies expression such as ``2*x-x``."""
 
@@ -183,15 +194,16 @@ def simplify_expression(expr: str) -> str:
     transformers = [
         SimpleSimpliflyTransformer(expr=expr),
         MulDivCancellerTransformer(expr=expr),
+        SimplifyParensTransformer(expr=expr),
     ]
     for tr in transformers:
         tree = tr.visit(tree)
-
     ast.fix_missing_locations(tree.body)
+    expr = ast.unparse(tree)
     simp = ExpressionSimplifierVisitor(expr=expr)
     simp.visit(tree.body)
     if not simp.success:
-        return expr
+        return expr.replace(" ", "")
     terms = []
     for var, coeff in simp.coeffs.items():
         if coeff == 0:

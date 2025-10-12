@@ -38,6 +38,7 @@ class TestDimension(ExtTestCase):
         self.assertEqual("x", simplify_expression("(2*x)//2"))
         self.assertEqual("x", simplify_expression("(x*y)//y"))
         self.assertEqual("x", simplify_expression("(x*(y+1))//(y+1)"))
+        self.assertEqual("c//2", simplify_expression("((c)//(2))"))
 
 
 if __name__ == "__main__":

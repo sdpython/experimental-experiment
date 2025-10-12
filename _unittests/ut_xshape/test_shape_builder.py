@@ -136,7 +136,7 @@ class TestShapeBuilder(ExtTestCase):
             {
                 "X": ("a", "b", "c"),
                 "Y": ("a", "b", "c"),
-                "xr": ("a", "b", 2, "((c)//(2))"),
+                "xr": ("a", "b", 2, "c//2"),
                 "xrr": ("a", "b", "c"),
             },
         )
