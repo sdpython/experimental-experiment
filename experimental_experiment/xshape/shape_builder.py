@@ -9,6 +9,7 @@ from onnx_diagnostic.helpers import string_type
 from ..helpers import make_hash
 from ._shape_helper import DYNAMIC_SHAPE, is_static_shape
 from ._builder_runtime import _BuilderRuntime
+from ._shape_runtime import _ShapeRuntime
 from .rename_expressions import parse_expression_tokens
 from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import (
@@ -141,7 +142,7 @@ class ShapeBuilder:
         return res
 
 
-class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime):
+class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime):
     """
     Implements a basic class doing shape inference in an ONNX model.
 
@@ -152,6 +153,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime):
     * ``ONNXDYNDIM=<name>``: raises an exception when dimension ``name`` is used
     * ``ONNXCST=1``: shows which constant is requested
     * ``ONNXSHAPECOMPUTE=1``: raises an exception when a shape is missing
+    * ``ONNXSTOPVALUESHAPE=<name>``: more information in function dealing with shapes
     """
 
     def __init__(self, verbose: int = 0):
@@ -175,6 +177,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime):
         self._debug_dyn_dim = set(os.environ.get("ONNXDYNDIM", "").split(","))
         self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
+        self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
         self._debug_msg = []
 
     def is_constant(self, name: str) -> bool:
@@ -294,6 +297,96 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime):
             name not in self.constants_
         ), f"Constant {name!r} is already defined{self.get_debug_msg()}"
         self.constants_[name] = value
+        if isinstance(value, onnx.TensorProto):
+            if not self.has_type(name):
+                self.set_type(name, value.data_type)
+            if not self.has_shape(name):
+                self.set_shape(name, tuple(value.dims))
+
+    def set_value_shape(self, name: str, value: Any, equal_to: Optional[Tuple[str, str]] = None):
+        """
+        Sets the value for a shape result.
+
+        :param name: name
+        :param value: it cannot be empty
+        :param equal_to: if specified, the value is also equal to this value
+
+        A value can be a string (for an unknown shape, a tuple for a shape,
+        an integer for a single scalar.
+        """
+        if self._debug_value_shape and name == self._debug_value_shape:
+            raise AssertionError(
+                f"Requested stop, name={name!r}, value={value!r}, equal_to={equal_to!r}"
+            )
+
+        assert isinstance(
+            name, str
+        ), f"Unexpected type {type(name)} for name={name!r}{self.get_debug_msg()}"
+        assert not isinstance(value, tuple) or all(isinstance(d, (str, int)) for d in value), (
+            f"Unexpected value for shape {name!r}, value={value!r}, "
+            f"types={string_type(value)}{self.get_debug_msg()}"
+        )
+        if not self.has_rank(name):
+            self.set_shape(name, (len(value),) if isinstance(value, tuple) else tuple())
+        assert self.has_rank(name), (
+            f"name={name!r}, has no rank, but it should, value={value!r}"
+            f"{self.get_debug_msg()}"
+        )
+        assert self.get_rank(name) in (0, 1), (
+            f"name={name!r} is not a shape, its rank is {self.get_rank(name)}"
+            f"{self.get_debug_msg()}"
+        )
+        assert not isinstance(value, (int, float)) or self.get_rank(name) == 0, (
+            f"Mismatch between value={value!r} and rank="
+            f"{self.get_rank(name)} for name={name!r}"
+            f"{self.get_debug_msg()}"
+        )
+        if equal_to is None:
+            if name in self._known_value_shape:
+                existing = self._known_value_shape[name]
+                if (
+                    isinstance(existing, tuple)
+                    and isinstance(value, tuple)
+                    and len(existing) == len(value) == 1
+                    and isinstance(existing[0], str)
+                ):
+                    self.register_constraint_dimension("existing", value)
+                    return
+            assert (
+                name not in self._known_value_shape or self._known_value_shape[name] == value
+            ), (
+                f"Shape value for {name!r} (value={value!r}) is already "
+                f"registered and is different from the existing "
+                f"value={value!r} (equal_to={equal_to!r}), "
+                f"existing value is {self._known_value_shape.get(name, None)!r}"
+                f"{self.get_debug_msg()}"
+            )
+            if self.verbose > 2:
+                print(f"[GraphBuilder-{self._hash()}.set_value_shape] {name}:{value}")
+            self._known_value_shape[name] = value
+            return
+
+        assert (
+            name in equal_to
+        ), f"Unexpected name={name!r}, it should be in equal_to={equal_to!r}."
+        values = (
+            self._known_value_shape.get(equal_to[0], None),
+            self._known_value_shape.get(equal_to[1], None),
+        )
+        assert value in values, (
+            f"Unexpected value={value} for name={name!r}, equal_to={equal_to}, "
+            f"values={values}{self.get_debug_msg()}"
+        )
+        assert equal_to[0] in self._known_value_shape, (
+            f"{equal_to[0]!r} should already registered, name={name!r}, "
+            f"value={value!r}, equal_to={equal_to!r}{self.get_debug_msg()}"
+        )
+        # The logic is to get rid of one value instead of keeping
+        # a mapping between equivalent values.
+        new_value = self._known_value_shape[equal_to[0]]
+        for n in equal_to:
+            if n not in self._known_value_shape:
+                self._known_value_shape[n] = new_value
 
     def has_type(self, name: str) -> Union[bool, int]:
         """Tells if a result has a type. This should be always true."""
@@ -481,6 +574,21 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime):
         if not self.has_rank(name):
             self.set_rank(name, len(shape))
 
+    def value_as_shape(self, name: str) -> bool:
+        """Returns the value of a result if it is a shape."""
+        if name in self._known_value_shape:
+            return self._known_value_shape[name]
+        if not self.has_type(name) or self.get_type(name) != onnx.TensorProto.INT64:
+            return None
+        if self.is_constant(name):
+            # It is probably a shape because the user requested it as a shape.
+            cst = self.get_constant(name, exc=False, computed_value=True)
+            if cst is not None and len(cst.shape) == 1 and cst.dtype == np.int64:
+                value = tuple(map(int, cst))
+                self._known_value_shape[name] = value
+                return value
+        return None
+
     def get_debug_msg(self, limit: int = 1000) -> str:
         """
         Returns a string providing as much information as possible
@@ -590,6 +698,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime):
         and types.
         """
         self._make_node_set_type_shape(node)
+        self.simple_update_value_shape_with_node(node)
         if all(self.is_constant(i) for i in node.input):
             for o in node.output:
                 self.set_constant(o, node)

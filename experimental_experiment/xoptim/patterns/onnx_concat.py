@@ -2,7 +2,7 @@ import inspect
 from typing import List, Optional
 import numpy as np
 from onnx import NodeProto
-from ...xbuilder._onnx_helper import unary_like_op_types
+from ...xshape._onnx_helper import unary_like_op_types
 from ..patterns_api import MatchResult, PatternOptimization
 
 

@@ -2341,8 +2341,6 @@ class TestOnnxExportAten(ExtTestCase):
         index = torch.tensor([0, 4, 2, 4])
         inputs = (x, index, t)
         expected = model(*inputs)
-        print("---")
-        print(expected)
         self.assertEqual(expected.dtype, torch.float32)
 
         onx = to_onnx(

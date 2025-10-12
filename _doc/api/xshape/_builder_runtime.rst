@@ -1,7 +1,7 @@
 
-.xbuilder._graph_builder_runtime
-================================
+.xshape._builder_runtime
+========================
 
-.. automodule:: experimental_experiment.xbuilder._graph_builder_runtime
+.. automodule:: experimental_experiment.xshape._builder_runtime
     :members:
     :no-undoc-members:
