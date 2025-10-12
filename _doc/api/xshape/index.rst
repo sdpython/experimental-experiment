@@ -6,6 +6,7 @@
     :caption: modules
 
     _builder_runtime
+    _shape_runtime
     _shape_helper
     _onnx_helper
     shape_type_compute

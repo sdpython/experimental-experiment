@@ -4,6 +4,8 @@ from ._shape_helper import all_int
 
 
 class _ShapeRuntime:
+    """Runs through a few nodes often used to deal with shapes."""
+
     def simple_update_value_shape_with_node(self, node: onnx.NodeProto) -> bool:
         """Updates ``_known`_value_shape`` for a particular node."""
         if node.domain != "" or node.op_type not in {
