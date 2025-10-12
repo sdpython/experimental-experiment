@@ -62,7 +62,7 @@ from ..xshape._shape_helper import (
     is_static_shape,
     reshape_implementation_with_zero,
 )
-from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
+from ..xshape.shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import (
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,

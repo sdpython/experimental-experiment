@@ -36,6 +36,8 @@ class TestDimension(ExtTestCase):
     def test_simplify_expression_bracket(self):
         self.assertEqual("x", simplify_expression("2*x//2"))
         self.assertEqual("x", simplify_expression("(2*x)//2"))
+        self.assertEqual("x", simplify_expression("(x*y)//y"))
+        self.assertEqual("x", simplify_expression("(x*(y+1))//(y+1)"))
 
 
 if __name__ == "__main__":
