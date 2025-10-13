@@ -4,11 +4,12 @@ from typing import Dict
 
 operators = {
     ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
+    ast.BitXor: lambda x, y: max(x, y),
     ast.FloorDiv: operator.floordiv,
     ast.Mod: operator.mod,
+    ast.Mult: operator.mul,
     ast.Pow: operator.pow,
+    ast.Sub: operator.sub,
     ast.USub: operator.neg,
 }
 

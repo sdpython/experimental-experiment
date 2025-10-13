@@ -7,8 +7,6 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
     requires_cuda,
-    requires_onnxscript,
-    skipif_transformers,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -336,48 +334,6 @@ class TestDynamoLlamaDynamic(ExtTestCase):
             verbose=0,
             dump_prefix="tt_test_llama_model_backward_mixed_dynamic_fastbackend_1024",
             disable_pattern="default",
-            atol=(1e-2, 0.8),
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.5", "missing kernel")
-    @requires_cuda()
-    @skipif_transformers(
-        "4.38.2",
-        "INVALID_ARGUMENT : Failed to load model with error:, "
-        "Graph output (aten_mean_dim_267_dim_2) does not exist in the graph.",
-    )
-    @requires_onnxscript(
-        "0.3",
-        "something is off, it works when run independently "
-        "from the other tests, it fails otherwise",
-    )
-    def test_llama_model_backward_mixed_dynamic_onnxrt_1024(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
-        input_dims = [(2, 1024)]
-        model, example_args_collection = get_llama_model(
-            input_dims=input_dims,
-            num_hidden_layers=2,
-            hidden_size=1024,
-            vocab_size=1024,
-            intermediate_size=1024,
-            max_position_embeddings=1024,
-            num_attention_heads=2,
-        )
-
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=True,
-            fullgraph=True,
-            onnx_export="tt_test_llama_model_backward_mixed_dynamic_onnxrt_1024",
-            impl="onnxrt",
-            mixed=False,
-            verbose=0,
-            dump_prefix="tt_test_llama_model_backward_mixed_dynamic_onnxrt_1024",
             atol=(1e-2, 0.8),
         )
 

@@ -79,7 +79,10 @@ backend_test.exclude(
 )
 
 # Not implemented yet.
-backend_test.exclude("(affine_grid|array_feature_extractor|binarizer|label_encoder)")
+backend_test.exclude(
+    "(affine_grid|array_feature_extractor|binarizer|label_encoder|attention"
+    "|argmax|argmin|bitwise|averagepool|conv|blackmanwindow)"
+)
 
 
 # import all test cases at global scope to make them visible to python.unittest

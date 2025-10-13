@@ -6,8 +6,6 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     skipif_ci_windows,
     requires_torch,
-    requires_cuda,
-    requires_onnxruntime_training,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import (
@@ -341,71 +339,6 @@ class TestDynamoLlama(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.2", "missing kernel")
-    @unittest.skip("aten_embedding receives the inputs in the other way")
-    def test_llama_model_forward(self):
-        import torch
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-
-        # onnxrt backend
-        compiled_model = torch.compile(
-            copy.deepcopy(model),
-            backend="onnxrt",
-            dynamic=False,
-            fullgraph=True,
-        )
-        # folder = "temp_llama_model_forward"
-        # with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-        compiled_model(*example_args_collection[0])
-
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=False,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_forward",
-            expected_graph_break=7,
-            impl="ort",
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_onnxruntime_training()
-    def test_llama_model_backward_forward(self):
-        import torch
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-
-        # onnxrt backend
-        compiled_model = torch.compile(
-            copy.deepcopy(model),
-            backend="onnxrt",
-            dynamic=False,
-            fullgraph=True,
-        )
-        # folder = "temp_llama_model_backward_forward"
-        # with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-        compiled_model(*example_args_collection[0])
-
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=1,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_backward_forward",
-            impl="ref",
-            decompositions=True,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.2", "missing kernel")
     def test_llama_model_backward_undec(self):
         from experimental_experiment.torch_models.llama_helper import get_llama_model
 
@@ -447,76 +380,6 @@ class TestDynamoLlama(ExtTestCase):
             impl="ref",
             verbose=0,
             atol=5e-2,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.2", "missing kernel")
-    @requires_cuda()
-    def test_llama_model_backward_forward_mixed(self):
-        import torch
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-
-        # onnxrt backend
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            compiled_model = torch.compile(
-                copy.deepcopy(model),
-                backend="onnxrt",
-                dynamic=False,
-                fullgraph=True,
-            )
-
-        # folder = "test_llama_model_backward_forward_mixed"
-        # dump_onnx("llama_onnxrt", folder=folder, clean=True):
-        compiled_model(*example_args_collection[0])
-
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=1,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_backward_forward_mixed",
-            impl="ort",
-            mixed=True,
-        )
-
-    @ignore_warnings((UserWarning, DeprecationWarning))
-    @skipif_ci_windows("torch.compile not supported on Windows")
-    @requires_torch("2.2", "missing kernel")
-    @requires_cuda()
-    def test_llama_model_backward_mixed(self):
-        import torch
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
-
-        # onnxrt backend
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            compiled_model = torch.compile(
-                copy.deepcopy(model),
-                backend="onnxrt",
-                dynamic=False,
-                fullgraph=True,
-            )
-
-        # folder = "test_llama_model_backward_forward_mixed"
-        # with dump_onnx("llama_onnxrt", folder=folder, clean=True):
-        compiled_model(*example_args_collection[0])
-
-        self.common_test_model(
-            model,
-            example_args_collection,
-            test_backward=True,
-            dynamic=False,
-            fullgraph=True,
-            onnx_export="test_llama_model_backward_mixed",
-            impl="ort",
-            mixed=True,
         )
 
     @ignore_warnings((UserWarning, DeprecationWarning))

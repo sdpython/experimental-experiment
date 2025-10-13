@@ -78,9 +78,7 @@ def broadcast_shape(
             if a == b:
                 d = a
             else:
-                d = a
-                if graph_builder:
-                    graph_builder.register_constraint_dimension(a, b)
+                d = simplify_expression(f"({a})^({b})")
         if d is None:
             raise RuntimeError(
                 f"Not implemented for sh1={sh1}, sh2={sh2}, a={a}, b={b}, "
@@ -679,8 +677,8 @@ def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
 
     This function defines the following functions::
 
-        conf_f1(d,s,stride) = s - (stride if d % stride == 0 else d % stride) // 2
-        conf_f2(d,s,stride) = (
+        conv_f1(d,s,stride) = s - (stride if d % stride == 0 else d % stride) // 2
+        conv_f2(d,s,stride) = (
             s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
         )
         conv_f3(d,s,stride,ceil_mode,p) = ... (see the code)
@@ -781,15 +779,15 @@ def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
                         pads[i] = half_pad_big
                         pads[i + n_input_dims] = half_pad_small
                 else:
-                    # conf_f1=(d,s,stride) = (
+                    # conv_f1=(d,s,stride) = (
                     #   s - (stride if d % stride == 0 else d % stride)) // 2
                     # )
-                    pads[i] = f"conf_f1({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
-                    # conf_f2=(d,s,stride) = (
+                    pads[i] = f"conv_f1({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
+                    # conv_f2=(d,s,stride) = (
                     #   s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
                     # )
                     pads[i + n_input_dims] = (
-                        f"conf_f2({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
+                        f"conv_f2({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
                     )
 
     require_kernel_shape = node.op_type in {"MaxPool"}
@@ -826,7 +824,7 @@ def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
         #   ) // stride + 1 + ...
 
         output_size = (
-            f"conf_f3({_(input_size)},{effective_kernel_shape[i]},{_(strides[i])},{_(ceil_mode)})"
+            f"conv_f3({_(input_size)},{effective_kernel_shape[i]},{_(strides[i])},{_(ceil_mode)})"
         )
         output_shape.append(output_size)
 
@@ -1261,10 +1259,12 @@ def _set_shape_type_op_any_topk(self: ShapeBuilder, node: NodeProto):
     else:
         shape = None
 
+    ret_shapes = []
     if node.output[0]:
         self.set_type(node.output[0], self.get_type(node.input[0]))
         if shape is not None:
             self.set_shape(node.output[0], shape)
+            ret_shapes.append(shape)
         elif self.has_rank(node.input[0]):
             self.set_rank(node.output[0], self.get_rank(node.input[0]))
         else:
@@ -1276,13 +1276,17 @@ def _set_shape_type_op_any_topk(self: ShapeBuilder, node: NodeProto):
         self.set_type(node.output[1], TensorProto.INT64)
         if shape is not None:
             self.set_shape(node.output[1], shape)
+            ret_shapes.append(shape)
         elif self.has_rank(node.input[0]):
             self.set_rank(node.output[1], self.get_rank(node.input[0]))
+            return True
         else:
             assert not self._debug_shape_missing, (
                 f"Unable to compute shape for node: "
                 f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
             )
+    if ret_shapes:
+        return ret_shapes
 
 
 def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
@@ -1320,6 +1324,7 @@ def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
             for i in iaxes:
                 shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
             self.set_shape(node.output[0], tuple(shape))
+            return tuple(shape)
         elif isinstance(cst, self.torch.Tensor):
             with self.maybe_disable_fake_tensor_mode():
                 iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
@@ -1327,6 +1332,7 @@ def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
                 for i in iaxes:
                     shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
                 self.set_shape(node.output[0], tuple(shape))
+                return tuple(shape)
         else:
             raise AssertionError(
                 f"Unexpected type {type(cst)} for {node.input[1]!r}, "
@@ -1336,6 +1342,7 @@ def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + cst.size)
+        return True
     else:
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -1361,6 +1368,7 @@ def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
             if all_int(shape_x):
                 new_shape = tuple(s for s in shape_x if s != 1)
                 self.set_shape(node.output[0], new_shape)
+                return new_shape
         # In other cases, we cannot really determine the new shape for sure.
     elif self.has_shape(node.input[0]):
         if len(node.input) == 1:
@@ -1385,6 +1393,7 @@ def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
             iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
             new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
             self.set_shape(node.output[0], new_shape)
+            return new_shape
         elif isinstance(cst, self.torch.Tensor):
             with self.maybe_disable_fake_tensor_mode():
                 iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
@@ -1392,6 +1401,7 @@ def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
                 iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
                 new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
                 self.set_shape(node.output[0], new_shape)
+                return new_shape
         else:
             raise AssertionError(
                 f"Unexpected type {type(cst)} for {node.input[1]!r}, "
@@ -1401,6 +1411,7 @@ def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) - cst.size)
+        return True
     else:
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -1429,8 +1440,10 @@ def _set_shape_type_op_any_where(self: ShapeBuilder, node: NodeProto):
         )
         sh = broadcast_shape(sh1, self.get_shape(node.input[2]), graph_builder=self)
         self.set_shape(node.output[0], sh)
+        return sh
     elif all(self.has_rank(i) for i in node.input):
         self.set_rank(node.output[0], max(self.get_rank(i) for i in node.input))
+        return True
     else:
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -1632,8 +1645,10 @@ def set_type_shape_complex_module(self: ShapeBuilder, node: NodeProto):
 
 
 def set_type_shape_shared_input(self: ShapeBuilder, node: NodeProto):
-    set_type_shape_binary_op(self, node.output[0], *node.input[:2])
-    set_type_shape_binary_op(self, node.output[1], *node.input[::2])
+    r1 = set_type_shape_binary_op(self, node.output[0], *node.input[:2])
+    r2 = set_type_shape_binary_op(self, node.output[1], *node.input[::2])
+    if r1 or r2:
+        return [r1, r2]
 
 
 def set_type_shape_scatter_nd_of_shape(self: ShapeBuilder, node: NodeProto):
@@ -1642,6 +1657,7 @@ def set_type_shape_scatter_nd_of_shape(self: ShapeBuilder, node: NodeProto):
     value = self.value_as_shape(node.input[0])
     if value is not None:
         self.set_shape(node.output[0], tuple(value))
+        return tuple(value)
 
 
 def set_type_shape_tri_matrix(self: ShapeBuilder, node: NodeProto):
