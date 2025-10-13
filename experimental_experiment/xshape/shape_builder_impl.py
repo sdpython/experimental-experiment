@@ -11,13 +11,13 @@ from onnx.reference import ReferenceEvaluator
 from ._shape_helper import DYNAMIC_SHAPE, is_static_shape
 from ._builder_runtime import _BuilderRuntime
 from ._shape_runtime import _ShapeRuntime
+from ._inference_runtime import _InferenceRuntime
 from .rename_expressions import parse_expression_tokens
-from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 from ._onnx_helper import str_tensor_proto_type
 from .shape_builder import ShapeBuilder
 
 
-class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime):
+class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     """
     Implements a basic class doing shape inference in an ONNX model.
 
@@ -188,8 +188,12 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime):
                 self.set_shape(name, tuple(value.dims))
         elif isinstance(value, onnx.NodeProto):
             for att in value.attribute:
-                if att.name == "tensor" and att.t:
+                if att.name == "value" and att.t:
                     self.constants_[name] = att.t
+                    if not self.has_type(name):
+                        self.set_type(name, att.t.data_type)
+                    if not self.has_shape(name):
+                        self.set_shape(name, tuple(att.t.dims))
                     return
             # Let's execute the node otherwise.
             ref = ReferenceEvaluator(value)
@@ -633,26 +637,6 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime):
             self.run_node(node)
         for i in graph.output:
             self.run_value_info(i, False)
-
-    def _make_node_set_type_shape(self, node: onnx.NodeProto):
-        """Updates shapes for a node."""
-        if node.domain == "":
-            node.doc_string += "#Io1"
-            update = set_shape_type_op_any(self, node)
-        else:
-            # Missing type means it is probably coming from an inlined function.
-            node.doc_string += (
-                "#Io3" if node.input and not self.has_type(node.input[0]) else "#Io2"
-            )
-            update = set_shape_type_custom(self, node)
-        if update:
-            self._calls.append(
-                (node.name, node.domain, node.op_type, node.input, node.output, update)
-            )
-        assert update is not None or not self._debug_shape_missing, (
-            f"Shape missing for node type {node.op_type!r}, inputs={node.input}, "
-            f"outputs={node.output}\n----\n{node}\n{self.get_debug_msg()}"
-        )
 
     def register_constraint_dimension(self, dim_name: str, value: Any):
         """

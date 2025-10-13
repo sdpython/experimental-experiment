@@ -272,6 +272,8 @@ class TestShapeBuilder(ExtTestCase):
                 "At": 1,
                 "Bt": 1,
                 "Ct": 1,
+                "new_shape": 7,
+                "shape": 7,
             },
         )
         self.assertEqual(

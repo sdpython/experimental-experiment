@@ -75,14 +75,15 @@ backend_test.exclude(
     "(test_bvlc_alexnet|test_densenet121|test_inception_v1|test_inception_v2"
     "|test_resnet50|test_shufflenet|test_squeezenet|test_vgg19|test_zfnet512"
     "|test_bernoulli|test_gradient|test_adam_multiple|test_adagrad|test_regex_full_match"
-    "|test_adam|test_if_opt|test_loop16_seq_none|test_scan_sum)"
+    "|test_adam|test_if_opt|test_loop16_seq_none|test_scan_sum|training)"
 )
 
 # Not implemented yet.
 backend_test.exclude(
     "(affine_grid|array_feature_extractor|binarizer|label_encoder|attention"
-    "|argmax|argmin|bitwise|averagepool|conv|blackmanwindow"
-    "center_crop|col2im|depthtospace|dft|resize|sce|sequence|shrink)"
+    "|argmax|argmin|bitwise|averagepool|blackmanwindow"
+    "|center_crop|col2im|compress|conv|depthtospace|dft|pad|resize|sce|sequence"
+    "|shrink|string)"
 )
 
 

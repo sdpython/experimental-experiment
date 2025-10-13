@@ -139,9 +139,7 @@ def compatible_dimensions(*dims: Sequence[Union[int, str]]) -> bool:
 
 
 def _reshape_shape(shape: Tuple[int, ...], new_shape: Tuple[int, ...]) -> Tuple[int, ...]:
-    """
-    Computes the shape of the reshaped shape.
-    """
+    """Computes the shape of the reshaped shape."""
     assert all_int(new_shape), f"Unexpected new_shape={new_shape}"
     if -1 not in new_shape:
         return new_shape
