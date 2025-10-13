@@ -81,7 +81,8 @@ backend_test.exclude(
 # Not implemented yet.
 backend_test.exclude(
     "(affine_grid|array_feature_extractor|binarizer|label_encoder|attention"
-    "|argmax|argmin|bitwise|averagepool|conv|blackmanwindow)"
+    "|argmax|argmin|bitwise|averagepool|conv|blackmanwindow"
+    "center_crop|col2im|depthtospace|dft|resize|sce|sequence|shrink)"
 )
 
 

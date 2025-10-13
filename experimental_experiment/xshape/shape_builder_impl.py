@@ -3,9 +3,11 @@ import pprint
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import onnx
+import onnx.helper as oh
 import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx_diagnostic.helpers import string_type
+from onnx.reference import ReferenceEvaluator
 from ._shape_helper import DYNAMIC_SHAPE, is_static_shape
 from ._builder_runtime import _BuilderRuntime
 from ._shape_runtime import _ShapeRuntime
@@ -184,6 +186,19 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime):
                 self.set_type(name, value.data_type)
             if not self.has_shape(name):
                 self.set_shape(name, tuple(value.dims))
+        elif isinstance(value, onnx.NodeProto):
+            for att in value.attribute:
+                if att.name == "tensor" and att.t:
+                    self.constants_[name] = att.t
+                    return
+            # Let's execute the node otherwise.
+            ref = ReferenceEvaluator(value)
+            val = ref.run(None, {})[0]
+            self.constants_computed_[name] = val
+            self.set_type(name, oh.np_dtype_to_tensor_dtype(val.dtype))
+            self.set_shape(name, tuple(map(int, val.shape)))
+        else:
+            raise TypeError(f"Unexpected type {type(value)} for value.")
 
     def set_value_shape(self, name: str, value: Any, equal_to: Optional[Tuple[str, str]] = None):
         """
@@ -574,11 +589,15 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime):
         Uses shapes availables in the ShapeBuilder to infer the output shapes
         and types.
         """
-        self._make_node_set_type_shape(node)
-        self.simple_update_value_shape_with_node(node)
-        if all(self.is_constant(i) for i in node.input):
-            for o in node.output:
-                self.set_constant(o, node)
+        if node.op_type == "Constant" and node.domain == "":
+            self.set_constant(node.output[0], node)
+            self.simple_update_value_shape_with_node(node)
+        else:
+            self._make_node_set_type_shape(node)
+            self.simple_update_value_shape_with_node(node)
+            if all(self.is_constant(i) for i in node.input):
+                for o in node.output:
+                    self.set_constant(o, node)
 
     def run_value_info(self, info: onnx.ValueInfoProto, is_input: bool):
         """Fills ShapeBuilder with information coming from an input or output."""
@@ -630,6 +649,10 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime):
             self._calls.append(
                 (node.name, node.domain, node.op_type, node.input, node.output, update)
             )
+        assert update is not None or not self._debug_shape_missing, (
+            f"Shape missing for node type {node.op_type!r}, inputs={node.input}, "
+            f"outputs={node.output}\n----\n{node}\n{self.get_debug_msg()}"
+        )
 
     def register_constraint_dimension(self, dim_name: str, value: Any):
         """

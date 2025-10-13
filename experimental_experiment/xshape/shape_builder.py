@@ -126,6 +126,70 @@ class ShapeBuilder:
         res = {k: v for k, v in res.items() if v is not None}
         return res
 
+    def pretty_node(
+        self,
+        node: Optional[onnx.NodeProto],
+        limit: int = 80,
+        short: bool = True,
+        shape: bool = False,
+    ) -> str:
+        """
+        Pretty rendering for a node.
+
+        :param node: node to render
+        :param limit: to show type and shapes after the limit
+        :param short: do not display shape information on the left
+        :param shape: show shape information below
+        :return: string
+        """
+        if node is None:
+            return "None"
+        if shape:
+            st = []
+            for i in node.input:
+                dt = self.get_type(i) if self.has_type(i) else "-"
+                sh = (
+                    "x".join(str(_).replace(" ", "") for _ in self.get_shape(i))
+                    if self.has_shape(i)
+                    else (f"rk={self.get_rank(i)}" if self.has_rank(i) else "?")
+                )
+                st.append(f"{i}:{dt}|{sh}")
+            st.append("->")
+            for i in node.output:
+                dt = self.get_type(i) if self.has_type(i) else "-"
+                sh = (
+                    "x".join(str(_).replace(" ", "") for _ in self.get_shape(i))
+                    if self.has_shape(i)
+                    else (f"rk={self.get_rank(i)}" if self.has_rank(i) else "?")
+                )
+                st.append(f"{i}:{dt}|{sh}")
+            shape_info = " ".join(st)
+        else:
+            shape_info = ""
+        text = (
+            (
+                f"{node.op_type}[{node.domain}]: "
+                f"{', '.join(node.input)} -> {', '.join(node.output)}"
+            )
+            if node.domain
+            else f"{node.op_type}: {', '.join(node.input)} -> {', '.join(node.output)}"
+        )
+        if shape_info:
+            text = f"{text} ## {shape_info}"
+        if short:
+            return text
+        add = " " * abs(80 - len(text))
+        text += add
+        info = []
+        for o in node.output:
+            t = f"T{self.get_type(o)}" if self.has_type(o) else ""
+            s = " x ".join(map(str, self.get_shape(o))) if self.has_shape(o) else ""
+            info.append(": ".join([t, s]))
+        if node.name:
+            s = f"{text}|{' '.join(info)}"
+            return f"{s}{' ' * (110 - len(s))}- {node.name}"
+        return f"{text}|{' '.join(info)}"
+
     def map_value_info_dimension_with_true_values(self, name: str, tensor: np.ndarray):
         assert self.has_type(name), f"Missing type for {name!r}."
         assert self.has_shape(name), f"Missing shape for {name!r}."
