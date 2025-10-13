@@ -124,6 +124,23 @@ class MulDivCancellerTransformer(CommonTransformer):
         return ast.copy_location(new_node, node)
 
 
+class MaxToXorTransformer(CommonTransformer):
+    """Replaces ``Max(a,b)`` by ``a^b``."""
+
+    def visit_Call(self, node):
+        self.generic_visit(node)
+
+        if (
+            isinstance(node.func, ast.Name)
+            and node.func.id in ("max", "Max")
+            and len(node.args) == 2
+        ):
+            a, b = node.args
+            return ast.BinOp(left=a, op=ast.BitXor(), right=b)
+
+        return node
+
+
 class SimplifyParensTransformer(CommonTransformer):
     """To simplify parenthesis."""
 
@@ -194,6 +211,7 @@ def simplify_expression(expr: str) -> str:
     transformers = [
         SimpleSimpliflyTransformer(expr=expr),
         MulDivCancellerTransformer(expr=expr),
+        MaxToXorTransformer(expr=expr),
         SimplifyParensTransformer(expr=expr),
     ]
     for tr in transformers:
