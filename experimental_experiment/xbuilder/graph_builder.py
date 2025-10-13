@@ -4267,29 +4267,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     del kwargs["axes"]
         return inputs, kwargs
 
-    def update_node_constant(self, name: str, node: NodeProto) -> bool:
-        """Updates a constant NodeProto."""
-        assert isinstance(name, str), f"Unexpected type {type(name)} for name"
-        assert node is None or isinstance(
-            node, NodeProto
-        ), f"Unexpected type {type(node)} for name={name!r}"
-        if self.verbose > 2:
-            print(
-                f"[GraphBuilder-{self._hash()}.update_node_constant] new constant "
-                f"{name!r}, node={None if node is None else node.op_type}"
-            )
-        assert (
-            node is None
-            or node.op_type == "Shape"
-            or all(self.is_constant(i) for i in node.input if i not in {"", None, "None"})
-        ), (
-            f"Output {name!r} is constant (node={self.pretty_node(node)}) "
-            f"only if every input from {node.input} is constant "
-            f"but constants={[self.is_constant(i) for i in node.input]}{self.get_debug_msg()}"
-        )
-        self.constants_[name] = node
-        return True
-
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
     ) -> Optional[AttributeProto]:

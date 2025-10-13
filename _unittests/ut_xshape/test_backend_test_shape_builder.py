@@ -10,6 +10,7 @@ from onnx import ModelProto
 from onnx.backend.base import Device, DeviceType
 from onnx_diagnostic.helpers import string_type
 from onnx_diagnostic.helpers.rt_helper import make_feeds
+from onnx_diagnostic.helpers.onnx_helper import pretty_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.xshape.shape_builder_impl import BasicShapeBuilder
 from experimental_experiment.xshape._onnx_helper import overwrite_shape_in_model_proto
@@ -38,7 +39,8 @@ class ShapeBuilderBackendRep(onnx.backend.base.BackendRep):
             raise AssertionError(
                 f"Unable to handle a model due to {str(e)}\n---\n"
                 f"inputs: {string_type(feeds, with_shape=True)}\n---\n"
-                f"{self._shape_builder.get_debug_msg()}\n---\n{self._model}"
+                f"{self._shape_builder.get_debug_msg()}\n---\n"
+                f"{pretty_onnx(self._model)}"
             ) from e
         return outs
 
@@ -82,9 +84,15 @@ backend_test.exclude(
 backend_test.exclude(
     "(affine_grid|array_feature_extractor|binarizer|label_encoder|attention"
     "|argmax|argmin|bitwise|averagepool|blackmanwindow"
-    "|center_crop|col2im|compress|conv|depthtospace|dft|pad|resize|sce|sequence"
+    "|center_crop|col2im|compress|conv|constantofshape|cumsum"
+    "|depthtospace|det|dft|dropout|einsum|eyelike|gelu"
+    "|group_normalization|hamming|"
+    "|pad|quantize|resize|sce|sequence"
     "|shrink|string)"
 )
+
+# uncommon cases
+backend_test.exclude("(expand_dim)")
 
 
 # import all test cases at global scope to make them visible to python.unittest

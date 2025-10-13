@@ -39,6 +39,29 @@ class _InferenceRuntime:
             f"outputs={node.output}\n----\n{node}\n{self.get_debug_msg()}"
         )
 
+    def update_node_constant(self, name: str, node: onnx.NodeProto) -> bool:
+        """Updates a constant NodeProto."""
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name"
+        assert node is None or isinstance(
+            node, onnx.NodeProto
+        ), f"Unexpected type {type(node)} for name={name!r}"
+        if self.verbose > 2:
+            print(
+                f"[GraphBuilder-{self._hash()}.update_node_constant] new constant "
+                f"{name!r}, node={None if node is None else node.op_type}"
+            )
+        assert (
+            node is None
+            or node.op_type == "Shape"
+            or all(self.is_constant(i) for i in node.input if i not in {"", None, "None"})
+        ), (
+            f"Output {name!r} is constant (node={self.pretty_node(node)}) "
+            f"only if every input from {node.input} is constant "
+            f"but constants={[self.is_constant(i) for i in node.input]}{self.get_debug_msg()}"
+        )
+        self.constants_[name] = node
+        return True
+
     def _make_node_set_type_shape_constant(
         self, node: onnx.NodeProto, sts: Optional[Dict[str, Any]]
     ):
