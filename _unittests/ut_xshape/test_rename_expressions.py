@@ -7,7 +7,7 @@ from experimental_experiment.xshape.rename_expressions import (
 )
 
 
-class TestDimension(ExtTestCase):
+class TestRenameExpressions(ExtTestCase):
     def test_rename_expression2(self):
         self.assertEqual("B+seq_length", rename_expression("s52+seq_length", {"s52": "B"}))
 

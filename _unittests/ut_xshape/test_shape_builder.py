@@ -4,7 +4,9 @@ import onnx
 import onnx.helper as oh
 import onnx.numpy_helper as onh
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.xshape.shape_builder import ShapeBuilder, BasicShapeBuilder
+from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.xshape.shape_builder import ShapeBuilder
+from experimental_experiment.xshape.shape_builder_impl import BasicShapeBuilder
 
 TFLOAT = onnx.TensorProto.FLOAT
 TFLOAT16 = onnx.TensorProto.FLOAT16
@@ -299,6 +301,32 @@ class TestShapeBuilder(ExtTestCase):
         self.assertEqual(builder.constraints_, {})
         self.assertEqual(builder.dynamic_dimensions_, {"batch": {"batch"}, "seq": {"seq"}})
         self.assertEqual(builder._output_names, ["At", "Bt", "Ct"])
+
+    def test_evaluate_shape(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["X", "Y"], ["Z"], axis=1),
+                ],
+                "dummy",
+                [_mkv_("Y", TFLOAT, ["batch", "seq1"]), _mkv_("X", TFLOAT, ["batch", "seq2"])],
+                [_mkv_("Z", TFLOAT, [None, None])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        builder = BasicShapeBuilder()
+        builder.run_model(model)
+        self.assertEqual(
+            builder._known_shapes,
+            {"Y": ("batch", "seq1"), "X": ("batch", "seq2"), "Z": ("batch", "seq2+seq1")},
+        )
+        feeds = dict(
+            X=np.random.rand(3, 5).astype(np.float32), Y=np.random.rand(3, 6).astype(np.float32)
+        )
+        got = ExtendedReferenceEvaluator(model).run(None, feeds)
+        res = builder.compare_with_true_inputs(feeds, got)
+        self.assertEqual(res, {"Z": (("batch", 3, 3), ("seq2+seq1", 11, 11))})
 
 
 if __name__ == "__main__":

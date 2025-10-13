@@ -7,7 +7,7 @@ from experimental_experiment.xshape.simplify_expressions import (
 from experimental_experiment.xshape._shape_helper import is_static_shape, all_float
 
 
-class TestDimension(ExtTestCase):
+class TestSimplifyExpressions(ExtTestCase):
     def test_simplify_expression(self):
         self.assertEqual(simplify_expression("x - y + y"), "x")
         self.assertEqual(simplify_expression("2*x + 3*x - x"), "4*x")
