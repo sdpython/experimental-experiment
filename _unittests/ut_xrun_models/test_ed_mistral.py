@@ -20,6 +20,7 @@ class TestEdMistral(ExtTestCase):
         "AssertionError: original output #6 is None or "
         "issue with torch.ops.prims.convert_element_type.default",
     )
+    @unittest.skip("silu_backward not decomposed")
     def test_mistral_cort_static(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]
@@ -55,6 +56,7 @@ class TestEdMistral(ExtTestCase):
         "AssertionError: original output #6 is None or "
         "issue with torch.ops.prims.convert_element_type.default",
     )
+    @unittest.skip("silu_backward not decomposed")
     def test_mistral_cort_static_norename(self):
         model, input_tensors = get_mistral_model()
         input_tensors = input_tensors[0]

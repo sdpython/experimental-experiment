@@ -9283,8 +9283,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                         dimension in self.constraints_ and exp in self.constraints_[dimension]
                     ):
                         return True
-                    return False
-
+        if not simplify_two_expressions(dimension, f"({args[0]}){args[1]}({args[2]})"):
+            return True
         raise NotImplementedError(
             f"Unable to evaluate expression with dimension={dimension!r}, "
             f"args={args!r}, constraints={self.constraints_}{self.get_debug_msg()}"

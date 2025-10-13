@@ -27,6 +27,7 @@ class TestSimplifyExpressions(ExtTestCase):
         self.assertEqual(
             simplify_two_expressions("s52+seq_length", "s52+s70"), {"s70": -1, "seq_length": 1}
         )
+        self.assertEqual(simplify_two_expressions("e*2", "e+e"), {})
 
     def test_all_float(self):
         self.assertTrue(all_float([6.7, 7.8]))

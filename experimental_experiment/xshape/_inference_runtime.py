@@ -113,7 +113,7 @@ class _InferenceRuntime:
                     return value
             vs = self.value_as_shape(node.input[0])
             if vs is not None:
-                self.set_shape(node.output[0], vs)
+                self.set_shape(node.output[0], vs, allow_zero=True)
                 return vs
             if self.has_shape(node.input[0]):
                 shape = self.get_shape(node.input[0])
