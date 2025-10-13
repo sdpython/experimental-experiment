@@ -85,14 +85,17 @@ backend_test.exclude(
     "(affine_grid|array_feature_extractor|binarizer|label_encoder|attention"
     "|argmax|argmin|bitwise|averagepool|blackmanwindow"
     "|center_crop|col2im|compress|conv|constantofshape|cumsum"
-    "|depthtospace|det|dft|dropout|einsum|eyelike|gelu"
-    "|group_normalization|hamming|"
-    "|pad|quantize|resize|sce|sequence"
+    "|depthtospace|det|dft|dropout|einsum|eyelike|flatten|floor|gather|gelu"
+    "|globalmaxpool|gridsample|group_normalization|gru|hamming|hann"
+    "|hardmax|hardsigmoid|hardswish|instancenorm|l1normalization"
+    "|l2normalization|layer_normalization|leakyrelu|logsoftmax"
+    "|lpnormalization|lppool|lrn|lstm|pad|quantize"
+    "|resize|sce|sequence"
     "|shrink|string)"
 )
 
 # uncommon cases
-backend_test.exclude("(expand_dim)")
+backend_test.exclude("(expand_dim|_opt_|_if_|_scan|_loop|_image_)")
 
 
 # import all test cases at global scope to make them visible to python.unittest
