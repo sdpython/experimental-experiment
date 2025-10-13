@@ -69,6 +69,7 @@ from ..xshape._onnx_helper import (
     element_wise_binary_op_types,
     element_wise_op_cmp_types,
     unary_like_op_types,
+    str_tensor_proto_type,
 )
 from ._onnx_helper import (
     _default_OPSET_TO_IR_VERSION,
@@ -1914,14 +1915,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime):
         if name in self._known_types:
             # 0 is undefined
             if self._known_types[name] != 0 and int_type != self._known_types[name]:
-                if exc:
-                    from . import str_tensor_proto_type
-
-                    raise RuntimeError(
-                        f"Type for name {name!r} already exists and it is different, "
-                        f"known is {self._known_types[name]} != {int_type} (new) - "
-                        f"(mapping={str_tensor_proto_type()}){self.get_debug_msg()}"
-                    )
+                assert not exc, (
+                    f"Type for name {name!r} already exists and it is different, "
+                    f"known is {self._known_types[name]} != {int_type} (new) - "
+                    f"(mapping={str_tensor_proto_type()}){self.get_debug_msg()}"
+                )
                 if "warnings" not in self._debug_msg:
                     self._debug_msg["warnings"] = []
                 self._debug_msg["warnings"].append(
@@ -2249,8 +2247,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime):
             return 2
         if elem_type in {TensorProto.BOOL, TensorProto.UINT8, TensorProto.INT8}:
             return 1
-        from . import str_tensor_proto_type
-
         raise AssertionError(
             f"elem_size not implemented for elem_type={elem_type}, "
             f"among {str_tensor_proto_type()}"

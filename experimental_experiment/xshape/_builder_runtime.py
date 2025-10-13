@@ -11,6 +11,7 @@ from ..helpers import (
 )
 from ..xshape._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
 from ..xshape.simplify_expressions import simplify_expression
+from ..xshape._onnx_helper import str_tensor_proto_type
 
 
 @contextlib.contextmanager
@@ -308,8 +309,6 @@ class _BuilderRuntime:
         node: NodeProto,
         feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
-        from . import str_tensor_proto_type
-
         x = feeds[node.input[0]]
         if not isinstance(x, (np.ndarray, self.torch.Tensor)):
             # Maybe a float, then we process it as a float, tensor.to only works

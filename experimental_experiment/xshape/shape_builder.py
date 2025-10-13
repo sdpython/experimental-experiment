@@ -16,27 +16,8 @@ from ._onnx_helper import (
     element_wise_binary_op_types,
     element_wise_op_cmp_types,
     unary_like_op_types,
+    str_tensor_proto_type,
 )
-
-
-def str_tensor_proto_type() -> str:
-    """
-    Returns the following string:
-
-    .. runpython::
-        :showcode:
-
-        from experimental_experiment.xshape.shape_builder import str_tensor_proto_type
-
-        print(str_tensor_proto_type())
-    """
-    mapping = [
-        (getattr(onnx.TensorProto, att), att)
-        for att in dir(onnx.TensorProto)
-        if att.upper() == att and isinstance(getattr(onnx.TensorProto, att), int)
-    ]
-    mapping.sort()
-    return ", ".join(f"{k}:{v}" for k, v in mapping)
 
 
 class ShapeBuilder:

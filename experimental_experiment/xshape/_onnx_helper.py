@@ -1,4 +1,25 @@
+import onnx
 from typing import Set
+
+
+def str_tensor_proto_type() -> str:
+    """
+    Returns the following string:
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.xshape._onnx_helper import str_tensor_proto_type
+
+        print(str_tensor_proto_type())
+    """
+    mapping = [
+        (getattr(onnx.TensorProto, att), att)
+        for att in dir(onnx.TensorProto)
+        if att.upper() == att and isinstance(getattr(onnx.TensorProto, att), int)
+    ]
+    mapping.sort()
+    return ", ".join(f"{k}:{v}" for k, v in mapping)
 
 
 def element_wise_binary_op_types() -> Set[str]:
