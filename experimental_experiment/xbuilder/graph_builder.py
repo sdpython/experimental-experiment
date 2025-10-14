@@ -1806,24 +1806,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if dim not in self.dynamic_objects:
             self.add_dynamic_object(dim, dim)
 
-    def make_dimension_name_if_necessary(
-        self, a: Union[int, str], b: Union[int, str], op: str
-    ) -> str:
-        """Creates a new dimension."""
-        if op == "^":
-            # very simple trick for the time being
-            if a == b:
-                return a
-            if isinstance(a, str) and a.endswith(f"^{b}"):
-                return a
-            if isinstance(b, str) and b.startswith(f"{a}^"):
-                return b
-        if isinstance(a, str) and set(a) & set("+/*-^"):
-            a = f"({a})"
-        if isinstance(b, str) and set(b) & set("+/*-^"):
-            b = f"({b})"
-        return f"{a}{op}{b}"
-
     def set_shape(
         self,
         name: str,

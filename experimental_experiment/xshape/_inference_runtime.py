@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import onnx
 from onnx_diagnostic.helpers import string_type
@@ -16,6 +16,24 @@ from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
 
 class _InferenceRuntime:
     """Sets shape and type."""
+
+    def make_dimension_name_if_necessary(
+        self, a: Union[int, str], b: Union[int, str], op: str
+    ) -> str:
+        """Creates a new dimension."""
+        if op == "^":
+            # very simple trick for the time being
+            if a == b:
+                return a
+            if isinstance(a, str) and a.endswith(f"^{b}"):
+                return a
+            if isinstance(b, str) and b.startswith(f"{a}^"):
+                return b
+        if isinstance(a, str) and set(a) & set("+/*-^"):
+            a = f"({a})"
+        if isinstance(b, str) and set(b) & set("+/*-^"):
+            b = f"({b})"
+        return f"{a}{op}{b}"
 
     def _make_node_set_type_shape(self, node: onnx.NodeProto):
         """Updates shapes for a node."""

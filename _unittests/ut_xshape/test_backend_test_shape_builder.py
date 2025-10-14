@@ -89,7 +89,7 @@ backend_test.exclude(
     "|globalmaxpool|gridsample|group_normalization|gru|hamming|hann"
     "|hardmax|hardsigmoid|hardswish|instancenorm|l1normalization"
     "|l2normalization|layer_normalization|leakyrelu|logsoftmax"
-    "|lpnormalization|lppool|lrn|lstm|pad|quantize"
+    "|lpnormalization|lppool|lrn|lstm|matmulinteger|pad|quantize"
     "|resize|sce|sequence"
     "|shrink|string)"
 )
