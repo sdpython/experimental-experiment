@@ -1035,12 +1035,13 @@ def _set_shape_type_op_any_reduce(self: ShapeBuilder, node: NodeProto):
                     f"with name={node.name!r}{self.get_debug_msg()}"
                 )
                 if isinstance(cst, self.torch.Tensor):
-                    cst = cst.cpu()
+                    with self.maybe_disable_fake_tensor_mode():
+                        cst = cst.cpu()
                 iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
             elif keepdim is not None:
                 self.set_rank(node.output[0], self.get_rank(node.input[0]))
                 return True
-            if self.has_shape(node.input[1]):
+            elif self.has_shape(node.input[1]) and self.has_rank(node.input[0]):
                 shape = self.get_shape(node.input[1])
                 assert (
                     len(shape) == 1
@@ -1048,10 +1049,11 @@ def _set_shape_type_op_any_reduce(self: ShapeBuilder, node: NodeProto):
                 if isinstance(shape[0], int):
                     self.set_rank(node.output[0], self.get_rank(node.input[0]) - shape[0])
                     return True
-            assert (
-                self._debug_shape_missing
-            ), f"Unable to determine shape for node {node}\n---\n{self.get_debug_msg()}"
-            return
+            else:
+                assert (
+                    self._debug_shape_missing
+                ), f"Unable to determine shape for node {node}\n---\n{self.get_debug_msg()}"
+                return
         else:
             iaxes = None
     else:
