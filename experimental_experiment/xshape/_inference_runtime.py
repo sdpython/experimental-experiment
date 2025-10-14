@@ -35,19 +35,19 @@ class _InferenceRuntime:
             b = f"({b})"
         return f"{a}{op}{b}"
 
-    def _make_node_set_type_shape(self, node: onnx.NodeProto):
+    def _make_node_set_type_shape(self, node: onnx.NodeProto, exc: bool = False):
         """Updates shapes for a node."""
         update = self._make_node_set_type_shape_constant(node, {})
         if update is None:
             if node.domain == "":
                 node.doc_string += "#Io1"
-                update = set_shape_type_op_any(self, node)
+                update = set_shape_type_op_any(self, node, exc=exc)
             else:
                 # Missing type means it is probably coming from an inlined function.
                 node.doc_string += (
                     "#Io3" if node.input and not self.has_type(node.input[0]) else "#Io2"
                 )
-                update = set_shape_type_custom(self, node)
+                update = set_shape_type_custom(self, node, exc=exc)
         if update:
             self._calls.append(
                 (node.name, node.domain, node.op_type, node.input, node.output, update)
@@ -56,6 +56,7 @@ class _InferenceRuntime:
             f"Shape missing for node type {node.op_type!r}, inputs={node.input}, "
             f"outputs={node.output}\n----\n{node}\n{self.get_debug_msg()}"
         )
+        return update
 
     def update_node_constant(self, name: str, node: onnx.NodeProto) -> bool:
         """Updates a constant NodeProto."""
@@ -414,7 +415,7 @@ class _InferenceRuntime:
                 and self.get_type(v.input[0]) == self.get_type(v.input[1])
             ):
                 output = self._apply_binary_op(v, feeds)
-            elif v.op_type in {"Exp", "Reciprocal", "Sqrt"}:
+            elif v.op_type in {"Exp", "Log", "Reciprocal", "Sqrt"}:
                 # bypassing onnx.numpy_helper.from_array, too slow
                 output = self._apply_unary_function(v, feeds)
             elif hasattr(self, f"_apply_{v.op_type.lower()}"):

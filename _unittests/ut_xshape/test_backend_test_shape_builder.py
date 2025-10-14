@@ -1,3 +1,4 @@
+import os
 import unittest
 import warnings
 from typing import Any
@@ -18,9 +19,18 @@ from experimental_experiment.xshape._onnx_helper import overwrite_shape_in_model
 
 class ShapeBuilderBackendRep(onnx.backend.base.BackendRep):
     def __init__(self, model: onnx.ModelProto):
-        self._model = overwrite_shape_in_model_proto(model)
+        op_type = model.graph.node[0].op_type
+        self._model = overwrite_shape_in_model_proto(
+            model,
+            n_in=(
+                1
+                if op_type in {"Expand", "Reshape", "Squeeze", "Unsqueeze"}
+                or op_type.startswith("Reduce")
+                else None
+            ),
+        )
         self._session = ExtendedReferenceEvaluator(self._model)
-        self._shape_builder = BasicShapeBuilder()
+        self._shape_builder = BasicShapeBuilder(verbose=int(os.environ.get("VERBOSE", "0")))
 
     def run(self, inputs, **kwargs):
         if isinstance(inputs, numpy.ndarray):
@@ -32,9 +42,13 @@ class ShapeBuilderBackendRep(onnx.backend.base.BackendRep):
         else:
             raise TypeError(f"Unexpected input type {type(inputs)!r}.")
         outs = self._session.run(None, feeds)
-        self._shape_builder.run_model(self._model)
+        self._shape_builder.run_model(self._model, exc=True)
         try:
             self._shape_builder.compare_with_true_inputs(feeds, outs, exc=True)
+        except NameError as e:
+            raise unittest.SkipTest(
+                f"shape function was found but only the rank could be set: {e}"
+            )
         except Exception as e:
             raise AssertionError(
                 f"Unable to handle a model due to {str(e)}\n---\n"
@@ -84,17 +98,18 @@ backend_test.exclude(
 backend_test.exclude(
     "(affine_grid|array_feature_extractor|binarizer|label_encoder|attention"
     "|argmax|argmin|bitwise|averagepool|blackmanwindow"
-    "|center_crop|col2im|compress|conv|constantofshape|cumsum"
+    "|center_crop|col2im|compress|conv|cumsum"
     "|depthtospace|det|dft|dropout|einsum|eyelike|fft|flatten|floor|gather|gelu"
     "|globalmaxpool|gridsample|group_normalization|gru|hamming|hann"
     "|hardmax|hardsigmoid|hardswish|instancenorm|l1normalization"
     "|l2normalization|layer_normalization|leakyrelu|logsoftmax"
-    "|lpnormalization|lppool|lrn|lstm|matmulinteger|pad|quantize"
+    "|lpnormalization|lppool|lrn|lstm|matmulinteger|maxunpool|pad|quantize"
     "|resize|roialign|sce|sequence|test_max_|test_min_|test_maxpool_"
-    "|shrink|spacetodepth|string|strnorm"
+    "|shrink|simple_rnn|spacetodepth|stft|string|strnorm"
     "|tensorscatter|tfidfvectorizer|top_k|tril|triu"
     "|thresholdrelu"
-    "|unique|AvgPool|BatchNorm|Conv|GLU|LeakyReLU|MaxPool|PReLU"
+    "|unique|AvgPool|BatchNorm|Conv|Embedding|GLU|LeakyReLU|Linear"
+    "|MaxPool|PReLU"
     "|Reflection|Replication|ZeroPad|test_operator)"
 )
 

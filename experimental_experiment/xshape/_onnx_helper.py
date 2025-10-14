@@ -1,6 +1,6 @@
 import onnx
 import onnx.helper as oh
-from typing import Iterator, Set
+from typing import Iterator, Optional, Set
 
 
 def element_wise_binary_op_types() -> Set[str]:
@@ -152,13 +152,19 @@ def _rewrite_info(info: onnx.ValueInfoProto):
     return oh.make_tensor_value_info(info.name, info.type.tensor_type.elem_type, shape)
 
 
-def overwrite_shape_in_model_proto(model: onnx.ModelProto) -> onnx.ModelProto:
+def overwrite_shape_in_model_proto(
+    model: onnx.ModelProto, n_in: Optional[int] = None
+) -> onnx.ModelProto:
     """
     Removes inferred shapes. Overwrites input shapes to make them all dynamic.
+    ``n_in`` indicates the number of inputs for which the shape must be rewritten.
     """
     assert isinstance(model, onnx.ModelProto), f"Unexpected type {type(model)} for model."
     for subgraph in enumerate_subgraphs(model.graph):
-        new_info = [_rewrite_info(i) for i in subgraph.input]
+        new_info = [
+            _rewrite_info(inp) if n_in is None or i < n_in else inp
+            for i, inp in enumerate(subgraph.input)
+        ]
         del subgraph.input[:]
         subgraph.input.extend(new_info)
         new_info = [_rewrite_info(i) for i in subgraph.output]

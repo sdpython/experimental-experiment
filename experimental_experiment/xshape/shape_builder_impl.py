@@ -588,7 +588,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
             rows.append("--NOCALLS--")
         return "\n".join(rows)
 
-    def run_node(self, node: onnx.NodeProto):
+    def run_node(self, node: onnx.NodeProto, exc: bool = False):
         """
         Uses shapes availables in the ShapeBuilder to infer the output shapes
         and types.
@@ -596,12 +596,19 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         if node.op_type == "Constant" and node.domain == "":
             self.set_constant(node.output[0], node)
             self.simple_update_value_shape_with_node(node)
+            if self.verbose:
+                print(
+                    f"[BasicShapeBuilder.run_node] {self.pretty_node(node)} - "
+                    f"{self.get_type(node.output[0])}:{self.get_shape(node.output[0])}"
+                )
         else:
-            self._make_node_set_type_shape(node)
+            r = self._make_node_set_type_shape(node, exc=exc)
             self.simple_update_value_shape_with_node(node)
             if all(self.is_constant(i) for i in node.input):
                 for o in node.output:
                     self.set_constant(o, node)
+            if self.verbose:
+                print(f"[BasicShapeBuilder.run_node] {self.pretty_node(node)}: {r}")
 
     def run_value_info(self, info: onnx.ValueInfoProto, is_input: bool):
         """Fills ShapeBuilder with information coming from an input or output."""
@@ -619,6 +626,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         self,
         model: Union[onnx.ModelProto, onnx.GraphProto],
         functions: Optional[Dict[Tuple[str, str], onnx.FunctionProto]] = None,
+        exc: bool = False,
     ):
         """Runs inference over a model or a graph."""
         if isinstance(model, onnx.ModelProto):
@@ -634,7 +642,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         for i in graph.input:
             self.run_value_info(i, True)
         for node in graph.node:
-            self.run_node(node)
+            self.run_node(node, exc=exc)
         for i in graph.output:
             self.run_value_info(i, False)
 

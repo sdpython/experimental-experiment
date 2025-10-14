@@ -1022,24 +1022,36 @@ def _set_shape_type_op_any_reduce(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for Reduce node type."
     keepdim = self.get_attribute(node, "keepdims", exc=False)
     axes = self.get_attribute(node, "axes", exc=False)
+    keepdim = None if keepdim is None else keepdim.i
     if axes is None:
         if len(node.input) == 2:
-            assert self.is_constant(node.input[1]), (
-                f"axes {node.input[1]!r} from node {node.op_type}, "
-                f"name={node.name!r} is not a constant, "
-                f"the new shape cannot be infered{self.get_debug_msg()}"
-            )
-            cst = self.get_constant(node.input[1])
-            if isinstance(cst, NodeProto) and self.is_constant(cst.output[0]):
-                cst = self.get_constant(node.input[1], computed_value=True)
-            assert isinstance(cst, (np.ndarray, self.torch.Tensor)), (
-                f"Unexpected type {type(cst)} for {node.input[1]!r}, "
-                f"unable to set type and shape for node {node.op_type} "
-                f"with name={node.name!r}{self.get_debug_msg()}"
-            )
-            if isinstance(cst, self.torch.Tensor):
-                cst = cst.cpu()
-            iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+            if self.is_constant(node.input[1]):
+                cst = self.get_constant(node.input[1])
+                if isinstance(cst, NodeProto) and self.is_constant(cst.output[0]):
+                    cst = self.get_constant(node.input[1], computed_value=True)
+                assert isinstance(cst, (np.ndarray, self.torch.Tensor)), (
+                    f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                    f"unable to set type and shape for node {node.op_type} "
+                    f"with name={node.name!r}{self.get_debug_msg()}"
+                )
+                if isinstance(cst, self.torch.Tensor):
+                    cst = cst.cpu()
+                iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+            elif keepdim is not None:
+                self.set_rank(node.output[0], self.get_rank(node.input[0]))
+                return True
+            if self.has_shape(node.input[1]):
+                shape = self.get_shape(node.input[1])
+                assert (
+                    len(shape) == 1
+                ), f"Wrong shape={shape!r} for axes={node.input[1]!r}{self.get_debug_msg()}"
+                if isinstance(shape[0], int):
+                    self.set_rank(node.output[0], self.get_rank(node.input[0]) - shape[0])
+                    return True
+            assert (
+                self._debug_shape_missing
+            ), f"Unable to determine shape for node {node}\n---\n{self.get_debug_msg()}"
+            return
         else:
             iaxes = None
     else:
@@ -1049,7 +1061,7 @@ def _set_shape_type_op_any_reduce(self: ShapeBuilder, node: NodeProto):
         self,
         node.output[0],
         node.input[0],
-        keepdim=None if keepdim is None else keepdim.i,
+        keepdim=keepdim,
         axes=iaxes,
     )
 
@@ -1473,6 +1485,7 @@ _set_shape_type_op_any_known = {
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "IsNaN": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "LayerNormalization": _set_shape_type_op_any_layer_normalization,
+    "Log": _set_shape_type_op_any_unary,
     "MatMul": _set_shape_type_op_any_matmul,
     "MaxPool": _set_shape_type_op_any_conv_max_pool,
     "NonZero": _set_shape_type_op_any_non_zero,
@@ -1493,7 +1506,7 @@ _set_shape_type_op_any_known = {
 }
 
 
-def set_shape_type_op_any(self: ShapeBuilder, node: NodeProto):
+def set_shape_type_op_any(self: ShapeBuilder, node: NodeProto, exc: bool = False):
     """Sets the shape and type if it can."""
     if node.op_type.startswith("Reduce"):
         return _set_shape_type_op_any_reduce(self, node)
@@ -1557,6 +1570,8 @@ def set_shape_type_op_any(self: ShapeBuilder, node: NodeProto):
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
+    if exc:
+        raise NotImplementedError(f"No shape function for node type {node.op_type!r}")
 
 
 def set_type_shape_fused_matmul(self: ShapeBuilder, node: NodeProto):
@@ -1763,7 +1778,7 @@ _set_shape_type_op_any_custom = {
 }
 
 
-def set_shape_type_custom(self: ShapeBuilder, node: NodeProto):
+def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False):
     """Sets the shape and type if it can."""
     if node.domain == "ai.onnx.ml":
         if node.op_type in ("TreeEnsembleRegressor", "TreeEnsemble"):
@@ -1838,3 +1853,7 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto):
         f"No function to compute shape for node: "
         f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
     )
+    if exc:
+        raise NotImplementedError(
+            f"No shape function for node type {node.op_type!r} from domain {node.domain!r}"
+        )
