@@ -1535,11 +1535,11 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 ],
                 "test",
                 [
-                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, "c", "d"]),
+                    oh.make_tensor_value_info("X", TFLOAT, ["a", 2, "c", "e*2"]),
                     oh.make_tensor_value_info("m1", TFLOAT, [1, 1, "c", "e"]),
                     oh.make_tensor_value_info("m2", TFLOAT, [1, 1, "c", "e"]),
                 ],
-                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c", "e*2"])],
                 [onh.from_array(np.array([4, 6], dtype=np.int64), name="split")],
             ),
             opset_imports=[oh.make_operatorsetid("", opset)],
@@ -1565,7 +1565,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             model,
             infer_shapes_options=InferShapesOptions.BUILDER,
             optimization_options=OptimizationOptions(
-                patterns=["FunctionHalfRotaryEmbedding", "ContribRotaryEmbedding"], verbose=0
+                patterns=["FunctionHalfRotaryEmbedding", "ContribRotaryEmbedding"], verbose=10
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)

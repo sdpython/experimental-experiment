@@ -5,13 +5,3 @@ from .virtual_tensor import VirtualTensor
 
 
 TEMPLATE_TYPE = 999
-
-
-def str_tensor_proto_type() -> str:
-    mapping = [
-        (getattr(TensorProto, att), att)
-        for att in dir(TensorProto)
-        if att.upper() == att and isinstance(getattr(TensorProto, att), int)
-    ]
-    mapping.sort()
-    return ", ".join(f"{k}:{v}" for k, v in mapping)

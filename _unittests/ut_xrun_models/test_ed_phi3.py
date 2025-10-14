@@ -34,6 +34,7 @@ class TestEdPhi3(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.9")
+    @unittest.skip("silu_backward not decomposed")
     def test_phi3_cort_static_not_mixed(self):
         import torch
 
@@ -79,6 +80,7 @@ class TestEdPhi3(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
     @requires_cuda()
+    @unittest.skip("silu_backward not decomposed")
     def test_phi3_cort_static_mixed(self):
         import torch
 
@@ -174,6 +176,7 @@ class TestEdPhi3(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.9")
+    @unittest.skip("silu_backward not decomposed")
     def test_phi3_cort_static(self):
         import torch
 

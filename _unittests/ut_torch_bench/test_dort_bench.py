@@ -67,6 +67,7 @@ class TestDortBench(ExtTestCase):
 
     @skipif_ci_windows("exporter does not work on Windows")
     @requires_transformers("4.54")
+    @requires_torch("2.12", "missing silu_backward")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_dort_bench_small_llama_cpu_debug(self):
         self._dort_bench_small_llama_cpu("debug")

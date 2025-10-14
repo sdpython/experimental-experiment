@@ -2,12 +2,12 @@ import inspect
 from typing import List, Optional, Sequence, Tuple, Union
 import numpy as np
 from onnx import NodeProto
-from ...xbuilder._onnx_helper import (
+from ...xshape._onnx_helper import (
     element_wise_binary_op_types,
     element_wise_op_cmp_types,
     unary_like_op_types,
 )
-from ...xbuilder._shape_helper import all_int, DYNAMIC_SHAPE
+from ...xshape._shape_helper import all_int, DYNAMIC_SHAPE
 from ..patterns_api import MatchResult, PatternOptimization
 
 

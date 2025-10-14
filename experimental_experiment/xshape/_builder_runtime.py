@@ -9,8 +9,9 @@ from ..helpers import (
     dtype_to_tensor_dtype,
     onnx_dtype_to_torch_dtype,
 )
-from ._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
-from .expression_dimension import simplify_expression
+from ..xshape._shape_helper import DYNAMIC_SHAPE, STATIC_SHAPE, all_int, all_int_or_str
+from ..xshape.simplify_expressions import simplify_expression
+from ..xshape._onnx_helper import str_tensor_proto_type
 
 
 @contextlib.contextmanager
@@ -25,7 +26,7 @@ def _unset_fake_temporarily() -> Generator:
             torch._C._set_dispatch_mode(old)
 
 
-class _GraphBuilderRuntime:
+class _BuilderRuntime:
 
     def _apply_slice_to_shape(
         self,
@@ -308,10 +309,10 @@ class _GraphBuilderRuntime:
         node: NodeProto,
         feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
-        from . import str_tensor_proto_type
-
         x = feeds[node.input[0]]
-        if not isinstance(x, (np.ndarray, self.torch.Tensor)):
+        if not isinstance(x, np.ndarray) and (
+            not hasattr(self, "torch") or not isinstance(x, self.torch.Tensor)
+        ):
             # Maybe a float, then we process it as a float, tensor.to only works
             # on tensors.
             assert isinstance(
@@ -330,6 +331,9 @@ class _GraphBuilderRuntime:
         assert to, f"to not here in node {node}"
         assert to != 8 and to < 17, f"Cast not implemented for to={to}, {str_tensor_proto_type()}"
         del saturate
+        if not hasattr(self, "torch"):
+            ttype = tensor_dtype_to_np_dtype(to)
+            return [x.astype(ttype)]
         if isinstance(x, np.ndarray):
             # Type conversion between numpy and torch is not robust.
             itype = dtype_to_tensor_dtype(x.dtype)
@@ -450,6 +454,8 @@ class _GraphBuilderRuntime:
     ) -> "torch.Tensor":  # noqa: F821
         new_feeds = {}
         for k, v in feeds.items():
+            if not hasattr(self, "torch"):
+                new_feeds[k] = v
             if isinstance(v, np.ndarray):
                 # Type conversion between numpy and torch is not robust.
                 itype = dtype_to_tensor_dtype(v.dtype)
@@ -463,6 +469,9 @@ class _GraphBuilderRuntime:
                 new_feeds[k] = x
             else:
                 new_feeds[k] = v
+        if not hasattr(self, "torch"):
+            y = np.where(*[new_feeds[k] for k in node.input])
+            return [y]
         y = self.torch.where(*[new_feeds[k] for k in node.input])
         return [y]
 

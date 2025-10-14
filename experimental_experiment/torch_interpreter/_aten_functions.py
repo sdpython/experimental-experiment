@@ -21,7 +21,7 @@ from ..helpers import (
     torch_dtype_to_onnx_dtype,
     type_info,
 )
-from ..xbuilder._shape_helper import (
+from ..xshape._shape_helper import (
     all_float,
     all_int,
     all_int_or_float,
@@ -30,7 +30,7 @@ from ..xbuilder._shape_helper import (
     DYNAMIC_SHAPE,
 )
 from ..xbuilder.graph_builder import GraphBuilder
-from ..xbuilder.shape_type_compute import (
+from ..xshape.shape_type_compute import (
     _adjust_attributes_of_max_pool,
     broadcast_shape,
     set_type_shape_unary_op,

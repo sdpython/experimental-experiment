@@ -16,6 +16,7 @@ API
     torch_models/index
     xbuilder/index
     xoptim/index
+    xshape/index
     torch_dynamo/index
     torch_bench/index
 

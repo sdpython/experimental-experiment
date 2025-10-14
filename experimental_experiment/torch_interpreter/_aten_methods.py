@@ -2,9 +2,9 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 from onnx import TensorProto
 from ..helpers import tensor_dtype_to_np_dtype
-from ..xbuilder._shape_helper import all_int
+from ..xshape._shape_helper import all_int
 from ..xbuilder.graph_builder import GraphBuilder
-from ..xbuilder.shape_type_compute import (
+from ..xshape.shape_type_compute import (
     torch_dtype_to_onnx_dtype,
     set_type_shape_binary_op,
     set_type_shape_unary_op,

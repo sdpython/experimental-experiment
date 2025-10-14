@@ -42,49 +42,45 @@ from ..helpers import (
     string_sig,
     onnx_dtype_to_torch_dtype,
     pretty_onnx,
-    rename_dynamic_dimensions,
-    rename_dynamic_expression,
     size_type,
     string_signature,
     string_type,
-    tensor_dtype_to_np_dtype,
     torch_dtype_to_onnx_dtype,
     make_idn,
     make_idg,
 )
-from ..reference import ExtendedReferenceEvaluator
-from ._shape_helper import (
+from ..xshape.rename_expressions import rename_dynamic_dimensions, rename_dynamic_expression
+from ..xshape._shape_helper import (
     DYNAMIC_SHAPE,
     STATIC_SHAPE,
-    _reshape_shape,
     all_int,
     all_int_or_str,
     is_static_dimension,
     is_static_shape,
-    reshape_implementation_with_zero,
 )
-from .shape_type_compute import set_shape_type_op_any, set_shape_type_custom
+from ..xshape.shape_type_compute import set_shape_type_op_any, set_shape_type_custom
+from ..xshape._builder_runtime import _BuilderRuntime
+from ..xshape._shape_runtime import _ShapeRuntime
+from ..xshape._inference_runtime import _InferenceRuntime
+from ..xshape._onnx_helper import (
+    element_wise_binary_op_types,
+    element_wise_op_cmp_types,
+    unary_like_op_types,
+    str_tensor_proto_type,
+)
 from ._onnx_helper import (
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,
     choose_consistent_domain_opset,
     compatible_opsets,
-    element_wise_binary_op_types,
-    element_wise_op_cmp_types,
     same_function_proto,
-    unary_like_op_types,
 )
 from .model_container import TorchModelContainer, proto_from_array, _get_type
 from .optimization_options import OptimizationOptions
-from .expression_dimension import (
-    Expression,
-    parse_expression,
-    parse_expression_tokens,
-    simplify_two_expressions,
-    rename_expression,
-)
+from ..xshape.rename_expressions import rename_expression, parse_expression_tokens
+from ..xshape.simplify_expressions import simplify_two_expressions
+from ..xshape.expressions_torch import Expression, parse_expression
 from .graph_builder_opset import Opset
-from ._graph_builder_runtime import _GraphBuilderRuntime
 from .virtual_tensor import VirtualTensor
 
 
@@ -182,7 +178,7 @@ class InferShapesOptions(IntEnum):
     BUILDER = 8
 
 
-class GraphBuilder(_GraphBuilderRuntime):
+class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     """
     Simplifies the creation of a model.
 
@@ -1149,6 +1145,59 @@ class GraphBuilder(_GraphBuilderRuntime):
         """Tells if a result is a constant."""
         return name in self.constants_
 
+    def compute_constant(
+        self, name: str, exc: bool = True, only_array: bool = False, allow_empty: bool = False
+    ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
+        """
+        Computes a constant.
+
+        :param name: constant name
+        :param exc: raises an exception if any failure
+        :param only_array: do not return TensorProto
+        :param allow_empty: allow empty result
+        :return: constant
+
+        If returns None if the constant is a FakeTensor.
+        """
+        assert self.is_constant(name), f"Name {name!r} is not a constant"
+        if name in self.initializers_dict:
+            value = self.initializers_dict[name]
+            assert not isinstance(
+                value, tuple
+            ), f"Unexpected type {type(value)} for name={name!r}"
+            if only_array and isinstance(value, TensorProto):
+                # Should reuse memory buffer here.
+                v = onh.to_array(value)
+                src = (
+                    ""
+                    if name not in self.initializers_dict_sources
+                    or not self.initializers_dict_sources[name].source
+                    else f"##{self.initializers_dict_sources[name].source}"
+                )
+                assert (
+                    src.count("GraphBuilder.compute_constant/from") < 10
+                ), f"Unexpected source={src!r} for initializer {name!r}{self.get_debug_msg()}"
+
+                self.add_initializer(
+                    name,
+                    v,
+                    existing=True,
+                    allow_empty=allow_empty,
+                    source=f"GraphBuilder.compute_constant/from({name}){src}",
+                )
+                return v, None
+            if isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
+                assert not self._debug_constant_folding, (
+                    f"Unable to compute constant because value is a FakeTensor"
+                    f"{string_type(value, with_shape=True)}"
+                    f"in node {self.pretty_node(v)}{self.get_debug_msg()}"
+                )
+                return None, None
+            return value, None
+        return _InferenceRuntime.compute_constant(
+            self, name=name, exc=exc, only_array=only_array, allow_empty=allow_empty
+        )
+
     def get_constant(
         self,
         name: str,
@@ -1465,9 +1514,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             if self.verbose > 5:
                 print(f"[GraphBuilder-{self._hash()}.set_rank] (again) {name}:{value}")
             return
-        assert (
-            name not in self._known_ranks
-        ), f"Name {name!r} already exists{self.get_debug_msg()}"
         self._known_ranks[name] = value
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_rank] {name}:{value}")
@@ -1751,7 +1797,7 @@ class GraphBuilder(_GraphBuilderRuntime):
 
         assert isinstance(dim, str) and " " not in dim and dim.count("(") == dim.count(")"), (
             f"type(dim)={type(dim)} must be a str and should not contain "
-            f"a comma or a space dim={dim!r} and the same number of opened and closed é"
+            f"a comma or a space dim={dim!r} and the same number of opened and closed "
             f"brackets{self.get_debug_msg()}"
         )
         for token in parse_expression_tokens(dim):
@@ -1759,24 +1805,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 self.add_dynamic_object(token, token)
         if dim not in self.dynamic_objects:
             self.add_dynamic_object(dim, dim)
-
-    def make_dimension_name_if_necessary(
-        self, a: Union[int, str], b: Union[int, str], op: str
-    ) -> str:
-        """Creates a new dimension."""
-        if op == "^":
-            # very simple trick for the time being
-            if a == b:
-                return a
-            if isinstance(a, str) and a.endswith(f"^{b}"):
-                return a
-            if isinstance(b, str) and b.startswith(f"{a}^"):
-                return b
-        if isinstance(a, str) and set(a) & set("+/*-^"):
-            a = f"({a})"
-        if isinstance(b, str) and set(b) & set("+/*-^"):
-            b = f"({b})"
-        return f"{a}{op}{b}"
 
     def set_shape(
         self,
@@ -1919,14 +1947,11 @@ class GraphBuilder(_GraphBuilderRuntime):
         if name in self._known_types:
             # 0 is undefined
             if self._known_types[name] != 0 and int_type != self._known_types[name]:
-                if exc:
-                    from . import str_tensor_proto_type
-
-                    raise RuntimeError(
-                        f"Type for name {name!r} already exists and it is different, "
-                        f"known is {self._known_types[name]} != {int_type} (new) - "
-                        f"(mapping={str_tensor_proto_type()}){self.get_debug_msg()}"
-                    )
+                assert not exc, (
+                    f"Type for name {name!r} already exists and it is different, "
+                    f"known is {self._known_types[name]} != {int_type} (new) - "
+                    f"(mapping={str_tensor_proto_type()}){self.get_debug_msg()}"
+                )
                 if "warnings" not in self._debug_msg:
                     self._debug_msg["warnings"] = []
                 self._debug_msg["warnings"].append(
@@ -1998,7 +2023,7 @@ class GraphBuilder(_GraphBuilderRuntime):
             return f"{name}:{s}"
         return f"{name}:?"
 
-    def get_shape(self, name: str) -> int:
+    def get_shape(self, name: str) -> DYNAMIC_SHAPE:
         """Returns the shape of a result."""
         assert isinstance(name, str), f"Unexpected type {type(name)} for name."
         assert name in self._known_shapes, (
@@ -2254,8 +2279,6 @@ class GraphBuilder(_GraphBuilderRuntime):
             return 2
         if elem_type in {TensorProto.BOOL, TensorProto.UINT8, TensorProto.INT8}:
             return 1
-        from . import str_tensor_proto_type
-
         raise AssertionError(
             f"elem_size not implemented for elem_type={elem_type}, "
             f"among {str_tensor_proto_type()}"
@@ -4225,210 +4248,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                     inputs.append(name)
                     del kwargs["axes"]
         return inputs, kwargs
-
-    def _make_node_set_type_shape_constant(self, node: NodeProto, sts: Optional[Dict[str, Any]]):
-        if node.domain != "":
-            return
-
-        if all(self.is_constant(i) for i in node.input):
-            for o in node.output:
-                self.update_node_constant(o, node)
-
-        if node.op_type == "Constant":
-            assert (
-                len(node.attribute) == 0
-                or node.attribute[0].name != "value"
-                or node.attribute[0].type != AttributeProto.GRAPH
-            ), f"{node}"
-            if len(node.attribute) == 1 and node.attribute[0].name == "value":
-                size = np.prod(node.attribute[0].t.dims)
-            else:
-                size = len(node.SerializeToString())
-            assert size < self.optimization_options.constant_size, (
-                f"A node Constant holds a tensor bigger than "
-                f"the constant: {size} >= {self.optimization_options.constant_size}."
-            )
-            k = node.output[0]
-            self.update_node_constant(k, node)
-            node.doc_string += ":constant-3:"
-            shape = self._get_tensor_shape(node)
-            dtype = self._get_tensor_type(node)
-            self.set_shape(k, shape)
-            self.set_type(k, dtype)
-            if self.verbose > 2 or np.prod(shape) > 100:
-                print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}: {shape}]")
-        elif node.op_type == "ConstantOfShape":
-            if len(node.attribute) == 1 and node.attribute[0].name == "value":
-                itype = node.attribute[0].t.data_type
-            else:
-                itype = TensorProto.FLOAT
-            self.set_type(node.output[0], itype)
-            if self.is_constant(node.input[0]):
-                value = self.get_constant(
-                    node.input[0], computed_value=True, as_shape=True, exc=False
-                )
-                if value is not None:
-                    # This is needed when concatenating caches.
-                    self.set_shape(node.output[0], value, allow_zero=True)
-                    node.doc_string += ":constant-9:"
-        elif node.op_type == "Identity":
-            if self.has_shape(node.input[0]):
-                # allow_zero is True but if it fails here, it means it did not fail
-                # before when it should be.
-                self.set_shape(node.output[0], self.get_shape(node.input[0]), allow_zero=True)
-            elif self.has_rank(node.input[0]):
-                self.set_rank(node.output[0], self.get_rank(node.input[0]))
-            if self.has_type(node.input[0]):
-                self.set_type(node.output[0], self.get_type(node.input[0]))
-            if self.is_constant(node.input[0]):
-                self.update_node_constant(node.output[0], node)
-                node.doc_string += ":constant-4:"
-        elif node.op_type == "Expand":
-            if self.has_type(node.input[0]):
-                self.set_type(node.output[0], self.get_type(node.input[0]))
-            if (
-                self.has_shape(node.input[0])
-                and is_static_shape(self.get_shape(node.input[0]))
-                and self.is_constant(node.input[1])
-            ):
-                cst, _ = self.compute_constant(node.input[1], exc=False, only_array=True)
-                if cst is not None:
-                    assert not isinstance(cst, self.torch._subclasses.fake_tensor.FakeTensor), (
-                        f"self.compute_constant returns a FakeTensor for {node.input[1]!r}"
-                        f"\n{self.pretty_text()}"
-                    )
-                    assert (
-                        not self.has_rank(node.input[1]) or self.get_rank(node.input[1]) == 1
-                    ), (
-                        f"Unexpected rank {self.get_rank(node.input[1])} for {node.input[1]!r}"
-                        f"{self.get_debug_msg()}"
-                    )
-                    with self.maybe_disable_fake_tensor_mode():
-                        assert len(cst.shape) == 1 and cst.min() > 0, (
-                            f"Unexpected shape {cst.shape} "
-                            f"for computed constant {node.input[1]!r}, "
-                            f"cst={cst}{self.get_debug_msg()}"
-                        )
-                        shape = self.get_shape(node.input[0])
-                        new_shape = tuple(int(i) for i in cst)
-                    if len(shape) < len(new_shape):
-                        shape = (1,) * (len(new_shape) - len(shape)) + shape
-                    self.set_shape(
-                        node.output[0], tuple(max(i, j) for i, j in zip(shape, new_shape))
-                    )
-        elif node.op_type == "Reshape":
-            if self.has_type(node.input[0]):
-                self.set_type(node.output[0], self.get_type(node.input[0]))
-            if self.is_constant(node.input[1]):
-                cst, _ = self.compute_constant(
-                    node.input[1], exc=False, only_array=True, allow_empty=True
-                )
-                if cst is not None:
-                    shape_cst = tuple(int(i) for i in cst)
-                    if 0 in shape_cst:
-                        if self.has_shape(node.input[0]):
-                            sh = self.get_shape(node.input[0])
-                            shape_cst_last_zero = shape_cst[
-                                : len(shape_cst) - 1 - shape_cst[::-1].index(0) + 1
-                            ]
-                            assert len(sh) >= len(shape_cst_last_zero), (
-                                f"Shape discrepancies for name={node.input[0]!r} "
-                                f"node.name={node.name!r} "
-                                f"between sh={sh} and shape_cst={shape_cst}, "
-                                f"shape_cst_last_zero={shape_cst_last_zero}"
-                                f"\ncst={cst}{self.get_debug_msg()}"
-                            )
-                            shape_cst = tuple(
-                                [
-                                    shape_cst[i] if shape_cst[i] != 0 else sh[i]
-                                    for i in range(len(shape_cst))
-                                ]
-                            )
-                        else:
-                            shape_cst = None
-                    if shape_cst is not None:
-                        if -1 in shape_cst:
-                            if self.has_shape(node.input[0]):
-                                sh = self.get_shape(node.input[0])
-                                if is_static_shape(sh):
-                                    self.set_shape(node.output[0], _reshape_shape(sh, shape_cst))
-                                    node.doc_string += ":constant-7a:"
-                        else:
-                            self.set_shape(node.output[0], shape_cst)
-                            node.doc_string += ":constant-7b:"
-        elif node.op_type == "Shape":
-            self.set_type(node.output[0], TensorProto.INT64)
-            if self.has_rank(node.input[0]):
-                rk = self.get_rank(node.input[0])
-                if len(node.attribute) == 0:
-                    self.set_shape(node.output[0], (rk,))
-                else:
-                    start = self.get_attribute_with_default(node, "start", 0)
-                    if start < 0:
-                        start += rk
-                    end = self.get_attribute_with_default(node, "end", rk)
-                    if end < 0:
-                        end += rk
-                    self.set_shape(node.output[0], (end - start,))
-            elif node.attribute:
-                start = self.get_attribute_with_default(node, "start", 0)
-                end = self.get_attribute_with_default(node, "end", None)
-                if end is not None and end - start > 0:
-                    self.set_shape(node.output[0], (end - start,))
-                else:
-                    self.set_rank(node.output[0], 1)
-                    assert not self._debug_shape_missing, (
-                        f"Unable to compute the shape of this shape: "
-                        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-                    )
-            else:
-                self.set_rank(node.output[0], 1)
-                assert not self._debug_shape_missing, (
-                    f"Unable to compute the shape of this shape: "
-                    f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-                )
-            if self.is_constant(node.input[0]) or (
-                self.has_shape(node.input[0]) and all_int(self.get_shape(node.input[0]))
-            ):
-                self.update_node_constant(node.output[0], node)
-                node.doc_string += ":constant-2:"
-        elif node.op_type == "Size":
-            self.set_type(node.output[0], TensorProto.INT64)
-            self.set_shape(node.output[0], tuple())
-            if self.is_constant(node.input[0]):
-                self.update_node_constant(node.output[0], node)
-                node.doc_string += ":constant-2s:"
-        elif not sts:
-            if node.op_type == "GatherElements":
-                if self.has_type(node.input[0]):
-                    self.set_type(node.output[0], self.get_type(node.input[0]))
-                if self.has_shape(node.input[1]):
-                    self.set_shape(node.output[0], self.get_shape(node.input[1]))
-                elif self.has_rank(node.input[1]):
-                    self.set_rank(node.output[0], self.get_rank(node.input[1]))
-
-    def update_node_constant(self, name: str, node: NodeProto) -> bool:
-        """Updates a constant NodeProto."""
-        assert isinstance(name, str), f"Unexpected type {type(name)} for name"
-        assert node is None or isinstance(
-            node, NodeProto
-        ), f"Unexpected type {type(node)} for name={name!r}"
-        if self.verbose > 2:
-            print(
-                f"[GraphBuilder-{self._hash()}.update_node_constant] new constant "
-                f"{name!r}, node={None if node is None else node.op_type}"
-            )
-        assert (
-            node is None
-            or node.op_type == "Shape"
-            or all(self.is_constant(i) for i in node.input if i not in {"", None, "None"})
-        ), (
-            f"Output {name!r} is constant (node={self.pretty_node(node)}) "
-            f"only if every input from {node.input} is constant "
-            f"but constants={[self.is_constant(i) for i in node.input]}{self.get_debug_msg()}"
-        )
-        self.constants_[name] = node
-        return True
 
     def get_attribute(
         self, node: NodeProto, att_name: str, exc: bool = True
@@ -6692,272 +6511,6 @@ class GraphBuilder(_GraphBuilderRuntime):
         self._refresh_values_cache()
         return start - len(self.nodes)
 
-    def compute_constant(
-        self, name: str, exc: bool = True, only_array: bool = False, allow_empty: bool = False
-    ) -> Tuple[np.ndarray, Optional[Dict[str, np.ndarray]]]:
-        """
-        Computes a constant.
-
-        :param name: constant name
-        :param exc: raises an exception if any failure
-        :param only_array: do not return TensorProto
-        :param allow_empty: allow empty result
-        :return: constant
-
-        If returns None if the constant is a FakeTensor.
-        """
-        assert self.is_constant(name), f"Name {name!r} is not a constant"
-        if name in self.initializers_dict:
-            value = self.initializers_dict[name]
-            assert not isinstance(
-                value, tuple
-            ), f"Unexpected type {type(value)} for name={name!r}"
-            if only_array and isinstance(value, TensorProto):
-                # Should reuse memory buffer here.
-                v = onh.to_array(value)
-                src = (
-                    ""
-                    if name not in self.initializers_dict_sources
-                    or not self.initializers_dict_sources[name].source
-                    else f"##{self.initializers_dict_sources[name].source}"
-                )
-                assert (
-                    src.count("GraphBuilder.compute_constant/from") < 10
-                ), f"Unexpected source={src!r} for initializer {name!r}{self.get_debug_msg()}"
-
-                self.add_initializer(
-                    name,
-                    v,
-                    existing=True,
-                    allow_empty=allow_empty,
-                    source=f"GraphBuilder.compute_constant/from({name}){src}",
-                )
-                return v, None
-            if isinstance(value, self.torch._subclasses.fake_tensor.FakeTensor):
-                assert not self._debug_constant_folding, (
-                    f"Unable to compute constant because value is a FakeTensor"
-                    f"{string_type(value, with_shape=True)}"
-                    f"in node {self.pretty_node(v)}{self.get_debug_msg()}"
-                )
-                return None, None
-            return value, None
-
-        v = self.constants_[name]
-        # It should not be None but a node as it is not an initializer.
-        assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for constant name={name!r}"
-        if self._debug_get_constant:
-            print(f"[GraphBuilder-{self._hash()}.compute_constant] {self.pretty_node(v)}")
-
-        if v.op_type == "Shape":
-            if not self.has_shape(v.input[0]):
-                # We stop.
-                assert not self._debug_constant_folding, (
-                    f"Unable to compute constant because {v.input[0]!r} has no shape"
-                    f"in node {self.pretty_node(v)}{self.get_debug_msg()}"
-                )
-                return None, None
-            shape = self.get_shape(v.input[0])
-            if is_static_shape(shape):
-                if v.attribute:
-                    start = 0
-                    end = None
-                    for att in v.attribute:
-                        if att.name == "start":
-                            start = att.i
-                        elif att.name == "end":
-                            end = att.i
-                    shape = shape[start:] if end is None else shape[start:end]
-                    if self._debug_get_constant:
-                        print(
-                            f"[GraphBuilder-{self._hash()}.compute_constant]     - SHAPE "
-                            f"{name}: {shape}? start={start}, end={end}"
-                        )
-                elif self._debug_get_constant:
-                    print(
-                        f"[GraphBuilder-{self._hash()}.compute_constant] "
-                        f"    - SHAPE {name}: {shape}?"
-                    )
-                return np.array(shape, dtype=np.int64), {
-                    v.input[0]: self.ShapeConstant(v.input[0], shape, v)
-                }
-
-            if not self.is_constant(v.input[0]):
-                # One exception here as the input maybe not
-                # be constant but the shape may be known.
-                assert all_int(shape), (
-                    f"Shape must be static ({shape}) if shape is constant in {v} in "
-                    f"{self.pretty_node(v)}{self.get_debug_msg()}"
-                )
-                with self.maybe_disable_fake_tensor_mode():
-                    output = self._apply_shape_on_shape(v, shape)
-                    if isinstance(output[0], self.torch.Tensor):
-                        # We convert the tensor into numpy array,
-                        # it is a small shape anyway so the FakeMode
-                        # does not come up as an issue.
-                        output = [output[0].detach().cpu().numpy()]
-                    if self._debug_get_constant:
-                        print(
-                            f"[GraphBuilder-{self._hash()}.compute_constant]     - A "
-                            f"{name}: {self.pretty_tensor(output[0])}"
-                        )
-                    return output[0], {v.input[0]: self.ShapeConstant(v.input[0], shape, v)}
-            assert not self._debug_constant_folding, (
-                f"Unable to compute constant for node {self.pretty_node(v)}"
-                f"{self.get_debug_msg()}"
-            )
-            return None, None
-
-        feeds = {i: self.get_constant(i, exc=exc, computed_value=True) for i in v.input}
-        for kval, val in feeds.items():
-            if not exc and "FakeTensor" in str(type(val)):
-                assert not self._debug_constant_folding, (
-                    f"Unable to compute constant for node {self.pretty_node(v)}"
-                    f"because a FakeTensor appeared{self.get_debug_msg()}"
-                )
-                return None, None
-            assert "FakeTensor" not in str(type(val)), (
-                f"FakeTensor {kval!r} cannot be an initializer {type(val)}, "
-                f"v.op_type={v.op_type!r}"
-                f"{self.get_debug_msg()}"
-            )
-            if val is None:
-                assert not self._debug_constant_folding, (
-                    f"Unable to compute constant for node {self.pretty_node(v)}"
-                    f"because val=None{self.get_debug_msg()}"
-                )
-                return None, None
-
-        with self.maybe_disable_fake_tensor_mode():
-            if v.op_type == "Identity":
-                # much faster this way
-                output = [feeds[v.input[0]]]
-            elif v.op_type == "Reshape":
-                # much faster this way
-                output = [
-                    reshape_implementation_with_zero(feeds[v.input[0]], tuple(feeds[v.input[1]]))
-                ]
-            elif v.op_type in {
-                "Add",
-                "Div",
-                "Mul",
-                "Sub",
-            }:
-                # bypassing onnx.numpy_helper.from_array, too slow
-                output = self._apply_binary_op(v, feeds)
-            elif (
-                v.op_type == "Pow"
-                and self.has_type(v.input[0])
-                and self.has_type(v.input[1])
-                and self.get_type(v.input[0]) == self.get_type(v.input[1])
-            ):
-                output = self._apply_binary_op(v, feeds)
-            elif v.op_type in {"Exp", "Reciprocal", "Sqrt"}:
-                # bypassing onnx.numpy_helper.from_array, too slow
-                output = self._apply_unary_function(v, feeds)
-            elif hasattr(self, f"_apply_{v.op_type.lower()}"):
-                output = getattr(self, f"_apply_{v.op_type.lower()}")(v, feeds)
-            elif all(isinstance(v, np.ndarray) for v in feeds.values()):
-                if v.op_type not in {"Constant", "ConstantOfShape"} and self.main_opset < 18:
-                    # This functionality is not enabled before that opset.
-                    if self._debug_get_constant:
-                        print(
-                            f"[GraphBuilder-{self._hash()}.compute_constant] fails "
-                            f"because opset={self.main_opset} for name={name!r}, "
-                            f"node={self.pretty_node(v)}"
-                        )
-                    assert not self._debug_constant_folding, (
-                        f"Unable to compute constant opset={self.main_opset}<18"
-                        f"for name={name!r}{self.get_debug_msg()}"
-                    )
-                    return None, None
-
-                # Let's avoid big computation on CPU.
-                max_dim = 0
-                for _v in feeds.values():
-                    max_dim = max(max_dim, np.prod(_v.shape))
-                if max_dim >= 2**22:
-                    if self.verbose > 1:
-                        print(
-                            f"[GraphBuilder-{self._hash()}.compute_constant] stop computing a "
-                            f"constant as it may be too big, shapes are "
-                            f"{[_.shape for _ in feeds.values()]}"
-                        )
-                    assert not self._debug_constant_folding, (
-                        f"Unable to compute constant for node {self.pretty_node(v)}"
-                        f"because max_dim={max_dim} (shape={_v.shape}){self.get_debug_msg()}"
-                    )
-                    return None, None
-
-                begin = time.perf_counter()
-                ref = ExtendedReferenceEvaluator(v)
-                try:
-                    output = ref.run(None, feeds)
-                except (ValueError, TypeError) as e:
-                    sf = ", ".join(f"{k}:{v.dtype}:{v.shape}" for k, v in feeds.items())
-                    if "warnings" not in self._debug_msg:
-                        self._debug_msg["warnings"] = []
-                    sv = str(v).replace("\n", " ")
-                    self._debug_msg["warnings"].append(f"Issue with v={sv}, feeds={sf}, e={e}")
-                    self.time_evaluation_constants_ += time.perf_counter() - begin
-                    assert not self._debug_constant_folding, (
-                        f"Unable to compute constant for node {self.pretty_node(v)}"
-                        f"due to {e}{self.get_debug_msg()}"
-                    )
-                    return None, None
-
-                self.time_evaluation_constants_ += time.perf_counter() - begin
-            else:
-                assert not self._debug_constant_folding, (
-                    f"Unable to compute constant for node {self.pretty_node(v)}, "
-                    f"feeds={string_type(feeds, with_shape=True, with_min_max=True, limit=20)}"
-                    f"{self.get_debug_msg()}"
-                )
-                return None, None
-
-            cst = None
-            for n, val in zip(v.output, output):
-                assert not isinstance(val, tuple), f"Unexpected type {type(val)} for n={n!r}"
-                assert "FakeTensor" not in str(type(val)), (
-                    f"FakeTensor detected {type(val)} in constant {name!r}, "
-                    f"v.op_type={v.op_type!r}{self.get_debug_msg()}"
-                )
-                if self.has_type(n):
-                    # numpy changes the expected type sometimes
-                    # (like transpose(x: float36) --> float32)
-                    itype = self.get_type(n)
-                    if hasattr(val, "detach"):
-                        val = val.to(onnx_dtype_to_torch_dtype(itype))
-                    else:
-                        val = val.astype(tensor_dtype_to_np_dtype(itype))
-                self.constants_computed_[n] = val
-                if name == n:
-                    cst = val
-
-        assert (
-            len(cst.shape) == 0
-            or min(cst.shape) > 0
-            or (v.op_type in {"ConstantOfShape", "Cast", "Identity", "Constant"})
-        ), (
-            f"Output has empty shape {cst.shape}, name={name!r} "
-            f"v.op_type={v.op_type!r}, v.name={v.name!r}{self.get_debug_msg()}"
-        )
-        assert cst is not None, f"Constant {name!r} was not found in {v.output}"
-        if isinstance(cst, self.torch._subclasses.fake_tensor.FakeTensor):
-            assert not self._debug_constant_folding, (
-                f"Unable to compute constant for node {self.pretty_node(v)}"
-                f"because a FakeTensor appeared{self.get_debug_msg()}"
-            )
-            return None, None
-        if self._debug_get_constant:
-            print(
-                f"[GraphBuilder-{self._hash()}.compute_constant] "
-                f"    - A {name}: {self.pretty_tensor(cst)}"
-            )
-        assert (
-            not self._debug_constant_folding or cst is not None
-        ), f"Unable to compute constant for node {self.pretty_node(v)}{self.get_debug_msg()}"
-        return cst, feeds
-
     def constant_folding(
         self, options: Union[bool, Set[str]], convert_into_initializer: bool = True
     ) -> Dict[str, float]:
@@ -8032,397 +7585,6 @@ class GraphBuilder(_GraphBuilderRuntime):
                 f"[GraphBuilder-{self._hash()}._update_shape_types_with_proto] ends in "
                 f"{time.perf_counter() - begin_} seconds."
             )
-
-    def simple_update_value_shape_with_node(self, node) -> bool:
-        """Updates ``_known`_value_shape`` for a particular node."""
-        if node.domain != "" or node.op_type not in {
-            "Abs",
-            "Add",
-            "Concat",
-            "Div",
-            "Gather",
-            "Identity",
-            "Mod",
-            "Mul",
-            "Range",
-            "Scatter",
-            "Shape",
-            "Slice",
-            "Squeeze",
-            "Sub",
-            "Unsqueeze",
-        }:
-            return False
-
-        # Constant can be considered as possible shape.
-        for i in node.input:
-            known = self.value_as_shape(i)
-            if known is not None:
-                continue
-            if not self.is_constant(i):
-                continue
-            if not self.has_type(i) or self.get_type(i) != TensorProto.INT64:
-                # No chance for this to be used a shape computation.
-                continue
-            cst = self.get_constant(i, exc=False, computed_value=True)
-            if cst is None or len(cst.shape) > 1:
-                continue
-            with self.maybe_disable_fake_tensor_mode():
-                tu = tuple(map(int, cst)) if len(cst.shape) > 0 else int(cst)
-            self.set_value_shape(i, tu)
-
-        if node.op_type in {"Identity", "Abs"}:
-            value = self.value_as_shape(node.input[0])
-            if value is not None:
-                node.doc_string += "#SV-Id1"
-                self.set_value_shape(
-                    node.output[0], value, equal_to=(node.input[0], node.output[0])
-                )
-                return True
-            node.doc_string += "#SV-Id/2"
-            return False
-
-        if node.op_type == "Shape":
-            if len(node.attribute) == 0:
-                if self.has_shape(node.input[0]):
-                    node.doc_string += "#SV-Sh1"
-                    shape = self.get_shape(node.input[0])
-                    self.set_value_shape(node.output[0], shape)
-                    if all_int(shape):
-                        self.update_node_constant(node.output[0], node)
-                    self.set_shape(node.output[0], (len(shape),))
-                    return True
-                node.doc_string += "#SV-Sh/1"
-                return False
-
-            start = self.get_attribute(node, "start", exc=False)
-            end = self.get_attribute(node, "end", exc=False)
-            if end is None:
-                if self.has_rank(node.input[0]):
-                    end = self.get_rank(node.input[0])
-            if self.has_shape(node.input[0]):
-                shape = self.get_shape(node.input[0])
-                assert start is None or start.i < len(shape), (
-                    f"Shape mismatch, start={0 if start is None else start.i}, "
-                    f"shape of {node.input[0]!r} "
-                    f"is {shape}{self.get_debug_msg()}"
-                )
-                if end is None:
-                    n_shape = shape[0 if start is None else start.i :]
-                    self.set_value_shape(node.output[0], n_shape)
-                    if all_int(shape):
-                        self.update_node_constant(node.output[0], node)
-                    self.set_shape(node.output[0], (len(n_shape),))
-                    node.doc_string += "#SV-Sh4"
-                    return True
-                assert getattr(end, "i", end) <= len(shape), (
-                    f"Shape mismatch, end={getattr(end, 'i', end)}, "
-                    f"shape of {node.input[0]!r} "
-                    f"is {shape}{self.get_debug_msg()}"
-                )
-                n_shape = shape[0 if start is None else start.i : getattr(end, "i", end)]
-                if all_int(shape):
-                    self.update_node_constant(node.output[0], node)
-                self.set_value_shape(node.output[0], n_shape)
-                self.set_shape(node.output[0], (len(n_shape),))
-                node.doc_string += "#SV-Sh6"
-                return True
-
-            if end is None:
-                self.set_value_shape(node.output[0], f"{node.input[0]}[{start.i}:]")
-                node.doc_string += "#SV-Sh/6"
-                return False
-
-            start = start.i
-            end = getattr(end, "i", end)
-            if isinstance(start, int) and isinstance(end, int):
-                self.set_value_shape(
-                    node.output[0], tuple(f"{node.input[0]}[{i}]" for i in range(start, end))
-                )
-                node.doc_string += "#SV-Sh7"
-            else:
-                self.set_value_shape(node.output[0], f"{node.input[0]}[{start}:{end}]")
-                node.doc_string += "#SV-Sh7"
-            return True
-
-        if node.op_type == "Gather":
-            if self.has_type(node.input[0]):
-                self.set_type(node.output[0], self.get_type(node.input[0]))
-            if self.is_constant(node.input[1]):
-                y = self.value_as_shape(node.input[0])
-                if y is None:
-                    node.doc_string += "#SV-Ga/2"
-                    return False
-                i = self.get_constant(node.input[1], computed_value=True, exc=True)
-                if i is None:
-                    node.doc_string += "#SV-Ga/3"
-                    return False
-                if isinstance(y, str) and isinstance(i, int):
-                    self.set_value_shape(node.output[0], f"{y}[{i}]")
-                    node.doc_string += "#SV-Ga3"
-                    self.set_shape(node.output[0], tuple())
-                    return True
-                if (
-                    isinstance(y, str)
-                    and isinstance(i, np.ndarray)
-                    and i.dtype == np.int64
-                    and i.shape in ((1,), tuple())
-                ):
-                    ii = int(i[0]) if i.shape == (1,) else int(i)
-                    self.set_value_shape(node.output[0], f"{y}[{ii}]")
-                    node.doc_string += "#SV-Ga4"
-                    self.set_shape(node.output[0], (1,) if i.shape == (1,) else tuple())
-                    return True
-                if isinstance(y, tuple) and isinstance(i, int):
-                    self.set_value_shape(node.output[0], y[i])
-                    node.doc_string += "#SV-Ga5"
-                    self.set_shape(node.output[0], tuple())
-                    return True
-                if isinstance(y, tuple) and isinstance(i, tuple) and all_int(i):
-                    self.set_value_shape(node.output[0], tuple(y[_] for _ in i))
-                    self.set_shape(node.output[0], (len(i),))
-                    node.doc_string += "#SV-Ga6"
-                    return True
-                if (
-                    isinstance(y, tuple)
-                    and isinstance(i, (self.torch.Tensor, np.ndarray))
-                    and i.dtype in (np.int64, self.torch.int64)
-                    and tuple(i.shape) in ((1,), tuple())
-                ):
-                    ishape = tuple(i.shape)
-                    ii = int(i[0]) if ishape == (1,) else int(i)
-                    if self._debug_quiet and ii >= len(y):
-                        node.doc_string += "#SV-Ga/77"
-                        return False
-                    assert ii < len(y), (
-                        f"Unexpected value for y={y!r}, i={i!r} in node Gather "
-                        f"with inputs={node.input}{self.get_debug_msg()}"
-                    )
-                    self.set_value_shape(node.output[0], (y[ii],) if i.shape == (1,) else y[ii])
-                    self.set_shape(node.output[0], (1,) if i.shape == (1,) else tuple())
-                    node.doc_string += "#SV-Ga7"
-                    return True
-                raise RuntimeError(
-                    f"Not implemented when node Gather(x,i) with inputs={node.input}, "
-                    f"shape(x)={y!r}, i={i!r}, i.dtype={i.dtype if i is not None else '?'}"
-                    f"{self.get_debug_msg()}"
-                )
-            node.doc_string += "#SV-Ga/7"
-            return False
-
-        if node.op_type == "Squeeze":
-            if self.is_constant_or_attribute(node, 1, "axes"):
-                y = self.value_as_shape(node.input[0])
-                if y is None:
-                    node.doc_string += "#SV-Sq/3"
-                    return False
-                i = self.get_constant_or_attribute(node, 1, "axes")
-                if isinstance(i, int):
-                    ii = i
-                elif (
-                    isinstance(i, np.ndarray)
-                    and i.dtype == np.int64
-                    and i.shape in ((1,), tuple())
-                ):
-                    ii = int(i[0]) if i.shape == (1,) else int(i)
-                elif i is None and isinstance(y, tuple) and len(y) == 1:
-                    # A dimension a tensor of 1 element turned into a scalar
-                    node.doc_string += "#SV-SqDim"
-                    self.set_value_shape(node.output[0], y[0])
-                    return True
-                else:
-                    raise RuntimeError(
-                        f"Not implemented when node Squeeze with inputs={node.input}, "
-                        f"y={y!r}, i={i!r}{self.get_debug_msg()}"
-                    )
-                assert (
-                    ii == 0
-                ), f"A shape should only have one axis i={i}, y={y}{self.get_debug_msg()}"
-                if isinstance(y, str):
-                    node.doc_string += "#SV-Sq1"
-                    self.set_value_shape(node.output[0], f"squeeze({y})")
-                    return True
-                if isinstance(y, int):
-                    node.doc_string += "#SV-Sq2"
-                    self.set_value_shape(node.output[0], y)
-                    return True
-                assert isinstance(
-                    y, tuple
-                ), f"Unexpected type {type(y)} for y={y} and i={i}{self.get_debug_msg()}"
-                node.doc_string += "#SV-Sq3"
-                self.set_value_shape(node.output[0], y[0])
-                return True
-            node.doc_string += "#SV-Sq/2"
-            return False
-
-        if node.op_type == "Unsqueeze":
-            values_0 = self.value_as_shape(node.input[0])
-            if isinstance(values_0, tuple) and len(values_0) > 1:
-                # This cannot be a shape anymore after this operation
-                node.doc_string += "#SV-Unsq/1"
-                return False
-            if self.has_rank(node.input[0]) and self.get_rank(node.input[0]) > 0:
-                # This cannot be a shape anymore.
-                node.doc_string += "#SV-Unsq/2"
-                return False
-            if not self.has_rank(node.input[0]) and values_0 is None:
-                node.doc_string += "#SV-Unsq/3"
-                return False
-            assert self.has_rank(node.input[0]), (
-                f"Rank of {node.input[0]!r} is unknown but "
-                f"its value is {values_0!r}{self.get_debug_msg()}"
-            )
-            if len(node.input) > 1:
-                cst = self.get_constant(node.input[1], exc=False, computed_value=True)
-                cst = tuple() if not cst.shape else tuple(cst)
-            else:
-                cst = tuple(self.get_attribute(node, "axes").ints)
-                assert cst, f"Value={cst!r} is wrong for {node.input[0]}{self.get_debug_msg()}"
-            if cst is not None and len(cst) == 1 and self.get_rank(node.input[0]) == 0:
-                node.doc_string += "#SV-Unsq4"
-                self.set_value_shape(
-                    node.output[0], (node.input[0],) if values_0 is None else (values_0,)
-                )
-                return True
-
-        # after this point, it is all about operator between shapes.
-        values = [self.value_as_shape(x) for x in node.input]
-        if any(x is None for x in values):
-            # it is not a shape
-            node.doc_string += "#SV-All/0"
-            return False
-
-        if node.op_type == "Concat":
-            node.doc_string += "#SV-Co1"
-            concatenated = []
-            for v in values:
-                concatenated.extend(v if isinstance(v, tuple) else (v,))
-            self.set_value_shape(node.output[0], tuple(concatenated))
-            return True
-
-        if node.op_type == "Range":
-            if len(values) == 3:
-                args = []
-                for v in values:
-                    if isinstance(v, int):
-                        args.append(v)
-                    elif len(v) == 1:
-                        # Should not happen.
-                        args.append(v[0])
-                    else:
-                        node.doc_string += "#SV-Ra/1"
-                        return False
-                if not all_int(args):
-                    node.doc_string += "#SV-Ra/2"
-                    return False
-            node.doc_string += "#SV-Ra"
-            self.set_value_shape(node.output[0], tuple(range(*args)))
-            return True
-
-        if node.op_type in {"Mul", "Add", "Div", "Sub", "Mod"}:
-            fct, symbol = {
-                "Add": ((lambda x, y: x + y), "+"),
-                "Div": ((lambda x, y: x // y), "/"),
-                "Mul": ((lambda x, y: x * y), "*"),
-                "Sub": ((lambda x, y: x - y), "-"),
-                "Mod": ((lambda x, y: x % y), "%"),
-            }[node.op_type]
-            m1 = values[0]
-            m2 = values[1]
-            if isinstance(m1, int) and isinstance(m2, int):
-                node.doc_string += f"#SV-{node.op_type}1"
-                self.set_value_shape(node.output[0], fct(m1, m2))
-                return True
-            if isinstance(m1, (int, str)) and isinstance(m2, (int, str)):
-                node.doc_string += f"#SV-{node.op_type}2"
-                self.set_value_shape(node.output[0], f"{m1}{symbol}{m2}")
-                return True
-
-            # One of them is a tuple.
-            if not isinstance(m1, tuple):
-                m1 = (m1,)
-            if not isinstance(m2, tuple):
-                m2 = (m2,)
-            if len(m1) == len(m2):
-                res = []
-                for s1, s2 in zip(m1, m2):
-                    res.append(
-                        fct(s1, s2)
-                        if isinstance(s1, int) and isinstance(s2, int)
-                        else f"{s1}{symbol}{s2}"
-                    )
-                self.set_value_shape(node.output[0], tuple(res))
-                node.doc_string += f"#SV-{node.op_type}3"
-                return True
-
-            if len(m1) == 1:
-                res = []
-                for s2 in m2:
-                    res.append(
-                        fct(m1[0], s2)
-                        if isinstance(m1[0], int) and isinstance(s2, int)
-                        else f"{m1[0]}{symbol}{s2}"
-                    )
-                self.set_value_shape(node.output[0], tuple(res))
-                node.doc_string += f"#SV-{node.op_type}4"
-                return True
-            if len(m2) == 1:
-                res = []
-                for s1 in m1:
-                    res.append(
-                        fct(s1, m2[0])
-                        if isinstance(s1, int) and isinstance(m2[0], int)
-                        else f"{s1}{symbol}{m2[0]}"
-                    )
-                self.set_value_shape(node.output[0], tuple(res))
-                node.doc_string += f"#SV-{node.op_type}4"
-                return True
-
-            # This cannot be a shape anymore.
-            node.doc_string += f"#SV-{node.op_type}/0"
-            return False
-
-        if node.op_type == "Gather":
-            if isinstance(values[1], tuple) and all_int(values[1]):
-                shape = (values[0],) if not isinstance(values[0], tuple) else values[0]
-                node.doc_string += "#SV-Ga1"
-                assert max(values[1]) < len(shape), (
-                    f"Unable to compute new value shape when values={values}"
-                    f"{self.get_debug_msg()}"
-                )
-                self.set_value_shape(node.output[0], tuple(shape[i] for i in values[1]))
-                return True
-
-        if node.op_type == "Slice":
-            if len(values) >= 3 and values[1] == (0,) and values[2] == (9223372036854775807,):
-                node.doc_string += "#SV-Sl1"
-                self.set_value_shape(node.output[0], values[0])
-                return True
-            if len(values) < 4 or values[3] != (0,):
-                # Not a shape.
-                node.doc_string += "#SV-Sl/2"
-                return False
-            if len(values) == 4 and all_int(values[1]) and all_int(values[2]):
-                assert len(values[1]) == len(values[2]) == 1, (
-                    f"Unexpected values {values} to compute a shape from node "
-                    f"{self.pretty_node(node)}{self.get_debug_msg()}"
-                )
-                node.doc_string += "#SV-Sl3"
-                self.set_value_shape(node.output[0], values[0][values[1][0] : values[2][0]])
-                return True
-            if (
-                len(values) == 4
-                and values[1] == (0,)
-                and isinstance(values[2][0], str)
-                and isinstance(values[3][0], int)
-            ):
-                # Maybe a shape but probably not.
-                node.doc_string += "#SV-Sl/3"
-                return False
-        raise RuntimeError(
-            f"Unable to compute a shape for node {self.pretty_node(node)} "
-            f"with values={values}{self.get_debug_msg()}"
-        )
 
     def _make_node_set_type_shape(self, node: NodeProto):
         """Updates shapes for a node."""
@@ -10103,8 +9265,8 @@ class GraphBuilder(_GraphBuilderRuntime):
                         dimension in self.constraints_ and exp in self.constraints_[dimension]
                     ):
                         return True
-                    return False
-
+        if not simplify_two_expressions(dimension, f"({args[0]}){args[1]}({args[2]})"):
+            return True
         raise NotImplementedError(
             f"Unable to evaluate expression with dimension={dimension!r}, "
             f"args={args!r}, constraints={self.constraints_}{self.get_debug_msg()}"

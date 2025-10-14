@@ -1,4 +1,3 @@
-import ast
 import enum
 import functools
 import inspect
@@ -621,92 +620,6 @@ def np_dtype_to_tensor_dtype(dt: "dtype") -> int:  # noqa: F821
             if dt == ml_dtypes.float8_e5m2fnuz:
                 return TensorProto.FLOAT8E5M2FNUZ
     raise ValueError(f"Unable to convert type {dt}")
-
-
-def rename_dynamic_dimensions(
-    constraints: Dict[str, Set[str]], original: Set[str], ban_prefix: str = "DYN"
-) -> Dict[str, str]:
-    """
-    Renames dynamic shapes as requested by the user. :func:`torch.export.export` uses
-    many names for dynamic dimensions. When building the onnx model,
-    some of them are redundant and can be replaced by the name provided by the user.
-
-    :param constraints: exhaustive list of used name and all the values equal to it
-    :param original: the names to use if possible
-    :param ban_prefix: avoid any rewriting by a constant starting with this prefix
-    :return: replacement dictionary
-    """
-    replacements = {s: s for s in original}
-    all_values = set(constraints) | original
-
-    not_done = set(constraints)
-    max_iter = len(replacements)
-    while not_done and max_iter > 0:
-        max_iter -= 1
-        for k, v in constraints.items():
-            common = v & original
-            if not common:
-                continue
-            common = sorted(common)
-            by = common[0]
-            if ban_prefix and by.startswith(ban_prefix):
-                continue
-            replacements[k] = by
-            for vv in v:
-                if vv not in replacements:
-                    replacements[vv] = by
-        not_done = all_values - set(replacements)
-    return replacements
-
-
-class SimpleSimpliflyTransformer(ast.NodeTransformer):
-    def visit_BinOp(self, node):
-        self.generic_visit(node)
-        if isinstance(node.op, ast.BitXor):
-            if (
-                isinstance(node.left, ast.Name)
-                and isinstance(node.right, ast.Name)
-                and node.left.id == node.right.id
-            ):
-                return node.left
-        if isinstance(node.op, ast.Add):
-            if isinstance(node.left, ast.Constant) and node.left.value == 0:
-                return node.right
-            if isinstance(node.right, ast.Constant) and node.right.value == 0:
-                return node.left
-        if isinstance(node.op, ast.Mult):
-            if isinstance(node.left, ast.Constant) and node.left.value == 1:
-                return node.right
-            if isinstance(node.right, ast.Constant) and node.right.value == 1:
-                return node.left
-        return node
-
-
-def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
-    """
-    Renames variables inside an expression.
-    The function removes any space.
-
-    :param expression: something like ``s15 + seq_length``
-    :param replacements: replacements to make
-    :return: new string
-    """
-
-    class RenameVariable(ast.NodeTransformer):
-        def visit_Name(self, node):
-            if node.id in replacements:
-                node.id = replacements[node.id]
-            return node
-
-    try:
-        tree = ast.parse(expression)
-    except SyntaxError:
-        return expression
-    transformer = RenameVariable()
-    simplify = SimpleSimpliflyTransformer()
-    new_tree = simplify.visit(transformer.visit(tree))
-    res = ast.unparse(new_tree).replace(" ", "")
-    return res
 
 
 def flatten_object(x: Any, drop_keys: bool = False) -> List[Any]:

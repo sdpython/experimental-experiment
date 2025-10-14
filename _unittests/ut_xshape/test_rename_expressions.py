@@ -1,21 +1,15 @@
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase
-from experimental_experiment.helpers import (
+from experimental_experiment.xshape.rename_expressions import (
+    rename_expression,
     rename_dynamic_dimensions,
     rename_dynamic_expression,
 )
-from experimental_experiment.xbuilder._shape_helper import (
-    is_static_shape,
-    all_float,
-)
 
 
-class TestShapeHelper(ExtTestCase):
-    def test_all_float(self):
-        self.assertTrue(all_float([6.7, 7.8]))
-
-    def test_is_static_shape(self):
-        self.assertFalse(is_static_shape(None))
+class TestRenameExpressions(ExtTestCase):
+    def test_rename_expression2(self):
+        self.assertEqual("B+seq_length", rename_expression("s52+seq_length", {"s52": "B"}))
 
     def test_rename_dynamic_dimension(self):
         constraints = {
@@ -113,6 +107,9 @@ class TestShapeHelper(ExtTestCase):
         expression = "s9+seq_length"
         renamed = rename_dynamic_expression(expression, replacements)
         self.assertEqual(renamed, "cache_length+seq_length")
+
+    def test_rename_expression(self):
+        self.assertEqual("B+seq_length", rename_expression("s52+seq_length", {"s52": "B"}))
 
 
 if __name__ == "__main__":

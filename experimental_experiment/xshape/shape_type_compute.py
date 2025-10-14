@@ -7,19 +7,20 @@ from ..helpers import (
     dtype_to_tensor_dtype,
     torch_dtype_to_onnx_dtype,
 )
-from ..xbuilder._shape_helper import (
+from ._shape_helper import (
     DYNAMIC_SHAPE,
     is_static_shape,
     all_int,
     all_int_or_str,
 )
-from ..xbuilder.expression_dimension import simplify_expression
+from .simplify_expressions import simplify_expression
+from .shape_builder import ShapeBuilder
 
 
 def broadcast_shape(
     sh1: DYNAMIC_SHAPE,
     sh2: DYNAMIC_SHAPE,
-    graph_builder: Optional["GraphBuilder"] = None,  # noqa: F821
+    graph_builder: Optional[ShapeBuilder] = None,
 ) -> DYNAMIC_SHAPE:
     """
     Computes the shape for many broadcasting operators.
@@ -77,9 +78,7 @@ def broadcast_shape(
             if a == b:
                 d = a
             else:
-                d = a
-                if graph_builder:
-                    graph_builder.register_constraint_dimension(a, b)
+                d = simplify_expression(f"({a})^({b})")
         if d is None:
             raise RuntimeError(
                 f"Not implemented for sh1={sh1}, sh2={sh2}, a={a}, b={b}, "
@@ -90,7 +89,7 @@ def broadcast_shape(
 
 
 def set_type_shape_reshape(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     name: str,
     input_name: str,
     new_shape: Sequence[int],
@@ -124,33 +123,33 @@ def set_type_shape_reshape(
 
 
 def set_type_shape_unary_op(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     name: str,
     input_name: str,
     itype: Optional[int] = None,
 ) -> bool:
     """Sets the shape and type for an unary operator (abs, exp, ...)."""
     if not itype and not g.has_type(input_name):
-        return False
+        return
     g.set_type(name, itype or g.get_type(input_name))
     if g.has_shape(input_name):
         g.set_shape(name, g.get_shape(input_name), allow_zero=True)
-        return True
+        return g.get_shape(input_name)
     if g.has_rank(input_name):
         g.set_rank(name, g.get_rank(input_name))
         return True
-    return False
+    return
 
 
 def set_type_shape_unary_op_abs(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     name: str,
     input_name: str,
     itype: Optional[int] = None,
 ) -> bool:
     """Sets the shape and type for an unary operator (abs, exp, ...)."""
     if not itype and not g.has_type(input_name):
-        return False
+        return
     if not itype:
         itype = g.get_type(input_name)
     if itype in (TensorProto.COMPLEX64, TensorProto.COMPLEX128):
@@ -165,24 +164,24 @@ def set_type_shape_unary_op_abs(
         if g.has_shape(input_name):
             shape = g.get_shape(input_name)
             g.set_shape(name, shape)
-            return True
+            return shape
         if g.has_rank(input_name):
             g.set_rank(name, g.get_rank(input_name))
             return True
-        return False
+        return
 
     g.set_type(name, itype)
     if g.has_shape(input_name):
         g.set_shape(name, g.get_shape(input_name))
-        return True
+        return g.get_shape(input_name)
     if g.has_rank(input_name):
         g.set_rank(name, g.get_rank(input_name))
         return True
-    return False
+    return
 
 
 def set_type_shape_binary_op(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     name: str,
     *input_names: List[str],
     begin: int = 0,
@@ -203,7 +202,7 @@ def set_type_shape_binary_op(
                 dtype = g.get_type(input_name)
                 break
         if not dtype and g.as_function:
-            return False
+            return
         assert dtype, f"Unable to guess type for {name!r} from {input_names}{g.get_debug_msg()}"
         g.set_type(name, dtype)
 
@@ -227,7 +226,7 @@ def set_type_shape_binary_op(
 
     if shape is not None:
         g.set_shape(name, shape)
-        return True
+        return shape
 
     # rank otherwise
     rank = None
@@ -243,13 +242,13 @@ def set_type_shape_binary_op(
     if rank is not None:
         g.set_rank(name, rank)
         return True
-    return False
+    return
 
 
-def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str) -> bool:  # noqa: F821
+def set_type_shape_matmul(g: ShapeBuilder, name: str, x: str, y: str) -> bool:
     "Sets the output shape for node type MatMul."
     if not g.has_type(x):
-        return False
+        return
     g.set_type(name, g.get_type(x))
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
@@ -279,16 +278,17 @@ def set_type_shape_matmul(g: "GraphBuilder", name: str, x: str, y: str) -> bool:
 
         new_shape.append(sh1[-2])
         new_shape.append(sh2[-1])
-        g.set_shape(name, tuple(new_shape))
-        return True
+        new_shape = tuple(new_shape)
+        g.set_shape(name, new_shape)
+        return new_shape
     if g.has_rank(x) and g.has_rank(y):
         g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
         return True
-    return False
+    return
 
 
 def set_type_shape_gemm(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     name: str,
     x: str,
     y: str,
@@ -307,12 +307,13 @@ def set_type_shape_gemm(
         ), f"not implemented when shapes are {sh1} and {sh2}{g.get_debug_msg()}"
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
         g.set_shape(name, new_shape)
+        return new_shape
     elif g.has_rank(x) and g.has_rank(y):
         g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
 
 
 def set_type_shape_reduce_op(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     name: str,
     x: str,
     keepdim: int,
@@ -325,10 +326,13 @@ def set_type_shape_reduce_op(
     if g.has_type(x):
         g.set_type(name, g.get_type(x))
     if axes is None:
-        g.set_shape(name, ((1,) * g.get_rank(x)) if keepdim else tuple())
+        new_shape = ((1,) * g.get_rank(x)) if keepdim else tuple()
+        g.set_shape(name, new_shape)
+        return new_shape
     elif not g.has_shape(x):
         if g.has_rank(x):
             g.set_rank(name, g.get_rank(x) - (1 - int(keepdim)) * len(axes))
+            return True
     else:
         shape = list(g.get_shape(x))
         for d in axes:
@@ -339,10 +343,11 @@ def set_type_shape_reduce_op(
             shape[d] = 1 if keepdim else None
         shape = tuple(_ for _ in shape if _ is not None)
         g.set_shape(name, shape)
+        return shape
 
 
 def _get_input_type(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     x: Any,
     python_default: bool,
 ) -> int:
@@ -390,7 +395,7 @@ def _get_compute_type(dtypes: Set[int]) -> int:
 
 
 def _cast_inputs(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     a: Any,
     itype: int,
     name: Optional[str] = None,
@@ -425,7 +430,7 @@ def _cast_inputs(
 
 
 def prepare_inputs_homogeneous_operator(
-    g: "GraphBuilder",  # noqa: F821
+    g: ShapeBuilder,
     *args: Sequence[str],
     f: Optional[Callable] = None,
     outputs: Optional[List[str]] = None,
@@ -587,31 +592,31 @@ def _adjust_attributes_of_max_pool(
 ########################################
 
 
-def _set_shape_type_op_any_batch_normalization(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
-):
+def _set_shape_type_op_any_batch_normalization(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type BatchNormalization."
-    set_type_shape_unary_op(self, node.output[0], node.input[0])
+    res = []
+    res.append(set_type_shape_unary_op(self, node.output[0], node.input[0]))
     if len(node.output) > 1:
-        set_type_shape_unary_op(self, node.output[1], node.input[1])
+        res.append(set_type_shape_unary_op(self, node.output[1], node.input[1]))
     if len(node.output) > 2:
-        set_type_shape_unary_op(self, node.output[2], node.input[2])
+        res.append(set_type_shape_unary_op(self, node.output[2], node.input[2]))
+    return None if set(res) == {None} else res
 
 
-def _set_shape_type_op_any_layer_normalization(
-    self: "GraphBuilder", node: NodeProto  # noqa: F821
-):
+def _set_shape_type_op_any_layer_normalization(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type LayerNormalization."
-    set_type_shape_unary_op(self, node.output[0], node.input[0])
+    res = []
+    res.append(set_type_shape_unary_op(self, node.output[0], node.input[0]))
     if len(node.output) > 1:
-        set_type_shape_unary_op(self, node.output[1], node.input[1])
+        res.append(set_type_shape_unary_op(self, node.output[1], node.input[1]))
     if len(node.output) > 2:
-        set_type_shape_unary_op(self, node.output[2], node.input[2])
+        res.append(set_type_shape_unary_op(self, node.output[2], node.input[2]))
+    return None if set(res) == {None} else res
 
 
-def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_cast(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Cast."
-    set_type_shape_unary_op(
+    return set_type_shape_unary_op(
         self,
         node.output[0],
         node.input[0],
@@ -619,19 +624,19 @@ def _set_shape_type_op_any_cast(self: "GraphBuilder", node: NodeProto):  # noqa:
     )
 
 
-def _set_shape_type_op_any_rotary_embedding(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_rotary_embedding(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Cast."
-    set_type_shape_unary_op(self, node.output[0], node.input[0])
+    return set_type_shape_unary_op(self, node.output[0], node.input[0])
 
 
-def _set_shape_type_op_any_castlike(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_castlike(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type CastLike."
-    set_type_shape_unary_op(
+    return set_type_shape_unary_op(
         self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
     )
 
 
-def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_concat(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Concat."
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -649,13 +654,16 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
             new_shape[axis] = sum(dims)
         else:
             new_shape[axis] = "+".join(map(str, dims))
-        self.set_shape(node.output[0], tuple(new_shape))
+        new_shape = tuple(new_shape)
+        self.set_shape(node.output[0], new_shape)
+        return new_shape
     elif all(map(self.has_rank, node.input)):
         ranks = [self.get_rank(i) for i in node.input]
         assert (
             len(set(ranks)) == 1
         ), f"Unexpected ranks={ranks} for node {node.op_type!r}{self.get_debug_msg()}"
         self.set_rank(node.output[0], ranks[0])
+        return True
     else:
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -663,14 +671,14 @@ def _set_shape_type_op_any_concat(self: "GraphBuilder", node: NodeProto):  # noq
         )
 
 
-def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
     """
     Sets the output shape for node types Conv, MaxPool.
 
     This function defines the following functions::
 
-        conf_f1(d,s,stride) = s - (stride if d % stride == 0 else d % stride) // 2
-        conf_f2(d,s,stride) = (
+        conv_f1(d,s,stride) = s - (stride if d % stride == 0 else d % stride) // 2
+        conv_f2(d,s,stride) = (
             s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
         )
         conv_f3(d,s,stride,ceil_mode,p) = ... (see the code)
@@ -771,15 +779,15 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
                         pads[i] = half_pad_big
                         pads[i + n_input_dims] = half_pad_small
                 else:
-                    # conf_f1=(d,s,stride) = (
+                    # conv_f1=(d,s,stride) = (
                     #   s - (stride if d % stride == 0 else d % stride)) // 2
                     # )
-                    pads[i] = f"conf_f1({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
-                    # conf_f2=(d,s,stride) = (
+                    pads[i] = f"conv_f1({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
+                    # conv_f2=(d,s,stride) = (
                     #   s - (stride if d % stride == 0 else d % stride)) // 2 + stride % 2
                     # )
                     pads[i + n_input_dims] = (
-                        f"conf_f2({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
+                        f"conv_f2({_(input_dim)},{effective_kernel_shape[i]},{_(stride)})"
                     )
 
     require_kernel_shape = node.op_type in {"MaxPool"}
@@ -816,20 +824,23 @@ def _set_shape_type_op_any_conv_max_pool(self: "GraphBuilder", node: NodeProto):
         #   ) // stride + 1 + ...
 
         output_size = (
-            f"conf_f3({_(input_size)},{effective_kernel_shape[i]},{_(strides[i])},{_(ceil_mode)})"
+            f"conv_f3({_(input_size)},{effective_kernel_shape[i]},{_(strides[i])},{_(ceil_mode)})"
         )
         output_shape.append(output_size)
 
     self.set_shape(node.output[0], tuple(output_shape))
+    res = [tuple(output_shape)]
 
     # Gestion de la deuxième sortie pour MaxPool
     if node.op_type == "MaxPool" and len(node.output) > 1:
         second_output_shape = []
         second_output_shape.extend(output_shape)
         self.set_shape(node.output[1], tuple(second_output_shape))
+        res.append(tuple(second_output_shape))
+    return res
 
 
-def _set_shape_type_op_any_gather(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_gather(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Gather."
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -841,25 +852,28 @@ def _set_shape_type_op_any_gather(self: "GraphBuilder", node: NodeProto):  # noq
         if len(sh2) == 0:
             new_shape = tuple(s for i, s in enumerate(sh1) if i != axis)
             self.set_shape(node.output[0], new_shape)
-        elif len(sh1) == len(sh2) == 2 and axis == 0:
+            return new_shape
+        if len(sh1) == len(sh2) == 2 and axis == 0:
             new_shape = (*sh2, sh1[-1])
             self.set_shape(node.output[0], new_shape)
-        elif len(sh1) == len(sh2) == 1:
+            return new_shape
+        if len(sh1) == len(sh2) == 1:
             self.set_shape(node.output[0], sh2)
-        else:
-            self.set_rank(node.output[0], len(sh1) + len(sh2) - 1)
-    elif self.has_rank(node.input[0]) and self.has_rank(node.input[1]):
+            return sh2
+        self.set_rank(node.output[0], len(sh1) + len(sh2) - 1)
+        return True
+    if self.has_rank(node.input[0]) and self.has_rank(node.input[1]):
         rk1 = self.get_rank(node.input[0])
         rk2 = self.get_rank(node.input[1])
         self.set_rank(node.output[0], rk1 + rk2 - 1)
-    else:
-        assert not self._debug_shape_missing, (
-            f"Unable to compute shape for node: "
-            f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-        )
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_gather_elements(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_gather_elements(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type GatherElements."
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -871,23 +885,24 @@ def _set_shape_type_op_any_gather_elements(self: "GraphBuilder", node: NodeProto
         new_shape = list(shape)
         new_shape[axis] = i_shape[axis]
         self.set_shape(node.output[0], tuple(new_shape))
-    elif self.has_rank(node.input[0]):
+        return tuple(new_shape)
+    if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
-    else:
-        assert not self._debug_shape_missing, (
-            f"Unable to compute shape for node: "
-            f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-        )
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_gemm(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_gemm(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Gemm."
     transA = self.get_attribute(node, "transA", exc=False)
     transB = self.get_attribute(node, "transB", exc=False)
     assert (
         len(node.input) >= 2
     ), f"Unexpected number of input {node.input} for node {node.op_type} name {node.name!r}"
-    set_type_shape_gemm(
+    return set_type_shape_gemm(
         self,
         node.output[0],
         *node.input[:2],
@@ -896,31 +911,30 @@ def _set_shape_type_op_any_gemm(self: "GraphBuilder", node: NodeProto):  # noqa:
     )
 
 
-def _set_shape_type_op_any_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_matmul(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type MatMul."
     r = set_type_shape_matmul(self, node.output[0], *node.input)
-    assert r or not self._debug_shape_missing, (
+    assert r is not None or not self._debug_shape_missing, (
         f"Unable to compute shape for node: "
         f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
     )
+    return r
 
 
-def _set_shape_type_op_any_non_zero(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_non_zero(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type NonZro."
     self.set_type(node.output[0], TensorProto.INT64)
     if self.has_rank(node.input[0]):
-        self.set_shape(
-            node.output[0],
-            (self.get_rank(node.input[0]), self.unique_dimension_name("NEWDIM_nonzero")),
-        )
-        return
+        new_shape = (self.get_rank(node.input[0]), self.unique_dimension_name("NEWDIM_nonzero"))
+        self.set_shape(node.output[0], new_shape)
+        return new_shape
     assert not self._debug_shape_missing, (
         f"Unable to compute shape for node: "
         f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
     )
 
 
-def _set_shape_type_op_any_pad(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_pad(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Pad."
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
@@ -957,17 +971,17 @@ def _set_shape_type_op_any_pad(self: "GraphBuilder", node: NodeProto):  # noqa: 
             p1, p2 = pads[i], pads[i + len(axes)]
             new_shape[a] = (d + p1 + p2) if isinstance(d, int) else f"{d}+{p1+p2}"
         self.set_shape(node.output[0], tuple(new_shape))
-        return
+        return tuple(new_shape)
     if self.has_rank(node.input[0]):
         self.set_rank(node.input[0], self.get_rank(node.input[0]))
-        return
+        return True
     assert not self._debug_shape_missing, (
         f"Unable to compute shape for node: "
         f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
     )
 
 
-def _set_shape_type_op_any_range(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_range(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for for node type Range."
     types = [self.get_type(i) for i in node.input if self.has_type(i)]
     assert types and len(set(types)) == 1, (
@@ -999,51 +1013,66 @@ def _set_shape_type_op_any_range(self: "GraphBuilder", node: NodeProto):  # noqa
                 dim = simplify_expression(f"{v2}-({v1})")
             self.set_shape(node.output[0], (dim,))
             return
-    self.set_shape(node.output[0], (self.unique_dimension_name("NEWDIM_range"),))
+    new_shape = (self.unique_dimension_name("NEWDIM_range"),)
+    self.set_shape(node.output[0], new_shape)
+    return new_shape
 
 
-def _set_shape_type_op_any_reduce(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_reduce(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for Reduce node type."
     keepdim = self.get_attribute(node, "keepdims", exc=False)
     axes = self.get_attribute(node, "axes", exc=False)
+    keepdim = None if keepdim is None else keepdim.i
     if axes is None:
         if len(node.input) == 2:
-            assert self.is_constant(node.input[1]), (
-                f"axes {node.input[1]!r} from node {node.op_type}, "
-                f"name={node.name!r} is not a constant, "
-                f"the new shape cannot be infered{self.get_debug_msg()}"
-            )
-            cst = self.get_constant(node.input[1])
-            if isinstance(cst, NodeProto) and self.is_constant(cst.output[0]):
-                cst = self.get_constant(node.input[1], computed_value=True)
-            assert isinstance(cst, (np.ndarray, self.torch.Tensor)), (
-                f"Unexpected type {type(cst)} for {node.input[1]!r}, "
-                f"unable to set type and shape for node {node.op_type} "
-                f"with name={node.name!r}{self.get_debug_msg()}"
-            )
-            if isinstance(cst, self.torch.Tensor):
-                cst = cst.cpu()
-            iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+            if self.is_constant(node.input[1]):
+                cst = self.get_constant(node.input[1])
+                if isinstance(cst, NodeProto) and self.is_constant(cst.output[0]):
+                    cst = self.get_constant(node.input[1], computed_value=True)
+                assert isinstance(cst, (np.ndarray, self.torch.Tensor)), (
+                    f"Unexpected type {type(cst)} for {node.input[1]!r}, "
+                    f"unable to set type and shape for node {node.op_type} "
+                    f"with name={node.name!r}{self.get_debug_msg()}"
+                )
+                if isinstance(cst, self.torch.Tensor):
+                    with self.maybe_disable_fake_tensor_mode():
+                        cst = cst.cpu()
+                iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
+            elif keepdim is not None:
+                self.set_rank(node.output[0], self.get_rank(node.input[0]))
+                return True
+            elif self.has_shape(node.input[1]) and self.has_rank(node.input[0]):
+                shape = self.get_shape(node.input[1])
+                assert (
+                    len(shape) == 1
+                ), f"Wrong shape={shape!r} for axes={node.input[1]!r}{self.get_debug_msg()}"
+                if isinstance(shape[0], int):
+                    self.set_rank(node.output[0], self.get_rank(node.input[0]) - shape[0])
+                    return True
+            else:
+                assert (
+                    self._debug_shape_missing
+                ), f"Unable to determine shape for node {node}\n---\n{self.get_debug_msg()}"
+                return
         else:
             iaxes = None
     else:
         iaxes = tuple(axes.ints)
 
-    set_type_shape_reduce_op(
+    return set_type_shape_reduce_op(
         self,
         node.output[0],
         node.input[0],
-        keepdim=None if keepdim is None else keepdim.i,
+        keepdim=keepdim,
         axes=iaxes,
     )
 
 
-def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_reshape(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Reshape."
     k = node.output[0]
     if self.has_type(node.input[0]):
         self.set_type(k, self.get_type(node.input[0]))
-    shape_set = False
     value = None
     if self.is_constant(node.input[1]):
         value = self.get_constant(node.input[1], computed_value=True, as_shape=True, exc=False)
@@ -1054,31 +1083,29 @@ def _set_shape_type_op_any_reshape(self: "GraphBuilder", node: NodeProto):  # no
         if all_int_or_str(cst):
             if -1 not in cst and 0 not in cst:
                 self.set_shape(k, cst)
-                shape_set = True
-            elif all_int(cst) and self.has_shape(node.input[0]):
+                return cst
+            if all_int(cst) and self.has_shape(node.input[0]):
                 sh = self.get_shape(node.input[0])
                 new_shape = self._apply_reshape_to_shape(sh, cst)
                 if new_shape is not None:
                     self.set_shape(k, new_shape)
-                    shape_set = True
+                    return new_shape
 
-    if not shape_set:
-        if self.has_shape(node.input[1]):
-            rk = self.get_shape(node.input[1])
-            self.set_rank(k, rk[0])
-        else:
-            assert not self._debug_shape_missing, (
-                f"Unable to compute shape for node: "
-                f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-            )
+    if self.has_shape(node.input[1]):
+        rk = self.get_shape(node.input[1])
+        self.set_rank(k, rk[0])
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_expand(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_expand(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Reshape."
     k = node.output[0]
     if self.has_type(node.input[0]):
         self.set_type(k, self.get_type(node.input[0]))
-    shape_set = False
     value = None
     if self.is_constant(node.input[1]):
         value = self.get_constant(node.input[1], computed_value=True, as_shape=True, exc=False)
@@ -1089,43 +1116,43 @@ def _set_shape_type_op_any_expand(self: "GraphBuilder", node: NodeProto):  # noq
         if all_int_or_str(cst):
             if -1 not in cst and 1 not in cst and 0 not in cst:
                 self.set_shape(k, cst)
-                shape_set = True
-            elif self.has_shape(node.input[0]):
+                return cst
+            if self.has_shape(node.input[0]):
                 sh = self.get_shape(node.input[0])
                 new_shape = self._apply_expand_to_shape(sh, cst)
                 if new_shape is not None:
                     self.set_shape(k, new_shape)
-                    shape_set = True
+                    return new_shape
 
-    if not shape_set:
-        if self.has_shape(node.input[1]):
-            rk = self.get_shape(node.input[1])
+    if self.has_shape(node.input[1]):
+        rk = self.get_shape(node.input[1])
+        if isinstance(rk[0], int):
             self.set_rank(k, rk[0])
-        else:
-            assert not self._debug_shape_missing, (
-                f"Unable to compute shape for node: "
-                f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-            )
+            return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_sign(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_sign(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Sign."
-    set_type_shape_unary_op(self, node.output[0], node.input[0])
+    return set_type_shape_unary_op(self, node.output[0], node.input[0])
 
 
-def _set_shape_type_op_any_slice(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_slice(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Slice."
     self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
-    else:
-        assert not self._debug_shape_missing, (
-            f"Unable to compute shape for node: "
-            f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-        )
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Split."
     num_outputs = self.get_attribute(node, "num_outputs", exc=False)
     assert num_outputs is None or num_outputs.i == len(
@@ -1153,18 +1180,19 @@ def _set_shape_type_op_any_split(self: "GraphBuilder", node: NodeProto):  # noqa
         for i, o in enumerate(node.output):
             sh[axis] = int(splits[i])
             self.set_shape(o, tuple(sh), allow_zero=True)
-    elif self.has_rank(node.input[0]):
+        return [self.get_shape(o) for o in node.output]
+    if self.has_rank(node.input[0]):
         rank = self.get_rank(node.input[0])
         for o in node.output:
             self.set_rank(o, rank)
-    else:
-        assert not self._debug_shape_missing, (
-            f"Unable to compute shape for node: "
-            f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-        )
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_scatternd(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_scatternd(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type ScatterND."
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
@@ -1177,16 +1205,17 @@ def _set_shape_type_op_any_scatternd(self: "GraphBuilder", node: NodeProto):  # 
     self.set_type(node.output[0], dtype)
     if self.has_shape(node.input[0]):
         self.set_shape(node.output[0], self.get_shape(node.input[0]))
-    elif self.has_rank(node.input[0]):
+        return self.get_shape(node.input[0])
+    if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
-    else:
-        assert not self._debug_shape_missing, (
-            f"Unable to compute shape for node: "
-            f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-        )
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_transpose(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_transpose(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Transpose."
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
@@ -1209,28 +1238,29 @@ def _set_shape_type_op_any_transpose(self: "GraphBuilder", node: NodeProto):  # 
         for i, p in enumerate(perm):
             new_shape[i] = shape[p]
         self.set_shape(node.output[0], tuple(new_shape))
-    elif self.has_rank(node.input[0]):
+        return tuple(new_shape)
+    if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
-    else:
-        assert not self._debug_shape_missing, (
-            f"Unable to compute shape for node: "
-            f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-        )
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_tile(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_tile(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Tile."
     self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
-    else:
-        assert not self._debug_shape_missing, (
-            f"Unable to compute shape for node: "
-            f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
-        )
+        return True
+    assert not self._debug_shape_missing, (
+        f"Unable to compute shape for node: "
+        f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
+    )
 
 
-def _set_shape_type_op_any_topk(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_topk(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type TopK."
     is_scalar = self.is_constant(node.input[1])
     if is_scalar and self.has_shape(node.input[0]):
@@ -1244,10 +1274,12 @@ def _set_shape_type_op_any_topk(self: "GraphBuilder", node: NodeProto):  # noqa:
     else:
         shape = None
 
+    ret_shapes = []
     if node.output[0]:
         self.set_type(node.output[0], self.get_type(node.input[0]))
         if shape is not None:
             self.set_shape(node.output[0], shape)
+            ret_shapes.append(shape)
         elif self.has_rank(node.input[0]):
             self.set_rank(node.output[0], self.get_rank(node.input[0]))
         else:
@@ -1259,16 +1291,20 @@ def _set_shape_type_op_any_topk(self: "GraphBuilder", node: NodeProto):  # noqa:
         self.set_type(node.output[1], TensorProto.INT64)
         if shape is not None:
             self.set_shape(node.output[1], shape)
+            ret_shapes.append(shape)
         elif self.has_rank(node.input[0]):
             self.set_rank(node.output[1], self.get_rank(node.input[0]))
+            return True
         else:
             assert not self._debug_shape_missing, (
                 f"Unable to compute shape for node: "
                 f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
             )
+    if ret_shapes:
+        return ret_shapes
 
 
-def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Unsqueeze."
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
@@ -1303,6 +1339,7 @@ def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # 
             for i in iaxes:
                 shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
             self.set_shape(node.output[0], tuple(shape))
+            return tuple(shape)
         elif isinstance(cst, self.torch.Tensor):
             with self.maybe_disable_fake_tensor_mode():
                 iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
@@ -1310,6 +1347,7 @@ def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # 
                 for i in iaxes:
                     shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
                 self.set_shape(node.output[0], tuple(shape))
+                return tuple(shape)
         else:
             raise AssertionError(
                 f"Unexpected type {type(cst)} for {node.input[1]!r}, "
@@ -1319,6 +1357,7 @@ def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # 
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + cst.size)
+        return True
     else:
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -1326,7 +1365,7 @@ def _set_shape_type_op_any_unsqueeze(self: "GraphBuilder", node: NodeProto):  # 
         )
 
 
-def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Squeeze."
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
@@ -1344,6 +1383,7 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
             if all_int(shape_x):
                 new_shape = tuple(s for s in shape_x if s != 1)
                 self.set_shape(node.output[0], new_shape)
+                return new_shape
         # In other cases, we cannot really determine the new shape for sure.
     elif self.has_shape(node.input[0]):
         if len(node.input) == 1:
@@ -1368,6 +1408,7 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
             iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
             new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
             self.set_shape(node.output[0], new_shape)
+            return new_shape
         elif isinstance(cst, self.torch.Tensor):
             with self.maybe_disable_fake_tensor_mode():
                 iaxes = set((int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst))
@@ -1375,6 +1416,7 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
                 iaxes = set((i + len(shape)) % len(shape) for i in iaxes)  # for negative value
                 new_shape = tuple(s for i, s in enumerate(shape) if i not in iaxes)
                 self.set_shape(node.output[0], new_shape)
+                return new_shape
         else:
             raise AssertionError(
                 f"Unexpected type {type(cst)} for {node.input[1]!r}, "
@@ -1384,6 +1426,7 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
         self.set_rank(node.output[0], self.get_rank(node.input[0]) - cst.size)
+        return True
     else:
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -1391,7 +1434,7 @@ def _set_shape_type_op_any_squeeze(self: "GraphBuilder", node: NodeProto):  # no
         )
 
 
-def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def _set_shape_type_op_any_where(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Where."
     if not self.has_type(node.input[2]):
         assert not self._debug_shape_missing, (
@@ -1412,8 +1455,10 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
         )
         sh = broadcast_shape(sh1, self.get_shape(node.input[2]), graph_builder=self)
         self.set_shape(node.output[0], sh)
+        return sh
     elif all(self.has_rank(i) for i in node.input):
         self.set_rank(node.output[0], max(self.get_rank(i) for i in node.input))
+        return True
     else:
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -1422,7 +1467,7 @@ def _set_shape_type_op_any_where(self: "GraphBuilder", node: NodeProto):  # noqa
 
 
 def _set_shape_type_op_any_unary(
-    self: "GraphBuilder",  # noqa: F821
+    self: ShapeBuilder,
     node: NodeProto,
     itype: Optional[int] = None,
 ):
@@ -1442,6 +1487,7 @@ _set_shape_type_op_any_known = {
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "IsNaN": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "LayerNormalization": _set_shape_type_op_any_layer_normalization,
+    "Log": _set_shape_type_op_any_unary,
     "MatMul": _set_shape_type_op_any_matmul,
     "MaxPool": _set_shape_type_op_any_conv_max_pool,
     "NonZero": _set_shape_type_op_any_non_zero,
@@ -1462,67 +1508,75 @@ _set_shape_type_op_any_known = {
 }
 
 
-def set_shape_type_op_any(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_shape_type_op_any(self: ShapeBuilder, node: NodeProto, exc: bool = False):
     """Sets the shape and type if it can."""
     if node.op_type.startswith("Reduce"):
-        _set_shape_type_op_any_reduce(self, node)
-    elif node.op_type in _set_shape_type_op_any_known:
-        _set_shape_type_op_any_known[node.op_type](self, node)
-    elif node.op_type in self._op_type_element_wise_cmp_types:
+        return _set_shape_type_op_any_reduce(self, node)
+    if node.op_type in _set_shape_type_op_any_known:
+        return _set_shape_type_op_any_known[node.op_type](self, node)
+    if node.op_type in self._op_type_element_wise_cmp_types:
         r = set_type_shape_binary_op(self, node.output[0], *node.input, cmp_op=True)
-        assert r or not self._debug_shape_missing, (
+        assert r is not None or not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
-    elif node.op_type in self._op_type_element_wise_types:
+        return r
+    if node.op_type in self._op_type_element_wise_types:
         r = set_type_shape_binary_op(self, node.output[0], *node.input)
-        assert r or not self._debug_shape_missing, (
+        assert r is not None or not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
-    elif node.op_type in {"DequantizeLinear", "DynamicQuantizeLinear"}:
+        return r
+    if node.op_type in {"DequantizeLinear", "DynamicQuantizeLinear"}:
         raise AssertionError(
             f"set_shape_type_op_any not implemented for "
             f"{node.op_type!r}{self.get_debug_msg()}"
         )
-    elif node.op_type in {"CastLike"}:
+    if node.op_type in {"CastLike"}:
         r = set_type_shape_binary_op(
             self, node.output[0], node.input[0], itype=self.get_type(node.input[1])
         )
-        assert r or not self._debug_shape_missing, (
+        assert r is not None or not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
-    elif node.op_type in {"Pow"}:
+        return r
+    if node.op_type in {"Pow"}:
         r = set_type_shape_binary_op(self, node.output[0], *node.input)
-        assert r or not self._debug_shape_missing, (
+        assert r is not None or not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
-    elif node.op_type in self._op_type_unary_like:
+        return r
+    if node.op_type in self._op_type_unary_like:
         if node.op_type == "Abs":
             r = set_type_shape_unary_op_abs(self, node.output[0], node.input[0])
         else:
             r = set_type_shape_unary_op(self, node.output[0], node.input[0])
-        assert r or not self._debug_shape_missing, (
+        assert r is not None or not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
-    elif node.op_type in {"ScatterElements", "ScatterND"}:
+        return r
+    if node.op_type in {"ScatterElements", "ScatterND"}:
         r = set_type_shape_unary_op(self, node.output[0], node.input[0])
-        assert r or not self._debug_shape_missing, (
+        assert r is not None or not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
-    elif node.op_type not in {"Constant", "ConstantOfShape", "Identity", "Reshape", "Shape"}:
+        return r
+    if node.op_type not in {"Constant", "ConstantOfShape", "Identity", "Reshape", "Shape"}:
         # Some nodes are handled when the node is created such as Identity.
         assert not self._debug_shape_missing, (
             f"No function to compute shape for node: "
             f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
         )
+    if exc:
+        raise NotImplementedError(f"No shape function for node type {node.op_type!r}")
 
 
-def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_fused_matmul(self: ShapeBuilder, node: NodeProto):
     name = node.output[0]
     x, y = node.input[:2]
     transA = self.get_attribute(node, "transA", exc=False)
@@ -1547,13 +1601,14 @@ def set_type_shape_fused_matmul(self: "GraphBuilder", node: NodeProto):  # noqa:
             broadcast_shape(sh1[:-2], sh2[:-2], graph_builder=self) if len(sh1) > 2 else tuple()
         )
         new_shape = (sh1[-1] if transA else sh1[-2], sh2[-2] if transB else sh2[-1])
-        self.set_shape(name, prefix + new_shape)
-        self.set_shape(name, prefix + new_shape)
+        new_shape = prefix + new_shape
+        self.set_shape(name, new_shape)
+        return new_shape
     elif self.has_rank(x) and self.has_rank(y):
         self.set_rank(name, max(self.get_rank(x), self.get_rank(y)))
 
 
-def set_type_shape_tree_ensemble(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_tree_ensemble(self: ShapeBuilder, node: NodeProto):
     self.set_type(node.output[0], self.get_type(node.input[0]))
     n_targets = self.get_attribute(node, "n_targets", exc=False)
     assert n_targets is not None, (
@@ -1562,12 +1617,14 @@ def set_type_shape_tree_ensemble(self: "GraphBuilder", node: NodeProto):  # noqa
     )
     if self.has_shape(node.input[0]):
         shape = self.get_shape(node.input[0])
-        self.set_shape(node.output[0], (shape[0], n_targets.i))
+        new_shape = (shape[0], n_targets.i)
+        self.set_shape(node.output[0], new_shape)
+        return new_shape
     else:
         self.set_rank(node.output[0], 2)
 
 
-def set_type_shape_to_complex(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_to_complex(self: ShapeBuilder, node: NodeProto):
     if self.has_type(node.input[0]):
         dtype = self.get_type(node.input[0])
         mapping = {
@@ -1579,13 +1636,15 @@ def set_type_shape_to_complex(self: "GraphBuilder", node: NodeProto):  # noqa: F
         ), f"Unexpected type {dtype} for node {node.op_type}{self.get_debug_msg()}"
         self.set_type(node.output[0], mapping[dtype])
     if self.has_shape(node.input[0]):
-        self.set_shape(node.output[0], self.get_shape(node.input[0][:-1]))
-    elif self.has_rank(node.input[0]):
+        new_shape = self.get_shape(node.input[0][:-1])
+        self.set_shape(node.output[0], new_shape)
+        return new_shape
+    if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(input[0]) - 1)
     return True
 
 
-def set_type_shape_complex_module(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_complex_module(self: ShapeBuilder, node: NodeProto):
     if self.has_type(node.input[0]):
         dtype = self.get_type(node.input[0])
         mapping = {
@@ -1603,42 +1662,49 @@ def set_type_shape_complex_module(self: "GraphBuilder", node: NodeProto):  # noq
     return True
 
 
-def set_type_shape_shared_input(self: "GraphBuilder", node: NodeProto):  # noqa: F821
-    set_type_shape_binary_op(self, node.output[0], *node.input[:2])
-    set_type_shape_binary_op(self, node.output[1], *node.input[::2])
+def set_type_shape_shared_input(self: ShapeBuilder, node: NodeProto):
+    r1 = set_type_shape_binary_op(self, node.output[0], *node.input[:2])
+    r2 = set_type_shape_binary_op(self, node.output[1], *node.input[::2])
+    if r1 or r2:
+        return [r1, r2]
 
 
-def set_type_shape_scatter_nd_of_shape(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_scatter_nd_of_shape(self: ShapeBuilder, node: NodeProto):
     if self.has_type(node.input[2]):
         self.set_type(node.output[0], self.get_type(node.input[2]))
     value = self.value_as_shape(node.input[0])
     if value is not None:
         self.set_shape(node.output[0], tuple(value))
+        return tuple(value)
 
 
-def set_type_shape_tri_matrix(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_tri_matrix(self: ShapeBuilder, node: NodeProto):
     if self.has_type(node.input[1]):
         self.set_type(node.output[0], self.get_type(node.input[1]))
     value = self.value_as_shape(node.input[0])
     if value is not None:
-        self.set_shape(node.output[0], tuple(value))
+        tvalue = tuple(value)
+        self.set_shape(node.output[0], tvalue)
+        return tvalue
 
 
-def set_type_shape_transpose_2d_cast_fp16(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_transpose_2d_cast_fp16(self: ShapeBuilder, node: NodeProto):
     self.set_type(node.output[0], TensorProto.FLOAT16)
     if self.has_shape(node.input[0]):
         shape = self.get_shape(node.input[0])
         self.set_shape(node.output[0], shape[::-1])
+        return shape[::-1]
 
 
-def set_type_shape_transpose_2d_cast_fp32(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_transpose_2d_cast_fp32(self: ShapeBuilder, node: NodeProto):
     self.set_type(node.output[0], TensorProto.FLOAT)
     if self.has_shape(node.input[0]):
         shape = self.get_shape(node.input[0])
         self.set_shape(node.output[0], shape[::-1])
+        return shape[::-1]
 
 
-def set_type_shape_multi_head_attention(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_type_shape_multi_head_attention(self: ShapeBuilder, node: NodeProto):
     itype = self.get_type(node.input[0])
     for o in node.output:
         self.set_type(o, itype)
@@ -1656,7 +1722,9 @@ def set_type_shape_multi_head_attention(self: "GraphBuilder", node: NodeProto): 
             if len(node.input) > 6 and node.input[6] and self.has_shape(node.input[6])
             else None
         )
+        up = []
         self.set_shape(node.output[0], q_shape)
+        up.append(q_shape)
         d1, d2 = q_shape[1], pk_shape[2]
         if isinstance(d1, int) and isinstance(d2, int):
             d = d1 + d2
@@ -1666,6 +1734,8 @@ def set_type_shape_multi_head_attention(self: "GraphBuilder", node: NodeProto): 
         for o in node.output[1:]:
             if o:
                 self.set_shape(o, shape)
+                up.append(shape)
+        return up
     else:
         self.set_rank(node.output[0], 3)
         for o in node.output[1:]:
@@ -1710,18 +1780,16 @@ _set_shape_type_op_any_custom = {
 }
 
 
-def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
+def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False):
     """Sets the shape and type if it can."""
     if node.domain == "ai.onnx.ml":
-        if node.op_type == "TreeEnsembleRegressor":
-            set_type_shape_tree_ensemble(self, node)
-        return
+        if node.op_type in ("TreeEnsembleRegressor", "TreeEnsemble"):
+            return set_type_shape_tree_ensemble(self, node)
+        return None
     if node.op_type in {"ReplaceZero", "NegXplus1"}:
-        set_type_shape_unary_op(self, node.output[0], node.input[0])
-        return
+        return set_type_shape_unary_op(self, node.output[0], node.input[0])
     if node.op_type in _set_shape_type_op_any_custom:
-        _set_shape_type_op_any_custom[node.op_type](self, node)
-        return
+        return _set_shape_type_op_any_custom[node.op_type](self, node)
     if self.has_local_function(node.op_type, domain=node.domain, builder=True):
         local_function_builder = self.get_local_function(
             node.op_type, domain=node.domain, builder=True
@@ -1767,7 +1835,7 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
                 self.set_shape(o, local_function_builder.get_shape(lo))
             elif local_function_builder.has_rank(lo):
                 self.set_rank(o, local_function_builder.get_rank(lo))
-        return
+        return None
 
     assert node.op_type in {"GatherGrad", "SoftmaxGrad", "ConcatTraining"} or node.domain not in {
         "ai.onnx.ml",
@@ -1787,3 +1855,7 @@ def set_shape_type_custom(self: "GraphBuilder", node: NodeProto):  # noqa: F821
         f"No function to compute shape for node: "
         f"{self.pretty_node(node, shape=True)}{self.get_debug_msg()}"
     )
+    if exc:
+        raise NotImplementedError(
+            f"No shape function for node type {node.op_type!r} from domain {node.domain!r}"
+        )
