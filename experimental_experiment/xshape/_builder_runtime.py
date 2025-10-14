@@ -310,7 +310,9 @@ class _BuilderRuntime:
         feeds: Dict[str, "torch.Tensor"],  # noqa: F821
     ) -> "torch.Tensor":  # noqa: F821
         x = feeds[node.input[0]]
-        if not isinstance(x, (np.ndarray, self.torch.Tensor)):
+        if not isinstance(x, np.ndarray) and (
+            not hasattr(self, "torch") or not isinstance(x, self.torch.Tensor)
+        ):
             # Maybe a float, then we process it as a float, tensor.to only works
             # on tensors.
             assert isinstance(
@@ -329,6 +331,9 @@ class _BuilderRuntime:
         assert to, f"to not here in node {node}"
         assert to != 8 and to < 17, f"Cast not implemented for to={to}, {str_tensor_proto_type()}"
         del saturate
+        if not hasattr(self, "torch"):
+            ttype = tensor_dtype_to_np_dtype(to)
+            return [x.astype(ttype)]
         if isinstance(x, np.ndarray):
             # Type conversion between numpy and torch is not robust.
             itype = dtype_to_tensor_dtype(x.dtype)
@@ -449,6 +454,8 @@ class _BuilderRuntime:
     ) -> "torch.Tensor":  # noqa: F821
         new_feeds = {}
         for k, v in feeds.items():
+            if not hasattr(self, "torch"):
+                new_feeds[k] = v
             if isinstance(v, np.ndarray):
                 # Type conversion between numpy and torch is not robust.
                 itype = dtype_to_tensor_dtype(v.dtype)
@@ -462,6 +469,9 @@ class _BuilderRuntime:
                 new_feeds[k] = x
             else:
                 new_feeds[k] = v
+        if not hasattr(self, "torch"):
+            y = np.where(*[new_feeds[k] for k in node.input])
+            return [y]
         y = self.torch.where(*[new_feeds[k] for k in node.input])
         return [y]
 

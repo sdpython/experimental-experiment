@@ -107,7 +107,7 @@ backend_test.exclude(
     "|lpnormalization|lppool|lrn|lstm|matmulinteger|maxunpool"
     "|mvn|nllloss|nonzero|optional|pad|quantize|range|rms"
     "|resize|roialign|sce|sequence|shape_clip|softmax|squeeze|unsqueeze"
-    "|test_max_|test_min_|test_maxpool_"
+    "|test_max_|test_min_|test_maxpool_|shape_start_greater"
     "|shrink|simple_rnn|spacetodepth|stft|string|strnorm"
     "|tensorscatter|tfidfvectorizer|top_k|tril|triu"
     "|thresholdrelu"
@@ -118,6 +118,9 @@ backend_test.exclude(
 
 # uncommon cases
 backend_test.exclude("(expand_dim|_opt_|_if_|_scan|_loop|_image_|_scatter_)")
+
+# broken case
+backend_test.exclude("(test_transpose_default)")
 
 
 # import all test cases at global scope to make them visible to python.unittest

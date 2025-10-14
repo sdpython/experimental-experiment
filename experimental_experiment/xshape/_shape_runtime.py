@@ -70,6 +70,10 @@ class _ShapeRuntime:
 
             start = self.get_attribute(node, "start", exc=False)
             end = self.get_attribute(node, "end", exc=False)
+            assert end is None or start is None or end.i < 0 or start.i < end.i, (
+                f"Shape(..., end < start) is not implemented, node={self.pretty_node(node)}, "
+                f"start={start}, end={end}{self.get_debug_msg()}"
+            )
             if end is None:
                 if self.has_rank(node.input[0]):
                     end = self.get_rank(node.input[0])

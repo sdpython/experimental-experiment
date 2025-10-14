@@ -138,9 +138,14 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         possible_value = self.constants_[name]
 
         if computed_value and isinstance(possible_value, onnx.NodeProto):
-            possible_value, _ = self.compute_constant(name, exc=exc)
-            if possible_value is not None:
-                self.constants_computed_[name] = possible_value
+            assert len(possible_value.output) == 1, (
+                f"Not implemented for node {self.pretty_node(possible_value)}"
+                f"{self.get_debug_msg()}"
+            )
+            value, _ = self.compute_constant(name, exc=exc)
+            if value is not None:
+                self.constants_computed_[name] = value
+                return value
 
         if isinstance(possible_value, onnx.TensorProto):
             if uses_external_data(possible_value):
