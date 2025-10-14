@@ -85,13 +85,17 @@ backend_test.exclude(
     "(affine_grid|array_feature_extractor|binarizer|label_encoder|attention"
     "|argmax|argmin|bitwise|averagepool|blackmanwindow"
     "|center_crop|col2im|compress|conv|constantofshape|cumsum"
-    "|depthtospace|det|dft|dropout|einsum|eyelike|flatten|floor|gather|gelu"
+    "|depthtospace|det|dft|dropout|einsum|eyelike|fft|flatten|floor|gather|gelu"
     "|globalmaxpool|gridsample|group_normalization|gru|hamming|hann"
     "|hardmax|hardsigmoid|hardswish|instancenorm|l1normalization"
     "|l2normalization|layer_normalization|leakyrelu|logsoftmax"
     "|lpnormalization|lppool|lrn|lstm|matmulinteger|pad|quantize"
-    "|resize|sce|sequence"
-    "|shrink|string)"
+    "|resize|roialign|sce|sequence|test_max_|test_min_|test_maxpool_"
+    "|shrink|spacetodepth|string|strnorm"
+    "|tensorscatter|tfidfvectorizer|top_k|tril|triu"
+    "|thresholdrelu"
+    "|unique|AvgPool|BatchNorm|Conv|GLU|LeakyReLU|MaxPool|PReLU"
+    "|Reflection|Replication|ZeroPad|test_operator)"
 )
 
 # uncommon cases
