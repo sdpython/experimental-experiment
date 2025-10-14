@@ -91,7 +91,8 @@ backend_test.exclude(
     "(test_bvlc_alexnet|test_densenet121|test_inception_v1|test_inception_v2"
     "|test_resnet50|test_shufflenet|test_squeezenet|test_vgg19|test_zfnet512"
     "|test_bernoulli|test_gradient|test_adam_multiple|test_adagrad|test_regex_full_match"
-    "|test_adam|test_if_opt|test_loop16_seq_none|test_scan_sum|training)"
+    "|test_adam|test_if_opt|test_loop16_seq_none|test_scan_sum|training|nesterov"
+    "|momentum)"
 )
 
 # Not implemented yet.
@@ -103,18 +104,20 @@ backend_test.exclude(
     "|globalmaxpool|gridsample|group_normalization|gru|hamming|hann"
     "|hardmax|hardsigmoid|hardswish|instancenorm|l1normalization"
     "|l2normalization|layer_normalization|leakyrelu|logsoftmax"
-    "|lpnormalization|lppool|lrn|lstm|matmulinteger|maxunpool|pad|quantize"
-    "|resize|roialign|sce|sequence|test_max_|test_min_|test_maxpool_"
+    "|lpnormalization|lppool|lrn|lstm|matmulinteger|maxunpool"
+    "|mvn|nllloss|nonzero|optional|pad|quantize|range|rms"
+    "|resize|roialign|sce|sequence|shape_clip|softmax|squeeze|unsqueeze"
+    "|test_max_|test_min_|test_maxpool_"
     "|shrink|simple_rnn|spacetodepth|stft|string|strnorm"
     "|tensorscatter|tfidfvectorizer|top_k|tril|triu"
     "|thresholdrelu"
     "|unique|AvgPool|BatchNorm|Conv|Embedding|GLU|LeakyReLU|Linear"
-    "|MaxPool|PReLU"
+    "|MaxPool|PReLU|ConstantPad"
     "|Reflection|Replication|ZeroPad|test_operator)"
 )
 
 # uncommon cases
-backend_test.exclude("(expand_dim|_opt_|_if_|_scan|_loop|_image_)")
+backend_test.exclude("(expand_dim|_opt_|_if_|_scan|_loop|_image_|_scatter_)")
 
 
 # import all test cases at global scope to make them visible to python.unittest

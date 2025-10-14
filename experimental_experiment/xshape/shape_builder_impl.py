@@ -1,6 +1,7 @@
+import contextlib
 import os
 import pprint
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 import numpy as np
 import onnx
 import onnx.helper as oh
@@ -17,6 +18,14 @@ from ._onnx_helper import str_tensor_proto_type
 from .shape_builder import ShapeBuilder
 
 
+@contextlib.contextmanager
+def _maybe_disable_fake_tensor_mode() -> Generator:
+    try:
+        yield
+    finally:
+        pass
+
+
 class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     """
     Implements a basic class doing shape inference in an ONNX model.
@@ -31,7 +40,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
     * ``ONNXSTOPVALUESHAPE=<name>``: more information in function dealing with shapes
     """
 
-    def __init__(self, verbose: int = 0):
+    def __init__(self, verbose: int = 0, opset: Optional[int] = None):
         self.verbose = verbose
         self._input_names = []
         self._output_names = []
@@ -54,7 +63,11 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
+        self._debug_constant_folding = 0
         self._debug_msg = []
+        self.maybe_disable_fake_tensor_mode = _maybe_disable_fake_tensor_mode
+        self.main_opset = opset or 18
+        self.time_evaluation_constants_ = 0
 
     @property
     def input_names(self) -> List[str]:
@@ -123,6 +136,11 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
             return value
 
         possible_value = self.constants_[name]
+
+        if computed_value and isinstance(possible_value, onnx.NodeProto):
+            possible_value, _ = self.compute_constant(name, exc=exc)
+            if possible_value is not None:
+                self.constants_computed_[name] = possible_value
 
         if isinstance(possible_value, onnx.TensorProto):
             if uses_external_data(possible_value):
@@ -606,7 +624,8 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
             self.simple_update_value_shape_with_node(node)
             if all(self.is_constant(i) for i in node.input):
                 for o in node.output:
-                    self.set_constant(o, node)
+                    if not self.is_constant(o):
+                        self.set_constant(o, node)
             if self.verbose:
                 print(f"[BasicShapeBuilder.run_node] {self.pretty_node(node)}: {r}")
 
@@ -629,7 +648,13 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         exc: bool = False,
     ):
         """Runs inference over a model or a graph."""
+        self.main_opset = 18
+        self.time_evaluation_constants_ = 0
         if isinstance(model, onnx.ModelProto):
+            for opset in model.opset_import:
+                if opset.domain == "":
+                    self.main_opset = opset.version
+                    break
             return self.run_model(
                 model.graph, functions={(f.domain, f.name): f for f in model.functions}
             )
