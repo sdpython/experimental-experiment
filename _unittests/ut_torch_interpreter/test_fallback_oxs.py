@@ -94,6 +94,7 @@ class TestFallbackOxs(ExtTestCase):
 
     @skipif_ci_windows("dynamo not supported on Windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
+    @unittest.skip("no longer maintained")
     def test_fallback_oxs(self):
         import torch
         from experimental_experiment.torch_interpreter import to_onnx
