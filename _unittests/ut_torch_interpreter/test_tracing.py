@@ -2,7 +2,7 @@ import copy
 import operator
 import unittest
 import torch
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.torch_interpreter.tracing import (
     CustomTracer,
     CustomProxy,
@@ -257,6 +257,7 @@ class TestTracing(ExtTestCase):
         self.assertNotEmpty(got)
         self.assertEqualArray(expected, got)
 
+    @skipif_ci_windows("not supported")
     def test_tracing_cond(self):
         class Model(torch.nn.Module):
             def forward(self, x):
