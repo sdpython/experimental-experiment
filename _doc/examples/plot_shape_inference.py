@@ -54,6 +54,10 @@ for info in model2.graph.value_info:
 # %%
 # Basic Shape Inference
 # =====================
+#
+# The algorithm infer shapes wherever the output shape of a node does not
+# depend on the content even. The evaluation relies on :mod:`ast`.
+
 builder = BasicShapeBuilder()
 builder.run_model(model)
 builder.update_shapes(model)
@@ -62,3 +66,14 @@ for info in model.graph.value_info:
     t = info.type.tensor_type
     shape = tuple(d.dim_param or d.dim_value for d in t.shape.dim)
     print(f"{info.name}: {t.elem_type}:{shape}")
+
+# %%
+# Evaluate Expressions
+# ====================
+#
+# We can also evaluate every expression without evaluating the model itself.
+
+dimensions = dict(a=3, b=4, c=6)
+for name in ["X", "Y", "xy", "S1", "S2", "zs", "Z"]:
+    sh = builder.evaluate_shape(name, dimensions)
+    print(f"shape of {name!r} is {sh}")

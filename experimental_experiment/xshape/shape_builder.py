@@ -69,8 +69,13 @@ class ShapeBuilder:
             include |= set(node.output)
         include -= exclude
         include -= set(i.name for i in graph.value_info)
+        ordered_include = []
+        for node in graph.node:
+            for o in node.output:
+                if o in include:
+                    ordered_include.append(o)
         infos = []
-        for k in include:
+        for k in ordered_include:
             if not self.has_shape(k):
                 continue
             infos.append(oh.make_tensor_value_info(k, self.get_type(k), list(self.get_shape(k))))

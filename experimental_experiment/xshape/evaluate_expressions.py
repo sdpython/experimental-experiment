@@ -14,6 +14,10 @@ operators = {
 }
 
 
+def _CeilToDiv(n: int, div: int) -> int:
+    return n // div if n % div == 0 else n // div + 1
+
+
 def _eval(node, variables, expr):
     if isinstance(node, ast.Expression):
         return _eval(node.body)
@@ -55,6 +59,13 @@ def _eval(node, variables, expr):
         raise NameError(
             f"Unknown variable: {node.id!r} in expression {expr!r} with context={variables!r}"
         )
+    if isinstance(node, ast.Call):
+        # Specific function
+        name = node.func.id
+        assert name == "CeilToInt", f"Unable to evaluate function {name!r} in {expr!r}"
+        values = [_eval(a, variables, expr) for a in node.args]
+        return _CeilToDiv(*values)
+
     raise TypeError(
         f"Unsupported AST node: {type(node)} in expression {expr!r} with context={variables!r}"
     )

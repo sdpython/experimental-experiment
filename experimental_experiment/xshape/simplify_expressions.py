@@ -1,6 +1,6 @@
 import ast
 from collections import Counter
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 def _dump_node(n: ast.AST) -> str:
@@ -152,14 +152,13 @@ class SimplifyParensTransformer(CommonTransformer):
         return self.generic_visit(node)
 
 
-class ExpressionSimplifierVisitor(CommonVisitor):
+class ExpressionSimplifierAddVisitor(CommonVisitor):
     """Simplifies expression such as ``2*x-x``."""
 
     def __init__(self, expr: Optional[str] = None):
         super().__init__(expr)
         self.coeffs = {}
         self.const = 0
-        self.success = True
 
     def visit_BinOp(self, node):
         if isinstance(node.op, ast.Add):
@@ -167,42 +166,56 @@ class ExpressionSimplifierVisitor(CommonVisitor):
             self.visit(node.right)
         elif isinstance(node.op, ast.Sub):
             self.visit(node.left)
-            # negate the right side
-            neg = ExpressionSimplifierVisitor()
+            neg = ExpressionSimplifierAddVisitor()
             neg.visit(node.right)
-            if not neg.success:
-                self.success = False
-                return
             for v, c in neg.coeffs.items():
                 if v not in self.coeffs:
                     self.coeffs[v] = 0
                 self.coeffs[v] -= c
             self.const -= neg.const
         elif isinstance(node.op, ast.Mult):
-            # Only support coeff * var or var * coeff
-            if isinstance(node.left, ast.Constant) and isinstance(node.right, ast.Name):
-                if node.right.id not in self.coeffs:
-                    self.coeffs[node.right.id] = 0
-                self.coeffs[node.right.id] += node.left.value
-            elif isinstance(node.right, ast.Constant) and isinstance(node.left, ast.Name):
-                if node.left.id not in self.coeffs:
-                    self.coeffs[node.left.id] = 0
-                self.coeffs[node.left.id] += node.right.value
+            if isinstance(node.left, ast.Constant) or isinstance(node.right, ast.Constant):
+                simp = ExpressionSimplifierAddVisitor()
+                simp.visit(node.left if isinstance(node.right, ast.Constant) else node.right)
+                value = (
+                    node.right.value if isinstance(node.right, ast.Constant) else node.left.value
+                )
+                for v, c in simp.coeffs.items():
+                    if v not in self.coeffs:
+                        self.coeffs[v] = 0
+                    self.coeffs[v] += value * c
+                self.const += simp.const * value
             else:
-                # unable to simplify
-                self.success = False
-                return
+                self.generic_visit(node)
         else:
-            self.success = False
-            return
-
-    def visit_Name(self, node):
-        if node.id not in self.coeffs:
-            self.coeffs[node.id] = 0
-        self.coeffs[node.id] += 1
+            self.generic_visit(node)
 
     def visit_Constant(self, node):
         self.const += node.value
+
+    def generic_visit(self, node):
+        s = ast.unparse(node)
+        if s not in self.coeffs:
+            self.coeffs[s] = 1
+        else:
+            self.coeffs[s] += 1
+
+    def make_simplified(self) -> str:
+        terms = []
+        for var, coeff in self.coeffs.items():
+            if coeff == 0:
+                continue
+            elif coeff == 1:
+                terms.append(f"+{var}")
+            elif coeff == -1:
+                terms.append(f"-{var}")
+            else:
+                terms.append(f"{'+' if coeff > 0 else ''}{coeff}*{var}")
+        if self.const != 0:
+            terms.append(f"{'+' if self.const > 0 else ''}{self.const}")
+        result = "".join(terms)
+        res = result[1:] if result.startswith("+") else (result if result else "0")
+        return res.replace(" ", "")
 
 
 def simplify_expression(expr: str) -> str:
@@ -218,44 +231,14 @@ def simplify_expression(expr: str) -> str:
         tree = tr.visit(tree)
     ast.fix_missing_locations(tree.body)
     expr = ast.unparse(tree)
-    simp = ExpressionSimplifierVisitor(expr=expr)
+    simp = ExpressionSimplifierAddVisitor(expr=expr)
     simp.visit(tree.body)
-    if not simp.success:
-        return expr.replace(" ", "")
-    terms = []
-    for var, coeff in simp.coeffs.items():
-        if coeff == 0:
-            continue
-        elif coeff == 1:
-            terms.append(f"+{var}")
-        elif coeff == -1:
-            terms.append(f"-{var}")
-        else:
-            terms.append(f"{'+' if coeff > 0 else ''}{coeff}*{var}")
-    if simp.const != 0:
-        terms.append(f"{'+' if simp.const > 0 else ''}{simp.const}")
-    result = "".join(terms)
-    return result[1:] if result.startswith("+") else (result if result else "0")
+    return simp.make_simplified()
 
 
-def simplify_two_expressions(expr1: str, expr2: str) -> str:
+def simplify_two_expressions(expr1: str, expr2: str) -> Dict[str, int]:
     """Simplifies an expression exp1 == exp2."""
-    simp1 = ExpressionSimplifierVisitor(expr1)
-    simp1.visit(ast.parse(expr1, mode="eval").body)
-    simp2 = ExpressionSimplifierVisitor(expr2)
-    simp2.visit(ast.parse(expr2, mode="eval").body)
-
-    terms = {}
-    for var, coeff in simp1.coeffs.items():
-        if coeff == 0:
-            continue
-        if var not in terms:
-            terms[var] = 0
-        terms[var] += coeff
-    for var, coeff in simp2.coeffs.items():
-        if coeff == 0:
-            continue
-        if var not in terms:
-            terms[var] = 0
-        terms[var] -= coeff
-    return {k: v for k, v in terms.items() if v != 0}
+    expr = f"{expr1}-({expr2})"
+    simp1 = ExpressionSimplifierAddVisitor(expr)
+    simp1.visit(ast.parse(expr, mode="eval").body)
+    return {k: v for k, v in simp1.coeffs.items() if v != 0}

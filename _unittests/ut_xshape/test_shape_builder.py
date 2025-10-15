@@ -330,6 +330,46 @@ class TestShapeBuilder(ExtTestCase):
         res = builder.compare_with_true_inputs(feeds, got)
         self.assertEqual(res, {"Z": (("batch", 3, 3), ("seq2+seq1", 11, 11))})
 
+    def test_concat_split(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["X", "Y"], ["xy"], axis=1),
+                    oh.make_node("Split", ["xy"], ["S1", "S2"], axis=1, num_outputs=2),
+                    oh.make_node("Concat", ["S2", "S1"], ["zs"], axis=1),
+                    oh.make_node("Relu", ["zs"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, ["a", "b"]),
+                    oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, ["a", "c"]),
+                ],
+                [oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, ["a", "e"])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        builder = BasicShapeBuilder()
+        builder.run_model(model)
+        builder.update_shapes(model)
+        res = []
+        for info in model.graph.value_info:
+            t = info.type.tensor_type
+            shape = tuple(d.dim_param or d.dim_value for d in t.shape.dim)
+            res.append((t.elem_type, shape))
+        expected = [
+            (1, ("a", "b+c")),
+            (1, ("a", "CeilToInt(b+c,2)")),
+            (1, ("a", "b+c-CeilToInt(b+c,2)")),
+            (1, ("a", "b+c")),
+        ]
+        self.assertEqual(expected, res)
+        values = {
+            name: builder.evaluate_shape(name, dict(a=3, b=4, c=6))
+            for name in ["xy", "S1", "S2", "zs"]
+        }
+        self.assertEqual(values, {"S1": (3, 5), "S2": (3, 5), "xy": (3, 10), "zs": (3, 10)})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

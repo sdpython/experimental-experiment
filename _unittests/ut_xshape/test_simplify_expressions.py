@@ -42,6 +42,12 @@ class TestSimplifyExpressions(ExtTestCase):
         self.assertEqual("x", simplify_expression("(x*(y+1))//(y+1)"))
         self.assertEqual("c//2", simplify_expression("((c)//(2))"))
 
+    def test_simplify_add_sub(self):
+        self.assertEqual("b+c", simplify_expression("b+c-CeilToInt(b+c,2)+CeilToInt(b+c,2)"))
+
+    def test_simplify_function(self):
+        self.assertEqual("CeilToInt(b+c,2)", simplify_expression("CeilToInt(b+c,2)"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

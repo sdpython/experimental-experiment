@@ -1180,7 +1180,7 @@ def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
             sh[axis] = int(splits[i])
             self.set_shape(o, tuple(sh), allow_zero=True)
         return [self.get_shape(o) for o in node.output]
-    num_outputs= self.get_attribute(node, "num_outputs") 
+    num_outputs = self.get_attribute(node, "num_outputs")
     if num_outputs is not None:
         no = num_outputs.i
         if self.has_shape(node.input[0]):
@@ -1190,10 +1190,20 @@ def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
                     dims = [dim // no for i in range(no)]
                 else:
                     d = dim // no + 1
-                    dims = [d for i in range(no-1)]
+                    dims = [d for i in range(no - 1)]
                     dims.append(dim - d * (no - 1))
             else:
-                dims = [f"CeilInt(, )" for i in range(no)]
+                dims = [f"CeilToInt({dim},{no})" for i in range(no)]
+                dims[-1] = (
+                    f"{dim}-{no-1}*CeilToInt({dim},{no})"
+                    if no > 2
+                    else f"{dim}-CeilToInt({dim},{no})"
+                )
+            li = list(self.get_shape(node.input[0]))
+            for d, o in zip(dims, node.output):
+                li[axis] = d
+                self.set_shape(o, tuple(li))
+            return [self.get_shape(o) for o in node.output]
     if self.has_rank(node.input[0]):
         rank = self.get_rank(node.input[0])
         for o in node.output:

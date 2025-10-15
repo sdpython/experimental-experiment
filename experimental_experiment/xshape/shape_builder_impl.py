@@ -14,6 +14,7 @@ from ._builder_runtime import _BuilderRuntime
 from ._shape_runtime import _ShapeRuntime
 from ._inference_runtime import _InferenceRuntime
 from .rename_expressions import parse_expression_tokens
+from .simplify_expressions import simplify_expression
 from ._onnx_helper import str_tensor_proto_type
 from .shape_builder import ShapeBuilder
 
@@ -470,6 +471,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
             not name or name != self._debug_stop_shape
         ), f"Requested stop, name={name!r}, shape={shape}{self.get_debug_msg()}"
         assert not shape or not isinstance(shape[0], tuple), f"Unexpected shape {shape}"
+        shape = tuple(simplify_expression(s) for s in shape)
         for sdim in shape:
             if not isinstance(sdim, str):
                 continue
