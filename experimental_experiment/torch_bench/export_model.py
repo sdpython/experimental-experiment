@@ -8,8 +8,6 @@ The script export a model with different options.
 
     python -m experimental_experiment.torch_bench.export_model --help
 
-Example, run llama model with onnxrt backend on cuda.
-
 ::
 
     python -m experimental_experiment.torch_bench.export_model \\
