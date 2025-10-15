@@ -14,6 +14,10 @@ class Var:
         self.name = name
         self.builder = builder
 
+    @property
+    def dtype(self):
+        return None
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name!r})"
 

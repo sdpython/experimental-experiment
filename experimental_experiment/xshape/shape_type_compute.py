@@ -1180,7 +1180,7 @@ def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
             sh[axis] = int(splits[i])
             self.set_shape(o, tuple(sh), allow_zero=True)
         return [self.get_shape(o) for o in node.output]
-    num_outputs = self.get_attribute(node, "num_outputs")
+    num_outputs = self.get_attribute(node, "num_outputs", exc=False)
     if num_outputs is not None:
         no = num_outputs.i
         if self.has_shape(node.input[0]):

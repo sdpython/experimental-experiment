@@ -18,11 +18,11 @@ Let's use the true model for that.
 We use the dummy example from the model page.
 """
 
-from typing import Any, Dict, List, Tuple
-import packaging.version as pv
+from typing import Any, Dict
 import torch
 import transformers
 from onnx_diagnostic.helpers import string_type
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 
 
 MODEL_NAME = "arnir0/Tiny-LLM"
@@ -65,37 +65,6 @@ model.forward = keep_model_forward
 # ++++++++++++++++++
 #
 # Let's create an untrained model.
-
-if pv.Version(transformers.__version__) > pv.Version("4.49.99999"):
-
-    def make_dynamic_cache(
-        key_value_pairs: List[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> transformers.cache_utils.DynamicCache:
-        """
-        Creates an instance of :class:`transformers.cache_utils.DynamicCache`.
-        This version is valid for ``transformers >= 4.50``.
-
-        :param key_value_pairs: list of pairs of (key, values)
-        :return: :class:`transformers.cache_utils.DynamicCache`
-        """
-        return transformers.cache_utils.DynamicCache(key_value_pairs)
-
-else:
-
-    def make_dynamic_cache(
-        key_value_pairs: List[Tuple[torch.Tensor, torch.Tensor]],
-    ) -> transformers.cache_utils.DynamicCache:
-        """
-        Creates an instance of :class:`transformers.cache_utils.DynamicCache`.
-        This version is valid for ``transformers < 4.50``.
-
-        :param key_value_pairs: list of pairs of (key, values)
-        :return: :class:`transformers.cache_utils.DynamicCache`
-        """
-        cache = transformers.cache_utils.DynamicCache(len(key_value_pairs))
-        for i, (key, value) in enumerate(key_value_pairs):
-            cache.update(key, value, i)
-        return cache
 
 
 def get_tiny_llm(

@@ -222,6 +222,7 @@ def simplify_expression(expr: Union[str, int]) -> Union[str, int]:
     """Simplifies an expression."""
     if isinstance(expr, int):
         return expr
+    assert isinstance(expr, str), f"Unexpected type {expr} for the expression."
     tree = ast.parse(expr, mode="eval")
     transformers = [
         SimpleSimpliflyTransformer(expr=expr),

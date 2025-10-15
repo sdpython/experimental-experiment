@@ -360,7 +360,7 @@ It can be aggregated:
 
     df = pandas.DataFrame(stat)
     for c in df.columns:
-        if "time" not in c and "pattern" not in c:
+        if "time" not in c and "pattern" not in c and "exit_point" not in c:
             df[c] = df[c].fillna(0).astype(int)
     aggs = {
         "time_in": "sum",

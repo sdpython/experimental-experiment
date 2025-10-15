@@ -536,7 +536,7 @@ def onnx_custom_backend(
         <experimental_experiment.torch_interpreter.ExportOptions>`
     :return: Callable
 
-    See :ref:`l-plot-onnxrt-diff` or :ref:`l-plot-custom-backend` for examples.
+    See :ref:`l-plot-custom-backend` for examples.
     If not empty, `storage` keeps the memory of the data generated,
     onnx models, graph module as well the inputs and outputs when
     the model is run.

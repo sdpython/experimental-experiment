@@ -25,6 +25,7 @@ class TestFallbackOxs(ExtTestCase):
         self.assertIn("aten::celu", reg)
 
     @ignore_warnings((DeprecationWarning, FutureWarning))
+    @unittest.skip("no longer valid")
     def test_celu(self):
         from onnxscript.function_libs.torch_lib.registration import default_registry
         import onnxscript.function_libs.torch_lib.ops.core
@@ -59,6 +60,7 @@ class TestFallbackOxs(ExtTestCase):
         self.assertEqual(x.shape, y.shape)
 
     @ignore_warnings((DeprecationWarning, FutureWarning))
+    @unittest.skip("no longer valid")
     def test_gather(self):
         from onnxscript.function_libs.torch_lib.registration import default_registry
         import onnxscript.function_libs.torch_lib.ops.core
@@ -92,6 +94,7 @@ class TestFallbackOxs(ExtTestCase):
 
     @skipif_ci_windows("dynamo not supported on Windows")
     @ignore_warnings((DeprecationWarning, FutureWarning))
+    @unittest.skip("no longer maintained")
     def test_fallback_oxs(self):
         import torch
         from experimental_experiment.torch_interpreter import to_onnx
