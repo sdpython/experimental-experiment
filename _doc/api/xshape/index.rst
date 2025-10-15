@@ -9,6 +9,7 @@
     rename_expressions
     simplify_expressions
     _builder_runtime
+    _inference_runtime
     _shape_runtime
     _shape_helper
     _onnx_helper
