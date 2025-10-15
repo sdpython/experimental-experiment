@@ -78,7 +78,7 @@ def evaluate_expression(expression: str, context: Dict[str, int]) -> int:
     .. runpython::
         :showcode:
 
-        from experimental_experiment.xshape.evaluate_expresssions import (
+        from experimental_experiment.xshape.evaluate_expressions import (
             evaluate_expression,
         )
 

@@ -1,7 +1,7 @@
 
-.xbuilder._shape_helper
-=======================
+.xshape._shape_helper
+=====================
 
-.. automodule:: experimental_experiment.xbuilder._shape_helper
+.. automodule:: experimental_experiment.xshape._shape_helper
     :members:
     :no-undoc-members:

@@ -11,7 +11,7 @@ from ..patterns.onnx_rotary import FunctionHalfRotaryEmbeddingPattern
 class ContribRotaryEmbeddingPattern(PatternOptimization):
     """
     Very similar to
-    :class:`experimental_experimental.xoptim.patterns.onnx_rotary.RotaryEmbeddingPattern`.
+    :class:`experimental_experiment.xoptim.patterns.onnx_rotary.RotaryEmbeddingPattern`.
     """
 
     _operator_name = FunctionHalfRotaryEmbeddingPattern._operator_name
@@ -375,7 +375,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
 class ContribRotaryEmbedding3DPattern(PatternOptimization):
     """
     Extension to
-    :class:`experimental_experimental.xoptim.patterns_ort.llm_optim.ContribRotaryEmbeddingPattern`,
+    :class:`experimental_experiment.xoptim.patterns_ort.llm_optim.ContribRotaryEmbeddingPattern`,
     turn the operator into a 3D operator including the transpose.
     """
 

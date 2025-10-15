@@ -294,9 +294,7 @@ def _onnx_derivative_fw(
     options: DerivativeOptions,
     verbose: int = 0,
 ) -> ModelProto:
-    """
-    Implements a gradient based on class `OrtModuleGraphBuilder`.
-    """
+    """Implements a gradient based on class `OrtModuleGraphBuilder`."""
     from onnxruntime.capi._pybind_state import (
         OrtModuleGraphBuilder,
         OrtModuleGraphBuilderConfiguration,

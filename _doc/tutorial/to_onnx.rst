@@ -20,13 +20,11 @@ Section :ref:`l-torch-export-export-ds` provides a couple of examples
 on how to define them, as their definition aligns with those used
 in :func:`torch.export.export`.
 
-* :ref:`l-plot-exporter-recipes-custom-named-dynamic-shapes`
 * :ref:`l-plot-exporter-recipes-custom-dynpad`
 
 **Control Flow**
 
 * :ref:`l-plot-exporter-recipes-custom-cond`
-* :ref:`l-plot-exporter-recipes-custom-pdist`
 
 **Custom Operators**
 
@@ -36,10 +34,6 @@ in :func:`torch.export.export`.
 **Submodules**
 
 * :ref:`l-plot-exporter-recipes-custom-modules`
-
-**Models**
-
-* :ref:`l-plot-exporter-recipes-custom-phi2`
 
 **Optimization**
 
