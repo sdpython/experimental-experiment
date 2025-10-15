@@ -1,6 +1,6 @@
 import ast
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 
 def _dump_node(n: ast.AST) -> str:
@@ -218,8 +218,10 @@ class ExpressionSimplifierAddVisitor(CommonVisitor):
         return res.replace(" ", "")
 
 
-def simplify_expression(expr: str) -> str:
+def simplify_expression(expr: Union[str, int]) -> Union[str, int]:
     """Simplifies an expression."""
+    if isinstance(expr, int):
+        return expr
     tree = ast.parse(expr, mode="eval")
     transformers = [
         SimpleSimpliflyTransformer(expr=expr),

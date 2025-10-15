@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     skipif_ci_windows,
     hide_stdout,
+    ignore_warnings,
 )
 from experimental_experiment.helpers import string_type
 from experimental_experiment.reference import ExtendedReferenceEvaluator
@@ -32,6 +33,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
+    @ignore_warnings(UserWarning)
     def test_controlflow_custom_if_1(self):
         import onnxruntime
 
@@ -72,6 +74,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
+    @ignore_warnings(UserWarning)
     def test_controlflow_custom_if_2(self):
         cls, x = self.get_custom_model_2()
         model = cls()
@@ -91,6 +94,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
     @hide_stdout()
+    @ignore_warnings(UserWarning)
     def test_controlflow_custom_if_inline(self):
         cls, x = self.get_custom_model()
         model = cls()
@@ -138,6 +142,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
+    @ignore_warnings(UserWarning)
     def test_controlflow_custom_if_two_cond(self):
         import torch
 
@@ -207,6 +212,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
 
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
+    @hide_stdout()
     def test_controlflow_custom_fallback(self):
         import torch
 
@@ -283,6 +289,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
             got = ref.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @ignore_warnings(UserWarning)
     def test_nested_cond(self):
         import onnxruntime
         import torch
@@ -479,6 +486,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                 self.assertEqualArray(exp[0], got[0])
 
     @requires_torch("2.7", "export of torch.cond")
+    @ignore_warnings(UserWarning)
     def test_controlflow_cond_submodule_1(self):
         import torch
 
@@ -509,6 +517,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         )
 
     @requires_torch("2.7", "export of torch.cond")
+    @ignore_warnings(UserWarning)
     def test_controlflow_cond_submodule_args(self):
         import torch
 
