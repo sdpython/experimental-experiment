@@ -59,7 +59,7 @@ jobs:
       python -c "import torchvision.extension"
     displayName: 'check torchvision'
   - script: |
-      python -m pip install . -v -v -v
+      python -m pip install . -v
     displayName: 'install wheel'
   - script: |
       python -m pip freeze
@@ -135,7 +135,7 @@ jobs:
       python -c "import torchvision.extension"
     displayName: 'check torchvision'
   - script: |
-      python -m pip install . -v -v -v
+      python -m pip install . -v
     displayName: 'install wheel'
   - script: |
       python -m pip uninstall -y onnx onnx-weekly
@@ -209,7 +209,7 @@ jobs:
       python -c "import torchvision.extension"
     displayName: 'check torchvision'
   - script: |
-      python -m pip install . -v -v -v
+      python -m pip install . -v
     displayName: 'install wheel'
   - script: |
       python -m pip uninstall -y onnx onnx-weekly
@@ -301,7 +301,7 @@ jobs:
       python -c "import torchvision.extension"
     displayName: 'check torchvision'
   - script: |
-      python -m pip install . -v -v -v
+      python -m pip install . -v
     displayName: 'install wheel'
   - script: |
       python -m pip uninstall -y onnx onnx-weekly
@@ -390,10 +390,10 @@ jobs:
       black --diff .
     displayName: 'Black'
   - script: |
-      python -m pip wheel . --wheel-dir dist -v -v -v
+      python -m pip wheel . --wheel-dir dist -v --no-build-isolation
     displayName: 'build wheel'
   - script: |
-      python -m pip install . -v -v -v
+      python -m pip install . -v --no-build-isolation
     displayName: 'install wheel'
   - script: |
       python -m pip uninstall -y onnx onnx-weekly

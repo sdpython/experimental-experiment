@@ -22,7 +22,7 @@ jobs:
           python-version: '3.12'
 
       - name: build wheel
-        run: python -m pip wheel .
+        run: python -m pip wheel . -v
 
       - uses: actions/upload-artifact@v4
         with:
