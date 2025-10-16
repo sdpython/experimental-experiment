@@ -1103,3 +1103,70 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
                 doc_string=reshape.doc_string,
             )
         ]
+
+
+class UnsqueezeReshapePattern(PatternOptimization):
+    """
+    Unsqueeze + Reshape into Unsqueeze at a different place if possible.
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(node.input[1])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        unsq = g.node_before(node.input[0])
+        if unsq is None or unsq.op_type != "Unsqueeze" or unsq.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(unsq.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        axes = g.get_computed_constant(unsq.input[1])
+        if axes is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        new_axes = self.compute_new_axes(tuple(map(int, axes)), tuple(map(int, cst)))
+        if new_axes is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [unsq, node], self.apply, insert_at=node)
+
+    def compute_new_axes(self, axes: Tuple[int, ...], shape: Tuple[int, ...]) -> Tuple[int, ...]:
+        if axes == (2,) and shape == (0, 1, -1, 0):
+            return (1,)
+        return None
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        unsqueeze: NodeProto,
+        reshape: NodeProto,
+    ) -> List[NodeProto]:
+        new_axes = self.compute_new_axes(
+            tuple(map(int, g.get_computed_constant(unsqueeze.input[1]))),
+            tuple(map(int, g.get_computed_constant(reshape.input[1]))),
+        )
+        axes = g.make_initializer(
+            "",
+            np.array(new_axes, dtype=np.int64),
+            source="UnsqueezeReshapePattern.a1",
+        )
+        return [
+            g.make_node(
+                "Unsqueeze",
+                [unsqueeze.input[0], axes],
+                [reshape.output[0]],
+                name=f"{self.__class__.__name__}--{unsqueeze.name}",
+                doc_string=unsqueeze.doc_string,
+            ),
+        ]
