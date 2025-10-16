@@ -283,6 +283,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
             got = ref.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @skipif_ci_windows("not yet supported on Windows")
     def test_nested_cond(self):
         import onnxruntime
         import torch

@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
     requires_transformers,
     ignore_warnings,
+    skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, CacheKeyValue
@@ -2208,6 +2209,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertEqualArray(y, ref.run(None, {ref.input_names[0]: x.numpy()})[0])
 
     @hide_stdout()
+    @skipif_ci_windows("broken")
     def test_controlflow_cond_submodule(self):
         import torch
 

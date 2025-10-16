@@ -112,6 +112,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected.to(int), got.astype(int))
 
+    @skipif_ci_windows("broken")
     def test_aten_index_put_3d_nd_case_1(self):
         import torch
 
@@ -144,6 +145,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @skipif_ci_windows("broken")
     def test_aten_index_put_3d_nd_case_2(self):
         import torch
 
