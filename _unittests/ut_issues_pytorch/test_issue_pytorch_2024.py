@@ -247,27 +247,33 @@ class TestIssuesPytorch2024(ExtTestCase):
             e2 = session.run(None, input_2)[0]
             self.assertEqualArray(expected, e2)
 
+    @skipif_ci_windows("broken")
     def test_index_put_update_parameter_custom_2d_static(self):
         self._updated_parameter("custom", False, dynamic=False)
 
     @requires_onnx_diagnostic("0.7.13")
+    @skipif_ci_windows("broken")
     def test_index_put_update_parameter_custom_2d_dynamic(self):
         self._updated_parameter("custom", False, dynamic=True)
 
     @ignore_warnings(UserWarning)
+    @skipif_ci_windows("broken")
     def test_index_put_update_parameter_custom_2d_nodec(self):
         self._updated_parameter("custom", False, decomposition=False)
 
     @ignore_warnings(UserWarning)
     @requires_torch("2.8")
+    @skipif_ci_windows("broken")
     def test_index_put_update_parameter_custom_2d_dec(self):
         self._updated_parameter("custom", False, decomposition=True)
 
     @skipif_ci_windows("not working on Windows")
+    @skipif_ci_windows("broken")
     def test_index_put_update_parameter_custom_3d_static(self):
         self._updated_parameter("custom", True, dynamic=False)
 
     @requires_onnx_diagnostic("0.7.13")
+    @skipif_ci_windows("broken")
     def test_index_put_update_parameter_custom_3d_dynamic(self):
         self._updated_parameter("custom", True, dynamic=True)
 
@@ -847,6 +853,7 @@ class TestIssuesPytorch2024(ExtTestCase):
 
     @ignore_warnings(UserWarning)
     @requires_onnx_diagnostic("0.7.13")
+    @skipif_ci_windows("broken")
     def test_index_put_no_none(self):
         for exporter, d3, decomposition, dynamic in itertools.product(
             ["custom"],

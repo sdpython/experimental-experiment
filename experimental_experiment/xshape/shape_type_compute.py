@@ -1168,19 +1168,42 @@ def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
     dtype = self.get_type(node.input[0])
     for o in node.output:
         self.set_type(o, dtype)
+    att = self.get_attribute(node, "axis", exc=False)
+    axis = 0 if att is None else att.i
     if self.has_shape(node.input[0]) and len(node.input) > 1 and self.is_constant(node.input[1]):
         splits = list(self.get_constant(node.input[1]))
         assert len(splits) == len(
             node.output
         ), f"Unexpected number of outputs, output={node.output} splits={splits}"
-        att = self.get_attribute(node, "axis", exc=False)
-        axis = 0 if att is None else att.i
-
         sh = list(self.get_shape(node.input[0]))
         for i, o in enumerate(node.output):
             sh[axis] = int(splits[i])
             self.set_shape(o, tuple(sh), allow_zero=True)
         return [self.get_shape(o) for o in node.output]
+    num_outputs = self.get_attribute(node, "num_outputs", exc=False)
+    if num_outputs is not None:
+        no = num_outputs.i
+        if self.has_shape(node.input[0]):
+            dim = self.get_shape(node.input[0])[axis]
+            if isinstance(dim, int):
+                if dim % no == 0:
+                    dims = [dim // no for i in range(no)]
+                else:
+                    d = dim // no + 1
+                    dims = [d for i in range(no - 1)]
+                    dims.append(dim - d * (no - 1))
+            else:
+                dims = [f"CeilToInt({dim},{no})" for i in range(no)]
+                dims[-1] = (
+                    f"{dim}-{no-1}*CeilToInt({dim},{no})"
+                    if no > 2
+                    else f"{dim}-CeilToInt({dim},{no})"
+                )
+            li = list(self.get_shape(node.input[0]))
+            for d, o in zip(dims, node.output):
+                li[axis] = d
+                self.set_shape(o, tuple(li))
+            return [self.get_shape(o) for o in node.output]
     if self.has_rank(node.input[0]):
         rank = self.get_rank(node.input[0])
         for o in node.output:

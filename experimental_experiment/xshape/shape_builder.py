@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import onnx
+import onnx.helper as oh
 from onnx_diagnostic.helpers import string_type
 from onnx_diagnostic.helpers.onnx_helper import dtype_to_tensor_dtype
 from ..helpers import make_hash
@@ -51,6 +52,34 @@ class ShapeBuilder:
 
     def _hash(self) -> str:
         return make_hash(self)
+
+    def update_shapes(self, model: onnx.ModelProto):
+        """Updates model shapes with the value stored inside this graph."""
+        self._update_shapes_graph(model.graph)
+
+    def _update_shapes_graph(self, graph: onnx.GraphProto):
+        exclude = (
+            set(i.name for i in graph.input)
+            | set(i.name for i in graph.output)
+            | set(i.name for i in graph.initializer)
+            | set(i.name for i in graph.sparse_initializer)
+        )
+        include = set()
+        for node in graph.node:
+            include |= set(node.output)
+        include -= exclude
+        include -= set(i.name for i in graph.value_info)
+        ordered_include = []
+        for node in graph.node:
+            for o in node.output:
+                if o in include:
+                    ordered_include.append(o)
+        infos = []
+        for k in ordered_include:
+            if not self.has_shape(k):
+                continue
+            infos.append(oh.make_tensor_value_info(k, self.get_type(k), list(self.get_shape(k))))
+        graph.value_info.extend(infos)
 
     def get_attribute(
         self, node: onnx.NodeProto, att_name: str, exc: bool = True

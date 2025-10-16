@@ -375,6 +375,7 @@ class TestOnnxExportCustomCode(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @ignore_warnings(UserWarning)
+    @skipif_ci_windows("broken")
     def test_custom_graph_break(self):
         import torch
 

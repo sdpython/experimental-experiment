@@ -663,38 +663,6 @@ It just needs to be added when calling function
 
     print(pretty_onnx(onx))
 
-Fallback
-++++++++
-
-The current library does not always have a converting function
-for evert aten functions implemented in torch. A mechanism exists
-to intercept the function returned by the interpreter and replace it
-by a function coming from another source such as :epkg:`onnxscript`.
-
-.. runpython::
-    :showcode:
-
-    import torch
-    from experimental_experiment.helpers import pretty_onnx
-    from experimental_experiment.torch_interpreter import to_onnx
-    from experimental_experiment.torch_interpreter.oxs_dispatcher import OxsDispatcher
-
-    class Neuron(torch.nn.Module):
-        def __init__(self, n_dims: int, n_targets: int):
-            super(Neuron, self).__init__()
-            self.linear = torch.nn.Linear(n_dims, n_targets)
-
-        def forward(self, x):
-            return torch.celu(self.linear(x))
-
-
-    x = torch.rand(5, 3)
-    model = Neuron(3, 1)
-
-    onx = to_onnx(model, (x,), input_names=["x"], dispatcher=OxsDispatcher(verbose=2))  
-
-    print(pretty_onnx(onx))
-
 Fake Tensors
 ++++++++++++
 

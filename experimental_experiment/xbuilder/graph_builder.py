@@ -68,6 +68,7 @@ from ..xshape._onnx_helper import (
     unary_like_op_types,
     str_tensor_proto_type,
 )
+from ..xshape.simplify_expressions import simplify_expression
 from ._onnx_helper import (
     _default_OPSET_TO_IR_VERSION,
     _nice_shape,
@@ -3794,7 +3795,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         #     f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         # )
         new_shape = self.verify_dynamic_shape(shape, name=name)
-        return new_shape
+        return tuple(simplify_expression(s) for s in new_shape)
 
     def _get_symbol(self, i: str) -> str:
         k = 0

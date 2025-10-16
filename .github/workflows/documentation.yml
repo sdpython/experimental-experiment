@@ -131,9 +131,9 @@ jobs:
             grep ERROR doc.txt
             exit 1
           fi
-          if [[ $(grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch' | grep -v 'l-plot-exporter') ]]; then
+          if [[ $(grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch' | grep -v 'l-plot-exporter' | grep -v 'failed to reach any of the inventories') ]]; then
             echo "Documentation produces warnings."
-            grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch' | grep -v 'l-plot-exporter'
+            grep WARNING doc.txt | grep -v 'tutorial/exported_onnx' | grep -v 'tutorial/exported_program' | grep -v 'plot-exporter-recipes-onnx-exporter' | grep -v 'plot-executorch' | grep -v 'l-plot-exporter' | grep -v 'failed to reach any of the inventories'
             exit 1
           fi
 

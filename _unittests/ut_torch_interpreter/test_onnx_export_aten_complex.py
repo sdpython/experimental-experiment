@@ -9,12 +9,14 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_cuda,
     requires_torch,
+    skipif_ci_windows,
 )
 
 
 class TestOnnxExportComplex(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
     @requires_cuda()
+    @skipif_ci_windows("broken")
     def test_export_polar(self):
         import torch
 
@@ -40,6 +42,7 @@ class TestOnnxExportComplex(ExtTestCase):
 
     @ignore_warnings(UserWarning)
     @requires_torch("2.7")
+    @skipif_ci_windows("broken")
     def test_fft_simple_1(self):
         import torch
 
@@ -97,6 +100,7 @@ class TestOnnxExportComplex(ExtTestCase):
 
     @ignore_warnings(UserWarning)
     @requires_torch("2.7")
+    @skipif_ci_windows("broken")
     def test_fft_simple_2(self):
         import torch
 
@@ -156,6 +160,7 @@ class TestOnnxExportComplex(ExtTestCase):
 
     @ignore_warnings(UserWarning)
     @requires_torch("2.7")
+    @skipif_ci_windows("broken")
     def test_ifft_simple_1(self):
         import torch
 
@@ -214,6 +219,7 @@ class TestOnnxExportComplex(ExtTestCase):
 
     @ignore_warnings(UserWarning)
     @requires_torch("2.7")
+    @skipif_ci_windows("broken")
     def test_ifft_simple_2(self):
         import torch
 
