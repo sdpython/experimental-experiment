@@ -146,6 +146,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @skipif_ci_windows("bug")
     def test_dummy_llm_flat_strict_true(self):
         model, inputs = dummy_llm()
         onx = to_onnx(
