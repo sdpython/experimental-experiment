@@ -17,6 +17,10 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
     _operator_name = FunctionHalfRotaryEmbeddingPattern._operator_name
     _domain_name = FunctionHalfRotaryEmbeddingPattern._domain_name
 
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super().__init__(verbose, priority)
+        self._info = []
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -73,6 +77,11 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             if g.builder.evaluate_dimension_equality_with_constraints(
                 input_shape[-1], cos_shape[-1], "+", sin_shape[-1]
             ):
+                shape = g.get_shape(node.input[0])
+                self._info.append((node.input[0], shape))
+                if not isinstance(shape[1], int):
+                    # Number of heads is not fixed"
+                    return self.none(node, inspect.currentframe().f_lineno)
                 # No split before, no concat after but there could be still position ids
                 return self._match_last_part(
                     g,
@@ -114,6 +123,13 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         axis = g.get_attribute(concat_node, "axis").i
         if axis != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        input_name = node.input[0] if split_node is None else split_node.input[0]
+        shape = g.get_shape(input_name)
+        self._info.append((input_name, shape))
+        if not isinstance(shape[1], int):
+            # Number of heads is not fixed"
             return self.none(node, inspect.currentframe().f_lineno)
 
         return self._match_last_part(
@@ -246,7 +262,11 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             main_input = split_node.input[0]
             main_output = concat_node.output[0]
 
-        assert isinstance(shape[1], int), f"Number of heads is not fixed, shape(X)={shape}"
+        assert isinstance(shape[1], int), (
+            f"Number of heads is not fixed, shape("
+            f"{split_node.input[0] if split_node is not None else half_node.input[0]}"
+            f")={shape}, info={self._info}"
+        )
         num_heads = shape[1]
 
         used_twice_cos = g.is_used_more_than_once(concat_cos.output[0])

@@ -7,9 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class OrtBatchNormalizationTrainingPattern(PatternOptimization):
-    """
-    onnxruntime does not support batch normalization with training=1.
-    """
+    """onnxruntime does not support batch normalization with training=1."""
 
     def match(
         self,

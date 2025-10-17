@@ -5,9 +5,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class FusedConvPattern(PatternOptimization):
-    """
-    Replaces the Conv + Relu into FusedConv.
-    """
+    """Replaces the Conv + Relu into FusedConv."""
 
     def __init__(self, verbose: int = 0, priority: int = 2):
         super().__init__(verbose, priority)

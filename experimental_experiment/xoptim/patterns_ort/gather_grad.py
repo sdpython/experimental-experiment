@@ -6,9 +6,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class GatherGradPattern(PatternOptimization):
-    """
-    Replaces ConstantOfShape + ScatterND with GatherGrad (com.domain).
-    """
+    """Replaces ConstantOfShape + ScatterND with GatherGrad (com.domain)."""
 
     def match(
         self,

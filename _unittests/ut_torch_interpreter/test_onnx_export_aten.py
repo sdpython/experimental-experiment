@@ -2660,6 +2660,100 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @skipif_ci_windows("broken")
+    def test_aten_index_put_3d_none(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, index, update):
+                x = x.clone()
+                return torch.ops.aten.index_put(x, [None, index, None], update)
+
+        class Model2(torch.nn.Module):
+            def forward(self, x, index, update):
+                x = x.clone()
+                return torch.ops.aten.index_put(
+                    x.transpose(1, 0), [index, None, None], update.transpose(1, 0)
+                ).transpose(1, 0)
+
+        model = Model()
+        shape = (2, 3, 2)
+        N = int(np.prod(shape))
+        x = torch.arange(N, dtype=torch.float32).reshape(shape)
+        update = (torch.arange(N, dtype=torch.float32).reshape(shape) + 1) * 100
+        index = ((torch.arange(shape[-2])).to(torch.int64) + 1) % shape[-2]
+        expected = model(x, index, update)
+        expected2 = Model2()(x, index, update)
+        self.assertEqualArray(expected, expected2)
+        DYN = torch.export.Dim.DYNAMIC
+        ds_ = [
+            ({0: DYN, 1: DYN, 2: DYN}, {0: DYN}, {0: DYN, 1: DYN, 2: DYN}),
+            ({0: DYN, 1: DYN}, {0: DYN}, {0: DYN, 1: DYN}),
+        ]
+        for ii, ds in enumerate(ds_):
+            onx = to_onnx(
+                model,
+                (x, index, update),
+                dynamic_shapes=ds,
+                export_options=ExportOptions(aten_as_function=set()),
+            )
+            self.dump_onnx(f"test_aten_index_put_3d_none_{ii}.onnx", onx)
+
+            import onnxruntime
+
+            sess_options = onnxruntime.SessionOptions()
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(),
+                sess_options=sess_options,
+                providers=["CPUExecutionProvider"],
+            )
+            feeds = dict(
+                zip(
+                    [i.name for i in sess.get_inputs()],
+                    [x.numpy(), index.numpy(), update.numpy()],
+                )
+            )
+            got = sess.run(None, feeds)[0]
+            self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("broken")
+    def test_aten_index_put_4d_none(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, index, update):
+                x = x.clone()
+                return torch.ops.aten.index_put(x, [None, None, index, None], update)
+
+        model = Model()
+        shape = (2, 1, 3, 2)
+        N = int(np.prod(shape))
+        x = torch.arange(N, dtype=torch.float32).reshape(shape)
+        update = (torch.arange(N, dtype=torch.float32).reshape(shape) + 1) * 100
+        index = torch.arange(shape[-2], dtype=torch.int64)
+        expected = model(x, index, update)
+        DYN = torch.export.Dim.DYNAMIC
+        ds = ({0: DYN, 2: DYN}, {0: DYN}, {0: DYN, 2: DYN})
+        onx = to_onnx(
+            model,
+            (x, index, update),
+            dynamic_shapes=ds,
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_index_put_4d_none.onnx", onx)
+
+        import onnxruntime
+
+        sess_options = onnxruntime.SessionOptions()
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(
+            zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

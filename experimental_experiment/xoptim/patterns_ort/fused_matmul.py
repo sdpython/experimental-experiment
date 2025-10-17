@@ -7,9 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class FusedMatMulDivPattern(PatternOptimization):
-    """
-    Replaces the Matmul, Div into FusedMatMul.
-    """
+    """Replaces the Matmul, Div into FusedMatMul."""
 
     def __init__(self, verbose: int = 0, priority: int = 2):
         super().__init__(verbose, priority)
@@ -74,9 +72,7 @@ class FusedMatMulDivPattern(PatternOptimization):
 
 
 class FusedMatMulPattern(PatternOptimization):
-    """
-    Replaces the sequence Transpose, Matmul into FusedMatMul.
-    """
+    """Replaces the sequence Transpose, Matmul into FusedMatMul."""
 
     def __init__(self, verbose: int = 0, priority: int = 2):
         super().__init__(verbose, priority)
@@ -248,9 +244,7 @@ class FusedMatMulPattern(PatternOptimization):
 
 
 class FusedMatMulx2Pattern(PatternOptimization):
-    """
-    Replaces the sequence Div by a scalar consumed by two FusedMatMul.
-    """
+    """Replaces the sequence Div by a scalar consumed by two FusedMatMul."""
 
     def __init__(self, verbose: int = 0, priority: int = 3):
         super().__init__(verbose, priority)
@@ -392,10 +386,7 @@ class FusedMatMulTransposePattern(PatternOptimization):
 
 
 class ReshapeGemmPattern(PatternOptimization):
-    """
-    Replaces the sequence Reshape(-1, ...) + Gemm
-    into FusedMatMul().
-    """
+    """Replaces the sequence Reshape(-1, ...) + Gemm into FusedMatMul()."""
 
     def __init__(self, verbose: int = 0, priority: int = 3):
         super().__init__(verbose, priority)

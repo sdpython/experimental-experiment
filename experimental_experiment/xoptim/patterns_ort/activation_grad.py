@@ -6,9 +6,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class SoftmaxGradPattern(PatternOptimization):
-    """
-    Replaces the sequence Mul, ReduceSum, Mul, Sub by SoftmaxGrad
-    """
+    """Replaces the sequence Mul, ReduceSum, Mul, Sub by SoftmaxGrad."""
 
     def match(
         self,
