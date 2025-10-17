@@ -4862,7 +4862,7 @@ def aten_index_put(
             or (
                 g.has_rank(ind)
                 and g.get_rank(ind) == 1
-                and g.get_type(ind) in {TensorProto.INT64, TensorProto.INT32}
+                and g.get_type(ind) in (TensorProto.INT64, TensorProto.INT32)
             )
         )
 
