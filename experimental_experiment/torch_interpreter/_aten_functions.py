@@ -4629,6 +4629,22 @@ def aten_index_put(
                     g.set_rank(res, g.get_rank(x))
             return res
 
+        if g.get_rank(index) > 1:
+            assert g.has_shape(index), f"Missing shape for index={index}{g.get_debug_msg()}"
+            r = g.get_rank(values) - 1
+            assert r > 0, (
+                f"r={r}, rank(values)={g.get_rank(values)}, unable to convert "
+                f"index_put with indices={indices}, rank(x)={g.get_rank(x)}"
+                f"{g.get_debug_msg()}"
+            )
+            shape_index = g.get_shape(index)
+            assert set(shape_index[:1]) == {1}, (
+                f"shape(index)={shape_index}, rank(values)={g.get_rank(values)}, "
+                f"unable to convert index_put with indices={indices}, "
+                f"rank(x)={g.get_rank(x)}{g.get_debug_msg()}"
+            )
+            index = g.op.SqueezeAnyOpset(index, np.arange(r, dtype=np.int64), name=name)
+
         new_index = g.op.UnsqueezeAnyOpset(index, g.MINUS_ONE, name=name)
         g.set_type(new_index, index_dtype)
         assert g.has_rank(values), f"Missing shape for {values!r}{g.get_debug_msg()}"
@@ -11206,9 +11222,10 @@ def aten_unbind_int(
     assert not use_sequence, f"Not implemented for use_sequence={use_sequence}"
     assert g.has_shape(x), f"Not implemented when the input {x!r} has no shape{g.get_debug_msg()}"
     shape = g.get_shape(x)
-    assert isinstance(
-        shape[dim], int
-    ), f"Not implemented when shape on this axis is dynamic, name={name!r}, shape={shape!r}"
+    assert isinstance(shape[dim], int), (
+        f"Not implemented when shape on this axis is dynamic "
+        f"dim={dim}, name={name!r}, shape={shape!r}{g.get_debug_msg()}"
+    )
 
     if shape[dim] == 1:
         return g.op.Identity(x, outputs=outputs, name=name)

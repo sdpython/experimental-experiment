@@ -2754,6 +2754,72 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @skipif_ci_windows("broken")
+    def test_aten_index_put_55_2_25(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, index, update):
+                return torch.ops.aten.index_put(x, [index], update)
+
+        model = Model()
+        x = torch.zeros((5, 5), dtype=torch.float32)
+        index = torch.tensor([2, 1], dtype=torch.int64)
+        update = (torch.arange(10) + 10).reshape((2, -1)).to(torch.float32)
+        expected = model(x, index, update)
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(
+            model,
+            (x, index, update),
+            dynamic_shapes=({0: DYN, 1: DYN}, {0: DYN}, {0: DYN, 1: DYN}),
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_index_put_55_2_25.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(
+            zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("broken")
+    def test_aten_index_put_55_12_25(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, index, update):
+                return torch.ops.aten.index_put(x, [index], update)
+
+        model = Model()
+        x = torch.zeros((6, 5), dtype=torch.float32)
+        index = torch.tensor([[2, 1]], dtype=torch.int64)
+        update = (torch.arange(10) + 10).reshape((2, -1)).to(torch.float32)
+        expected = model(x, index, update)
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(
+            model,
+            (x, index, update),
+            dynamic_shapes=({0: DYN, 1: DYN}, {1: DYN}, {0: DYN, 1: DYN}),
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_index_put_55_12_25.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(
+            zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
