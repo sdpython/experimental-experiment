@@ -2669,13 +2669,22 @@ class TestOnnxExportAten(ExtTestCase):
                 x = x.clone()
                 return torch.ops.aten.index_put(x, [None, index, None], update)
 
+        class Model2(torch.nn.Module):
+            def forward(self, x, index, update):
+                x = x.clone()
+                return torch.ops.aten.index_put(
+                    x.transpose(1, 0), [index, None, None], update.transpose(1, 0)
+                ).transpose(1, 0)
+
         model = Model()
         shape = (2, 3, 2)
         N = int(np.prod(shape))
         x = torch.arange(N, dtype=torch.float32).reshape(shape)
         update = (torch.arange(N, dtype=torch.float32).reshape(shape) + 1) * 100
-        index = (torch.arange(shape[-2])).to(torch.int64)
+        index = ((torch.arange(shape[-2])).to(torch.int64) + 1) % shape[-2]
         expected = model(x, index, update)
+        expected2 = Model2()(x, index, update)
+        self.assertEqualArray(expected, expected2)
         print("----------")
         print(expected)
         DYN = torch.export.Dim.DYNAMIC

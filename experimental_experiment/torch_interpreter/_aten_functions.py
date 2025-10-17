@@ -4544,6 +4544,7 @@ def aten_index_put(
     "M[..., :, ...] = ..."
     assert isinstance(indices, list), f"Unexpected type {type(indices)}{g.get_debug_msg()}"
     assert g.has_shape(x), f"Missing shape for {x!r}{g.get_debug_msg()}"
+    assert g.has_rank(values), f"Missing rank for {values!r}{g.get_debug_msg()}"
     assert not accumulate or g.main_opset >= 13, (
         f"index_put with accumulate=True cannot be implemented for opset < 13 "
         f"because ScatterND does not support reduction{g.get_debug_msg()}"
@@ -4853,6 +4854,38 @@ def aten_index_put(
             f"rk(x)={g.get_rank(x)}, rk(values)={g.get_rank(values)} "
             f"{g.get_debug_msg()}"
         )
+
+    n_none = [i for i, ind in enumerate(indices) if ind is not None]
+    if (
+        len(n_none) == 1
+        and g.get_rank(indices[n_none[0]]) == 1
+        and g.get_rank(x) == g.get_rank(values)
+    ):
+        unsq = g.op.Unsqueeze(indices[n_none[0]], g.ONE, np.array([1], dtype=np.int64), name=name)
+        if n_none[0] == 0:
+            name = f"{name}.nd0"
+            res = g.op.ScatterND(x, unsq, values, name=name, outputs=outputs)
+            if not sts:
+                set_type_shape_unary_op(g, res, x)
+            return res
+
+        name = f"{name}.ndt{n_none[0]}"
+        perm = list(range(g.get_rank(x)))
+        perm[n_none[0]], perm[0] = perm[0], perm[n_none[0]]
+        res = g.op.Transpose(
+            g.op.ScatterND(
+                g.op.Transpose(x, perm=perm, name=name),
+                unsq,
+                g.op.Transpose(values, perm=perm, name=name),
+                name=name,
+            ),
+            perm=perm,
+            name=name,
+            outputs=outputs,
+        )
+        if not sts:
+            set_type_shape_unary_op(g, res, x)
+        return res
 
     # generic simple case: all indices have rank 1
     rk1s = []
