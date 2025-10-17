@@ -4861,15 +4861,16 @@ def aten_index_put(
         and g.get_rank(indices[n_none[0]]) == 1
         and g.get_rank(x) == g.get_rank(values)
     ):
-        unsq = g.op.Unsqueeze(indices[n_none[0]], g.ONE, np.array([1], dtype=np.int64), name=name)
+        name = f"{name}.nd"
+        unsq = g.op.Unsqueeze(indices[n_none[0]], g.ONE, name=name)
         if n_none[0] == 0:
-            name = f"{name}.nd0"
+            name = f"{name}.0"
             res = g.op.ScatterND(x, unsq, values, name=name, outputs=outputs)
             if not sts:
                 set_type_shape_unary_op(g, res, x)
             return res
 
-        name = f"{name}.ndt{n_none[0]}"
+        name = f"{name}.t{n_none[0]}"
         perm = list(range(g.get_rank(x)))
         perm[n_none[0]], perm[0] = perm[0], perm[n_none[0]]
         res = g.op.Transpose(
@@ -4878,6 +4879,7 @@ def aten_index_put(
                 unsq,
                 g.op.Transpose(values, perm=perm, name=name),
                 name=name,
+                reduction="add" if accumulate else "none",
             ),
             perm=perm,
             name=name,

@@ -2685,8 +2685,6 @@ class TestOnnxExportAten(ExtTestCase):
         expected = model(x, index, update)
         expected2 = Model2()(x, index, update)
         self.assertEqualArray(expected, expected2)
-        print("----------")
-        print(expected)
         DYN = torch.export.Dim.DYNAMIC
         ds_ = [
             ({0: DYN, 1: DYN, 2: DYN}, {0: DYN}, {0: DYN, 1: DYN, 2: DYN}),
@@ -2716,8 +2714,6 @@ class TestOnnxExportAten(ExtTestCase):
                 )
             )
             got = sess.run(None, feeds)[0]
-            print("-----")
-            print(got)
             self.assertEqualArray(expected, got)
 
     @skipif_ci_windows("broken")
