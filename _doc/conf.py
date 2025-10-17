@@ -192,7 +192,7 @@ epkg_dictionary = {
     "GraphModule": "https://docs.pytorch.org/docs/stable/fx.html",
     "HuggingFace": "https://huggingface.co/docs/hub/en/index",
     "Linux": "https://www.linux.org/",
-    "monai": "https://monai.io/",
+    "monai": "https://github.com/Project-MONAI/MONAI",
     "numpy": "https://numpy.org/",
     "onnx": "https://onnx.ai/onnx/",
     "onnx.helper": "https://onnx.ai/onnx/api/helper.html",
