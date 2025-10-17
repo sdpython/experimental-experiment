@@ -8532,18 +8532,35 @@ def aten_masked_scatter(
     name: str = "masked_scatter",
 ) -> T:
     """masked_scatter"""
-    assert g.has_type(x), f"Missing type for x={x!r}{g.get_debug_msg()}"
-    itype = g.get_type(x)
-    dtype = tensor_dtype_to_np_dtype(itype)
-    imask = g.op.Cast(mask, to=itype, name=name)
-    res = g.op.Add(
-        g.op.Mul(x, g.op.Sub(np.array([1], dtype=dtype), imask, name=name), name=name),
-        g.op.Mul(updates, imask, name=name),
+    assert g.has_rank(x), f"mssing rank for {x!r}{g.get_debug_msg()}"
+    assert g.has_rank(mask), f"mssing rank for {x!r}{g.get_debug_msg()}"
+
+    rkx = g.get_rank(x)
+    rkm = g.get_rank(mask)
+    if rkx < rkm:
+        x = g.op.UnsqueezeAnyOpset(x, np.arange(rkm - rkx, dtype=np.int64), name=name)
+    else:
+        assert rkm == rkx, f"rank(mask)={rkm} != rank(x)={rkx}{g.get_debug_msg()}"
+
+    new_shape = g.op.Max(g.op.Shape(x, name=name), g.op.Shape(mask, name=name), name=name)
+    x = g.op.Expand(x, new_shape, name=name)
+    # mask = g.op.Expand(mask, new_shape, name=name)
+    flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+    flat_mask = g.op.Reshape(mask, g.MINUS_ONE, name=name)
+
+    non_zero = g.op.SqueezeAnyOpset(g.op.NonZero(flat_mask, name=name), g.ZERO, name=name)
+
+    flat_updates = g.op.Slice(
+        g.op.Reshape(updates, g.MINUS_ONE, name=name),
+        g.ZERO,
+        g.op.UnsqueezeAnyOpset(g.op.Size(non_zero, name=name), g.ZERO, name=name),
+        g.ZERO,
         name=name,
-        outputs=outputs,
     )
+    flat_x_scat = g.op.ScatterElements(flat_x, non_zero, flat_updates)
+    res = g.op.Reshape(flat_x_scat, g.op.Shape(x, name=name), name=name, outputs=outputs)
     if not sts:
-        set_type_shape_binary_op(g, res, x, updates)
+        set_type_shape_unary_op(g, res, x)
     return res
 
 
