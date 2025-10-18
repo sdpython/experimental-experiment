@@ -1859,7 +1859,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*inputs)
 
-        with torch_export_patches(patch_torch=True):
+        with torch_export_patches(patch_torch=2):
             onx = to_onnx(
                 model,
                 inputs,
@@ -1899,7 +1899,7 @@ class TestOnnxExportAten(ExtTestCase):
         expected = model(*inputs)
 
         dynshapes = ({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"})
-        with torch_export_patches(verbose=10), torch.fx.experimental._config.patch(
+        with torch_export_patches(patch_torch=2, verbose=10), torch.fx.experimental._config.patch(
             backed_size_oblivious=True
         ):
             ep = torch.export.export(model, inputs, dynamic_shapes=use_dyn_not_str(dynshapes))
