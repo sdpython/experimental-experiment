@@ -1472,6 +1472,74 @@ class TestOnnxExportAten(ExtTestCase):
                 self.assertEqual(expected.numpy().dtype, got.dtype)
 
     @ignore_warnings(UserWarning)
+    def test_aten_masked_scatter_samedim(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, mask, updates):
+                return x.masked_scatter(mask, updates)
+
+        model = Model()
+
+        xs = (
+            torch.tensor([[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]], dtype=torch.float32),
+            torch.tensor([[0, 0, 0, 1, 1], [1, 1, 0, 1, 1]], dtype=torch.bool),
+            torch.tensor([[11, 1, 2, 3, 4], [5, 6, 7, 8, 9]], dtype=torch.float32),
+        )
+        expected = model(*[x.clone() for x in xs])
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(
+            model,
+            xs,
+            dynamic_shapes=({0: DYN, 1: DYN}, {0: DYN, 1: DYN}, {0: DYN, 1: DYN}),
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_masked_scatter_samedim.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [t.numpy() for t in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @ignore_warnings(UserWarning)
+    def test_aten_masked_scatter_notsamedim(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, mask, updates):
+                return x.masked_scatter(mask, updates)
+
+        model = Model()
+
+        xs = (
+            torch.tensor([0, 0, 0, 0, 0], dtype=torch.float32),
+            torch.tensor([[0, 0, 0, 1, 1], [1, 1, 0, 1, 1]], dtype=torch.bool),
+            torch.tensor([[11, 1, 2, 3, 4, 12], [5, 6, 7, 8, 9, 13]], dtype=torch.float32),
+        )
+        expected = model(*[x.clone() for x in xs])
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(
+            model,
+            xs,
+            dynamic_shapes=({0: DYN}, {0: DYN, 1: DYN}, {0: DYN, 1: DYN}),
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_masked_scatter_notsamedim.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [t.numpy() for t in xs]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @ignore_warnings(UserWarning)
     @requires_torch("2.8")
     def test_symbolic(self):
         import torch
@@ -1774,12 +1842,13 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
-    @requires_onnx_diagnostic("0.7.14")
+    @requires_onnx_diagnostic("0.7.16")
     def test_index_Tensor_21_2(self):
         import torch
 
         class Model(torch.nn.Module):
             def forward(self, x, ind1, ind2):
+                torch._check(x.shape[1] == ind2.shape[0])
                 return x[ind1, ind2]
 
         inputs = (
@@ -1790,12 +1859,13 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*inputs)
 
-        with torch_export_patches():
+        with torch_export_patches(patch_torch=2):
             onx = to_onnx(
                 model,
                 inputs,
-                dynamic_shapes=({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"}),
+                dynamic_shapes=({0: "A", 1: "B"}, {1: "D"}, {0: "E"}),
                 verbose=0,
+                export_options=ExportOptions(aten_as_function=set()),
             )
         self.dump_onnx("test_index_Tensor_21_2.onnx", onx)
         feeds = dict(zip(["x", "ind1", "ind2"], [x.detach().cpu().numpy() for x in inputs]))
@@ -1811,7 +1881,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
-    @requires_onnx_diagnostic("0.7.14")
+    @requires_onnx_diagnostic("0.7.16")
     @hide_stdout()
     def test_index_Tensor_21_2_oblivious(self):
         import torch
@@ -1829,7 +1899,7 @@ class TestOnnxExportAten(ExtTestCase):
         expected = model(*inputs)
 
         dynshapes = ({0: "A", 1: "B"}, {0: "C", 1: "D"}, {0: "E"})
-        with torch_export_patches(verbose=10), torch.fx.experimental._config.patch(
+        with torch_export_patches(patch_torch=2, verbose=10), torch.fx.experimental._config.patch(
             backed_size_oblivious=True
         ):
             ep = torch.export.export(model, inputs, dynamic_shapes=use_dyn_not_str(dynshapes))
@@ -2747,6 +2817,72 @@ class TestOnnxExportAten(ExtTestCase):
         sess_options = onnxruntime.SessionOptions()
         sess = onnxruntime.InferenceSession(
             onx.SerializeToString(), sess_options=sess_options, providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(
+            zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("broken")
+    def test_aten_index_put_55_2_25(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, index, update):
+                return torch.ops.aten.index_put(x, [index], update)
+
+        model = Model()
+        x = torch.zeros((5, 5), dtype=torch.float32)
+        index = torch.tensor([2, 1], dtype=torch.int64)
+        update = (torch.arange(10) + 10).reshape((2, -1)).to(torch.float32)
+        expected = model(x, index, update)
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(
+            model,
+            (x, index, update),
+            dynamic_shapes=({0: DYN, 1: DYN}, {0: DYN}, {0: DYN, 1: DYN}),
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_index_put_55_2_25.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(
+            zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
+        )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    @skipif_ci_windows("broken")
+    def test_aten_index_put_55_12_25(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, index, update):
+                return torch.ops.aten.index_put(x, [index], update)
+
+        model = Model()
+        x = torch.zeros((6, 5), dtype=torch.float32)
+        index = torch.tensor([[2, 1]], dtype=torch.int64)
+        update = (torch.arange(10) + 10).reshape((2, -1)).to(torch.float32)
+        expected = model(x, index, update)
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(
+            model,
+            (x, index, update),
+            dynamic_shapes=({0: DYN, 1: DYN}, {1: DYN}, {0: DYN, 1: DYN}),
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_index_put_55_12_25.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
         )
         feeds = dict(
             zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
