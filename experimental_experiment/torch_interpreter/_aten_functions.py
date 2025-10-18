@@ -4638,12 +4638,8 @@ def aten_index_put(
                 f"{g.get_debug_msg()}"
             )
             shape_index = g.get_shape(index)
-            assert set(shape_index[:1]) == {1}, (
-                f"shape(index)={shape_index}, rank(values)={g.get_rank(values)}, "
-                f"unable to convert index_put with indices={indices}, "
-                f"rank(x)={g.get_rank(x)}{g.get_debug_msg()}"
-            )
-            index = g.op.SqueezeAnyOpset(index, np.arange(r, dtype=np.int64), name=name)
+            if set(shape_index[:1]) == {1}:
+                index = g.op.SqueezeAnyOpset(index, np.arange(r, dtype=np.int64), name=name)
 
         new_index = g.op.UnsqueezeAnyOpset(index, g.MINUS_ONE, name=name)
         g.set_type(new_index, index_dtype)
