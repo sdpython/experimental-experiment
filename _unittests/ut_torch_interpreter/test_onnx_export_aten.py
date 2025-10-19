@@ -2554,6 +2554,43 @@ class TestOnnxExportAten(ExtTestCase):
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_diff_prepend(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, prepend):
+                return torch.diff(x, n=2, dim=-1, prepend=prepend)
+
+        model = Model()
+        inputs = (
+            torch.arange(18, dtype=torch.int64).reshape((3, 6)) ** 2,
+            torch.arange(6, dtype=torch.int64).reshape((3, 2)) ** 2,
+        )
+        expected = model(*inputs)
+        self.assertEqual(expected.dtype, torch.int64)
+
+        onx = to_onnx(
+            model,
+            inputs,
+            verbose=0,
+            options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        self.dump_onnx("test_diff_prepend.onnx", onx)
+        feeds = dict(
+            zip([i.name for i in onx.graph.input], [x.detach().cpu().numpy() for x in inputs])
+        )
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
+        import onnxruntime
+
+        ref = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+
     def test_diff_dynamic(self):
         import torch
 

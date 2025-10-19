@@ -2211,8 +2211,9 @@ def aten_diff(
     assert isinstance(
         dim, int
     ), f"diff not implemented for type(dim)={type(dim)}{g.get_debug_msg()}"
-    assert prepend is None, f"diff not implemented for prepend={prepend!r}{g.get_debug_msg()}"
-    assert append is None, f"diff not implemented for append={append!r}{g.get_debug_msg()}"
+    concat = [_ for _ in [prepend, x, append] if _]
+    if len(concat) != 1:
+        x = g.op.Concat(*concat, axis=dim, name=name)
 
     diff_input = x
     for i in range(n):
