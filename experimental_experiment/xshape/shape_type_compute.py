@@ -253,11 +253,19 @@ def set_type_shape_matmul(g: ShapeBuilder, name: str, x: str, y: str) -> bool:
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
         sh2 = g.get_shape(y)
+        if len(sh1) == len(sh2) == 1:
+            g.set_shape(name, tuple())
+            return
         if len(sh1) >= 2 and len(sh2) >= 2 and len(sh1) != len(sh2):
             if len(sh1) < len(sh2):
                 sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
             else:
                 sh2 = (1,) * (len(sh1) - len(sh2)) + sh2
+        elif len(sh1) == 1:
+            sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
+        elif len(sh2) == 1:
+            sh2 = (1,) * (len(sh1) - len(sh2) - 1) + sh2 + (1,)
+
         assert len(sh1) == len(sh2), (
             f"not implemented when shapes are {sh1} ({x!r}) and {sh2} ({y!r})"
             f"{g.get_debug_msg()}"
@@ -282,6 +290,8 @@ def set_type_shape_matmul(g: ShapeBuilder, name: str, x: str, y: str) -> bool:
         g.set_shape(name, new_shape)
         return new_shape
     if g.has_rank(x) and g.has_rank(y):
+        if g.get_rank(x) == g.get_rank(y) == 1:
+            return g.set_shape(name, tuple())
         g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
         return True
     return
