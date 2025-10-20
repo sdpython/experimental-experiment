@@ -3795,7 +3795,18 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         #     f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         # )
         new_shape = self.verify_dynamic_shape(shape, name=name)
-        return tuple(simplify_expression(s) for s in new_shape)
+        return tuple(
+            (
+                s
+                if isinstance(s, int)
+                else (
+                    simplify_expression(s)
+                    if len(s) < 100
+                    else self.unique_dimension_name("NEWDIMLONG")
+                )
+            )
+            for s in new_shape
+        )
 
     def _get_symbol(self, i: str) -> str:
         k = 0
@@ -3899,6 +3910,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             f"Node 'If' has an unexpected number of inputs or outputs."
             f"\nIf({', '.join(inputs)}) -> {outputs}"
             f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
+        )
+        assert outputs != [""], (
+            f"Unexpected value for outputs={outputs}, op_type={op_type!r}, domain={domain!r}, "
+            f"inputs={inputs}, attributes={attributes}{self.get_debug_msg()}"
         )
 
     def do_not_remove(self, node: NodeProto) -> bool:
@@ -7380,8 +7395,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self.simple_update_value_shape_with_node(n)
             assert (
                 n.domain != ""
-                or any(not self.has_type(o) for o in n.input)
-                or all(self.has_type(o) for o in n.output)
+                or any(not self.has_type(o) for o in n.input if o)
+                or all(self.has_type(o) for o in n.output if o)
             ), (
                 f"Missing one output type in node={self.pretty_node(n)}, "
                 f"input_has_type={[self.has_type(o) for o in n.input]}, "

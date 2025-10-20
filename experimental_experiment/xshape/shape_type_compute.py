@@ -253,11 +253,19 @@ def set_type_shape_matmul(g: ShapeBuilder, name: str, x: str, y: str) -> bool:
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
         sh2 = g.get_shape(y)
+        if len(sh1) == len(sh2) == 1:
+            g.set_shape(name, tuple())
+            return
         if len(sh1) >= 2 and len(sh2) >= 2 and len(sh1) != len(sh2):
             if len(sh1) < len(sh2):
                 sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
             else:
                 sh2 = (1,) * (len(sh1) - len(sh2)) + sh2
+        elif len(sh1) == 1:
+            sh1 = (1,) * (len(sh2) - len(sh1)) + sh1
+        elif len(sh2) == 1:
+            sh2 = (1,) * (len(sh1) - len(sh2) - 1) + sh2 + (1,)
+
         assert len(sh1) == len(sh2), (
             f"not implemented when shapes are {sh1} ({x!r}) and {sh2} ({y!r})"
             f"{g.get_debug_msg()}"
@@ -282,6 +290,8 @@ def set_type_shape_matmul(g: ShapeBuilder, name: str, x: str, y: str) -> bool:
         g.set_shape(name, new_shape)
         return new_shape
     if g.has_rank(x) and g.has_rank(y):
+        if g.get_rank(x) == g.get_rank(y) == 1:
+            return g.set_shape(name, tuple())
         g.set_rank(name, max(g.get_rank(x), g.get_rank(y)))
         return True
     return
@@ -802,21 +812,46 @@ def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
     for i in range(len(kernel_shape)):
         ceil_mode = self.get_attribute_with_default(node, "ceil_mode", 0)
         input_size = input_shape[2 + i]
-        if isinstance(pads[i], int):
-            if isinstance(input_size, int):
-                effective_input_size = input_size + pads[i] + pads[i + len(kernel_shape)]
+        if (
+            isinstance(pads[i], int)
+            and isinstance(pads[i + len(kernel_shape)], int)
+            and isinstance(input_size, int)
+        ):
+            effective_input_size = input_size + pads[i] + pads[i + len(kernel_shape)]
+            if ceil_mode:
                 output_size = (
-                    (
-                        effective_input_size
-                        - effective_kernel_shape[i]
-                        + (strides[i] - 1 if ceil_mode else 0)
-                    )
+                    (effective_input_size - effective_kernel_shape[i] + (strides[i] - 1))
                     // strides[i]
                 ) + 1
-                if ceil_mode and (output_size - 1) * strides[i] >= input_size + pads[i]:
+                if (output_size - 1) * strides[i] >= input_size + pads[i]:
+                    # ~ pads[i + len(kernel_shape)] - effective_kernel_shape[i] +
+                    #   (strides[i] - 1) >= 0
                     output_size -= 1
-                output_shape.append(output_size)
-                continue
+            else:
+                output_size = (
+                    (effective_input_size - effective_kernel_shape[i]) // strides[i]
+                ) + 1
+            output_shape.append(output_size)
+            continue
+
+        if (
+            isinstance(pads[i], int)
+            and isinstance(pads[i + len(kernel_shape)], int)
+            and effective_kernel_shape[i] == 1
+            and strides[i] == 1
+        ):
+            if ceil_mode:
+                output_size = ((input_size + pads[i] + pads[i + len(kernel_shape)] - 1)) + 1
+                if pads[i + len(kernel_shape)] >= 1:
+                    # ~ pads[i + len(kernel_shape)] - effective_kernel_shape[i] +
+                    #   (strides[i] - 1) >= 0
+                    output_size = f"{input_size}+{pads[i] + pads[i + len(kernel_shape)]-1}"
+                else:
+                    output_size = f"{input_size}+{pads[i] + pads[i + len(kernel_shape)]-2}"
+            else:
+                output_size = f"{input_size}+{pads[i] + pads[i + len(kernel_shape)]}"
+            output_shape.append(output_size)
+            continue
 
         # conv_f3(d,s,stride,ceil_mode,p) = (
         #       d + (stride if d % stride == 0 else d % stride) +
@@ -824,7 +859,7 @@ def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
         #   ) // stride + 1 + ...
 
         output_size = (
-            f"conv_f3({_(input_size)},{effective_kernel_shape[i]},{_(strides[i])},{_(ceil_mode)})"
+            f"conv_f3_{ceil_mode}({_(input_size)},{effective_kernel_shape[i]},{_(strides[i])})"
         )
         output_shape.append(output_size)
 
@@ -1506,6 +1541,7 @@ _set_shape_type_op_any_known = {
     "Expand": _set_shape_type_op_any_expand,
     "Gather": _set_shape_type_op_any_gather,
     "GatherElements": _set_shape_type_op_any_gather_elements,
+    "Gelu": _set_shape_type_op_any_unary,
     "Gemm": _set_shape_type_op_any_gemm,
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "IsNaN": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),

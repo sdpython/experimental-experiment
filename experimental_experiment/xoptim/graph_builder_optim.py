@@ -762,6 +762,10 @@ class GraphBuilderPatternOptimization:
                 ]
         elif isinstance(outputs, str):
             outputs = [self.unique_name(outputs)]
+        assert outputs != [""], (
+            f"No output in node {op_type!r}, domain={domain!r}, inputs={inputs}, "
+            f"outputs={outputs}, attributes={attributes}"
+        )
         proto = oh.make_node(
             op_type,
             inputs,

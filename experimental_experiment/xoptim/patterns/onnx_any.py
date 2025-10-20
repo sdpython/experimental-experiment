@@ -120,6 +120,8 @@ class SameChildrenPattern(PatternOptimization):
             new_nodes.append(nodes[i])
 
             for o1, o2 in zip(nodes[i].output, nodes[i + 1].output):
+                if not o1 and not o2:
+                    continue
                 new_nodes.append(
                     g.make_node(
                         "Identity",
