@@ -2168,7 +2168,7 @@ def aten_cumsum(
 
     if dtype is None:
         itype = g.get_type(x)
-        if itype == TensorProto.INT32:
+        if itype == TensorProto.INT32 or itype == TensorProto.BOOL:
             # computation is done with INT64
             itype = TensorProto.INT64
             xi = g.op.Cast(x, to=itype, name=name)

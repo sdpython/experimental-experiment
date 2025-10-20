@@ -1541,6 +1541,7 @@ _set_shape_type_op_any_known = {
     "Expand": _set_shape_type_op_any_expand,
     "Gather": _set_shape_type_op_any_gather,
     "GatherElements": _set_shape_type_op_any_gather_elements,
+    "Gelu": _set_shape_type_op_any_unary,
     "Gemm": _set_shape_type_op_any_gemm,
     "IsInf": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),
     "IsNaN": lambda *args: _set_shape_type_op_any_unary(*args, itype=TensorProto.BOOL),

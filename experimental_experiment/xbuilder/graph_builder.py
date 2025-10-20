@@ -3911,6 +3911,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             f"\nIf({', '.join(inputs)}) -> {outputs}"
             f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
         )
+        assert outputs != [""], (
+            f"Unexpected value for outputs={outputs}, op_type={op_type!r}, domain={domain!r}, "
+            f"inputs={inputs}, attributes={attributes}{self.get_debug_msg()}"
+        )
 
     def do_not_remove(self, node: NodeProto) -> bool:
         """Tells if a node should be removed or not."""
@@ -7391,8 +7395,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self.simple_update_value_shape_with_node(n)
             assert (
                 n.domain != ""
-                or any(not self.has_type(o) for o in n.input)
-                or all(self.has_type(o) for o in n.output)
+                or any(not self.has_type(o) for o in n.input if o)
+                or all(self.has_type(o) for o in n.output if o)
             ), (
                 f"Missing one output type in node={self.pretty_node(n)}, "
                 f"input_has_type={[self.has_type(o) for o in n.input]}, "
