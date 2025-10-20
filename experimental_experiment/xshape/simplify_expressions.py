@@ -128,7 +128,7 @@ class MaxToXorTransformer(CommonTransformer):
     """Replaces ``Max(a,b)`` by ``a^b``."""
 
     def visit_Call(self, node):
-        self.generic_visit(node)
+        node = self.generic_visit(node)
 
         if (
             isinstance(node.func, ast.Name)

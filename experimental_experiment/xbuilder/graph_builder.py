@@ -3795,7 +3795,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         #     f"name={name!r}, elem_type={elem_type}{self.get_debug_msg()}"
         # )
         new_shape = self.verify_dynamic_shape(shape, name=name)
-        return tuple(simplify_expression(s) for s in new_shape)
+        return tuple(
+            (
+                simplify_expression(s)
+                if isinstance(s, int) and len(s) < 100
+                else self.unique_dimension_name("NEWDIMLONG")
+            )
+            for s in new_shape
+        )
 
     def _get_symbol(self, i: str) -> str:
         k = 0
