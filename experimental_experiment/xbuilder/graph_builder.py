@@ -3797,9 +3797,13 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         new_shape = self.verify_dynamic_shape(shape, name=name)
         return tuple(
             (
-                simplify_expression(s)
-                if isinstance(s, int) and len(s) < 100
-                else self.unique_dimension_name("NEWDIMLONG")
+                s
+                if isinstance(s, int)
+                else (
+                    simplify_expression(s)
+                    if len(s) < 100
+                    else self.unique_dimension_name("NEWDIMLONG")
+                )
             )
             for s in new_shape
         )
