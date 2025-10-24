@@ -233,7 +233,9 @@ class ExportOptions:
             if verbose:
                 begin = time.perf_counter()
                 print(f"[ExportOptions.export] run decomposition {self.decomposition_table!r}")
-            dec = apply_decompositions(exported_program, self.decomposition_table)
+            dec = apply_decompositions(
+                exported_program, self.decomposition_table, self.backed_size_oblivious
+            )
             if verbose:
                 print(
                     f"[ExportOptions.export] done after decomposition "
@@ -436,7 +438,7 @@ class ExportOptions:
                                     f"[ExportOptions.export] current decomposition_table="
                                     f"{opt.decomposition_table}, let's try with 'default'"
                                 )
-                            res = apply_decompositions(res, "default")
+                            res = apply_decompositions(res, "default", self.backed_size_oblivious)
                             inplace_nodes = CustomTracer._inplace_nodes(res.graph)
                             if inplace_nodes:
                                 # it fails
@@ -513,7 +515,7 @@ class ExportOptions:
                 with open(f"{self.save_ep}.jit", "w") as f:
                     f.write(str(res))
                 torch.export.save(res, f"{self.save_ep}.jit.pt2")
-            dec = apply_decompositions(res, self.decomposition_table)
+            dec = apply_decompositions(res, self.decomposition_table, self.backed_size_oblivious)
             if self.save_ep:
                 with open(f"{self.save_ep}.jit.decomposed", "w") as f:
                     f.write(str(dec))
@@ -714,11 +716,22 @@ class ExportOptions:
 
 
 def apply_decompositions(
-    exported_program: "torch.export.ExportedProgram", decomposition_table  # noqa: F821
+    exported_program: "torch.export.ExportedProgram",  # noqa: F821
+    decomposition_table,
+    backed_size_oblivious,
 ) -> "torch.export.ExportedProgram":  # noqa: F821
     if decomposition_table == "all":
         exported_program = insert_contiguous_between_transpose_and_view(exported_program)
-        exported_program = exported_program.run_decompositions()
+        if (
+            getattr(exported_program, "_computed_backed_size_oblivious", False)
+            or backed_size_oblivious is True
+        ):
+            import torch
+
+            with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+                exported_program = exported_program.run_decompositions()
+        else:
+            exported_program = exported_program.run_decompositions()
         return exported_program
 
     if isinstance(decomposition_table, str):
@@ -728,7 +741,16 @@ def apply_decompositions(
 
     if decomposition_table is not None:
         exported_program = insert_contiguous_between_transpose_and_view(exported_program)
-        exported_program = exported_program.run_decompositions(decomposition_table)
+        if (
+            getattr(exported_program, "_computed_backed_size_oblivious", False)
+            or backed_size_oblivious is True
+        ):
+            import torch
+
+            with torch.fx.experimental._config.patch(backed_size_oblivious=True):
+                exported_program = exported_program.run_decompositions(decomposition_table)
+        else:
+            exported_program = exported_program.run_decompositions(decomposition_table)
 
     return exported_program
 
