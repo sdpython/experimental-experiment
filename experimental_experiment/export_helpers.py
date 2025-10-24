@@ -145,6 +145,7 @@ def torch_export(
             ep = torch.export.export(
                 mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=strict, **export_kwargs
             )
+        ep._computed_backed_size_oblivious = backed_size_oblivious
         return ep
 
     if verbose:
