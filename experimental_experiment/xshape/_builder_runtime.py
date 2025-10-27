@@ -239,6 +239,10 @@ class _BuilderRuntime:
                 break
         assert perm, f"perm not here in node {node}"
         x = feeds[node.input[0]]
+        assert len(x.shape) == len(perm), (
+            f"Shape mismatch between x.shape={x.shape} and perm={perm!r}, "
+            f"node is {self.pretty_node(node)}{self.get_debug_msg()}"
+        )
         if isinstance(x, np.ndarray):
             # Type conversion between numpy and torch is not robust.
             itype = dtype_to_tensor_dtype(x.dtype)
@@ -254,6 +258,12 @@ class _BuilderRuntime:
         x = feeds[node.input[0]]
         new_shape = feeds[node.input[1]]
         if isinstance(x, self.torch.Tensor):
+            if len(x.shape) == 0:
+                if len(new_shape) == 0:
+                    return x
+                import torch
+
+                return [torch.full(tuple(new_shape), x)]
             try:
                 return [x.expand(tuple(max(s, int(i)) for s, i in zip(x.shape, new_shape)))]
             except RuntimeError as e:
@@ -342,7 +352,7 @@ class _BuilderRuntime:
             assert "FakeTensor" not in str(type(x)), (
                 f"FakeTensor {node.output[0]!r} cannot be a constant {type(x)}, "
                 f"node.op_type={node.op_type!r}, type={self.torch.Tensor}"
-                f"{self.get_debug_msg()}"
+                f"{self.pretty_text()}"
             )
         assert isinstance(x, self.torch.Tensor), (
             f"Unexpected type {type(x)} for x for node type {node.op_type}, "
@@ -528,6 +538,11 @@ class _BuilderRuntime:
             f"starts={starts}, ends={ends}, axes={axes}, steps={steps}, "
             f"node.name={node.name!r}, input names={node.input}, "
             f"slices={slices}"
+        )
+        assert len(res.shape) == len(data.shape), (
+            f"Shape mismatch input shape is {data.shape}, output shape is {res.shape}, "
+            f"axes={axes}, starts={starts}, ends={ends}, steps={steps}, "
+            f"node is {self.pretty_node(node)}{self.pretty_text()}"
         )
         return [res]
 
