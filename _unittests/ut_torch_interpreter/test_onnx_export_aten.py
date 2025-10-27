@@ -25,7 +25,6 @@ from experimental_experiment.torch_test_helper import to_numpy
 
 
 class TestOnnxExportAten(ExtTestCase):
-
     def _call_exporter(
         self,
         test_name: str,
@@ -2924,6 +2923,30 @@ class TestOnnxExportAten(ExtTestCase):
         feeds = dict(
             zip([i.name for i in sess.get_inputs()], [x.numpy(), index.numpy(), update.numpy()])
         )
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_aten_inplace_add(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                x[:2, :3] = 1
+                return x + 2
+
+        model = Model()
+        x = torch.zeros((6, 5), dtype=torch.float32)
+        expected = model(x)
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(model, (x,), dynamic_shapes=({0: DYN, 1: DYN},))
+        self.dump_onnx("test_aten_inplace_add.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.numpy()]))
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
