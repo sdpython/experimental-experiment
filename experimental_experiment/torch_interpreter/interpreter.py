@@ -170,8 +170,32 @@ class DynamoInterpreter:
             return tuple(res) if isinstance(x, tuple) else res
         return flatten_object(x, drop_keys=True)
 
+    def start_graph(self, graph: "torch.fx.Graph"):  # noqa: F821
+        assert (
+            not hasattr(self, "graph_begin_processed") or not self.graph_begin_processed
+        ), "A graph is already being processed."
+        self.graph_begin_processed = graph
+        predecessors = {}
+        for node in graph.nodes:
+            for us in node.users:
+                ius = id(us)
+                if ius not in predecessors:
+                    predecessors[ius] = []
+                predecessors[ius].append(node)
+        self.graph_processed_predecessors = predecessors
+
+    def end_graph(self, graph: "torch.fx.Graph"):  # noqa: F821
+        assert hasattr(self, "graph_begin_processed") and id(self.graph_begin_processed) == id(
+            graph
+        ), "A graph was not processed or it is not the same greaph."
+        self.graph_begin_processed = None
+
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         """Runs a node: call the approrpiate method based on the node type."""
+        assert (
+            hasattr(self, "graph_begin_processed") and self.graph_begin_processed
+        ), "start_graph was not called before this method."
+
         example_value = None
         if hasattr(node, "meta") and "example_value" in node.meta:
             if isinstance(node.target, str) or callable(node.target):
@@ -680,6 +704,31 @@ class DynamoInterpreter:
             f"{getattr(node, 'target', '?')}{self.builder.get_debug_msg()}."
         )
 
+    def _make_name(
+        self,
+        node,
+        prefix: str,
+        index: int = -1,
+        is_int: bool = False,
+        is_dim: bool = False,
+        is_none: bool = False,
+    ) -> str:
+        inode = id(node) if index < 0 else id(node.args[0][index])
+        assert inode in self.graph_processed_predecessors, (
+            f"output {prefix!r}, index={index}, args={node.args}, "
+            f"is not in graph_processed_predecessors"
+        )
+        preds = self.graph_processed_predecessors[inode]
+        # tweak for past_key_values
+        if (
+            preds
+            and hasattr(preds[0], "target")
+            and isinstance(preds[0].target, str)
+            and preds[0].target.startswith("past_key_values")
+        ):
+            return f"present{preds[0].target[4:]}"
+        return prefix
+
     def output(self, node):
         """Adds an output to the graph."""
         output_name = node.name
@@ -692,7 +741,7 @@ class DynamoInterpreter:
         )
         output = declared[0]
         if hasattr(output, "name"):
-            output = output.name
+            output = self._make_name(node, output.name, index=-1)
             self.builder.make_node(
                 "Identity", [output], [output_name], check=False, name=".output"
             )
@@ -702,11 +751,11 @@ class DynamoInterpreter:
             for i, a in enumerate(output):
                 if a is None:
                     a_name = None
-                    o = f"{output_name}_{i}"
+                    o = self._make_name(node, f"{output_name}_{i}", index=i)
                     cst = None
                 elif isinstance(a, int):
                     # The model seems to return an integer.
-                    o = f"{output_name}_INT_{i}"
+                    o = self._make_name(node, f"{output_name}_INT_{i}", is_int=True, index=i)
                     a_name = None
                     cst = self.builder.make_node(
                         "Constant", [], [o], value_int=a, name=".output_INT_{a}"
@@ -717,14 +766,16 @@ class DynamoInterpreter:
                     cst = None
                     a_name = a if isinstance(a, str) else a.name
                     if self.builder.get_is_dimension(a_name, n_outputs=len(output)):
-                        o = f"{output_name}_dim_{i}"
+                        o = self._make_name(node, f"{output_name}_dim_{i}", is_dim=True, index=i)
                     else:
-                        o = f"{output_name}_{i}"
+                        o = self._make_name(node, f"{output_name}_{i}", index=i)
 
                 if a_name is None:
                     # the gradient may need unused output
                     if cst is None:
-                        o = f"{output_name}_NONE_{i}"
+                        o = self._make_name(
+                            node, f"{output_name}_NONE_{i}", is_none=True, index=i
+                        )
                         self.builder.make_node(
                             "Constant", [], [o], value_float=0.0, name=".output_NONE"
                         )
@@ -817,7 +868,7 @@ class DynamoInterpreter:
 
         if isinstance(val, self.torch.Tensor):
             n_outputs = len(self.builder.outputs)
-            output_name = f"{node.name}_{n_outputs}"
+            output_name = self._make_name(node, f"{node.name}_{n_outputs}", index=-1)
             shape = val.shape
             dtype = _get_type(val.dtype)
             self.builder.make_tensor_output(
