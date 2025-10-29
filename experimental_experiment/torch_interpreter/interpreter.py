@@ -189,6 +189,7 @@ class DynamoInterpreter:
             graph
         ), "A graph was not processed or it is not the same greaph."
         self.graph_begin_processed = None
+        self.graph_processed_predecessors = None
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         """Runs a node: call the approrpiate method based on the node type."""
