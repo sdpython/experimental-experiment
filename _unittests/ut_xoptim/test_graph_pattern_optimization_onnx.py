@@ -6671,7 +6671,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["CosSinCache_to10"],
+            ["CosSinCacheWithRange_to10"],
             [n.op_type for n in opt_onx.graph.node],
         )
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
@@ -6770,7 +6770,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["CosSinCache"],
+            ["CosSinCacheWithRange"],
             [n.op_type for n in opt_onx.graph.node],
         )
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
@@ -6825,7 +6825,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual((1, "seq", "a"), gr.get_shape("sin_cache"))
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["CosSinCache", "Exp", "Exp"],
+            ["CosSinCacheWithRange", "Exp", "Exp"],
             [n.op_type for n in opt_onx.graph.node],
         )
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
