@@ -92,12 +92,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                     None,
                     comment="path with no split before, no concat after",
                 )
-                # return MatchResult(
-                #    self,
-                #    [None, concat_cos, concat_sin, None, node, None],
-                #    self.apply,
-                #    comment="path with no split before, no concat after",
-                # )
 
         if split_node is None or split_node.op_type != "Split" or split_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
@@ -169,6 +163,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         if (
             common
             and common[0].op_type.startswith("CosSinCache")
+            and not common[0].op_type.startswith("CosSinCacheWithRange")
             and common[0].domain == self._domain_name
         ):
             # Finally, we need to check if position_ids exists or if it is given
@@ -181,7 +176,15 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             shape_expand = g.builder.value_as_shape(expand_node.input[1])
             if shape_expand is None or len(shape_expand) != 3 or shape_expand[1:] != (1, 1):
-                return self.none(node, inspect.currentframe().f_lineno)
+                # maybe position_ids is not given
+                return self.none(
+                    node,
+                    inspect.currentframe().f_lineno,
+                    msg=lambda: (
+                        f"op_type={expand_node.op_type!r} name={expand_node.input[1]!r} "
+                        f"shape_expand={shape_expand}"
+                    ),
+                )
             if not g.has_shape(expand_node.input[0]):
                 return self.none(node, inspect.currentframe().f_lineno)
             wei_shape = g.get_shape(expand_node.input[0])

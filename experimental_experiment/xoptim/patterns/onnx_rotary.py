@@ -1444,7 +1444,12 @@ class FunctionCosSinCachePattern(PatternOptimization):
         # Builds the name of the local function.
         to = None if (cos_cast is None or sin_cast is None) else g.get_attribute(cos_cast, "to").i
         cst_position_ids = tuple(g.get_computed_constant(unsq_node.input[1]))
-        name = self._operator_name if to is None else f"{self._operator_name}_to{to}"
+        with_range = "WithRange" if range_node is not None else ""
+        name = (
+            f"{self._operator_name}{with_range}"
+            if to is None
+            else f"{self._operator_name}{with_range}_to{to}"
+        )
         if cst_position_ids != (0, 1):
             suffix = "".join(map(str, cst_position_ids))
             name = f"{name}_p{suffix}"
