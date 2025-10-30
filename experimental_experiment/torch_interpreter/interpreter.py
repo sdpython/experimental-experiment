@@ -175,21 +175,12 @@ class DynamoInterpreter:
             not hasattr(self, "graph_begin_processed") or not self.graph_begin_processed
         ), "A graph is already being processed."
         self.graph_begin_processed = graph
-        predecessors = {}
-        for node in graph.nodes:
-            for us in node.users:
-                ius = id(us)
-                if ius not in predecessors:
-                    predecessors[ius] = []
-                predecessors[ius].append(node)
-        self.graph_processed_predecessors = predecessors
 
     def end_graph(self, graph: "torch.fx.Graph"):  # noqa: F821
         assert hasattr(self, "graph_begin_processed") and id(self.graph_begin_processed) == id(
             graph
         ), "A graph was not processed or it is not the same greaph."
         self.graph_begin_processed = None
-        self.graph_processed_predecessors = None
 
     def run_node(self, node: "torch.fx.Node"):  # noqa: F821
         """Runs a node: call the approrpiate method based on the node type."""
@@ -714,20 +705,16 @@ class DynamoInterpreter:
         is_dim: bool = False,
         is_none: bool = False,
     ) -> str:
-        inode = id(node) if index < 0 else id(node.args[0][index])
-        assert inode in self.graph_processed_predecessors, (
-            f"output {prefix!r}, index={index}, args={node.args}, "
-            f"is not in graph_processed_predecessors"
-        )
-        preds = self.graph_processed_predecessors[inode]
-        # tweak for past_key_values
-        if (
-            preds
-            and hasattr(preds[0], "target")
-            and isinstance(preds[0].target, str)
-            and preds[0].target.startswith("past_key_values")
+        anode = node if index < 0 else node.args[0][index]
+        if anode.args and isinstance(
+            anode.args[0], self.torch.fx.immutable_collections.immutable_list
         ):
-            return f"present{preds[0].target[4:]}"
+            if (
+                isinstance(anode.args[0][0], self.torch.fx.node.Node)
+                and hasattr(anode.args[0][0], "name")
+                and anode.args[0][0].name.startswith("past_key_values")
+            ):
+                return f"present{anode.args[0][0].target[4:]}"
         return prefix
 
     def output(self, node):
