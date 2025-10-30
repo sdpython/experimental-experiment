@@ -5010,6 +5010,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
         #         node.replace_all_uses_with(cloned_node)
         # graph_module.recompile()
+        interpreter.start_graph(graph_module.graph)
 
         inputs = []
         for n in graph_module.graph.nodes:
@@ -5045,6 +5046,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
             )
             interpreter.run_node(node)
+        interpreter.end_graph(graph_module.graph)
 
     def _extend_local_function_inputs(self) -> Tuple[Tuple[str, Any], Set[Tuple[str, str]]]:
         """

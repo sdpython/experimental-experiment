@@ -42,6 +42,10 @@ class TestOptimizationUntrainedModel(ExtTestCase):
                 options=OptimizationOptions(patterns="default+onnxruntime"),
             )
 
+        outputs = [o.name for o in onx.model_proto.graph.output]
+        self.assertEqual(
+            ["output_0", "present_key_values_key_0", "present_key_values_value_0"], outputs
+        )
         unique_ops = {n.op_type for n in onx.model_proto.graph.node}
         self.assertNotIn("HalfRotaryEmbedding", unique_ops)
         self.assertIn("RotaryEmbedding", unique_ops)
