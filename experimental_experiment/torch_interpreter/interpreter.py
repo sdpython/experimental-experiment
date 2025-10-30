@@ -705,7 +705,12 @@ class DynamoInterpreter:
         is_dim: bool = False,
         is_none: bool = False,
     ) -> str:
+        "Tries to improve the output node."
+        if node is None or not hasattr(node, "args"):
+            return prefix
         anode = node if index < 0 else node.args[0][index]
+        if not hasattr(anode, "args"):
+            return prefix
         if anode.args and isinstance(
             anode.args[0], self.torch.fx.immutable_collections.immutable_list
         ):
