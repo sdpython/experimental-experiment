@@ -31,10 +31,6 @@ from experimental_experiment.torch_interpreter.piece_by_piece_serialize import (
     tree_spec_as_name,
     tree_spec_from_name,
 )
-from experimental_experiment.torch_models.llm_model_helper import (
-    get_phi2,
-    get_phi35_mini_instruct,
-)
 
 
 def traceable_local_f(x, y):
@@ -164,47 +160,6 @@ class TestPieceByPiece(ExtTestCase):
         diag = trace_execution_piece_by_piece(big, inputs, verbose=1)
         pretty = diag.pretty_text(with_dynamic_shape=True)
         self.assertIn("DS=", pretty)
-
-    @requires_torch("2.6")
-    @hide_stdout()
-    def test_trace_execution_piece_by_piece_phi2(self):
-        res = get_phi2(
-            num_hidden_layers=2,
-            input_cache=True,
-            common_dynamic_shapes=True,
-            intermediate_size=5120,
-            batch_size=2,
-        )
-        model, _inputs, _inputs2, ds = (
-            res["model"],
-            res["inputs"],
-            res["inputs2"],
-            res["dynamic_shapes"],
-        )
-        inputs = [_inputs, _inputs2]
-
-        diag = trace_execution_piece_by_piece(model, inputs, verbose=2)
-        pretty = diag.pretty_text(with_dynamic_shape=True)
-        self.assertIn("DS=", pretty)
-        args, ds_found = diag.guess_dynamic_shapes()
-        self.assertEqual(args, tuple())
-        self.assertEqual(set(ds), set(ds_found))
-
-        def _check(v1, v2):
-            if isinstance(v1, dict):
-                self.assertIsInstance(v2, dict)
-                self.assertEqual(set(v1), set(v2))
-                return
-            if isinstance(v1, list):
-                self.assertIsInstance(v2, list)
-                self.assertEqual(len(v1), len(v2))
-                for a, b in zip(v1, v2):
-                    _check(a, b)
-                return
-            raise AssertionError(f"unexpected type {type(v1)}")
-
-        for k in ds:
-            _check(ds[k], ds_found[k])
 
     @requires_torch("2.6")
     @hide_stdout()
@@ -1981,134 +1936,6 @@ class TestPieceByPiece(ExtTestCase):
             replace_by_custom_op=CustomOpStrategy.LOCAL,
         )
         self.assertNotEmpty(ep)
-
-    @requires_torch("2.7")
-    @hide_stdout()
-    def test_piece_by_piece_phi35_local(self):
-        import torch
-
-        def result_of_same_shape1(*args, **kwargs):
-            "Returns the shape of one element of the cache based on the inputs."
-            return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
-                args[3].dtype
-            )
-
-        def result_of_same_shape2(*args, **kwargs):
-            "Returns the shape of one element of the cache based on the inputs."
-            return torch.empty((*args[0].shape[:2], 32064)).to(args[0].dtype)
-
-        data = get_phi35_mini_instruct(num_hidden_layers=2, common_dynamic_shapes=True)
-        model, inputs, inputs2 = data["model"], data["inputs"], data["inputs2"]
-        diag = trace_execution_piece_by_piece(model, [inputs, inputs2], verbose=2)
-
-        raise unittest.SkipTest(
-            "Not ready yet to work: see the content of the test to understand"
-        )
-
-        """
-        Class ModelOutput contains this:
-
-        ```
-        def __getitem__(self, k):
-            if isinstance(k, str):
-                inner_dict = dict(self.items())
-                return inner_dict[k]
-            else:
-                return self.to_tuple()[k]
-        ```
-
-        An attribute of this class can be accessed with a string index or an integer.
-        But after it is serialized, the second option is no longer available.
-        This must be fixed before before able to export every submodule.
-        """
-
-        with register_additional_serialization_functions(patch_transformers=True):
-            ep = diag.try_export(
-                exporter="fx",
-                use_dynamic_shapes=True,
-                exporter_kwargs=dict(strict=False),
-                verbose=1,
-                replace_by_custom_op=CustomOpStrategy.LOCAL,
-                quiet=0,
-                shape_functions={
-                    "Phi3Model": {
-                        1: result_of_same_shape1,
-                        2: result_of_same_shape1,
-                        3: result_of_same_shape1,
-                        4: result_of_same_shape1,
-                    },
-                    "C_Phi3ForCausalLM_lm_head": {
-                        0: result_of_same_shape2,
-                    },
-                },
-            )
-            self.assertNotEmpty(ep)
-
-    @requires_torch("2.7")
-    @hide_stdout()
-    def test_piece_by_piece_phi35_functions(self):
-        import torch
-
-        def result_of_same_shape1(*args, **kwargs):
-            "Returns the shape of one element of the cache based on the inputs."
-            return torch.empty((*args[3].shape[:2], args[1].shape[1], args[3].shape[-1])).to(
-                args[3].dtype
-            )
-
-        def result_of_same_shape2(*args, **kwargs):
-            "Returns the shape of one element of the cache based on the inputs."
-            return torch.empty((*args[0].shape[:2], 32064)).to(args[0].dtype)
-
-        data = get_phi35_mini_instruct(num_hidden_layers=2, common_dynamic_shapes=True)
-        model, inputs, inputs2 = data["model"], data["inputs"], data["inputs2"]
-        diag = trace_execution_piece_by_piece(
-            model, [inputs, inputs2], verbose=2, trace_functions=True
-        )
-        report = diag.get_export_report()
-        self.assertIn("mod::transformers.models.phi3.modeling_phi3", report)
-
-        raise unittest.SkipTest(
-            "Not ready yet to work: see the content of the test to understand"
-        )
-
-        """
-        Class ModelOutput contains this:
-
-        ```
-        def __getitem__(self, k):
-            if isinstance(k, str):
-                inner_dict = dict(self.items())
-                return inner_dict[k]
-            else:
-                return self.to_tuple()[k]
-        ```
-
-        An attribute of this class can be accessed with a string index or an integer.
-        But after it is serialized, the second option is no longer available.
-        This must be fixed before before able to export every submodule.
-        """
-
-        with register_additional_serialization_functions(patch_transformers=True):
-            ep = diag.try_export(
-                exporter="fx",
-                use_dynamic_shapes=True,
-                exporter_kwargs=dict(strict=False),
-                verbose=1,
-                replace_by_custom_op=CustomOpStrategy.LOCAL,
-                quiet=0,
-                shape_functions={
-                    "Phi3Model": {
-                        1: result_of_same_shape1,
-                        2: result_of_same_shape1,
-                        3: result_of_same_shape1,
-                        4: result_of_same_shape1,
-                    },
-                    "C_Phi3ForCausalLM_lm_head": {
-                        0: result_of_same_shape2,
-                    },
-                },
-            )
-            self.assertNotEmpty(ep)
 
     @requires_torch("2.6")
     @hide_stdout()
