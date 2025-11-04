@@ -295,7 +295,8 @@ class IdentityPattern(PatternOptimization):
             value = g.get_computed_constant(node.input[1])
             if value is None:
                 return self.none(node, inspect.currentframe().f_lineno)
-            unique = set(value)
+            with g.builder.maybe_disable_fake_tensor_mode():
+                unique = set(value)
             if unique != {1}:
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(self, [node], self.apply, insert_at=node)

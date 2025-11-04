@@ -903,7 +903,10 @@ class DynamoInterpreter:
                 if i < len(node.args):
                     complete_args.append(node.args[i])
                 elif expected_arg.name in node.kwargs:
-                    complete_kwargs[expected_arg.name] = node.kwargs[expected_arg.name]
+                    v = node.kwargs[expected_arg.name]
+                    complete_kwargs[expected_arg.name] = (
+                        v.name if isinstance(v, self.torch.fx.Node) else v
+                    )
                 else:
                     # Get default from schema.
                     complete_kwargs[expected_arg.name] = expected_arg.default_value

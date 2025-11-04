@@ -717,7 +717,7 @@ class TestPieceByPiece(ExtTestCase):
             ((torch.randn((6, 6, 6, 6)), cache2), {}),
         ]
 
-        expected_dyn_shapes = "(({0: DYN, 2: DYN}, [[{0: DYN, 2: DYN}], [{0: DYN, 2: DYN}]]), {})"
+        expected_dyn_shapes = "(({0: DYN, 2: DYN}, [{0: DYN, 2: DYN}, {0: DYN, 2: DYN}]), {})"
         diag = trace_execution_piece_by_piece(model, inputs)
         dyn_shapes = diag.guess_dynamic_shapes()
         got = (
@@ -1485,7 +1485,7 @@ class TestPieceByPiece(ExtTestCase):
         report = diag.get_export_report(fx=True)
         self.assertIn("torch.ops.aten.abs", report)
         self.assertEqual(
-            diag.children[0].forward_expected_output_type, ["Tensor", "DynamicCache__1_1"]
+            diag.children[0].forward_expected_output_type, ["Tensor", "DynamicCache__2"]
         )
 
     @requires_torch("2.6")
@@ -1721,6 +1721,7 @@ class TestPieceByPiece(ExtTestCase):
                 'ones_like: "f32[s0, 6]"',
                 'ones_like: "f32[s35, 6]"',
                 'ones_like: "f32[s13, 6]"',
+                'ones_like: "f32[s60, 6]"',
             ),
             report,
         )

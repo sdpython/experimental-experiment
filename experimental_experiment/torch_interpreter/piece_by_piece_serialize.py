@@ -1,5 +1,6 @@
 import base64
 import io
+import itertools
 import pickle
 import re
 import zlib
@@ -59,7 +60,7 @@ def serialize_one(
         sorted_items = sorted(obj.items())
         return [_[1] for _ in sorted_items]
     if obj.__class__.__name__ == "DynamicCache":
-        return [*obj.key_cache, *obj.value_cache]
+        return list(itertools.chain.from_iterable(zip(obj.key_cache, obj.value_cache)))
     if obj is None:
         return None
     if isinstance(obj, (bool, int, float)):
@@ -170,7 +171,7 @@ def type_as_str_with_info(obj: Any) -> str:
         return f"dict__{len(obj)}_{sorted_keys}"
     if obj.__class__.__name__ == "DynamicCache":
         kv = CacheKeyValue(obj)
-        return f"{obj.__class__.__name__}__{len(kv.key_cache)}_{len(kv.value_cache)}"
+        return f"{obj.__class__.__name__}__{len(kv.key_cache)+len(kv.value_cache)}"
     if obj is None:
         return "None"
     if isinstance(obj, bool):
@@ -254,31 +255,14 @@ def deserialize_args(
 
         if tt.startswith("DynamicCache__"):
             info = tt.split("__")[-1]
-            n1, n2 = tuple(map(int, info.split("_")))
-            assert n1 == n2, f"Unexpected sizes for n1={n1} and n2={n2} for a DynamicCache"
-            if isinstance(res[pos_res], torch.Tensor):
-                # All flattened.
-                key_cache = res[pos_res : pos_res + n1]
-                value_cache = res[pos_res + n1 : pos_res + n1 + n2]
-                pos_res += n1 + n2
-            else:
-                value = res[pos_res]
-                assert isinstance(value, list) and all(
-                    isinstance(t, torch.Tensor) for t in value
-                ), (
-                    f"Unexpected type at position {pos_res}: "
-                    f"{string_type(value, with_shape=True)}, "
-                    f"deserialized into {tt}"
-                )
-                assert len(value) % 2 == 0 and len(value) == n1 + n2, (
-                    f"Number of tensors at position {pos_res} "
-                    f"in {string_type(value, with_shape=True)} "
-                    f"should be even. Unable to deserialize into {tt}, "
-                    f"n1={n1}, n2={n2}, len(res[pos_res])={len(value)}"
-                )
-                key_cache = value[:n1]
-                value_cache = value[n1:]
-                pos_res += 1
+            n = int(info)
+            assert n % 2 == 0, f"Unexpected sizes for n={n} for a DynamicCache"
+            assert isinstance(
+                res[pos_res], torch.Tensor
+            ), f"Unexpected type for a tensor in a DynamicCache {type(res[pos_res])}"
+            key_cache = res[pos_res : pos_res + n : 2]
+            value_cache = res[pos_res + 1 : pos_res + n : 2]
+            pos_res += n
 
             assert tt.startswith("DynamicCache__"), f"Unable to handle type info(2) {tt!r}"
             if clone:

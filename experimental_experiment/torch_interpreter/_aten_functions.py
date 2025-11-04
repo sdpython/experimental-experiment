@@ -1372,6 +1372,15 @@ def aten_cat(
     for i, c in enumerate(tensors):
         if isinstance(c, str) and g.has_rank(c) and g.get_rank(c) == 0:
             raise AssertionError(f"Input {i} ({c!r}) is a scalar{g.get_debug_msg()}")
+
+    # let's remove null shapes
+    new_tensors = []
+    for t in tensors:
+        if g.has_shape(t) and 0 in g.get_shape(t):
+            continue
+        new_tensors.append(t)
+    tensors = new_tensors
+
     if len(tensors) == 1:
         # Nothing to concatenate.
         return g.op.Identity(tensors[0], name=name, outputs=outputs)

@@ -216,6 +216,8 @@ def train_loop(model, *args, loss_fn=None, optimizer=None):
         v = pred[0]
     elif hasattr(pred, "last_hidden_state"):
         v = pred.last_hidden_state
+    elif hasattr(pred, "logits"):
+        v = pred.logits
     else:
         v = pred
     loss = loss_fn(v, torch.ones_like(v))
