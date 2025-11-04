@@ -16,7 +16,7 @@ from experimental_experiment.torch_models.training_helper import (
 
 class TestEdPhi(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
-    @ignore_warnings((DeprecationWarning, UserWarning))
+    @ignore_warnings((DeprecationWarning, UserWarning, FutureWarning))
     def test_llama_cort_static_not_mixed(self):
         model, input_tensors = self.get_llama_model()
         input_tensors = input_tensors[0]

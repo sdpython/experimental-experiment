@@ -593,8 +593,8 @@ class TestOnnxExportSignatures(ExtTestCase):
                 others=None,
                 feeds=dict(
                     x=inputs[0].numpy(),
-                    z_key_cache_0=inp2.key_cache[0].numpy(),
-                    z_value_cache_0=inp2.value_cache[0].numpy(),
+                    z_key_0=inp2.key_cache[0].numpy(),
+                    z_value_0=inp2.value_cache[0].numpy(),
                     ww=inputs[4].numpy(),
                 ),
                 exporter="custom-nostrict",

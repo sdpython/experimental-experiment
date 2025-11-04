@@ -4987,7 +4987,15 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             rows.append("### PARENT ###")
             rows.extend(["############"] * 3)
             rows.append(self._parent.get_debug_msg())
-        return "\n".join(rows)
+        res = "\n".join(rows)
+        if os.environ.get("DUMPMSG", ""):
+            if "process.graph_module" in self._debug_msg:
+                with open(f"{os.environ.get('DUMPMSG')}.module.txt", "w") as f:
+                    f.write(str(self._debug_msg["process.graph_module"]))
+            if "process.graph_module.graph" in self._debug_msg:
+                with open(f"{os.environ.get('DUMPMSG')}.graph.txt", "w") as f:
+                    f.write(str(self._debug_msg["process.graph_module.graph"]))
+        return res
 
     def process(
         self,

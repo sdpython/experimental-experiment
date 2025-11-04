@@ -13,6 +13,7 @@ rm plot*
 rm test* -rf
 rm temp* -rf
 rm dump* -rf
+rm DEBUG* -rf
 rm *.onnx.data
 rm .olive-cache -rf
 rm onnx_export*.md
