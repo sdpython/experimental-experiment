@@ -256,7 +256,7 @@ class Opset:
             args[0], axes=self._iaxes("ReduceSum", args[1]), name=name, **kwargs
         )
 
-    def ReduceLogSumExpOpset(self, *args, name: str = "ReduceLogSumExpOpset", **kwargs):
+    def ReduceLogSumExpAnyOpset(self, *args, name: str = "ReduceLogSumExpOpset", **kwargs):
         if len(args) == 1:
             return self.ReduceLogSumExp(*args, name=name, **kwargs)
         assert len(args) == 2, f"ReduceLogSumExpAnyOpset expects 2 arguments not {len(args)}"

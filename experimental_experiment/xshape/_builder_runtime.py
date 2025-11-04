@@ -264,8 +264,13 @@ class _BuilderRuntime:
                 import torch
 
                 return [torch.full(tuple(new_shape), x)]
+            shape_x = (
+                x.shape
+                if len(x.shape) == len(new_shape)
+                else ((1,) * (len(new_shape) - len(x.shape)) + x.shape)
+            )
             try:
-                return [x.expand(tuple(max(s, int(i)) for s, i in zip(x.shape, new_shape)))]
+                return [x.expand(tuple(max(s, int(i)) for s, i in zip(shape_x, new_shape)))]
             except RuntimeError as e:
                 raise RuntimeError(
                     f"Unable to compute the constant, new_shape={new_shape}, "

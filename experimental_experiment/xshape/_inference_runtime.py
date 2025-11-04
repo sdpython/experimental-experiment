@@ -64,6 +64,8 @@ class _InferenceRuntime:
         assert node is None or isinstance(
             node, onnx.NodeProto
         ), f"Unexpected type {type(node)} for name={name!r}"
+        if node is not None and node.op_type.startswith("Random"):
+            return False
         if self.verbose > 2:
             print(
                 f"[GraphBuilder-{self._hash()}.update_node_constant] new constant "

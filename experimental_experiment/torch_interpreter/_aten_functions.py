@@ -8183,12 +8183,10 @@ def aten_randn(
         return res
 
     assert is_static_shape(size), f"size={size} not a static shape{g.get_debug_msg()}"
-    res = g.op.RandomNormalLike(
-        np.array(size, dtype=np.int64), dtype=itype, outputs=outputs, name=name
-    )
+    res = g.op.RandomNormal(dtype=itype, outputs=outputs, name=name, shape=list(size))
     if not sts:
         g.set_dtype(res, itype)
-        g.set_shape(res, size)
+        g.set_shape(res, tuple(size))
     return res
 
 

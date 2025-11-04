@@ -2605,14 +2605,25 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         elif isinstance(value, TensorProto):
             pass
         elif isinstance(value, np.ndarray):
-            pass
+            assert not self.has_shape(name) or self.get_shape(name) == value.shape, (
+                f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+                f"for name {name!r}{self.get_debug_msg()}"
+            )
         elif isinstance(value, (np.float16, np.float32, np.float64, np.int64)):
             value = np.array(value)
+            assert not self.has_shape(name) or self.get_shape(name) == value.shape, (
+                f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+                f"for name {name!r}{self.get_debug_msg()}"
+            )
         elif isinstance(value, self.torch.Tensor):
             # torch.nn.parameter.Parameter -> np.ndarray
             assert "FakeTensor" not in str(type(value)), (
                 f"FakeTensor {name!r} cannot be an initializer {type(value)}"
                 f"{self.get_debug_msg()}"
+            )
+            assert not self.has_shape(name) or self.get_shape(name) == value.shape, (
+                f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+                f"for name {name!r}{self.get_debug_msg()}"
             )
         else:
             raise RuntimeError(
@@ -2735,6 +2746,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param source: any additional information, this field is usually used to
             let the number know where the initializer was created.
         """
+        assert (
+            not self.has_shape(name)
+            or not hasattr(value, "shape")
+            or self.get_shape(name) == value.shape
+        ), (
+            f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+            f"for name {name!r}{self.get_debug_msg()}"
+        )
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
             shape = (
