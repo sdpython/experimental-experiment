@@ -691,6 +691,15 @@ class ExtTestCase(unittest.TestCase):
 
         return string_type(*args, **kwargs)
 
+    def get_llama_model(self, *args, **kwargs):
+        return get_llama_model(*args, **kwargs)
+
+    def get_phi_model(self, *args, **kwargs):
+        return get_phi_model(*args, **kwargs)
+
+    def get_phi3_model(self, *args, **kwargs):
+        return get_phi3_model(*args, **kwargs)
+
 
 def get_figure(ax):
     """Returns the figure of a matplotlib figure."""
@@ -1208,3 +1217,30 @@ def statistics_on_folder(
         stat["dir"] = level
         rows.append(stat)
     return rows
+
+
+def get_phi_model():
+    from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+
+    data = get_untrained_model_with_inputs("microsoft/phi-2")
+    return data["model"], ((data["inputs"]["input_ids"],),)
+
+
+def get_phi3_model():
+    from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+
+    data = get_untrained_model_with_inputs("microsoft/Phi-3.5-mini-instruct")
+    return data["model"], ((data["inputs"]["input_ids"],),)
+
+
+def get_llama_model(_attn_implementation: str = "eager", with_mask: bool = True):
+    from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+
+    data = get_untrained_model_with_inputs(
+        "arnir0/Tiny-LLM", model_kwargs=dict(attn_implementation=_attn_implementation)
+    )
+    return data["model"], (
+        ((data["inputs"]["input_ids"], data["inputs"]["attention_mask"]),)
+        if with_mask
+        else ((data["inputs"]["input_ids"],),)
+    )

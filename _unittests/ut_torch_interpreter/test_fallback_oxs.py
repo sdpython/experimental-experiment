@@ -123,16 +123,13 @@ class TestFallbackOxs(ExtTestCase):
     @ignore_warnings((DeprecationWarning, FutureWarning))
     def test_llama_model_fallback_debug(self):
         import torch
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.xbuilder import OptimizationOptions
         from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
-        from experimental_experiment.torch_interpreter.oxs_dispatcher import (
-            OxsDebugDispatcher,
-        )
+        from experimental_experiment.torch_interpreter.oxs_dispatcher import OxsDebugDispatcher
         from onnx_diagnostic.torch_export_patches import torch_export_patches
 
         with torch.no_grad(), torch_export_patches(patch_transformers=True):
-            model, input_tensors = get_llama_model()
+            model, input_tensors = self.get_llama_model()
             input_tensors = input_tensors[0]
             expected = model(*input_tensors)
             self.assertNotEmpty(expected)

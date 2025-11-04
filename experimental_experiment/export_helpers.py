@@ -150,6 +150,18 @@ def torch_export(
 
     if verbose:
         print(f"[torch_export] export starts with backed_size_oblivious={backed_size_oblivious}")
-    return torch.export.export(
-        mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=strict, **export_kwargs
-    )
+    if strict:
+        return torch.export.export(
+            mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=strict, **export_kwargs
+        )
+    try:
+        return torch.export.export(
+            mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=strict, **export_kwargs
+        )
+    except RuntimeError as e:
+        # This happens when tensor.data_ptr() is accessed.
+        if "Cannot access data pointer of Tensor (e.g. FakeTensor, FunctionalTensor)" in str(e):
+            return torch.export.export(
+                mod, args, kwargs, dynamic_shapes=dynamic_shapes, strict=True, **export_kwargs
+            )
+        raise

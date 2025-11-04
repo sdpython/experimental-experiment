@@ -118,7 +118,12 @@ def assert_all_close(
         assert isinstance(v2, type(v1)), f"v2 is not a {type(v1)} but {type(v2)}"
         assert v1 == v2
     else:
-        raise AssertionError(f"Unexpected type for v1 and v2 {type(v1)}, {type(v2)}")
+        from onnx_diagnostic.helpers import max_diff, string_type
+        res = max_diff(v1, v2)
+        assert res["abs"] <= atol or res["rel"] <= rtol, (
+            f"Issues {string_type(v1, with_shape=True)} and "
+            f"{string_type(v2, with_shape=True)}, res={res}"
+        )
 
 
 def reorder_functions_in_proto(proto: Union[str, ModelProto]) -> Union[str, ModelProto]:

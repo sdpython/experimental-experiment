@@ -32,7 +32,7 @@ class TestInvestigateHelper(ExtTestCase):
                 verbose=1,
             ),
         )
-        self.assertEqual(len(results), 4)
+        self.assertEqual(len(results), 5)
 
 
 if __name__ == "__main__":

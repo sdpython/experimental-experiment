@@ -2155,9 +2155,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             f"name={name!r}, has no rank, but it should, value={value!r}"
             f"{self.get_debug_msg()}"
         )
-        assert self.get_rank(name) in (0, 1), (
-            f"name={name!r} is not a shape, its rank is {self.get_rank(name)}"
-            f"{self.get_debug_msg()}"
+        assert self.get_rank(name) in (0, 1) or (
+            isinstance(value, tuple) and len(value) <= 2048
+        ), (
+            f"name={name!r} is not a shape, its rank is {self.get_rank(name)}, "
+            f"shape={self.get_shape(name) if self.has_shape(name) else '?'}, "
+            f"value={string_type(value, with_shape=True)}{self.get_debug_msg()}"
         )
         assert not isinstance(value, (int, float)) or self.get_rank(name) == 0, (
             f"Mismatch between value={value!r} and rank="
@@ -2602,14 +2605,25 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         elif isinstance(value, TensorProto):
             pass
         elif isinstance(value, np.ndarray):
-            pass
+            assert not self.has_shape(name) or self.get_shape(name) == value.shape, (
+                f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+                f"for name {name!r}{self.get_debug_msg()}"
+            )
         elif isinstance(value, (np.float16, np.float32, np.float64, np.int64)):
             value = np.array(value)
+            assert not self.has_shape(name) or self.get_shape(name) == value.shape, (
+                f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+                f"for name {name!r}{self.get_debug_msg()}"
+            )
         elif isinstance(value, self.torch.Tensor):
             # torch.nn.parameter.Parameter -> np.ndarray
             assert "FakeTensor" not in str(type(value)), (
                 f"FakeTensor {name!r} cannot be an initializer {type(value)}"
                 f"{self.get_debug_msg()}"
+            )
+            assert not self.has_shape(name) or self.get_shape(name) == value.shape, (
+                f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+                f"for name {name!r}{self.get_debug_msg()}"
             )
         else:
             raise RuntimeError(
@@ -2732,6 +2746,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param source: any additional information, this field is usually used to
             let the number know where the initializer was created.
         """
+        assert (
+            not self.has_shape(name)
+            or not hasattr(value, "shape")
+            or self.get_shape(name) == value.shape
+        ), (
+            f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
+            f"for name {name!r}{self.get_debug_msg()}"
+        )
         is_proto = isinstance(value, (TensorProto, NodeProto))
         if shape is None:
             shape = (
@@ -4984,7 +5006,15 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             rows.append("### PARENT ###")
             rows.extend(["############"] * 3)
             rows.append(self._parent.get_debug_msg())
-        return "\n".join(rows)
+        res = "\n".join(rows)
+        if os.environ.get("DUMPMSG", ""):
+            if "process.graph_module" in self._debug_msg:
+                with open(f"{os.environ.get('DUMPMSG')}.module.txt", "w") as f:
+                    f.write(str(self._debug_msg["process.graph_module"]))
+            if "process.graph_module.graph" in self._debug_msg:
+                with open(f"{os.environ.get('DUMPMSG')}.graph.txt", "w") as f:
+                    f.write(str(self._debug_msg["process.graph_module.graph"]))
+        return res
 
     def process(
         self,

@@ -49,7 +49,14 @@ class _ShapeRuntime:
             if value is not None:
                 node.doc_string += "#SV-Id1"
                 self.set_value_shape(
-                    node.output[0], value, equal_to=(node.input[0], node.output[0])
+                    node.output[0],
+                    (
+                        np.abs(value)
+                        if node.op_type == "Abs"
+                        and all(isinstance(s, (int, float)) for s in value)
+                        else value
+                    ),
+                    equal_to=(node.input[0], node.output[0]),
                 )
                 return True
             node.doc_string += "#SV-Id/2"

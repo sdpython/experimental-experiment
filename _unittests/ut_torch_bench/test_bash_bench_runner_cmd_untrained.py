@@ -16,7 +16,6 @@ from experimental_experiment.ext_test_case import (
     requires_transformers,
     requires_onnx_diagnostic,
 )
-from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestBashBenchRunnerCmdUntrained(ExtTestCase):
@@ -159,22 +158,21 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
     @requires_onnx_diagnostic("0.7.14")
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     def test_untrained_export_bench_custom_cpu(self):
-        self._untrained_export("custom-dec", "Phi2LM_1Layer", verbose=1, debug=False)
+        self._untrained_export("custom-dec", "arnir0/Tiny-LLM", verbose=1, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.6")
     @requires_onnx_diagnostic("0.7.14")
     def test_untrained_export_bench_custom_tiny_llm_cpu(self):
-        self._untrained_export("custom", "TinyLLM", verbose=1, debug=False)
+        self._untrained_export("custom", "arnir0/Tiny-LLM", verbose=1, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.9")
     @requires_transformers("4.50.9999")
     def test_untrained_export_bench_export_cpu(self):
         self._untrained_export(
-            "export-nostrict", "Phi2LM_1Layer", verbose=1, debug=False, check_file=False
+            "export-nostrict", "arnir0/Tiny-LLM", verbose=1, debug=False, check_file=False
         )
 
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -184,7 +182,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
     def test_untrained_export_bench_export_cpu_dynamic(self):
         self._untrained_export(
             "export-nostrict",
-            "Phi2LM_1Layer",
+            "arnir0/Tiny-LLM",
             verbose=1,
             debug=False,
             check_file=False,

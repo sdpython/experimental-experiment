@@ -672,12 +672,7 @@ def aten_arange_start(
     pin_memory=None,
 ) -> T:
     "arange"
-    import torch
-
-    assert layout in (
-        None,
-        torch.strided,
-    ), f"arange not implemented for layout={layout!r}"
+    assert layout in (None, g.torch.strided), f"arange not implemented for layout={layout!r}"
     assert not pin_memory, "arange not implemented for pin_memory=True"
     return aten_arange(g, sts, outputs, start, end, dtype=dtype)
 
@@ -695,11 +690,9 @@ def aten_arange_start_step(
     pin_memory=None,
 ) -> T:
     "arange"
-    import torch
-
     assert layout in (
         None,
-        torch.strided,
+        g.torch.strided,
     ), f"arange not implemented for layout={layout!r} is not None"
     assert not pin_memory, "arange not implemented for pin_memory=True"
     return aten_arange(g, sts, outputs, start, end, step, dtype)
@@ -736,6 +729,29 @@ def aten_argmax(
             g.set_shape(res, (sh[dim],))
         else:
             g.set_rank(res, 1)
+    return res
+
+
+def aten_argsort(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    descending: bool = False,
+    stable: bool = False,
+    name: str = "argsort",
+):
+    "argsort"
+    n_elems = (
+        g.op.Shape(x, start=dim, end=dim + 1, name=name)
+        if dim >= 0
+        else g.op.Shape(x, start=dim, name=name)
+    )
+    _value, indices = g.op.TopK(x, n_elems, axis=dim, largest=int(descending), name=name)
+    res = g.op.Identity(indices, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x, dtype=TensorProto.INT64)
     return res
 
 
@@ -1356,6 +1372,15 @@ def aten_cat(
     for i, c in enumerate(tensors):
         if isinstance(c, str) and g.has_rank(c) and g.get_rank(c) == 0:
             raise AssertionError(f"Input {i} ({c!r}) is a scalar{g.get_debug_msg()}")
+
+    # let's remove null shapes
+    new_tensors = []
+    for t in tensors:
+        if g.has_shape(t) and 0 in g.get_shape(t):
+            continue
+        new_tensors.append(t)
+    tensors = new_tensors
+
     if len(tensors) == 1:
         # Nothing to concatenate.
         return g.op.Identity(tensors[0], name=name, outputs=outputs)
@@ -3576,9 +3601,7 @@ def aten_full(
     name: str = "full",
 ) -> T:
     "constantofshape"
-    import torch
-
-    assert layout in (None, torch.strided), (
+    assert layout in (None, g.torch.strided), (
         f"full not implemented for layout={layout!r} is not None, "
         f"size={size!r}, dtype={dtype}{g.get_debug_msg()}"
     )
@@ -3865,6 +3888,22 @@ def aten_getattr(
     raise AssertionError(
         f"attr_name={attr_name!r} is not implemented with x={x!r}{g.get_debug_msg()}"
     )
+
+
+def aten_glu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    name: str = "glu",
+) -> T:
+    """glu"""
+    first, second = g.op.Split(x, axis=dim, num_outputs=2, name=name)
+    res = g.op.Mul(first, g.op.Sigmoid(second, name=name), name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
 
 
 def aten_grid_sampler(
@@ -6105,11 +6144,9 @@ def aten_linspace(
     name: str = "linspace",
 ) -> T:
     """linspace"""
-    import torch
-
     assert layout in (
         None,
-        torch.strided,
+        g.torch.strided,
     ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
     assert pin_memory in (
         None,
@@ -6132,12 +6169,46 @@ def aten_linspace(
     )
 
 
-def aten_log(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
+def aten_log(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name: str = "log"
+) -> T:
     """log"""
-    res = g.op.Log(x)
+    res = g.op.Log(x, name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
+
+
+def aten_logsumexp(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: Optional[Union[int, List[int]]] = None,
+    keepdim: bool = False,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name="sum",
+) -> T:
+    "reducesumlogexp"
+    assert g.has_type(x), f"sum: type of {x!r} must be known{g.get_debug_msg()}"
+    if dtype is None and g.get_type(x) == TensorProto.BOOL:
+        dtype = g.torch.int64
+    if dtype is not None:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        xc = g.op.Cast(x, to=itype)
+    else:
+        xc = x
+
+    if dim is None:
+        result = g.op.ReduceLogSumExpAnyOpset(xc, keepdims=keepdim, outputs=outputs, name=name)
+    else:
+        adim = np.array([dim] if isinstance(dim, int) else dim, dtype=np.int64)
+        result = g.op.ReduceLogSumExpAnyOpset(
+            xc, adim, keepdims=keepdim, outputs=outputs, name=name
+        )
+    if not sts:
+        set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
+    return result
 
 
 def aten__log_softmax(
@@ -6726,11 +6797,7 @@ def aten_mean_dim(
     if dim is None:
         result = g.op.ReduceMeanAnyOpset(xc, keepdims=keepdim, outputs=outputs, name="mean_dim")
     else:
-        adim = (
-            np.array([dim], dtype=np.int64)
-            if isinstance(dim, int)
-            else np.array(dim, dtype=np.int64)
-        )
+        adim = np.array([dim] if isinstance(dim, int) else dim, dtype=np.int64)
         result = g.op.ReduceMeanAnyOpset(
             xc, adim, keepdims=keepdim, outputs=outputs, name="mean_dim"
         )
@@ -7904,7 +7971,7 @@ def aten_ones(
 
     assert layout in (
         None,
-        torch.strided,
+        g.torch.strided,
     ), f"not implemented for layout={layout!r}{g.get_debug_msg()}"
     assert not pin_memory, "ones not implemented for pin_memory=True"
     new_shape = None
@@ -8082,6 +8149,45 @@ def aten_constant_pad_nd(
         value=value,
         pad_is_right=pad_is_right,
     )
+
+
+def aten_randn(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    size: T,
+    dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    layout: str = "",
+    device: str = "",
+    pin_memory: bool = False,
+    name: str = "randn",
+) -> T:
+    """randn"""
+    assert layout in (None, g.torch.strided), (
+        f"scalar_tensor: not implemented for layout={layout!r}, size={size}, "
+        f"dtype={dtype}{g.get_debug_msg()}"
+    )
+    assert pin_memory in (None, False), (
+        f"scalar_tensor: not implemented for pin_memory={pin_memory!r}, size={size}"
+        f"{g.get_debug_msg()}"
+    )
+    itype = TensorProto.FLOAT if dtype is None else torch_dtype_to_onnx_dtype(dtype)
+    if isinstance(size, str):
+        shape = g.op.ConstantOfShape(size, name=name)
+        res = g.op.RandomNormalLike(shape, dtype=itype, outputs=outputs, name=name)
+        if not sts:
+            g.set_dtype(res, itype)
+            if g.has_shape(size):
+                shape = g.get_shape(size)
+                g.set_rank(res, len(shape))
+        return res
+
+    assert is_static_shape(size), f"size={size} not a static shape{g.get_debug_msg()}"
+    res = g.op.RandomNormal(dtype=itype, outputs=outputs, name=name, shape=list(size))
+    if not sts:
+        g.set_dtype(res, itype)
+        g.set_shape(res, tuple(size))
+    return res
 
 
 def aten_reflection_pad2d(
@@ -9274,9 +9380,7 @@ def aten_scalar_tensor(
     name: str = "scalar_tensor",
 ) -> T:
     """constant"""
-    import torch
-
-    assert layout in (None, torch.strided), (
+    assert layout in (None, g.torch.strided), (
         f"scalar_tensor: not implemented for layout={layout!r}, s={s}, "
         f"dtype={dtype}{g.get_debug_msg()}"
     )
@@ -10603,15 +10707,12 @@ def aten_sum(
         itype = torch_dtype_to_onnx_dtype(dtype)
         xc = g.op.Cast(x, to=itype)
     else:
-
         xc = x
+
     if dim is None:
         result = g.op.ReduceSumAnyOpset(xc, keepdims=keepdim, outputs=outputs, name=name)
     else:
-        if isinstance(dim, int):
-            adim = np.array([dim], dtype=np.int64)
-        else:
-            adim = np.array(dim, dtype=np.int64)
+        adim = np.array([dim] if isinstance(dim, int) else dim, dtype=np.int64)
         result = g.op.ReduceSumAnyOpset(xc, adim, keepdims=keepdim, outputs=outputs, name=name)
     if not sts:
         set_type_shape_reduce_op(g, outputs[0], x, keepdim=keepdim)
@@ -10757,12 +10858,7 @@ def aten__to_copy(
     memory_format=None,
 ) -> T:
     "identity"
-    import torch
-
-    assert layout in (
-        None,
-        torch.strided,
-    ), f"_to_copy implemented with layout={layout!r}"
+    assert layout in (None, g.torch.strided), f"_to_copy implemented with layout={layout!r}"
     # assert device is None, f"_to_copy implemented with device={device!r}"
     assert pin_memory is None, f"_to_copy implemented with pin_memory={pin_memory!r}"
     assert not non_blocking, f"_to_copy implemented with non_blocking={non_blocking!r}"

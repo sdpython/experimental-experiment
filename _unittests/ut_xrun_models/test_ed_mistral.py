@@ -6,8 +6,6 @@ from experimental_experiment.ext_test_case import (
     requires_onnxruntime_training,
     skipif_ci_windows,
 )
-from experimental_experiment.torch_models.llama_helper import get_llama_model
-from experimental_experiment.torch_models.mistral_helper import get_mistral_model
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
 from experimental_experiment.torch_models.training_helper import train_loop
 
@@ -22,7 +20,7 @@ class TestEdMistral(ExtTestCase):
     )
     @unittest.skip("silu_backward not decomposed")
     def test_mistral_cort_static(self):
-        model, input_tensors = get_mistral_model()
+        model, input_tensors = self.get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
@@ -58,7 +56,7 @@ class TestEdMistral(ExtTestCase):
     )
     @unittest.skip("silu_backward not decomposed")
     def test_mistral_cort_static_norename(self):
-        model, input_tensors = get_mistral_model()
+        model, input_tensors = self.get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
@@ -89,7 +87,7 @@ class TestEdMistral(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_simple(self):
-        model, input_tensors = get_mistral_model()
+        model, input_tensors = self.get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
@@ -115,7 +113,7 @@ class TestEdMistral(ExtTestCase):
     @requires_torch("2.7", "AssertionError: original output #6 is None")
     @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_norename(self):
-        model, input_tensors = get_mistral_model()
+        model, input_tensors = self.get_mistral_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
@@ -138,7 +136,7 @@ class TestEdMistral(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training(True)
     def test_mistral_cort_dynamic_norename_custom(self):
-        model, input_tensors = get_llama_model()
+        model, input_tensors = self.get_llama_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 

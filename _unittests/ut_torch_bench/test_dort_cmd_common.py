@@ -10,7 +10,6 @@ from experimental_experiment.torch_bench._dort_cmd_common import (
     create_configuration_for_benchmark,
     create_compiled_model,
 )
-from experimental_experiment.torch_models.llama_helper import get_llama_model
 
 
 class TestDortCmdCommond(ExtTestCase):
@@ -24,8 +23,7 @@ class TestDortCmdCommond(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_get_model(self):
-        cf = create_configuration_for_benchmark("llama", "small")
-        model, _example_args_collection = get_llama_model(**cf)
+        model, _example_args_collection = self.get_llama_model()
         for bck in {
             # "ort",
             "custom",

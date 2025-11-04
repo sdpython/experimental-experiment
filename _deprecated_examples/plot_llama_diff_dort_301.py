@@ -65,12 +65,11 @@ import onnx
 from onnx_array_api.reference import compare_onnx_execution, ExtendedReferenceEvaluator
 import torch
 from torch._dynamo.backends.common import aot_autograd
-from experimental_experiment.ext_test_case import unit_test_going
+from experimental_experiment.ext_test_case import unit_test_going, get_llama_model
 from experimental_experiment.convert.convert_helper import (
     ort_optimize,
     optimize_model_proto_oxs,
 )
-from experimental_experiment.torch_models.llama_helper import get_llama_model
 from experimental_experiment.torch_models.dump_helper import (
     assert_all_close,
     dump_onnx,

@@ -200,21 +200,10 @@ class TestDynamoLlama(ExtTestCase):
             onnx_export="test_ort_mlp",
         )
 
-    @classmethod
-    def get_input_dims(cls, dynamic: bool):
-        if dynamic:
-            input_dims = ((2, 8), (4, 7), (9, 15))
-        else:
-            input_dims = ((9, 15), (9, 15), (9, 15))
-        return input_dims
-
     @ignore_warnings((UserWarning, DeprecationWarning))
     @skipif_ci_windows("torch.compile not supported on Windows")
     def test_llama_model_backward_forward_decomposition_no(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
-        input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        model, example_args_collection = self.get_llama_model()
         self.common_test_model(
             model,
             example_args_collection,

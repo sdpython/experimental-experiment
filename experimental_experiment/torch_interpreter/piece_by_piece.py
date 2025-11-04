@@ -2,6 +2,7 @@ import ast
 import contextlib
 import enum
 import inspect
+import itertools
 import os
 import pickle
 import pprint
@@ -512,7 +513,7 @@ class ModelDiagnoseOutput:
                         *[CacheKeyValue(o).value_cache[i] for o in objs]
                     )
                 )
-            return [key_cache, value_cache]
+            return list(itertools.chain.from_iterable(zip(key_cache, value_cache)))
 
         raise NotImplementedError(
             f"Unable to build dynamic shapes for type {set_types.pop()}: "

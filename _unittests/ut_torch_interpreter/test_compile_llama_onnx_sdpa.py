@@ -192,10 +192,8 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     # @unittest.skip("aten_embedding receives the inputs in the other way")
     def test_llama_model_forward(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=input_dims, _attn_implementation="sdpa"
         )
 
@@ -215,10 +213,8 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @requires_torch("2.2", "missing kernel")
     @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     def test_llama_model_backward_forward(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=input_dims, _attn_implementation="sdpa"
         )
 
@@ -238,10 +234,8 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @requires_cuda()
     @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     def test_llama_model_backward_forward_mixed(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=input_dims, _attn_implementation="sdpa"
         )
 
@@ -262,10 +256,8 @@ class TestDynamoLlamaSdpa(ExtTestCase):
     @requires_cuda()
     @unittest.skipIf(True, reason="_scaled_dot_product_flash_attention_for_cpu_default missing")
     def test_llama_model_backward_mixed(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(False)
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=input_dims, _attn_implementation="sdpa"
         )
 

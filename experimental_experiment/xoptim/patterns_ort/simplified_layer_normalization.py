@@ -33,7 +33,10 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         if not g.is_constant_scalar(node_pow.input[1], 2):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        node_add = g.next_node(node.output[0])
+        nodes_add = g.next_nodes(node.output[0])
+        if len(nodes_add) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        node_add = nodes_add[0]
         if node_add.op_type != "Add" or node_add.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 

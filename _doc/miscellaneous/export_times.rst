@@ -60,7 +60,7 @@ With a bigger model:
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_models.llama_helper import get_llama_model
+    from experimental_experiment.ext_test_case import get_llama_model
 
     model, example_args_collection = get_llama_model(
         input_dims=[(2, 1024)],
@@ -143,7 +143,7 @@ With a bigger model:
     import experimental_experiment
     import experimental_experiment.torch_interpreter
     import experimental_experiment.torch_interpreter.aten_functions
-    from experimental_experiment.torch_models.llama_helper import get_llama_model
+    from experimental_experiment.ext_test_case import get_llama_model
 
     model, example_args_collection = get_llama_model(
         input_dims=[(2, 1024)],
