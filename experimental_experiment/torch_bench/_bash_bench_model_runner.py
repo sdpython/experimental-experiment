@@ -2221,64 +2221,72 @@ class ModelRunner:
                 if dyn_shape is None:
                     dyn_input_shapes.append(
                         [
-                            [
-                                [{} for t in ec1.key_cache],
-                                [{} for t in ec1.value_cache],
-                            ],
-                            [
-                                [{} for t in ec2.key_cache],
-                                [{} for t in ec2.value_cache],
-                            ],
+                            itertools.chain.from_iterable(
+                                zip(
+                                    [{} for t in ec1.key_cache],
+                                    [{} for t in ec1.value_cache],
+                                )
+                            ),
+                            itertools.chain.from_iterable(
+                                zip(
+                                    [{} for t in ec2.key_cache],
+                                    [{} for t in ec2.value_cache],
+                                )
+                            ),
                         ]
                     )
                     continue
 
                 dyn_input_shapes.append(
                     [
-                        [
-                            [
-                                self._get_input_shape_tensor(
-                                    export=export,
-                                    input_shape=t.shape,
-                                    dyn_shape=ds,
-                                    dyn_values=dyn_values,
-                                    i=i,
-                                )
-                                for t, ds in zip(ec1.key_cache, dyn_shape[0][0])
-                            ],
-                            [
-                                self._get_input_shape_tensor(
-                                    export=export,
-                                    input_shape=t.shape,
-                                    dyn_shape=ds,
-                                    dyn_values=dyn_values,
-                                    i=i,
-                                )
-                                for t, ds in zip(ec1.value_cache, dyn_shape[0][1])
-                            ],
-                        ],
-                        [
-                            [
-                                self._get_input_shape_tensor(
-                                    export=export,
-                                    input_shape=t.shape,
-                                    dyn_shape=ds,
-                                    dyn_values=dyn_values,
-                                    i=i,
-                                )
-                                for t, ds in zip(ec2.key_cache, dyn_shape[1][0])
-                            ],
-                            [
-                                self._get_input_shape_tensor(
-                                    export=export,
-                                    input_shape=t.shape,
-                                    dyn_shape=ds,
-                                    dyn_values=dyn_values,
-                                    i=i,
-                                )
-                                for t, ds in zip(ec2.value_cache, dyn_shape[1][1])
-                            ],
-                        ],
+                        itertools.chain.from_iterable(
+                            zip(
+                                [
+                                    self._get_input_shape_tensor(
+                                        export=export,
+                                        input_shape=t.shape,
+                                        dyn_shape=ds,
+                                        dyn_values=dyn_values,
+                                        i=i,
+                                    )
+                                    for t, ds in zip(ec1.key_cache, dyn_shape[0][::2])
+                                ],
+                                [
+                                    self._get_input_shape_tensor(
+                                        export=export,
+                                        input_shape=t.shape,
+                                        dyn_shape=ds,
+                                        dyn_values=dyn_values,
+                                        i=i,
+                                    )
+                                    for t, ds in zip(ec1.value_cache, dyn_shape[0][1::2])
+                                ],
+                            )
+                        ),
+                        itertools.chain.from_iterable(
+                            zip(
+                                [
+                                    self._get_input_shape_tensor(
+                                        export=export,
+                                        input_shape=t.shape,
+                                        dyn_shape=ds,
+                                        dyn_values=dyn_values,
+                                        i=i,
+                                    )
+                                    for t, ds in zip(ec2.key_cache, dyn_shape[1][::2])
+                                ],
+                                [
+                                    self._get_input_shape_tensor(
+                                        export=export,
+                                        input_shape=t.shape,
+                                        dyn_shape=ds,
+                                        dyn_values=dyn_values,
+                                        i=i,
+                                    )
+                                    for t, ds in zip(ec2.value_cache, dyn_shape[1][1::2])
+                                ],
+                            )
+                        ),
                     ]
                 )
                 continue
