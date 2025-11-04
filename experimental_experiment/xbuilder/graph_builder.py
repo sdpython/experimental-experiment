@@ -2155,9 +2155,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             f"name={name!r}, has no rank, but it should, value={value!r}"
             f"{self.get_debug_msg()}"
         )
-        assert self.get_rank(name) in (0, 1), (
-            f"name={name!r} is not a shape, its rank is {self.get_rank(name)}"
-            f"{self.get_debug_msg()}"
+        assert self.get_rank(name) in (0, 1) or (
+            isinstance(value, tuple) and len(value) <= 2048
+        ), (
+            f"name={name!r} is not a shape, its rank is {self.get_rank(name)}, "
+            f"shape={self.get_shape(name) if self.has_shape(name) else '?'}, "
+            f"value={string_type(value, with_shape=True)}{self.get_debug_msg()}"
         )
         assert not isinstance(value, (int, float)) or self.get_rank(name) == 0, (
             f"Mismatch between value={value!r} and rank="

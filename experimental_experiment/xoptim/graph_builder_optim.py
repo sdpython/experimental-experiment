@@ -414,6 +414,8 @@ class GraphBuilderPatternOptimization:
             if value is None:
                 return None if not statistics else [None for _ in statistics]
             self._cache_computed_constant[name] = value
+        if not self.builder.has_shape(name):
+            self.builder.set_shape(name, tuple(map(int, value.shape)))
         if statistics is None:
             assert "FakeTensor" not in str(
                 type(value)

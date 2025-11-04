@@ -202,6 +202,8 @@ class ReshapeReshapePattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             cst1 = tuple(map(int, cst1))
             cst2 = tuple(map(int, cst2))
+            if all(d > 0 for d in cst2):
+                return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
             if cst1 and cst2 and cst1[0] == cst2[0]:
                 i = 0
                 while i < min(len(cst1), len(cst2)) and cst1[i] == cst2[i] and cst1[i] >= 0:
@@ -361,16 +363,22 @@ class ReshapeReshapePattern(PatternOptimization):
                     )
         elif g.is_constant(next_node.input[1]):
             cst = tuple(map(int, g.get_computed_constant(next_node.input[1])))
-            cst2 = self._applicable_reshape(
-                g.get_shape(node.input[0]), g.get_shape(node.output[0]), cst
-            )
-            if cst2 != cst:
-                second_input = g.make_initializer(
-                    "",
-                    np.array(cst2, dtype=np.int64),
-                    source="ReshapeReshapePattern.new_shape.3",
+            if all(d > 0 for d in cst):
+                second_input = next_node.input[1]
+            else:
+                assert g.has_shape(node.input[0]), f"Shape is missing for {node.input[0]}"
+                assert g.has_shape(node.output[0]), f"Shape is missing for {node.output[0]}"
+                cst2 = self._applicable_reshape(
+                    g.get_shape(node.input[0]), g.get_shape(node.output[0]), cst
                 )
+                if cst2 != cst:
+                    second_input = g.make_initializer(
+                        "",
+                        np.array(cst2, dtype=np.int64),
+                        source="ReshapeReshapePattern.new_shape.3",
+                    )
 
+        assert second_input is not None, "Something went wrong"
         new_node = g.make_node(
             "Reshape",
             [node.input[0], second_input],
