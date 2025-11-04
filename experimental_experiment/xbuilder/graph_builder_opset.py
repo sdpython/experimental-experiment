@@ -136,6 +136,9 @@ class Opset:
             or inputs[1].dtype == np.int64
         ), f"Suspicious shape {inputs[1]!r} for a Reshape{self.builder.get_debug_msg()}"
         allow_empty_shape |= op_type in {"ConstantOfShape"}
+        has_dim_minus_one = (
+            op_type == "Reshape" and isinstance(inputs[1], np.ndarray) and -1 in inputs[1]
+        )
         new_inputs = []
         for i in inputs:
             assert not isinstance(
@@ -151,10 +154,15 @@ class Opset:
                 # Optional input
                 new_inputs.append("")
             elif isinstance(i, np.ndarray):
-                assert allow_empty_shape or 0 not in i.shape, (
+                assert (
+                    allow_empty_shape
+                    or 0 not in i.shape
+                    or len(i.shape) == 0
+                    or has_dim_minus_one
+                ), (
                     f"Not implemented for type(i)={type(i)}, i={i}, "
-                    f"inputs={inputs!r}, op_type={op_type!r}, i.shape={i.shape}"
-                    f"{self.builder.get_debug_msg()}"
+                    f"inputs={inputs!r}, op_type={op_type!r}, i.shape={i.shape}, "
+                    f"has_dim_minus_one={has_dim_minus_one}{self.builder.get_debug_msg()}"
                 )
                 if i.dtype == np.int64 and i.size < 16:
                     source = "Opset.make_node.1/Shape"
@@ -167,7 +175,7 @@ class Opset:
                     i,
                     msg=f"input {i} of op_type={op_type!r}",
                     source=source,
-                    allow_empty=allow_empty_shape,
+                    allow_empty=allow_empty_shape or i.size == 0,
                 )
                 new_inputs.append(cst_name)
             else:

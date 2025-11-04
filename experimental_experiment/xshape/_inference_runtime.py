@@ -175,7 +175,7 @@ class _InferenceRuntime:
                         f"{self.get_debug_msg()}"
                     )
                     with self.maybe_disable_fake_tensor_mode():
-                        assert len(cst.shape) == 1 and cst.min() > 0, (
+                        assert len(cst.shape) == 1 and cst[-1] > 0, (
                             f"Unexpected shape {cst.shape} "
                             f"for computed constant {node.input[1]!r}, "
                             f"cst={cst}{self.get_debug_msg()}"
@@ -185,7 +185,7 @@ class _InferenceRuntime:
                     if len(shape) < len(new_shape):
                         shape = (1,) * (len(new_shape) - len(shape)) + shape
                     new_shape = tuple(max(i, j) for i, j in zip(shape, new_shape))
-                    self.set_shape(node.output[0], new_shape)
+                    self.set_shape(node.output[0], new_shape, allow_zero=0 in shape)
                     return new_shape
         elif node.op_type == "Reshape":
             if self.has_type(node.input[0]):
@@ -223,7 +223,7 @@ class _InferenceRuntime:
                                 sh = self.get_shape(node.input[0])
                                 if is_static_shape(sh):
                                     new_shape = _reshape_shape(sh, shape_cst)
-                                    self.set_shape(node.output[0], new_shape)
+                                    self.set_shape(node.output[0], new_shape, allow_zero=0 in sh)
                                     node.doc_string += ":constant-7a:"
                                     return new_shape
                         else:

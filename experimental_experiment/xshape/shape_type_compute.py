@@ -225,7 +225,7 @@ def set_type_shape_binary_op(
             break
 
     if shape is not None:
-        g.set_shape(name, shape)
+        g.set_shape(name, shape, allow_zero=True)
         return shape
 
     # rank otherwise
@@ -886,7 +886,7 @@ def _set_shape_type_op_any_gather(self: ShapeBuilder, node: NodeProto):
         axis = 0 if att is None else att.i
         if len(sh2) == 0:
             new_shape = tuple(s for i, s in enumerate(sh1) if i != axis)
-            self.set_shape(node.output[0], new_shape)
+            self.set_shape(node.output[0], new_shape, allow_zero=True)
             return new_shape
         if len(sh1) == len(sh2) == 2 and axis == 0:
             new_shape = (*sh2, sh1[-1])
@@ -1123,7 +1123,7 @@ def _set_shape_type_op_any_reshape(self: ShapeBuilder, node: NodeProto):
                 sh = self.get_shape(node.input[0])
                 new_shape = self._apply_reshape_to_shape(sh, cst)
                 if new_shape is not None:
-                    self.set_shape(k, new_shape)
+                    self.set_shape(k, new_shape, allow_zero=0 in sh)
                     return new_shape
 
     if self.has_shape(node.input[1]):
@@ -1156,7 +1156,7 @@ def _set_shape_type_op_any_expand(self: ShapeBuilder, node: NodeProto):
                 sh = self.get_shape(node.input[0])
                 new_shape = self._apply_expand_to_shape(sh, cst)
                 if new_shape is not None:
-                    self.set_shape(k, new_shape)
+                    self.set_shape(k, new_shape, allow_zero=0 in sh)
                     return new_shape
 
     if self.has_shape(node.input[1]):
@@ -1262,7 +1262,8 @@ def _set_shape_type_op_any_scatternd(self: ShapeBuilder, node: NodeProto):
     dtype = self.get_type(node.input[0])
     self.set_type(node.output[0], dtype)
     if self.has_shape(node.input[0]):
-        self.set_shape(node.output[0], self.get_shape(node.input[0]))
+        sh = self.get_shape(node.input[0])
+        self.set_shape(node.output[0], sh, allow_zero=0 in sh)
         return self.get_shape(node.input[0])
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
@@ -1295,7 +1296,7 @@ def _set_shape_type_op_any_transpose(self: ShapeBuilder, node: NodeProto):
         new_shape = list(range(len(perm)))
         for i, p in enumerate(perm):
             new_shape[i] = shape[p]
-        self.set_shape(node.output[0], tuple(new_shape))
+        self.set_shape(node.output[0], tuple(new_shape), allow_zero=0 in shape)
         return tuple(new_shape)
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
@@ -1393,10 +1394,11 @@ def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
 
         if isinstance(cst, np.ndarray):
             iaxes = (int(cst),) if len(cst.shape) == 0 else tuple(int(i) for i in cst)
-            shape = list(self.get_shape(node.input[0]))
+            shape0 = self.get_shape(node.input[0])
+            shape = list(shape0)
             for i in iaxes:
                 shape.insert((i + len(shape) + 1) if i < 0 else i, 1)
-            self.set_shape(node.output[0], tuple(shape))
+            self.set_shape(node.output[0], tuple(shape), allow_zero=0 in shape0)
             return tuple(shape)
         elif isinstance(cst, self.torch.Tensor):
             with self.maybe_disable_fake_tensor_mode():
