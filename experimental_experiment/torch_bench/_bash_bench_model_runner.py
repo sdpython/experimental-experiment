@@ -2,6 +2,7 @@ import collections
 import copy
 import enum
 import inspect
+import itertools
 import os
 import pprint
 import shutil
@@ -1753,19 +1754,9 @@ class ModelRunner:
                 ), f"Unexpected type {type(x)}, input types={string_type(self.inputs)}"
                 length = len(x.key_cache)
                 if x.key_cache and len(x.key_cache[0].shape) > 2:
-                    res.append(
-                        [
-                            [{0: batch, 2: cache_length} for _ in range(length)],
-                            [{0: batch, 2: cache_length} for _ in range(length)],
-                        ]
-                    )
+                    res.append([{0: batch, 2: cache_length} for _ in range(length * 2)])
                 else:
-                    res.append(
-                        [
-                            [{0: batch} for _ in range(length)],
-                            [{0: batch} for _ in range(length)],
-                        ]
-                    )
+                    res.append([{0: batch} for _ in range(length * 2)])
                 continue
             assert hasattr(x, "shape"), (
                 f"Unexpected type {type(x)} for input {i}/{len(self.inputs)}, "
@@ -1946,12 +1937,12 @@ class ModelRunner:
                 ds = dynamic_shapes[i]
                 for k in range(len(new_input.key_cache)):
                     new_shape = self._make_export_new_dynamic_shape(
-                        inp.key_cache[k].shape, ds[1][k], dyn_values=dyn_values, i=i
+                        inp.key_cache[k].shape, ds[k * 2], dyn_values=dyn_values, i=i
                     )
                     new_input.key_cache[k] = inp.key_cache[k].expand(new_shape)
-                for i in range(len(new_input.value_cache)):
+                for k in range(len(new_input.value_cache)):
                     new_shape = self._make_export_new_dynamic_shape(
-                        inp.value_cache[k].shape, ds[1][k], dyn_values=dyn_values, i=i
+                        inp.value_cache[k].shape, ds[k * 2 + 1], dyn_values=dyn_values, i=i
                     )
                     new_input.value_cache[k] = inp.value_cache[k].expand(new_shape)
                 new_input = make_dynamic_cache(
@@ -2000,6 +1991,7 @@ class ModelRunner:
         assert isinstance(dyn_shape, dict), (
             f"Unexpected type for input {i}, "
             f"dyn_shape={dyn_shape}, shape of input[{i}]={input_shape}, "
+            f"type(model)={type(self.model)}"
         )
         for j in range(len(input_shape)):
             if not export or j not in dyn_shape or input_shape[j] != 1:
@@ -2112,34 +2104,34 @@ class ModelRunner:
                 )
                 inp = CacheKeyValue(inp)
                 if dyn_shape is None:
-                    dyn_input_shapes.append(
-                        [[{} for t in inp.key_cache], [{} for t in inp.value_cache]]
-                    )
+                    dyn_input_shapes.append([{} for t in range(2 * len(inp.key_cache))])
                     continue
 
                 dyn_input_shapes.append(
-                    [
-                        [
-                            self._get_input_shape_tensor(
-                                export=export,
-                                input_shape=t.shape,
-                                dyn_shape=ds,
-                                dyn_values=dyn_values,
-                                i=i,
-                            )
-                            for t, ds in zip(inp.key_cache, dyn_shape[0])
-                        ],
-                        [
-                            self._get_input_shape_tensor(
-                                export=export,
-                                input_shape=t.shape,
-                                dyn_shape=ds,
-                                dyn_values=dyn_values,
-                                i=i,
-                            )
-                            for t, ds in zip(inp.value_cache, dyn_shape[1])
-                        ],
-                    ]
+                    itertools.chain.from_iterable(
+                        zip(
+                            [
+                                self._get_input_shape_tensor(
+                                    export=export,
+                                    input_shape=t.shape,
+                                    dyn_shape=ds,
+                                    dyn_values=dyn_values,
+                                    i=i,
+                                )
+                                for t, ds in zip(inp.key_cache, dyn_shape[::2])
+                            ],
+                            [
+                                self._get_input_shape_tensor(
+                                    export=export,
+                                    input_shape=t.shape,
+                                    dyn_shape=ds,
+                                    dyn_values=dyn_values,
+                                    i=i,
+                                )
+                                for t, ds in zip(inp.value_cache, dyn_shape[1::2])
+                            ],
+                        )
+                    )
                 )
                 continue
 
@@ -2367,7 +2359,7 @@ class ModelRunner:
                         ns = self._make_dynamic_inputs_tensor(
                             input_shape=inp.key_cache[k].shape,
                             i=i,
-                            dyn_shape=dyn_shape[0][k],
+                            dyn_shape=dyn_shape[k * 2],
                             dyn_values=dyn_values,
                         )
                         zeros = torch.zeros(
@@ -2381,7 +2373,7 @@ class ModelRunner:
                         ns = self._make_dynamic_inputs_tensor(
                             input_shape=inp.value_cache[k].shape,
                             i=i,
-                            dyn_shape=dyn_shape[1][k],
+                            dyn_shape=dyn_shape[k * 2 + 1],
                             dyn_values=dyn_values,
                         )
                         zeros = torch.zeros(
