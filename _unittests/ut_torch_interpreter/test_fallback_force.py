@@ -270,14 +270,13 @@ class TestFallbackForce(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     def test_fallback_force_llama_sdpa_export(self):
         import torch
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
         from experimental_experiment.torch_interpreter.dispatcher import (
             ForceDispatcher,
         )
         from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
         )
         expected = model(*example_args_collection[0])
@@ -329,16 +328,13 @@ class TestFallbackForce(ExtTestCase):
     def fallback_force_llama_sdpa_cort_cuda(self, dynamic):
         import torch
         from torch._dynamo.backends.common import aot_autograd
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_dynamo import (
             onnx_debug_backend,
             get_decomposition_table,
         )
-        from experimental_experiment.torch_interpreter.dispatcher import (
-            ForceDispatcher,
-        )
+        from experimental_experiment.torch_interpreter.dispatcher import ForceDispatcher
 
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
         )
         model = model.to("cuda")
@@ -402,17 +398,14 @@ class TestFallbackForce(ExtTestCase):
     def fallback_force_llama_sdpa_cort_training_cuda(self, dynamic):
         import torch
         from torch._dynamo.backends.common import aot_autograd
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_dynamo import (
             onnx_debug_backend,
             get_decomposition_table,
         )
-        from experimental_experiment.torch_interpreter.dispatcher import (
-            ForceDispatcher,
-        )
+        from experimental_experiment.torch_interpreter.dispatcher import ForceDispatcher
         from experimental_experiment.torch_models.dump_helper import assert_all_close
 
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
         )
         model = model.to("cuda")

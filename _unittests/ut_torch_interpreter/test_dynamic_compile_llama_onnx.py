@@ -220,10 +220,8 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @requires_torch("2.3", "missing kernel")
     def __test_llama_model_b_forward_dynamic(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        model, example_args_collection = self.get_llama_model(input_dims=input_dims)
 
         self.common_test_model(
             model,
@@ -240,10 +238,8 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
     def test_llama_model_backward_mixed_dynamic_debug(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        model, example_args_collection = self.get_llama_model(input_dims=input_dims)
 
         self.common_test_model(
             model,
@@ -263,10 +259,8 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
     def test_llama_model_backward_mixed_dynamic_fast_backend(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        model, example_args_collection = self.get_llama_model(input_dims=input_dims)
 
         self.common_test_model(
             model,
@@ -286,10 +280,8 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
     def __test_llama_model_backward_dynamic_fast_backend(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = self.get_input_dims(True)
-        model, example_args_collection = get_llama_model(input_dims=input_dims)
+        model, example_args_collection = self.get_llama_model(input_dims=input_dims)
 
         self.common_test_model(
             model,
@@ -309,10 +301,8 @@ class TestDynamoLlamaDynamic(ExtTestCase):
     @requires_torch("2.2", "missing kernel")
     @requires_cuda()
     def test_llama_model_backward_mixed_dynamic_fast_backend_1024(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
         input_dims = [(2, 1014)]
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=input_dims,
             num_hidden_layers=2,
             hidden_size=1024,

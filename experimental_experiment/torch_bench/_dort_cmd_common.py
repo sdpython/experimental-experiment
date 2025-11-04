@@ -635,22 +635,22 @@ def create_model(
         )
 
     if model == "llama":
-        from ..torch_models.llama_helper import get_llama_model
+        from ..ext_test_case import get_llama_model
 
         return get_llama_model(**config_dict)
 
     if model == "mistral":
-        from ..torch_models.mistral_helper import get_mistral_model
+        from ..ext_test_case import get_mistral_model
 
         return get_mistral_model(**config_dict)
 
     if model == "phi":
-        from ..torch_models.phi_helper import get_phi_model
+        from ..ext_test_case import get_phi_model
 
         return get_phi_model(**config_dict)
 
     if model == "phi3":
-        from ..torch_models.phi3_helper import get_phi3_model
+        from ..ext_test_case import get_phi3_model
 
         return get_phi3_model(**config_dict)
 

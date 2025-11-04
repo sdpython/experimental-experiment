@@ -157,9 +157,7 @@ class TestDynamoLlamaSdpa3(ExtTestCase):
     @skipif_ci_windows("torch.compile not supported on Windows")
     @unittest.skip("requires silu_backward")
     def test_llama_model_backward_ref(self):
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
-
-        model, example_args_collection = get_llama_model(
+        model, example_args_collection = self.get_llama_model(
             input_dims=[(2, 1024)] * 2,
             hidden_size=16,
             num_hidden_layers=1,

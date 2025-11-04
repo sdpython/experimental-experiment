@@ -7,7 +7,6 @@ from experimental_experiment.ext_test_case import (
     has_cuda,
     skipif_ci_windows,
 )
-from experimental_experiment.torch_models.phi_helper import get_phi_model
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
 from experimental_experiment.torch_models.training_helper import (
     train_loop,
@@ -19,7 +18,7 @@ class TestEdPhi(ExtTestCase):
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     def test_phi_cort_static_not_mixed(self):
-        model, input_tensors = get_phi_model()
+        model, input_tensors = self.get_phi_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
@@ -56,7 +55,7 @@ class TestEdPhi(ExtTestCase):
     def test_phi_cort_static_mixed_debug(self):
         import torch
 
-        model, input_tensors = get_phi_model()
+        model, input_tensors = self.get_phi_model()
         model = model.to("cuda")
         input_tensors = [tuple([i.to("cuda") for i in inp]) for inp in input_tensors]
         input_tensors = input_tensors[0]
@@ -100,7 +99,7 @@ class TestEdPhi(ExtTestCase):
     def test_phi_cort_static_mixed_ort(self):
         import torch
 
-        model, input_tensors = get_phi_model()
+        model, input_tensors = self.get_phi_model()
         model = model.to("cuda")
         input_tensors = [tuple([i.to("cuda") for i in inp]) for inp in input_tensors]
         input_tensors = input_tensors[0]
@@ -141,7 +140,7 @@ class TestEdPhi(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training(True)
     def test_phi_cort_dynamic(self):
-        model, input_tensors = get_phi_model()
+        model, input_tensors = self.get_phi_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 

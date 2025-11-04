@@ -179,7 +179,7 @@ class OxsDebugDispatcher(OxsDispatcher):
         :process:
 
         import torch
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
+        from experimental_experiment.ext_test_case import get_llama_model
         from experimental_experiment.xbuilder import OptimizationOptions
         from experimental_experiment.torch_interpreter import to_onnx
         from experimental_experiment.torch_interpreter.oxs_dispatcher import (

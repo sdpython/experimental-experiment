@@ -3858,6 +3858,22 @@ def aten_getattr(
     )
 
 
+def aten_glu(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    name: str = "glu",
+) -> T:
+    """glu"""
+    first, second = g.op.Split(x, axis=dim, num_outputs=2, name=name)
+    res = g.op.Mul(first, g.op.Sigmoid(second, name=name), name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_grid_sampler(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

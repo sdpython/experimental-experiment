@@ -48,7 +48,6 @@ class TestDynamoCompileDiff(ExtTestCase):
             optimize_model_proto_oxs,
             ort_optimize,
         )
-        from experimental_experiment.torch_models.llama_helper import get_llama_model
         from experimental_experiment.torch_models.dump_helper import (
             assert_all_close,
             dump_onnx,
@@ -63,7 +62,7 @@ class TestDynamoCompileDiff(ExtTestCase):
 
         kwargs = dict(input_dims=[(2, 1024)] * 2)
 
-        model, inputs = get_llama_model(**kwargs)
+        model, inputs = self.get_llama_model(**kwargs)
         expected = model(*inputs[0])
 
         folder = "temp_dump_models"

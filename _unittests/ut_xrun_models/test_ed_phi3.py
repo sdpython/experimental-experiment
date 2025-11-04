@@ -7,13 +7,11 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     skipif_ci_windows,
 )
-from experimental_experiment.torch_models.phi3_helper import get_phi3_model
 from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
 from experimental_experiment.torch_models.training_helper import (
     train_loop,
     train_loop_mixed_precision,
 )
-from experimental_experiment.torch_models.phi3_helper import has_phi3
 
 
 class TestEdPhi3(ExtTestCase):
@@ -30,7 +28,6 @@ class TestEdPhi3(ExtTestCase):
 
         torch._dynamo.config.suppress_errors = cls._keep
 
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.9")
@@ -38,7 +35,7 @@ class TestEdPhi3(ExtTestCase):
     def test_phi3_cort_static_not_mixed(self):
         import torch
 
-        model, input_tensors = get_phi3_model()
+        model, input_tensors = self.get_phi3_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
@@ -75,7 +72,6 @@ class TestEdPhi3(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi3_cort_static_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4", "for transformers 4.41.1")
@@ -84,7 +80,7 @@ class TestEdPhi3(ExtTestCase):
     def test_phi3_cort_static_mixed(self):
         import torch
 
-        model, input_tensors = get_phi3_model()
+        model, input_tensors = self.get_phi3_model()
         model = model.to("cuda")
         input_tensors = [tuple([i.to("cuda") for i in inp]) for inp in input_tensors]
         input_tensors = input_tensors[0]
@@ -128,7 +124,6 @@ class TestEdPhi3(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi3_cort_static_mixed_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_onnxruntime_training(push_back_batch=True)
@@ -136,7 +131,7 @@ class TestEdPhi3(ExtTestCase):
     def test_phi3_cort_dynamic(self):
         import torch
 
-        model, input_tensors = get_phi3_model()
+        model, input_tensors = self.get_phi3_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
@@ -172,7 +167,6 @@ class TestEdPhi3(ExtTestCase):
             for i, inst in enumerate(instances):
                 self.dump_onnx(f"test_phi3_cort_dynamic_{i}.onnx", inst["onnx"])
 
-    @unittest.skipIf(not has_phi3(), reason="transformers not recent enough")
     @skipif_ci_windows("not supported yet on Windows")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.9")
@@ -180,7 +174,7 @@ class TestEdPhi3(ExtTestCase):
     def test_phi3_cort_static(self):
         import torch
 
-        model, input_tensors = get_phi3_model()
+        model, input_tensors = self.get_phi3_model()
         input_tensors = input_tensors[0]
         expected = model(*input_tensors)
 
