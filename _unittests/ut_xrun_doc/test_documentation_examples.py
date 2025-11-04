@@ -144,8 +144,8 @@ class TestDocumentationExamples(ExtTestCase):
                     reason = "graphviz not installed"
 
             if not reason and name in {"plot_torch_linreg_101.py"}:
-                if not has_onnx_diagnostic("0.7.14"):
-                    reason = "needs onnx-diagnostic>=0.7.14"
+                if not has_onnx_diagnostic("0.8.0"):
+                    reason = "needs onnx-diagnostic>=0.8.0"
 
             if not reason and name in {
                 "plot_torch_custom_backend_101.py",
