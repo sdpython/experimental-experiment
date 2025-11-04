@@ -178,7 +178,7 @@ class _InferenceRuntime:
                         assert len(cst.shape) == 1 and cst[-1] > 0, (
                             f"Unexpected shape {cst.shape} "
                             f"for computed constant {node.input[1]!r}, "
-                            f"cst={cst}{self.get_debug_msg()}"
+                            f"input={node.input}, cst={cst}{self.get_debug_msg()}"
                         )
                         shape = self.get_shape(node.input[0])
                         new_shape = tuple(int(i) for i in cst)

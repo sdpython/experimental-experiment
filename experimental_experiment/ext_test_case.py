@@ -1223,14 +1223,14 @@ def get_phi_model():
     from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
 
     data = get_untrained_model_with_inputs("microsoft/phi-2")
-    return data["model"], (data["inputs"]["input_ids"],)
+    return data["model"], ((data["inputs"]["input_ids"],),)
 
 
 def get_phi3_model():
     from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
 
     data = get_untrained_model_with_inputs("microsoft/Phi-3.5-mini-instruct")
-    return data["model"], (data["inputs"]["input_ids"],)
+    return data["model"], ((data["inputs"]["input_ids"],),)
 
 
 def get_llama_model(_attn_implementation: str = "eager", with_mask: bool = True):

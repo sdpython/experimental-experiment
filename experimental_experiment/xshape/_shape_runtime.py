@@ -50,7 +50,12 @@ class _ShapeRuntime:
                 node.doc_string += "#SV-Id1"
                 self.set_value_shape(
                     node.output[0],
-                    np.abs(value) if node.op_type == "Abs" else value,
+                    (
+                        np.abs(value)
+                        if node.op_type == "Abs"
+                        and all(isinstance(s, (int, float)) for s in value)
+                        else value
+                    ),
                     equal_to=(node.input[0], node.output[0]),
                 )
                 return True

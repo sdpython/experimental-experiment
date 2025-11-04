@@ -1686,6 +1686,7 @@ class TestOperatorsCort(ExtTestCase):
             lambda x: torch.randn(1, 2, 3, 4) + x,
             x,
             onnx_export=inspect.currentframe().f_code.co_name,
+            atol=100,
         )
 
     def test_rand(self):

@@ -732,6 +732,29 @@ def aten_argmax(
     return res
 
 
+def aten_argsort(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int = -1,
+    descending: bool = False,
+    stable: bool = False,
+    name: str = "argsort",
+):
+    "argsort"
+    n_elems = (
+        g.op.Shape(x, start=dim, end=dim + 1, name=name)
+        if dim >= 0
+        else g.op.Shape(x, start=dim, name=name)
+    )
+    _value, indices = g.op.TopK(x, n_elems, axis=dim, largest=int(descending), name=name)
+    res = g.op.Identity(indices, name=name, outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x, dtype=TensorProto.INT64)
+    return res
+
+
 def aten_as_strided(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

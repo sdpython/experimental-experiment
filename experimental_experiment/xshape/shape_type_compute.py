@@ -172,7 +172,8 @@ def set_type_shape_unary_op_abs(
 
     g.set_type(name, itype)
     if g.has_shape(input_name):
-        g.set_shape(name, g.get_shape(input_name))
+        sh = g.get_shape(input_name)
+        g.set_shape(name, sh, allow_zero=0 in sh)
         return g.get_shape(input_name)
     if g.has_rank(input_name):
         g.set_rank(name, g.get_rank(input_name))
@@ -415,7 +416,8 @@ def _cast_inputs(
         res = g.op.Cast(a, to=itype, name=name)
         g.set_type(res, itype)
         if g.has_shape(a):
-            g.set_shape(res, g.get_shape(a))
+            sh = g.get_shape(a)
+            g.set_shape(res, sh, allow_zero=0 in sh)
         else:
             g.set_rank(res, g.get_rank(a))
         return res
@@ -1156,7 +1158,7 @@ def _set_shape_type_op_any_expand(self: ShapeBuilder, node: NodeProto):
                 sh = self.get_shape(node.input[0])
                 new_shape = self._apply_expand_to_shape(sh, cst)
                 if new_shape is not None:
-                    self.set_shape(k, new_shape, allow_zero=0 in sh)
+                    self.set_shape(k, new_shape, allow_zero=0 in sh or 0 in new_shape)
                     return new_shape
 
     if self.has_shape(node.input[1]):
