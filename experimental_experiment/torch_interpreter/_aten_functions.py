@@ -3511,6 +3511,27 @@ def aten_flatten_using_ints(
     return res
 
 
+def aten_flip(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dims: List[int],
+    name: str = "flip",
+) -> T:
+    """flip"""
+    if not dims:
+        res = g.op.Identity(x, outputs=outputs, name=name)
+    else:
+        cst = np.array([-1] * len(dims), dtype=np.int64)
+        res = g.op.Slice(
+            x, cst, cst, np.array(dims, dtype=np.int64), cst, outputs=outputs, name=name
+        )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
 def aten_floor(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
     """floor"""
     res = g.op.Floor(x, name="floor", outputs=outputs)
