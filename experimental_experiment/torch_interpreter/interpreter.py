@@ -1437,7 +1437,7 @@ class DynamoInterpreter:
         aten_name = self._get_aten_name(node)
         fx_args, fx_kwargs = self._fill_in_default_kwargs(node)
 
-        if aten_name == "aten_auto_functionalized":
+        if aten_name in ("aten_auto_functionalized", "aten_auto_functionalized_v2"):
             # Should we make a direct call?
             aten_name = node.args[0]
             fx_args = fx_args[1:]

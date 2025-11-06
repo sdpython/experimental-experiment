@@ -1,6 +1,7 @@
 import unittest
 from collections import Counter
 from typing import Any, Dict, List
+import numpy as np
 import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -9,7 +10,8 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.torch_interpreter import to_onnx, Dispatcher
+from experimental_experiment.xbuilder import GraphBuilder
+from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
 
 
 class TestOnnxExportCustomCode(ExtTestCase):
@@ -460,6 +462,50 @@ class TestOnnxExportCustomCode(ExtTestCase):
         )
         op_types = [(n.domain, n.op_type) for n in onx.graph.node]
         self.assertEqual(op_types, [("testlib", "WeirdUnary")])
+
+    @ignore_warnings((UserWarning, FutureWarning))
+    def test_dispatcher_auto_functionalized_v2(self):
+        import torch
+
+        @torch.library.custom_op("mylib::numpy_sin", mutates_args={"output"}, device_types="cpu")
+        def numpy_sin(x: torch.Tensor, output: torch.Tensor) -> None:
+            assert x.device == output.device
+            assert x.device.type == "cpu"
+            x_np = x.numpy()
+            output_np = output.numpy()
+            np.sin(x_np, out=output_np)
+
+        class ModuleWithACustomOperator(torch.nn.Module):
+            def forward(self, x):
+                out = torch.zeros(x.shape)
+                numpy_sin(x, out)
+                return out
+
+        model = ModuleWithACustomOperator()
+        x = torch.randn(1, 3)
+        expected = model(x)
+
+        def numpy_sin_to_onnx(
+            g: "GraphBuilder",
+            sts: Dict[str, Any],
+            outputs: List[str],
+            x: str,
+            name: str = "mylib.numpy_sin",
+            **kwargs
+        ) -> str:
+            g.op.Sin(x, name=name, outputs=outputs[1:])
+            return outputs
+
+        dispatcher = Dispatcher({"mylib::numpy_sin": numpy_sin_to_onnx})
+        onx = to_onnx(
+            model,
+            (x,),
+            dispatcher=dispatcher,
+            optimize=False,
+            export_options=ExportOptions(decomposition_table="default"),
+        )
+        ref = ExtendedReferenceEvaluator(onx)
+        self.assertEqualArray(expected, ref.run(None, {"x": x.detach().numpy()})[0])
 
 
 if __name__ == "__main__":
