@@ -2955,7 +2955,7 @@ class TestOnnxExportAten(ExtTestCase):
 
         class Model(torch.nn.Module):
             def forward(self, x):
-                return torch.flip(x, [-1])
+                return torch.flip(x, [-1]) + 1
 
         model = Model()
         x = torch.zeros((6, 5), dtype=torch.float32)
