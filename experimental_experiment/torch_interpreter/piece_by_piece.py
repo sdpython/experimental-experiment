@@ -162,8 +162,8 @@ class ModelDiagnoseOutput:
     """
     Contains inputs and outputs, traced results when tracing
     intermediate results. An instance of this class is produced
-    by :mod:`experimental_experiment.torch_interpreter.
-    piece_by_piece.trace_execution_piece_by_piece`.
+    by :func:`trace_execution_piece_by_piece
+    <experimental_experiment.torch_interpreter.piece_by_piece.trace_execution_piece_by_piece>`.
     Example :ref:`l-plot-exporter-exporter-phi35-piece` tells you
     more about how to use this class.
 
@@ -2993,7 +2993,8 @@ def trace_execution_piece_by_piece(
         the traced method or function inside this method or function
     :param black_list_functions: if trace_functions is true, this option
         can be used to avoid tracing some functions
-    :return: see :class:`ModelDiagnoseOutput`
+    :return: see :class:`ModelDiagnoseOutput
+        <experimental_experiment.torch_interpreter.piece_by_piece.ModelDiagnoseOutput>`
 
     See :ref:`l-plot-exporter-exporter-phi35-piece` for an example.
     """

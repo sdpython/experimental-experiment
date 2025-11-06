@@ -14,7 +14,7 @@ A model with a custom ops
 +++++++++++++++++++++++++
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import numpy as np
 import torch
 from onnx_array_api.plotting.graphviz_helper import plot_dot
@@ -97,8 +97,8 @@ def numpy_sin_to_onnx(
     sts: Dict[str, Any],
     outputs: List[str],
     x: T,
-    output: Optional[T] = None,
     name: str = "mylib.numpy_sin",
+    **_kwargs,
 ) -> T:
     # name= ... lets the user know when the node comes from
     # o is not used, we could check the shape are equal.

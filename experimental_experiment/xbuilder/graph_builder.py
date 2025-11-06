@@ -2736,7 +2736,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param itype: to overwrite the type
         :param shape: to overwrite the shape
         :param cst: value to send to :meth:`update_node_constant
-            <experimental_experiment.xbuilder.GraphBuilder.update_node_constant>`
+            <experimental_experiment.xshape._inference_runtime._InferenceRuntime.update_node_constant>`
         :param key: used to register the initializer
         :param existing: if True, shape and type should exist,
             if False, it should not exist, if None, both case are allowed
