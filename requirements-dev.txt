@@ -23,7 +23,6 @@ sphinx-issues
 sphinx-runpython
 tabulate
 timm
-torch_geometric
 transformers>=4.56
 tqdm
 wheel
