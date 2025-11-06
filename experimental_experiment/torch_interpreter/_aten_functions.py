@@ -45,6 +45,8 @@ from ._exceptions import FunctionNotFoundError
 
 T = str
 
+_INT64_MIN = -9223372036854775808
+
 
 class Reduction(Enum):
     NONE = 0
@@ -3524,8 +3526,9 @@ def aten_flip(
         res = g.op.Identity(x, outputs=outputs, name=name)
     else:
         cst = np.array([-1] * len(dims), dtype=np.int64)
+        cst_end = np.array([_INT64_MIN] * len(dims), dtype=np.int64)
         res = g.op.Slice(
-            x, cst, cst, np.array(dims, dtype=np.int64), cst, outputs=outputs, name=name
+            x, cst, cst_end, np.array(dims, dtype=np.int64), cst, outputs=outputs, name=name
         )
     if not sts:
         set_type_shape_unary_op(g, res, x)

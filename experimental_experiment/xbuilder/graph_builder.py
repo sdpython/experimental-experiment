@@ -35,7 +35,6 @@ import onnx.numpy_helper as onh
 from onnx.external_data_helper import uses_external_data
 from onnx.model_container import make_large_tensor_proto
 from onnx.shape_inference import infer_shapes as onnx_infer_shapes
-from onnx_diagnostic.helpers.onnx_helper import onnx_dtype_name
 from ..helpers import (
     dtype_to_tensor_dtype,
     from_array_extended,
@@ -49,6 +48,7 @@ from ..helpers import (
     torch_dtype_to_onnx_dtype,
     make_idn,
     make_idg,
+    onnx_dtype_name,
 )
 from ..xshape.rename_expressions import rename_dynamic_dimensions, rename_dynamic_expression
 from ..xshape._shape_helper import (

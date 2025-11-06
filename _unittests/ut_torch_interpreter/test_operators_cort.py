@@ -33,6 +33,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_torch,
+    hide_stdout,
 )
 from experimental_experiment.torch_interpreter import FunctionNotFoundError
 from experimental_experiment.torch_models.dump_helper import assert_all_close
@@ -222,6 +223,9 @@ class TestOperatorsCort(ExtTestCase):
                 raise_list=raise_list,
                 optimize=optimize,
                 verbose=(verbose, 10) if intermediate else verbose,
+                dump_prefix=(
+                    None if not save_onnx else self.get_dump_file(f"dump_{onnx_export}_assert")
+                ),
                 **kwargs,
             )
 
@@ -291,7 +295,9 @@ class TestOperatorsCort(ExtTestCase):
                     if save_onnx:
                         assert storage["instance"]
                         for i, inst in enumerate(storage["instance"]):
-                            with open(f"{onnx_export}_debug_{i}.onnx", "wb") as f:
+                            with open(
+                                self.get_dump_file(f"{onnx_export}_debug_{i}.onnx"), "wb"
+                            ) as f:
                                 f.write(inst["onnx"].SerializeToString())
                     assert_all_close(
                         baseline_result,
@@ -1971,6 +1977,7 @@ class TestOperatorsCort(ExtTestCase):
             onnx_export=inspect.currentframe().f_code.co_name,
         )
 
+    @hide_stdout()
     def test_cumsum(self):
         x = torch.randn(2, 3, 4, requires_grad=True)
         self.assertONNX(
@@ -1978,6 +1985,8 @@ class TestOperatorsCort(ExtTestCase):
             x,
             opset_version=11,
             onnx_export=inspect.currentframe().f_code.co_name,
+            verbose=1,
+            save_onnx=True,
         )
 
     @unittest.skipIf(not DICT_SUPPORTED, reason="only tensor are supported")
