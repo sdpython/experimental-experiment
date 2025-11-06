@@ -4,3 +4,4 @@
 
 .. automodule:: experimental_experiment.xshape._shape_runtime
     :members:
+    :private-members:

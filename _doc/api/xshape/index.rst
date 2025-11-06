@@ -5,6 +5,7 @@
     :maxdepth: 1
     :caption: modules
 
+    expressions_torch
     evaluate_expressions
     rename_expressions
     simplify_expressions
