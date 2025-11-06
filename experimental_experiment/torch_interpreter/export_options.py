@@ -291,12 +291,14 @@ class ExportOptions:
         ret = False
         for node in exported_program.graph.nodes:
             target_name = CustomTracer.get_node_target_name(node, exc=False)
+            if target_name in {"aten::index_copy_"}:
+                ret = True
+                continue
             if target_name in {
-                "aten::index_copy_",
                 "aten:relu_",
                 "aten::mul_.Tensor",
             }:
-                ret = True
+                ret = len(node.users) == 0
                 continue
             if target_name in {"aten::lstm.input"}:
                 return True, True

@@ -7,5 +7,4 @@ onnx-diagnostic>=0.8.0
 onnxruntime
 optree
 torch>=2.8
-torch_geometric
 
