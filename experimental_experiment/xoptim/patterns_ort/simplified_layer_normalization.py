@@ -105,8 +105,8 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         if shape is not None and isinstance(shape[axis], int):
             # a constant
             scale = g.make_initializer(
-                "ONES",
-                np.array([1] * shape[axis], dtype=dtype),
+                f"ONES{shape[axis]}",
+                np.ones((shape[axis],), dtype=dtype),
                 source="SimplifiedLayerNormalizationPattern.apply.scale.1",
             )
         else:

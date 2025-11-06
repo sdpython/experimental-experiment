@@ -45,6 +45,8 @@ from ._exceptions import FunctionNotFoundError
 
 T = str
 
+_INT64_MIN = -9223372036854775808
+
 
 class Reduction(Enum):
     NONE = 0
@@ -3508,6 +3510,28 @@ def aten_flatten_using_ints(
             g.set_shape(res, (int(np.prod(g.get_shape(x)))))
         else:
             g.set_rank(res, 1)
+    return res
+
+
+def aten_flip(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dims: List[int],
+    name: str = "flip",
+) -> T:
+    """flip"""
+    if not dims:
+        res = g.op.Identity(x, outputs=outputs, name=name)
+    else:
+        cst = np.array([-1] * len(dims), dtype=np.int64)
+        cst_end = np.array([_INT64_MIN] * len(dims), dtype=np.int64)
+        res = g.op.Slice(
+            x, cst, cst_end, np.array(dims, dtype=np.int64), cst, outputs=outputs, name=name
+        )
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
     return res
 
 

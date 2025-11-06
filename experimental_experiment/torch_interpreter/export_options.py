@@ -259,8 +259,8 @@ class ExportOptions:
                     f"[ExportOptions.export] done remove inplace in "
                     f"{time.perf_counter() - begin}, modified={modified}"
                 )
-            need_dec = self.need_run_decompositions(exported_program)
-            if need_dec or modified <= -1:
+            need_dec, need_dec_all = self.need_run_decompositions(exported_program)
+            if need_dec or need_dec_all or modified <= -1:
                 # We need to run decomposition to fully remove all inplace operations.
                 if verbose:
                     begin = time.perf_counter()
@@ -268,7 +268,11 @@ class ExportOptions:
                         "[ExportOptions.export] use decomposition to remove inplace nodes left"
                         f"[modified={modified}, need_dec={need_dec}]"
                     )
-                exported_program = exported_program.run_decompositions({})
+                exported_program = (
+                    exported_program.run_decompositions()
+                    if need_dec_all
+                    else exported_program.run_decompositions({})
+                )
                 if verbose:
                     print(
                         f"[ExportOptions.export] done in {time.perf_counter() - begin}, "
@@ -280,15 +284,23 @@ class ExportOptions:
                 print("-- DONE -- ")
         return exported_program
 
-    def need_run_decompositions(self, exported_program) -> bool:
+    def need_run_decompositions(self, exported_program) -> Tuple[bool, bool]:
         """Final check to see if we need to run decompositions."""
         from .tracing import CustomTracer
 
+        ret = False
         for node in exported_program.graph.nodes:
             target_name = CustomTracer.get_node_target_name(node, exc=False)
-            if target_name in {"aten::index_copy_"}:
-                return True
-        return False
+            if target_name in {
+                "aten::index_copy_",
+                "aten:relu_",
+                "aten::mul_.Tensor",
+            }:
+                ret = True
+                continue
+            if target_name in {"aten::lstm.input"}:
+                return True, True
+        return ret, False
 
     def _export(
         self,

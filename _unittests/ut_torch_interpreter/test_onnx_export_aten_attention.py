@@ -188,7 +188,18 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         for node in onx.graph.node:
             if node.domain == "aten":
                 keys = [p.key for p in node.metadata_props]
-                self.assertEqual(["aten_name", "args", "kwargs"], keys)
+                self.assertEqual(
+                    [
+                        "aten_name",
+                        "args",
+                        "kwargs",
+                        "intypes",
+                        "outtypes",
+                        "inshapes",
+                        "outshapes",
+                    ],
+                    keys,
+                )
         for f in onx.functions:
             keys = [p.key for p in f.metadata_props]
             self.assertEqual(["inline"], keys)

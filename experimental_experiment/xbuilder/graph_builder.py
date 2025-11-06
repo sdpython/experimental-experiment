@@ -48,6 +48,7 @@ from ..helpers import (
     torch_dtype_to_onnx_dtype,
     make_idn,
     make_idg,
+    onnx_dtype_name,
 )
 from ..xshape.rename_expressions import rename_dynamic_dimensions, rename_dynamic_expression
 from ..xshape._shape_helper import (
@@ -2635,7 +2636,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         key = self.make_key(value)
         if key and key in self._values:
             # exception with obivous names
-            if name in {"", "ONES", "ZEROS", "ZERO", "ONE"}:
+            if name in {"", "ONES", "ZEROS", "ZERO", "ONE"} or name.startswith("ONES"):
                 assert not parameter_name, (
                     f"Empty name cannot be used with parameter_name={parameter_name!r}, "
                     f"key={key!r}"
@@ -2750,6 +2751,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             not self.has_shape(name)
             or not hasattr(value, "shape")
             or self.get_shape(name) == value.shape
+            or any(isinstance(s, str) and s.startswith("NEWDIM") for s in self.get_shape(name))
         ), (
             f"Shape {value.shape} does not match the registered one {self.get_shape(name)} "
             f"for name {name!r}{self.get_debug_msg()}"
@@ -4175,7 +4177,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             f"{', '.join(node.output)}"
         )
         if metadata_props:
-            oh.set_model_props(node, metadata_props)
+            oh.set_metadata_props(node, metadata_props)
 
         if attributes:
             node.attribute.extend(attributes)
@@ -5296,7 +5298,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if filtered:
                 values["_known_value_shape"] = self._format_dict(filtered)
         if values:
-            oh.set_model_props(model, values)
+            oh.set_metadata_props(model, values)
 
     def _get_size(self, t: Union["torch.Tensor", np.ndarray, TensorProto]) -> int:  # noqa: F821
         if hasattr(t, "shape"):
@@ -5372,6 +5374,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             len(self.nodes) > 0
         ), f"The onnx model is empty after optimization (no node).{self.get_debug_msg()}"
 
+        # adding to the model everything we know
+        self._add_shape_information_node_metadata()
         opsets = [oh.make_opsetid(*o) for o in self.opsets.items()]
         if mask_outputs is None:
             mask_outputs = [True for o in self.outputs]
@@ -5782,6 +5786,73 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 )
         if addition:
             model.graph.value_info.extend(addition)
+
+    def _add_shape_information_node_metadata(self):
+        for node in self.nodes:
+            data = dict(
+                intypes=" / ".join(
+                    map(
+                        str,
+                        [
+                            (
+                                ""
+                                if not i
+                                else (
+                                    onnx_dtype_name(self.get_type(i)) if self.has_type(i) else "?"
+                                )
+                            )
+                            for i in node.input
+                        ],
+                    )
+                ),
+                outtypes=" / ".join(
+                    map(
+                        str,
+                        [
+                            (
+                                ""
+                                if not i
+                                else (
+                                    onnx_dtype_name(self.get_type(i)) if self.has_type(i) else "?"
+                                )
+                            )
+                            for i in node.output
+                        ],
+                    )
+                ),
+                inshapes=" / ".join(
+                    map(
+                        str,
+                        [
+                            "" if not i else (self.get_shape(i) if self.has_shape(i) else "?")
+                            for i in node.input
+                        ],
+                    )
+                ),
+                outshapes=" / ".join(
+                    map(
+                        str,
+                        [
+                            "" if not i else (self.get_shape(i) if self.has_shape(i) else "?")
+                            for i in node.output
+                        ],
+                    )
+                ),
+            )
+            invalues = [self.value_as_shape(i) for i in node.input]
+            outvalues = [self.value_as_shape(i) for i in node.output]
+            if any(i is not None for i in invalues):
+                data["invalueshape"] = " / ".join(
+                    map(str, ["" if i is None else i for i in invalues])
+                )
+            if any(i is not None for i in outvalues):
+                data["outvalueshape"] = " / ".join(
+                    map(str, ["" if i is None else i for i in outvalues])
+                )
+            for k, v in data.items():
+                entry = node.metadata_props.add()
+                entry.key = k
+                entry.value = v
 
     def _improve_constraints(self):
         """Adds more correspondances deduced from self.constraints_."""
@@ -8167,7 +8238,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         )
         onx = fct["proto"] if isinstance(fct, dict) else fct
         if metadata_props:
-            oh.set_model_props(onx, metadata_props)
+            oh.set_metadata_props(onx, metadata_props)
 
         if self._debug_local_function and isinstance(fct, dict):
             print(f"[GraphBuilder-{self._hash()}.make_local_function] keys={', '.join(fct)}")
