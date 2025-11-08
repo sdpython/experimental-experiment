@@ -495,7 +495,7 @@ class SwapUnaryPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(self, [node, next_node], self.apply, insert_at=node)
+        return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
 
     def apply(
         self, g: "GraphBuilder", node: NodeProto, unary_node: NodeProto  # noqa: F821
