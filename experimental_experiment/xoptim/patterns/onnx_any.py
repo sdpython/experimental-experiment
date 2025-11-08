@@ -482,15 +482,12 @@ class SwapUnaryPattern(PatternOptimization):
             or node.domain != ""
         ):
             return self.none()
-
-        next_nodes = g.next_nodes(node.output[0])
-        if len(next_nodes) != 1:
-            return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) == 0:
             # the unary or binary op changes the shape
             return self.none(node, inspect.currentframe().f_lineno)
-
-        next_node = next_nodes[0]
+        if g.is_used_more_than_once(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_node = g.next_node(node.output[0])
         if next_node.op_type not in self._unary_types and (
             next_node.op_type not in self._binary_types_scalar_cst
             or not g.has_shape(next_node.input[1])
