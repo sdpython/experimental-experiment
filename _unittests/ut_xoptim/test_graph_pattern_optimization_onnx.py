@@ -7013,7 +7013,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 "test",
                 [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"])],
                 [oh.make_tensor_value_info("Y", TFLOAT, ["a", "c", "b", "d"])],
-                [onh.from_array(np.array([2], dtype=np.float32), name="cst")]
+                [onh.from_array(np.array([2], dtype=np.float32), name="cst")],
             ),
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
