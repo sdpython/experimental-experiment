@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import torch
 import torch.fx.experimental.symbolic_shapes as _tds
+from onnx_diagnostic.helpers import flatten_object
 
 _torch_guard_or = _tds._guard_or
 
@@ -120,18 +121,23 @@ def torch_export(
         if not ds or (args and None in ags):
             backed_size_oblivious = False
         else:
-            try:
-                cpl = CoupleInputsDynamicShapes(ags, kws, ds)
-                backed_size_oblivious = cpl.invalid_dimensions_for_export()
-            except AssertionError as e:
-                from onnx_diagnostic.helpers import string_type
+            from torch._subclasses.fake_tensor import FakeTensor
 
-                raise AssertionError(
-                    f"Unable to guess backed_size_oblivious with "
-                    f"args={string_type(ags,with_shape=True)}, "
-                    f"kwargs={string_type(kws,with_shape=True)}, "
-                    f"dynamic_shapes={string_type(ds,with_shape=True)}"
-                ) from e
+            if not any(
+                isinstance(f, FakeTensor) for f in flatten_object([ags, kws], drop_keys=True)
+            ):
+                try:
+                    cpl = CoupleInputsDynamicShapes(ags, kws, ds)
+                    backed_size_oblivious = cpl.invalid_dimensions_for_export()
+                except AssertionError as e:
+                    from onnx_diagnostic.helpers import string_type
+
+                    raise AssertionError(
+                        f"Unable to guess backed_size_oblivious with "
+                        f"args={string_type(ags,with_shape=True)}, "
+                        f"kwargs={string_type(kws,with_shape=True)}, "
+                        f"dynamic_shapes={string_type(ds,with_shape=True)}"
+                    ) from e
 
         if verbose:
             print(f"[torch_export] inferred backed_size_oblivious={backed_size_oblivious!r}")
