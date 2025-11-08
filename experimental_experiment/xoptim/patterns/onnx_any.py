@@ -486,6 +486,9 @@ class SwapUnaryPattern(PatternOptimization):
         next_nodes = g.next_nodes(node.output[0])
         if len(next_nodes) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) == 0:
+            # the unary or binary op changes the shape
+            return self.none(node, inspect.currentframe().f_lineno)
 
         next_node = next_nodes[0]
         if next_node.op_type not in self._unary_types and (
@@ -495,7 +498,7 @@ class SwapUnaryPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
+        return MatchResult(self, [node, next_node], self.apply)
 
     def apply(
         self, g: "GraphBuilder", node: NodeProto, unary_node: NodeProto  # noqa: F821
