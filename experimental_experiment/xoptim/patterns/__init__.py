@@ -10,6 +10,7 @@ from .onnx_any import (
     SameChildrenFromInputPattern,
     ShapeBasedIdentityPattern,
     ShapeBasedSameChildrenPattern,
+    SwapUnaryPattern,
 )
 from .onnx_attention import FunctionAttentionPattern
 from .onnx_cast import (
@@ -214,6 +215,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         StaticConcatReshapePattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
         SwapExpandReshapePattern(verbose=verbose),
+        SwapUnaryPattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
         SwitchReshapeActivationPattern(verbose=verbose),
         TransposeEqualReshapePattern(verbose=verbose),

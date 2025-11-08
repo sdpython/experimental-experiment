@@ -8,7 +8,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class FunctionAttentionPattern(PatternOptimization):
-    """Merges Attention nodes into a local funtcion."""
+    """Merges Attention nodes into a local function."""
 
     _operator_name = "LocalAttention"
     _domain_name = "intermediate"

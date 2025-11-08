@@ -79,9 +79,7 @@ class GeluPattern(EasyPatternOptimization):
 
 
 class LeakyReluPattern(EasyPatternOptimization):
-    """
-    Detects the decomposed version of LeakyRelu.
-    """
+    """Detects the decomposed version of LeakyRelu."""
 
     def __init__(self, verbose: int = 0, priority: int = 0, min_opset: int = 6):
         super().__init__(verbose, priority, min_opset=min_opset)
@@ -124,9 +122,7 @@ class LeakyReluPattern(EasyPatternOptimization):
 
 
 class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
-    """
-    Detects one decomposed version of SoftmaxCrossEntropyLoss.
-    """
+    """Detects one decomposed version of SoftmaxCrossEntropyLoss."""
 
     def __init__(
         self, verbose: int = 0, priority: int = 0, min_opset: int = 14, domain: str = ""

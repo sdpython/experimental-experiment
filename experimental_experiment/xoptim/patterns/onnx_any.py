@@ -2,6 +2,7 @@ import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ...helpers import make_idn
+from ...xshape._onnx_helper import unary_like_op_types
 from ..patterns_api import MatchResult, PatternOptimization
 
 
@@ -456,3 +457,66 @@ class ShapeBasedIdentityPattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{node.name}",
             )
         ]
+
+
+class SwapUnaryPattern(PatternOptimization):
+    """
+    Tries to move computation nodes before any transpose or reshape.
+    That works for unary operator or equivalent to that.
+    """
+
+    _unary_types = unary_like_op_types()
+    _binary_types_scalar_cst = {"Mul", "Add", "Div", "Sub"}
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            node.op_type not in {"Transpose", "Reshape", "Squeeze", "Unsqueeze"}
+            or node.domain != ""
+        ):
+            return self.none()
+
+        next_nodes = g.next_nodes(node.output[0])
+        if len(next_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        next_node = next_nodes[0]
+        if next_node.op_type not in self._unary_types and (
+            next_node.op_type not in self._binary_types_scalar_cst
+            or not g.has_shape(next_node.input[1])
+            or g.get_shape(next_node.input[1]) != (1,)
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, [node, next_node], self.apply, insert_at=node)
+
+    def apply(
+        self, g: "GraphBuilder", node: NodeProto, unary_node: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        temp_name = g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")
+        res = [
+            g.make_node(
+                unary_node.op_type,
+                [node.input[0], *unary_node.input[1:]],
+                [temp_name],
+                name=f"{self.__class__.__name__}--{unary_node.name}",
+            ),
+            g.make_node(
+                node.op_type,
+                [temp_name, *node.input[1:]],
+                [unary_node.output[0]],
+                name=f"{self.__class__.__name__}--{node.name}",
+            ),
+        ]
+        if unary_node.attribute:
+            res[0].attribute.extend(unary_node.attribute)
+        if node.attribute:
+            res[1].attribute.extend(node.attribute)
+        return res
