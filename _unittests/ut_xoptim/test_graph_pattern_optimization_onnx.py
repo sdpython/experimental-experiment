@@ -6973,6 +6973,67 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_swap_unary_exp(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xt"], perm=(0, 2, 1, 3)),
+                    oh.make_node("Exp", ["xt"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "c", "b", "d"])],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": np.arange(12).reshape((1, 1, 3, 4)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns="SwapUnary", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Exp", "Transpose"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_swap_unary_mul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xt"], perm=(0, 2, 1, 3)),
+                    oh.make_node("Mul", ["xt", "cst"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c", "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", "c", "b", "d"])],
+                [onh.from_array(np.array([2], dtype=np.float32), name="cst")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": np.arange(12).reshape((1, 1, 3, 4)).astype(np.float32)}
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns="SwapUnary", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Mul", "Transpose"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
     def test_local_function_attention(self):
         model = oh.make_model(
             oh.make_graph(
