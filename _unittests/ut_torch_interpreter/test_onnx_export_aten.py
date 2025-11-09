@@ -2974,6 +2974,31 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @unittest.skip("unbind not ready yet")
+    def test_aten_unbind(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                u = torch.unbind(x, dim=1)
+                return torch.cat(u, dim=0)
+
+        model = Model()
+        x = torch.zeros((6, 5), dtype=torch.float32)
+        expected = model(x)
+        DYN = torch.export.Dim.DYNAMIC
+        onx = to_onnx(model, (x,), dynamic_shapes=({0: DYN, 1: DYN},))
+        self.dump_onnx("test_aten_unbind.onnx", onx)
+
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.numpy()]))
+        got = sess.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

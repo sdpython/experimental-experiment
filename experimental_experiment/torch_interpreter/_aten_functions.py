@@ -8112,7 +8112,21 @@ def aten_pad(
         if len(pad) < rk * 2:
             pad = list(pad) + list((0,) * (rk * 2 - len(pad)))
         new_pad = pad[::2][::-1] + pad[1::2][::-1]
-        new_pad = np.array(new_pad, dtype=np.int64)
+        if all(isinstance(p, int) for p in new_pad):
+            new_pad = np.array(new_pad, dtype=np.int64)
+        else:
+            new_pad = g.op.Concat(
+                *[
+                    (
+                        np.array([p], dtype=np.int64)
+                        if isinstance(p, int)
+                        else g.op.UnsqueezeAnyOpset(p, g.ZERO, name=name)
+                    )
+                    for p in new_pad
+                ],
+                axis=0,
+                name=name,
+            )
     else:
         assert (
             pad_is_right
@@ -8935,7 +8949,7 @@ def aten_remainder(
     # a - a.div(b, rounding_mode="floor") * b
     if isinstance(other, (int, float)):
         dtype = tensor_dtype_to_np_dtype(g.get_type(x))
-        res = g.op.Mod(x, np.array([other], dtype=dtype), name=name, outputs=outputs)
+        res = g.op.Mod(x, np.array(other, dtype=dtype), name=name, outputs=outputs)
         if not sts:
             set_type_shape_unary_op(g, res, x)
         return res
