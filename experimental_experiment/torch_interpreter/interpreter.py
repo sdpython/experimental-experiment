@@ -13,6 +13,7 @@ from ..helpers import (
     make_hash,
     torch_dtype_to_onnx_dtype,
     onnx_dtype_to_torch_dtype,
+    onnx_dtype_name,
 )
 from ..xbuilder import GraphBuilder, FunctionOptions, VirtualTensor
 from ..xshape._shape_helper import all_int, DYNAMIC_SHAPE
@@ -1961,8 +1962,32 @@ class DynamoInterpreter:
                         description.append(f"{r}:{dtype}:{shape}".replace(" ", ""))
                 elif isinstance(v, self.torch.SymInt):
                     # this is a shape
-                    self.builder.set_shape(r, tuple())
-                    self.builder.set_type(r, TensorProto.INT64)
+                    if self.builder.has_shape(r):
+                        assert self.builder.get_shape(r) == tuple(), (
+                            f"Shape mismatch for {r!r}, got {self.builder.get_shape(r)}, "
+                            f"it should be empty{self.builder.get_debug_msg()}"
+                        )
+                    else:
+                        self.builder.set_shape(r, tuple())
+                    if self.builder.has_type(r):
+                        t = self.builder.get_type_known(r)
+                        assert t is None or t == self.builder.get_type(r), (
+                            f"Unexpected type {onnx_dtype_name(self.builder.get_type(r))}, "
+                            f"know by torch is {onnx_dtype_name(t)}, "
+                            f"for r={r!r}, expected INT32 or INT64{self.builder.get_debug_msg()}"
+                        )
+                    else:
+                        t = self.builder.get_type_known(r)
+                        if t is not None:
+                            assert t in (TensorProto.INT64, TensorProto.INT32), (
+                                f"Unexpected type "
+                                f"{onnx_dtype_name(self.builder.get_type_known(r))} "
+                                f"for r={r!r}, expected INT32 or INT64"
+                                f"{self.builder.get_debug_msg()}"
+                            )
+                            self.builder.set_type(r, t)
+                        else:
+                            self.builder.set_type(r, TensorProto.INT64)
                     self.builder.make_dynamic_object(r, v)
                 elif isinstance(v, self.torch.SymBool):
                     # this is a shape
