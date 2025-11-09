@@ -2940,15 +2940,7 @@ class TestOnnxExportAten(ExtTestCase):
         DYN = torch.export.Dim.DYNAMIC
         onx = to_onnx(model, (x,), dynamic_shapes=({0: DYN, 1: DYN},))
         self.dump_onnx("test_aten_inplace_add.onnx", onx)
-
-        import onnxruntime
-
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.numpy()]))
-        got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got)
+        self.assert_conversion_with_ort_on_cpu(onx, (expected,), (x,))
 
     def test_aten_flip(self):
         import torch
@@ -2964,15 +2956,7 @@ class TestOnnxExportAten(ExtTestCase):
         DYN = torch.export.Dim.DYNAMIC
         onx = to_onnx(model, (x,), dynamic_shapes=({0: DYN, 1: DYN},))
         self.dump_onnx("test_aten_flip.onnx", onx)
-
-        import onnxruntime
-
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.numpy()]))
-        got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got)
+        self.assert_conversion_with_ort_on_cpu(onx, (expected,), (x,))
 
     @unittest.skip("unbind not ready yet")
     def test_aten_unbind(self):
@@ -2989,15 +2973,49 @@ class TestOnnxExportAten(ExtTestCase):
         DYN = torch.export.Dim.DYNAMIC
         onx = to_onnx(model, (x,), dynamic_shapes=({0: DYN, 1: DYN},))
         self.dump_onnx("test_aten_unbind.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, (expected,), (x,))
 
-        import onnxruntime
+    def test_aten_unique_consecutive(self):
+        import torch
 
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.unique_consecutive(x)
+
+        model = Model()
+        x = torch.tensor([0, 1, 2, 2, 3, 3, 0, 0], dtype=torch.int64)
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+            export_options=ExportOptions(
+                save_ep=self.get_dump_file("test_aten_unique_consecutive.ep")
+            ),
         )
-        feeds = dict(zip([i.name for i in sess.get_inputs()], [x.numpy()]))
-        got = sess.run(None, feeds)[0]
-        self.assertEqualArray(expected, got)
+        self.dump_onnx("test_aten_unique_consecutive.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, (expected,), (x,))
+
+    def test_aten_unique_consecutive_return(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.unique_consecutive(x, return_inverse=True, return_counts=True)
+
+        model = Model()
+        x = torch.tensor([0, 1, 2, 2, 3, 3, 3, 0, 0], dtype=torch.int64)
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+            export_options=ExportOptions(
+                save_ep=self.get_dump_file("test_aten_unique_consecutive_return.ep")
+            ),
+        )
+        self.dump_onnx("test_aten_unique_consecutive_return.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
 
 if __name__ == "__main__":

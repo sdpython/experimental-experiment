@@ -20,6 +20,7 @@ from ..helpers import (
     onnx_dtype_to_torch_dtype,
     torch_dtype_to_onnx_dtype,
     type_info,
+    onnx_dtype_name,
 )
 from ..xshape._shape_helper import (
     all_float,
@@ -46,6 +47,8 @@ from ._exceptions import FunctionNotFoundError
 T = str
 
 _INT64_MIN = -9223372036854775808
+_INT64_MAX = 9223372036854775807
+_INT32_MAX = 2147483647
 
 
 class Reduction(Enum):
@@ -11545,6 +11548,88 @@ def aten_unfold(
     if len(unsqueeze) == 1:
         return g.op.Identity(unsqueeze[0], name=name, outputs=outputs)
     return g.op.Concat(*unsqueeze, axis=dimension, name=name, outputs=outputs)
+
+
+def aten_unique_consecutive(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    return_inverse: bool = False,
+    return_counts: bool = False,
+    dim: Optional[int] = None,
+    name: str = "unique_consecutive",
+) -> Tuple[T, ...]:
+    """unique_consecutive"""
+    assert g.get_type(x), f"type is missing for x={x!r}{g.get_debug_msg()}"
+    itype = g.get_type(x)
+    assert itype in (TensorProto.INT32, TensorProto.INT64), (
+        f"This function is only implemented for INT32 and INT64 but "
+        f"type(x) is {onnx_dtype_name(itype)}{g.get_debug_msg()}"
+    )
+    if dim is None:
+        assert g.has_rank(x), f"Rank of x={x!r} must be known if dim={dim}{g.get_debug_msg()}"
+        if g.get_rank(x) != 1:
+            x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+        dim = 0
+    else:
+        assert g.has_rank(x), f"Rank of x={x!r} must be known {g.get_debug_msg()}"
+        assert g.get_rank(x) == 1 and dim == 0, (
+            f"Not implemented for x={x!r} with rank={g.get_rank(x)} and dim={dim}"
+            f"{g.get_debug_msg()}"
+        )
+
+    lag = g.op.Concat(
+        # Hopefully this will never be equal to the first value of the tensor x
+        # ideally we could do differently but with a higher cost
+        (
+            np.array([_INT64_MAX], dtype=np.int64)
+            if itype == TensorProto.INT64
+            else np.array([_INT32_MAX], dtype=np.int32)
+        ),
+        g.op.Slice(x, g.ZERO, g.MINUS_ONE, g.ZERO, name=name),
+        axis=0,
+        name=name,
+    )
+    eq = g.op.Equal(x, lag, name=name)
+    diff = g.op.Not(eq, name=name)
+    res = g.op.Compress(x, diff, axis=0, name=name, outputs=outputs[:1])
+    new_dim = g.unique_dimension_name("unique_consecutive")
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, (new_dim,))
+    if len(outputs) == 1:
+        return res
+
+    # Not requested but the fx graph still wants them, so we give dummies.
+    assert (
+        len(outputs) == 3
+    ), f"Unexpected number of expected outputs={outputs}{g.get_debug_msg()}"
+    inverse = g.op.Sub(
+        g.op.CumSum(g.op.Cast(diff, to=itype, name=name), g.ZERO, name=name),
+        g.ONE if itype == TensorProto.INT64 else np.array([1], dtype=np.int32),
+        name=name,
+        outputs=outputs[1:2],
+    )
+    shape_x = g.op.Shape(x, name=name)
+    indices = g.op.Range(
+        g.ZERO_NO_DIM, g.op.SqueezeAnyOpset(shape_x, name=name), g.ONE_NO_DIM, name=name
+    )
+    points = g.op.Compress(indices, diff, axis=0, name=name)
+    g.set_type(points, g.get_type(x))
+    g.set_shape(points, (new_dim,))
+    lagp = g.op.Concat(
+        g.op.Slice(points, g.ONE, g.op.Shape(points), g.ZERO, name=name),
+        shape_x,
+        name=name,
+        axis=0,
+    )
+    counts = g.op.Sub(lagp, points, name=name, outputs=outputs[2:])
+    if not sts:
+        set_type_shape_unary_op(g, inverse, x)
+        g.set_type(counts, g.get_type(x))
+        g.set_shape(counts, (new_dim,))
+    return (res, inverse, counts)
 
 
 def aten_unsqueeze(
