@@ -700,6 +700,28 @@ class ExtTestCase(unittest.TestCase):
     def get_phi3_model(self, *args, **kwargs):
         return get_phi3_model(*args, **kwargs)
 
+    def assert_conversion_with_ort_on_cpu(
+        self,
+        onx: "onnx.ModelProto",  # noqa: F821
+        expected: Tuple["torch.Tensor", ...],  # noqa: F821
+        inputs: Tuple["torch.Tensor", ...],  # noqa: F821
+        atol: float = 0,
+        rtol: float = 0,
+        msg: Optional[str] = None,
+    ):
+        import onnxruntime
+
+        sess = onnxruntime.InferenceSession(
+            onx.SerializeToString(), providers=["CPUExecutionProvider"]
+        )
+        feeds = dict(
+            zip([i.name for i in sess.get_inputs()], [x.detach().numpy() for x in inputs])
+        )
+        got = sess.run(None, feeds)
+        self.assertEqual(len(expected), len(got))
+        for e, g in zip(expected, got):
+            self.assertEqualArray(e, g, atol=atol, rtol=rtol, msg=msg)
+
 
 def get_figure(ax):
     """Returns the figure of a matplotlib figure."""

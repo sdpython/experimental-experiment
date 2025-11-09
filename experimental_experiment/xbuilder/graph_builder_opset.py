@@ -24,6 +24,7 @@ class Opset:
         "Cast": 1,
         "CastLike": 1,
         "Celu": 1,
+        "Compress": 1,
         "Concat": 1,
         "Constant": 1,
         "ConstantOfShape": 1,
