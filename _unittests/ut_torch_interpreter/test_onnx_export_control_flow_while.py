@@ -4,7 +4,7 @@ from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings, 
 
 class TestOnnxExportControlFlow(ExtTestCase):
     @ignore_warnings((UserWarning, FutureWarning))
-    @skipif_ci_windows("does not work")
+    @skipif_ci_windows("while_loop does not work")
     def test_while_loop_simple_backward(self):
         import torch
 
@@ -24,7 +24,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualAny(expected, ep.module()(*example_inputs))
 
     @ignore_warnings((UserWarning, FutureWarning))
-    @skipif_ci_windows("does not work")
+    @skipif_ci_windows("while_loop does not work")
     def test_while_loop_simple_forward(self):
         import torch
 
@@ -44,7 +44,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualAny(expected, ep.module()(*example_inputs))
 
     @ignore_warnings((UserWarning, FutureWarning))
-    @skipif_ci_windows("does not work")
+    @skipif_ci_windows("while_loop does not work")
     def test_while_loop_simple_forward2(self):
         import torch
 
@@ -64,7 +64,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualAny(expected, ep.module()(*example_inputs))
 
     @ignore_warnings((UserWarning, FutureWarning))
-    @skipif_ci_windows("does not work")
+    @skipif_ci_windows("while_loop does not work")
     def test_while_repeat_interleave(self):
         import torch
 
@@ -93,7 +93,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         model = Model()
         expected = model(*inputs)
         self.assertEqual(expected[-1].shape, (6, 3))
-        # This does not work.
+        # This while_loop does not work.
         # ep = torch.export.export(model, inputs, strict=True)
         # print(ep)
 
