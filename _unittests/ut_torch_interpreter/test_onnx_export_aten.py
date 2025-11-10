@@ -2996,6 +2996,27 @@ class TestOnnxExportAten(ExtTestCase):
         self.dump_onnx("test_aten_unique_consecutive.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, (expected,), (x,))
 
+    def test_aten_unique_consecutive_int32(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.unique_consecutive(x)
+
+        model = Model()
+        x = torch.tensor([0, 1, 2, 2, 3, 3, 0, 0], dtype=torch.int32)
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+            export_options=ExportOptions(
+                save_ep=self.get_dump_file("test_aten_unique_consecutive_32.ep")
+            ),
+        )
+        self.dump_onnx("test_aten_unique_consecutive_32.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, (expected,), (x,))
+
     def test_aten_unique_consecutive_return(self):
         import torch
 
@@ -3015,6 +3036,28 @@ class TestOnnxExportAten(ExtTestCase):
             ),
         )
         self.dump_onnx("test_aten_unique_consecutive_return.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
+    def test_aten_unique_consecutive_return_32(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.unique_consecutive(x, return_inverse=True, return_counts=True)
+
+        model = Model()
+        x = torch.tensor([0, 1, 2, 2, 3, 3, 3, 0, 0], dtype=torch.int32)
+        # type in fx graph differs from one we can see here
+        expected = tuple(t.to(torch.int32) for t in model(x))
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+            export_options=ExportOptions(
+                save_ep=self.get_dump_file("test_aten_unique_consecutive_return_32.ep")
+            ),
+        )
+        self.dump_onnx("test_aten_unique_consecutive_return_32.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
 

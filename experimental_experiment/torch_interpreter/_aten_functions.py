@@ -11571,7 +11571,6 @@ def aten_unique_consecutive(
         assert g.has_rank(x), f"Rank of x={x!r} must be known if dim={dim}{g.get_debug_msg()}"
         if g.get_rank(x) != 1:
             x = g.op.Reshape(x, g.MINUS_ONE, name=name)
-        dim = 0
     else:
         assert g.has_rank(x), f"Rank of x={x!r} must be known {g.get_debug_msg()}"
         assert g.get_rank(x) == 1 and dim == 0, (
@@ -11612,15 +11611,21 @@ def aten_unique_consecutive(
         outputs=outputs[1:2],
     )
     shape_x = g.op.Shape(x, name=name)
+    shape_x_cast = (
+        shape_x if itype == TensorProto.INT64 else g.op.Cast(shape_x, to=itype, name=name)
+    )
     indices = g.op.Range(
-        g.ZERO_NO_DIM, g.op.SqueezeAnyOpset(shape_x, name=name), g.ONE_NO_DIM, name=name
+        g.ZERO_NO_DIM if itype == TensorProto.INT64 else np.array(0, dtype=np.int32),
+        g.op.SqueezeAnyOpset(shape_x_cast, name=name),
+        g.ONE_NO_DIM if itype == TensorProto.INT64 else np.array(1, dtype=np.int32),
+        name=name,
     )
     points = g.op.Compress(indices, diff, axis=0, name=name)
     g.set_type(points, g.get_type(x))
     g.set_shape(points, (new_dim,))
     lagp = g.op.Concat(
         g.op.Slice(points, g.ONE, g.op.Shape(points), g.ZERO, name=name),
-        shape_x,
+        shape_x_cast,
         name=name,
         axis=0,
     )
