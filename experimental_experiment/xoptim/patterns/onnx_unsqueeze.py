@@ -134,6 +134,8 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Unsqueeze" or node.domain != "":
             return self.none()
+        if not g.has_rank(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(node.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         next_nodes = g.next_nodes(node.output[0])
@@ -144,8 +146,16 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if next_node.input[0] != node.output[0]:
             return self.none(node, inspect.currentframe().f_lineno)
-
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
+
+    @classmethod
+    def _unsqueeze(cls, current, axes):
+        if len(axes) == 1:
+            current.insert(axes[0], True)
+        else:
+            for a in axes:
+                current.insert(a, True)
+        return current
 
     def apply(
         self,
@@ -155,15 +165,16 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     ) -> List[NodeProto]:
         axis1 = g.get_constant_or_attribute(node, "axis", 1)
         axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
-        ma = max(axis1.max(), axis2.max()) + 1
-        all_axes = list(range(ma))
-        axis1 = axis1.reshape((-1,))
-        axis2 = axis2.reshape((-1,))
-        for a in axis1[::-1]:
-            all_axes.insert(a, -2)
-        for a in axis2[::-1]:
-            all_axes.insert(a, -2)
-        new_axes = [i for i, a in enumerate(all_axes) if a == -2]
+        rk = g.get_rank(node.input[0])
+        existing = [False for i in range(rk)]
+        existing = self._unsqueeze(existing, axis1)
+        assert axis1.min() < 0 or [i for i, a in enumerate(existing) if a] == list(axis1), (
+            f"Something is wrong: rk={rk}, axis={axis1}, existing={existing}, shapes:"
+            f"{g.get_shape(node.input[0]) if g.has_shape(node.input[0]) else '?'}, "
+            f"{g.get_shape(node.output[0]) if g.has_shape(node.output[0]) else '?'}"
+        )
+        existing = self._unsqueeze(existing, axis2)
+        new_axes = [i for i, a in enumerate(existing) if a]
         new_axis = g.make_initializer(
             "",
             np.array(new_axes, dtype=np.int64),
