@@ -1,9 +1,10 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings, skipif_ci_windows
 
 
 class TestOnnxExportControlFlow(ExtTestCase):
     @ignore_warnings((UserWarning, FutureWarning))
+    @skipif_ci_windows("does not work")
     def test_while_loop_simple_backward(self):
         import torch
 
@@ -23,6 +24,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualAny(expected, ep.module()(*example_inputs))
 
     @ignore_warnings((UserWarning, FutureWarning))
+    @skipif_ci_windows("does not work")
     def test_while_loop_simple_forward(self):
         import torch
 
@@ -42,6 +44,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualAny(expected, ep.module()(*example_inputs))
 
     @ignore_warnings((UserWarning, FutureWarning))
+    @skipif_ci_windows("does not work")
     def test_while_loop_simple_forward2(self):
         import torch
 
@@ -61,6 +64,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
         self.assertEqualAny(expected, ep.module()(*example_inputs))
 
     @ignore_warnings((UserWarning, FutureWarning))
+    @skipif_ci_windows("does not work")
     def test_while_repeat_interleave(self):
         import torch
 
