@@ -146,6 +146,12 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if next_node.input[0] != node.output[0]:
             return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[1]) or not g.is_constant(next_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(node.input[0]) or not g.has_rank(next_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(node.input[0]) != 1 or g.get_rank(next_node.input[1]) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
     @classmethod
