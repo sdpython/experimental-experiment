@@ -1601,6 +1601,7 @@ class DynamoInterpreter:
             or (
                 node.target == self.torch.ops.aten.nonzero_numpy.default
                 or (node.target == self.torch.ops.aten.where.default and len(node.args) == 1)
+                or ("aten" not in str(node.target))
             ),
         )
         res = self._check_output_name(node, res, output_names)
