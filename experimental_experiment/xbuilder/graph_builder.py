@@ -7951,7 +7951,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             assert node.op_type not in {
                 "SplitToSequence",
                 "SequenceErase",
-                "SequenceInsert",
                 "SequenceAt",
             }, (
                 f"Sequence operators are not supported yet and op_type={node.op_type!r}"
