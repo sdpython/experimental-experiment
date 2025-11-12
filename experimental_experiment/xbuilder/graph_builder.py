@@ -280,6 +280,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
+        self._debug_stop_sequence = os.environ.get("ONNXSTOPSEQUENCE", "#?#")
         self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
         self._debug_foldnot = int(os.environ.get("ONNXFOLDNOT", "0"))
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
@@ -500,6 +501,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self._debug_stop = os.environ.get("ONNXSTOP", "#?#")
         self._debug_stop_shape = os.environ.get("ONNXSTOPSHAPE", "#?#")
         self._debug_stop_type = os.environ.get("ONNXSTOPTYPE", "#?#")
+        self._debug_stop_sequence = os.environ.get("ONNXSTOPSEQUENCE", "#?#")
         self._debug_get_constant = int(os.environ.get("ONNXCST", "0"))
         self._debug_local_function = int(os.environ.get("ONNXFUNC", "0"))
         self._debug_value_shape = os.environ.get("ONNXSTOPVALUESHAPE", "")
@@ -1435,6 +1437,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         unknown: bool = False,
     ):
         """Defines a result as a sequence."""
+        if name in (self._debug_stop_sequence, self._debug_stop_type):
+            raise AssertionError(
+                f"Requested stop, sequence name={name!r}, dtype={dtype}{self.get_debug_msg()}"
+            )
         assert self.has_name(name), f"No result name={name!r}{self.get_debug_msg()}"
         assert isinstance(dtype, (int, tuple)), (
             f"Only one type is allowed in onnx sequences but dtype={dtype!r}, "
@@ -7948,11 +7954,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 new_nodes.append(node)
                 continue
 
-            assert node.op_type not in {
-                "SplitToSequence",
-                "SequenceErase",
-                "SequenceAt",
-            }, (
+            assert node.op_type not in {"SplitToSequence", "SequenceErase"}, (
                 f"Sequence operators are not supported yet and op_type={node.op_type!r}"
                 f"(name={node.name!r})."
             )

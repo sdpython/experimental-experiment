@@ -11372,7 +11372,7 @@ def aten_unbind_int(
     x: T,
     dim: int = 0,
     use_sequence: bool = False,
-    name: str = "unbind",
+    name: str = "unbind.int",
 ) -> Tuple[T, ...]:
     """split"""
     assert not use_sequence, f"Not implemented for use_sequence={use_sequence}"

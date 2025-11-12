@@ -1918,6 +1918,20 @@ class DynamoInterpreter:
                 )
             output_sets = set(last_node.output) if last_node is not None else {}
 
+            # specific case, a loop was not exported as a loop because if it has one element only.
+            if (
+                len(val) == 1
+                and isinstance(val[0], list)
+                and len(val[0]) == 1
+                and isinstance(res, tuple)
+                and len(res) == 1
+                and isinstance(res[0], str)
+                and not self.builder.is_sequence(res[0])
+                and hasattr(node.target, "name")
+                and node.target.name() in {"aten::unbind.int"}
+            ):
+                val = (val[0],)
+
             for i, (v, r) in enumerate(zip(val, res)):
                 if isinstance(v, self.torch.Tensor):
                     dtype = _get_type(v.dtype)
@@ -2011,10 +2025,19 @@ class DynamoInterpreter:
                 elif v is None:
                     continue
                 elif isinstance(v, list) and len(v) > 0:
-                    if len(v) == len(r) and r[0].endswith("#0"):
+                    assert isinstance(r, (list, tuple)), (
+                        f"Expected a list but type is {type(r)}, v={v!r}, "
+                        f"r={r!r}, val={val}, res={res}, node={node!r}, "
+                        f"node.target={node.target!r}{self.builder.get_debug_msg()}"
+                    )
+                    if len(v) == len(r) and (r[0].endswith("#0") or len(v) == 1):
                         # Operator Split was used instead of SplitToSequence.
                         # Or any other node producing multiple results.
                         for r_, v_ in zip(r, v):
+                            assert not self.builder.is_sequence(r_), (
+                                f"{r_!r} is defined as a sequence already"
+                                f"{self.builder.get_debug_msg()}"
+                            )
                             self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
                             shape = tuple(v_.shape)
                             if not any(
