@@ -18,7 +18,7 @@ class MissingRangePattern(PatternOptimization):
         if not g.has_type(node.input[0]) or g.get_type(node.input[0]) in {
             TensorProto.INT32,
             TensorProto.INT64,
-            TensorProto.FLOAT32,
+            TensorProto.FLOAT,
         }:
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node], self.apply, insert_at=node)
