@@ -1930,7 +1930,7 @@ class DynamoInterpreter:
                 and hasattr(node.target, "name")
                 and node.target.name() in {"aten::unbind.int"}
             ):
-                val = (val[0],)
+                val = val[0]
 
             for i, (v, r) in enumerate(zip(val, res)):
                 if isinstance(v, self.torch.Tensor):
