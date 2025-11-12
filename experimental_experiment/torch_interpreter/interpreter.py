@@ -1928,7 +1928,7 @@ class DynamoInterpreter:
                 and isinstance(res[0], str)
                 and not self.builder.is_sequence(res[0])
                 and hasattr(node.target, "name")
-                and node.target.name() in {"aten::unbind.int"}
+                and node.target.name() in {"aten::unbind.int", "aten::nonzero_numpy"}
             ):
                 val = val[0]
 
