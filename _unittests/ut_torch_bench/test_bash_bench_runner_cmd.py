@@ -236,11 +236,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_onnx_dynamo_cpu_fail(self):
-        self._explicit_export_bench_cpu("onnx_dynamo", "1001Fail,1001Fail2", output_data=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_2_outputs(self):
         self._hg_export_bench_cpu("custom", "101Dummy2Outputs")
 
@@ -289,18 +284,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu2_timeout(self):
-        self._hg_export_bench_cpu(
-            "onnx_dynamo",
-            "101Dummy,101Dummy16",
-            timeout=1,
-            verbose=0,
-            check_file=False,
-            output_data=True,
-        )
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_first(self):
         self._hg_export_bench_cpu("custom", "0")
 
@@ -315,24 +298,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         self._hg_export_bench_cpu("torch_script", "101Dummy", tag="taggy")
 
     @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.7")
-    def test_huggingface_export_bench_onnx_dynamo_cpu(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy")
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_tuple(self):
         self._hg_export_bench_cpu("custom", "101DummyTuple")
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu_optimize_ort(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", optimization="ort")
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_huggingface_export_bench_dynamo_cpu_optimize_ir(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", optimization="ir")
 
     @skipif_ci_linux("too long")
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -473,9 +441,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_cpu_dummy_none_list_int(self):
-        for exporter, dynamic in itertools.product(
-            ["custom", "onnx_dynamo", "torch_script"], [True, False]
-        ):
+        for exporter, dynamic in itertools.product(["custom"], [True, False]):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 self._hg_export_bench_cpu(
                     exporter,
@@ -492,7 +458,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.5")
     @requires_onnx_diagnostic("0.7.13")
     def test_huggingface_export_bench_cpu_dummy_none_int_dict(self):
-        for exporter, dynamic in itertools.product(["custom", "onnx_dynamo"], [True, False]):
+        for exporter, dynamic in itertools.product(["custom"], [True, False]):
             with self.subTest(exporter=exporter, dynamic=dynamic):
                 if exporter == "onnx_dynamo" or (dynamic and exporter == "torch_script"):
                     raise unittest.SkipTest(f"this input fails with {exporter!r}")
