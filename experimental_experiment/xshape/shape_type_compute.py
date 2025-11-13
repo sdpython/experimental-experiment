@@ -1487,7 +1487,11 @@ def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
             )
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
-        self.set_rank(node.output[0], self.get_rank(node.input[0]) - cst.size)
+        self.set_rank(
+            node.output[0],
+            self.get_rank(node.input[0])
+            - int(cst.numel() if hasattr(cst, "numel") else cst.size),
+        )
         return True
     else:
         assert not self._debug_shape_missing, (

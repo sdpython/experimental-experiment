@@ -14,6 +14,7 @@
     fused_matmul
     gather_grad
     llm_optim
+    missing_kernels
     simplified_layer_normalization
 
 .. automodule:: experimental_experiment.xoptim.patterns_ort

@@ -10768,14 +10768,19 @@ def aten_sum_dim_IntList(
     dim: Optional[Union[int, List[int]]],
     keepdim: bool,
     dtype: Optional["torch.dtype"] = None,  # noqa: F821
+    name: str = "sum_dim_IntList",
 ) -> T:
-    "reducesum"
+    "reducesum, sum_dim_IntList"
     if dtype is None:
+        torch_dtype = g.get_type_known(outputs[0])
+        if torch_dtype != g.get_type(x):
+            # torch sometimes cast the results into in64
+            x = g.op.Cast(x, to=torch_dtype, name=name)
         return aten_sum(g, sts, outputs, x, dim, keepdim)
 
     res = aten_sum(g, sts, None, x, dim, keepdim)
     itype = torch_dtype_to_onnx_dtype(dtype)
-    result = g.op.Cast(res, to=itype, outputs=outputs, name="sum_dim_IntList")
+    result = g.op.Cast(res, to=itype, outputs=outputs, name=name)
     return result
 
 
@@ -11367,7 +11372,7 @@ def aten_unbind_int(
     x: T,
     dim: int = 0,
     use_sequence: bool = False,
-    name: str = "unbind",
+    name: str = "unbind.int",
 ) -> Tuple[T, ...]:
     """split"""
     assert not use_sequence, f"Not implemented for use_sequence={use_sequence}"
