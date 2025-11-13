@@ -437,7 +437,7 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     # int, list, none
 
-    @unittest.skip("torch.expot.export does not work")
+    @unittest.skip("torch.export.export does not work")
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_huggingface_export_bench_cpu_dummy_none_list_int(self):
