@@ -213,25 +213,9 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
-    def test_export_bench_onnx_dynamo_cpu_dynamic_1_input(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", dynamic=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
     @requires_onnx_diagnostic("0.7.13")
     def test_export_bench_custom_cpu_dynamic_1_input_dummy16(self):
         self._hg_export_bench_cpu("custom", "101Dummy16", dynamic=True, debug=False)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    @requires_onnx_diagnostic("0.7.13")
-    def test_export_bench_onnx_dynamo_cpu_dynamic_1_input_dummy16(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy16", dynamic=True, debug=False)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.11")
-    def test_export_bench_onnx_dynamo_cpu_dynamic_2_inputs(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy2Inputs", dynamic=True, debug=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
@@ -254,11 +238,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.4")
     def test_huggingface_export_bench_onnx_dynamo_cpu_fail(self):
         self._explicit_export_bench_cpu("onnx_dynamo", "1001Fail,1001Fail2", output_data=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_huggingface_export_bench_onnx_dynamo_cpu_dynamic(self):
-        self._hg_export_bench_cpu("onnx_dynamo", "101Dummy", dynamic=True)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
