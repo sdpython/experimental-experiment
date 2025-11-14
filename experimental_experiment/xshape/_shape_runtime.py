@@ -285,6 +285,10 @@ class _ShapeRuntime:
             return True
 
         if node.op_type == "Range":
+            if len(values) == 4 and self.is_constant(node.input[3]):
+                cst = self.get_constant(node.input[3], computed_value=True, exc=False)
+                if cst == 1:
+                    values = values[:-1]
             if len(values) == 3:
                 args = []
                 for v in values:
@@ -299,6 +303,9 @@ class _ShapeRuntime:
                 if not all_int(args):
                     node.doc_string += "#SV-Ra/2"
                     return False
+            else:
+                node.doc_string += "#SV-Ra/3"
+                return False
             node.doc_string += "#SV-Ra"
             self.set_value_shape(node.output[0], tuple(range(*args)))
             return True

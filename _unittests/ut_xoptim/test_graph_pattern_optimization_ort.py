@@ -17,6 +17,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_onnxruntime_training,
     requires_cuda,
+    hide_stdout,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -1585,6 +1586,77 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz, atol=1e-4)
+
+    @hide_stdout()
+    def test_missing_kernels(self):
+        opset = 20
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xc"], to=TensorProto.BFLOAT16),
+                    oh.make_node("Sin", ["xc"], ["xcs"]),
+                    oh.make_node("Cos", ["xc"], ["xcc"]),
+                    oh.make_node("Cast", ["zero"], ["zeroc"], to=TensorProto.BFLOAT16),
+                    oh.make_node("Cast", ["one"], ["onec"], to=TensorProto.BFLOAT16),
+                    oh.make_node("Cast", ["five"], ["fivec"], to=TensorProto.BFLOAT16),
+                    oh.make_node("Range", ["zeroc", "onec", "fivec"], ["y"]),
+                    oh.make_node("Add", ["xcc", "xcs"], ["xccc"]),
+                    oh.make_node("Add", ["xccc", "y"], ["yc"]),
+                    oh.make_node("Cast", ["yc"], ["Y"], to=TensorProto.FLOAT),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a"])],
+                [
+                    onh.from_array(np.array(0, dtype=np.int64), name="zero"),
+                    onh.from_array(np.array(1, dtype=np.int64), name="one"),
+                    onh.from_array(np.array(5, dtype=np.int64), name="five"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", opset)],
+            ir_version=10,
+        )
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=InferShapesOptions.BUILDER,
+            optimization_options=OptimizationOptions(
+                patterns=["MissingRange", "MissingCosSin"], verbose=10
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            [
+                "Cast",
+                "Cast",
+                "Sin",
+                "Cast",
+                "Cast",
+                "Cos",
+                "Cast",
+                "Range",
+                "Cast",
+                "Add",
+                "Add",
+                "Cast",
+            ],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+        import onnxruntime
+
+        # feeds = {"X": np.arange(5).astype(np.float32)}
+        self.assertRaise(
+            lambda: self.make_inference_session(model),
+            onnxruntime.capi.onnxruntime_pybind11_state.InvalidGraph,
+        )
+        self.assertRaise(
+            lambda: self.make_inference_session(opt_onx),
+            onnxruntime.capi.onnxruntime_pybind11_state.NotImplemented,  # on CPU
+        )
+        # sess = self.make_inference_session(opt_onx)
+        # got = sess.run(None, feeds)
+        # self.assertEqualArray(np.array([0, 1, 2, 3, 4], dtype=np.float32), got)
 
     def test_contrib_rotary_embedding_concat_after_position_ids(self):
         opset = 20
