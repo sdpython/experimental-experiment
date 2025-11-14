@@ -41,7 +41,7 @@ class ExportOptions:
     :param save_ep: to save the exported program, it True, it will save the
         graph as well ``<save_ep>.graph``, it dumps them as text,
         if decompositions are enabled, the exported program before them will be saved
-        as well
+        as well, it can a tuple (str, int), to avoid saving a model bigger than the desired size
     :param validate_ep: validates the exported program with the given inputs,
         by default the tolerance is ``1e-5``, use a float instead of a boolean
         to change that value
@@ -112,7 +112,7 @@ class ExportOptions:
         aten_as_function: Optional[Union[bool, Set[Any]]] = None,
         remove_inplace: bool = True,
         allow_untyped_output: bool = False,
-        save_ep: Optional[str] = None,
+        save_ep: Optional[Union[Tuple[str, int], str]] = None,
         validate_ep: Union[float, bool] = False,
         backed_size_oblivious: Union[bool, str] = "auto",
         prefer_deferred_runtime_asserts_over_guards: bool = False,
@@ -511,9 +511,10 @@ class ExportOptions:
             )(*(args or tuple()), **(kwargs or {}))
 
             if self.save_ep:
-                with open(f"{self.save_ep}.old_dynamo", "w") as f:
+                save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
+                with open(f"{save_ep}.old_dynamo", "w") as f:
                     f.write(str(res))
-                torch.export.save(res, f"{self.save_ep}.old_dynamo.pt2")
+                torch.export.save(res, f"{save_ep}.old_dynamo.pt2")
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return res  # _apply_decompositions(res, self.decomposition_table)
@@ -526,14 +527,16 @@ class ExportOptions:
             jit_model = torch.jit.trace(mod, example_inputs=args, check_trace=False, strict=False)
             res = TS2EPConverter(jit_model, args, kwargs).convert()
             if self.save_ep:
-                with open(f"{self.save_ep}.jit", "w") as f:
+                save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
+                with open(f"{save_ep}.jit", "w") as f:
                     f.write(str(res))
-                torch.export.save(res, f"{self.save_ep}.jit.pt2")
+                torch.export.save(res, f"{save_ep}.jit.pt2")
             dec = apply_decompositions(res, self.decomposition_table, self.backed_size_oblivious)
             if self.save_ep:
-                with open(f"{self.save_ep}.jit.decomposed", "w") as f:
+                save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
+                with open(f"{save_ep}.jit.decomposed", "w") as f:
                     f.write(str(dec))
-                torch.export.save(dec, f"{self.save_ep}.jit.decomposed.pt2")
+                torch.export.save(dec, f"{save_ep}.jit.decomposed.pt2")
             if verbose:
                 print(f"[ExportOptions.export] done in {time.perf_counter() - begin}")
             return dec
@@ -573,7 +576,8 @@ class ExportOptions:
                 if verbose:
                     print(f"[ExportOptions.export] done, modified={modified}")
             if self.save_ep:
-                with open(f"{self.save_ep}.tracing", "w") as f:
+                save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
+                with open(f"{save_ep}.tracing", "w") as f:
                     f.write(str(graph))
             gm = torch.fx.GraphModule(mod, graph)
             return gm
@@ -629,6 +633,9 @@ class ExportOptions:
             print(exported_program)
             print("-- DONE -- ")
         if self.save_ep:
+            save_ep, threshold = (
+                self.save_ep if isinstance(self.save_ep, tuple) else (self.save_ep, 2**2)
+            )
 
             def torch_model_size(model):
                 size_model = 0
@@ -637,17 +644,18 @@ class ExportOptions:
                     size_model += size
                 return size_model
 
-            with open(f"{self.save_ep}.ep", "w") as f:
+            with open(f"{save_ep}.ep", "w") as f:
                 f.write(str(exported_program))
-            with open(f"{self.save_ep}.ep.graph", "w") as f:
+            with open(f"{save_ep}.ep.graph", "w") as f:
                 f.write(str(exported_program.graph))
             size = torch_model_size(mod)
             if verbose:
                 print(f"[ExportOptions.export] model size {size / 2**20} Mb")
-            if size < 2**22:
+            if size < threshold:
                 # skipping if the model is too big.
                 begin = time.perf_counter()
-                torch.export.save(exported_program, f"{self.save_ep}.ep.pt2")
+                torch.save({"args": args, "kwargs": kwargs}, f"{save_ep}.input.pt")
+                torch.export.save(exported_program, f"{save_ep}.ep.pt2")
                 self._stat_time_torch_export_save = time.perf_counter() - begin
         if isinstance(self.validate_ep, float) or self.validate_ep:
             begin = time.perf_counter()
