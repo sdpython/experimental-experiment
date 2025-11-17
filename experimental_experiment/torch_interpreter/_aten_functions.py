@@ -3570,7 +3570,8 @@ def aten_floor_divide(
         assert g.has_rank(x), f"missing rank for {x!r}{g.get_debug_msg()}"
         itype = g.get_type(x)
         dtype = tensor_dtype_to_np_dtype(itype)
-        div = g.op.Div(x, np.array([y] if g.get_rank(x) > 0 else y, dtype=dtype), name=name)
+        cst = np.array([y] if g.get_rank(x) > 0 else y, dtype=dtype)
+        div = g.op.Div(x, cst, name=name)
         if g.has_shape(x):
             g.set_shape(div, g.get_shape(x))
         else:
@@ -8353,6 +8354,7 @@ def aten_pow_Tensor_Tensor(
         if exponent == 1:
             # The node is removed.
             return g.op.Identity(x, outputs=outputs, name=name)
+        assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
         if g.get_type(x) in {
             TensorProto.FLOAT,
             TensorProto.FLOAT16,
@@ -8365,7 +8367,10 @@ def aten_pow_Tensor_Tensor(
                 return g.op.Reciprocal(g.op.Sqrt(x, name=name), outputs=outputs, name=name)
         elif g.get_type(x) in {TensorProto.INT64, TensorProto.INT32}:
             if isinstance(exponent, int) or int(exponent) == exponent:
-                exponent = np.array([exponent], dtype=np.int64)
+                assert g.has_rank(x), f"Missing rank({x!r}){g.get_debug_msg()}"
+                exponent = np.array(
+                    ([exponent] if g.get_rank(x) > 0 else exponent), dtype=np.int64
+                )
             else:
                 # Type conflicts: we use the output type
                 output_type = g.get_type_known(outputs[0], exc=False)
@@ -8380,16 +8385,21 @@ def aten_pow_Tensor_Tensor(
                     dtype = tensor_dtype_to_np_dtype(output_type)
                     itype = output_type
                 x = g.op.Cast(x, to=itype, name=name)
-                exponent = np.array([exponent], dtype=dtype)
+                assert g.has_rank(x), f"Missing rank({x!r}){g.get_debug_msg()}"
+                exponent = np.array(([exponent] if g.get_rank(x) > 0 else exponent), dtype=dtype)
         if not isinstance(exponent, np.ndarray):
-            exponent = np.array([exponent])
+            assert g.has_rank(x), f"Missing rank({x!r}){g.get_debug_msg()}"
+            exponent = np.array(([exponent] if g.get_rank(x) > 0 else exponent), dtype=dtype)
     if isinstance(x, (int, float)):
         assert isinstance(exponent, str), (
             f"Unexpected type for exponent, type(x)={type(x)}, "
             f"type(exponent)={type(exponent)}{g.get_debug_msg()}"
         )
         itype = g.get_type(exponent)
-        x = np.array([x], dtype=tensor_dtype_to_np_dtype(itype))
+        assert g.has_rank(exponent), f"Missing rank({x!r}){g.get_debug_msg()}"
+        x = np.array(
+            ([x] if g.get_rank(exponent) > 0 else x), dtype=tensor_dtype_to_np_dtype(itype)
+        )
         res = g.op.Pow(x, exponent, outputs=outputs, name=name)
         if not sts:
             set_type_shape_unary_op(g, res, exponent)
