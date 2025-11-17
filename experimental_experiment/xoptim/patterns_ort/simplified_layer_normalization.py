@@ -163,6 +163,14 @@ class SkipLayerNormalizationPattern(PatternOptimization):
             return self.none()
         if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) not in (2, 3):
             return self.none(node, inspect.currentframe().f_lineno)
+        if len(node.input) > 1 and (
+            not g.has_rank(node.input[1]) or g.get_rank(node.input[1]) != 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(node.input) > 2 and (
+            not g.has_rank(node.input[2]) or g.get_rank(node.input[2]) != 1
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
         axis = g.get_attribute(node, "axis", exc=False)
         axis = 0 if axis is None else axis.i
         if axis != -1:
