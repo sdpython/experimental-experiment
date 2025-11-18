@@ -8537,6 +8537,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self.functions[key] = f
         if builder:
             self.functions_builder[key] = builder
+        elif f.domain not in self.opsets:
+            self.opsets[f.domain] = 1
         return f.domain, f.name
 
     def has_local_function(self, name: str, domain: str = "", builder: bool = False) -> bool:

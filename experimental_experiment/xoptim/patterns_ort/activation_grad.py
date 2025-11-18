@@ -23,7 +23,7 @@ class SoftmaxGradPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         mul_node = g.node_before(node.input[0])
-        if mul_node.op_type != "Mul" or mul_node.domain != "":
+        if mul_node is None or mul_node.op_type != "Mul" or mul_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
 
         next_mul_node = g.next_node(node.output[0])
