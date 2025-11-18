@@ -207,7 +207,7 @@ def same_function_proto(
             return f"different number of outputs at node {i}" if verbose else False
         if len(n1.attribute) != len(n2.attribute):
             return f"different number of attributes at node {i}" if verbose else False
-        n2_input = [mapped[i] for i in n1.input]
+        n2_input = [(mapped[i] if i else "") for i in n1.input]
         if list(n2.input) != n2_input:
             return (
                 f"different input names at node {i}, {n1.input}, {n2.input} != {n2_input}"
