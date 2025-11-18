@@ -8955,10 +8955,16 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         for node in proto.node:
             new_inputs = []
             for name in node.input:
+                if not name:
+                    new_inputs.append("")
+                    continue
                 assert name in renamed, f"Unable to find {name!r} in renamed={renamed}"
                 new_inputs.append(renamed[name])
             new_outputs = []
             for name in node.output:
+                if not name:
+                    new_outputs.append("")
+                    continue
                 if name in renamed:
                     new_outputs.append(renamed[name])
                 else:
