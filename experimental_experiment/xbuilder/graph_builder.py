@@ -7341,12 +7341,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 self.simple_update_value_shape_with_node(n)
                 assert (
                     n.domain != ""
-                    or any(not self.has_type(o) for o in n.input)
-                    or all(self.has_type(o) for o in n.output)
+                    or any(not self.has_type(o) for o in n.input if o)
+                    or all(self.has_type(o) for o in n.output if o)
                 ), (
                     f"Missing one output type in node={self.pretty_node(n)}, "
-                    f"input_has_type={[self.has_type(o) for o in n.input]}, "
-                    f"output_has_type={[self.has_type(o) for o in n.output]}, "
+                    f"input_has_type={[(self.has_type(o) if o else '-') for o in n.input]}, "
+                    f"output_has_type={[(self.has_type(o) if o else '-') for o in n.output]}, "
                     f"{self.get_debug_msg()}"
                 )
             self.nodes = [n for n in self.nodes if n is not None]
@@ -8955,10 +8955,16 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         for node in proto.node:
             new_inputs = []
             for name in node.input:
+                if not name:
+                    new_inputs.append("")
+                    continue
                 assert name in renamed, f"Unable to find {name!r} in renamed={renamed}"
                 new_inputs.append(renamed[name])
             new_outputs = []
             for name in node.output:
+                if not name:
+                    new_outputs.append("")
+                    continue
                 if name in renamed:
                     new_outputs.append(renamed[name])
                 else:
