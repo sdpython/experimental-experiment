@@ -648,6 +648,13 @@ def _set_shape_type_op_any_castlike(self: ShapeBuilder, node: NodeProto):
     )
 
 
+def _set_shape_type_op_any_compress(self: ShapeBuilder, node: NodeProto):
+    "Sets the output shape for node type Compress."
+    return set_type_shape_binary_op(
+        self, node.output[0], node.input[0], itype=self.get_type(node.input[0])
+    )
+
+
 def _set_shape_type_op_any_concat(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Concat."
     if self.has_type(node.input[0]):
@@ -1544,6 +1551,7 @@ def _set_shape_type_op_any_unary(
 _set_shape_type_op_any_known = {
     "BatchNormalization": _set_shape_type_op_any_batch_normalization,
     "Cast": _set_shape_type_op_any_cast,
+    "Compress": _set_shape_type_op_any_compress,
     "Concat": _set_shape_type_op_any_concat,
     "Conv": _set_shape_type_op_any_conv_max_pool,
     "Expand": _set_shape_type_op_any_expand,
@@ -1902,6 +1910,14 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
                 self.set_shape(o, local_function_builder.get_shape(lo))
             elif local_function_builder.has_rank(lo):
                 self.set_rank(o, local_function_builder.get_rank(lo))
+        return None
+
+    # to be improved later
+    if node.op_type in {"PackedMultiHeadAttention"} and node.domain == "com.microsoft":
+        if self.has_type(node.input[0]):
+            self.set_type(node.output[0], self.get_type(node.input[0]))
+        if self.has_rank(node.input[0]):
+            self.set_rank(node.output[0], self.get_rank(node.input[0]))
         return None
 
     assert node.op_type in {"GatherGrad", "SoftmaxGrad", "ConcatTraining"} or node.domain not in {
