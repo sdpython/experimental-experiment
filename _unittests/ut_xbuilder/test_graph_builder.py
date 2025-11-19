@@ -1123,7 +1123,11 @@ class TestGraphBuilder(ExtTestCase):
             oh.make_graph(
                 [
                     oh.make_node(
-                        "LinearRegression", ["X", "A", "B"], ["Y1"], domain=new_domain, epsilon=10
+                        "LinearRegression",
+                        ["X", "A", "B"],
+                        ["Y1"],
+                        domain=new_domain,
+                        epsilon=10.0,
                     ),
                     oh.make_node("Abs", ["Y1"], ["Y"]),
                 ],
@@ -1146,7 +1150,7 @@ class TestGraphBuilder(ExtTestCase):
         )
         expected = ref.run(None, feeds)[0]
 
-        gr = GraphBuilder(onnx_model)
+        gr = GraphBuilder(onnx_model, verbose=1)
         self.assertEqual(len(gr.functions), 1)
         onx = gr.to_onnx(inline=False)
         self.assertEqual(len(onx.functions), 1)
