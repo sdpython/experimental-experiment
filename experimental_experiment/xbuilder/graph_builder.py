@@ -8699,6 +8699,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
         :param skip_functions: do not inline these functions
         :param verbose: verbosity
+        :return: number of replacements
         """
         skip_functions = skip_functions or set()
         n_replacements = 0
@@ -8720,6 +8721,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     n_replacements += self._inline_functions_subgraph(
                         att.g, verbose=verbose, skip_functions=skip_functions
                     )
+                elif att.ref_attr_name:
+                    # we need to retrieve the value of the parameter
+                    raise NotImplementedError(f"Unable to inline a function with attribute {att}")
 
             key = node.domain, node.op_type
             if key not in self.functions or key in skip_functions:
