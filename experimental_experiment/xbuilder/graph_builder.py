@@ -7344,7 +7344,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     or any(not self.has_type(o) for o in n.input if o)
                     or all(self.has_type(o) for o in n.output if o)
                 ), (
-                    f"Missing one output type in node={self.pretty_node(n)}, "
+                    f"Missing one output type in node=[{self.pretty_node(n)}], "
                     f"input_has_type={[(self.has_type(o) if o else '-') for o in n.input]}, "
                     f"output_has_type={[(self.has_type(o) if o else '-') for o in n.output]}, "
                     f"{self.get_debug_msg()}"
