@@ -679,11 +679,14 @@ class ExtTestCase(unittest.TestCase):
                 raise
             raise AssertionError(msg) from e
 
-    def make_inference_session(self, proto: "ModelProto") -> "InferenceSession":  # noqa: F821
+    def make_inference_session(
+        self, proto: Union[str, "ModelProto"]  # noqa: F821
+    ) -> "InferenceSession":  # noqa: F821
         import onnxruntime
 
         return onnxruntime.InferenceSession(
-            proto.SerializeToString(), providers=["CPUExecutionProvider"]
+            proto if isinstance(proto, str) else proto.SerializeToString(),
+            providers=["CPUExecutionProvider"],
         )
 
     def string_type(self, *args, **kwargs):
