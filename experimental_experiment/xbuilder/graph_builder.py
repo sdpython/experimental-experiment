@@ -1126,7 +1126,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if att.name == "value":
                     t = onh.to_array(att.t)
                     return tuple(t.shape)
-        raise TypeError(f"Unexpected or unsupported scenario type {type(proto)}: {proto}.")
+        raise TypeError(
+            f"Unexpected or unsupported scenario type {type(proto)}: "
+            f"{proto}, attribute={proto.attribute}."
+        )
 
     def _get_tensor_type(self, proto: Union[NodeProto, TensorProto]) -> int:
         if isinstance(proto, TensorProto):
@@ -9014,6 +9017,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     new_att.ParseFromString(known_att.SerializeToString())
                     new_att.name = att.name
                     new_attributes.append(new_att)
+                else:
+                    new_attributes.append(att)
             new_node.attribute.extend(new_attributes)
             new_nodes.append(new_node)
 
