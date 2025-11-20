@@ -1126,7 +1126,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if att.name == "value":
                     t = onh.to_array(att.t)
                     return tuple(t.shape)
-        raise TypeError(f"Unexpected or unsupported scenario type {type(proto)}: {proto}.")
+        raise TypeError(
+            f"Unexpected or unsupported scenario type {type(proto)}: "
+            f"{proto}, attribute={proto.attribute}."
+        )
 
     def _get_tensor_type(self, proto: Union[NodeProto, TensorProto]) -> int:
         if isinstance(proto, TensorProto):
@@ -8699,6 +8702,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
         :param skip_functions: do not inline these functions
         :param verbose: verbosity
+        :return: number of replacements
         """
         skip_functions = skip_functions or set()
         n_replacements = 0
@@ -8720,6 +8724,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     n_replacements += self._inline_functions_subgraph(
                         att.g, verbose=verbose, skip_functions=skip_functions
                     )
+                elif att.ref_attr_name:
+                    # we need to retrieve the value of the parameter
+                    raise NotImplementedError(f"Unable to inline a function with attribute {att}")
 
             key = node.domain, node.op_type
             if key not in self.functions or key in skip_functions:
@@ -8731,7 +8738,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"[_inline_functions_iterations] inline function "
                     f"{self.functions[key].name!r} domain {self.functions[key].domain!r}"
                 )
-            new_nodes = self._convert_function(node.input, node.output, self.functions[key])
+            new_nodes = self._convert_function(
+                node.input, node.output, self.functions[key], attributes=node.attribute
+            )
             if verbose:
                 print(
                     f"[_inline_functions_iterations] {len(new_nodes)} new nodes "
@@ -8939,7 +8948,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         return g2
 
     def _convert_function(
-        self, inputs: List[str], outputs: List[str], proto: FunctionProto
+        self,
+        inputs: List[str],
+        outputs: List[str],
+        proto: FunctionProto,
+        attributes: Optional[Sequence[AttributeProto]] = None,
     ) -> List[NodeProto]:
         """
         Converts a function into a list of nodes.
@@ -8947,8 +8960,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param inputs: inputs in the calling nodes
         :param outputs: outputs in the calling nodes
         :param proto: function proto
+        :param attributes: attribute of the node, needed if the function
+            has arguments
         :return: list of nodes
         """
+        mapatt = {}
+        if attributes:
+            for att in attributes:
+                mapatt[att.name] = att
         renamed = dict(zip(proto.input, inputs))
         renamed.update(dict(zip(proto.output, outputs)))
         new_nodes = []
@@ -8958,7 +8977,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if not name:
                     new_inputs.append("")
                     continue
-                assert name in renamed, f"Unable to find {name!r} in renamed={renamed}"
+                assert name in renamed, f"Unable to find {name!r} in renamed={renamed!r}"
                 new_inputs.append(renamed[name])
             new_outputs = []
             for name in node.output:
@@ -8979,7 +8998,28 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 name=self.unique_node_name(node.name),
                 domain=node.domain,
             )
-            new_node.attribute.extend(node.attribute)
+            new_attributes = []
+            for att in node.attribute:
+                if att.ref_attr_name:
+                    assert att.ref_attr_name in mapatt, (
+                        f"The node relies on one attribute {att.name!r} with a reference "
+                        f"to a function attribute but none is provided in the available "
+                        f"set {sorted(mapatt)}."
+                    )
+                    known_att = mapatt[att.ref_attr_name]
+                    assert known_att.type == att.type, (
+                        f"Type mimatch netween the attribute {att.name!r} "
+                        f"type {att.type} of the node "
+                        f"inside the function and the one "
+                        f"{known_att.type} outside the function (name {known_att.name!r})"
+                    )
+                    new_att = AttributeProto()
+                    new_att.ParseFromString(known_att.SerializeToString())
+                    new_att.name = att.name
+                    new_attributes.append(new_att)
+                else:
+                    new_attributes.append(att)
+            new_node.attribute.extend(new_attributes)
             new_nodes.append(new_node)
 
         return new_nodes
