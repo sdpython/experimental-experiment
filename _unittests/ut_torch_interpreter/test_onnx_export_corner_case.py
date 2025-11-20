@@ -1,4 +1,5 @@
 import contextlib
+import itertools
 import os
 import unittest
 import warnings
@@ -128,8 +129,7 @@ def export_utils(
     return names
 
 
-class TestOnnxExport(ExtTestCase):
-
+class TestOnnxExportCornerCase(ExtTestCase):
     def test_export_options(self):
         for k in ExportOptions._allowed:
             st = ExportOptions(strategy=k)
@@ -471,6 +471,57 @@ class TestOnnxExport(ExtTestCase):
                 NotFoundUTError,
             )
         self.assertIn("[Dispatcher.find_function]", s.getvalue())
+
+    def test_batch_norm_2d(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(self, training, affine, track_running_stats):
+                super().__init__()
+                self.bn1 = torch.nn.BatchNorm2d(
+                    3, affine=affine, track_running_stats=track_running_stats
+                )
+                self.bn1.training = training
+
+            def forward(self, x):
+                return -self.bn1(-x)
+
+        for train, affine, track in itertools.product(
+            [False, True], [False, True], [False, True]
+        ):
+            with self.subTest(train=train, affine=affine, track=track):
+                model = Model(train, affine, track)
+                x = torch.randn(1, 3, 224, 224)
+                expected = model(x)
+                self.assertIsInstance(expected, torch.Tensor)
+                ep = torch.export.export(model, (x,))
+                got = ep.module()(x)
+                self.assertEqualArray(expected, got)
+
+        for train, affine, track in itertools.product(
+            [False, True], [False, True], [False, True]
+        ):
+            with self.subTest(train=train, affine=affine, track=track):
+                model = Model(train, affine, track).eval()
+                x = torch.randn(1, 3, 224, 224)
+                expected = model(x)
+                self.assertIsInstance(expected, torch.Tensor)
+                ep = torch.export.export(model, (x,))
+                got = ep.module()(x)
+                self.assertEqualArray(expected, got)
+
+    def test_mobilenet_v2(self):
+        import torch
+        from torchvision import models
+
+        model = models.mobilenet_v2(weights=None).eval()
+        x = torch.randn(1, 3, 224, 224)
+        expected = model(x)
+        ep = torch.export.export(model, (x,))
+        got = ep.module()(x)
+        print(ep)
+        torch.testing.assert_close(expected, got)
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
