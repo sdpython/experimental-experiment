@@ -8609,10 +8609,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         raise AssertionError(f"Unsupported type {type(a)}, unable to convert to a torch.Tensor.")
 
     def inline_functions(self, verbose: int = 0) -> int:
-        """
-        Inlines local functions.
-        Returns the number of inlined nodes.
-        """
+        """Inlines local functions. Returns the number of inlined nodes."""
         if not self.functions:
             # Nothing to do
             return
@@ -8936,12 +8933,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 set_rep -= set(node.output)
         if not do:
             return g
-        assert set(o.name for o in g.output) & set_rep, (
-            f"One output name is scheduled to be renamed but an Identity "
-            f"node should have been inserted, set_rep={set_rep}, "
-            f"outputs={[o.name for o in g.output]}\n---\n{pretty_onnx(g)}"
-            f"\n----\nreplacements={replacements}"
-        )
         g2 = oh.make_graph(
             new_nodes, g.name, g.input, g.output, g.initializer, g.sparse_initializer
         )
@@ -9017,6 +9008,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     new_att.ParseFromString(known_att.SerializeToString())
                     new_att.name = att.name
                     new_attributes.append(new_att)
+                elif att.type == AttributeProto.GRAPH:
+                    new_g = self._rename_results_in_subgraph(att.g, replacements=renamed.copy())
+                    if make_idg(new_g) == make_idg(att.g):
+                        new_attributes.append(att)
+                    else:
+                        new_attributes.append(oh.make_attribute(att.name, new_g))
                 else:
                     new_attributes.append(att)
             new_node.attribute.extend(new_attributes)
