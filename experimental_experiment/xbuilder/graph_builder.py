@@ -1242,7 +1242,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"multiple_outputs={multiple_outputs}{self.get_debug_msg()}"
                 )
                 if self._debug_get_constant:
-                    print(f"[GraphBuilder.get_constant]   A: None, name={name!r}")
+                    print(f"[GraphBuilder-{self._hash()}.get_constant]   A: None, name={name!r}")
                 return None
             assert multiple_outputs or not isinstance(
                 res, tuple
@@ -1259,7 +1259,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if exc and not self._parent:  # subgraphs not fully working
                 raise ValueError(f"Result {name!r} is not a constant{self.get_debug_msg()}")
             if self._debug_get_constant:
-                print(f"[GraphBuilder.get_constant]   C: None, name={name!r}")
+                print(f"[GraphBuilder-{self._hash()}.get_constant]   C: None, name={name!r}")
             return None
         possible_value = self.constants_[name]
         if name in self.constants_computed_:
@@ -1287,7 +1287,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if res is None:
                     # The constant is too big to be computed.
                     if self._debug_get_constant:
-                        print(f"[GraphBuilder.get_constant]   E: None, name={name!r}")
+                        print(
+                            f"[GraphBuilder-{self._hash()}.get_constant]   E: None, name={name!r}"
+                        )
                     return None
 
                 assert multiple_outputs or not isinstance(res, tuple), (
@@ -1299,7 +1301,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 ), f"get_constants not implemented when multiple_outputs=True, name={name!r}"
                 if not isinstance(res, tuple):
                     if self._debug_get_constant:
-                        print(f"[GraphBuilder.get_constant]   F: tuple, name={name!r}")
+                        print(
+                            f"[GraphBuilder-{self._hash()}.get_constant]   "
+                            f"F: tuple, name={name!r}"
+                        )
                     return res
 
                 assert isinstance(res, tuple), (
@@ -1359,7 +1364,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"Result {name!r} was never evaluated within method 'constant_folding'."
                 )
             if self._debug_get_constant:
-                print(f"[GraphBuilder.get_constant]   J: None, name={name!r}")
+                print(f"[GraphBuilder-{self._hash()}.get_constant]   J: None, name={name!r}")
             return None
 
         value = self.initializers_dict[name]
@@ -1750,8 +1755,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 sshape = set()
             if (set(old_shape) | sshape) & self._debug_dyn_dim:
                 print(
-                    f"[GraphBuilder._check_two_shapes_are_compatible] old_shape={old_shape}, "
-                    f"shape={shape}, register_int={register_int}, name={name!r}"
+                    f"[GraphBuilder-{self._hash()}._check_two_shapes_are_compatible] "
+                    f"old_shape={old_shape}, shape={shape}, register_int={register_int}, "
+                    f"name={name!r}"
                 )
         for d1, d2 in zip(old_shape, shape):
             if isinstance(d1, int) and isinstance(d2, int):
@@ -1880,7 +1886,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             old_shape = self._known_shapes[name]
             if self._debug_dyn_dim and self._debug_dyn_dim & (set(shape) | set(old_shape)):
                 print(
-                    f"[GraphBuilder.set_shape] set_shape({name!r}, {shape}), "
+                    f"[GraphBuilder-{self._hash()}.set_shape] set_shape({name!r}, {shape}), "
                     f"old_shape={old_shape}"
                 )
             if len(shape) == len(old_shape) and set_if_more_precise:
@@ -1909,7 +1915,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 return
 
         if self._debug_dyn_dim and set(shape) & self._debug_dyn_dim:
-            print(f"[GraphBuilder.set_shape] set_shape({name!r}, {shape})")
+            print(f"[GraphBuilder-{self._hash()}.set_shape] set_shape({name!r}, {shape})")
         if self.verbose > 5:
             print(f"[GraphBuilder-{self._hash()}.set_shape] {name}:{shape}")
         for s in shape:
@@ -5556,13 +5562,13 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         """
         if self._debug_dyn_dim:
             print(
-                f"[GraphBuilder._improves_dynamic_dimension_naming] "
+                f"[GraphBuilder-{self._hash()}._improves_dynamic_dimension_naming] "
                 f"{len(self.constraints_)} constaints"
             )
             for k, v in sorted(self.constraints_.items()):
                 if k in self._debug_dyn_dim or v & self._debug_dyn_dim:
                     print(
-                        f"[GraphBuilder._improves_dynamic_dimension_naming] .. "
+                        f"[GraphBuilder-{self._hash()}._improves_dynamic_dimension_naming] .. "
                         f"{k} ~ {sorted(v)}"
                     )
 
@@ -5667,7 +5673,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             original.remove("channel")
 
         if self._debug_dyn_dim:
-            print(f"[GraphBuilder._improves_dynamic_dimension_naming] original={original}")
+            print(
+                f"[GraphBuilder-{self._hash()}._improves_dynamic_dimension_naming] "
+                f"original={original}"
+            )
         # Let's process the output constraints.
         assert self.output_dynamic_shapes is None or isinstance(
             self.output_dynamic_shapes, dict
@@ -5705,12 +5714,15 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             )
         if self._debug_dyn_dim:
             print(
-                f"[GraphBuilder._improves_dynamic_dimension_naming] "
+                f"[GraphBuilder-{self._hash()}._improves_dynamic_dimension_naming] "
                 f"{len(replacements)} replacements"
             )
             for k, v in sorted(replacements.items()):
                 if k in self._debug_dyn_dim or v in self._debug_dyn_dim:
-                    print(f"[GraphBuilder._improves_dynamic_dimension_naming] .. {k!r} -> {v!r}")
+                    print(
+                        f"[GraphBuilder-{self._hash()}._improves_dynamic_dimension_naming] "
+                        f".. {k!r} -> {v!r}"
+                    )
 
         if replacements:
             if not hasattr(self, "replacements_"):
@@ -5903,7 +5915,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
             for k, v in update.items():
                 if self._debug_dyn_dim and self._debug_dyn_dim & {k}:
-                    print(f"[GraphBuilder._improve_constraints] {k} -> {v}")
+                    print(f"[GraphBuilder-{self._hash()}._improve_constraints] {k} -> {v}")
                 self.add_to_constraints(k, v)
 
     def io_names(self):
@@ -5946,7 +5958,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"{node.op_type}, name is {node.name!r}\n"
                     f"{self.pretty_node(node)}{self.get_debug_msg()}"
                 )
-            if node.op_type in {"If", "Loop", "Scan", "SequenceMap"}:
+            if self._has_subgraph_possibly(node):
                 for att in node.attribute:
                     if att.type == AttributeProto.GRAPH:
                         g = att.g
@@ -6503,8 +6515,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         used by a subgraph.
         """
         hidden = set()
-        memo = set(i.name for i in graph.initializer)
-        memo |= set(i.values.name for i in graph.sparse_initializer)
+        memo = (
+            {i.name for i in graph.initializer}
+            | {i.values.name for i in graph.sparse_initializer}
+            | {i.name for i in graph.input}
+        )
         for node in graph.node:
             for i in node.input:
                 if i not in memo:
@@ -6563,17 +6578,25 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         return used
 
     @classmethod
-    def _enumerate_inputs_with_subgraph(cls, node: NodeProto) -> Iterator[str]:
+    def _has_subgraph_possibly(cls, node: NodeProto) -> bool:
+        return node.op_type[0] in "LSI" and node.op_type in {"Loop", "Scan", "If", "SequenceMap"}
+
+    @classmethod
+    def _enumerate_inputs_with_subgraph_plus_hidden(cls, node: NodeProto) -> Iterator[str]:
         """
         Enumerates all inputs from a node including all the hidden inputs
         from subgraphs.
         """
         yield from node.input
-        if node.op_type[0] in "LSI" and node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+        if cls._has_subgraph_possibly(node):
             for att in node.attribute:
                 if att.type == AttributeProto.GRAPH:
                     hidden_inputs = cls._get_hidden_inputs(att.g)
                     yield from hidden_inputs
+                else:
+                    assert (
+                        att.type != AttributeProto.GRAPHS
+                    ), "Not implemented when att.type == AttributeProto.GRAPHS"
 
     def remove_unused(self) -> int:
         """
@@ -6588,7 +6611,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         marked = {o.name: set() for o in self.outputs}
         for node in reversed(self.nodes):
             used = False
-            node_inputs = list(self._enumerate_inputs_with_subgraph(node))
+            node_inputs = list(self._enumerate_inputs_with_subgraph_plus_hidden(node))
             for o in node.output:
                 if o in marked:
                     for i in node_inputs:
@@ -6675,7 +6698,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if self.verbose > 4:
                     print(f"[GraphBuilder-{self._hash()}.constant_folding] initializer: {k}")
                 if self._debug_foldnot and k not in self.initializers_dict:
-                    print(f"[GraphBuilder.constant_folding.0] unable to fold {k!r} (v is None)")
+                    print(
+                        f"[GraphBuilder-{self._hash()}.constant_folding.0] "
+                        f"unable to fold {k!r} (v is None)"
+                    )
                 continue
             assert isinstance(v, NodeProto), f"Unexpected type {type(v)} for k={k!r}"
             if self.verbose > 4:
@@ -6687,7 +6713,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             ):
                 if self._debug_foldnot:
                     print(
-                        f"[GraphBuilder.constant_folding.P] unable to fold "
+                        f"[GraphBuilder-{self._hash()}.constant_folding.P] unable to fold "
                         f"{v.op_type}{v.input} -> {v.output}  [{v.name}], k={k!r}, "
                         f"options={options}"
                     )
@@ -6700,7 +6726,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     # Evaluation failed.
                     if self._debug_foldnot:
                         print(
-                            f"[GraphBuilder.constant_folding.A] unable to fold "
+                            f"[GraphBuilder-{self._hash()}.constant_folding.A] unable to fold "
                             f"{v.op_type}{v.input} -> {v.output}  [{v.name}], k={k!r}"
                         )
                     assert not self._debug_constant_folding, (
@@ -6748,8 +6774,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     else:
                         if self._debug_foldnot:
                             print(
-                                f"[GraphBuilder.constant_folding.B] unable to fold "
-                                f"{v.op_type}{v.input} -> {v.output}  [{v.name}]"
+                                f"[GraphBuilder-{self._hash()}.constant_folding.B] unable to "
+                                f"fold {v.op_type}{v.input} -> {v.output}  [{v.name}]"
                             )
                         updates[name] = v
                     if self.verbose > 3:
@@ -6768,7 +6794,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 new_nodes.append(node)
                 if self._debug_foldnot:
                     print(
-                        f"[GraphBuilder.constant_folding.C] unable to fold "
+                        f"[GraphBuilder-{self._hash()}.constant_folding.C] unable to fold "
                         f"{node.op_type}{node.input} -> {node.output}  [{node.name}]"
                     )
                 continue
@@ -6827,7 +6853,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     def _rename_inputs_in_node(
         cls, node: NodeProto, replacements: Dict[str, str], to_rename: Set[str]
     ) -> NodeProto:
-        set_inputs = set(cls._enumerate_inputs_with_subgraph(node))
+        set_inputs = set(cls._enumerate_inputs_with_subgraph_plus_hidden(node))
         if set_inputs & to_rename:
             new_inputs = [replacements.get(i, i) for i in node.input]
             new_outputs = [replacements.get(i, i) for i in node.output]
@@ -6844,7 +6870,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 name=node.name,
             )
 
-            if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+            if cls._has_subgraph_possibly(node):
                 # Hidden inputs must be taken care of.
                 node_attributes = []
                 for att in node.attribute:
@@ -7058,7 +7084,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         added = 0
         for node in new_nodes:
             repo = {o for o in node.output if o in replacements}
-            repi = {o for o in self._enumerate_inputs_with_subgraph(node) if o in replacements}
+            repi = {
+                o
+                for o in self._enumerate_inputs_with_subgraph_plus_hidden(node)
+                if o in replacements
+            }
             if repi or repo:
                 new_inputs = [replacements.get(i, i) for i in node.input]
                 new_outputs = [replacements.get(i, i) for i in node.output]
@@ -7090,7 +7120,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 added += 1
                 removed += 1
 
-                if node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+                if self._has_subgraph_possibly(node):
                     # Hidden inputs must be taken care of.
                     short_replacements = {k: replacements[k] for k in repi if k in replacements}
                     node_attributes = []
@@ -7296,13 +7326,13 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         # finding the position and updating the opsets if needed.
         n_existing = []
         for node in new_nodes:
-            for i in self._enumerate_inputs_with_subgraph(node):
+            for i in self._enumerate_inputs_with_subgraph_plus_hidden(node):
                 if not i:
                     # optional input
                     continue
                 assert self.has_name(i), (
                     f"Input {i!r} does not exist for node {node.op_type!r}, "
-                    f"debug={debug}{self.get_debug_msg()}"
+                    f"debug={debug}{self.get_debug_msg()}\n---------\n{node}"
                 )
             for o in node.output:
                 if self.has_name(o):
@@ -7344,6 +7374,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 self.simple_update_value_shape_with_node(n)
                 assert (
                     n.domain != ""
+                    or self._has_subgraph_possibly(n)
                     or any(not self.has_type(o) for o in n.input if o)
                     or all(self.has_type(o) for o in n.output if o)
                 ), (
@@ -7398,7 +7429,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 position_to_insert = mini[0]
                 if self.verbose > 1:
                     print(
-                        f"[GraphBuilder.insert_and_remove_nodes] needs full sort "
+                        f"[GraphBuilder-{self._hash()}.insert_and_remove_nodes] needs full sort "
                         f"to add new nodes at because node at position {pos} "
                         f"cannot be moved.\n----\n{self._position_msg([node])}"
                         f"\n-------\n{self._position_msg(new_nodes)}"
@@ -8579,7 +8610,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         """
         if self._debug_dyn_dim and dim_name in self._debug_dyn_dim:
             print(
-                f"[GraphBuilder.register_constraint_dimension] "
+                f"[GraphBuilder-{self._hash()}.register_constraint_dimension] "
                 f"dim_name={dim_name!r}, value={value!r}"
             )
         self.add_to_constraints(dim_name, value)
@@ -8635,8 +8666,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     self.opsets[op.domain] = op.version
 
         if verbose:
-            print(f"[inline_functions] begin graph {id(self)}")
-            print(f"[inline_functions] skip_functions={skip_functions}")
+            print(f"[GraphBuilder-{self._hash()}.inline_functions] begin inlining graph")
+            print(
+                f"[GraphBuilder-{self._hash()}.inline_functions] skip_functions={skip_functions}"
+            )
         stats = []
         self._check(stats, step="before inline")
         begin = time.perf_counter()
@@ -8670,7 +8703,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         # We can remove the local functions now.
         self.functions = {k: v for k, v in self.functions.items() if k in skip_functions}
         if verbose:
-            print(f"[inline_functions] done graph {id(self)} in {time.perf_counter()-begin0}")
+            print(
+                f"[GraphBuilder-{self._hash()}.inline_functions] done inlining graph "
+                f"{id(self)} in {time.perf_counter()-begin0}"
+            )
         return stats
 
     def local_functions_found(self, g: GraphProto) -> bool:
@@ -8715,8 +8751,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     # A function was detected in a subgraphs.
                     if verbose:
                         print(
-                            f"[_inline_functions_iterations] replace local "
-                            f"functions in node {node.op_type!r}, name={node.name!r}"
+                            f"[GraphBuilder-{self._hash()}._inline_functions_iterations] "
+                            f"replace local functions in node {node.op_type!r}, "
+                            f"name={node.name!r}"
                         )
                     n_replacements += self._inline_functions_subgraph(
                         att.g, verbose=verbose, skip_functions=skip_functions
@@ -8732,15 +8769,17 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             n_replacements += 1
             if verbose:
                 print(
-                    f"[_inline_functions_iterations] inline function "
-                    f"{self.functions[key].name!r} domain {self.functions[key].domain!r}"
+                    f"[GraphBuilder-{self._hash()}._inline_functions_iterations] inline function "
+                    f"{self.functions[key].name!r} domain {self.functions[key].domain!r} "
+                    f"[n_replacements={n_replacements}]"
                 )
             new_nodes = self._convert_function(
                 node.input, node.output, self.functions[key], attributes=node.attribute
             )
             if verbose:
                 print(
-                    f"[_inline_functions_iterations] {len(new_nodes)} new nodes "
+                    f"[GraphBuilder-{self._hash()}._inline_functions_iterations] "
+                    f"done with {len(new_nodes)} new nodes "
                     f"for {self.functions[key].name!r}, {self.functions[key].domain!r}"
                 )
             replacements.append((pos, node, new_nodes))
@@ -8766,6 +8805,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         Inlines local functions in subgraph (inplace).
         Returns the number of replacements.
         """
+        if self.verbose >= 5:
+            print(
+                f"[GraphBuilder-{self._hash()}._inline_functions_subgraph] "
+                f"inline subgraph {g.name!r}"
+            )
         stat = []
         self._check(stat, step="before inline")
         inlined = self._inline_functions_subgraph_iteration(
@@ -8782,6 +8826,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             total += inlined
             it += 1
             self._check(stat, step=f"after inline iteration {it}")
+        if self.verbose >= 5:
+            print(
+                f"[GraphBuilder-{self._hash()}._inline_functions_subgraph] "
+                f"inlined subgraph {g.name!r}, total={total}"
+            )
         return total
 
     def _inline_functions_subgraph_iteration(
@@ -8895,6 +8944,18 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     def _rename_results_in_subgraph(
         self, g: GraphProto, replacements: Dict[str, str]
     ) -> GraphProto:
+        if self.verbose >= 5:
+
+            def _(d):
+                return {k: v for k, v in d.items() if k != v}
+
+            assert g.name
+            print(f"[GraphBuilder-{self._hash()}._rename_results_in_subgraph] name={g.name!r}")
+            print(
+                f"[GraphBuilder-{self._hash()}._rename_results_in_subgraph] "
+                f"replacements={_(replacements)}"
+            )
+
         set_rep = set({k: v for k, v in replacements.items() if k != v})
         new_nodes = []
         do = False
@@ -8908,14 +8969,19 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"att.name={att.name!r}, not implemented with att.type={att.type} "
                     f"(AttributeProto.GRAPHS)"
                 )
-                new_g = self._rename_results_in_subgraph(att.g, replacements=replacements.copy())
-                if make_idg(new_g) != make_idg(g):
-                    diff = True
-                    new_atts.append(
-                        oh.make_attribute(att.name, new_g)
-                        if att.type == AttributeProto.GRAPH
-                        else att
+                if att.type == AttributeProto.GRAPH:
+                    new_g = self._rename_results_in_subgraph(
+                        att.g, replacements=replacements.copy()
                     )
+                    if make_idg(new_g) != make_idg(g):
+                        diff = True
+                        new_atts.append(
+                            oh.make_attribute(att.name, new_g)
+                            if att.type == AttributeProto.GRAPH
+                            else att
+                        )
+                    else:
+                        new_atts.append(att)
                 else:
                     new_atts.append(att)
             if diff:
@@ -8932,10 +8998,17 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 # This is shadowing. We can't continue with replacement.
                 set_rep -= set(node.output)
         if not do:
+            if self.verbose >= 5:
+                print(
+                    f"[GraphBuilder-{self._hash()}._rename_results_in_subgraph] "
+                    f"no replacement for {g.name!r}"
+                )
             return g
         g2 = oh.make_graph(
             new_nodes, g.name, g.input, g.output, g.initializer, g.sparse_initializer
         )
+        if self.verbose >= 5:
+            print(f"[GraphBuilder-{self._hash()}._rename_results_in_subgraph] done {g2.name!r}")
         return g2
 
     def _convert_function(
@@ -8961,6 +9034,13 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 mapatt[att.name] = att
         renamed = dict(zip(proto.input, inputs))
         renamed.update(dict(zip(proto.output, outputs)))
+        if self.verbose >= 5:
+
+            def _(d):
+                return {k: v for k, v in d.items() if k != v}
+
+            print(f"[GraphBuilder-{self._hash()}._convert_function] {proto.domain}.{proto.name}")
+            print(f"[GraphBuilder-{self._hash()}._convert_function] renamed={_(renamed)}")
         new_nodes = []
         for node in proto.node:
             new_inputs = []
@@ -9019,6 +9099,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             new_node.attribute.extend(new_attributes)
             new_nodes.append(new_node)
 
+        if self.verbose >= 5:
+            print(
+                f"[GraphBuilder-{self._hash()}._convert_function] done "
+                f"{proto.domain}.{proto.name}"
+            )
         return new_nodes
 
     def move_initializers_to_constant(

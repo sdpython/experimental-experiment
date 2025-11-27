@@ -1249,60 +1249,63 @@ class TestGraphBuilder(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
     def test_inline_function_with_subgraphs(self):
-        new_domain = "custom"
+        def _make_model():
+            new_domain = "custom"
+            cdist = self._get_cdist_implementation(
+                ["CX", "CY"], ["CZ"], domain="cdistdomain", opsets={"": 22}
+            )
 
-        cdist = self._get_cdist_implementation(
-            ["CX", "CY"], ["CZ"], domain="cdistdomain", opsets={"": 22}
-        )
-
-        bizarre = oh.make_function(
-            new_domain,
-            "BizarreRegression",
-            ["x", "a", "b"],
-            ["yfinal"],
-            [
-                oh.make_node("MatMul", ["x", "a"], ["xa"]),
-                oh.make_node("Add", ["xa", "b"], ["y"]),
-                oh.make_node("Constant", [], ["eps"]),
-                oh.make_node("Add", ["y", "eps"], ["yeps"]),
-                oh.make_node(cdist.name, ["x", "yeps"], ["yfinal"], domain=cdist.domain),
-            ],
-            [oh.make_opsetid("", 22), oh.make_opsetid(cdist.domain, 1)],
-            attributes=["epsilon"],
-        )
-        att = AttributeProto()
-        att.name = "value_float"
-        att.ref_attr_name = "epsilon"
-        att.type = AttributeProto.FLOAT
-        bizarre.node[2].attribute.append(att)
-
-        onnx_model = oh.make_model(
-            oh.make_graph(
+            bizarre = oh.make_function(
+                new_domain,
+                "BizarreRegression",
+                ["x", "a", "b"],
+                ["yfinal"],
                 [
-                    oh.make_node(
-                        bizarre.name,
-                        ["X", "A", "B"],
-                        ["Y1"],
-                        domain=bizarre.domain,
-                        epsilon=10.0,
-                    ),
-                    oh.make_node("Abs", ["Y1"], ["Y"]),
+                    oh.make_node("MatMul", ["x", "a"], ["xa"]),
+                    oh.make_node("Add", ["xa", "b"], ["y"]),
+                    oh.make_node("Constant", [], ["eps"]),
+                    oh.make_node("Add", ["y", "eps"], ["yeps"]),
+                    oh.make_node(cdist.name, ["x", "yeps"], ["yfinal"], domain=cdist.domain),
                 ],
-                "example",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, [None, None]),
-                    oh.make_tensor_value_info("A", TensorProto.FLOAT, [None, None]),
-                    oh.make_tensor_value_info("B", TensorProto.FLOAT, [None, None]),
+                [oh.make_opsetid("", 22), oh.make_opsetid(cdist.domain, 1)],
+                attributes=["epsilon"],
+            )
+            att = AttributeProto()
+            att.name = "value_float"
+            att.ref_attr_name = "epsilon"
+            att.type = AttributeProto.FLOAT
+            bizarre.node[2].attribute.append(att)
+
+            onnx_model = oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node(
+                            bizarre.name,
+                            ["X", "A", "B"],
+                            ["Y1"],
+                            domain=bizarre.domain,
+                            epsilon=10.0,
+                        ),
+                        oh.make_node("Abs", ["Y1"], ["Y"]),
+                    ],
+                    "main_graph",
+                    [
+                        oh.make_tensor_value_info("X", TensorProto.FLOAT, [None, None]),
+                        oh.make_tensor_value_info("A", TensorProto.FLOAT, [None, None]),
+                        oh.make_tensor_value_info("B", TensorProto.FLOAT, [None, None]),
+                    ],
+                    [oh.make_tensor_value_info("Y", TensorProto.FLOAT, None)],
+                ),
+                opset_imports=[
+                    oh.make_opsetid("", 22),
+                    oh.make_opsetid(bizarre.domain, 1),
+                    oh.make_opsetid(cdist.domain, 1),
                 ],
-                [oh.make_tensor_value_info("Y", TensorProto.FLOAT, None)],
-            ),
-            opset_imports=[
-                oh.make_opsetid("", 22),
-                oh.make_opsetid(bizarre.domain, 1),
-                oh.make_opsetid(cdist.domain, 1),
-            ],
-            functions=[cdist, bizarre],
-        )
+                functions=[cdist, bizarre],
+            )
+            return onnx_model
+
+        onnx_model = _make_model()
         ref = ExtendedReferenceEvaluator(onnx_model)
         feeds = dict(
             X=np.arange(9).reshape((3, 3)).astype(np.float32),
@@ -1311,12 +1314,13 @@ class TestGraphBuilder(ExtTestCase):
         )
         expected = ref.run(None, feeds)[0]
 
-        gr = GraphBuilder(onnx_model, verbose=1)
+        gr = GraphBuilder(onnx_model, verbose=0)
         assert None not in gr.nodes
         self.assertEqual(len(gr.functions), 2)
         onx = gr.to_onnx(inline=False)
         assert None not in gr.nodes
         self.assertEqual(len(onx.functions), 2)
+        gr = GraphBuilder(onnx_model, verbose=5)
         gr.inline_functions(verbose=1)
         function_proto = gr.to_onnx(
             function_options=FunctionOptions(
