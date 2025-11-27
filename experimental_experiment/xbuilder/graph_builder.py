@@ -8861,6 +8861,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     n_replacements += self._inline_functions_subgraph(
                         att.g, verbose=verbose, skip_functions=skip_functions
                     )
+                assert (
+                    not att.ref_attr_name
+                ), f"Missing information to replace {att} in node {self.pretty_node(node)}"
 
             key = node.domain, node.op_type
             if key not in self.functions or key in skip_functions:
@@ -8933,6 +8936,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     oh.make_attribute(
                         att.name,
                         self._rename_results_in_subgraph(att.g, replacements=replacements.copy()),
+                        check_ref_attr=True,
                     )
                     if att.type == AttributeProto.GRAPH
                     else att
@@ -8942,7 +8946,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         return new_nodes
 
     def _rename_results_in_subgraph(
-        self, g: GraphProto, replacements: Dict[str, str]
+        self,
+        g: GraphProto,
+        replacements: Dict[str, str],
+        check_ref_attr: bool = False,
+        attributes: Optional[Sequence[AttributeProto]] = None,
     ) -> GraphProto:
         if self.verbose >= 5:
 
@@ -8971,7 +8979,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 )
                 if att.type == AttributeProto.GRAPH:
                     new_g = self._rename_results_in_subgraph(
-                        att.g, replacements=replacements.copy()
+                        att.g,
+                        replacements=replacements.copy(),
+                        check_ref_attr=check_ref_attr,
+                        attributes=attributes,
                     )
                     if make_idg(new_g) != make_idg(g):
                         diff = True
@@ -8982,8 +8993,20 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                         )
                     else:
                         new_atts.append(att)
+                elif attributes and att.ref_attr_name:
+                    find = [a for a in attributes if a.name == att.ref_attr_name]
+                    assert not check_ref_attr or len(find) == 1, (
+                        f"Missing replacement for {att} in {self.pretty_node(node)}, "
+                        f"attributes={attributes}"
+                    )
+                    new_att = AttributeProto()
+                    new_att.ParseFromString(find[0].SerializeToString())
+                    new_att.name = att.name
+                    new_atts.append(new_att)
+                    diff = True
                 else:
                     new_atts.append(att)
+
             if diff:
                 do = True
                 new_node = oh.make_node(
@@ -9089,7 +9112,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     new_att.name = att.name
                     new_attributes.append(new_att)
                 elif att.type == AttributeProto.GRAPH:
-                    new_g = self._rename_results_in_subgraph(att.g, replacements=renamed.copy())
+                    new_g = self._rename_results_in_subgraph(
+                        att.g,
+                        replacements=renamed.copy(),
+                        check_ref_attr=True,
+                        attributes=attributes,
+                    )
                     if make_idg(new_g) == make_idg(att.g):
                         new_attributes.append(att)
                     else:
