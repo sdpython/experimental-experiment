@@ -1,4 +1,5 @@
 import unittest
+from typing import Dict, List
 import onnx.helper as oh
 import numpy as np
 import onnx.numpy_helper as onh
@@ -1176,6 +1177,320 @@ class TestGraphBuilder(ExtTestCase):
         self.assertEqual(len(gr.functions), 0)
         self.assertEqual(len(onx.functions), 0)
         ref2 = ExtendedReferenceEvaluator(onx)
+        got = ref2.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def _get_cdist_implementation(
+        self,
+        node_inputs: List[str],
+        node_outputs: List[str],
+        opsets: Dict[str, int],
+        domain="cdist_domain",
+        metric="euclidean",
+    ) -> FunctionProto:
+        """Returns the CDist implementation as a function."""
+        assert len(node_inputs) == 2, f"cdist has two inputs not {len(node_inputs)}."
+        assert len(node_outputs) == 1, f"cdist has one outputs not {len(node_outputs)}."
+        assert opsets, "opsets cannot be None."
+        assert "" in opsets, f"Opsets for domain '' must be specified but opsets={opsets!r}."
+        if opsets is not None and "com.microsoft" in opsets:
+            node = oh.make_node(
+                "CDist", ["xa", "xb"], ["z"], domain="com.microsoft", metric=metric
+            )
+            return oh.make_function(
+                domain,
+                f"CDist_{metric}",
+                ["xa", "xb"],
+                ["z"],
+                [node],
+                [oh.make_opsetid("com.microsoft", 1)],
+            )
+
+        if metric in ("euclidean", "sqeuclidean"):
+            # subgraph
+            nodes = [
+                oh.make_node("Sub", ["next", "next_in"], ["diff"]),
+                oh.make_node("Constant", [], ["axis"], value_ints=[1]),
+                oh.make_node("ReduceSumSquare", ["diff", "axis"], ["scan_out"], keepdims=0),
+                oh.make_node("Identity", ["next_in"], ["next_out"]),
+            ]
+
+            def make_value(name):
+                value = oh.ValueInfoProto()
+                value.name = name
+                return value
+
+            graph = oh.make_graph(
+                nodes,
+                "loop",
+                [make_value("next_in"), make_value("next")],
+                [make_value("next_out"), make_value("scan_out")],
+            )
+
+            scan = oh.make_node(
+                "Scan", ["xb", "xa"], ["next_out", "zout"], num_scan_inputs=1, body=graph
+            )
+            final = (
+                oh.make_node("Sqrt", ["zout"], ["z"])
+                if metric == "euclidean"
+                else oh.make_node("Identity", ["zout"], ["z"])
+            )
+            return oh.make_function(
+                domain,
+                f"CDist_{metric}",
+                ["xa", "xb"],
+                ["z"],
+                [scan, final],
+                [oh.make_opsetid("", opsets[""])],
+            )
+
+        raise RuntimeError(f"There is no implementation for cdist and metric={metric!r} yet.")
+
+    @ignore_warnings(DeprecationWarning)
+    @hide_stdout()
+    def test_inline_function_with_subgraphs(self):
+        def _make_model():
+            new_domain = "custom"
+            cdist = self._get_cdist_implementation(
+                ["CX", "CY"], ["CZ"], domain="cdistdomain", opsets={"": 22}
+            )
+
+            bizarre = oh.make_function(
+                new_domain,
+                "BizarreRegression",
+                ["x", "a", "b"],
+                ["yfinal"],
+                [
+                    oh.make_node("MatMul", ["x", "a"], ["xa"]),
+                    oh.make_node("Add", ["xa", "b"], ["y"]),
+                    oh.make_node("Constant", [], ["eps"]),
+                    oh.make_node("Add", ["y", "eps"], ["yeps"]),
+                    oh.make_node(cdist.name, ["x", "yeps"], ["yfinal"], domain=cdist.domain),
+                ],
+                [oh.make_opsetid("", 22), oh.make_opsetid(cdist.domain, 1)],
+                attributes=["epsilon"],
+            )
+            att = AttributeProto()
+            att.name = "value_float"
+            att.ref_attr_name = "epsilon"
+            att.type = AttributeProto.FLOAT
+            bizarre.node[2].attribute.append(att)
+
+            onnx_model = oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node(
+                            bizarre.name,
+                            ["X", "A", "B"],
+                            ["Y1"],
+                            domain=bizarre.domain,
+                            epsilon=10.0,
+                        ),
+                        oh.make_node("Abs", ["Y1"], ["Y"]),
+                    ],
+                    "main_graph",
+                    [
+                        oh.make_tensor_value_info("X", TensorProto.FLOAT, [None, None]),
+                        oh.make_tensor_value_info("A", TensorProto.FLOAT, [None, None]),
+                        oh.make_tensor_value_info("B", TensorProto.FLOAT, [None, None]),
+                    ],
+                    [oh.make_tensor_value_info("Y", TensorProto.FLOAT, None)],
+                ),
+                opset_imports=[
+                    oh.make_opsetid("", 22),
+                    oh.make_opsetid(bizarre.domain, 1),
+                    oh.make_opsetid(cdist.domain, 1),
+                ],
+                functions=[cdist, bizarre],
+                ir_version=10,
+            )
+            return onnx_model
+
+        onnx_model = _make_model()
+        ref = ExtendedReferenceEvaluator(onnx_model)
+        feeds = dict(
+            X=np.arange(9).reshape((3, 3)).astype(np.float32),
+            A=np.arange(9).reshape((3, 3)).astype(np.float32),
+            B=np.arange(9).reshape((3, 3)).astype(np.float32),
+        )
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(onnx_model, verbose=0)
+        assert None not in gr.nodes
+        self.assertEqual(len(gr.functions), 2)
+        onx = gr.to_onnx(inline=False)
+        assert None not in gr.nodes
+        self.assertEqual(len(onx.functions), 2)
+        gr = GraphBuilder(onnx_model, verbose=5)
+        gr.inline_functions(verbose=1)
+        function_proto = gr.to_onnx(
+            function_options=FunctionOptions(
+                export_as_function=True,
+                name="lr",
+                domain="custom_domain",
+            ),
+            inline=False,
+        )
+        self.assertNotEmpty(function_proto)
+
+        onx = gr.to_onnx(inline=True)
+        self.assertEqual(len(gr.functions), 0)
+        self.assertEqual(len(onx.functions), 0)
+        ref2 = ExtendedReferenceEvaluator(onx)
+        got = ref2.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def _get_cdist_implementation_with_ref_attribute(
+        self,
+        node_inputs: List[str],
+        node_outputs: List[str],
+        opsets: Dict[str, int],
+        domain="cdist_domain",
+        metric="euclidean",
+    ) -> FunctionProto:
+        """Returns the CDist implementation as a function."""
+        assert len(node_inputs) == 2, f"cdist has two inputs not {len(node_inputs)}."
+        assert len(node_outputs) == 1, f"cdist has one outputs not {len(node_outputs)}."
+        assert opsets, "opsets cannot be None."
+        assert "" in opsets, f"Opsets for domain '' must be specified but opsets={opsets!r}."
+        assert opsets is not None and "com.microsoft" not in opsets
+        if metric in ("euclidean", "sqeuclidean"):
+            # subgraph
+            nodes = [
+                oh.make_node("Sub", ["next", "next_in"], ["diff"]),
+                oh.make_node("Constant", [], ["axis"], value_ints=[1]),
+                oh.make_node("Cast", ["diff"], ["diffc"]),
+                oh.make_node("ReduceSumSquare", ["diffc", "axis"], ["out"], keepdims=0),
+                oh.make_node("CastLike", ["out", "diff"], ["scan_out"]),
+                oh.make_node("Identity", ["next_in"], ["next_out"]),
+            ]
+            att = AttributeProto()
+            att.name = "to"
+            att.ref_attr_name = "stash_type"
+            att.type = AttributeProto.INT
+            nodes[2].attribute.append(att)
+
+            def make_value(name):
+                value = oh.ValueInfoProto()
+                value.name = name
+                return value
+
+            graph = oh.make_graph(
+                nodes,
+                "loop",
+                [make_value("next_in"), make_value("next")],
+                [make_value("next_out"), make_value("scan_out")],
+            )
+
+            scan = oh.make_node(
+                "Scan", ["xb", "xa"], ["next_out", "zout"], num_scan_inputs=1, body=graph
+            )
+            final = (
+                oh.make_node("Sqrt", ["zout"], ["z"])
+                if metric == "euclidean"
+                else oh.make_node("Identity", ["zout"], ["z"])
+            )
+            return oh.make_function(
+                domain,
+                f"CDist_{metric}",
+                ["xa", "xb"],
+                ["z"],
+                [scan, final],
+                [oh.make_opsetid("", opsets[""])],
+                ["stash_type"],
+            )
+
+        raise RuntimeError(f"There is no implementation for cdist and metric={metric!r} yet.")
+
+    @ignore_warnings(DeprecationWarning)
+    @hide_stdout()
+    def test_inline_function_with_subgraphs_with_ref_attribute(self):
+        def _make_model():
+            new_domain = "custom"
+            cdist = self._get_cdist_implementation_with_ref_attribute(
+                ["CX", "CY"], ["CZ"], domain="cdistdomain", opsets={"": 22}
+            )
+
+            bizarre = oh.make_function(
+                new_domain,
+                "BizarreRegression",
+                ["x", "a", "b"],
+                ["yfinal"],
+                [
+                    oh.make_node("MatMul", ["x", "a"], ["xa"]),
+                    oh.make_node("Add", ["xa", "b"], ["y"]),
+                    oh.make_node("Constant", [], ["eps"]),
+                    oh.make_node("Add", ["y", "eps"], ["yeps"]),
+                    oh.make_node(
+                        cdist.name,
+                        ["x", "yeps"],
+                        ["yfinal"],
+                        domain=cdist.domain,
+                        stash_type=TensorProto.FLOAT,
+                    ),
+                ],
+                [oh.make_opsetid("", 22), oh.make_opsetid(cdist.domain, 1)],
+                attributes=["epsilon"],
+            )
+            att = AttributeProto()
+            att.name = "value_float"
+            att.ref_attr_name = "epsilon"
+            att.type = AttributeProto.FLOAT
+            bizarre.node[2].attribute.append(att)
+
+            onnx_model = oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node(
+                            bizarre.name,
+                            ["X", "A", "B"],
+                            ["Y1"],
+                            domain=bizarre.domain,
+                            epsilon=10.0,
+                        ),
+                        oh.make_node("Abs", ["Y1"], ["Y"]),
+                    ],
+                    "main_graph",
+                    [
+                        oh.make_tensor_value_info("X", TensorProto.FLOAT, [None, None]),
+                        oh.make_tensor_value_info("A", TensorProto.FLOAT, [None, None]),
+                        oh.make_tensor_value_info("B", TensorProto.FLOAT, [None, None]),
+                    ],
+                    [oh.make_tensor_value_info("Y", TensorProto.FLOAT, None)],
+                ),
+                opset_imports=[
+                    oh.make_opsetid("", 22),
+                    oh.make_opsetid(bizarre.domain, 1),
+                    oh.make_opsetid(cdist.domain, 1),
+                ],
+                functions=[cdist, bizarre],
+                ir_version=10,
+            )
+            return onnx_model
+
+        onnx_model = _make_model()
+        ref = self.check_ort(onnx_model)
+        feeds = dict(
+            X=np.arange(9).reshape((3, 3)).astype(np.float32),
+            A=np.arange(9).reshape((3, 3)).astype(np.float32),
+            B=np.arange(9).reshape((3, 3)).astype(np.float32),
+        )
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(onnx_model, verbose=0)
+        assert None not in gr.nodes
+        self.assertEqual(len(gr.functions), 2)
+        onx = gr.to_onnx(inline=False)
+        assert None not in gr.nodes
+        self.assertEqual(len(onx.functions), 2)
+        gr = GraphBuilder(onnx_model, verbose=5)
+        gr.inline_functions(verbose=1)
+
+        onx = gr.to_onnx(inline=False)
+        self.dump_onnx("test_inline_function_with_subgraphs_with_ref_attribute.onnx", onx)
+        self.assertEqual(len(gr.functions), 0)
+        self.assertEqual(len(onx.functions), 0)
+        ref2 = self.check_ort(onx)
         got = ref2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 

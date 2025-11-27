@@ -602,7 +602,7 @@ class ExtTestCase(unittest.TestCase):
             value = numpy.array(value).astype(expected.dtype)
         self.assertEqualArray(expected, value, atol=atol, rtol=rtol)
 
-    def check_ort(self, onx: "onnx.ModelProto") -> bool:  # noqa: F821
+    def check_ort(self, onx: "onnx.ModelProto") -> "onnxruntime.InferenceSession":  # noqa: F821
         from onnxruntime import InferenceSession
 
         return InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
