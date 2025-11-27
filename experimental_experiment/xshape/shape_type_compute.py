@@ -1283,6 +1283,14 @@ def _set_shape_type_op_any_scatternd(self: ShapeBuilder, node: NodeProto):
     )
 
 
+def _set_shape_type_op_any_sequence_empty(self: ShapeBuilder, node: NodeProto):
+    for att in node.attribute:
+        if att.name == "dtype":
+            self.set_sequence(node.output[0], dtype=att.i)
+            return True
+    raise AssertionError(f"Attribute 'dtype' is missong from node {node}{self.get_debug_msg()}")
+
+
 def _set_shape_type_op_any_transpose(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Transpose."
     if not self.has_type(node.input[0]):
@@ -1571,6 +1579,7 @@ _set_shape_type_op_any_known = {
     "Reshape": _set_shape_type_op_any_reshape,
     "RotaryEmbedding": _set_shape_type_op_any_rotary_embedding,
     "ScatterND": _set_shape_type_op_any_scatternd,
+    "SequenceEmpty": _set_shape_type_op_any_sequence_empty,
     "Sign": _set_shape_type_op_any_sign,
     "Slice": _set_shape_type_op_any_slice,
     "Split": _set_shape_type_op_any_split,
