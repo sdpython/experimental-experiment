@@ -8935,8 +8935,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 new_atts.append(
                     oh.make_attribute(
                         att.name,
-                        self._rename_results_in_subgraph(att.g, replacements=replacements.copy()),
-                        check_ref_attr=True,
+                        self._rename_results_in_subgraph(
+                            att.g, replacements=replacements.copy(), check_ref_attr=True
+                        ),
                     )
                     if att.type == AttributeProto.GRAPH
                     else att
