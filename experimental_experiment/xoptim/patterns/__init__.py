@@ -87,18 +87,19 @@ from .onnx_rotary import (
 from .onnx_sequence import SequenceConstructAtPattern
 from .onnx_shape import ShapeBasedShapeShapeAddPattern
 from .onnx_slice import SliceSlicePattern
-from .onnx_split import SlicesSplitPattern, SplitConcatPattern
+from .onnx_split import SplitConcatPattern, SlicesSplitPattern
 from .onnx_sub import Sub1MulPattern
 from .onnx_transpose import (
-    TransposeTransposePattern,
-    TransposeReshapeTransposePattern,
     TransposeEqualReshapePattern,
+    TransposeGatherPattern,
+    TransposeReshapeTransposePattern,
+    TransposeTransposePattern,
 )
 from .onnx_unsqueeze import (
-    SqueezeUnsqueezePattern,
-    SqueezeBinaryUnsqueezePattern,
-    UnsqueezeUnsqueezePattern,
     SqueezeAddPattern,
+    SqueezeBinaryUnsqueezePattern,
+    SqueezeUnsqueezePattern,
+    UnsqueezeUnsqueezePattern,
 )
 
 
@@ -219,6 +220,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         SwitchOrderBinaryPattern(verbose=verbose),
         SwitchReshapeActivationPattern(verbose=verbose),
         TransposeEqualReshapePattern(verbose=verbose),
+        TransposeGatherPattern(verbose=verbose),
         TransposeMatMulPattern(verbose=verbose),
         TransposeReshapeMatMulPattern(verbose=verbose),
         TransposeReshapeTransposePattern(verbose=verbose),
