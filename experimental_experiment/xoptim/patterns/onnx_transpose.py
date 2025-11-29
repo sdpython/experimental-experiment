@@ -391,6 +391,8 @@ class TransposeGatherPattern(PatternOptimization):
         tr_node = g.node_before(node.input[0])
         if not tr_node or g.is_used_more_than_once(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
+        if tr_node.op_type != "Tranpose" or tr_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_rank(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         rank = g.get_rank(node.input[1])
