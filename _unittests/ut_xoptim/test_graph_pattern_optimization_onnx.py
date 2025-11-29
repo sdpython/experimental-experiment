@@ -7088,6 +7088,70 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_reshape_reshape_single(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["X", "shape1"], ["xs"]),
+                    oh.make_node("Reshape", ["xs", "shape2"], ["Y"]),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", 1, 16, 80])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["ab", 1280])],
+                [
+                    onh.from_array(np.array([0, 0, 1, 16, 80], dtype=np.int64), name="shape1"),
+                    onh.from_array(np.array([-1, 1280], dtype=np.int64), name="shape2"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = dict(X=np.random.randn(1, 3, 1, 16, 80).astype(np.float32))
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns="ReshapeReshape", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        print(opt_onx)
+        self.assertEqual(["Reshape"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
+    def test_transpose_gather(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xt"], perm=[1, 0, 2, 3]),
+                    oh.make_node("Gather", ["xt", "ind"], ["Y"], axis=0),
+                ],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", 16, 80])],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["a", 16, 80])],
+                [onh.from_array(np.array(1, dtype=np.int64), name="ind")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = dict(X=np.random.randn(4, 3, 16, 80).astype(np.float32))
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns="TransposeGather", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Gather"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
