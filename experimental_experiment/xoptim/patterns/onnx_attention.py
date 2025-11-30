@@ -8,7 +8,185 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class FunctionAttentionPattern(PatternOptimization):
-    """Merges Attention nodes into a local function."""
+    """
+    Merges Attention nodes into a local function.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "values", onnx.TensorProto.FLOAT, shape=("av", "bv", "cv", "dv")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "keys", onnx.TensorProto.FLOAT, shape=("ak", "bk", "ck", "dk")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("scale_sqrt", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "mask", onnx.TensorProto.BOOL, shape=("am", "bm", "cm", "dm")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("aq", "bq", "cq", "dq")
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["scale_sqrt"],
+                value=onh.from_array(
+                    np.array([0.3162277638912201], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["minfty"],
+                value=onh.from_array(np.array([-np.inf], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Mul", ["query", "scale_sqrt"], ["query_scaled"]))
+        nodes.append(make_node_extended("Mul", ["keys", "scale_sqrt"], ["keys_scaled"]))
+        nodes.append(
+            make_node_extended(
+                "Transpose", ["keys_scaled"], ["keys_scaled_t"], perm=[0, 1, 3, 2]
+            )
+        )
+        nodes.append(make_node_extended("MatMul", ["query_scaled", "keys_scaled_t"], ["qk"]))
+        nodes.append(make_node_extended("Where", ["mask", "zero", "minfty"], ["bias"]))
+        nodes.append(make_node_extended("Add", ["qk", "bias"], ["qkb"]))
+        nodes.append(make_node_extended("Softmax", ["qkb"], ["qkbs"], axis=-1))
+        nodes.append(make_node_extended("IsNaN", ["qkbs"], ["nans"]))
+        nodes.append(make_node_extended("Where", ["nans", "zero", "qkbs"], ["filt"]))
+        nodes.append(make_node_extended("MatMul", ["filt", "values"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("ay", "by", "cy", "dy")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "values", onnx.TensorProto.FLOAT, shape=("av", "bv", "cv", "dv")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "keys", onnx.TensorProto.FLOAT, shape=("ak", "bk", "ck", "dk")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("scale_sqrt", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "mask", onnx.TensorProto.BOOL, shape=("am", "bm", "cm", "dm")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("aq", "bq", "cq", "dq")
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "LocalAttention_to1",
+                ["query", "keys", "values", "mask", "scale_sqrt"],
+                ["Y"],
+                domain="intermediate",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("ay", "by", "cy", "dy")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     _operator_name = "LocalAttention"
     _domain_name = "intermediate"

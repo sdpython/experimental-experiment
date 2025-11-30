@@ -16,7 +16,7 @@ class LayerNormalizationPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -100,7 +100,7 @@ class LayerNormalizationPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -625,7 +625,7 @@ class LayerNormalizationScalePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -692,7 +692,7 @@ class LayerNormalizationScalePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -1498,7 +1498,7 @@ class RMSNormalizationPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -1582,7 +1582,7 @@ class RMSNormalizationPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx

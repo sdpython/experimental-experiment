@@ -66,7 +66,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -135,7 +135,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -769,6 +769,105 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         pat = FunctionHalfRotaryEmbeddingPattern()
         g = GraphBuilderPatternOptimization(GraphBuilder(18))
         print(pat._pattern_to_string(g))
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 22),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("m2", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
+        )
+        inputs.append(oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        nodes.append(make_node_extended("Split", ["X"], ["x1", "x2"], axis=-1, num_outputs=2))
+        nodes.append(make_node_extended("Neg", ["x2"], ["nx2"]))
+        nodes.append(make_node_extended("Concat", ["nx2", "x1"], ["c"], axis=-1))
+        nodes.append(make_node_extended("Mul", ["c", "m1"], ["cm1"]))
+        nodes.append(make_node_extended("Mul", ["X", "m2"], ["cm2"]))
+        nodes.append(make_node_extended("Add", ["cm1", "cm2"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 22),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("m2", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
+        )
+        inputs.append(oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        nodes.append(
+            make_node_extended(
+                "HalfRotaryEmbedding", ["X", "m2", "m1"], ["Y"], domain="intermediate"
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     _operator_name = "HalfRotaryEmbedding"
@@ -921,7 +1020,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -986,7 +1085,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -1247,6 +1346,146 @@ class FunctionCausalMaskPattern(PatternOptimization):
         pat = FunctionCausalMaskPattern()
         g = GraphBuilderPatternOptimization(GraphBuilder(18))
         print(pat._pattern_to_string(g))
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("d1", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("initi", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["a012"],
+                value=onh.from_array(np.array([0, 1, 2], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["a013"],
+                value=onh.from_array(np.array([0, 1, 3], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["initi"],
+                value=onh.from_array(np.array([3], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Squeeze", ["d1"], ["nd1"]))
+        nodes.append(make_node_extended("Squeeze", ["d2"], ["nd2"]))
+        nodes.append(make_node_extended("Range", ["zero", "nd2", "one"], ["rg1"]))
+        nodes.append(make_node_extended("Range", ["nd1", "nd2", "one"], ["rg2"]))
+        nodes.append(make_node_extended("Unsqueeze", ["rg1", "a012"], ["m1"]))
+        nodes.append(make_node_extended("Unsqueeze", ["rg2", "a013"], ["m2"]))
+        nodes.append(make_node_extended("Sub", ["m2", "initi"], ["m2sub"]))
+        nodes.append(make_node_extended("Greater", ["m1", "m2sub"], ["yc"]))
+        outputs.append(oh.make_tensor_value_info("nd2", onnx.TensorProto.INT64, shape=[]))
+        outputs.append(
+            oh.make_tensor_value_info("yc", onnx.TensorProto.BOOL, shape=(1, 1, "b-a", "b"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("d1", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("initi", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(make_node_extended("Squeeze", ["d2"], ["nd2"]))
+        nodes.append(
+            make_node_extended(
+                "ShiftedCausalMask", ["d1", "d2", "initi"], ["yc"], domain="intermediate"
+            )
+        )
+        outputs.append(oh.make_tensor_value_info("nd2", onnx.TensorProto.INT64, shape=[]))
+        outputs.append(
+            oh.make_tensor_value_info("yc", onnx.TensorProto.BOOL, shape=(1, 1, "b-a", "b"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     _operator_names = ["CausalMask", "ShiftedCausalMask"]
@@ -1426,6 +1665,135 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         pat = FunctionCausalMaskMulAddPattern()
         g = GraphBuilderPatternOptimization(GraphBuilder(18))
         print(pat._pattern_to_string(g))
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("d1", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("N", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["a012"],
+                value=onh.from_array(np.array([0, 1, 2], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["a123"],
+                value=onh.from_array(np.array([1, 2, 3], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Squeeze", ["d1"], ["nd1"]))
+        nodes.append(make_node_extended("Squeeze", ["d2"], ["nd2"]))
+        nodes.append(make_node_extended("Range", ["zero", "nd1", "one"], ["rg1"]))
+        nodes.append(make_node_extended("Range", ["zero", "nd2", "one"], ["rg2"]))
+        nodes.append(make_node_extended("Unsqueeze", ["rg1", "a012"], ["m1"]))
+        nodes.append(make_node_extended("Unsqueeze", ["rg2", "a123"], ["m2"]))
+        nodes.append(make_node_extended("Mul", ["m2", "N"], ["yc"]))
+        nodes.append(make_node_extended("Add", ["m1", "yc"], ["yyc"]))
+        outputs.append(
+            oh.make_tensor_value_info("yyc", onnx.TensorProto.INT64, shape=("c", 1, 1, "b"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("d1", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("N", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "CausalMaskMulAdd", ["d1", "d2", "N"], ["yyc"], domain="intermediate"
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("yyc", onnx.TensorProto.INT64, shape=("c", 1, 1, "b"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     _operator_name = "CausalMaskMulAdd"
@@ -1582,6 +1950,158 @@ class FunctionCosSinCachePattern(PatternOptimization):
         pat = FunctionCosSinCachePattern()
         g = GraphBuilderPatternOptimization(GraphBuilder(18))
         print(pat._pattern_to_string(g))
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = [
+            onh.from_array(np.array(1, dtype=np.int64), name="init7_s_12"),
+            onh.from_array(np.array([0, 1], dtype=np.int64), name="init7_s2_0_12"),
+            onh.from_array(np.array([0, -1, 1], dtype=np.int64), name="init7_s3_0_-1_12"),
+        ]
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("weights", onnx.TensorProto.FLOAT, shape=(1, 1, "a"))
+        )
+        inputs.append(oh.make_tensor_value_info("dim1", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("dim2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(make_node_extended("Squeeze", ["dim1"], ["dim1::Sq2"]))
+        nodes.append(make_node_extended("Squeeze", ["dim2"], ["dim2::Sq2"]))
+        nodes.append(
+            make_node_extended(
+                "Range", ["dim1::Sq2", "dim2::Sq2", "init7_s_12"], ["_onx_range_dim1::Sq2"]
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Unsqueeze",
+                ["_onx_range_dim1::Sq2", "init7_s2_0_12"],
+                ["_onx_range_dim1::Sq::UnSq0x12"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Cast",
+                ["_onx_range_dim1::Sq::UnSq0x12"],
+                ["_onx_range_dim1::Sq::UnSq0x1::C12"],
+                to=1,
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape",
+                ["_onx_range_dim1::Sq::UnSq0x1::C12", "init7_s3_0_-1_12"],
+                ["_onx_range_dim1::Sq::UnSq0x1::C1::RSh0x-1x12"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Mul",
+                ["weights", "_onx_range_dim1::Sq::UnSq0x1::C1::RSh0x-1x12"],
+                ["_onx_mul_weights2"],
+            )
+        )
+        nodes.append(make_node_extended("Cos", ["_onx_mul_weights2"], ["_onx_cos_mul_weights"]))
+        nodes.append(make_node_extended("Sin", ["_onx_mul_weights2"], ["_onx_sin_mul_weights"]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "_onx_sin_mul_weights", onnx.TensorProto.FLOAT, shape=(1, "dim2-dim1", "a")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "_onx_cos_mul_weights", onnx.TensorProto.FLOAT, shape=(1, "dim2-dim1", "a")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("weights", onnx.TensorProto.FLOAT, shape=(1, 1, "a"))
+        )
+        inputs.append(oh.make_tensor_value_info("dim1", onnx.TensorProto.INT64, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("dim2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "CosSinCacheWithRange",
+                ["dim1", "dim2", "weights"],
+                ["_onx_cos_mul_weights", "_onx_sin_mul_weights"],
+                domain="intermediate",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "_onx_sin_mul_weights", onnx.TensorProto.FLOAT, shape=(1, "dim2-dim1", "a")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "_onx_cos_mul_weights", onnx.TensorProto.FLOAT, shape=(1, "dim2-dim1", "a")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     _operator_name = "CosSinCache"

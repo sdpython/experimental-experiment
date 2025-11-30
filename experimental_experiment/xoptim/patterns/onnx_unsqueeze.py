@@ -15,7 +15,7 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -74,7 +74,7 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -416,7 +416,7 @@ class SqueezeAddPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -457,7 +457,7 @@ class SqueezeAddPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -574,7 +574,7 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -632,7 +632,7 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx

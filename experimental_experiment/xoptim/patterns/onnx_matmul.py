@@ -15,6 +15,154 @@ class MatMulAddPattern(PatternOptimization):
     """
     Replaces the sequence MatMul, Add into Gemm.
     By default, no reshape is allowed this happens only it is two dimensions.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=("a", "b", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=("a", "b", 3))
+        )
+        inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=(3, "d")))
+        nodes.append(make_node_extended("MatMul", ["X1", "X2"], ["Y"]))
+        nodes.append(make_node_extended("Add", ["Y", "B"], ["Z"]))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=("a", "b", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=("a", "b", 3))
+        )
+        inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=(3, "d")))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s2_-1_3"],
+                value=onh.from_array(np.array([-1, 3], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_-1"],
+                value=onh.from_array(np.array([-1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended("Reshape", ["X1", "init7_s2_-1_3"], ["MatMulAddPattern--X1"])
+        )
+        nodes.append(make_node_extended("Shape", ["B"], ["MatMulAddPattern--X12"], start=-1))
+        nodes.append(
+            make_node_extended(
+                "Concat",
+                ["init7_s1_-1", "MatMulAddPattern--X12"],
+                ["MatMulAddPattern--X13"],
+                axis=0,
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape", ["B", "MatMulAddPattern--X13"], ["MatMulAddPattern--X14"]
+            )
+        )
+        nodes.append(
+            make_node_extended("Shape", ["X1"], ["MatMulAddPattern--X16"], end=-1, start=0)
+        )
+        nodes.append(
+            make_node_extended(
+                "Concat",
+                ["MatMulAddPattern--X16", "init7_s1_-1"],
+                ["MatMulAddPattern--X17"],
+                axis=0,
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Gemm",
+                ["MatMulAddPattern--X1", "X2", "MatMulAddPattern--X14"],
+                ["MatMulAddPattern--X15"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape", ["MatMulAddPattern--X15", "MatMulAddPattern--X17"], ["Z"]
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3, allow_reshape: bool = False):
@@ -424,6 +572,133 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
     It can be 3 or 2 out of 3.
     It is similar to
     :class:`experimental_experiment.xoptim.patterns.onnx_reshape.Reshape2Of3Pattern`.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("div_5", onnx.TensorProto.FLOAT, shape=(13, 4, 7, 7))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("transpose_23", onnx.TensorProto.FLOAT, shape=(52, 7, 8))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init7_s4_13_4_7_8", onnx.TensorProto.INT64, shape=(4,))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s3_52_7_7"],
+                value=onh.from_array(np.array([52, 7, 7], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s4_13_4_7_8"],
+                value=onh.from_array(np.array([13, 4, 7, 8], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Reshape", ["div_5", "init7_s3_52_7_7"], ["view_83"]))
+        nodes.append(make_node_extended("MatMul", ["view_83", "transpose_23"], ["bmm_11"]))
+        nodes.append(
+            make_node_extended("Reshape", ["bmm_11", "init7_s4_13_4_7_8"], ["view_85"])
+        )
+        outputs.append(
+            oh.make_tensor_value_info("view_85", onnx.TensorProto.FLOAT, shape=(13, 4, 7, 8))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("div_5", onnx.TensorProto.FLOAT, shape=(13, 4, 7, 7))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("transpose_23", onnx.TensorProto.FLOAT, shape=(52, 7, 8))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init7_s4_13_4_7_8", onnx.TensorProto.INT64, shape=(4,))
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape",
+                ["transpose_23", "init7_s4_13_4_7_8"],
+                ["MatMulReshape2Of3PatternL_view_83"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "MatMul", ["div_5", "MatMulReshape2Of3PatternL_view_83"], ["view_85"]
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("view_85", onnx.TensorProto.FLOAT, shape=(13, 4, 7, 8))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def same_size(
@@ -845,7 +1120,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -917,7 +1192,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -1742,7 +2017,7 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -1788,7 +2063,7 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx

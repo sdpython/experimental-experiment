@@ -16,7 +16,7 @@ class SlicesSplitPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -115,7 +115,7 @@ class SlicesSplitPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -297,7 +297,7 @@ class SplitConcatPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -336,7 +336,7 @@ class SplitConcatPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx

@@ -16,7 +16,7 @@ class ConcatGatherPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -63,7 +63,7 @@ class ConcatGatherPattern(PatternOptimization):
         :script: DOT-SECTION
         :process:
 
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         import numpy as np
         import ml_dtypes
         import onnx
@@ -289,7 +289,91 @@ class ConcatEmptyPattern(PatternOptimization):
 
 
 class ConcatTwiceUnaryPattern(PatternOptimization):
-    """Sin(Concat(x,x)) -> Concat(Sin(x), Sin(x))."""
+    """
+    Sin(Concat(x,x)) -> Concat(Sin(x), Sin(x)).
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("b", "c")))
+        nodes.append(make_node_extended("Concat", ["X", "X"], ["xx"], axis=0))
+        nodes.append(make_node_extended("Sin", ["xx"], ["xsin"]))
+        outputs.append(
+            oh.make_tensor_value_info("xsin", onnx.TensorProto.FLOAT, shape=("2*b", "c"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("b", "c")))
+        nodes.append(make_node_extended("Sin", ["X"], ["uxsin"]))
+        nodes.append(make_node_extended("Concat", ["uxsin", "uxsin"], ["xsin"], axis=0))
+        outputs.append(
+            oh.make_tensor_value_info("xsin", onnx.TensorProto.FLOAT, shape=("2*b", "c"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     _unary_types = unary_like_op_types()
     _binary_types_scalar_cst = {"Mul", "Add", "Div", "Sub"}

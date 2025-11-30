@@ -12,6 +12,143 @@ class GeluPattern(EasyPatternOptimization):
 
         y = \\frac{x}{2}
         \\left(1 + \\tanh\\left(\\sqrt{\\frac{2}{\\pi}} (x + 0.044715 * x^3)\\right)\\right)
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "linear_5", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384)
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s1_5"],
+                value=onh.from_array(np.array([3.0], dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s_8"],
+                value=onh.from_array(
+                    np.array(0.044708251953125, dtype=np.float16), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s_9"],
+                value=onh.from_array(np.array(0.7978515625, dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s_10"],
+                value=onh.from_array(np.array(1.0, dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s_7"],
+                value=onh.from_array(np.array(0.5, dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Pow", ["linear_5", "init10_s1_5"], ["pow_1"]))
+        nodes.append(make_node_extended("Mul", ["pow_1", "init10_s_8"], ["_onx_mul05"]))
+        nodes.append(make_node_extended("Add", ["linear_5", "_onx_mul05"], ["add_4"]))
+        nodes.append(make_node_extended("Mul", ["add_4", "init10_s_9"], ["_onx_mul06"]))
+        nodes.append(make_node_extended("Tanh", ["_onx_mul06"], ["tanh"]))
+        nodes.append(make_node_extended("Add", ["tanh", "init10_s_10"], ["add_5"]))
+        nodes.append(make_node_extended("Mul", ["linear_5", "init10_s_7"], ["_onx_mul04"]))
+        nodes.append(make_node_extended("Mul", ["_onx_mul04", "add_5"], ["mul_4"]))
+        outputs.append(
+            oh.make_tensor_value_info("mul_4", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "linear_5", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384)
+            )
+        )
+        nodes.append(make_node_extended("Gelu", ["linear_5"], ["mul_4"], approximate="tanh"))
+        outputs.append(
+            oh.make_tensor_value_info("mul_4", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def __init__(
@@ -79,7 +216,105 @@ class GeluPattern(EasyPatternOptimization):
 
 
 class LeakyReluPattern(EasyPatternOptimization):
-    """Detects the decomposed version of LeakyRelu."""
+    """
+    Detects the decomposed version of LeakyRelu.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=(3, 3)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["slope2"],
+                value=onh.from_array(
+                    np.array([-0.33000001311302185], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(make_node_extended("Greater", ["X1", "zero"], ["xpos2"]))
+        nodes.append(make_node_extended("Mul", ["X1", "slope2"], ["xmul2"]))
+        nodes.append(make_node_extended("Where", ["xpos2", "X1", "xmul2"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(3, 3)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=(3, 3)))
+        nodes.append(make_node_extended("LeakyRelu", ["X1"], ["Y"], alpha=-0.33000001311302185))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(3, 3)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 0, min_opset: int = 6):
         super().__init__(verbose, priority, min_opset=min_opset)
