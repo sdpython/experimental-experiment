@@ -63,7 +63,8 @@ class TestHelpers(ExtTestCase):
             oh.make_graph(
                 [
                     oh.make_node("Add", ["x", "y"], ["gggg"]),
-                    oh.make_node("Add", ["gggg", "z"], ["final"]),
+                    oh.make_node("Cast", ["gggg"], ["cc"], to=onnx.TensorProto.FLOAT),
+                    oh.make_node("Add", ["cc", "z"], ["final"]),
                 ],
                 "dummy",
                 [

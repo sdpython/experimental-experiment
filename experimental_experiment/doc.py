@@ -23,6 +23,25 @@ def _get_hidden_inputs(graph: onnx.GraphProto) -> Set[str]:
     return hidden
 
 
+def _make_node_label(node: onnx.NodeProto) -> str:
+    els = [f"{node.domain}.{node.op_type}" if node.domain else node.op_type, "("]
+    ee = ["." if i else "" for i in node.input]
+    for att in node.attribute:
+        if att.name == "to":
+            ee.append(f"{att.name}={onnx_dtype_name(att.i)}")
+        elif att.name in {"to", "axis", "value_int", "stash_type"}:
+            ee.append(f"{att.name}={att.i}")
+        elif att.name in {"value_float"}:
+            ee.append(f"{att.name}={att.f}")
+        elif att.name in {"value_floats"}:
+            ee.append(f"{att.name}={att.floats}")
+        elif att.name in {"value_ints", "perm"}:
+            ee.append(f"{att.name}={att.ints}")
+    els.append(", ".join(ee))
+    els.append(")")
+    return "".join(els)
+
+
 def to_dot(model: onnx.ModelProto) -> str:
     """Converts a model into a dot graph."""
     model = onnx.shape_inference.infer_shapes(model)
@@ -61,7 +80,8 @@ def to_dot(model: onnx.ModelProto) -> str:
         rows.append(f'  i_{id(init)} [label="{init.name}", fillcolor="#cccc00"];')
         name_to_ids[init.name] = f"i_{id(init)}"
     for node in nodes:
-        rows.append(f'  {node.op_type}_{id(node)} [label="{node.op_type}", fillcolor="#cccccc"];')
+        label = _make_node_label(node)
+        rows.append(f'  {node.op_type}_{id(node)} [label="{label}", fillcolor="#cccccc"];')
         name_to_ids.update({o: f"{node.op_type}_{id(node)}" for o in node.output if o})
 
     # nodes
