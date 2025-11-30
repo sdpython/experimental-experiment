@@ -7,6 +7,103 @@ from ..patterns_api import MatchResult, PatternOptimization
 class ClipClipPattern(PatternOptimization):
     """
     Merges consecutive clips if one is defining min and the other max.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("zero", onnx.TensorProto.FLOAT, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(oh.make_tensor_value_info("one", onnx.TensorProto.FLOAT, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array([1.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Clip", ["X", "zero"], ["x1"]))
+        nodes.append(make_node_extended("Clip", ["x1", "", "one"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("zero", onnx.TensorProto.FLOAT, shape=(1,)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(oh.make_tensor_value_info("one", onnx.TensorProto.FLOAT, shape=(1,)))
+        nodes.append(make_node_extended("Clip", ["X", "zero", "one"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def match(

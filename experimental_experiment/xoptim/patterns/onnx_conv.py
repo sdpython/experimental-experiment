@@ -37,6 +37,7 @@ class ConvBiasNullPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("W", onnx.TensorProto.FLOAT, shape=(64, 3, 4, 4))
         )
+        initializers.append(onh.from_array(np.zeros((64,), dtype=np.float32), name="B2"))
         nodes.append(
             make_node_extended(
                 "Conv",

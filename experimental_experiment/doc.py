@@ -39,6 +39,8 @@ def _make_node_label(node: onnx.NodeProto) -> str:
             ee.append(f"{att.name}={att.ints}")
     els.append(", ".join(ee))
     els.append(")")
+    if node.op_type == "Constant":
+        els.extend([" -> ", node.output[0]])
     return "".join(els)
 
 
@@ -74,6 +76,8 @@ def to_dot(model: onnx.ModelProto) -> str:
     inits = list(model.graph.initializer)
     name_to_ids = {}
     for inp in inputs:
+        if not inp.name:
+            continue
         rows.append(f'  I_{id(inp)} [label="{inp.name}", fillcolor="#eeeeaa"];')
         name_to_ids[inp.name] = f"I_{id(inp)}"
     for init in inits:
@@ -89,6 +93,12 @@ def to_dot(model: onnx.ModelProto) -> str:
     for node in nodes:
         names = list(node.input)
         for i in names:
+            if not i:
+                continue
+            if i not in name_to_ids:
+                from .helpers import pretty_onnx
+
+                raise ValueError(f"Unable to find {i!r}\n{pretty_onnx(model)}")
             edge = name_to_ids[i], f"{node.op_type}_{id(node)}"
             if edge in done:
                 continue
@@ -111,6 +121,8 @@ def to_dot(model: onnx.ModelProto) -> str:
 
     # outputs
     for out in outputs:
+        if not out.name:
+            continue
         rows.append(f'  O_{id(out)} [label="{out.name}", fillcolor="#aaaaee"];')
         edge = name_to_ids[out.name], f"O_{id(out)}"
         rows.append(f"  {edge[0]} -> {edge[1]};")

@@ -60,7 +60,95 @@ class ConcatGatherPattern(PatternOptimization):
 
 
 class ConcatEmptyPattern(PatternOptimization):
-    """Checks if one of the concatenated values is empty."""
+    """
+    Checks if one of the concatenated values is empty.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=("b",)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.INT64, shape=("a",)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["I"],
+                value=onh.from_array(np.array([], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Concat", ["X", "Y", "I"], ["Z"], axis=0))
+        outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.INT64, shape=("c",)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=("b",)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.INT64, shape=("a",)))
+        nodes.append(make_node_extended("Concat", ["X", "Y"], ["Z"], axis=0))
+        outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.INT64, shape=("c",)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def match(
         self,
