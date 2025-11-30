@@ -3,7 +3,7 @@ black
 diffusers>=0.30.0
 furo
 matplotlib
-onnx-array-api
+onnx-array-api>=0.3.3
 onnx-ir>=0.1.9
 onnxscript>=0.5.0
 openpyxl
