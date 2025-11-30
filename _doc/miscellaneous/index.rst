@@ -7,4 +7,3 @@ Miscellaneous
 
     export_times
     long_outputs
-    models/index
