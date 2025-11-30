@@ -9,6 +9,91 @@ from ..patterns_api import MatchResult, PatternOptimization
 class TransposeTransposePattern(PatternOptimization):
     """
     Removes two consecutive transpose if the second one put the tensor in origin shape.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("xs", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
+        )
+        nodes.append(make_node_extended("Transpose", ["xs"], ["r1"], perm=[1, 0, 3, 2]))
+        nodes.append(make_node_extended("Transpose", ["r1"], ["xm1"], perm=[0, 1, 3, 2]))
+        outputs.append(
+            oh.make_tensor_value_info("xm1", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("xs", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
+        )
+        nodes.append(make_node_extended("Transpose", ["xs"], ["xm1"], perm=[1, 0, 2, 3]))
+        outputs.append(
+            oh.make_tensor_value_info("xm1", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
@@ -117,6 +202,149 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         Transpose(., perm=[0, 1, 3, 2, 4, 5])
         Transpose(., perm=[0, 5, 1, 2, 3, 4])
         Reshape(., 32x128x56x56)
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "xts", onnx.TensorProto.FLOAT, shape=(32, 2, 14, 2, 13, 256)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(32, 256, 28, 26))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["shape"],
+                value=onh.from_array(
+                    np.array([32, 2, 14, 2, 13, 256], dtype=np.int64), name="value"
+                ),
+            )
+        )
+        nodes.append(make_node_extended("Transpose", ["X"], ["xt"], perm=[0, 2, 3, 1]))
+        nodes.append(make_node_extended("Reshape", ["xt", "shape"], ["xts"]))
+        nodes.append(make_node_extended("Transpose", ["xts"], ["Y"], perm=[0, 1, 3, 2, 4, 5]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "xts", onnx.TensorProto.FLOAT, shape=(32, 2, 14, 2, 13, 256)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=(32, 2, 2, 14, 13, 256)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "xts", onnx.TensorProto.FLOAT, shape=(32, 2, 14, 2, 13, 256)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(32, 256, 28, 26))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s6_"],
+                value=onh.from_array(
+                    np.array([32, 256, 2, 14, 2, 13], dtype=np.int64), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape", ["X", "init7_s6_"], ["TransposeReshapeTransposePattern_xt"]
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Transpose",
+                ["TransposeReshapeTransposePattern_xt"],
+                ["xts"],
+                perm=[0, 2, 3, 4, 5, 1],
+            )
+        )
+        nodes.append(make_node_extended("Transpose", ["xts"], ["Y"], perm=[0, 1, 3, 2, 4, 5]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "xts", onnx.TensorProto.FLOAT, shape=(32, 2, 14, 2, 13, 256)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=(32, 2, 2, 14, 13, 256)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):

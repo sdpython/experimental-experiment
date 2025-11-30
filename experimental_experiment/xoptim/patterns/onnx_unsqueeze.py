@@ -121,7 +121,116 @@ class SqueezeUnsqueezePattern(PatternOptimization):
 
 
 class UnsqueezeUnsqueezePattern(PatternOptimization):
-    """Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze."""
+    """
+        Replaces the sequence Unsqueeze, Unsqueeze by Unsqueeze.
+
+        Model with nodes to be fused:
+
+        .. gdot::
+            :script: DOT-SECTION
+            :process:
+
+            from onnx_array_api.plotting.dot_plot import to_dot
+            import numpy as np
+            import ml_dtypes
+            import onnx
+            import onnx.helper as oh
+            import onnx.numpy_helper as onh
+            from onnx_array_api.translate_api.make_helper import make_node_extended
+
+            opset_imports = [
+                oh.make_opsetid("", 18),
+            ]
+            inputs = []
+            outputs = []
+            nodes = []
+            initializers = []
+            sparse_initializers = []
+            functions = []
+            inputs.append(
+                oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b"))
+            )
+            nodes.append(
+                make_node_extended(
+                    "Constant",
+                    [],
+                    ["ii"],
+                    value=onh.from_array(np.array([2], dtype=np.int64), name="value"),
+                )
+            )
+            nodes.append(
+                make_node_extended(
+                    "Constant",
+                    [],
+                    ["jj"],
+                    value=onh.from_array(np.array([3], dtype=np.int64), name="value"),
+                )
+            )
+            nodes.append(make_node_extended("Unsqueeze", ["X", "ii"], ["x1"]))
+            nodes.append(make_node_extended("Unsqueeze", ["x1", "jj"], ["Y"]))
+            outputs.append(
+                oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 1, "a", "b"))
+            )
+            graph = oh.make_graph(
+                nodes,
+                "pattern",
+                inputs,
+                outputs,
+                initializers,
+                sparse_initializer=sparse_initializers,
+            )
+            model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s2_2_3"],
+                value=onh.from_array(np.array([2, 3], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Unsqueeze", ["X", "init7_s2_2_3"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 1, "a", "b"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)

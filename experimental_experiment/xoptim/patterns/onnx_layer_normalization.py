@@ -328,7 +328,138 @@ class LayerNormalizationScalePattern(PatternOptimization):
 
 
 class CastLayerNormalizationCastPattern(PatternOptimization):
-    """Checks that a Cast is really needed around LayerNormalization."""
+    """
+    Checks that a Cast is really needed around LayerNormalization.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("scale", onnx.TensorProto.FLOAT, shape=(3,)))
+        inputs.append(oh.make_tensor_value_info("bias", onnx.TensorProto.FLOAT, shape=(3,)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=(3, 3)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["scale"],
+                value=onh.from_array(
+                    np.array([0.5, 0.6000000238418579, 0.699999988079071], dtype=np.float32),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["bias"],
+                value=onh.from_array(
+                    np.array([-0.5, -0.6000000238418579, -0.699999988079071], dtype=np.float32),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(make_node_extended("Cast", ["X"], ["xc"], to=1))
+        nodes.append(
+            make_node_extended(
+                "LayerNormalization", ["xc", "scale", "bias"], ["norm"], stash_type=1
+            )
+        )
+        nodes.append(make_node_extended("Cast", ["norm"], ["Y"], to=10))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=(3, 3)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("scale", onnx.TensorProto.FLOAT, shape=(3,)))
+        inputs.append(oh.make_tensor_value_info("bias", onnx.TensorProto.FLOAT, shape=(3,)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=(3, 3)))
+        nodes.append(
+            make_node_extended(
+                "Cast", ["scale"], ["CastLayerNormalizationCastPattern_scale::C10"], to=10
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Cast", ["bias"], ["CastLayerNormalizationCastPattern_bias::C10"], to=10
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "LayerNormalization",
+                [
+                    "X",
+                    "CastLayerNormalizationCastPattern_scale::C10",
+                    "CastLayerNormalizationCastPattern_bias::C10",
+                ],
+                ["Y"],
+                stash_type=1,
+            )
+        )
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=(3, 3)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def match(
         self,
@@ -409,7 +540,216 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
 
 
 class BatchNormalizationPattern(PatternOptimization):
-    """Checks that a BatchNormalization is really needed."""
+    """
+    Checks that a BatchNormalization is really needed.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(1024, 16)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["scale"],
+                value=onh.from_array(
+                    np.array(
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                        ],
+                        dtype=np.float32,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["B"],
+                value=onh.from_array(
+                    np.array(
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                        ],
+                        dtype=np.float32,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["input_mean"],
+                value=onh.from_array(
+                    np.array(
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                        ],
+                        dtype=np.float32,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["input_var"],
+                value=onh.from_array(
+                    np.array(
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                        ],
+                        dtype=np.float32,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "BatchNormalization",
+                ["X", "scale", "B", "input_mean", "input_var"],
+                ["Y"],
+                epsilon=0.0,
+            )
+        )
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1024, 16)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(1024, 16)))
+        nodes.append(make_node_extended("Identity", ["X"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1024, 16)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)

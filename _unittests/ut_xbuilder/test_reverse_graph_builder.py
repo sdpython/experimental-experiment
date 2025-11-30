@@ -78,11 +78,11 @@ class TestReverseGraphBuilder(ExtTestCase):
 
         def make_my_model() -> "ModelProto":
             g = GraphBuilder({'': 18}, ir_version=9)
-            g.make_tensor_input("shape", TensorProto.INT64, ('',))
-            g.make_tensor_input("indices", TensorProto.INT64, ('', ''))
-            g.make_tensor_input("updates", TensorProto.FLOAT, ('', '', ''))
+            g.make_tensor_input("shape", onnx.TensorProto.INT64, ('',))
+            g.make_tensor_input("indices", onnx.TensorProto.INT64, ('', ''))
+            g.make_tensor_input("updates", onnx.TensorProto.FLOAT, ('', '', ''))
             create_graph(g.op, "shape", "indices", "updates")
-            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', '')__LONG2__)
+            g.make_tensor_output("Z", onnx.TensorProto.FLOAT, ('', '', '')__LONG2__)
             model = g.to_onnx()
             return model
 
@@ -93,7 +93,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             .strip("\n")
             .replace(
                 "__LONG__",
-                "op.ConstantOfShape(shape, value=from_array"
+                "op.ConstantOfShape(shape, value=onh.from_array"
                 "(np.array([0.0], dtype=np.float32), name='value'), outputs=['cst'])",
             )
             .replace("__LONG2__", ", is_dimension=False, indexed=False")
@@ -151,10 +151,10 @@ class TestReverseGraphBuilder(ExtTestCase):
 
         def make_my_model() -> "ModelProto":
             g = GraphBuilder({'': 18}, ir_version=9)
-            g.make_tensor_input("shape", TensorProto.INT64, ('',))
-            g.make_tensor_input("axes", TensorProto.INT64, ('',))
+            g.make_tensor_input("shape", onnx.TensorProto.INT64, ('',))
+            g.make_tensor_input("axes", onnx.TensorProto.INT64, ('',))
             create_graph(g.op, "shape", "axes")
-            g.make_tensor_output("Z", TensorProto.FLOAT, ('', '', '')__LONG2__)
+            g.make_tensor_output("Z", onnx.TensorProto.FLOAT, ('', '', '')__LONG2__)
             model = g.to_onnx()
             return model
 
@@ -165,7 +165,7 @@ class TestReverseGraphBuilder(ExtTestCase):
             .strip("\n")
             .replace(
                 "__LONG__",
-                "op.ConstantOfShape(shape, value=from_array"
+                "op.ConstantOfShape(shape, value=onh.from_array"
                 "(np.array([0.0], dtype=np.float32), name='value'), outputs=['cst'])",
             )
             .replace("__LONG2__", ", is_dimension=False, indexed=False")
@@ -254,11 +254,11 @@ class TestReverseGraphBuilder(ExtTestCase):
 
             def make_my_model() -> "ModelProto":
                 g = GraphBuilder({'': 14, 'custom': 1}, ir_version=11)
-                g.make_tensor_input("X", TensorProto.FLOAT, ('', ''))
-                g.make_tensor_input("A", TensorProto.FLOAT, ('', ''))
-                g.make_tensor_input("B", TensorProto.FLOAT, ('', ''))
+                g.make_tensor_input("X", onnx.TensorProto.FLOAT, ('', ''))
+                g.make_tensor_input("A", onnx.TensorProto.FLOAT, ('', ''))
+                g.make_tensor_input("B", onnx.TensorProto.FLOAT, ('', ''))
                 example(g.op, "X", "A", "B")
-                g.make_tensor_output("Y", TensorProto.FLOAT, ()__SUFFIX__)
+                g.make_tensor_output("Y", onnx.TensorProto.FLOAT, ()__SUFFIX__)
                 make_custom_LinearRegression(g)
                 model = g.to_onnx()
                 return model
