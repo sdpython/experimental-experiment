@@ -107,7 +107,7 @@ def onnx_derivative(
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,
@@ -145,7 +145,7 @@ def onnx_derivative(
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,
@@ -180,7 +180,7 @@ def onnx_derivative(
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,
@@ -216,7 +216,7 @@ def onnx_derivative(
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,

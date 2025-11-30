@@ -999,7 +999,7 @@ class GraphBuilderPatternOptimization:
                 :script: DOT-SECTION
                 :process:
 
-                from onnx_array_api.plotting.dot_plot import to_dot
+                from experimental_experiment.doc import to_dot
             __CODE1__
                 print(to_dot(model))
 
@@ -1009,7 +1009,7 @@ class GraphBuilderPatternOptimization:
                 :script: DOT-SECTION
                 :process:
 
-                from onnx_array_api.plotting.dot_plot import to_dot
+                from experimental_experiment.doc import to_dot
             __CODE2__
                 print(to_dot(model))
             """

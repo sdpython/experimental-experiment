@@ -528,7 +528,7 @@ And visually:
     :process:
 
     import torch
-    from onnx_array_api.plotting.dot_plot import to_dot
+    from experimental_experiment.doc import to_dot
     from experimental_experiment.torch_interpreter import to_onnx
 
     class Neuron(torch.nn.Module):
