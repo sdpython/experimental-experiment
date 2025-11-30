@@ -181,7 +181,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             )
             model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+            print(to_dot(model))
 
     Outcome of the fusion:
 

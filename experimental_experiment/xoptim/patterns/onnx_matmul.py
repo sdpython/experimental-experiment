@@ -271,6 +271,107 @@ class MatMulAddPattern(PatternOptimization):
 class GemmTransposePattern(PatternOptimization):
     """
     Replaces Gemm (., constant) by Gemm(., constant', transB=1)
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(3, 2)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["B"],
+                value=onh.from_array(
+                    np.array(
+                        [
+                            [0.0, 0.1666666716337204],
+                            [0.3333333432674408, 0.5],
+                            [0.6666666865348816, 0.8333333134651184],
+                        ],
+                        dtype=np.float32,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(make_node_extended("Gemm", ["X", "B"], ["Z"]))
+        outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(3, 2)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3)))
+        nodes.append(
+            make_node_extended("Transpose", ["B"], ["GemmTransposePattern--B"], perm=[1, 0])
+        )
+        nodes.append(
+            make_node_extended("Gemm", ["X", "GemmTransposePattern--B"], ["Z"], transB=1)
+        )
+        outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def match(
