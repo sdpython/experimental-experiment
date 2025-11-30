@@ -7,7 +7,94 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ConcatGatherPattern(PatternOptimization):
-    """Checks if Gather(Concat) can be replaced by Identity."""
+    """
+    Checks if Gather(Concat) can be replaced by Identity.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("D2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["un"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Concat", ["D1", "D2"], ["d"], axis=0))
+        nodes.append(make_node_extended("Gather", ["d", "un"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=(1,)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("D2", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(make_node_extended("Identity", ["D2"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=(1,)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)

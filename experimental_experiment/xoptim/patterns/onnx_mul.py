@@ -101,6 +101,104 @@ class SwitchOrderBinaryPattern(PatternOptimization):
     If it makes sense, switches the order of two multiplications
     or two addtions if the broadcasting reduces one operator to
     a an insignificant number.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, 3, 4))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2, 3, 4))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", 1, 3, 4))
+        )
+        nodes.append(make_node_extended("Add", ["Z", "xy"], ["F"]))
+        nodes.append(make_node_extended("Add", ["X", "Y"], ["xy"]))
+        outputs.append(
+            oh.make_tensor_value_info("F", onnx.TensorProto.FLOAT, shape=("a", 2, 3, 4))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, 3, 4))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2, 3, 4))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", 1, 3, 4))
+        )
+        nodes.append(make_node_extended("Add", ["Y", "Z"], ["add-Y"]))
+        nodes.append(make_node_extended("Add", ["add-Y", "X"], ["F"]))
+        outputs.append(
+            oh.make_tensor_value_info("F", onnx.TensorProto.FLOAT, shape=("a", 2, 3, 4))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     class BroadcastType(IntEnum):

@@ -8,6 +8,113 @@ class SequenceConstructAtPattern(PatternOptimization):
     """
     Replaces the sequence ``SequenceConstruct(x1, x2, ...)`` followed
     by ``SequenceAt(seq, 0)``, ``SequenceAt(seq, 1)``, ...
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["i0"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["i1"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("SequenceConstruct", ["X1", "X2"], ["seq"]))
+        nodes.append(make_node_extended("SequenceAt", ["seq", "i0"], ["Y1"]))
+        nodes.append(make_node_extended("SequenceAt", ["seq", "i1"], ["Y2"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y1", onnx.TensorProto.FLOAT, shape=("a", "b"))
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y2", onnx.TensorProto.FLOAT, shape=("c", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=("c", "d")))
+        nodes.append(make_node_extended("Identity", ["X1"], ["Y1"]))
+        nodes.append(make_node_extended("Identity", ["X2"], ["Y2"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y1", onnx.TensorProto.FLOAT, shape=("a", "b"))
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y2", onnx.TensorProto.FLOAT, shape=("c", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def match(

@@ -7,7 +7,436 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class LayerNormalizationPattern(PatternOptimization):
-    """Fuses nodes of a LayerNormalization."""
+    """
+    Fuses nodes of a LayerNormalization.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("add_1", onnx.TensorProto.FLOAT16, shape=(4, 512, 128))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_-1"],
+                value=onh.from_array(np.array([-1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s1_"],
+                value=onh.from_array(np.array([2.0], dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s1_2"],
+                value=onh.from_array(np.array([0.0], dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "ReduceMean", ["add_1", "init7_s1_-1"], ["_onx_reducemean0"], keepdims=1
+            )
+        )
+        nodes.append(make_node_extended("Sub", ["add_1", "_onx_reducemean0"], ["_onx_sub0"]))
+        nodes.append(make_node_extended("Pow", ["_onx_sub0", "init10_s1_"], ["_onx_pow0"]))
+        nodes.append(
+            make_node_extended(
+                "ReduceMean", ["_onx_pow0", "init7_s1_-1"], ["_onx_reducemean02"], keepdims=1
+            )
+        )
+        nodes.append(
+            make_node_extended("Add", ["_onx_reducemean02", "init10_s1_2"], ["_onx_add0"])
+        )
+        nodes.append(make_node_extended("Sqrt", ["_onx_add0"], ["_onx_sqrt0"]))
+        nodes.append(make_node_extended("Div", ["_onx_sub0", "_onx_sqrt0"], ["_onx_div0"]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "_onx_div0", onnx.TensorProto.FLOAT16, shape=(4, 512, 128)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("add_1", onnx.TensorProto.FLOAT16, shape=(4, 512, 128))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["p_model_albert_embeddings_layernorm_weight"],
+                value=onh.from_array(
+                    np.array(
+                        [
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                        ],
+                        dtype=np.float16,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["p_model_albert_embeddings_layernorm_bias"],
+                value=onh.from_array(
+                    np.array(
+                        [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                        ],
+                        dtype=np.float16,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "LayerNormalization",
+                [
+                    "add_1",
+                    "p_model_albert_embeddings_layernorm_weight",
+                    "p_model_albert_embeddings_layernorm_bias",
+                ],
+                ["_onx_div0"],
+                axis=-1,
+                epsilon=0.0,
+                stash_type=1,
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "_onx_div0", onnx.TensorProto.FLOAT16, shape=(4, 512, 128)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def match(
         self,
@@ -187,7 +616,126 @@ class LayerNormalizationPattern(PatternOptimization):
 
 
 class LayerNormalizationScalePattern(PatternOptimization):
-    """Fused LayerNormalization, scale, bias just after."""
+    """
+    Fused LayerNormalization, scale, bias just after.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("scale", onnx.TensorProto.FLOAT, shape=(3,)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(oh.make_tensor_value_info("s0", onnx.TensorProto.FLOAT, shape=(3,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["s0"],
+                value=onh.from_array(
+                    np.array(
+                        [-0.10000000149011612, -0.009999999776482582, -0.05000000074505806],
+                        dtype=np.float32,
+                    ),
+                    name="value",
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["scale"],
+                value=onh.from_array(np.array([2.0, 3.0, 4.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "LayerNormalization", ["X", "s0"], ["norm"], epsilon=0.10000000149011612
+            )
+        )
+        nodes.append(make_node_extended("Mul", ["norm", "scale"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("scale", onnx.TensorProto.FLOAT, shape=(3,)))
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(oh.make_tensor_value_info("s0", onnx.TensorProto.FLOAT, shape=(3,)))
+        nodes.append(
+            make_node_extended("Mul", ["s0", "scale"], ["LayerNormalizationScalePattern_s0"])
+        )
+        nodes.append(
+            make_node_extended(
+                "LayerNormalization",
+                ["X", "LayerNormalizationScalePattern_s0"],
+                ["Y"],
+                epsilon=0.10000000149011612,
+            )
+        )
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def match(
         self,
@@ -941,7 +1489,155 @@ class BatchNormalizationTrainingPattern(PatternOptimization):
 
 
 class RMSNormalizationPattern(PatternOptimization):
-    """Fuses the nodes equivalent to RMSNormalization(23)."""
+    """
+    Fuses the nodes equivalent to RMSNormalization(23).
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 23),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=("a", "D"))
+        )
+        inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["exp"],
+                value=onh.from_array(np.array([2.0], dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["axis"],
+                value=onh.from_array(np.array([-1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["eps"],
+                value=onh.from_array(
+                    np.array([9.999999974752427e-07], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array([1.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Cast", ["X"], ["Xc"], to=1))
+        nodes.append(make_node_extended("Pow", ["Xc", "exp"], ["x2"]))
+        nodes.append(make_node_extended("ReduceMean", ["x2", "axis"], ["xr"]))
+        nodes.append(make_node_extended("Add", ["xr", "eps"], ["xa"]))
+        nodes.append(make_node_extended("Sqrt", ["xa"], ["xq"]))
+        nodes.append(make_node_extended("Div", ["one", "xq"], ["Z"]))
+        nodes.append(make_node_extended("Mul", ["Z", "Xc"], ["Yc"]))
+        nodes.append(make_node_extended("Cast", ["Yc"], ["Y"], to=10))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=("a", "D"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 23),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=("a", "D"))
+        )
+        inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=(1,)))
+        nodes.append(make_node_extended("Shape", ["X"], ["shape-X"]))
+        nodes.append(make_node_extended("Gather", ["shape-X", "axis"], ["gather-shape-X"]))
+        nodes.append(
+            make_node_extended(
+                "ConstantOfShape",
+                ["gather-shape-X"],
+                ["constantofshape-gather-shape-X"],
+                value=onh.from_array(np.array([1.0], dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "RMSNormalization",
+                ["X", "constantofshape-gather-shape-X"],
+                ["Y"],
+                axis=-1,
+                epsilon=9.999999974752427e-07,
+                stash_type=1,
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=("a", "D"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def match(
         self,

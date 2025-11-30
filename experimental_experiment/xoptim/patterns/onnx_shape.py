@@ -5,7 +5,101 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ShapeBasedShapeShapeAddPattern(PatternOptimization):
-    """Tries to find another way to get a dimension obtained with the addition of two."""
+    """
+    Tries to find another way to get a dimension obtained with the addition of two.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d", 1))
+        )
+        nodes.append(make_node_extended("Expand", ["X", "d"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 3, "d", 2))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from onnx_array_api.plotting.dot_plot import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d", 1))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s4_1_1_1_2"],
+                value=onh.from_array(np.array([1, 1, 1, 2], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Expand", ["X", "init7_s4_1_1_1_2"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 3, "d", 2))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
