@@ -1,8 +1,11 @@
 import unittest
 import numpy as np
+import onnx
+import onnx.helper as oh
 from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.helpers import string_type, string_sig
 from experimental_experiment.xshape.rename_expressions import rename_dynamic_expression
+from experimental_experiment.doc import to_dot
 
 
 class TestHelpers(ExtTestCase):
@@ -53,6 +56,33 @@ class TestHelpers(ExtTestCase):
         self.assertEqual("batch", rename_dynamic_expression("0+batch", {}))
         self.assertEqual("batch", rename_dynamic_expression("1*batch", {}))
         self.assertEqual("batch", rename_dynamic_expression("batch*1", {}))
+
+    def test_dot_plot(self):
+        TFLOAT = onnx.TensorProto.FLOAT
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["x", "y"], ["gggg"]),
+                    oh.make_node("Cast", ["gggg"], ["cc"], to=onnx.TensorProto.FLOAT),
+                    oh.make_node("Add", ["cc", "z"], ["final"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("x", TFLOAT, [None, None]),
+                    oh.make_tensor_value_info("y", TFLOAT, [None, None]),
+                    oh.make_tensor_value_info("z", TFLOAT, [None, None]),
+                ],
+                [oh.make_tensor_value_info("final", TFLOAT, [None, None])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=9,
+        )
+        dot = to_dot(model)
+        name = self.get_dump_file("test_dot_plot.dot")
+        with open(name, "w") as f:
+            f.write(dot)
+        # dot -Tpng dump_test/test_dot_plot.dot -o dump_test/test_dot_plot.png
+        self.assertIn("-> Add", dot)
 
 
 if __name__ == "__main__":

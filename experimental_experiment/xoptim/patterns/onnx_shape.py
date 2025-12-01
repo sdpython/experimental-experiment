@@ -5,7 +5,9 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class ShapeBasedShapeShapeAddPattern(PatternOptimization):
-    """Tries to find another way to get a dimension obtained with the addition of two."""
+    """
+    Tries to find another way to get a dimension obtained with the addition of two.
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)

@@ -7,6 +7,119 @@ from ..patterns_api import MatchResult, PatternOptimization
 class ReduceSumNormalizePattern(PatternOptimization):
     """
     Nodes equivalent to a reduction.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=("a", "b"))
+        )
+        inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=[]))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["axis"],
+                value=onh.from_array(np.array(-1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Cast", ["X"], ["xc"], to=1))
+        nodes.append(make_node_extended("ReduceSum", ["xc", "axis"], ["red"], keepdims=1))
+        nodes.append(make_node_extended("Mul", ["red", "Y"], ["mul"]))
+        nodes.append(make_node_extended("Sub", ["xc", "mul"], ["subc"]))
+        nodes.append(make_node_extended("Cast", ["subc"], ["Z"], to=10))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", "b"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=("a", "b"))
+        )
+        inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=[]))
+        nodes.append(
+            make_node_extended(
+                "ReduceSum", ["X", "axis"], ["ReduceSumNormalizePattern_red"], keepdims=1
+            )
+        )
+        nodes.append(make_node_extended("Cast", ["Y"], ["ReduceSumNormalizePattern_Y"], to=10))
+        nodes.append(
+            make_node_extended(
+                "Mul",
+                ["ReduceSumNormalizePattern_red", "ReduceSumNormalizePattern_Y"],
+                ["ReduceSumNormalizePattern_mul"],
+            )
+        )
+        nodes.append(make_node_extended("Sub", ["X", "ReduceSumNormalizePattern_mul"], ["Z"]))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", "b"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def match(

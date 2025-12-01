@@ -7,6 +7,114 @@ from ..patterns_api import MatchResult, PatternOptimization
 class DropoutPattern(PatternOptimization):
     """
     Checks that a Cast is really needed.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "_onx_add02", onnx.TensorProto.FLOAT16, shape=(4, 512, 128)
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init10_s_3"],
+                value=onh.from_array(np.array(0.0, dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init9_s_"],
+                value=onh.from_array(np.array(False, dtype=np.bool_), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Dropout", ["_onx_add02", "init10_s_3", "init9_s_"], ["dropout", ""]
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("dropout", onnx.TensorProto.FLOAT16, shape=(4, 512, 128))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "_onx_add02", onnx.TensorProto.FLOAT16, shape=(4, 512, 128)
+            )
+        )
+        nodes.append(make_node_extended("Identity", ["_onx_add02"], ["dropout"]))
+        outputs.append(
+            oh.make_tensor_value_info("dropout", onnx.TensorProto.FLOAT16, shape=(4, 512, 128))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def match(

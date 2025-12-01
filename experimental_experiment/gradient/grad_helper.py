@@ -96,19 +96,18 @@ def onnx_derivative(
     :param verbose: verbosity
     :return: onnx graph
 
-    The function calls *OrtModuleGraphBuilderConfiguration*
+    The function calls ``OrtModuleGraphBuilderConfiguration``
     from :epkg:`onnxruntime-training`. This graph is meant to be used
     with `OrtGradientForwardBackward` and includes
     operator `YieldOp`. That's the graph looks this way:
 
-    .. gdot::
-        :script: DOT-SECTION
+    .. code-block:: python
 
         import numpy as np
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,
@@ -140,14 +139,13 @@ def onnx_derivative(
     outputs to compute the gradient of the weights and the inputs.
     After they are replaced, it looks this way:
 
-    .. gdot::
-        :script: DOT-SECTION
+    .. code-block:: python
 
         import numpy as np
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,
@@ -176,14 +174,13 @@ def onnx_derivative(
 
     The user can still compute the outputs.
 
-    .. gdot::
-        :script: DOT-SECTION
+    .. code-block:: python
 
         import numpy as np
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,
@@ -213,14 +210,13 @@ def onnx_derivative(
     The input gradient can be filled with a constant matrix
     filled with one and with the expected shape.
 
-    .. gdot::
-        :script: DOT-SECTION
+    .. code-block:: python
 
         import numpy as np
         from onnx.defs import onnx_opset_version
         from skl2onnx.common.data_types import FloatTensorType
         from skl2onnx.algebra.onnx_ops import OnnxAdd
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.grad_helper import (
             onnx_derivative,
             DerivativeOptions,

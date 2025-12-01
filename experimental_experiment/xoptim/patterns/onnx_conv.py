@@ -7,6 +7,119 @@ from ..patterns_api import MatchResult, PatternOptimization
 class ConvBiasNullPattern(PatternOptimization):
     """
     Checks that a Conv has a null bias.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(512, 3, 64, 64))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("W", onnx.TensorProto.FLOAT, shape=(64, 3, 4, 4))
+        )
+        initializers.append(onh.from_array(np.zeros((64,), dtype=np.float32), name="B2"))
+        nodes.append(
+            make_node_extended(
+                "Conv",
+                ["X", "W", "B2"],
+                ["Y"],
+                dilations=[1, 1],
+                group=1,
+                kernel_shape=[4, 4],
+                pads=[1, 1, 1, 1],
+                strides=[2, 2],
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(512, 64, 32, 32))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(512, 3, 64, 64))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("W", onnx.TensorProto.FLOAT, shape=(64, 3, 4, 4))
+        )
+        nodes.append(
+            make_node_extended(
+                "Conv",
+                ["X", "W"],
+                ["Y"],
+                dilations=[1, 1],
+                group=1,
+                kernel_shape=[4, 4],
+                pads=[1, 1, 1, 1],
+                strides=[2, 2],
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(512, 64, 32, 32))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):

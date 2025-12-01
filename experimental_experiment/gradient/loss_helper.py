@@ -398,7 +398,7 @@ def add_loss_output(
         from sklearn.model_selection import train_test_split
         from sklearn.linear_model import LinearRegression
         from skl2onnx import to_onnx
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.loss_helper import add_loss_output
 
         opset = onnx_opset_version() - 2
@@ -430,7 +430,7 @@ def add_loss_output(
         from sklearn.model_selection import train_test_split
         from sklearn.linear_model import LinearRegression
         from skl2onnx import to_onnx
-        from onnx_array_api.plotting.dot_plot import to_dot
+        from experimental_experiment.doc import to_dot
         from experimental_experiment.gradient.loss_helper import add_loss_output
 
         opset = onnx_opset_version() - 2

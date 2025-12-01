@@ -9,6 +9,169 @@ from ..patterns_api import MatchResult, PatternOptimization
 class SlicesSplitPattern(PatternOptimization):
     """
     Merges multiple parallel slices into a split.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "transpose_1", onnx.TensorProto.FLOAT16, shape=(2, 2, 1024, 512)
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_0"],
+                value=onh.from_array(np.array([0], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_256"],
+                value=onh.from_array(np.array([256], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_3"],
+                value=onh.from_array(np.array([3], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_9223372036854775807"],
+                value=onh.from_array(
+                    np.array([9223372036854775807], dtype=np.int64), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Slice",
+                ["transpose_1", "init7_s1_0", "init7_s1_256", "init7_s1_3"],
+                ["slice_11"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Slice",
+                ["transpose_1", "init7_s1_256", "init7_s1_9223372036854775807", "init7_s1_3"],
+                ["slice_12"],
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "slice_11", onnx.TensorProto.FLOAT16, shape=(2, 2, 1024, 256)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "slice_12", onnx.TensorProto.FLOAT16, shape=(2, 2, 1024, 256)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "transpose_1", onnx.TensorProto.FLOAT16, shape=(2, 2, 1024, 512)
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s2_256_256"],
+                value=onh.from_array(np.array([256, 256], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Split", ["transpose_1", "init7_s2_256_256"], ["slice_11", "slice_12"], axis=3
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "slice_11", onnx.TensorProto.FLOAT16, shape=(2, 2, 1024, 256)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "slice_12", onnx.TensorProto.FLOAT16, shape=(2, 2, 1024, 256)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def match(
@@ -127,6 +290,83 @@ class SlicesSplitPattern(PatternOptimization):
 class SplitConcatPattern(PatternOptimization):
     """
     Replaces Split + Concat into identity if this is equivalent.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        nodes.append(make_node_extended("Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2))
+        nodes.append(make_node_extended("Concat", ["s1", "s2"], ["Y"], axis=-1))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        nodes.append(make_node_extended("Identity", ["X"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print(to_dot(model))
     """
 
     def match(

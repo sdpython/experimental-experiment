@@ -202,7 +202,7 @@ Which we can renders as follows:
     :script: DOT-SECTION
 
     import onnx
-    from onnx_array_api.plotting.dot_plot import to_dot
+    from experimental_experiment.doc import to_dot
 
     onx = onnx.load("temp_doc_mlp.onnx")
 
@@ -237,7 +237,7 @@ Which renders as follows:
     :script: DOT-SECTION
 
     import onnx
-    from onnx_array_api.plotting.dot_plot import to_dot
+    from experimental_experiment.doc import to_dot
 
     onx = onnx.load("temp_doc_mlp_opt.onnx")
 

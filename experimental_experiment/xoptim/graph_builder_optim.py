@@ -1,9 +1,10 @@
 import os
 import pprint
+import textwrap
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
-from onnx import AttributeProto, GraphProto, NodeProto, TensorProto
+from onnx import AttributeProto, GraphProto, NodeProto, TensorProto, save as onnx_save
 from onnx.shape_inference import infer_shapes
 import onnx.helper as oh
 from ..helpers import from_array_extended, make_idn
@@ -51,6 +52,8 @@ class GraphBuilderPatternOptimization:
     There can be several separated by a comma.
     ``PATTERN`` increases the verbosity for a particular pattern.
     ``LOG_PATTERN_OPTIMIZE`` overwrites the verbosity.
+    Environment variable ``DUMPPATTERNS`` dumps the matched nodes
+    and their replacement if it contains a folder name.
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -81,9 +84,7 @@ class GraphBuilderPatternOptimization:
         self.patterns = patterns or get_default_patterns(self.verbose)
         self.recursive = recursive
         self.verifies = verifies
-        self.dump_applied_patterns = dump_applied_patterns or int(
-            os.environ.get("DUMPPATTERNS", "0")
-        )
+        self.dump_applied_patterns = dump_applied_patterns or os.environ.get("DUMPPATTERNS", None)
         self.processor = processor
         self._build()
         # This assume a name is given once and
@@ -876,8 +877,7 @@ class GraphBuilderPatternOptimization:
         for node in match.nodes:
             if node is None:
                 continue
-            unique_names |= set(node.input)
-            unique_names |= set(node.output)
+            unique_names |= set(node.input) | set(node.output)
 
         new_initializers = {}
         input_names = set()
@@ -950,8 +950,7 @@ class GraphBuilderPatternOptimization:
             model.ir_version = self.builder.ir_version
             model_apply.ir_version = self.builder.ir_version
 
-        with open(fullname, "wb") as f:
-            f.write(model.SerializeToString())
+        onnx_save(model, fullname)
         if self.verbose >= 10:
             print(
                 f"[GraphBuilderPatternOptimization-"
@@ -960,14 +959,73 @@ class GraphBuilderPatternOptimization:
             )
 
         name = f"{match.pattern.__class__.__name__}_{n}_apply.onnx"
-        fullname = os.path.join(folder, name)
-        with open(fullname, "wb") as f:
-            f.write(model_apply.SerializeToString())
+        fullname_apply = os.path.join(folder, name)
+        onnx_save(model_apply, fullname_apply)
+
         if self.verbose >= 10:
             print(
                 f"[GraphBuilderPatternOptimization-"
                 f"{self.builder._hash()}._save_pattern_as_proto] "
                 f"saved {fullname!r}"
+            )
+
+        try:
+            from onnx_array_api.translate_api import translate, translate_header
+        except ImportError:
+            return
+
+        try:
+            import black
+
+            _format = lambda code: black.format_str(code, mode=black.Mode())  # noqa: E731
+        except ImportError:
+            # No black formatting.
+            _format = lambda code: code  # noqa: E731
+
+        fmt = "onnx"
+        code1 = _format(translate_header(fmt) + translate(model, api=fmt))
+        code2 = _format(translate_header(fmt) + translate(model_apply, api=fmt))
+        with open(f"{fullname}.py", "w") as f:
+            f.write(code1)
+        with open(f"{fullname_apply}.py", "w") as f:
+            f.write(code2)
+
+        rst = (
+            textwrap.dedent(
+                """
+            Model with nodes to be fused:
+
+            .. gdot::
+                :script: DOT-SECTION
+                :process:
+
+                from experimental_experiment.doc import to_dot
+            __CODE1__
+                print(to_dot(model))
+
+            Outcome of the fusion:
+
+            .. gdot::
+                :script: DOT-SECTION
+                :process:
+
+                from experimental_experiment.doc import to_dot
+            __CODE2__
+                print(to_dot(model))
+            """
+            )
+            .replace("__CODE1__", textwrap.indent(code1, "    "))
+            .replace("__CODE2__", textwrap.indent(code2, "    "))
+        )
+
+        with open(f"{fullname}.rst", "w") as f:
+            f.write(rst)
+
+        if self.verbose >= 10:
+            print(
+                f"[GraphBuilderPatternOptimization-"
+                f"{self.builder._hash()}._save_pattern_as_proto] "
+                f"saved {fullname + '.py'!r} and {fullname_apply + '.py'!r}"
             )
 
     def _chech_graph_verifies(self, node: NodeProto):
