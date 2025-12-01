@@ -105,7 +105,7 @@ class ShapedBasedReshapePattern(ReshapePattern):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -148,7 +148,7 @@ class ShapedBasedReshapePattern(ReshapePattern):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
@@ -225,7 +225,7 @@ class ReduceReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -263,7 +263,7 @@ class ReduceReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -644,7 +644,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -687,7 +687,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _op_types = element_wise_binary_op_types()
@@ -936,7 +936,7 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -977,7 +977,7 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _op_types = element_wise_binary_op_types()
@@ -1110,7 +1110,7 @@ class ConcatReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1168,7 +1168,7 @@ class ConcatReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
@@ -1329,7 +1329,7 @@ class StaticConcatReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1377,7 +1377,7 @@ class StaticConcatReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):

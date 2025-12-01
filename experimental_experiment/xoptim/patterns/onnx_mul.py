@@ -66,7 +66,7 @@ class MulMulMulScalarPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -116,7 +116,7 @@ class MulMulMulScalarPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -256,7 +256,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -305,7 +305,7 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     class BroadcastType(IntEnum):

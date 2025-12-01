@@ -1001,7 +1001,7 @@ class GraphBuilderPatternOptimization:
 
                 from experimental_experiment.doc import to_dot
             __CODE1__
-                print(to_dot(model))
+                print("DOT-SECTION", to_dot(model))
 
             Outcome of the fusion:
 
@@ -1011,7 +1011,7 @@ class GraphBuilderPatternOptimization:
 
                 from experimental_experiment.doc import to_dot
             __CODE2__
-                print(to_dot(model))
+                print("DOT-SECTION", to_dot(model))
             """
             )
             .replace("__CODE1__", textwrap.indent(code1, "    "))

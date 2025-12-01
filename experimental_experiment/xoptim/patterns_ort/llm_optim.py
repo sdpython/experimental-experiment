@@ -12,6 +12,209 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
     """
     Very similar to
     :class:`experimental_experiment.xoptim.patterns.onnx_rotary.RotaryEmbeddingPattern`.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2, "c", "2*e"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("m2", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
+        )
+        nodes.append(make_node_extended("Concat", ["m2", "m2"], ["m2x2"], axis=-1))
+        nodes.append(make_node_extended("Concat", ["m1", "m1"], ["m1x2"], axis=-1))
+        nodes.append(
+            make_node_extended(
+                "HalfRotaryEmbedding", ["X", "m2x2", "m1x2"], ["Y"], domain="intermediate"
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "2*e"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2, "c", "2*e"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("m2", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s2_0_1"],
+                value=onh.from_array(np.array([0, 1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s_0"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s_1"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_1"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Squeeze", ["m2", "init7_s2_0_1"], ["ContribRotaryEmbeddingPattern--m2x2"]
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Squeeze", ["m1", "init7_s2_0_1"], ["ContribRotaryEmbeddingPattern--m1x2"]
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Shape", ["X"], ["ContribRotaryEmbeddingPattern--X--batch"], end=1, start=0
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Shape", ["X"], ["ContribRotaryEmbeddingPattern--X--seq_length"], end=3, start=2
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Squeeze",
+                ["ContribRotaryEmbeddingPattern--X--seq_length"],
+                ["ContribRotaryEmbeddingPattern--X--seqsq"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Range",
+                ["init7_s_0", "ContribRotaryEmbeddingPattern--X--seqsq", "init7_s_1"],
+                ["ContribRotaryEmbeddingPattern--X_flat_pids"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Concat",
+                ["ContribRotaryEmbeddingPattern--X--batch", "init7_s1_1"],
+                ["ContribRotaryEmbeddingPattern--X_pshape"],
+                axis=0,
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Expand",
+                [
+                    "ContribRotaryEmbeddingPattern--X_flat_pids",
+                    "ContribRotaryEmbeddingPattern--X_pshape",
+                ],
+                ["ContribRotaryEmbeddingPattern--X_position_ids"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "RotaryEmbedding",
+                [
+                    "X",
+                    "ContribRotaryEmbeddingPattern--X_position_ids",
+                    "ContribRotaryEmbeddingPattern--m2x2",
+                    "ContribRotaryEmbeddingPattern--m1x2",
+                ],
+                ["Y"],
+                domain="com.microsoft",
+                num_heads=2,
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "2*e"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_name = FunctionHalfRotaryEmbeddingPattern._operator_name
@@ -456,6 +659,276 @@ class MultiHeadAttention3DPattern(PatternOptimization):
     Merges multiple nodes into MultiHeadAttention. It assumes pattern
     :class:`experimental_experiment.xoptim.patterns.onnx_attention.FunctionAttentionPattern`
     was triggered before.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "mask", onnx.TensorProto.BOOL, shape=("am", 1, "cm", "dm")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_values", onnx.TensorProto.FLOAT, shape=("pav", 8, "pcv", 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "values", onnx.TensorProto.FLOAT, shape=("av", "bv", 8, 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("aq", "bq", 8, 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_keys", onnx.TensorProto.FLOAT, shape=("pak", 8, "pck", 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("keys", onnx.TensorProto.FLOAT, shape=("ak", "bk", 8, 64))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["scale_sqrt"],
+                value=onh.from_array(
+                    np.array([0.3162277638912201], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(make_node_extended("Transpose", ["query"], ["t_query"], perm=[0, 2, 1, 3]))
+        nodes.append(make_node_extended("Transpose", ["keys"], ["t_keys"], perm=[0, 2, 1, 3]))
+        nodes.append(
+            make_node_extended("Concat", ["past_keys", "t_keys"], ["ct_keys"], axis=-2)
+        )
+        nodes.append(
+            make_node_extended("Transpose", ["values"], ["t_values"], perm=[0, 2, 1, 3])
+        )
+        nodes.append(
+            make_node_extended("Concat", ["past_values", "t_values"], ["ct_values"], axis=-2)
+        )
+        nodes.append(
+            make_node_extended(
+                "LocalAttention_to1",
+                ["t_query", "ct_keys", "ct_values", "mask", "scale_sqrt"],
+                ["prob"],
+                domain="intermediate",
+            )
+        )
+        nodes.append(make_node_extended("Transpose", ["prob"], ["Y"], perm=[0, 2, 1, 3]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "ct_values", onnx.TensorProto.FLOAT, shape=("pav", 8, "pcv+bv", 64)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("ay", "by", "cy", "dy")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "ct_keys", onnx.TensorProto.FLOAT, shape=("pak", 8, "pck+bk", 64)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "mask", onnx.TensorProto.BOOL, shape=("am", 1, "cm", "dm")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_values", onnx.TensorProto.FLOAT, shape=("pav", 8, "pcv", 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "values", onnx.TensorProto.FLOAT, shape=("av", "bv", 8, 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("aq", "bq", 8, 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_keys", onnx.TensorProto.FLOAT, shape=("pak", 8, "pck", 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("keys", onnx.TensorProto.FLOAT, shape=("ak", "bk", 8, 64))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s3_0_0_-1"],
+                value=onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init1_s1_"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init1_s1_2"],
+                value=onh.from_array(np.array([-np.inf], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s4_0_0_-1_64"],
+                value=onh.from_array(np.array([0, 0, -1, 64], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape", ["query", "init7_s3_0_0_-1"], ["MultiHeadAttention3DPattern--query"]
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape", ["keys", "init7_s3_0_0_-1"], ["MultiHeadAttention3DPattern--keys"]
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape",
+                ["values", "init7_s3_0_0_-1"],
+                ["MultiHeadAttention3DPattern--values"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Where",
+                ["mask", "init1_s1_", "init1_s1_2"],
+                ["MultiHeadAttention3DPattern--mask"],
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "MultiHeadAttention",
+                [
+                    "MultiHeadAttention3DPattern--query",
+                    "MultiHeadAttention3DPattern--keys",
+                    "MultiHeadAttention3DPattern--values",
+                    "",
+                    "",
+                    "MultiHeadAttention3DPattern--mask",
+                    "past_keys",
+                    "past_values",
+                ],
+                ["MultiHeadAttention3DPattern--Y", "ct_keys", "ct_values"],
+                domain="com.microsoft",
+                num_heads=8,
+                scale=0.10000000149011612,
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Reshape", ["MultiHeadAttention3DPattern--Y", "init7_s4_0_0_-1_64"], ["Y"]
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "ct_values", onnx.TensorProto.FLOAT, shape=("pav", 8, "pcv+bv", 64)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("ay", "by", "cy", "dy")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "ct_keys", onnx.TensorProto.FLOAT, shape=("pak", 8, "pck+bk", 64)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     _prefix_operator_name = f"{FunctionAttentionPattern._operator_name}_to"
