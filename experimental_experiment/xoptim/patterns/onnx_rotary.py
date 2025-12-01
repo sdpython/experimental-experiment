@@ -127,7 +127,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -177,7 +177,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -818,7 +818,7 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -867,7 +867,7 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_name = "HalfRotaryEmbedding"
@@ -1077,7 +1077,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1187,7 +1187,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_name = FunctionHalfRotaryEmbeddingPattern._operator_name
@@ -1436,7 +1436,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1485,7 +1485,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_names = ["CausalMask", "ShiftedCausalMask"]
@@ -1746,7 +1746,7 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1793,7 +1793,7 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_name = "CausalMaskMulAdd"
@@ -2042,7 +2042,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -2101,7 +2101,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_name = "CosSinCache"

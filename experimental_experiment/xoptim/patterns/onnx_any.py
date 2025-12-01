@@ -58,7 +58,7 @@ class SameChildrenPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -108,7 +108,7 @@ class SameChildrenPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     @classmethod
@@ -289,7 +289,7 @@ class SameChildrenFromInputPattern(SameChildrenPattern):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -338,7 +338,7 @@ class SameChildrenFromInputPattern(SameChildrenPattern):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -470,7 +470,7 @@ class IdentityPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -512,7 +512,7 @@ class IdentityPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     @classmethod
@@ -748,7 +748,7 @@ class ShapeBasedIdentityPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -786,7 +786,7 @@ class ShapeBasedIdentityPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
@@ -891,7 +891,7 @@ class SwapUnaryPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -937,7 +937,7 @@ class SwapUnaryPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     _unary_types = unary_like_op_types()

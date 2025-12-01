@@ -61,7 +61,7 @@ class MatMulAddPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -162,7 +162,7 @@ class MatMulAddPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 3, allow_reshape: bool = False):
@@ -475,7 +475,7 @@ class GemmTransposePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -519,7 +519,7 @@ class GemmTransposePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -639,7 +639,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -698,7 +698,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def same_size(
@@ -1184,7 +1184,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1229,7 +1229,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -1374,7 +1374,7 @@ class TransposeMatMulPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1413,7 +1413,7 @@ class TransposeMatMulPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -1597,7 +1597,7 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1664,7 +1664,7 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def check_transpose_node(self, g: "GraphBuilder", name: str) -> bool:  # noqa: F821
@@ -1855,7 +1855,7 @@ class SwitchReshapeActivationPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -1914,7 +1914,7 @@ class SwitchReshapeActivationPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -2055,7 +2055,7 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
 
     Outcome of the fusion:
 
@@ -2118,7 +2118,7 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         )
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
-        print(to_dot(model))
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(

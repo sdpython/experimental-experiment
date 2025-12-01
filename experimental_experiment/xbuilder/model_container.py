@@ -98,7 +98,7 @@ class TorchModelContainer(ModelContainer):
         :param load_large_initializers: loads the large initializers,
                 if not done, the model is incomplete but it can be used to
                 look into the model without executing it and method
-                :meth:`onnx.model_container.ModelContainer._load_large_initializers`
+                ``onnx.model_container.ModelContainer._load_large_initializers``
                 can be used to load them later
         :return: self
         """

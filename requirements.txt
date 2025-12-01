@@ -1,7 +1,7 @@
 numpy
 ml_dtypes
 onnx>=1.16.0
-onnx-diagnostic>=0.8.0
+onnx-diagnostic>=0.8.3
 # onnxruntime-training; sys_platform == 'linux' and python_version < "3.12"
 # onnxruntime; sys_platform != 'linux' or python_version >= "3.12"
 onnxruntime
