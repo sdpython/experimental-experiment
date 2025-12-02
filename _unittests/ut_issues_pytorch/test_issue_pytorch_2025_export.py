@@ -1,3 +1,4 @@
+import os
 import unittest
 import onnx
 from experimental_experiment.ext_test_case import ExtTestCase, requires_torch, never_test
@@ -191,6 +192,182 @@ class TestIssuesPytorch2025Export(ExtTestCase):
 
             onnx_program.save(f"{prefix}.dynamo.onnx")
             assert_discrepancies(f"{prefix}.dynamo.onnx", m, (input_batch,))
+
+    @never_test()
+    def test_issue_169178_resnet18(self):
+        import torch
+        import torchvision
+        from torchvision.models import resnet18, ResNet18_Weights
+        import onnxruntime
+        import numpy as np
+        from pathlib import Path
+        from tqdm import tqdm
+
+        def export(exporter: str, model_path: str):
+            model = resnet18(weights=ResNet18_Weights.DEFAULT)
+            model.eval()
+            preprocess = ResNet18_Weights.DEFAULT.transforms()
+
+            batch_size = 128
+            dummy_input = torch.rand(batch_size, 3, 224, 224)
+            dummy_input = preprocess(dummy_input)
+
+            additional_kwargs = {}
+            if exporter != "script":
+                additional_kwargs["dynamic_shapes"] = ({0: "batch_size"},)
+            else:
+                additional_kwargs["dynamic_axes"] = {"image": {0: "batch"}}
+
+            if exporter == "dynamo":
+                onnx_program = torch.onnx.export(
+                    model,
+                    dummy_input,
+                    export_params=True,
+                    opset_version=18,
+                    dynamo=True,
+                    input_names=["image"],
+                    output_names=["predictions"],
+                    report=True,
+                    **additional_kwargs,
+                )
+                onnx_program.save(model_path)
+            elif exporter == "custom":
+                from onnx_diagnostic.export.api import to_onnx
+
+                to_onnx(
+                    model,
+                    (dummy_input,),
+                    filename=model_path,
+                    target_opset=18,
+                    input_names=["image"],
+                    output_names=["predictions"],
+                    exporter="custom",
+                    verbose=1,
+                    dynamic_shapes=({0: "batch_size"},),
+                )
+            else:
+                torch.onnx.export(
+                    model,
+                    dummy_input,
+                    model_path,
+                    export_params=True,
+                    opset_version=18,
+                    dynamo=False,
+                    input_names=["image"],
+                    output_names=["predictions"],
+                    **additional_kwargs,
+                )
+
+        def validate(data_path: Path, *onnx_model_paths: str):
+            dataset = torchvision.datasets.ImageFolder(
+                data_path / "imagenet" / "val", ResNet18_Weights.DEFAULT.transforms()
+            )
+            data_loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
+
+            sesss = [
+                onnxruntime.InferenceSession(p, providers=["CPUExecutionProvider"])
+                for p in onnx_model_paths
+            ]
+
+            dataset_size = len(data_loader)
+            print(f"Dataset Size: {dataset_size}")
+            errors = []
+            ok = []
+            for i, (images, _target) in tqdm(
+                enumerate(data_loader), total=dataset_size, desc="Validation"
+            ):
+                predictions = []
+                scores = []
+                for sess in sesss:
+                    output = sess.run([], {"image": images.numpy()})[0]
+                    predictions.append(np.argmax(output, axis=1).item())
+                    scores.append(np.max(output, axis=1).item())
+
+                unique = set(predictions)
+                if len(unique) != 1:
+                    errors.append(
+                        f"-- disagreement on image {i}, "
+                        f"predictions={predictions}, scores={scores}"
+                    )
+                else:
+                    ok.append(f"-- image {i}: {scores}")
+
+            if errors:
+                print("\n".join(errors))
+            else:
+                print("\n".join(ok[:100]))
+            assert not errors, f"Issues with the following {len(errors)}"
+
+        def main():
+            RESNET18_DYNAMO_FALSE = "resnet18_dynamo_false.onnx"
+            RESNET18_DYNAMO_TRUE = "resnet18_dynamo_true.onnx"
+            RESNET18_CUSTOM = "resnet18_custom.onnx"
+            DATASET_PATH = Path("/home/xadupre/examples/images")  # imagenet/val
+
+            if not os.path.exists(RESNET18_DYNAMO_FALSE) or not os.path.exists(
+                RESNET18_DYNAMO_TRUE
+            ):
+                print("========== Export ==========")
+                export("script", model_path=RESNET18_DYNAMO_FALSE)
+                export("dynamo", model_path=RESNET18_DYNAMO_TRUE)
+                export("custom", model_path=RESNET18_CUSTOM)
+
+            print("========== Validation ==========")
+            validate(DATASET_PATH, RESNET18_DYNAMO_FALSE, RESNET18_DYNAMO_TRUE, RESNET18_CUSTOM)
+
+        main()
+
+    @never_test()
+    def test_issue_resnet50_168224(self):
+        import torch
+        import onnxruntime
+        from torchvision import models
+        from onnx_diagnostic.helpers import max_diff, string_type
+
+        example_inputs = (torch.randn(1, 3, 224, 224),)
+        onnx_inputs = [tensor.numpy(force=True) for tensor in example_inputs]
+        torch_model = models.resnet50(pretrained=True).eval()
+        print(f"Input length: {len(onnx_inputs)} {string_type(onnx_inputs, with_shape=True)}")
+
+        for exporter in ["script", "onnx-dynamo", "custom"]:
+            model_path = self.get_dump_file(f"test_issue_resnet50_168224.{exporter}.onnx")
+            if exporter == "onnx-dynamo":
+                torch.onnx.export(torch_model, example_inputs, model_path, dynamo=True)
+            elif exporter == "script":
+                torch.onnx.export(torch_model, example_inputs, model_path, dynamo=False)
+            else:
+                from onnx_diagnostic.export.api import to_onnx
+
+                to_onnx(
+                    torch_model,
+                    example_inputs,
+                    filename=model_path,
+                    target_opset=18,
+                    input_names=["image"],
+                    output_names=["predictions"],
+                    exporter="custom",
+                    verbose=0,
+                    dynamic_shapes=({0: "batch_size"},),
+                )
+
+            ort_session = onnxruntime.InferenceSession(
+                model_path, providers=["CPUExecutionProvider"]
+            )
+
+            onnxruntime_input = {
+                input_arg.name: input_value
+                for input_arg, input_value in zip(ort_session.get_inputs(), onnx_inputs)
+            }
+
+            onnxruntime_outputs = ort_session.run(None, onnxruntime_input)[0]
+            torch_outputs = torch_model(*example_inputs)
+            assert len(torch_outputs) == len(onnxruntime_outputs)
+            for torch_output, onnxruntime_output in zip(torch_outputs, onnxruntime_outputs):
+                diff = max_diff(torch_output, torch.tensor(onnxruntime_output), hist=[0.1])
+                print("--", diff)
+                torch.testing.assert_close(torch_output, torch.tensor(onnxruntime_output))
+            print("PyTorch and ONNX Runtime output matched!")
+            print(f"Output length: {len(onnxruntime_outputs)}")
 
 
 if __name__ == "__main__":
