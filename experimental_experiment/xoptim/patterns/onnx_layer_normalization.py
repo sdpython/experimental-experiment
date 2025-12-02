@@ -1709,6 +1709,8 @@ class RMSNormalizationPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         cast_1 = g.node_before(node_pow.input[0])
+        if cast_1 is not None and cast_1.op_type != "Cast":
+            cast_1 = None
         cast_2 = None
         if cast_1 is not None:
             to = g.get_attribute(cast_1, "to").i
