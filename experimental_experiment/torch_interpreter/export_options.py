@@ -51,6 +51,8 @@ class ExportOptions:
         :func:`experimental_experiment.export_helpers.torch_export`
     :param prefer_deferred_runtime_asserts_over_guards:
         see func:`torch.export.export`
+    :param cut_ep: option used to cut the exported program and defines these names
+        into the new output
 
     The fallback strategy tries the following in order:
 
@@ -116,6 +118,7 @@ class ExportOptions:
         validate_ep: Union[float, bool] = False,
         backed_size_oblivious: Union[bool, str] = "auto",
         prefer_deferred_runtime_asserts_over_guards: bool = False,
+        cut_ep: Optional[List[str]] = None,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -135,6 +138,7 @@ class ExportOptions:
         self.prefer_deferred_runtime_asserts_over_guards = (
             prefer_deferred_runtime_asserts_over_guards
         )
+        self.cut_ep = cut_ep
         if aten_as_function is None:
             from experimental_experiment.torch_interpreter.onnx_export import (
                 get_default_aten_as_function,
@@ -213,6 +217,58 @@ class ExportOptions:
                 self.clone(jit=True, decomposition_table=self.decomposition_table),
             ]
         raise AssertionError(f"Unable to return fallback strategy with kind={kind!r}")
+
+    def cut_exported_program(
+        self,
+        exported_program: "torch.export.ExportedProgram",  # noqa: F821
+        args,
+        kwargs,
+        dynamic_shapes,
+        input_names,
+        exc,
+        verbose: int = 0,
+    ) -> "torch.export.ExportedProgram":  # noqa: F821
+        """
+        Cut the exported program. The export is truncated.
+        This can be used to investigate an issue.
+        """
+        if verbose:
+            print(f"[ExportOptions.cut_exported_program] cut_ep={self.cut_ep!r}")
+        set_names = set(self.cut_ep)
+        output_node = None
+        target_nodes = []
+        gm = exported_program.module()
+        graph = gm.graph
+        for node in graph.nodes:
+            if node.op == "output":
+                output_node = node
+            elif node.name in set_names:
+                target_nodes.append(node)
+
+        assert target_nodes and output_node, (
+            f"Output node or output candidates are missing, cut_ep={self.cut_ep!r}, "
+            f"output_node={output_node}, target_nodes={target_nodes}"
+        )
+        output_node.args = (tuple(target_nodes),)
+        graph.eliminate_dead_code()
+        graph.lint()
+        gm.recompile()
+        if verbose:
+            print("[ExportOptions.cut_exported_program] export again.")
+        exported_program = self._export(
+            gm,
+            args,
+            kwargs,
+            dynamic_shapes,
+            input_names,
+            exc,
+            verbose,
+            backed_size_oblivious=self.backed_size_oblivious,
+            prefer_deferred_runtime_asserts_over_guards=self.prefer_deferred_runtime_asserts_over_guards,
+        )
+        if verbose:
+            print("[ExportOptions.cut_exported_program] done.")
+        return exported_program
 
     def post_process_exported_program(
         self,
@@ -632,6 +688,18 @@ class ExportOptions:
             print("-- EXPORTED PROGRAM AFTER EXPORT -- ")
             print(exported_program)
             print("-- DONE -- ")
+
+        if self.cut_ep:
+            exported_program = self.cut_exported_program(
+                exported_program,
+                args=args,
+                kwargs=kwargs,
+                dynamic_shapes=dynamic_shapes,
+                input_names=input_names,
+                exc=exc,
+                verbose=verbose,
+            )
+
         if self.save_ep:
             save_ep, threshold = (
                 self.save_ep if isinstance(self.save_ep, tuple) else (self.save_ep, 2**2)
