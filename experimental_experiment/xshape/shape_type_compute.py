@@ -1216,7 +1216,7 @@ def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
     for o in node.output:
         self.set_type(o, dtype)
         if device is not None:
-            self.set_type(o, device)
+            self.set_device(o, device)
     att = self.get_attribute(node, "axis", exc=False)
     axis = 0 if att is None else att.i
     if self.has_shape(node.input[0]) and len(node.input) > 1 and self.is_constant(node.input[1]):

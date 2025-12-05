@@ -47,6 +47,7 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         self._output_names = []
         self._known_shapes = {}
         self._known_ranks = {}
+        self._known_devices = {}
         self._known_types = {}
         self.constraints_ = {}
         self.dynamic_dimensions_ = {}
@@ -312,6 +313,39 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         for n in equal_to:
             if n not in self._known_value_shape:
                 self._known_value_shape[n] = new_value
+
+    def set_device(
+        self, name: str, device: Union[int, "torch.dtype"], exc: bool = True  # noqa: F821
+    ):
+        """
+        Sets the shape for a result. It is exists, it checks the new shape
+        is equal to the existing one.
+
+        :param name: name
+        :param device: an integer or a torch device then converted into an integer
+        :param exc: raises an exception
+        """
+        assert exc, f"not implemented when exc={exc}"
+        if not isinstance(device, int):
+            device = -1 if device.type == "cpu" else device.index
+        if name in self._known_devices:
+            assert self._known_devices[name] == device, (
+                f"device mismatch for name={name!r}, got {self._known_devices[name]}, "
+                f"new device is {device}{self.get_debug_msg()}"
+            )
+            return
+        self._known_devices[name] = device
+
+    def has_device(self, name) -> bool:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        return name in self._known_devices
+
+    def get_device(self, name) -> int:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert (
+            name in self._known_devices
+        ), f"Unknown device for name={name!r}{self.get_debug_msg()}"
+        return self._known_devices[name]
 
     def has_type(self, name: str) -> Union[bool, int]:
         """Tells if a result has a type. This should be always true."""

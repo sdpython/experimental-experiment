@@ -4978,6 +4978,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         rows.append(f"dynamic_shapes={pprint.pformat(self.dynamic_shapes)[:10000]}")
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
+        rows.append(f"_known_devices={pprint.pformat(self._known_devices)[:10000]}")
         short_sh = {
             k: (v if (isinstance(v, tuple) and len(v) < 10) else string_type(v, with_shape=True))
             for k, v in self._known_value_shape.items()
