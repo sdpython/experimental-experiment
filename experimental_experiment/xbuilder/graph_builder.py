@@ -243,6 +243,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     - `_known_names`: set of existing results names
     - `_known_shapes: Dict[str, DYNAMIC_SHAPE]`: declared shapes
     - `_known_types: Dict[str, int]`: declared element types
+    - `_known_devices: Dict[str, int]`: declared devices
     - `_known_value_shape: Dict[str, Any]`: if a result is a shape or not
       (for example the output of operator Shape)
     - `_known_ranks: Dict[str, int]`: declared ranks
@@ -484,6 +485,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self._known_shapes = {}
         self._known_types = {}
         self._known_ranks = {}
+        self._known_devices = {}
         self._known_torch_value = {}
         self._known_names = set()
         self._known_sequences = {}
@@ -1694,6 +1696,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 continue
             if self.has_type(k):
                 del self._known_types[k]
+            if self.has_device(k):
+                del self._known_devices[k]
             if self.has_shape(k):
                 del self._known_shapes[k]
             if self.has_rank(k):
@@ -1936,12 +1940,47 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
     def set_type_shape_or_rank(self, name: str, like: str):
         """Sets the type and the shape of *name* like *like*."""
+        if self.has_device(like):
+            self.set_device(name, self.get_device(like))
         if self.has_type(like):
             self.set_type(name, self.get_type(like))
         if self.has_shape(like):
             self.set_shape(name, self.get_shape(like))
         elif self.has_rank(like):
             self.set_rank(name, self.get_rank(like))
+
+    def set_device(
+        self, name: str, device: Union[int, "torch.dtype"], exc: bool = True  # noqa: F821
+    ):
+        """
+        Sets the shape for a result. It is exists, it checks the new shape
+        is equal to the existing one.
+
+        :param name: name
+        :param device: an integer or a torch device then converted into an integer
+        :param exc: raises an exception
+        """
+        assert exc, f"not implemented when exc={exc}"
+        if not isinstance(device, int):
+            device = -1 if device.type == "cpu" else device.index
+        if name in self._known_devices:
+            assert self._known_devices[name] == device, (
+                f"device mismatch for name={name!r}, got {self._known_devices[name]}, "
+                f"new device is {device}{self.get_debug_msg()}"
+            )
+            return
+        self._known_devices[name] = device
+
+    def has_device(self, name) -> bool:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        return name in self._known_devices
+
+    def get_device(self, name) -> int:
+        assert isinstance(name, str), f"Unexpected type {type(name)} for name."
+        assert (
+            name in self._known_devices
+        ), f"Unknown device for name={name!r}{self.get_debug_msg()}"
+        return self._known_devices[name]
 
     def set_type(self, name: str, dtype: int, exc: bool = True):
         """
@@ -2512,6 +2551,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     )
                     if self.get_rank(name) == 0:
                         r = self.op.UnsqueezeAnyOpset(name, self.ZERO, name=f"_mkshape1_{name}")
+                        if self.has_device(name):
+                            self.set_device(r, self.get_device(name))
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
                         conc.append(r)
@@ -2554,6 +2595,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     )
                     if self.get_rank(name) == 0:
                         r = self.op.UnsqueezeAnyOpset(name, self.ZERO, name=f"_mkshape2_{name}")
+                        if self.has_device(name):
+                            self.set_device(r, self.get_device(name))
                         self.set_type(r, self.get_type(name))
                         self.set_shape(r, (1,))
                         conc.append(r)
@@ -2846,6 +2889,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self.set_name(parameter_name, marker="parameter_name")
             self.set_shape(parameter_name, self.get_shape(name))
             self.set_type(parameter_name, self.get_type(name))
+            if self.has_device(name):
+                self.set_device(parameter_name, self.get_device(name))
             if self.verbose and (self.verbose > 3 or (self.verbose > 2 and np.prod(shape) > 100)):
                 print(
                     f"[GraphBuilder-{self._hash()}.make_initializer] "
@@ -3317,6 +3362,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         is_dimension: bool = False,
         marker: str = "",
         default_initializer: Optional[Any] = None,
+        device: Optional[int] = None,
     ) -> str:
         """
         Adds a tensor input to the onnx graph.
@@ -3329,6 +3375,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             to the graph
         :param marker: to known from this input was created
         :param default_initializer: add an initializer with the same name of the input
+        :param device: device if known
         :return: input name
         """
         if isinstance(name, (tuple, list)):
@@ -3452,6 +3499,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self.set_type(name, elem_type)
             if input_name != name:
                 self.set_type(input_name, elem_type)
+        if device is not None:
+            self.set_device(name, device)
+            if input_name != name:
+                self.set_device(input_name, device)
 
         node.doc_string += ".\n" + self._info_shape_type([name]) + "\n"
         add_node()
@@ -3677,6 +3728,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         is_dimension: Optional[bool] = None,
         allow_untyped_output: bool = False,
         doc_string: str = "",
+        device: Optional[int] = None,
     ) -> Union[str, List[str]]:
         """
         Adds a tensor output to the onnx graph.
@@ -3689,6 +3741,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             to the graph
         :param allow_untyped_output: allow untyped output even if it is not a function
         :param doc_string: doc string
+        :param device: device if known
         :return: output name
         """
         assert self.as_function or is_dimension is not None, (
@@ -3771,6 +3824,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self.set_type(name, elem_type)
             if old_name:
                 self.set_type(old_name, elem_type)
+        if device is not None:
+            self.set_device(name, device)
+            if old_name:
+                self.set_device(old_name, device)
         return name
 
     def make_tensor_value_info_from_name(self, name: str, verbose: int = 0) -> ValueInfoProto:
@@ -4508,6 +4565,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                             self.set_shape(no, shape)
                     if builder.has_type(o):
                         self.set_type(no, builder.get_type(o))
+                    if builder.has_device(o):
+                        self.set_device(no, builder.get_device(o))
 
             assert len(output_names) == len(builder.outputs), (
                 f"Inconsistency between output_names={output_names} and "
@@ -6019,6 +6078,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self.set_rank(name, g.get_rank(parent_name))
         if g.has_type(parent_name):
             self.set_type(name, g.get_type(parent_name))
+        if g.has_device(parent_name):
+            self.set_device(name, g.get_device(parent_name))
         if parent_name in g.constants_:
             self.constants_[name] = g.constants_[parent_name]
         if parent_name in g.constants_node_:
@@ -6083,6 +6144,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 )
                 self.set_type(k, g.get_type(k))
                 self.set_shape(k, g.get_shape(k))
+                if g.has_device(k):
+                    self.set_device(k, g.get_device(k))
                 if k in g.constants_:
                     self.constants_[k] = g.constants_[k]
                 if k in g._parameter_renaming:
@@ -8021,6 +8084,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if replaced:
                     self.set_shape(node.output[0], self.get_shape(node.input[0]), allow_zero=True)
                     self.set_type(node.output[0], self.get_type(node.input[0]))
+                    if self.has_device(node.input[0]):
+                        self.set_device(node.output[0], self.get_device(node.input[0]))
                 else:
                     self.set_shape(node.output[0], self._get_tensor_shape(node), allow_zero=True)
                     self.set_type(node.output[0], self._get_tensor_type(node))
@@ -8048,6 +8113,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if replaced:
                     self.set_type(node.output[0], self.get_type(node.input[0]))
                     self.set_shape(node.output[0], self.get_shape(node.input[0]))
+                    if self.has_device(node.input[0]):
+                        self.set_device(node.output[0], self.get_device(node.input[0]))
                 else:
                     value = self.get_constant(node.input[0], computed_value=True)
                     shape = tuple(int(i) for i in value)
@@ -9402,6 +9469,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if not with_existing:
                 if self.has_type(k):
                     self.set_type(v, self.get_type(k))
+                if self.has_device(k):
+                    self.set_device(v, self.get_device(k))
                 if self.has_shape(k):
                     self.set_shape(v, self.get_shape(k))
                 elif self.has_rank(k):

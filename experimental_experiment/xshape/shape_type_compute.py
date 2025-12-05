@@ -96,6 +96,8 @@ def set_type_shape_reshape(
 ):
     "Sets the output shape for node type Reshape"
     g.set_type(name, g.get_type(input_name))
+    if g.has_device(input_name):
+        g.set_device(name, g.get_device(input_name))
     if isinstance(new_shape, str):
         if g.has_shape(new_shape):
             sh = g.get_shape(new_shape)
@@ -1210,8 +1212,11 @@ def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
         )
         return
     dtype = self.get_type(node.input[0])
+    device = self.get_device(node.input[0]) if self.has_device(node.input[0]) else None
     for o in node.output:
         self.set_type(o, dtype)
+        if device is not None:
+            self.set_type(o, device)
     att = self.get_attribute(node, "axis", exc=False)
     axis = 0 if att is None else att.i
     if self.has_shape(node.input[0]) and len(node.input) > 1 and self.is_constant(node.input[1]):
@@ -1906,6 +1911,8 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
             for ni, i, sh in zip(node.input, proto_local_function.input, shapes):
                 if self.has_type(ni):
                     local_function_builder.set_type(i, self.get_type(ni))
+                if self.has_device(ni):
+                    local_function_builder.set_device(i, self.get_device(ni))
                 local_function_builder.set_shape(i, sh)
             local_function_builder.infer_shapes()
         assert len(local_function_builder.output_names) == len(node.output), (
