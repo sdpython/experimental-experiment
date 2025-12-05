@@ -1203,10 +1203,12 @@ class DynamoInterpreter:
                 else:
                     self.builder.set_rank(node.name, len(t_shape))
                 self.builder.set_type(node.name, dtype)
+                self.builder.set_device(node.name, val.get_device())
                 sts = {"dtype": val.dtype}
             elif isinstance(val, self.torch.SymInt):
                 self.builder.set_shape(node.name, (1,))
                 self.builder.set_type(node.name, TensorProto.INT64)
+                self.builder.set_device(node.name, -1)
                 sts = {"dtype": self.torch.int64}
             else:
                 raise TypeError(
@@ -1279,6 +1281,8 @@ class DynamoInterpreter:
                 if not sts:
                     if self.builder.has_type(result_name):
                         self.builder.set_type(node.name, self.builder.get_type(result_name))
+                    if self.builder.has_device(result_name):
+                        self.builder.set_device(node.name, self.builder.get_device(result_name))
                     if self.builder.has_shape(result_name):
                         self.builder.set_shape(node.name, self.builder.get_shape(result_name)[1:])
                     elif self.builder.has_rank(result_name):
@@ -1568,6 +1572,8 @@ class DynamoInterpreter:
             for bout, out in zip(fct_builder.output_names, output_names):
                 if fct_builder.has_type(bout):
                     self.builder.set_type(out, fct_builder.get_type(bout))
+                if fct_builder.has_device(bout):
+                    self.builder.set_device(out, fct_builder.get_device(bout))
                 if fct_builder.has_shape(bout):
                     self.builder.set_shape(out, fct_builder.get_shape(bout))
                 elif fct_builder.has_rank(bout):
@@ -1751,6 +1757,8 @@ class DynamoInterpreter:
         for out, lout in zip(output_names, new_builder.outputs):
             if new_builder.has_type(lout.name):
                 self.builder.set_type(out, new_builder.get_type(lout.name))
+            if new_builder.has_device(lout.name):
+                self.builder.set_device(out, new_builder.get_device(lout.name))
             if new_builder.has_shape(lout.name):
                 self.builder.set_shape(out, new_builder.get_shape(lout.name))
             elif new_builder.has_rank(lout.name):
@@ -1935,6 +1943,7 @@ class DynamoInterpreter:
 
             for i, (v, r) in enumerate(zip(val, res)):
                 if isinstance(v, self.torch.Tensor):
+                    self.builder.set_device(r, v.get_device())
                     dtype = _get_type(v.dtype)
                     if i >= 1 and node.target.name() in {
                         "aten::_native_batch_norm_legit.no_stats",
@@ -2040,6 +2049,7 @@ class DynamoInterpreter:
                                 f"{self.builder.get_debug_msg()}"
                             )
                             self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
+                            self.builder.set_device(r_, v_.get_device())
                             shape = tuple(v_.shape)
                             if not any(
                                 i == 0 for i in shape if isinstance(i, int)
@@ -2190,6 +2200,8 @@ class DynamoInterpreter:
                 builder.add_dynamic_object(k, v, check_tokens=False)
                 if self.builder.has_type(k):
                     builder.set_type(k, self.builder.get_type(k))
+                if self.builder.has_device(k):
+                    builder.set_device(k, self.builder.get_device(k))
                 if self.builder.has_shape(k):
                     builder.set_shape(k, self.builder.get_shape(k))
         if self.preserved_modules and hasattr(self, "named_modules"):
@@ -2251,6 +2263,8 @@ class DynamoInterpreter:
                         builder.set_shape(name, val[i].shape)
                     if not builder.has_type(name):
                         builder.set_type(name, val[i].dtype)
+                    if not builder.has_device(name):
+                        builder.set_device(name, val[i].get_device())
                     if isinstance(val[i], self.builder.torch.Tensor):
                         self.builder.set_shapes_types(
                             source_node.name, "call_module", (val[i].dtype, val[i].shape)
@@ -2379,6 +2393,8 @@ class DynamoInterpreter:
                 for name, out_name in zip(builder.output_names, output_names):
                     if builder.has_type(name):
                         self.builder.set_type(out_name, builder.get_type(name))
+                    if builder.has_device(name):
+                        self.builder.set_device(out_name, builder.get_device(name))
                     if builder.has_shape(name):
                         existing_shape = builder.get_shape(name)
                         # We need to move any dynamic objects necessary from the submodules

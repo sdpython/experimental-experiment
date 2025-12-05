@@ -152,6 +152,8 @@ class _InferenceRuntime:
                 self.set_rank(node.output[0], self.get_rank(node.input[0]))
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.has_device(node.input[0]):
+                self.set_device(node.output[0], self.get_device(node.input[0]))
             if self.is_constant(node.input[0]):
                 self.update_node_constant(node.output[0], node)
                 node.doc_string += ":constant-4:"
@@ -159,6 +161,8 @@ class _InferenceRuntime:
         elif node.op_type == "Expand":
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.has_device(node.input[0]):
+                self.set_device(node.output[0], self.get_device(node.input[0]))
             if (
                 self.has_shape(node.input[0])
                 and is_static_shape(self.get_shape(node.input[0]))
@@ -192,6 +196,8 @@ class _InferenceRuntime:
         elif node.op_type == "Reshape":
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self.get_type(node.input[0]))
+            if self.has_device(node.input[0]):
+                self.set_device(node.output[0], self.get_device(node.input[0]))
             if self.is_constant(node.input[1]):
                 cst, _ = self.compute_constant(
                     node.input[1], exc=False, only_array=True, allow_empty=True
@@ -235,6 +241,7 @@ class _InferenceRuntime:
         elif node.op_type == "Shape":
             ret_shape = None
             self.set_type(node.output[0], onnx.TensorProto.INT64)
+            self.set_device(node.output[0], -1)
             if self.has_rank(node.input[0]):
                 rk = self.get_rank(node.input[0])
                 if len(node.attribute) == 0:
@@ -273,6 +280,7 @@ class _InferenceRuntime:
             return ret_shape
         elif node.op_type == "Size":
             self.set_type(node.output[0], onnx.TensorProto.INT64)
+            self.set_device(node.output[0], -1)
             self.set_shape(node.output[0], tuple())
             if self.is_constant(node.input[0]):
                 self.update_node_constant(node.output[0], node)
@@ -282,6 +290,8 @@ class _InferenceRuntime:
             if node.op_type == "GatherElements":
                 if self.has_type(node.input[0]):
                     self.set_type(node.output[0], self.get_type(node.input[0]))
+                if self.has_device(node.input[0]):
+                    self.set_device(node.output[0], self.get_device(node.input[0]))
                 if self.has_shape(node.input[1]):
                     self.set_shape(node.output[0], self.get_shape(node.input[1]))
                     return self.get_shape(node.input[1])

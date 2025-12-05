@@ -78,6 +78,8 @@ class _ShapeRuntime:
     def _update_value_shape_with_node_Gather(self, node: onnx.NodeProto) -> bool:
         if self.has_type(node.input[0]):
             self.set_type(node.output[0], self.get_type(node.input[0]))
+        if self.has_device(node.input[0]):
+            self.set_device(node.output[0], self.get_device(node.input[0]))
         if self.is_constant(node.input[1]):
             y = self.value_as_shape(node.input[0])
             if y is None:

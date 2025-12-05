@@ -1933,6 +1933,8 @@ class GraphBuilderPatternOptimization:
                     marker=g._events.get((k, "set_event"), "optimize_node_subgraphs_inplace"),
                 )
                 self.builder.set_type(k, g.get_type(k))
+                if g.has_device(k):
+                    self.builder.set_device(k, g.get_device(k))
                 self.builder.set_shape(k, g.get_shape(k))
                 if k in g.constants_:
                     self.builder.constants_[k] = g.constants_[k]

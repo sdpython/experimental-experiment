@@ -662,6 +662,8 @@ def aten_arange(
             g.set_rank(res, 1)
         else:
             g.set_shape(res, ((end - start) // step,))
+        if device is not None:
+            g.set_device(res, device)
     return res
 
 
@@ -679,7 +681,7 @@ def aten_arange_start(
     "arange"
     assert layout in (None, g.torch.strided), f"arange not implemented for layout={layout!r}"
     assert not pin_memory, "arange not implemented for pin_memory=True"
-    return aten_arange(g, sts, outputs, start, end, dtype=dtype)
+    return aten_arange(g, sts, outputs, start, end, dtype=dtype, device=device)
 
 
 def aten_arange_start_step(
@@ -700,7 +702,7 @@ def aten_arange_start_step(
         g.torch.strided,
     ), f"arange not implemented for layout={layout!r} is not None"
     assert not pin_memory, "arange not implemented for pin_memory=True"
-    return aten_arange(g, sts, outputs, start, end, step, dtype)
+    return aten_arange(g, sts, outputs, start, end, step, dtype, device=device)
 
 
 def aten_argmax(
@@ -2823,6 +2825,7 @@ def aten_empty_like(
         0,
         dtype=dtype or g.get_type(x),
         name="empty_like",
+        device=device,
     )
 
 
@@ -3692,6 +3695,8 @@ def aten_full(
         if not sts:
             g.set_type(res, itype)
             g.set_shape(res, tuple())
+            if device is not None:
+                g.set_device(res, device)
         return res
 
     res = g.op.ConstantOfShape(
@@ -3701,6 +3706,8 @@ def aten_full(
         g.set_type(res, itype)
         if new_shape:
             g.set_shape(res, new_shape)
+        if device is not None:
+            g.set_device(res, device)
     return res
 
 
@@ -3738,6 +3745,7 @@ def aten_full_like(
                 fill_value,
                 dtype=dtype or g.get_type(x),
                 name=name,
+                device=device,
             )
         return aten_full(
             g,
@@ -3747,6 +3755,7 @@ def aten_full_like(
             fill_value,
             dtype=dtype or g.get_type(x),
             name=name,
+            device=device,
         )
 
     if dtype is None:
@@ -3763,7 +3772,7 @@ def aten_full_like(
     else:
         res = g.op.Expand(fill, g.op.Shape(x, name=name), name=name, outputs=outputs)
     if not sts:
-        set_type_shape_unary_op(g, res, x, itype=itype)
+        set_type_shape_unary_op(g, res, x, itype=itype, device=device)
     return res
 
 
@@ -6180,6 +6189,9 @@ def aten_linspace(
         None,
         False,
     ), f"not implemented for pin_memory={pin_memory!r} {g.get_debug_msg()}"
+    assert (
+        device is None
+    ), f"Not implemented when device is not None, device={device}{g.get_debug_msg()}"
 
     if isinstance(start, float) and isinstance(end, float):
         # A constant will do.
@@ -8035,6 +8047,8 @@ def aten_ones(
         g.set_type(res, dtype)
         if new_shape:
             g.set_shape(res, new_shape)
+        if device is not None:
+            g.set_device(res, device)
     return res
 
 
@@ -8079,13 +8093,7 @@ def aten_ones_like(
 ) -> T:
     "constantofshape"
     return aten_full_like(
-        g,
-        sts,
-        outputs,
-        x,
-        1,
-        dtype=dtype or g.get_type(x),
-        name="ones_like",
+        g, sts, outputs, x, 1, dtype=dtype or g.get_type(x), name="ones_like", device=device
     )
 
 
@@ -10919,7 +10927,7 @@ def aten__to_copy(
     assert pin_memory is None, f"_to_copy implemented with pin_memory={pin_memory!r}"
     assert not non_blocking, f"_to_copy implemented with non_blocking={non_blocking!r}"
     assert memory_format is None, f"_to_copy implemented with memory_format={memory_format!r}"
-    if dtype is None:
+    if dtype is None and device is None:
         return g.op.Identity(x, outputs=outputs, name="_to_copy")
     itype = torch_dtype_to_onnx_dtype(dtype)
     assert (
@@ -10927,7 +10935,7 @@ def aten__to_copy(
     ), f"Unexpected value for itype={itype}, dtype={dtype}"
     res = g.op.Cast(x, to=itype, outputs=outputs, name="_to_copy")
     if not sts:
-        set_type_shape_unary_op(g, res, x, itype=itype)
+        set_type_shape_unary_op(g, res, x, itype=itype, device=device)
     return res
 
 
