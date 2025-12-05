@@ -346,10 +346,8 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             return self.none()
         if not g.has_rank(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(node.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        next_nodes = g.next_nodes(node.output[0])
-        if len(next_nodes) != 1:
+        next_nodes = [n for n in g.next_nodes(node.output[0]) if n.op_type == "Unsqueeze"]
+        if not next_nodes:
             return self.none(node, inspect.currentframe().f_lineno)
         next_node = next_nodes[0]
         if next_node.op_type != "Unsqueeze" or node.domain != "":
@@ -403,6 +401,8 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{node.name}",
             doc_string=next_node.doc_string,
         )
+        if g.is_used_more_than_once(node.output[0]):
+            return [node, new_node]
         return [new_node]
 
 

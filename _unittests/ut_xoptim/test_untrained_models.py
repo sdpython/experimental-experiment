@@ -49,6 +49,8 @@ class TestOptimizationUntrainedModel(ExtTestCase):
         unique_ops = {n.op_type for n in onx.model_proto.graph.node}
         self.assertNotIn("HalfRotaryEmbedding", unique_ops)
         self.assertIn("RotaryEmbedding", unique_ops)
+        self.assertIn("LocalAttention_to1", unique_ops)
+        self.assertInOr(("CosSinCache_p1", "CosSinCacheWithRange"), unique_ops)
         sess = onnxruntime.InferenceSession(filename, providers=["CPUExecutionProvider"])
         feeds = make_feeds(sess, b1, use_numpy=True)
         got = sess.run(None, feeds)

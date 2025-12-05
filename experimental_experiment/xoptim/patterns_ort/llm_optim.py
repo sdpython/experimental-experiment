@@ -245,6 +245,8 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         if shape_cos[1] != 1 or shape_sin[1] != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         # if shape_cos[0] != 1 or shape_sin[0] != 1:
+        #    return self.none(node, inspect.currentframe().f_lineno)
+        # if shape_cos[0] != 1 or shape_sin[0] != 1:
         # batch size is not 1 because position_ids was involved in the
         # computation of cos/sin caches.
         #    return self.none(node, inspect.currentframe().f_lineno)
@@ -432,16 +434,19 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             anc_sin = g.node_before(sin_name)
             if anc_cos is None or anc_sin is None:
                 return None
-            if (
-                anc_cos.input[0] == anc_sin.input[0]
-                and id(anc_cos) == id(anc_sin)
-                and len(anc_cos.output) == 2
-            ):
-                if cos_name != anc_cos.output[0] or sin_name != anc_cos.output[1]:
-                    # cos/sin were switched, the pattern should not match at all.
-                    return []
-                nodes.append(anc_cos)
-                return nodes[::-1]
+            if anc_cos.input[0] == anc_sin.input[0] and id(anc_cos) == id(anc_sin):
+                if len(anc_cos.output) == 2:
+                    if (
+                        cos_name != anc_cos.output[0]
+                        or sin_name != anc_cos.output[1]
+                        or not anc_cos.op_type.startswith("CosSinCache")
+                    ):
+                        # cos/sin were switched, the pattern should not match at all.
+                        return []
+                    nodes.append(anc_cos)
+                    return nodes[::-1]
+                # cos/sin are not produced the usual way (CosSinCache)
+                return []
             nodes.extend([anc_cos, anc_sin])
         return None
 
