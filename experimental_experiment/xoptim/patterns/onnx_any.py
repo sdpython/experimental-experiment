@@ -953,14 +953,14 @@ class SwapUnaryPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            node.op_type not in {"Transpose", "Reshape", "Squeeze", "Unsqueeze", "Cast"}
+            node.op_type not in {"Transpose", "Reshape", "Squeeze", "Unsqueeze"}
             or node.domain != ""
         ):
             return self.none()
         if not g.has_rank(node.input[0]) or g.get_rank(node.input[0]) == 0:
             # the unary or binary op changes the shape
             return self.none(node, inspect.currentframe().f_lineno)
-        if g.is_used_more_than_once(node.output[0]) or node.op_type:
+        if g.is_used_more_than_once(node.output[0]) or node.op_type in {"Squeeze", "Unsqueeze"}:
             return self.none(node, inspect.currentframe().f_lineno)
         next_node = g.next_node(node.output[0])
         if next_node.op_type not in self._unary_types and (
