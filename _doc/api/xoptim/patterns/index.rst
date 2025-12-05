@@ -16,6 +16,7 @@
     onnx_clip
     onnx_constants
     onnx_conv
+    onnx_concat
     onnx_dropout
     onnx_equal
     onnx_expand

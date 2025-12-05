@@ -2165,24 +2165,34 @@ class FunctionCosSinCachePattern(PatternOptimization):
         if g.is_used_more_than_once(reshape_node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
 
+        # Unsqueeze -> Cast -> Reshape -> Mul or Cast -> Unsqueeze -> Reshape -> Mul
+
         cast_node = g.node_before(reshape_node.input[0])
         if cast_node is None:
             return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(cast_node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         unsq_node = g.node_before(cast_node.input[0])
-        if unsq_node is None or unsq_node.op_type != "Unsqueeze" or unsq_node.domain != "":
+
+        if unsq_node is None or unsq_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant(unsq_node.input[1]):
+
+        if {cast_node.op_type, unsq_node.op_type} != {"Cast", "Unsqueeze"}:
             return self.none(node, inspect.currentframe().f_lineno)
-        cst_position_ids = g.get_computed_constant(unsq_node.input[1])
+
+        true_unsq_node = unsq_node if unsq_node.op_type == "Unsqueeze" else cast_node
+        last_node = unsq_node
+
+        if not g.is_constant(true_unsq_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst_position_ids = g.get_computed_constant(true_unsq_node.input[1])
         if tuple(cst_position_ids) not in ((0, 1), (1,)):
             # unsqueeze before position ids
             # (0, 1) -> input is a scalar
             # (1, ) -> input is a tensor with position_ids
             return self.none(node, inspect.currentframe().f_lineno)
 
-        range_node = g.node_before(unsq_node.input[0])
+        range_node = g.node_before(last_node.input[0])
         if range_node is None:
             if cst_position_ids != (1,):
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -2249,8 +2259,8 @@ class FunctionCosSinCachePattern(PatternOptimization):
         dim_squeeze1: NodeProto,
         dim_squeeze2: NodeProto,
         range_node: NodeProto,
-        unsq_node: NodeProto,
-        cast_node: NodeProto,
+        unsq_or_cast_node: NodeProto,
+        cast_or_unsq_node: NodeProto,
         reshape_node: NodeProto,
         mul_node: NodeProto,
         cos: NodeProto,
@@ -2260,7 +2270,10 @@ class FunctionCosSinCachePattern(PatternOptimization):
     ) -> List[NodeProto]:
         # Builds the name of the local function.
         to = None if (cos_cast is None or sin_cast is None) else g.get_attribute(cos_cast, "to").i
-        cst_position_ids = tuple(g.get_computed_constant(unsq_node.input[1]))
+        true_unsq_node = (
+            unsq_or_cast_node if unsq_or_cast_node.op_type == "Unsqueeze" else cast_or_unsq_node
+        )
+        cst_position_ids = tuple(g.get_computed_constant(true_unsq_node.input[1]))
         with_range = "WithRange" if range_node is not None else ""
         name = (
             f"{self._operator_name}{with_range}"
@@ -2284,8 +2297,8 @@ class FunctionCosSinCachePattern(PatternOptimization):
                         dim_squeeze1,
                         dim_squeeze2,
                         range_node,
-                        unsq_node,
-                        cast_node,
+                        unsq_or_cast_node,
+                        cast_or_unsq_node,
                         reshape_node,
                     ]
                     if n
@@ -2298,7 +2311,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
                 (
                     [dim_squeeze1.input[0], dim_squeeze2.input[0], mul_node.input[0]]
                     if range_node
-                    else [unsq_node.input[0], mul_node.input[0]]
+                    else [unsq_or_cast_node.input[0], mul_node.input[0]]
                 ),
                 [
                     cos_cast.output[0] if to is not None else cos.output[0],

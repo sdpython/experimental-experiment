@@ -856,15 +856,16 @@ class GraphBuilderPatternOptimization:
 
     def _save_pattern_as_proto(self, folder: str, match: MatchResult, new_nodes: List[NodeProto]):
         assert isinstance(folder, str), f"Unexpected type {type(folder)} for folder."
+        folder = os.path.join(folder, match.pattern.__class__.__name__)
         if folder and not os.path.exists(folder):
             os.makedirs(folder)
 
-        name = f"{match.pattern.__class__.__name__}_0.onnx"
+        name = f"{match.pattern.__class__.__name__}_0.amatch.onnx"
         fullname = os.path.join(folder, name)
         n = 0
         while os.path.exists(fullname):
             n += 1
-            name = f"{match.pattern.__class__.__name__}_{n}.onnx"
+            name = f"{match.pattern.__class__.__name__}_{n}.amatch.onnx"
             fullname = os.path.join(folder, name)
 
         if self.verbose >= 10:
@@ -930,12 +931,13 @@ class GraphBuilderPatternOptimization:
                 return [None] * self.builder.get_rank(n)
             return None
 
-        inputs = [
-            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n)) for n in fproto.input
-        ]
-        outputs = [
-            oh.make_tensor_value_info(n, self.builder.get_type(n), _sh(n)) for n in fproto.output
-        ]
+        def _st(n):
+            if self.builder.has_type(n):
+                return self.builder.get_type(n)
+            return TensorProto.UNDEFINED
+
+        inputs = [oh.make_tensor_value_info(n, _st(n), _sh(n)) for n in fproto.input]
+        outputs = [oh.make_tensor_value_info(n, _st(n), _sh(n)) for n in fproto.output]
 
         model = oh.make_model(
             oh.make_graph(fproto.node, "pattern", inputs, outputs),
@@ -958,7 +960,7 @@ class GraphBuilderPatternOptimization:
                 f"saved {fullname!r}"
             )
 
-        name = f"{match.pattern.__class__.__name__}_{n}_apply.onnx"
+        name = f"{match.pattern.__class__.__name__}_{n}.apply.onnx"
         fullname_apply = os.path.join(folder, name)
         onnx_save(model_apply, fullname_apply)
 
