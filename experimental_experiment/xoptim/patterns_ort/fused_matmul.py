@@ -7,7 +7,126 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 
 class FusedMatMulDivPattern(PatternOptimization):
-    """Replaces the Matmul, Div into FusedMatMul."""
+    """
+    Replaces the Matmul, Div into FusedMatMul.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 128, 64))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 32, 128))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["deux"],
+                value=onh.from_array(np.array([2.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "FusedMatMul",
+                ["X", "Y"],
+                ["zd"],
+                domain="com.microsoft",
+                alpha=1.2999999523162842,
+            )
+        )
+        nodes.append(make_node_extended("Div", ["zd", "deux"], ["Z"]))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2, 32, 64))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 128, 64))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 32, 128))
+        )
+        nodes.append(
+            make_node_extended(
+                "FusedMatMul",
+                ["X", "Y"],
+                ["Z"],
+                domain="com.microsoft",
+                alpha=0.6499999761581421,
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2, 32, 64))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
 
     def __init__(self, verbose: int = 0, priority: int = 2):
         super().__init__(verbose, priority)

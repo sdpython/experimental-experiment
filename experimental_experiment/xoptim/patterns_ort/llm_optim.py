@@ -608,6 +608,174 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
     Extension to
     :class:`experimental_experiment.xoptim.patterns_ort.llm_optim.ContribRotaryEmbeddingPattern`,
     turn the operator into a 3D operator including the transpose.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "ContribRotaryEmbeddingPattern--m2x2",
+                onnx.TensorProto.FLOAT,
+                shape=("NEWDIM_range", 2),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("position_ids", onnx.TensorProto.INT64, shape=("a", "e"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "ContribRotaryEmbeddingPattern--m1x2",
+                onnx.TensorProto.FLOAT,
+                shape=("NEWDIM_range", 2),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "c", 2, "d"))
+        )
+        nodes.append(make_node_extended("Transpose", ["X"], ["Xt"], perm=[0, 2, 1, 3]))
+        nodes.append(
+            make_node_extended(
+                "RotaryEmbedding",
+                [
+                    "Xt",
+                    "position_ids",
+                    "ContribRotaryEmbeddingPattern--m1x2",
+                    "ContribRotaryEmbeddingPattern--m2x2",
+                ],
+                ["Y"],
+                domain="com.microsoft",
+                num_heads=2,
+                rotary_embedding_dim=4,
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 20),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "ContribRotaryEmbeddingPattern--m2x2",
+                onnx.TensorProto.FLOAT,
+                shape=("NEWDIM_range", 2),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("position_ids", onnx.TensorProto.INT64, shape=("a", "e"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "ContribRotaryEmbeddingPattern--m1x2",
+                onnx.TensorProto.FLOAT,
+                shape=("NEWDIM_range", 2),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "c", 2, "d"))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s3_0_0_-1"],
+                value=onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Reshape", ["X", "init7_s3_0_0_-1"], ["X::3D"]))
+        nodes.append(
+            make_node_extended(
+                "RotaryEmbedding",
+                [
+                    "X::3D",
+                    "position_ids",
+                    "ContribRotaryEmbeddingPattern--m1x2",
+                    "ContribRotaryEmbeddingPattern--m2x2",
+                ],
+                ["X::3Dr"],
+                domain="com.microsoft",
+                num_heads=2,
+                rotary_embedding_dim=4,
+            )
+        )
+        nodes.append(make_node_extended("Shape", ["X"], ["X::Shape3"], start=3))
+        nodes.append(
+            make_node_extended(
+                "Concat", ["init7_s3_0_0_-1", "X::Shape3"], ["X::Shape+1"], axis=0
+            )
+        )
+        nodes.append(make_node_extended("Reshape", ["X::3Dr", "X::Shape+1"], ["X::4D"]))
+        nodes.append(make_node_extended("Transpose", ["X::4D"], ["Y"], perm=[0, 2, 1, 3]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
