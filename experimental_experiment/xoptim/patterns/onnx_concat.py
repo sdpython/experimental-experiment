@@ -33,6 +33,7 @@ class ConcatGatherPattern(PatternOptimization):
         initializers = []
         sparse_initializers = []
         functions = []
+        inputs.append(oh.make_tensor_value_info("D1", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("D2", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
             make_node_extended(
