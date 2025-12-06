@@ -22,7 +22,6 @@ class SlicesSplitPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -40,7 +39,7 @@ class SlicesSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_0"],
@@ -48,7 +47,7 @@ class SlicesSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_256"],
@@ -56,7 +55,7 @@ class SlicesSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_3"],
@@ -64,7 +63,7 @@ class SlicesSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_9223372036854775807"],
@@ -74,14 +73,14 @@ class SlicesSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Slice",
                 ["transpose_1", "init7_s1_0", "init7_s1_256", "init7_s1_3"],
                 ["slice_11"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Slice",
                 ["transpose_1", "init7_s1_256", "init7_s1_9223372036854775807", "init7_s1_3"],
                 ["slice_12"],
@@ -121,7 +120,6 @@ class SlicesSplitPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -139,7 +137,7 @@ class SlicesSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_256_256"],
@@ -147,7 +145,7 @@ class SlicesSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Split", ["transpose_1", "init7_s2_256_256"], ["slice_11", "slice_12"], axis=3
             )
         )
@@ -303,7 +301,6 @@ class SplitConcatPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -315,8 +312,8 @@ class SplitConcatPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
-        nodes.append(make_node_extended("Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2))
-        nodes.append(make_node_extended("Concat", ["s1", "s2"], ["Y"], axis=-1))
+        nodes.append(oh.make_node("Split", ["X"], ["s1", "s2"], axis=-1, num_outputs=2))
+        nodes.append(oh.make_node("Concat", ["s1", "s2"], ["Y"], axis=-1))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(
             nodes,
@@ -342,7 +339,6 @@ class SplitConcatPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -354,7 +350,7 @@ class SplitConcatPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
-        nodes.append(make_node_extended("Identity", ["X"], ["Y"]))
+        nodes.append(oh.make_node("Identity", ["X"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(
             nodes,

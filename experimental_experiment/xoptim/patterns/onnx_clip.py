@@ -20,7 +20,6 @@ class ClipClipPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -35,7 +34,7 @@ class ClipClipPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("one", onnx.TensorProto.FLOAT, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -43,15 +42,15 @@ class ClipClipPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
                 value=onh.from_array(np.array([1.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Clip", ["X", "zero"], ["x1"]))
-        nodes.append(make_node_extended("Clip", ["x1", "", "one"], ["Y"]))
+        nodes.append(oh.make_node("Clip", ["X", "zero"], ["x1"]))
+        nodes.append(oh.make_node("Clip", ["x1", "", "one"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("c", "d")))
         graph = oh.make_graph(
             nodes,
@@ -77,7 +76,6 @@ class ClipClipPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -91,7 +89,7 @@ class ClipClipPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("zero", onnx.TensorProto.FLOAT, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("one", onnx.TensorProto.FLOAT, shape=(1,)))
-        nodes.append(make_node_extended("Clip", ["X", "zero", "one"], ["Y"]))
+        nodes.append(oh.make_node("Clip", ["X", "zero", "one"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("c", "d")))
         graph = oh.make_graph(
             nodes,

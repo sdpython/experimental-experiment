@@ -20,7 +20,6 @@ class ConvBiasNullPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -39,7 +38,7 @@ class ConvBiasNullPattern(PatternOptimization):
         )
         initializers.append(onh.from_array(np.zeros((64,), dtype=np.float32), name="B2"))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Conv",
                 ["X", "W", "B2"],
                 ["Y"],
@@ -77,7 +76,6 @@ class ConvBiasNullPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -95,7 +93,7 @@ class ConvBiasNullPattern(PatternOptimization):
             oh.make_tensor_value_info("W", onnx.TensorProto.FLOAT, shape=(64, 3, 4, 4))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Conv",
                 ["X", "W"],
                 ["Y"],

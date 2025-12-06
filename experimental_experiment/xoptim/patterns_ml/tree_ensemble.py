@@ -23,7 +23,6 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -39,7 +38,7 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("batch", 3))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["cst"],
@@ -49,7 +48,7 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "TreeEnsembleRegressor",
                 ["X"],
                 ["Ym"],
@@ -97,7 +96,7 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("Mul", ["Ym", "cst"], ["Y"]))
+        nodes.append(oh.make_node("Mul", ["Ym", "cst"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("batch", 1))
         )
@@ -125,7 +124,6 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -141,7 +139,7 @@ class TreeEnsembleRegressorMulPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("batch", 3))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "TreeEnsembleRegressor",
                 ["X"],
                 ["Y"],
@@ -286,7 +284,6 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -301,11 +298,11 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("batch", 3))
         )
-        nodes.append(make_node_extended("Concat", ["Ys1", "Ys2"], ["Y"], axis=1))
-        nodes.append(make_node_extended("Sigmoid", ["Ym1"], ["Ys1"]))
-        nodes.append(make_node_extended("Sigmoid", ["Ym2"], ["Ys2"]))
+        nodes.append(oh.make_node("Concat", ["Ys1", "Ys2"], ["Y"], axis=1))
+        nodes.append(oh.make_node("Sigmoid", ["Ym1"], ["Ys1"]))
+        nodes.append(oh.make_node("Sigmoid", ["Ym2"], ["Ys2"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "TreeEnsembleRegressor",
                 ["X"],
                 ["Ym1"],
@@ -351,7 +348,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "TreeEnsembleRegressor",
                 ["X"],
                 ["Ym2"],
@@ -423,7 +420,6 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -439,7 +435,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("batch", 3))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "TreeEnsembleRegressor",
                 ["X"],
                 ["TreeEnsembleRegressorConcatPattern_Y"],
@@ -565,7 +561,7 @@ class TreeEnsembleRegressorConcatPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended("Sigmoid", ["TreeEnsembleRegressorConcatPattern_Y"], ["Y"])
+            oh.make_node("Sigmoid", ["TreeEnsembleRegressorConcatPattern_Y"], ["Y"])
         )
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("batch", 2))

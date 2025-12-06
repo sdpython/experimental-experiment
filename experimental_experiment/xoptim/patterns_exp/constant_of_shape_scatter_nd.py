@@ -21,7 +21,6 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -49,7 +48,7 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ConstantOfShape",
                 ["shape"],
                 ["data"],
@@ -57,7 +56,7 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ScatterND", ["data", "indices", "masked_updates"], ["y"], reduction="add"
             )
         )
@@ -90,7 +89,6 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -118,7 +116,7 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ScatterNDOfShape",
                 ["shape", "indices", "masked_updates"],
                 ["y"],
@@ -214,7 +212,6 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -242,7 +239,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
             oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=("UNKNOWNDIM",))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -250,7 +247,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["mone"],
@@ -258,7 +255,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ScatterNDOfShape",
                 ["shape", "indices", "masked_updates"],
                 ["y"],
@@ -268,11 +265,11 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Where", ["masked_indices", "zero", "updates"], ["masked_updates"]
             )
         )
-        nodes.append(make_node_extended("Equal", ["indices", "mone"], ["masked_indices"]))
+        nodes.append(oh.make_node("Equal", ["indices", "mone"], ["masked_indices"]))
         outputs.append(
             oh.make_tensor_value_info(
                 "y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM6", "UNKNOWNDIM7")
@@ -302,7 +299,6 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -330,7 +326,7 @@ class MaskedShapeScatterNDPattern(PatternOptimization):
             oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=("UNKNOWNDIM",))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "MaskedScatterNDOfShape",
                 ["shape", "indices", "updates"],
                 ["y"],

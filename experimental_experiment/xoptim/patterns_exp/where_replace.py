@@ -20,7 +20,6 @@ class ReplaceZeroPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -38,7 +37,7 @@ class ReplaceZeroPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["cst"],
@@ -47,8 +46,8 @@ class ReplaceZeroPattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("Cast", ["X"], ["xb"], to=9))
-        nodes.append(make_node_extended("Where", ["xb", "cst", "X"], ["Y"]))
+        nodes.append(oh.make_node("Cast", ["X"], ["xb"], to=9))
+        nodes.append(oh.make_node("Where", ["xb", "cst", "X"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info(
                 "Y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM2", "UNKNOWNDIM3")
@@ -78,7 +77,6 @@ class ReplaceZeroPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -96,7 +94,7 @@ class ReplaceZeroPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ReplaceZero",
                 ["X"],
                 ["Y"],

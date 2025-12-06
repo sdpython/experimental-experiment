@@ -21,7 +21,6 @@ class Sub1MulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -34,15 +33,15 @@ class Sub1MulPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("input3", onnx.TensorProto.FLOAT, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s1_"],
                 value=onh.from_array(np.array([1.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Mul", ["input3", "_onx_sub0"], ["_onx_mul0"]))
-        nodes.append(make_node_extended("Sub", ["init1_s1_", "input3"], ["_onx_sub0"]))
+        nodes.append(oh.make_node("Mul", ["input3", "_onx_sub0"], ["_onx_mul0"]))
+        nodes.append(oh.make_node("Sub", ["init1_s1_", "input3"], ["_onx_sub0"]))
         outputs.append(
             oh.make_tensor_value_info("_onx_mul0", onnx.TensorProto.FLOAT, shape=(1,))
         )
@@ -70,7 +69,6 @@ class Sub1MulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -83,10 +81,10 @@ class Sub1MulPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("input3", onnx.TensorProto.FLOAT, shape=(1,)))
         nodes.append(
-            make_node_extended("Mul", ["input3", "input3"], ["Sub1MulPattern--_onx_mul0"])
+            oh.make_node("Mul", ["input3", "input3"], ["Sub1MulPattern--_onx_mul0"])
         )
         nodes.append(
-            make_node_extended("Sub", ["input3", "Sub1MulPattern--_onx_mul0"], ["_onx_mul0"])
+            oh.make_node("Sub", ["input3", "Sub1MulPattern--_onx_mul0"], ["_onx_mul0"])
         )
         outputs.append(
             oh.make_tensor_value_info("_onx_mul0", onnx.TensorProto.FLOAT, shape=(1,))

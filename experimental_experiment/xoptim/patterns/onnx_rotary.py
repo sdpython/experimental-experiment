@@ -72,7 +72,6 @@ class RotaryConcatPartPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -90,7 +89,7 @@ class RotaryConcatPartPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("nx1", onnx.TensorProto.FLOAT, shape=("a", 8)))
         inputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a", 8)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape"],
@@ -98,20 +97,20 @@ class RotaryConcatPartPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["split"],
                 value=onh.from_array(np.array([8, 8], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("ConstantOfShape", ["shape"], ["zero"]))
-        nodes.append(make_node_extended("Split", ["X", "split"], ["x1", "x2"], axis=1))
-        nodes.append(make_node_extended("Neg", ["x1"], ["nx1"]))
-        nodes.append(make_node_extended("Concat", ["nx1", "zero"], ["c1"], axis=1))
-        nodes.append(make_node_extended("ConstantOfShape", ["shape"], ["zero"]))
-        nodes.append(make_node_extended("Concat", ["zero", "x2"], ["c2"], axis=1))
-        nodes.append(make_node_extended("Add", ["c1", "c2"], ["Y"]))
+        nodes.append(oh.make_node("ConstantOfShape", ["shape"], ["zero"]))
+        nodes.append(oh.make_node("Split", ["X", "split"], ["x1", "x2"], axis=1))
+        nodes.append(oh.make_node("Neg", ["x1"], ["nx1"]))
+        nodes.append(oh.make_node("Concat", ["nx1", "zero"], ["c1"], axis=1))
+        nodes.append(oh.make_node("ConstantOfShape", ["shape"], ["zero"]))
+        nodes.append(oh.make_node("Concat", ["zero", "x2"], ["c2"], axis=1))
+        nodes.append(oh.make_node("Add", ["c1", "c2"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 16)))
         outputs.append(oh.make_tensor_value_info("zero", onnx.TensorProto.FLOAT, shape=(3, 8)))
         outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a", 8)))
@@ -141,7 +140,6 @@ class RotaryConcatPartPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -158,10 +156,10 @@ class RotaryConcatPartPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(2,)))
         inputs.append(oh.make_tensor_value_info("nx1", onnx.TensorProto.FLOAT, shape=("a", 8)))
         inputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a", 8)))
-        nodes.append(make_node_extended("ConstantOfShape", ["shape"], ["zero"]))
-        nodes.append(make_node_extended("Split", ["X", "split"], ["x1", "x2"], axis=1))
-        nodes.append(make_node_extended("Neg", ["x1"], ["nx1"]))
-        nodes.append(make_node_extended("Concat", ["nx1", "x2"], ["Y"], axis=1))
+        nodes.append(oh.make_node("ConstantOfShape", ["shape"], ["zero"]))
+        nodes.append(oh.make_node("Split", ["X", "split"], ["x1", "x2"], axis=1))
+        nodes.append(oh.make_node("Neg", ["x1"], ["nx1"]))
+        nodes.append(oh.make_node("Concat", ["nx1", "x2"], ["Y"], axis=1))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 16)))
         outputs.append(oh.make_tensor_value_info("zero", onnx.TensorProto.FLOAT, shape=(3, 8)))
         outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a", 8)))
@@ -782,7 +780,6 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 22),
@@ -799,12 +796,12 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
         inputs.append(oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=("c", "d")))
-        nodes.append(make_node_extended("Split", ["X"], ["x1", "x2"], axis=-1, num_outputs=2))
-        nodes.append(make_node_extended("Neg", ["x2"], ["nx2"]))
-        nodes.append(make_node_extended("Concat", ["nx2", "x1"], ["c"], axis=-1))
-        nodes.append(make_node_extended("Mul", ["c", "m1"], ["cm1"]))
-        nodes.append(make_node_extended("Mul", ["X", "m2"], ["cm2"]))
-        nodes.append(make_node_extended("Add", ["cm1", "cm2"], ["Y"]))
+        nodes.append(oh.make_node("Split", ["X"], ["x1", "x2"], axis=-1, num_outputs=2))
+        nodes.append(oh.make_node("Neg", ["x2"], ["nx2"]))
+        nodes.append(oh.make_node("Concat", ["nx2", "x1"], ["c"], axis=-1))
+        nodes.append(oh.make_node("Mul", ["c", "m1"], ["cm1"]))
+        nodes.append(oh.make_node("Mul", ["X", "m2"], ["cm2"]))
+        nodes.append(oh.make_node("Add", ["cm1", "cm2"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
@@ -832,7 +829,6 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 22),
@@ -850,7 +846,7 @@ class FunctionHalfRotaryEmbeddingPattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=("c", "d")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "HalfRotaryEmbedding", ["X", "m2", "m1"], ["Y"], domain="intermediate"
             )
         )
@@ -1026,7 +1022,6 @@ class RotaryEmbeddingPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 23),
@@ -1048,22 +1043,22 @@ class RotaryEmbeddingPattern(PatternOptimization):
             oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["split"],
                 value=onh.from_array(np.array([4, 6], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Concat", ["m2", "m2"], ["m2x2"], axis=-1))
-        nodes.append(make_node_extended("Concat", ["m1", "m1"], ["m1x2"], axis=-1))
-        nodes.append(make_node_extended("Split", ["X", "split"], ["Xh1", "Xh2"], axis=-1))
+        nodes.append(oh.make_node("Concat", ["m2", "m2"], ["m2x2"], axis=-1))
+        nodes.append(oh.make_node("Concat", ["m1", "m1"], ["m1x2"], axis=-1))
+        nodes.append(oh.make_node("Split", ["X", "split"], ["Xh1", "Xh2"], axis=-1))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "HalfRotaryEmbedding", ["Xh1", "m2x2", "m1x2"], ["Yh"], domain="intermediate"
             )
         )
-        nodes.append(make_node_extended("Concat", ["Yh", "Xh2"], ["Y"], axis=-1))
+        nodes.append(oh.make_node("Concat", ["Yh", "Xh2"], ["Y"], axis=-1))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
@@ -1091,7 +1086,6 @@ class RotaryEmbeddingPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 23),
@@ -1113,7 +1107,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
             oh.make_tensor_value_info("m1", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_1_1"],
@@ -1121,7 +1115,7 @@ class RotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_1"],
@@ -1129,12 +1123,12 @@ class RotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Shape", ["X"], ["RotaryEmbeddingPattern--Xh1--dim"], end=1, start=0
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Concat",
                 ["RotaryEmbeddingPattern--Xh1--dim", "init7_s2_1_1"],
                 ["RotaryEmbeddingPattern--Xh1::Shape"],
@@ -1142,31 +1136,31 @@ class RotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Squeeze", ["m2", "init7_s1_1"], ["RotaryEmbeddingPattern--m2x2"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Squeeze", ["m1", "init7_s1_1"], ["RotaryEmbeddingPattern--m1x2"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Expand",
                 ["RotaryEmbeddingPattern--m2x2", "RotaryEmbeddingPattern--Xh1::Shape"],
                 ["RotaryEmbeddingPattern--m2x22"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Expand",
                 ["RotaryEmbeddingPattern--m1x2", "RotaryEmbeddingPattern--Xh1::Shape"],
                 ["RotaryEmbeddingPattern--m1x22"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "RotaryEmbedding",
                 ["X", "RotaryEmbeddingPattern--m2x22", "RotaryEmbeddingPattern--m1x22"],
                 ["Y"],
@@ -1359,7 +1353,6 @@ class FunctionCausalMaskPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1375,7 +1368,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("initi", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -1383,7 +1376,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
@@ -1391,7 +1384,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["a012"],
@@ -1399,7 +1392,7 @@ class FunctionCausalMaskPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["a013"],
@@ -1407,21 +1400,21 @@ class FunctionCausalMaskPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["initi"],
                 value=onh.from_array(np.array([3], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Squeeze", ["d1"], ["nd1"]))
-        nodes.append(make_node_extended("Squeeze", ["d2"], ["nd2"]))
-        nodes.append(make_node_extended("Range", ["zero", "nd2", "one"], ["rg1"]))
-        nodes.append(make_node_extended("Range", ["nd1", "nd2", "one"], ["rg2"]))
-        nodes.append(make_node_extended("Unsqueeze", ["rg1", "a012"], ["m1"]))
-        nodes.append(make_node_extended("Unsqueeze", ["rg2", "a013"], ["m2"]))
-        nodes.append(make_node_extended("Sub", ["m2", "initi"], ["m2sub"]))
-        nodes.append(make_node_extended("Greater", ["m1", "m2sub"], ["yc"]))
+        nodes.append(oh.make_node("Squeeze", ["d1"], ["nd1"]))
+        nodes.append(oh.make_node("Squeeze", ["d2"], ["nd2"]))
+        nodes.append(oh.make_node("Range", ["zero", "nd2", "one"], ["rg1"]))
+        nodes.append(oh.make_node("Range", ["nd1", "nd2", "one"], ["rg2"]))
+        nodes.append(oh.make_node("Unsqueeze", ["rg1", "a012"], ["m1"]))
+        nodes.append(oh.make_node("Unsqueeze", ["rg2", "a013"], ["m2"]))
+        nodes.append(oh.make_node("Sub", ["m2", "initi"], ["m2sub"]))
+        nodes.append(oh.make_node("Greater", ["m1", "m2sub"], ["yc"]))
         outputs.append(oh.make_tensor_value_info("nd2", onnx.TensorProto.INT64, shape=[]))
         outputs.append(
             oh.make_tensor_value_info("yc", onnx.TensorProto.BOOL, shape=(1, 1, "b-a", "b"))
@@ -1450,7 +1443,6 @@ class FunctionCausalMaskPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1465,9 +1457,9 @@ class FunctionCausalMaskPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("d1", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("initi", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
-        nodes.append(make_node_extended("Squeeze", ["d2"], ["nd2"]))
+        nodes.append(oh.make_node("Squeeze", ["d2"], ["nd2"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ShiftedCausalMask", ["d1", "d2", "initi"], ["yc"], domain="intermediate"
             )
         )
@@ -1678,7 +1670,6 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1694,7 +1685,7 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("N", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -1702,7 +1693,7 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
@@ -1710,7 +1701,7 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["a012"],
@@ -1718,21 +1709,21 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["a123"],
                 value=onh.from_array(np.array([1, 2, 3], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Squeeze", ["d1"], ["nd1"]))
-        nodes.append(make_node_extended("Squeeze", ["d2"], ["nd2"]))
-        nodes.append(make_node_extended("Range", ["zero", "nd1", "one"], ["rg1"]))
-        nodes.append(make_node_extended("Range", ["zero", "nd2", "one"], ["rg2"]))
-        nodes.append(make_node_extended("Unsqueeze", ["rg1", "a012"], ["m1"]))
-        nodes.append(make_node_extended("Unsqueeze", ["rg2", "a123"], ["m2"]))
-        nodes.append(make_node_extended("Mul", ["m2", "N"], ["yc"]))
-        nodes.append(make_node_extended("Add", ["m1", "yc"], ["yyc"]))
+        nodes.append(oh.make_node("Squeeze", ["d1"], ["nd1"]))
+        nodes.append(oh.make_node("Squeeze", ["d2"], ["nd2"]))
+        nodes.append(oh.make_node("Range", ["zero", "nd1", "one"], ["rg1"]))
+        nodes.append(oh.make_node("Range", ["zero", "nd2", "one"], ["rg2"]))
+        nodes.append(oh.make_node("Unsqueeze", ["rg1", "a012"], ["m1"]))
+        nodes.append(oh.make_node("Unsqueeze", ["rg2", "a123"], ["m2"]))
+        nodes.append(oh.make_node("Mul", ["m2", "N"], ["yc"]))
+        nodes.append(oh.make_node("Add", ["m1", "yc"], ["yyc"]))
         outputs.append(
             oh.make_tensor_value_info("yyc", onnx.TensorProto.INT64, shape=("c", 1, 1, "b"))
         )
@@ -1760,7 +1751,6 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1776,7 +1766,7 @@ class FunctionCausalMaskMulAddPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("N", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("d2", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "CausalMaskMulAdd", ["d1", "d2", "N"], ["yyc"], domain="intermediate"
             )
         )
@@ -1963,7 +1953,6 @@ class FunctionCosSinCachePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1984,22 +1973,22 @@ class FunctionCosSinCachePattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("dim1", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("dim2", onnx.TensorProto.INT64, shape=(1,)))
-        nodes.append(make_node_extended("Squeeze", ["dim1"], ["dim1::Sq2"]))
-        nodes.append(make_node_extended("Squeeze", ["dim2"], ["dim2::Sq2"]))
+        nodes.append(oh.make_node("Squeeze", ["dim1"], ["dim1::Sq2"]))
+        nodes.append(oh.make_node("Squeeze", ["dim2"], ["dim2::Sq2"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Range", ["dim1::Sq2", "dim2::Sq2", "init7_s_12"], ["_onx_range_dim1::Sq2"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Unsqueeze",
                 ["_onx_range_dim1::Sq2", "init7_s2_0_12"],
                 ["_onx_range_dim1::Sq::UnSq0x12"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Cast",
                 ["_onx_range_dim1::Sq::UnSq0x12"],
                 ["_onx_range_dim1::Sq::UnSq0x1::C12"],
@@ -2007,21 +1996,21 @@ class FunctionCosSinCachePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape",
                 ["_onx_range_dim1::Sq::UnSq0x1::C12", "init7_s3_0_-1_12"],
                 ["_onx_range_dim1::Sq::UnSq0x1::C1::RSh0x-1x12"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Mul",
                 ["weights", "_onx_range_dim1::Sq::UnSq0x1::C1::RSh0x-1x12"],
                 ["_onx_mul_weights2"],
             )
         )
-        nodes.append(make_node_extended("Cos", ["_onx_mul_weights2"], ["_onx_cos_mul_weights"]))
-        nodes.append(make_node_extended("Sin", ["_onx_mul_weights2"], ["_onx_sin_mul_weights"]))
+        nodes.append(oh.make_node("Cos", ["_onx_mul_weights2"], ["_onx_cos_mul_weights"]))
+        nodes.append(oh.make_node("Sin", ["_onx_mul_weights2"], ["_onx_sin_mul_weights"]))
         outputs.append(
             oh.make_tensor_value_info(
                 "_onx_sin_mul_weights", onnx.TensorProto.FLOAT, shape=(1, "dim2-dim1", "a")
@@ -2056,7 +2045,6 @@ class FunctionCosSinCachePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -2074,7 +2062,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("dim1", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("dim2", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "CosSinCacheWithRange",
                 ["dim1", "dim2", "weights"],
                 ["_onx_cos_mul_weights", "_onx_sin_mul_weights"],

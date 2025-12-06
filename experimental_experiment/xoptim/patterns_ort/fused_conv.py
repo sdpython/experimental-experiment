@@ -20,7 +20,6 @@ class FusedConvPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -40,7 +39,7 @@ class FusedConvPattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(8,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Conv",
                 ["X", "W", "B"],
                 ["c"],
@@ -50,7 +49,7 @@ class FusedConvPattern(PatternOptimization):
                 strides=[1, 1],
             )
         )
-        nodes.append(make_node_extended("Relu", ["c"], ["Y"]))
+        nodes.append(oh.make_node("Relu", ["c"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 8, 6, 6))
         )
@@ -78,7 +77,6 @@ class FusedConvPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -98,7 +96,7 @@ class FusedConvPattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(8,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedConv",
                 ["X", "W", "B"],
                 ["Y"],

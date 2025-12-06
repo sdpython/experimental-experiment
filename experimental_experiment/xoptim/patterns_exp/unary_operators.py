@@ -21,7 +21,6 @@ class TransposeCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -34,8 +33,8 @@ class TransposeCastPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
-        nodes.append(make_node_extended("Transpose", ["X"], ["xt"], perm=[1, 0]))
-        nodes.append(make_node_extended("Cast", ["xt"], ["Y"], to=10))
+        nodes.append(oh.make_node("Transpose", ["X"], ["xt"], perm=[1, 0]))
+        nodes.append(oh.make_node("Cast", ["xt"], ["Y"], to=10))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=("b", "a"))
         )
@@ -63,7 +62,6 @@ class TransposeCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -77,7 +75,7 @@ class TransposeCastPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose2DCastFP16", ["X"], ["Y"], domain="onnx_extended.ortops.optim.cuda"
             )
         )

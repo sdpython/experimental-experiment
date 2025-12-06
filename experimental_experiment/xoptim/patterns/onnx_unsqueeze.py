@@ -21,7 +21,6 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -36,7 +35,7 @@ class SqueezeUnsqueezePattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 1, 1, "d"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["axes1"],
@@ -44,15 +43,15 @@ class SqueezeUnsqueezePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["axes2"],
                 value=onh.from_array(np.array([1, 2], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Unsqueeze", ["X", "axes1"], ["mm"]))
-        nodes.append(make_node_extended("Squeeze", ["mm", "axes2"], ["Y"]))
+        nodes.append(oh.make_node("Unsqueeze", ["X", "axes1"], ["mm"]))
+        nodes.append(oh.make_node("Squeeze", ["mm", "axes2"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, 1, "d"))
         )
@@ -80,7 +79,6 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -94,7 +92,7 @@ class SqueezeUnsqueezePattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 1, 1, "d"))
         )
-        nodes.append(make_node_extended("Identity", ["X"], ["Y"]))
+        nodes.append(oh.make_node("Identity", ["X"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, 1, "d"))
         )
@@ -237,7 +235,6 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
             import onnx
             import onnx.helper as oh
             import onnx.numpy_helper as onh
-            from onnx_array_api.translate_api.make_helper import make_node_extended
 
             opset_imports = [
                 oh.make_opsetid("", 18),
@@ -252,7 +249,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
                 oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b"))
             )
             nodes.append(
-                make_node_extended(
+                oh.make_node(
                     "Constant",
                     [],
                     ["ii"],
@@ -260,15 +257,15 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
                 )
             )
             nodes.append(
-                make_node_extended(
+                oh.make_node(
                     "Constant",
                     [],
                     ["jj"],
                     value=onh.from_array(np.array([3], dtype=np.int64), name="value"),
                 )
             )
-            nodes.append(make_node_extended("Unsqueeze", ["X", "ii"], ["x1"]))
-            nodes.append(make_node_extended("Unsqueeze", ["x1", "jj"], ["Y"]))
+            nodes.append(oh.make_node("Unsqueeze", ["X", "ii"], ["x1"]))
+            nodes.append(oh.make_node("Unsqueeze", ["x1", "jj"], ["Y"]))
             outputs.append(
                 oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 1, "a", "b"))
             )
@@ -296,7 +293,6 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -309,14 +305,14 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_2_3"],
                 value=onh.from_array(np.array([2, 3], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Unsqueeze", ["X", "init7_s2_2_3"], ["Y"]))
+        nodes.append(oh.make_node("Unsqueeze", ["X", "init7_s2_2_3"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 1, "a", "b"))
         )
@@ -422,7 +418,6 @@ class SqueezeAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -435,9 +430,9 @@ class SqueezeAddPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("S2", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("S1", onnx.TensorProto.INT64, shape=(1,)))
-        nodes.append(make_node_extended("Squeeze", ["S1"], ["s1"]))
-        nodes.append(make_node_extended("Squeeze", ["S2"], ["s2"]))
-        nodes.append(make_node_extended("Add", ["s1", "s2"], ["s"]))
+        nodes.append(oh.make_node("Squeeze", ["S1"], ["s1"]))
+        nodes.append(oh.make_node("Squeeze", ["S2"], ["s2"]))
+        nodes.append(oh.make_node("Add", ["s1", "s2"], ["s"]))
         outputs.append(oh.make_tensor_value_info("s", onnx.TensorProto.INT64, shape=[]))
         graph = oh.make_graph(
             nodes,
@@ -463,7 +458,6 @@ class SqueezeAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -476,8 +470,8 @@ class SqueezeAddPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("S2", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("S1", onnx.TensorProto.INT64, shape=(1,)))
-        nodes.append(make_node_extended("Add", ["S1", "S2"], ["SqueezeAddPattern_s"]))
-        nodes.append(make_node_extended("Squeeze", ["SqueezeAddPattern_s"], ["s"]))
+        nodes.append(oh.make_node("Add", ["S1", "S2"], ["SqueezeAddPattern_s"]))
+        nodes.append(oh.make_node("Squeeze", ["SqueezeAddPattern_s"], ["s"]))
         outputs.append(oh.make_tensor_value_info("s", onnx.TensorProto.INT64, shape=[]))
         graph = oh.make_graph(
             nodes,
@@ -580,7 +574,6 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -595,7 +588,7 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("d", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("two", onnx.TensorProto.INT64, shape=[]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["two"],
@@ -603,16 +596,16 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
                 value=onh.from_array(np.array([0], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Squeeze", ["d"], ["d0"]))
-        nodes.append(make_node_extended("Div", ["d0", "two"], ["d1"]))
-        nodes.append(make_node_extended("Unsqueeze", ["d1", "zero"], ["e"]))
+        nodes.append(oh.make_node("Squeeze", ["d"], ["d0"]))
+        nodes.append(oh.make_node("Div", ["d0", "two"], ["d1"]))
+        nodes.append(oh.make_node("Unsqueeze", ["d1", "zero"], ["e"]))
         outputs.append(oh.make_tensor_value_info("e", onnx.TensorProto.INT64, shape=(1,)))
         graph = oh.make_graph(
             nodes,
@@ -638,7 +631,6 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -653,12 +645,12 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("d", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("two", onnx.TensorProto.INT64, shape=[]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Unsqueeze", ["two", "zero"], ["SqueezeBinaryUnsqueezePattern_two"]
             )
         )
         nodes.append(
-            make_node_extended("Div", ["d", "SqueezeBinaryUnsqueezePattern_two"], ["e"])
+            oh.make_node("Div", ["d", "SqueezeBinaryUnsqueezePattern_two"], ["e"])
         )
         outputs.append(oh.make_tensor_value_info("e", onnx.TensorProto.INT64, shape=(1,)))
         graph = oh.make_graph(

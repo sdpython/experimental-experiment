@@ -27,7 +27,6 @@ class ExpandPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -45,14 +44,14 @@ class ExpandPattern(PatternOptimization):
             oh.make_tensor_value_info("mul", onnx.TensorProto.FLOAT, shape=(32, 2, 10, 8))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s4_32_2_10_8"],
                 value=onh.from_array(np.array([32, 2, 10, 8], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Expand", ["mul", "init7_s4_32_2_10_8"], ["expand"]))
+        nodes.append(oh.make_node("Expand", ["mul", "init7_s4_32_2_10_8"], ["expand"]))
         outputs.append(
             oh.make_tensor_value_info("expand", onnx.TensorProto.FLOAT, shape=(32, 2, 10, 8))
         )
@@ -80,7 +79,6 @@ class ExpandPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -97,7 +95,7 @@ class ExpandPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("mul", onnx.TensorProto.FLOAT, shape=(32, 2, 10, 8))
         )
-        nodes.append(make_node_extended("Identity", ["mul", "init7_s4_32_2_10_8"], ["expand"]))
+        nodes.append(oh.make_node("Identity", ["mul", "init7_s4_32_2_10_8"], ["expand"]))
         outputs.append(
             oh.make_tensor_value_info("expand", onnx.TensorProto.FLOAT, shape=(32, 2, 10, 8))
         )
@@ -175,7 +173,6 @@ class ExpandBroadcastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -193,7 +190,7 @@ class ExpandBroadcastPattern(PatternOptimization):
             oh.make_tensor_value_info("input66", onnx.TensorProto.FLOAT, shape=(2, 1024, 1024))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s3_2_1024_1024"],
@@ -201,10 +198,10 @@ class ExpandBroadcastPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended("Expand", ["mul_25", "init7_s3_2_1024_1024"], ["expand_11"])
+            oh.make_node("Expand", ["mul_25", "init7_s3_2_1024_1024"], ["expand_11"])
         )
         nodes.append(
-            make_node_extended("Mul", ["expand_11", "input66"], ["MulMulMulPattern--mul_27"])
+            oh.make_node("Mul", ["expand_11", "input66"], ["MulMulMulPattern--mul_27"])
         )
         outputs.append(
             oh.make_tensor_value_info(
@@ -235,7 +232,6 @@ class ExpandBroadcastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -253,7 +249,7 @@ class ExpandBroadcastPattern(PatternOptimization):
             oh.make_tensor_value_info("input66", onnx.TensorProto.FLOAT, shape=(2, 1024, 1024))
         )
         nodes.append(
-            make_node_extended("Mul", ["mul_25", "input66"], ["MulMulMulPattern--mul_27"])
+            oh.make_node("Mul", ["mul_25", "input66"], ["MulMulMulPattern--mul_27"])
         )
         outputs.append(
             oh.make_tensor_value_info(
@@ -512,7 +508,6 @@ class ExpandSwapPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -527,7 +522,7 @@ class ExpandSwapPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(1, 5, 7)))
         inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(3,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape"],
@@ -535,15 +530,15 @@ class ExpandSwapPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["p"],
                 value=onh.from_array(np.array([2], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Expand", ["X", "shape"], ["xs"]))
-        nodes.append(make_node_extended("Pow", ["xs", "p"], ["Z"]))
+        nodes.append(oh.make_node("Expand", ["X", "shape"], ["xs"]))
+        nodes.append(oh.make_node("Pow", ["xs", "p"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(3, 5, 7)))
         graph = oh.make_graph(
             nodes,
@@ -569,7 +564,6 @@ class ExpandSwapPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -583,8 +577,8 @@ class ExpandSwapPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("p", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(1, 5, 7)))
         inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(3,)))
-        nodes.append(make_node_extended("Pow", ["X", "p"], ["ExpandSwapPattern_X"]))
-        nodes.append(make_node_extended("Expand", ["ExpandSwapPattern_X", "shape"], ["Z"]))
+        nodes.append(oh.make_node("Pow", ["X", "p"], ["ExpandSwapPattern_X"]))
+        nodes.append(oh.make_node("Expand", ["ExpandSwapPattern_X", "shape"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(3, 5, 7)))
         graph = oh.make_graph(
             nodes,
@@ -679,7 +673,6 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [oh.make_opsetid("", 18)]
         inputs = []
@@ -693,7 +686,7 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
         )
         nodes.append(oh.make_node("Shape", ["X"], ["D2"], start=0, end=-1))
         nodes.append(oh.make_node("Concat", ["D2", "two"], ["d"], axis=0))
-        nodes.append(make_node_extended("Expand", ["X", "d"], ["Y"]))
+        nodes.append(oh.make_node("Expand", ["X", "d"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 3, "d", 2))
         )
@@ -721,7 +714,6 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -736,14 +728,14 @@ class ShapeBasedStaticExpandPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d", 1))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s4_1_1_1_2"],
                 value=onh.from_array(np.array([1, 1, 1, 2], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Expand", ["X", "init7_s4_1_1_1_2"], ["Y"]))
+        nodes.append(oh.make_node("Expand", ["X", "init7_s4_1_1_1_2"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 3, "d", 2))
         )
@@ -845,7 +837,6 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -862,15 +853,15 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Xc", onnx.TensorProto.FLOAT, shape=("d", 1)))
         inputs.append(oh.make_tensor_value_info("one", onnx.TensorProto.FLOAT, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
                 value=onh.from_array(np.array([4.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Expand", ["Xc", "full_shape"], ["Xce"]))
-        nodes.append(make_node_extended("Add", ["Xce", "one"], ["Y"]))
+        nodes.append(oh.make_node("Expand", ["Xc", "full_shape"], ["Xce"]))
+        nodes.append(oh.make_node("Add", ["Xce", "one"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d", "d")))
         graph = oh.make_graph(
             nodes,
@@ -896,7 +887,6 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -913,10 +903,10 @@ class ShapeBasedExpandSwapPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Xc", onnx.TensorProto.FLOAT, shape=("d", 1)))
         inputs.append(oh.make_tensor_value_info("one", onnx.TensorProto.FLOAT, shape=(1,)))
         nodes.append(
-            make_node_extended("Add", ["Xc", "one"], ["ShapeBasedExpandSwapPattern_Y"])
+            oh.make_node("Add", ["Xc", "one"], ["ShapeBasedExpandSwapPattern_Y"])
         )
         nodes.append(
-            make_node_extended("Expand", ["ShapeBasedExpandSwapPattern_Y", "full_shape"], ["Y"])
+            oh.make_node("Expand", ["ShapeBasedExpandSwapPattern_Y", "full_shape"], ["Y"])
         )
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d", "d")))
         graph = oh.make_graph(
@@ -1175,7 +1165,6 @@ class ShapeBasedExpandBroadcastMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1194,8 +1183,8 @@ class ShapeBasedExpandBroadcastMatMulPattern(PatternOptimization):
         )
         nodes.append(oh.make_node("Shape", ["Y"], ["batch"], start=0, end=1))
         nodes.append(oh.make_node("Concat", ["batch", "o11"], ["exp"], axis=0))
-        nodes.append(make_node_extended("Expand", ["Y", "exp"], ["Ye"]))
-        nodes.append(make_node_extended("MatMul", ["X", "Ye"], ["Z"]))
+        nodes.append(oh.make_node("Expand", ["Y", "exp"], ["Ye"]))
+        nodes.append(oh.make_node("MatMul", ["X", "Ye"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b", "d"))
         )
@@ -1223,7 +1212,6 @@ class ShapeBasedExpandBroadcastMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1240,7 +1228,7 @@ class ShapeBasedExpandBroadcastMatMulPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
         )
-        nodes.append(make_node_extended("MatMul", ["X", "Y"], ["Z"]))
+        nodes.append(oh.make_node("MatMul", ["X", "Y"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b", "d"))
         )
@@ -1369,7 +1357,6 @@ class ShapeBasedExpandCastWhereSwapPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1384,16 +1371,16 @@ class ShapeBasedExpandCastWhereSwapPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("exp", onnx.TensorProto.INT64, shape=(3,)))
         inputs.append(oh.make_tensor_value_info("cst", onnx.TensorProto.FLOAT, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["cst"],
                 value=onh.from_array(np.array([-np.inf], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Expand", ["X", "exp"], ["Xe"]))
-        nodes.append(make_node_extended("Cast", ["Xe"], ["Xeb"], to=9))
-        nodes.append(make_node_extended("Where", ["Xeb", "Xe", "cst"], ["Y"]))
+        nodes.append(oh.make_node("Expand", ["X", "exp"], ["Xe"]))
+        nodes.append(oh.make_node("Cast", ["Xe"], ["Xeb"], to=9))
+        nodes.append(oh.make_node("Where", ["Xeb", "Xe", "cst"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("b", "b", "c"))
         )
@@ -1421,7 +1408,6 @@ class ShapeBasedExpandCastWhereSwapPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1436,19 +1422,19 @@ class ShapeBasedExpandCastWhereSwapPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("exp", onnx.TensorProto.INT64, shape=(3,)))
         inputs.append(oh.make_tensor_value_info("cst", onnx.TensorProto.FLOAT, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Cast", ["X"], ["ShapeBasedExpandCastWhereSwapPattern_Xeb"], to=9
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Where",
                 ["ShapeBasedExpandCastWhereSwapPattern_Xeb", "X", "cst"],
                 ["ShapeBasedExpandCastWhereSwapPattern_Y"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Expand", ["ShapeBasedExpandCastWhereSwapPattern_Y", "exp"], ["Y"]
             )
         )
@@ -1587,7 +1573,6 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1601,7 +1586,7 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 1)))
         inputs.append(oh.make_tensor_value_info("two", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["two"],
@@ -1609,8 +1594,8 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
             )
         )
         nodes.append(oh.make_node("Shape", ["X"], ["shx"], start=0, end=1))
-        nodes.append(make_node_extended("Concat", ["shx", "two"], ["sh2"], axis=0))
-        nodes.append(make_node_extended("Expand", ["X", "sh2"], ["Y"]))
+        nodes.append(oh.make_node("Concat", ["shx", "two"], ["sh2"], axis=0))
+        nodes.append(oh.make_node("Expand", ["X", "sh2"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2)))
         graph = oh.make_graph(
             nodes,
@@ -1636,7 +1621,6 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1650,15 +1634,15 @@ class ShapeBasedConcatExpandPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 1)))
         inputs.append(oh.make_tensor_value_info("two", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_12"],
                 value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Concat", ["init7_12", "two"], ["sh22"], axis=0))
-        nodes.append(make_node_extended("Expand", ["X", "sh22"], ["Y"]))
+        nodes.append(oh.make_node("Concat", ["init7_12", "two"], ["sh22"], axis=0))
+        nodes.append(oh.make_node("Expand", ["X", "sh22"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2)))
         graph = oh.make_graph(
             nodes,
@@ -1777,7 +1761,6 @@ class SwapExpandReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1794,7 +1777,7 @@ class SwapExpandReshapePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("stat", onnx.TensorProto.INT64, shape=(3,)))
         inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(3,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["weight"],
@@ -1804,15 +1787,15 @@ class SwapExpandReshapePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["stat"],
                 value=onh.from_array(np.array([0, 1, -1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Expand", ["weight", "shape"], ["resh"]))
-        nodes.append(make_node_extended("Reshape", ["resh", "stat"], ["Y"]))
+        nodes.append(oh.make_node("Expand", ["weight", "shape"], ["resh"]))
+        nodes.append(oh.make_node("Reshape", ["resh", "stat"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, 4))
         )
@@ -1840,7 +1823,6 @@ class SwapExpandReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1856,8 +1838,8 @@ class SwapExpandReshapePattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("stat", onnx.TensorProto.INT64, shape=(3,)))
         inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(3,)))
-        nodes.append(make_node_extended("Reshape", ["weight", "stat"], ["Y2"]))
-        nodes.append(make_node_extended("Expand", ["Y2", "shape"], ["Y"]))
+        nodes.append(oh.make_node("Reshape", ["weight", "stat"], ["Y2"]))
+        nodes.append(oh.make_node("Expand", ["Y2", "shape"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, 4))
         )

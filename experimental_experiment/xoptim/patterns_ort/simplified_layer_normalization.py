@@ -22,7 +22,6 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -36,7 +35,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "D")))
         inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["exp"],
@@ -44,7 +43,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["axis"],
@@ -52,7 +51,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["eps"],
@@ -62,19 +61,19 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
                 value=onh.from_array(np.array([1.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Pow", ["X", "exp"], ["x2"]))
-        nodes.append(make_node_extended("ReduceMean", ["x2", "axis"], ["xr"]))
-        nodes.append(make_node_extended("Add", ["xr", "eps"], ["xa"]))
-        nodes.append(make_node_extended("Sqrt", ["xa"], ["xq"]))
-        nodes.append(make_node_extended("Div", ["one", "xq"], ["Z"]))
-        nodes.append(make_node_extended("Mul", ["Z", "X"], ["Y"]))
+        nodes.append(oh.make_node("Pow", ["X", "exp"], ["x2"]))
+        nodes.append(oh.make_node("ReduceMean", ["x2", "axis"], ["xr"]))
+        nodes.append(oh.make_node("Add", ["xr", "eps"], ["xa"]))
+        nodes.append(oh.make_node("Sqrt", ["xa"], ["xq"]))
+        nodes.append(oh.make_node("Div", ["one", "xq"], ["Z"]))
+        nodes.append(oh.make_node("Mul", ["Z", "X"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", 1)))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "D")))
         graph = oh.make_graph(
@@ -101,7 +100,6 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -114,10 +112,10 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "D")))
         inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=(1,)))
-        nodes.append(make_node_extended("Shape", ["X"], ["shape-X"]))
-        nodes.append(make_node_extended("Gather", ["shape-X", "axis"], ["gather-shape-X"]))
+        nodes.append(oh.make_node("Shape", ["X"], ["shape-X"]))
+        nodes.append(oh.make_node("Gather", ["shape-X", "axis"], ["gather-shape-X"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ConstantOfShape",
                 ["gather-shape-X"],
                 ["constantofshape-gather-shape-X"],
@@ -125,7 +123,7 @@ class SimplifiedLayerNormalizationPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SimplifiedLayerNormalization",
                 ["X", "constantofshape-gather-shape-X"],
                 ["Y", "Z"],
@@ -306,7 +304,6 @@ class SkipLayerNormalizationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -328,9 +325,9 @@ class SkipLayerNormalizationPattern(PatternOptimization):
             oh.make_tensor_value_info("scale", onnx.TensorProto.FLOAT16, shape=("c",))
         )
         inputs.append(oh.make_tensor_value_info("bias", onnx.TensorProto.FLOAT16, shape=("c",)))
-        nodes.append(make_node_extended("Add", ["X1", "X2"], ["add"]))
+        nodes.append(oh.make_node("Add", ["X1", "X2"], ["add"]))
         nodes.append(
-            make_node_extended("LayerNormalization", ["add", "scale", "bias"], ["Y"], axis=-1)
+            oh.make_node("LayerNormalization", ["add", "scale", "bias"], ["Y"], axis=-1)
         )
         outputs.append(
             oh.make_tensor_value_info("add", onnx.TensorProto.FLOAT16, shape=("a", "b", "c"))
@@ -362,7 +359,6 @@ class SkipLayerNormalizationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -385,7 +381,7 @@ class SkipLayerNormalizationPattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("bias", onnx.TensorProto.FLOAT16, shape=("c",)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SkipLayerNormalization",
                 ["X1", "X2", "scale", "bias"],
                 ["Y", "unused", "unused2", "add"],
@@ -482,7 +478,6 @@ class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -506,7 +501,7 @@ class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["scale"],
@@ -712,9 +707,9 @@ class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("Add", ["X", "skip"], ["xs"]))
+        nodes.append(oh.make_node("Add", ["X", "skip"], ["xs"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SimplifiedLayerNormalization",
                 ["xs", "scale"],
                 ["ym"],
@@ -756,7 +751,6 @@ class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -780,7 +774,7 @@ class SkipSimplifiedLayerNormalizationPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SkipSimplifiedLayerNormalization",
                 ["X", "skip", "scale"],
                 ["ym", "", "", "xs"],
@@ -884,7 +878,6 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -910,7 +903,7 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
             oh.make_tensor_value_info("weights", onnx.TensorProto.FLOAT, shape=(192,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["scale"],
@@ -1117,7 +1110,7 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["weights"],
@@ -1324,7 +1317,7 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SkipSimplifiedLayerNormalization",
                 ["X", "skip", "scale"],
                 ["ym", "", "", "xs"],
@@ -1332,7 +1325,7 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
                 epsilon=0.10000000149011612,
             )
         )
-        nodes.append(make_node_extended("Mul", ["ym", "weights"], ["a"]))
+        nodes.append(oh.make_node("Mul", ["ym", "weights"], ["a"]))
         outputs.append(oh.make_tensor_value_info("", onnx.TensorProto.UNDEFINED, []))
         outputs.append(
             oh.make_tensor_value_info(
@@ -1368,7 +1361,6 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1394,7 +1386,7 @@ class SkipSimplifiedLayerNormalizationMulPattern(PatternOptimization):
             oh.make_tensor_value_info("weights", onnx.TensorProto.FLOAT, shape=(192,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SkipSimplifiedLayerNormalization",
                 ["X", "skip", "weights"],
                 ["a", "", "", "xs"],
@@ -1512,7 +1504,6 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1533,7 +1524,7 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
             oh.make_tensor_value_info("weights", onnx.TensorProto.FLOAT, shape=(192,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["scale"],
@@ -1740,7 +1731,7 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["weights"],
@@ -1947,7 +1938,7 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SimplifiedLayerNormalization",
                 ["xs", "scale"],
                 ["ym"],
@@ -1955,7 +1946,7 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
                 epsilon=0.10000000149011612,
             )
         )
-        nodes.append(make_node_extended("Mul", ["ym", "weights"], ["a"]))
+        nodes.append(oh.make_node("Mul", ["ym", "weights"], ["a"]))
         outputs.append(oh.make_tensor_value_info("a", onnx.TensorProto.FLOAT, shape=[]))
         graph = oh.make_graph(
             nodes,
@@ -1981,7 +1972,6 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -2002,7 +1992,7 @@ class SimplifiedLayerNormalizationMulPattern(PatternOptimization):
             oh.make_tensor_value_info("weights", onnx.TensorProto.FLOAT, shape=(192,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SimplifiedLayerNormalization",
                 ["xs", "weights"],
                 ["a"],

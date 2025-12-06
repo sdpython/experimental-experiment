@@ -21,7 +21,6 @@ class SliceSlicePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -36,7 +35,7 @@ class SliceSlicePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("one", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("zero", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -44,15 +43,15 @@ class SliceSlicePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
                 value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Slice", ["X", "zero", "one", "zero"], ["x1"]))
-        nodes.append(make_node_extended("Slice", ["x1", "zero", "one", "one"], ["Y"]))
+        nodes.append(oh.make_node("Slice", ["X", "zero", "one", "zero"], ["x1"]))
+        nodes.append(oh.make_node("Slice", ["x1", "zero", "one", "one"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("c", "d")))
         graph = oh.make_graph(
             nodes,
