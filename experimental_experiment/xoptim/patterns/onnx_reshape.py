@@ -352,6 +352,109 @@ class ReduceReshapePattern(PatternOptimization):
 class ReshapeReshapePattern(PatternOptimization):
     """
     Replaces the sequence Reshape, Reshape by Reshape.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("sh2", onnx.TensorProto.INT64, shape=(3,)))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", 128))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["sh1"],
+                value=onh.from_array(np.array([4096, 7, 7, 128], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["sh2"],
+                value=onh.from_array(np.array([4096, 49, 128], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Reshape", ["X", "sh1"], ["s1"]))
+        nodes.append(make_node_extended("Reshape", ["s1", "sh2"], ["s2"]))
+        outputs.append(
+            oh.make_tensor_value_info("s2", onnx.TensorProto.FLOAT, shape=(4096, 49, 128))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("sh2", onnx.TensorProto.INT64, shape=(3,)))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", 128))
+        )
+        nodes.append(make_node_extended("Reshape", ["X", "sh2"], ["s2"]))
+        outputs.append(
+            oh.make_tensor_value_info("s2", onnx.TensorProto.FLOAT, shape=(4096, 49, 128))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
@@ -1316,8 +1419,8 @@ class StaticConcatReshapePattern(PatternOptimization):
             )
         )
         nodes.append(oh.make_node("Shape", ["X"], ["D2"], start=2, end=3))
-        nodes.append(make_node_extended("Concat", ["I1", "D2"], ["d"], axis=0))
-        nodes.append(make_node_extended("Reshape", ["X", "d"], ["Y"]))
+        nodes.append(make_node_extended("Concat", ["I1", "D2"], ["dc"], axis=0))
+        nodes.append(make_node_extended("Reshape", ["X", "dc"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(6, "d")))
         graph = oh.make_graph(
             nodes,
@@ -1476,6 +1579,92 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
     Tries to reduce the number of nodes in the sequence Concat + Reshape
     by replacing one of the dimension by -1 or 0.
     The pattern tries to align shape information to infer a static shape.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = [onh.from_array(np.array([-1], dtype=np.int64), name="I1")]
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
+        nodes.append(oh.make_node("Shape", ["X"], ["D2"], start=2, end=3))
+        nodes.append(oh.make_node("Concat", ["I1", "D2"], ["dshape"], axis=0))
+        nodes.append(oh.make_node("Reshape", ["X", "dshape"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(6, "d")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s2_6_-1"],
+                value=onh.from_array(np.array([6, -1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Reshape", ["X", "init7_s2_6_-1"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(6, "d")))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
@@ -1646,7 +1835,97 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
 class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
     """
     Replaces a replaces by a squeeze or unsqueeze pattern if possible.
-    It is only available for opset < 18.
+    It is only available for ``opset >= 18``.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = [onh.from_array(np.array([1], dtype=np.int64), name="one")]
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
+        nodes.append(oh.make_node("Shape", ["X"], ["D2"]))
+        nodes.append(oh.make_node("Concat", ["one", "D2", "one"], ["dshape2"], axis=0))
+        nodes.append(oh.make_node("Reshape", ["X", "dshape2"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 2, 3, "d", 1))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s2_0_4"],
+                value=onh.from_array(np.array([0, 4], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Unsqueeze", ["X", "init7_s2_0_4"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 2, 3, "d", 1))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
