@@ -8,6 +8,141 @@ from ..patterns_api import MatchResult, PatternOptimization
 class ConstantOfShapeScatterNDPattern(PatternOptimization):
     """
     Replaces ConstantOfShape + ScatterND with ScatterNDOfShape.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("onnx_extended.ortops.optim.cuda", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "indices", onnx.TensorProto.INT64, shape=("UNKNOWNDIM1", "UNKNOWNDIM2", 1)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=("UNKNOWNDIM",))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "masked_updates",
+                onnx.TensorProto.FLOAT,
+                shape=("UNKNOWNDIM1^UNKNOWNDIM3", "UNKNOWNDIM2^UNKNOWNDIM4", "UNKNOWNDIM5"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "ConstantOfShape",
+                ["shape"],
+                ["data"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "ScatterND", ["data", "indices", "masked_updates"], ["y"], reduction="add"
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM6", "UNKNOWNDIM7")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("onnx_extended.ortops.optim.cuda", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "indices", onnx.TensorProto.INT64, shape=("UNKNOWNDIM1", "UNKNOWNDIM2", 1)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=("UNKNOWNDIM",))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "masked_updates",
+                onnx.TensorProto.FLOAT,
+                shape=("UNKNOWNDIM1^UNKNOWNDIM3", "UNKNOWNDIM2^UNKNOWNDIM4", "UNKNOWNDIM5"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "ScatterNDOfShape",
+                ["shape", "indices", "masked_updates"],
+                ["y"],
+                domain="onnx_extended.ortops.optim.cuda",
+                strategy="optimize",
+                reduction="add",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM6", "UNKNOWNDIM7")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
@@ -66,6 +201,160 @@ class ConstantOfShapeScatterNDPattern(PatternOptimization):
 class MaskedShapeScatterNDPattern(PatternOptimization):
     """
     Replaces Equal, Where, ScatterNDOfShape by MaskedScatterNDOfShape.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("onnx_extended.ortops.optim.cuda", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "updates",
+                onnx.TensorProto.FLOAT,
+                shape=("UNKNOWNDIM3", "UNKNOWNDIM4", "UNKNOWNDIM5"),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "indices", onnx.TensorProto.INT64, shape=("UNKNOWNDIM1", "UNKNOWNDIM2", 1)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=("UNKNOWNDIM",))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["mone"],
+                value=onh.from_array(np.array([-1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "ScatterNDOfShape",
+                ["shape", "indices", "masked_updates"],
+                ["y"],
+                domain="onnx_extended.ortops.optim.cuda",
+                strategy="optimize",
+                reduction="add",
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Where", ["masked_indices", "zero", "updates"], ["masked_updates"]
+            )
+        )
+        nodes.append(make_node_extended("Equal", ["indices", "mone"], ["masked_indices"]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM6", "UNKNOWNDIM7")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("onnx_extended.ortops.optim.cuda", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "updates",
+                onnx.TensorProto.FLOAT,
+                shape=("UNKNOWNDIM3", "UNKNOWNDIM4", "UNKNOWNDIM5"),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "indices", onnx.TensorProto.INT64, shape=("UNKNOWNDIM1", "UNKNOWNDIM2", 1)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=("UNKNOWNDIM",))
+        )
+        nodes.append(
+            make_node_extended(
+                "MaskedScatterNDOfShape",
+                ["shape", "indices", "updates"],
+                ["y"],
+                domain="onnx_extended.ortops.optim.cuda",
+                maskedValue=-1,
+                reduction="add",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM6", "UNKNOWNDIM7")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(

@@ -357,7 +357,154 @@ class LeakyReluPattern(EasyPatternOptimization):
 
 
 class SoftmaxCrossEntropyLossCastPattern(EasyPatternOptimization):
-    """Detects one decomposed version of SoftmaxCrossEntropyLoss."""
+    """
+    Detects one decomposed version of SoftmaxCrossEntropyLoss.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("I", onnx.TensorProto.INT64, shape=("A",)))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=("A", "B"))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["B"],
+                value=onh.from_array(np.array([-100], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zeroi"],
+                value=onh.from_array(np.array([0], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zerof"],
+                value=onh.from_array(np.array([0.0], dtype=np.float16), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Equal", ["I", "B"], ["eq1"]))
+        nodes.append(make_node_extended("Not", ["eq1"], ["neq1"]))
+        nodes.append(make_node_extended("Where", ["neq1", "I", "zeroi"], ["ind"]))
+        nodes.append(make_node_extended("Unsqueeze", ["ind", "one"], ["flat_ind"]))
+        nodes.append(make_node_extended("LogSoftmax", ["X"], ["logX"], axis=1))
+        nodes.append(make_node_extended("GatherElements", ["logX", "flat_ind"], ["gx"], axis=1))
+        nodes.append(make_node_extended("Squeeze", ["gx", "one"], ["flat_gx"]))
+        nodes.append(make_node_extended("Neg", ["flat_gx"], ["neg_gx"]))
+        nodes.append(make_node_extended("Where", ["neq1", "neg_gx", "zerof"], ["w2"]))
+        nodes.append(make_node_extended("Cast", ["neq1"], ["neq1f"], to=1))
+        nodes.append(
+            make_node_extended(
+                "ReduceSum", ["neq1f"], ["red2"], keepdims=0, noop_with_empty_axes=0
+            )
+        )
+        nodes.append(make_node_extended("Cast", ["red2"], ["red2_16"], to=10))
+        nodes.append(make_node_extended("Cast", ["w2"], ["w2f"], to=1))
+        nodes.append(
+            make_node_extended(
+                "ReduceSum", ["w2f"], ["red1"], keepdims=0, noop_with_empty_axes=0
+            )
+        )
+        nodes.append(make_node_extended("Cast", ["red1"], ["red1_16"], to=10))
+        nodes.append(make_node_extended("Div", ["red1_16", "red2_16"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=[]))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("I", onnx.TensorProto.INT64, shape=("A",)))
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT16, shape=("A", "B"))
+        )
+        nodes.append(
+            make_node_extended(
+                "SoftmaxCrossEntropyLoss",
+                ["X", "I"],
+                ["Y"],
+                ignore_index=-100,
+                reduction="mean",
+            )
+        )
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=[]))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
 
     def __init__(
         self, verbose: int = 0, priority: int = 0, min_opset: int = 14, domain: str = ""
