@@ -470,6 +470,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self.check_empty_source = check_empty_source
         self.user_defined_output_names = output_names or []
         self._context = _context or set()
+        self.do_not_turn_constant_initializers = False
+
         if isinstance(_parent, tuple):
             self._parent = _parent[0]
             self._parent_node = _parent[1]
@@ -9218,6 +9220,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param verbose: verbosity
         :return: number of moved initializers
         """
+        self.do_not_turn_constant_initializers = True
         if not self.initializers_dict:
             return
 

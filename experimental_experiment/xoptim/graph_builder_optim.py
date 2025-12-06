@@ -99,6 +99,10 @@ class GraphBuilderPatternOptimization:
             self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
         self._debug_step = os.environ.get("PATTERNSTEP", "0") in (1, "1", "True", True, "true")
 
+    @property
+    def do_not_turn_constant_initializers(self):
+        return self.builder.do_not_turn_constant_initializers
+
     def has_processor(self, processor: str) -> bool:
         """Checks the process is on the list of used processors."""
         return processor in self.processor

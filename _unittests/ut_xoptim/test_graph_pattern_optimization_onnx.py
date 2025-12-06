@@ -7132,6 +7132,78 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_swap_unsqueeze_transpose(self):
+        for axis in [0, 1, 2, -1]:
+            with self.subTest(axis=axis):
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("Unsqueeze", ["X", "axes"], ["xu"]),
+                            oh.make_node("Transpose", ["xu"], ["Y"], perm=[0, 2, 1, 3]),
+                        ],
+                        "test",
+                        [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
+                        [oh.make_tensor_value_info("Y", TFLOAT, ["e", "f", "g", "h"])],
+                        [onh.from_array(np.array([axis], dtype=np.int64), name="axes")],
+                    ),
+                    opset_imports=[oh.make_operatorsetid("", 18)],
+                    ir_version=10,
+                )
+                feeds = dict(X=np.random.randn(4, 3, 7).astype(np.float32))
+                ref = ExtendedReferenceEvaluator(model, verbose=0)
+                z = ref.run(None, feeds)[0]
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(
+                        patterns="SwapUnsqueezeTranspose", verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    ["Transpose", "Unsqueeze"], [n.op_type for n in opt_onx.graph.node]
+                )
+                ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+                zz = ref.run(None, feeds)[0]
+                self.assertEqualArray(z, zz)
+
+    def test_swap_unsqueeze_transpose_2(self):
+        for axes in [[0, 1], [1, 2], [0, 2]]:
+            with self.subTest(axes=axes):
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("Unsqueeze", ["X", "axes"], ["xu"]),
+                            oh.make_node("Transpose", ["xu"], ["Y"], perm=[0, 2, 1, 4, 3]),
+                        ],
+                        "test",
+                        [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
+                        [oh.make_tensor_value_info("Y", TFLOAT, ["e", "f", "g", "h", "i"])],
+                        [onh.from_array(np.array(axes, dtype=np.int64), name="axes")],
+                    ),
+                    opset_imports=[oh.make_operatorsetid("", 18)],
+                    ir_version=10,
+                )
+                feeds = dict(X=np.random.randn(4, 3, 7).astype(np.float32))
+                ref = ExtendedReferenceEvaluator(model, verbose=0)
+                z = ref.run(None, feeds)[0]
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(
+                        patterns="SwapUnsqueezeTranspose", verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    ["Transpose", "Unsqueeze"], [n.op_type for n in opt_onx.graph.node]
+                )
+                ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+                zz = ref.run(None, feeds)[0]
+                self.assertEqualArray(z, zz)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
