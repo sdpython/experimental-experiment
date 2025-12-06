@@ -10,6 +10,179 @@ class TriMatrixPattern(PatternOptimization):
     """
     Replaces a sequence of nodes creating a triangular matrix
     with operator TriMatrix(...).
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("onnx_extended.ortops.optim.cuda", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(2,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["dim"],
+                value=onh.from_array(np.array(1024, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["onei"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["shape1"],
+                value=onh.from_array(np.array([1024, 1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zerof"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["shape"],
+                value=onh.from_array(np.array([1024, 1024], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Range", ["zero", "dim", "onei"], ["ar"]))
+        nodes.append(make_node_extended("Add", ["ar", "one"], ["ad"]))
+        nodes.append(make_node_extended("Reshape", ["ad", "shape1"], ["re"]))
+        nodes.append(make_node_extended("Less", ["ar", "re"], ["le"]))
+        nodes.append(make_node_extended("Where", ["le", "zerof", "cst"], ["Y"]))
+        nodes.append(
+            make_node_extended(
+                "ConstantOfShape",
+                ["shape"],
+                ["cst"],
+                value=onh.from_array(
+                    np.array([-3.4028234663852886e38], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM", "UNKNOWNDIM1")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("onnx_extended.ortops.optim.cuda", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(2,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["TriMatrixPattern--"],
+                value=onh.from_array(
+                    np.array([0.0, 0.0, -3.4028234663852886e38], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "TriMatrix",
+                ["shape", "TriMatrixPattern--"],
+                ["Y"],
+                domain="onnx_extended.ortops.optim.cuda",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM", "UNKNOWNDIM1")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
