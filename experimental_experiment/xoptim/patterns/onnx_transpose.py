@@ -798,7 +798,7 @@ class TransposeGatherPattern(PatternOptimization):
         if node.op_type != "Gather" or node.domain != "":
             return self.none()
         tr_node = g.node_before(node.input[0])
-        if not tr_node or g.is_used_more_than_once(node.input[0]):
+        if not tr_node:
             return self.none(node, inspect.currentframe().f_lineno)
         if tr_node.op_type != "Transpose" or tr_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
@@ -823,13 +823,14 @@ class TransposeGatherPattern(PatternOptimization):
         perm = transpose_node.attribute[0].ints
         axis = gather_node.attribute[0].i if gather_node.attribute else 0
         new_axis = perm[axis]
-        return [
-            g.make_node(
-                "Gather",
-                [transpose_node.input[0], gather_node.input[1]],
-                gather_node.output,
-                axis=new_axis,
-                name=f"{self.__class__.__name__}--{gather_node.name}",
-                doc_string=gather_node.doc_string,
-            )
-        ]
+        new_node = g.make_node(
+            "Gather",
+            [transpose_node.input[0], gather_node.input[1]],
+            gather_node.output,
+            axis=new_axis,
+            name=f"{self.__class__.__name__}--{gather_node.name}",
+            doc_string=gather_node.doc_string,
+        )
+        if g.is_used_more_than_once(transpose_node.output[0]):
+            return [transpose_node, new_node]
+        return [new_node]

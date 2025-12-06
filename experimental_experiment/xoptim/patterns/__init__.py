@@ -167,6 +167,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ConcatGatherPattern(verbose=verbose),
         ConcatReshapePattern(verbose=verbose),
         ConcatTwiceUnaryPattern(verbose=verbose),
+        ConstantToInitializerPattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
