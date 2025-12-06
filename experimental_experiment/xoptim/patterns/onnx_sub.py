@@ -8,6 +8,100 @@ class Sub1MulPattern(PatternOptimization):
     """
     Replaces the sequence `(1 - X) x Y`  by `Y - X x Y` to avoid the creation
     of a constant in the graph. `x` means element wise multiplication.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("input3", onnx.TensorProto.FLOAT, shape=(1,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init1_s1_"],
+                value=onh.from_array(np.array([1.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Mul", ["input3", "_onx_sub0"], ["_onx_mul0"]))
+        nodes.append(make_node_extended("Sub", ["init1_s1_", "input3"], ["_onx_sub0"]))
+        outputs.append(
+            oh.make_tensor_value_info("_onx_mul0", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("input3", onnx.TensorProto.FLOAT, shape=(1,)))
+        nodes.append(
+            make_node_extended("Mul", ["input3", "input3"], ["Sub1MulPattern--_onx_mul0"])
+        )
+        nodes.append(
+            make_node_extended("Sub", ["input3", "Sub1MulPattern--_onx_mul0"], ["_onx_mul0"])
+        )
+        outputs.append(
+            oh.make_tensor_value_info("_onx_mul0", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
