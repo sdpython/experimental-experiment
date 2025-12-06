@@ -6004,12 +6004,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 opt_onx = gr.to_onnx(optimize=True)
                 self.assertEqual(
                     (
-                        [
-                            "Shape",
-                            "Gather",
-                            "ConstantOfShape",
-                            "RMSNormalization",
-                        ]
+                        ["Shape", "ConstantOfShape", "RMSNormalization"]
                         if dyn
                         else ["RMSNormalization"]
                     ),
@@ -6020,12 +6015,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ref1 = ExtendedReferenceEvaluator(model)
                 expected = ref1.run(None, feeds)
 
-                ninits = {
-                    (False, False): 1,
-                    (False, True): 1,
-                    (True, False): 1,
-                    (True, True): 1,
-                }
+                ninits = {(False, False): 1, (False, True): 0, (True, False): 1, (True, True): 0}
                 self.assertEqual(ninits[div, dyn], len(opt_onx.graph.initializer))
 
                 ref2 = ExtendedReferenceEvaluator(opt_onx)
@@ -6089,12 +6079,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 opt_onx = gr.to_onnx(optimize=True)
                 self.assertEqual(
                     (
-                        [
-                            "Shape",
-                            "Gather",
-                            "ConstantOfShape",
-                            "RMSNormalization",
-                        ]
+                        ["Shape", "ConstantOfShape", "RMSNormalization"]
                         if dyn
                         else ["RMSNormalization"]
                     ),
@@ -6105,12 +6090,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                 ref1 = ExtendedReferenceEvaluator(model)
                 expected = ref1.run(None, feeds)
 
-                ninits = {
-                    (False, False): 1,
-                    (False, True): 1,
-                    (True, False): 1,
-                    (True, True): 1,
-                }
+                ninits = {(False, False): 1, (False, True): 0, (True, False): 1, (True, True): 0}
                 self.assertEqual(ninits[div, dyn], len(opt_onx.graph.initializer))
 
                 ref2 = ExtendedReferenceEvaluator(opt_onx)

@@ -1766,25 +1766,27 @@ class RMSNormalizationPattern(PatternOptimization):
                 source="RMSNormalization.apply.scale.1",
             )
         else:
-            sh = g.make_node("Shape", [input_name], name=f"{self.__class__.__name__}--{nname}")
-            axis_name = g.make_initializer(
-                "",
-                np.array([axis], dtype=np.int64),
-                source="RMSNormalization.apply.axis",
-            )
-            ga = g.make_node(
-                "Gather",
-                [sh.output[0], axis_name],
-                name=f"{self.__class__.__name__}--{nname}",
+            sh = (
+                g.make_node(
+                    "Shape",
+                    [input_name],
+                    start=axis,
+                    end=axis + 1,
+                    name=f"{self.__class__.__name__}--{nname}",
+                )
+                if axis != -1
+                else g.make_node(
+                    "Shape", [input_name], start=axis, name=f"{self.__class__.__name__}--{nname}"
+                )
             )
             cc = g.make_node(
                 "ConstantOfShape",
-                [ga.output[0]],
+                [sh.output[0]],
                 value=from_array_extended(np.array([1], dtype=dtype)),
                 name=f"{self.__class__.__name__}--{nname}",
             )
             scale = cc.output[0]
-            nodes.extend([sh, ga, cc])
+            nodes.extend([sh, cc])
 
         layer = g.make_node(
             "RMSNormalization",
