@@ -470,7 +470,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self.check_empty_source = check_empty_source
         self.user_defined_output_names = output_names or []
         self._context = _context or set()
-        self.do_not_turn_constant_initializers = False
+        self._do_not_turn_constant_initializers = False
 
         if isinstance(_parent, tuple):
             self._parent = _parent[0]
@@ -580,6 +580,15 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 )
         else:
             raise NotImplementedError(f"{type(target_opset_or_existing_proto)} is not supported.")
+
+    @property
+    def do_not_turn_constant_initializers(self):
+        """
+        Constants are turned into initializers in the main graph.
+        It is not possible in function or not always safe inside subgraphs
+        (due to shadowing).
+        """
+        return self._do_not_turn_constant_initializers or self._parent
 
     def make_subset_builder(
         self,
@@ -9220,7 +9229,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param verbose: verbosity
         :return: number of moved initializers
         """
-        self.do_not_turn_constant_initializers = True
+        self._do_not_turn_constant_initializers = True
         if not self.initializers_dict:
             return
 

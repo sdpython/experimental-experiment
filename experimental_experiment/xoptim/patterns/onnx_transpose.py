@@ -982,7 +982,8 @@ class SwapUnsqueezeTransposePattern(PatternOptimization):
         perm = transpose_node.attribute[0].ints
         if axes.min() < 0:
             axes = (axes + len(perm)) % len(perm)
-        permf = [p for p in perm if p not in set(axes)]
+        set_axes = {int(i) for i in axes}
+        permf = [p for p in perm if p not in set_axes]
         iperm = [(p, i) for i, p in enumerate(permf)]
         iperm.sort()
         nperm = [(i, ni) for ni, (_p, i) in enumerate(iperm)]
