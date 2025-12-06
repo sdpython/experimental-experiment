@@ -25,7 +25,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 20),
@@ -47,10 +46,10 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("m2", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
         )
-        nodes.append(make_node_extended("Concat", ["m2", "m2"], ["m2x2"], axis=-1))
-        nodes.append(make_node_extended("Concat", ["m1", "m1"], ["m1x2"], axis=-1))
+        nodes.append(oh.make_node("Concat", ["m2", "m2"], ["m2x2"], axis=-1))
+        nodes.append(oh.make_node("Concat", ["m1", "m1"], ["m1x2"], axis=-1))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "HalfRotaryEmbedding", ["X", "m2x2", "m1x2"], ["Y"], domain="intermediate"
             )
         )
@@ -81,7 +80,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 20),
@@ -104,7 +102,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             oh.make_tensor_value_info("m2", onnx.TensorProto.FLOAT, shape=(1, 1, "c", "e"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_0_1"],
@@ -112,7 +110,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s_0"],
@@ -120,7 +118,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s_1"],
@@ -128,7 +126,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_1"],
@@ -136,41 +134,41 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Squeeze", ["m2", "init7_s2_0_1"], ["ContribRotaryEmbeddingPattern--m2x2"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Squeeze", ["m1", "init7_s2_0_1"], ["ContribRotaryEmbeddingPattern--m1x2"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Shape", ["X"], ["ContribRotaryEmbeddingPattern--X--batch"], end=1, start=0
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Shape", ["X"], ["ContribRotaryEmbeddingPattern--X--seq_length"], end=3, start=2
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Squeeze",
                 ["ContribRotaryEmbeddingPattern--X--seq_length"],
                 ["ContribRotaryEmbeddingPattern--X--seqsq"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Range",
                 ["init7_s_0", "ContribRotaryEmbeddingPattern--X--seqsq", "init7_s_1"],
                 ["ContribRotaryEmbeddingPattern--X_flat_pids"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Concat",
                 ["ContribRotaryEmbeddingPattern--X--batch", "init7_s1_1"],
                 ["ContribRotaryEmbeddingPattern--X_pshape"],
@@ -178,7 +176,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Expand",
                 [
                     "ContribRotaryEmbeddingPattern--X_flat_pids",
@@ -188,7 +186,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "RotaryEmbedding",
                 [
                     "X",
@@ -621,7 +619,6 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 20),
@@ -654,9 +651,9 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "c", 2, "d"))
         )
-        nodes.append(make_node_extended("Transpose", ["X"], ["Xt"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Transpose", ["X"], ["Xt"], perm=[0, 2, 1, 3]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "RotaryEmbedding",
                 [
                     "Xt",
@@ -697,7 +694,6 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 20),
@@ -731,16 +727,16 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "c", 2, "d"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s3_0_0_-1"],
                 value=onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "init7_s3_0_0_-1"], ["X::3D"]))
+        nodes.append(oh.make_node("Reshape", ["X", "init7_s3_0_0_-1"], ["X::3D"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "RotaryEmbedding",
                 [
                     "X::3D",
@@ -754,14 +750,14 @@ class ContribRotaryEmbedding3DPattern(PatternOptimization):
                 rotary_embedding_dim=4,
             )
         )
-        nodes.append(make_node_extended("Shape", ["X"], ["X::Shape3"], start=3))
+        nodes.append(oh.make_node("Shape", ["X"], ["X::Shape3"], start=3))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Concat", ["init7_s3_0_0_-1", "X::Shape3"], ["X::Shape+1"], axis=0
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X::3Dr", "X::Shape+1"], ["X::4D"]))
-        nodes.append(make_node_extended("Transpose", ["X::4D"], ["Y"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Reshape", ["X::3Dr", "X::Shape+1"], ["X::4D"]))
+        nodes.append(oh.make_node("Transpose", ["X::4D"], ["Y"], perm=[0, 2, 1, 3]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
@@ -845,7 +841,6 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -887,7 +882,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             oh.make_tensor_value_info("keys", onnx.TensorProto.FLOAT, shape=("ak", "bk", 8, 64))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["scale_sqrt"],
@@ -896,26 +891,26 @@ class MultiHeadAttention3DPattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("Transpose", ["query"], ["t_query"], perm=[0, 2, 1, 3]))
-        nodes.append(make_node_extended("Transpose", ["keys"], ["t_keys"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Transpose", ["query"], ["t_query"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Transpose", ["keys"], ["t_keys"], perm=[0, 2, 1, 3]))
         nodes.append(
-            make_node_extended("Concat", ["past_keys", "t_keys"], ["ct_keys"], axis=-2)
+            oh.make_node("Concat", ["past_keys", "t_keys"], ["ct_keys"], axis=-2)
         )
         nodes.append(
-            make_node_extended("Transpose", ["values"], ["t_values"], perm=[0, 2, 1, 3])
+            oh.make_node("Transpose", ["values"], ["t_values"], perm=[0, 2, 1, 3])
         )
         nodes.append(
-            make_node_extended("Concat", ["past_values", "t_values"], ["ct_values"], axis=-2)
+            oh.make_node("Concat", ["past_values", "t_values"], ["ct_values"], axis=-2)
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "LocalAttention_to1",
                 ["t_query", "ct_keys", "ct_values", "mask", "scale_sqrt"],
                 ["prob"],
                 domain="intermediate",
             )
         )
-        nodes.append(make_node_extended("Transpose", ["prob"], ["Y"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Transpose", ["prob"], ["Y"], perm=[0, 2, 1, 3]))
         outputs.append(
             oh.make_tensor_value_info(
                 "ct_values", onnx.TensorProto.FLOAT, shape=("pav", 8, "pcv+bv", 64)
@@ -955,7 +950,6 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -997,7 +991,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             oh.make_tensor_value_info("keys", onnx.TensorProto.FLOAT, shape=("ak", "bk", 8, 64))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s3_0_0_-1"],
@@ -1005,7 +999,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s1_"],
@@ -1013,7 +1007,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s1_2"],
@@ -1021,7 +1015,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s4_0_0_-1_64"],
@@ -1029,31 +1023,31 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape", ["query", "init7_s3_0_0_-1"], ["MultiHeadAttention3DPattern--query"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape", ["keys", "init7_s3_0_0_-1"], ["MultiHeadAttention3DPattern--keys"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape",
                 ["values", "init7_s3_0_0_-1"],
                 ["MultiHeadAttention3DPattern--values"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Where",
                 ["mask", "init1_s1_", "init1_s1_2"],
                 ["MultiHeadAttention3DPattern--mask"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "MultiHeadAttention",
                 [
                     "MultiHeadAttention3DPattern--query",
@@ -1072,7 +1066,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape", ["MultiHeadAttention3DPattern--Y", "init7_s4_0_0_-1_64"], ["Y"]
             )
         )

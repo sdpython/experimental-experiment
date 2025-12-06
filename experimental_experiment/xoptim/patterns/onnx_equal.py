@@ -21,7 +21,6 @@ class UnsqueezeEqualPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -39,7 +38,7 @@ class UnsqueezeEqualPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["axis"],
@@ -47,16 +46,16 @@ class UnsqueezeEqualPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["mone"],
                 value=onh.from_array(np.array([-1.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Unsqueeze", ["X", "axis"], ["Y"]))
-        nodes.append(make_node_extended("Equal", ["X", "mone"], ["xe"]))
-        nodes.append(make_node_extended("Unsqueeze", ["xe", "axis"], ["Z"]))
+        nodes.append(oh.make_node("Unsqueeze", ["X", "axis"], ["Y"]))
+        nodes.append(oh.make_node("Equal", ["X", "mone"], ["xe"]))
+        nodes.append(oh.make_node("Unsqueeze", ["xe", "axis"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, "b"))
         )
@@ -87,7 +86,6 @@ class UnsqueezeEqualPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -104,8 +102,8 @@ class UnsqueezeEqualPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("mone", onnx.TensorProto.FLOAT, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=(1,)))
-        nodes.append(make_node_extended("Unsqueeze", ["X", "axis"], ["Y"]))
-        nodes.append(make_node_extended("Equal", ["Y", "mone"], ["Z"]))
+        nodes.append(oh.make_node("Unsqueeze", ["X", "axis"], ["Y"]))
+        nodes.append(oh.make_node("Equal", ["Y", "mone"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 1, "b"))
         )

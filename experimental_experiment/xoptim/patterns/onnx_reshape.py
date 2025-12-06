@@ -68,7 +68,6 @@ class ShapedBasedReshapePattern(ReshapePattern):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -84,14 +83,14 @@ class ShapedBasedReshapePattern(ReshapePattern):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape2"],
                 value=onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "shape2"], ["xrr"]))
+        nodes.append(oh.make_node("Reshape", ["X", "shape2"], ["xrr"]))
         outputs.append(
             oh.make_tensor_value_info("xrr", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
         )
@@ -119,7 +118,6 @@ class ShapedBasedReshapePattern(ReshapePattern):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -134,7 +132,7 @@ class ShapedBasedReshapePattern(ReshapePattern):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
         )
-        nodes.append(make_node_extended("Identity", ["X", "shape2"], ["xrr"]))
+        nodes.append(oh.make_node("Identity", ["X", "shape2"], ["xrr"]))
         outputs.append(
             oh.make_tensor_value_info("xrr", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
         )
@@ -192,7 +190,6 @@ class ReduceReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 10),
@@ -205,15 +202,15 @@ class ReduceReshapePattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(3, 2)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape"],
                 value=onh.from_array(np.array([3], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("ReduceSum", ["X"], ["xr"], axes=[1], keepdims=1))
-        nodes.append(make_node_extended("Reshape", ["xr", "shape"], ["Y"]))
+        nodes.append(oh.make_node("ReduceSum", ["X"], ["xr"], axes=[1], keepdims=1))
+        nodes.append(oh.make_node("Reshape", ["xr", "shape"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(3,)))
         graph = oh.make_graph(
             nodes,
@@ -239,7 +236,6 @@ class ReduceReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 10),
@@ -251,7 +247,7 @@ class ReduceReshapePattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(3, 2)))
-        nodes.append(make_node_extended("ReduceSum", ["X"], ["Y"], axes=[1], keepdims=0))
+        nodes.append(oh.make_node("ReduceSum", ["X"], ["Y"], axes=[1], keepdims=0))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(3,)))
         graph = oh.make_graph(
             nodes,
@@ -365,7 +361,6 @@ class ReshapeReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -381,7 +376,7 @@ class ReshapeReshapePattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", 128))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["sh1"],
@@ -389,15 +384,15 @@ class ReshapeReshapePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["sh2"],
                 value=onh.from_array(np.array([4096, 49, 128], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "sh1"], ["s1"]))
-        nodes.append(make_node_extended("Reshape", ["s1", "sh2"], ["s2"]))
+        nodes.append(oh.make_node("Reshape", ["X", "sh1"], ["s1"]))
+        nodes.append(oh.make_node("Reshape", ["s1", "sh2"], ["s2"]))
         outputs.append(
             oh.make_tensor_value_info("s2", onnx.TensorProto.FLOAT, shape=(4096, 49, 128))
         )
@@ -425,7 +420,6 @@ class ReshapeReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -440,7 +434,7 @@ class ReshapeReshapePattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", 128))
         )
-        nodes.append(make_node_extended("Reshape", ["X", "sh2"], ["s2"]))
+        nodes.append(oh.make_node("Reshape", ["X", "sh2"], ["s2"]))
         outputs.append(
             oh.make_tensor_value_info("s2", onnx.TensorProto.FLOAT, shape=(4096, 49, 128))
         )
@@ -692,7 +686,6 @@ class Reshape2Of3Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -708,7 +701,7 @@ class Reshape2Of3Pattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, 4)))
         inputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 3, 4)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape1"],
@@ -716,7 +709,7 @@ class Reshape2Of3Pattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape2"],
@@ -724,17 +717,17 @@ class Reshape2Of3Pattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape3"],
                 value=onh.from_array(np.array([2, 3, 4], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "shape1"], ["xr"]))
-        nodes.append(make_node_extended("Reshape", ["Y", "shape2"], ["yr"]))
-        nodes.append(make_node_extended("Reshape", ["xrr", "shape3"], ["Z"]))
-        nodes.append(make_node_extended("Mul", ["xr", "yr"], ["xrr"]))
+        nodes.append(oh.make_node("Reshape", ["X", "shape1"], ["xr"]))
+        nodes.append(oh.make_node("Reshape", ["Y", "shape2"], ["yr"]))
+        nodes.append(oh.make_node("Reshape", ["xrr", "shape3"], ["Z"]))
+        nodes.append(oh.make_node("Mul", ["xr", "yr"], ["xrr"]))
         outputs.append(oh.make_tensor_value_info("xrr", onnx.TensorProto.FLOAT, shape=(3, 8)))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 3, 4)))
         graph = oh.make_graph(
@@ -761,7 +754,6 @@ class Reshape2Of3Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -776,8 +768,8 @@ class Reshape2Of3Pattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("shape2", onnx.TensorProto.INT64, shape=(2,)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, 4)))
         inputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 3, 4)))
-        nodes.append(make_node_extended("Mul", ["X", "Y"], ["Z"]))
-        nodes.append(make_node_extended("Reshape", ["Z", "shape2"], ["xrr"]))
+        nodes.append(oh.make_node("Mul", ["X", "Y"], ["Z"]))
+        nodes.append(oh.make_node("Reshape", ["Z", "shape2"], ["xrr"]))
         outputs.append(oh.make_tensor_value_info("xrr", onnx.TensorProto.FLOAT, shape=(3, 8)))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 3, 4)))
         graph = oh.make_graph(
@@ -991,7 +983,6 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1010,7 +1001,7 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
             onh.from_array(np.array([4], dtype=np.int64), name="four"),
         ]
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["sh1"],
@@ -1018,16 +1009,16 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["sh2"],
                 value=onh.from_array(np.array([-1, 8], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "sh1"], ["xc"]))
-        nodes.append(make_node_extended("Reshape", ["Y", "sh2"], ["yc"]))
-        nodes.append(make_node_extended("Add", ["xc", "yc"], ["Z"]))
+        nodes.append(oh.make_node("Reshape", ["X", "sh1"], ["xc"]))
+        nodes.append(oh.make_node("Reshape", ["Y", "sh2"], ["yc"]))
+        nodes.append(oh.make_node("Add", ["xc", "yc"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("b", 8)))
         graph = oh.make_graph(
             nodes,
@@ -1053,7 +1044,6 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1067,8 +1057,8 @@ class ReshapeReshapeBinaryPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 4)))
         inputs.append(oh.make_tensor_value_info("sh1", onnx.TensorProto.INT64, shape=(2,)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 4)))
-        nodes.append(make_node_extended("Add", ["X", "Y"], ["add-X"]))
-        nodes.append(make_node_extended("Reshape", ["add-X", "sh1"], ["Z"]))
+        nodes.append(oh.make_node("Add", ["X", "Y"], ["add-X"]))
+        nodes.append(oh.make_node("Reshape", ["add-X", "sh1"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("b", 8)))
         graph = oh.make_graph(
             nodes,
@@ -1163,7 +1153,6 @@ class ConcatReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1183,7 +1172,7 @@ class ConcatReshapePattern(PatternOptimization):
         nodes.append(oh.make_node("Shape", ["X"], ["D2"], start=2, end=3))
         nodes.append(oh.make_node("Shape", ["X"], ["D1"], start=3, end=4))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["I1"],
@@ -1191,15 +1180,15 @@ class ConcatReshapePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["I2"],
                 value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Concat", ["I1", "I2", "D1", "D2"], ["d"], axis=0))
-        nodes.append(make_node_extended("Reshape", ["X", "d"], ["Y"]))
+        nodes.append(oh.make_node("Concat", ["I1", "I2", "D1", "D2"], ["d"], axis=0))
+        nodes.append(oh.make_node("Reshape", ["X", "d"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "d", "c"))
         )
@@ -1227,7 +1216,6 @@ class ConcatReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1245,7 +1233,7 @@ class ConcatReshapePattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("I2", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_-1"],
@@ -1253,11 +1241,11 @@ class ConcatReshapePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Concat", ["I1", "I2", "D1", "init7_s1_-1"], ["d--concat"], axis=0
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "d--concat"], ["Y"]))
+        nodes.append(oh.make_node("Reshape", ["X", "d--concat"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "d", "c"))
         )
@@ -1397,7 +1385,6 @@ class StaticConcatReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1411,7 +1398,7 @@ class StaticConcatReshapePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("I1", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["I1"],
@@ -1419,8 +1406,8 @@ class StaticConcatReshapePattern(PatternOptimization):
             )
         )
         nodes.append(oh.make_node("Shape", ["X"], ["D2"], start=2, end=3))
-        nodes.append(make_node_extended("Concat", ["I1", "D2"], ["dc"], axis=0))
-        nodes.append(make_node_extended("Reshape", ["X", "dc"], ["Y"]))
+        nodes.append(oh.make_node("Concat", ["I1", "D2"], ["dc"], axis=0))
+        nodes.append(oh.make_node("Reshape", ["X", "dc"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(6, "d")))
         graph = oh.make_graph(
             nodes,
@@ -1446,7 +1433,6 @@ class StaticConcatReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1460,15 +1446,15 @@ class StaticConcatReshapePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("I1", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_-1"],
                 value=onh.from_array(np.array([-1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Concat", ["I1", "init7_s1_-1"], ["d--concat"], axis=0))
-        nodes.append(make_node_extended("Reshape", ["X", "d--concat"], ["Y"]))
+        nodes.append(oh.make_node("Concat", ["I1", "init7_s1_-1"], ["d--concat"], axis=0))
+        nodes.append(oh.make_node("Reshape", ["X", "d--concat"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(6, "d")))
         graph = oh.make_graph(
             nodes,
@@ -1592,7 +1578,6 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1632,7 +1617,6 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1645,14 +1629,14 @@ class ShapeBasedEditDistanceReshapePattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_6_-1"],
                 value=onh.from_array(np.array([6, -1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "init7_s2_6_-1"], ["Y"]))
+        nodes.append(oh.make_node("Reshape", ["X", "init7_s2_6_-1"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(6, "d")))
         graph = oh.make_graph(
             nodes,
@@ -1849,7 +1833,6 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1891,7 +1874,6 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1904,14 +1886,14 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3, "d")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_0_4"],
                 value=onh.from_array(np.array([0, 4], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Unsqueeze", ["X", "init7_s2_0_4"], ["Y"]))
+        nodes.append(oh.make_node("Unsqueeze", ["X", "init7_s2_0_4"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 2, 3, "d", 1))
         )

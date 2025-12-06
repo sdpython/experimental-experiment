@@ -22,7 +22,6 @@ class ConcatGatherPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -36,15 +35,15 @@ class ConcatGatherPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("D1", onnx.TensorProto.INT64, shape=(1,)))
         inputs.append(oh.make_tensor_value_info("D2", onnx.TensorProto.INT64, shape=(1,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["un"],
                 value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Concat", ["D1", "D2"], ["d"], axis=0))
-        nodes.append(make_node_extended("Gather", ["d", "un"], ["Y"]))
+        nodes.append(oh.make_node("Concat", ["D1", "D2"], ["d"], axis=0))
+        nodes.append(oh.make_node("Gather", ["d", "un"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=(1,)))
         graph = oh.make_graph(
             nodes,
@@ -70,7 +69,6 @@ class ConcatGatherPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -82,7 +80,7 @@ class ConcatGatherPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         inputs.append(oh.make_tensor_value_info("D2", onnx.TensorProto.INT64, shape=(1,)))
-        nodes.append(make_node_extended("Identity", ["D2"], ["Y"]))
+        nodes.append(oh.make_node("Identity", ["D2"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=(1,)))
         graph = oh.make_graph(
             nodes,
@@ -163,7 +161,6 @@ class ConcatEmptyPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -177,14 +174,14 @@ class ConcatEmptyPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=("b",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.INT64, shape=("a",)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["I"],
                 value=onh.from_array(np.array([], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Concat", ["X", "Y", "I"], ["Z"], axis=0))
+        nodes.append(oh.make_node("Concat", ["X", "Y", "I"], ["Z"], axis=0))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.INT64, shape=("c",)))
         graph = oh.make_graph(
             nodes,
@@ -210,7 +207,6 @@ class ConcatEmptyPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -223,7 +219,7 @@ class ConcatEmptyPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.INT64, shape=("b",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.INT64, shape=("a",)))
-        nodes.append(make_node_extended("Concat", ["X", "Y"], ["Z"], axis=0))
+        nodes.append(oh.make_node("Concat", ["X", "Y"], ["Z"], axis=0))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.INT64, shape=("c",)))
         graph = oh.make_graph(
             nodes,
@@ -305,7 +301,6 @@ class ConcatTwiceUnaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -317,8 +312,8 @@ class ConcatTwiceUnaryPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("b", "c")))
-        nodes.append(make_node_extended("Concat", ["X", "X"], ["xx"], axis=0))
-        nodes.append(make_node_extended("Sin", ["xx"], ["xsin"]))
+        nodes.append(oh.make_node("Concat", ["X", "X"], ["xx"], axis=0))
+        nodes.append(oh.make_node("Sin", ["xx"], ["xsin"]))
         outputs.append(
             oh.make_tensor_value_info("xsin", onnx.TensorProto.FLOAT, shape=("2*b", "c"))
         )
@@ -346,7 +341,6 @@ class ConcatTwiceUnaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -358,8 +352,8 @@ class ConcatTwiceUnaryPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("b", "c")))
-        nodes.append(make_node_extended("Sin", ["X"], ["uxsin"]))
-        nodes.append(make_node_extended("Concat", ["uxsin", "uxsin"], ["xsin"], axis=0))
+        nodes.append(oh.make_node("Sin", ["X"], ["uxsin"]))
+        nodes.append(oh.make_node("Concat", ["uxsin", "uxsin"], ["xsin"], axis=0))
         outputs.append(
             oh.make_tensor_value_info("xsin", onnx.TensorProto.FLOAT, shape=("2*b", "c"))
         )

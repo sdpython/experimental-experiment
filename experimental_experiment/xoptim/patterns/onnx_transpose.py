@@ -22,7 +22,6 @@ class TransposeTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -36,8 +35,8 @@ class TransposeTransposePattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("xs", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
         )
-        nodes.append(make_node_extended("Transpose", ["xs"], ["r1"], perm=[1, 0, 3, 2]))
-        nodes.append(make_node_extended("Transpose", ["r1"], ["xm1"], perm=[0, 1, 3, 2]))
+        nodes.append(oh.make_node("Transpose", ["xs"], ["r1"], perm=[1, 0, 3, 2]))
+        nodes.append(oh.make_node("Transpose", ["r1"], ["xm1"], perm=[0, 1, 3, 2]))
         outputs.append(
             oh.make_tensor_value_info("xm1", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
         )
@@ -65,7 +64,6 @@ class TransposeTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -79,7 +77,7 @@ class TransposeTransposePattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("xs", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
         )
-        nodes.append(make_node_extended("Transpose", ["xs"], ["xm1"], perm=[1, 0, 2, 3]))
+        nodes.append(oh.make_node("Transpose", ["xs"], ["xm1"], perm=[1, 0, 2, 3]))
         outputs.append(
             oh.make_tensor_value_info("xm1", onnx.TensorProto.FLOAT, shape=(1, 1, 32, 128))
         )
@@ -215,7 +213,6 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -235,7 +232,7 @@ class TransposeReshapeTransposePattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(32, 256, 28, 26))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape"],
@@ -244,9 +241,9 @@ class TransposeReshapeTransposePattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("Transpose", ["X"], ["xt"], perm=[0, 2, 3, 1]))
-        nodes.append(make_node_extended("Reshape", ["xt", "shape"], ["xts"]))
-        nodes.append(make_node_extended("Transpose", ["xts"], ["Y"], perm=[0, 1, 3, 2, 4, 5]))
+        nodes.append(oh.make_node("Transpose", ["X"], ["xt"], perm=[0, 2, 3, 1]))
+        nodes.append(oh.make_node("Reshape", ["xt", "shape"], ["xts"]))
+        nodes.append(oh.make_node("Transpose", ["xts"], ["Y"], perm=[0, 1, 3, 2, 4, 5]))
         outputs.append(
             oh.make_tensor_value_info(
                 "xts", onnx.TensorProto.FLOAT, shape=(32, 2, 14, 2, 13, 256)
@@ -281,7 +278,6 @@ class TransposeReshapeTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -301,7 +297,7 @@ class TransposeReshapeTransposePattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(32, 256, 28, 26))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s6_"],
@@ -311,19 +307,19 @@ class TransposeReshapeTransposePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape", ["X", "init7_s6_"], ["TransposeReshapeTransposePattern_xt"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose",
                 ["TransposeReshapeTransposePattern_xt"],
                 ["xts"],
                 perm=[0, 2, 3, 4, 5, 1],
             )
         )
-        nodes.append(make_node_extended("Transpose", ["xts"], ["Y"], perm=[0, 1, 3, 2, 4, 5]))
+        nodes.append(oh.make_node("Transpose", ["xts"], ["Y"], perm=[0, 1, 3, 2, 4, 5]))
         outputs.append(
             oh.make_tensor_value_info(
                 "xts", onnx.TensorProto.FLOAT, shape=(32, 2, 14, 2, 13, 256)
@@ -549,7 +545,6 @@ class TransposeEqualReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -563,7 +558,7 @@ class TransposeEqualReshapePattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(3, 2, 1, 5))
         )
-        nodes.append(make_node_extended("Transpose", ["X"], ["Y"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Transpose", ["X"], ["Y"], perm=[0, 2, 1, 3]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
@@ -591,7 +586,6 @@ class TransposeEqualReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -606,14 +600,14 @@ class TransposeEqualReshapePattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(3, 2, 1, 5))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s4_0_1_-1_0"],
                 value=onh.from_array(np.array([0, 1, -1, 0], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "init7_s4_0_1_-1_0"], ["Y"]))
+        nodes.append(oh.make_node("Reshape", ["X", "init7_s4_0_1_-1_0"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
@@ -710,7 +704,6 @@ class TransposeGatherPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -726,15 +719,15 @@ class TransposeGatherPattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("ind", onnx.TensorProto.INT64, shape=[]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["ind"],
                 value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Transpose", ["X"], ["xt"], perm=[1, 0, 2, 3]))
-        nodes.append(make_node_extended("Gather", ["xt", "ind"], ["Y"], axis=0))
+        nodes.append(oh.make_node("Transpose", ["X"], ["xt"], perm=[1, 0, 2, 3]))
+        nodes.append(oh.make_node("Gather", ["xt", "ind"], ["Y"], axis=0))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 16, 80))
         )
@@ -762,7 +755,6 @@ class TransposeGatherPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -777,7 +769,7 @@ class TransposeGatherPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", 16, 80))
         )
         inputs.append(oh.make_tensor_value_info("ind", onnx.TensorProto.INT64, shape=[]))
-        nodes.append(make_node_extended("Gather", ["X", "ind"], ["Y"], axis=1))
+        nodes.append(oh.make_node("Gather", ["X", "ind"], ["Y"], axis=1))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 16, 80))
         )

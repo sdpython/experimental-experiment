@@ -20,7 +20,6 @@ class ReduceSumNormalizePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -37,18 +36,18 @@ class ReduceSumNormalizePattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=[]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["axis"],
                 value=onh.from_array(np.array(-1, dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Cast", ["X"], ["xc"], to=1))
-        nodes.append(make_node_extended("ReduceSum", ["xc", "axis"], ["red"], keepdims=1))
-        nodes.append(make_node_extended("Mul", ["red", "Y"], ["mul"]))
-        nodes.append(make_node_extended("Sub", ["xc", "mul"], ["subc"]))
-        nodes.append(make_node_extended("Cast", ["subc"], ["Z"], to=10))
+        nodes.append(oh.make_node("Cast", ["X"], ["xc"], to=1))
+        nodes.append(oh.make_node("ReduceSum", ["xc", "axis"], ["red"], keepdims=1))
+        nodes.append(oh.make_node("Mul", ["red", "Y"], ["mul"]))
+        nodes.append(oh.make_node("Sub", ["xc", "mul"], ["subc"]))
+        nodes.append(oh.make_node("Cast", ["subc"], ["Z"], to=10))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", "b"))
         )
@@ -76,7 +75,6 @@ class ReduceSumNormalizePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -93,19 +91,19 @@ class ReduceSumNormalizePattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("axis", onnx.TensorProto.INT64, shape=[]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ReduceSum", ["X", "axis"], ["ReduceSumNormalizePattern_red"], keepdims=1
             )
         )
-        nodes.append(make_node_extended("Cast", ["Y"], ["ReduceSumNormalizePattern_Y"], to=10))
+        nodes.append(oh.make_node("Cast", ["Y"], ["ReduceSumNormalizePattern_Y"], to=10))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Mul",
                 ["ReduceSumNormalizePattern_red", "ReduceSumNormalizePattern_Y"],
                 ["ReduceSumNormalizePattern_mul"],
             )
         )
-        nodes.append(make_node_extended("Sub", ["X", "ReduceSumNormalizePattern_mul"], ["Z"]))
+        nodes.append(oh.make_node("Sub", ["X", "ReduceSumNormalizePattern_mul"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", "b"))
         )

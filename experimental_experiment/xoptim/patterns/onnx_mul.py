@@ -23,7 +23,6 @@ class MulMulMulScalarPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -37,7 +36,7 @@ class MulMulMulScalarPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["cst1"],
@@ -45,16 +44,16 @@ class MulMulMulScalarPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["cst2"],
                 value=onh.from_array(np.array([3.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Mul", ["xc", "yc"], ["Z"]))
-        nodes.append(make_node_extended("Div", ["X", "cst1"], ["xc"]))
-        nodes.append(make_node_extended("Div", ["Y", "cst2"], ["yc"]))
+        nodes.append(oh.make_node("Mul", ["xc", "yc"], ["Z"]))
+        nodes.append(oh.make_node("Div", ["X", "cst1"], ["xc"]))
+        nodes.append(oh.make_node("Div", ["Y", "cst2"], ["yc"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(
             nodes,
@@ -80,7 +79,6 @@ class MulMulMulScalarPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -94,16 +92,16 @@ class MulMulMulScalarPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s1_"],
                 value=onh.from_array(np.array([6.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Mul", ["X", "Y"], ["MulMulMulScalarPattern--Z"]))
+        nodes.append(oh.make_node("Mul", ["X", "Y"], ["MulMulMulScalarPattern--Z"]))
         nodes.append(
-            make_node_extended("Div", ["MulMulMulScalarPattern--Z", "init1_s1_"], ["Z"])
+            oh.make_node("Div", ["MulMulMulScalarPattern--Z", "init1_s1_"], ["Z"])
         )
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(
@@ -221,7 +219,6 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -241,8 +238,8 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", 1, 3, 4))
         )
-        nodes.append(make_node_extended("Add", ["Z", "xy"], ["F"]))
-        nodes.append(make_node_extended("Add", ["X", "Y"], ["xy"]))
+        nodes.append(oh.make_node("Add", ["Z", "xy"], ["F"]))
+        nodes.append(oh.make_node("Add", ["X", "Y"], ["xy"]))
         outputs.append(
             oh.make_tensor_value_info("F", onnx.TensorProto.FLOAT, shape=("a", 2, 3, 4))
         )
@@ -270,7 +267,6 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -290,8 +286,8 @@ class SwitchOrderBinaryPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", 1, 3, 4))
         )
-        nodes.append(make_node_extended("Add", ["Y", "Z"], ["add-Y"]))
-        nodes.append(make_node_extended("Add", ["add-Y", "X"], ["F"]))
+        nodes.append(oh.make_node("Add", ["Y", "Z"], ["add-Y"]))
+        nodes.append(oh.make_node("Add", ["add-Y", "X"], ["F"]))
         outputs.append(
             oh.make_tensor_value_info("F", onnx.TensorProto.FLOAT, shape=("a", 2, 3, 4))
         )

@@ -21,7 +21,6 @@ class SequenceConstructAtPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -35,7 +34,7 @@ class SequenceConstructAtPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=("c", "d")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["i0"],
@@ -43,16 +42,16 @@ class SequenceConstructAtPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["i1"],
                 value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("SequenceConstruct", ["X1", "X2"], ["seq"]))
-        nodes.append(make_node_extended("SequenceAt", ["seq", "i0"], ["Y1"]))
-        nodes.append(make_node_extended("SequenceAt", ["seq", "i1"], ["Y2"]))
+        nodes.append(oh.make_node("SequenceConstruct", ["X1", "X2"], ["seq"]))
+        nodes.append(oh.make_node("SequenceAt", ["seq", "i0"], ["Y1"]))
+        nodes.append(oh.make_node("SequenceAt", ["seq", "i1"], ["Y2"]))
         outputs.append(
             oh.make_tensor_value_info("Y1", onnx.TensorProto.FLOAT, shape=("a", "b"))
         )
@@ -83,7 +82,6 @@ class SequenceConstructAtPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -96,8 +94,8 @@ class SequenceConstructAtPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=("a", "b")))
         inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=("c", "d")))
-        nodes.append(make_node_extended("Identity", ["X1"], ["Y1"]))
-        nodes.append(make_node_extended("Identity", ["X2"], ["Y2"]))
+        nodes.append(oh.make_node("Identity", ["X1"], ["Y1"]))
+        nodes.append(oh.make_node("Identity", ["X2"], ["Y2"]))
         outputs.append(
             oh.make_tensor_value_info("Y1", onnx.TensorProto.FLOAT, shape=("a", "b"))
         )

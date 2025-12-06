@@ -21,7 +21,6 @@ class CastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -37,7 +36,7 @@ class CastPattern(PatternOptimization):
                 "_onx_mul045", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384)
             )
         )
-        nodes.append(make_node_extended("Cast", ["_onx_mul045"], ["mul_34"], to=10))
+        nodes.append(oh.make_node("Cast", ["_onx_mul045"], ["mul_34"], to=10))
         outputs.append(
             oh.make_tensor_value_info("mul_34", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384))
         )
@@ -65,7 +64,6 @@ class CastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -81,7 +79,7 @@ class CastPattern(PatternOptimization):
                 "_onx_mul045", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384)
             )
         )
-        nodes.append(make_node_extended("Identity", ["_onx_mul045"], ["mul_34"]))
+        nodes.append(oh.make_node("Identity", ["_onx_mul045"], ["mul_34"]))
         outputs.append(
             oh.make_tensor_value_info("mul_34", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384))
         )
@@ -155,7 +153,6 @@ class CastCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -169,8 +166,8 @@ class CastCastPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT16, shape=("b", "c"))
         )
-        nodes.append(make_node_extended("Cast", ["x1"], ["x2"], to=1))
-        nodes.append(make_node_extended("Cast", ["x2"], ["Y"], to=1))
+        nodes.append(oh.make_node("Cast", ["x1"], ["x2"], to=1))
+        nodes.append(oh.make_node("Cast", ["x2"], ["Y"], to=1))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("b", "c")))
         graph = oh.make_graph(
             nodes,
@@ -196,7 +193,6 @@ class CastCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -210,7 +206,7 @@ class CastCastPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT16, shape=("b", "c"))
         )
-        nodes.append(make_node_extended("Cast", ["x1"], ["Y"], to=1))
+        nodes.append(oh.make_node("Cast", ["x1"], ["Y"], to=1))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("b", "c")))
         graph = oh.make_graph(
             nodes,
@@ -318,7 +314,6 @@ class CastCastBinaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -331,9 +326,9 @@ class CastCastBinaryPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 4)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 4)))
-        nodes.append(make_node_extended("Cast", ["X"], ["xc"], to=10))
-        nodes.append(make_node_extended("Cast", ["Y"], ["yc"], to=10))
-        nodes.append(make_node_extended("Add", ["xc", "yc"], ["Z"]))
+        nodes.append(oh.make_node("Cast", ["X"], ["xc"], to=10))
+        nodes.append(oh.make_node("Cast", ["Y"], ["yc"], to=10))
+        nodes.append(oh.make_node("Add", ["xc", "yc"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", 4)))
         graph = oh.make_graph(
             nodes,
@@ -359,7 +354,6 @@ class CastCastBinaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -372,8 +366,8 @@ class CastCastBinaryPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 4)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 4)))
-        nodes.append(make_node_extended("Add", ["X", "Y"], ["add-X"]))
-        nodes.append(make_node_extended("Cast", ["add-X"], ["Z"], to=10))
+        nodes.append(oh.make_node("Add", ["X", "Y"], ["add-X"]))
+        nodes.append(oh.make_node("Cast", ["add-X"], ["Z"], to=10))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", 4)))
         graph = oh.make_graph(
             nodes,
@@ -483,7 +477,6 @@ class CastOpCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -498,9 +491,9 @@ class CastOpCastPattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=("a", "b"))
         )
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
-        nodes.append(make_node_extended("Cast", ["Y"], ["yc"], to=1))
-        nodes.append(make_node_extended("Add", ["X", "yc"], ["zc"]))
-        nodes.append(make_node_extended("Cast", ["zc"], ["Z"], to=10))
+        nodes.append(oh.make_node("Cast", ["Y"], ["yc"], to=1))
+        nodes.append(oh.make_node("Add", ["X", "yc"], ["zc"]))
+        nodes.append(oh.make_node("Cast", ["zc"], ["Z"], to=10))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", "b"))
         )
@@ -528,7 +521,6 @@ class CastOpCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -543,8 +535,8 @@ class CastOpCastPattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=("a", "b"))
         )
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
-        nodes.append(make_node_extended("Cast", ["X"], ["CastOpCastPattern--zc"], to=10))
-        nodes.append(make_node_extended("Add", ["CastOpCastPattern--zc", "Y"], ["Z"]))
+        nodes.append(oh.make_node("Cast", ["X"], ["CastOpCastPattern--zc"], to=10))
+        nodes.append(oh.make_node("Add", ["CastOpCastPattern--zc", "Y"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT16, shape=("a", "b"))
         )
@@ -738,7 +730,6 @@ class ComputationCastOpCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -753,8 +744,8 @@ class ComputationCastOpCastPattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT16, shape=("a", "b"))
         )
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
-        nodes.append(make_node_extended("Cast", ["Y"], ["yc"], to=1))
-        nodes.append(make_node_extended("Add", ["X", "yc"], ["Z"]))
+        nodes.append(oh.make_node("Cast", ["Y"], ["yc"], to=1))
+        nodes.append(oh.make_node("Add", ["X", "yc"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(
             nodes,
@@ -780,7 +771,6 @@ class ComputationCastOpCastPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -796,17 +786,17 @@ class ComputationCastOpCastPattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b")))
         nodes.append(
-            make_node_extended("Cast", ["X"], ["ComputationCastOpCastPattern--X"], to=10)
+            oh.make_node("Cast", ["X"], ["ComputationCastOpCastPattern--X"], to=10)
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Add",
                 ["ComputationCastOpCastPattern--X", "Y"],
                 ["ComputationCastOpCastPattern--Z"],
             )
         )
         nodes.append(
-            make_node_extended("Cast", ["ComputationCastOpCastPattern--Z"], ["Z"], to=1)
+            oh.make_node("Cast", ["ComputationCastOpCastPattern--Z"], ["Z"], to=1)
         )
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(

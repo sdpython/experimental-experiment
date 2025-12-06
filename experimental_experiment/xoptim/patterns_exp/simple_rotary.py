@@ -21,7 +21,6 @@ class SimpleRotaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -40,16 +39,16 @@ class SimpleRotaryPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["splits"],
                 value=onh.from_array(np.array([4, 4], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Split", ["X", "splits"], ["s1", "s2"], axis=-1))
-        nodes.append(make_node_extended("Neg", ["s2"], ["ns2"]))
-        nodes.append(make_node_extended("Concat", ["ns2", "s1"], ["Y"], axis=-1))
+        nodes.append(oh.make_node("Split", ["X", "splits"], ["s1", "s2"], axis=-1))
+        nodes.append(oh.make_node("Neg", ["s2"], ["ns2"]))
+        nodes.append(oh.make_node("Concat", ["ns2", "s1"], ["Y"], axis=-1))
         outputs.append(
             oh.make_tensor_value_info(
                 "Y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM2", "UNKNOWNDIM3")
@@ -79,7 +78,6 @@ class SimpleRotaryPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -98,7 +96,7 @@ class SimpleRotaryPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Rotary",
                 ["X", "splits"],
                 ["Y"],

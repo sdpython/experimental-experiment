@@ -20,7 +20,6 @@ class DropoutPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -37,7 +36,7 @@ class DropoutPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init10_s_3"],
@@ -45,7 +44,7 @@ class DropoutPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init9_s_"],
@@ -53,7 +52,7 @@ class DropoutPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Dropout", ["_onx_add02", "init10_s_3", "init9_s_"], ["dropout", ""]
             )
         )
@@ -84,7 +83,6 @@ class DropoutPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -100,7 +98,7 @@ class DropoutPattern(PatternOptimization):
                 "_onx_add02", onnx.TensorProto.FLOAT16, shape=(4, 512, 128)
             )
         )
-        nodes.append(make_node_extended("Identity", ["_onx_add02"], ["dropout"]))
+        nodes.append(oh.make_node("Identity", ["_onx_add02"], ["dropout"]))
         outputs.append(
             oh.make_tensor_value_info("dropout", onnx.TensorProto.FLOAT16, shape=(4, 512, 128))
         )

@@ -23,7 +23,6 @@ class TriMatrixPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -37,7 +36,7 @@ class TriMatrixPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(2,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -45,7 +44,7 @@ class TriMatrixPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["dim"],
@@ -53,7 +52,7 @@ class TriMatrixPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["onei"],
@@ -61,7 +60,7 @@ class TriMatrixPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
@@ -69,7 +68,7 @@ class TriMatrixPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape1"],
@@ -77,7 +76,7 @@ class TriMatrixPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zerof"],
@@ -85,20 +84,20 @@ class TriMatrixPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape"],
                 value=onh.from_array(np.array([1024, 1024], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Range", ["zero", "dim", "onei"], ["ar"]))
-        nodes.append(make_node_extended("Add", ["ar", "one"], ["ad"]))
-        nodes.append(make_node_extended("Reshape", ["ad", "shape1"], ["re"]))
-        nodes.append(make_node_extended("Less", ["ar", "re"], ["le"]))
-        nodes.append(make_node_extended("Where", ["le", "zerof", "cst"], ["Y"]))
+        nodes.append(oh.make_node("Range", ["zero", "dim", "onei"], ["ar"]))
+        nodes.append(oh.make_node("Add", ["ar", "one"], ["ad"]))
+        nodes.append(oh.make_node("Reshape", ["ad", "shape1"], ["re"]))
+        nodes.append(oh.make_node("Less", ["ar", "re"], ["le"]))
+        nodes.append(oh.make_node("Where", ["le", "zerof", "cst"], ["Y"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "ConstantOfShape",
                 ["shape"],
                 ["cst"],
@@ -136,7 +135,6 @@ class TriMatrixPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -150,7 +148,7 @@ class TriMatrixPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("shape", onnx.TensorProto.INT64, shape=(2,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["TriMatrixPattern--"],
@@ -160,7 +158,7 @@ class TriMatrixPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "TriMatrix",
                 ["shape", "TriMatrixPattern--"],
                 ["Y"],

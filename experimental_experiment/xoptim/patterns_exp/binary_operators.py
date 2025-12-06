@@ -70,7 +70,6 @@ class AddAddMulMulPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -86,8 +85,8 @@ class AddAddMulMulPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
-        nodes.append(make_node_extended("Add", ["X", "Y"], ["xy"]))
-        nodes.append(make_node_extended("Add", ["xy", "Z"], ["F"]))
+        nodes.append(oh.make_node("Add", ["X", "Y"], ["xy"]))
+        nodes.append(oh.make_node("Add", ["xy", "Z"], ["F"]))
         outputs.append(oh.make_tensor_value_info("F", onnx.TensorProto.FLOAT, shape=("d",)))
         graph = oh.make_graph(
             nodes,
@@ -113,7 +112,6 @@ class AddAddMulMulPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -130,7 +128,7 @@ class AddAddMulMulPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "AddAdd", ["X", "Y", "Z"], ["F"], domain="onnx_extended.ortops.optim.cuda"
             )
         )
@@ -251,7 +249,6 @@ class AddMulPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -267,8 +264,8 @@ class AddMulPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
-        nodes.append(make_node_extended("Add", ["X", "Y"], ["xy"]))
-        nodes.append(make_node_extended("Mul", ["xy", "Z"], ["F"]))
+        nodes.append(oh.make_node("Add", ["X", "Y"], ["xy"]))
+        nodes.append(oh.make_node("Mul", ["xy", "Z"], ["F"]))
         outputs.append(oh.make_tensor_value_info("F", onnx.TensorProto.FLOAT, shape=("d",)))
         graph = oh.make_graph(
             nodes,
@@ -294,7 +291,6 @@ class AddMulPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -311,7 +307,7 @@ class AddMulPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "AddMul", ["X", "Y", "Z"], ["F"], domain="onnx_extended.ortops.optim.cuda"
             )
         )
@@ -430,7 +426,6 @@ class MulSigmoidPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -447,8 +442,8 @@ class MulSigmoidPattern(PatternOptimization):
                 "X", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM", "UNKNOWNDIM1")
             )
         )
-        nodes.append(make_node_extended("Sigmoid", ["X"], ["xs"]))
-        nodes.append(make_node_extended("Mul", ["X", "xs"], ["Y"]))
+        nodes.append(oh.make_node("Sigmoid", ["X"], ["xs"]))
+        nodes.append(oh.make_node("Mul", ["X", "xs"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info(
                 "Y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM2", "UNKNOWNDIM3")
@@ -478,7 +473,6 @@ class MulSigmoidPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -496,7 +490,7 @@ class MulSigmoidPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "MulSigmoid", ["X"], ["Y"], domain="onnx_extended.ortops.optim.cuda"
             )
         )
@@ -577,7 +571,6 @@ class NegXplus1Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -595,14 +588,14 @@ class NegXplus1Pattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
                 value=onh.from_array(np.array([1.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Sub", ["one", "X"], ["Y"]))
+        nodes.append(oh.make_node("Sub", ["one", "X"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info(
                 "Y", onnx.TensorProto.FLOAT, shape=("UNKNOWNDIM2", "UNKNOWNDIM3")
@@ -632,7 +625,6 @@ class NegXplus1Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -650,7 +642,7 @@ class NegXplus1Pattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "NegXplus1", ["X"], ["Y"], domain="onnx_extended.ortops.optim.cuda"
             )
         )
@@ -729,7 +721,6 @@ class SubMulPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -745,8 +736,8 @@ class SubMulPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
-        nodes.append(make_node_extended("Sub", ["X", "Y"], ["xy"]))
-        nodes.append(make_node_extended("Mul", ["xy", "Z"], ["F"]))
+        nodes.append(oh.make_node("Sub", ["X", "Y"], ["xy"]))
+        nodes.append(oh.make_node("Mul", ["xy", "Z"], ["F"]))
         outputs.append(oh.make_tensor_value_info("F", onnx.TensorProto.FLOAT, shape=("d",)))
         graph = oh.make_graph(
             nodes,
@@ -772,7 +763,6 @@ class SubMulPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -789,7 +779,7 @@ class SubMulPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "SubMul", ["X", "Y", "Z"], ["F"], domain="onnx_extended.ortops.optim.cuda"
             )
         )
@@ -916,7 +906,6 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -932,8 +921,8 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
-        nodes.append(make_node_extended("Add", ["X", "Y"], ["F1"]))
-        nodes.append(make_node_extended("Add", ["X", "Z"], ["F2"]))
+        nodes.append(oh.make_node("Add", ["X", "Y"], ["F1"]))
+        nodes.append(oh.make_node("Add", ["X", "Z"], ["F2"]))
         outputs.append(oh.make_tensor_value_info("F1", onnx.TensorProto.FLOAT, shape=("d",)))
         outputs.append(oh.make_tensor_value_info("F2", onnx.TensorProto.FLOAT, shape=("d",)))
         graph = oh.make_graph(
@@ -960,7 +949,6 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -977,7 +965,7 @@ class AddMulSharedInputPattern(PatternOptimization, _common):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("d",)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("d",)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "AddSharedInput",
                 ["X", "Y", "Z"],
                 ["F1", "F2"],
@@ -1126,7 +1114,6 @@ class AddMulTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1148,11 +1135,11 @@ class AddMulTransposePattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "AddMul", ["X", "Y", "Z"], ["F1"], domain="onnx_extended.ortops.optim.cuda"
             )
         )
-        nodes.append(make_node_extended("Transpose", ["F1"], ["final"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Transpose", ["F1"], ["final"], perm=[0, 2, 1, 3]))
         outputs.append(
             oh.make_tensor_value_info(
                 "final", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d")
@@ -1182,7 +1169,6 @@ class AddMulTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1204,7 +1190,7 @@ class AddMulTransposePattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "AddMul",
                 ["X", "Y", "Z"],
                 ["final"],

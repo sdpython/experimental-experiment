@@ -19,7 +19,6 @@ class ConstantToInitializerPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -31,7 +30,7 @@ class ConstantToInitializerPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["cst"],
@@ -63,7 +62,6 @@ class ConstantToInitializerPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -75,14 +73,14 @@ class ConstantToInitializerPattern(PatternOptimization):
         sparse_initializers = []
         functions = []
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["cst_cst2init"],
                 value=onh.from_array(np.array([1.0, 2.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Identity", ["cst_cst2init"], ["cst"]))
+        nodes.append(oh.make_node("Identity", ["cst_cst2init"], ["cst"]))
         outputs.append(oh.make_tensor_value_info("cst", onnx.TensorProto.FLOAT, shape=(2,)))
         graph = oh.make_graph(
             nodes,

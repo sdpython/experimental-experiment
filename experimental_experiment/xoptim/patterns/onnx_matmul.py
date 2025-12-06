@@ -28,7 +28,6 @@ class MatMulAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -46,8 +45,8 @@ class MatMulAddPattern(PatternOptimization):
             oh.make_tensor_value_info("X1", onnx.TensorProto.FLOAT, shape=("a", "b", 3))
         )
         inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=(3, "d")))
-        nodes.append(make_node_extended("MatMul", ["X1", "X2"], ["Y"]))
-        nodes.append(make_node_extended("Add", ["Y", "B"], ["Z"]))
+        nodes.append(oh.make_node("MatMul", ["X1", "X2"], ["Y"]))
+        nodes.append(oh.make_node("Add", ["Y", "B"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b", "d"))
         )
@@ -75,7 +74,6 @@ class MatMulAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -94,7 +92,7 @@ class MatMulAddPattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("X2", onnx.TensorProto.FLOAT, shape=(3, "d")))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_-1_3"],
@@ -102,7 +100,7 @@ class MatMulAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_-1"],
@@ -110,11 +108,11 @@ class MatMulAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended("Reshape", ["X1", "init7_s2_-1_3"], ["MatMulAddPattern--X1"])
+            oh.make_node("Reshape", ["X1", "init7_s2_-1_3"], ["MatMulAddPattern--X1"])
         )
-        nodes.append(make_node_extended("Shape", ["B"], ["MatMulAddPattern--X12"], start=-1))
+        nodes.append(oh.make_node("Shape", ["B"], ["MatMulAddPattern--X12"], start=-1))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Concat",
                 ["init7_s1_-1", "MatMulAddPattern--X12"],
                 ["MatMulAddPattern--X13"],
@@ -122,15 +120,15 @@ class MatMulAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape", ["B", "MatMulAddPattern--X13"], ["MatMulAddPattern--X14"]
             )
         )
         nodes.append(
-            make_node_extended("Shape", ["X1"], ["MatMulAddPattern--X16"], end=-1, start=0)
+            oh.make_node("Shape", ["X1"], ["MatMulAddPattern--X16"], end=-1, start=0)
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Concat",
                 ["MatMulAddPattern--X16", "init7_s1_-1"],
                 ["MatMulAddPattern--X17"],
@@ -138,14 +136,14 @@ class MatMulAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Gemm",
                 ["MatMulAddPattern--X1", "X2", "MatMulAddPattern--X14"],
                 ["MatMulAddPattern--X15"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape", ["MatMulAddPattern--X15", "MatMulAddPattern--X17"], ["Z"]
             )
         )
@@ -432,7 +430,6 @@ class GemmTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -446,7 +443,7 @@ class GemmTransposePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(3, 2)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["B"],
@@ -463,7 +460,7 @@ class GemmTransposePattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("Gemm", ["X", "B"], ["Z"]))
+        nodes.append(oh.make_node("Gemm", ["X", "B"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2)))
         graph = oh.make_graph(
             nodes,
@@ -489,7 +486,6 @@ class GemmTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -503,10 +499,10 @@ class GemmTransposePattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(3, 2)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 3)))
         nodes.append(
-            make_node_extended("Transpose", ["B"], ["GemmTransposePattern--B"], perm=[1, 0])
+            oh.make_node("Transpose", ["B"], ["GemmTransposePattern--B"], perm=[1, 0])
         )
         nodes.append(
-            make_node_extended("Gemm", ["X", "GemmTransposePattern--B"], ["Z"], transB=1)
+            oh.make_node("Gemm", ["X", "GemmTransposePattern--B"], ["Z"], transB=1)
         )
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2)))
         graph = oh.make_graph(
@@ -585,7 +581,6 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -606,7 +601,7 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             oh.make_tensor_value_info("init7_s4_13_4_7_8", onnx.TensorProto.INT64, shape=(4,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s3_52_7_7"],
@@ -614,17 +609,17 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s4_13_4_7_8"],
                 value=onh.from_array(np.array([13, 4, 7, 8], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["div_5", "init7_s3_52_7_7"], ["view_83"]))
-        nodes.append(make_node_extended("MatMul", ["view_83", "transpose_23"], ["bmm_11"]))
+        nodes.append(oh.make_node("Reshape", ["div_5", "init7_s3_52_7_7"], ["view_83"]))
+        nodes.append(oh.make_node("MatMul", ["view_83", "transpose_23"], ["bmm_11"]))
         nodes.append(
-            make_node_extended("Reshape", ["bmm_11", "init7_s4_13_4_7_8"], ["view_85"])
+            oh.make_node("Reshape", ["bmm_11", "init7_s4_13_4_7_8"], ["view_85"])
         )
         outputs.append(
             oh.make_tensor_value_info("view_85", onnx.TensorProto.FLOAT, shape=(13, 4, 7, 8))
@@ -653,7 +648,6 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -674,14 +668,14 @@ class MatMulReshape2Of3Pattern(PatternOptimization):
             oh.make_tensor_value_info("init7_s4_13_4_7_8", onnx.TensorProto.INT64, shape=(4,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape",
                 ["transpose_23", "init7_s4_13_4_7_8"],
                 ["MatMulReshape2Of3PatternL_view_83"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "MatMul", ["div_5", "MatMulReshape2Of3PatternL_view_83"], ["view_85"]
             )
         )
@@ -1067,7 +1061,6 @@ class MulMulMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1081,7 +1074,7 @@ class MulMulMatMulPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(16, 64)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(32, 16)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["c"],
@@ -1091,7 +1084,7 @@ class MulMulMatMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["d"],
@@ -1100,9 +1093,9 @@ class MulMulMatMulPattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("Mul", ["X", "c"], ["a"]))
-        nodes.append(make_node_extended("Mul", ["d", "Y"], ["b"]))
-        nodes.append(make_node_extended("MatMul", ["a", "b"], ["z"]))
+        nodes.append(oh.make_node("Mul", ["X", "c"], ["a"]))
+        nodes.append(oh.make_node("Mul", ["d", "Y"], ["b"]))
+        nodes.append(oh.make_node("MatMul", ["a", "b"], ["z"]))
         outputs.append(oh.make_tensor_value_info("z", onnx.TensorProto.FLOAT, shape=(32, 64)))
         graph = oh.make_graph(
             nodes,
@@ -1128,7 +1121,6 @@ class MulMulMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1142,7 +1134,7 @@ class MulMulMatMulPattern(PatternOptimization):
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(16, 64)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(32, 16)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s1_"],
@@ -1151,8 +1143,8 @@ class MulMulMatMulPattern(PatternOptimization):
                 ),
             )
         )
-        nodes.append(make_node_extended("MatMul", ["X", "Y"], ["MulMulMatMulPattern_z"]))
-        nodes.append(make_node_extended("Mul", ["MulMulMatMulPattern_z", "init1_s1_"], ["z"]))
+        nodes.append(oh.make_node("MatMul", ["X", "Y"], ["MulMulMatMulPattern_z"]))
+        nodes.append(oh.make_node("Mul", ["MulMulMatMulPattern_z", "init1_s1_"], ["z"]))
         outputs.append(oh.make_tensor_value_info("z", onnx.TensorProto.FLOAT, shape=(32, 64)))
         graph = oh.make_graph(
             nodes,
@@ -1237,7 +1229,6 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1255,7 +1246,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(3, 5, 128, 64))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape1"],
@@ -1263,7 +1254,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape2"],
@@ -1271,17 +1262,17 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape3"],
                 value=onh.from_array(np.array([3, 5, 32, 64], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["xu2", "shape1"], ["xm1"]))
-        nodes.append(make_node_extended("Reshape", ["Y", "shape2"], ["xm2c"]))
-        nodes.append(make_node_extended("MatMul", ["xm1", "xm2c"], ["xm"]))
-        nodes.append(make_node_extended("Reshape", ["xm", "shape3"], ["Z"]))
+        nodes.append(oh.make_node("Reshape", ["xu2", "shape1"], ["xm1"]))
+        nodes.append(oh.make_node("Reshape", ["Y", "shape2"], ["xm2c"]))
+        nodes.append(oh.make_node("MatMul", ["xm1", "xm2c"], ["xm"]))
+        nodes.append(oh.make_node("Reshape", ["xm", "shape3"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(3, 5, 32, 64))
         )
@@ -1309,7 +1300,6 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1326,7 +1316,7 @@ class ReshapeMatMulReshapePattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(3, 5, 128, 64))
         )
-        nodes.append(make_node_extended("MatMul", ["xu2", "Y"], ["Z"]))
+        nodes.append(oh.make_node("MatMul", ["xu2", "Y"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(3, 5, 32, 64))
         )
@@ -1459,7 +1449,6 @@ class TransposeMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1472,8 +1461,8 @@ class TransposeMatMulPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(128, 64)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(128, 32)))
-        nodes.append(make_node_extended("Transpose", ["X"], ["xm1"], perm=[1, 0]))
-        nodes.append(make_node_extended("MatMul", ["xm1", "Y"], ["Z"]))
+        nodes.append(oh.make_node("Transpose", ["X"], ["xm1"], perm=[1, 0]))
+        nodes.append(oh.make_node("MatMul", ["xm1", "Y"], ["Z"]))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(32, 64)))
         graph = oh.make_graph(
             nodes,
@@ -1499,7 +1488,6 @@ class TransposeMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1512,7 +1500,7 @@ class TransposeMatMulPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(128, 64)))
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(128, 32)))
-        nodes.append(make_node_extended("Gemm", ["X", "Y"], ["Z"], transA=1, transB=0))
+        nodes.append(oh.make_node("Gemm", ["X", "Y"], ["Z"], transA=1, transB=0))
         outputs.append(oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(32, 64)))
         graph = oh.make_graph(
             nodes,
@@ -1663,7 +1651,6 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1682,16 +1669,16 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 5, 7))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape"],
                 value=onh.from_array(np.array([2, 2, 7, 3], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("MatMul", ["X", "yts"], ["Z"]))
-        nodes.append(make_node_extended("Reshape", ["yt", "shape"], ["yts"]))
-        nodes.append(make_node_extended("Transpose", ["Y"], ["yt"], perm=[0, 2, 1]))
+        nodes.append(oh.make_node("MatMul", ["X", "yts"], ["Z"]))
+        nodes.append(oh.make_node("Reshape", ["yt", "shape"], ["yts"]))
+        nodes.append(oh.make_node("Transpose", ["Y"], ["yt"], perm=[0, 2, 1]))
         outputs.append(
             oh.make_tensor_value_info("yts", onnx.TensorProto.FLOAT, shape=(2, 2, 7, 3))
         )
@@ -1722,7 +1709,6 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -1741,7 +1727,7 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 5, 7))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s4_2_2_3_7"],
@@ -1749,16 +1735,16 @@ class TransposeReshapeMatMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape", ["Y", "init7_s4_2_2_3_7"], ["TransposeReshapeMatMulPatternL_Y"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose", ["TransposeReshapeMatMulPatternL_Y"], ["yts"], perm=[0, 1, 3, 2]
             )
         )
-        nodes.append(make_node_extended("MatMul", ["X", "yts"], ["Z"]))
+        nodes.append(oh.make_node("MatMul", ["X", "yts"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("yts", onnx.TensorProto.FLOAT, shape=(2, 2, 7, 3))
         )
@@ -1933,7 +1919,6 @@ class SwitchReshapeActivationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1950,9 +1935,9 @@ class SwitchReshapeActivationPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(3, 2, 6, 5))
         )
-        nodes.append(make_node_extended("MatMul", ["X", "Y"], ["mm"]))
-        nodes.append(make_node_extended("Transpose", ["mm"], ["tmm"], perm=[0, 2, 1, 3]))
-        nodes.append(make_node_extended("Relu", ["tmm"], ["Z"]))
+        nodes.append(oh.make_node("MatMul", ["X", "Y"], ["mm"]))
+        nodes.append(oh.make_node("Transpose", ["mm"], ["tmm"], perm=[0, 2, 1, 3]))
+        nodes.append(oh.make_node("Relu", ["tmm"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
@@ -1980,7 +1965,6 @@ class SwitchReshapeActivationPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1998,17 +1982,17 @@ class SwitchReshapeActivationPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(3, 2, 6, 5))
         )
         nodes.append(
-            make_node_extended("MatMul", ["X", "Y"], ["SwitchReshapeActivationPatternL_mm"])
+            oh.make_node("MatMul", ["X", "Y"], ["SwitchReshapeActivationPatternL_mm"])
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Relu",
                 ["SwitchReshapeActivationPatternL_mm"],
                 ["SwitchReshapeActivationPatternL_tmm"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose", ["SwitchReshapeActivationPatternL_tmm"], ["Z"], perm=[0, 2, 1, 3]
             )
         )
@@ -2134,7 +2118,6 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -2151,8 +2134,8 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", 1))
         )
-        nodes.append(make_node_extended("MatMul", ["X", "Y"], ["Zt"]))
-        nodes.append(make_node_extended("Transpose", ["Zt"], ["Z"], perm=[0, 2, 1]))
+        nodes.append(oh.make_node("MatMul", ["X", "Y"], ["Zt"]))
+        nodes.append(oh.make_node("Transpose", ["Zt"], ["Z"], perm=[0, 2, 1]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "c", "b"))
         )
@@ -2180,7 +2163,6 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -2198,7 +2180,7 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", 1))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["X-ZEROS2"],
@@ -2206,16 +2188,16 @@ class ShapeBasedMatMulToMulPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["Y-ZEROS2"],
                 value=onh.from_array(np.array([0, -1, 1], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["X", "X-ZEROS2"], ["X2"]))
-        nodes.append(make_node_extended("Reshape", ["Y", "Y-ZEROS2"], ["Y2"]))
-        nodes.append(make_node_extended("Mul", ["X2", "Y2"], ["Z"]))
+        nodes.append(oh.make_node("Reshape", ["X", "X-ZEROS2"], ["X2"]))
+        nodes.append(oh.make_node("Reshape", ["Y", "Y-ZEROS2"], ["Y2"]))
+        nodes.append(oh.make_node("Mul", ["X2", "Y2"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("a", "c", "b"))
         )

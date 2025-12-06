@@ -23,7 +23,6 @@ class FunctionAttentionPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -59,7 +58,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["scale_sqrt"],
@@ -69,7 +68,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -77,27 +76,27 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["minfty"],
                 value=onh.from_array(np.array([-np.inf], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Mul", ["query", "scale_sqrt"], ["query_scaled"]))
-        nodes.append(make_node_extended("Mul", ["keys", "scale_sqrt"], ["keys_scaled"]))
+        nodes.append(oh.make_node("Mul", ["query", "scale_sqrt"], ["query_scaled"]))
+        nodes.append(oh.make_node("Mul", ["keys", "scale_sqrt"], ["keys_scaled"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose", ["keys_scaled"], ["keys_scaled_t"], perm=[0, 1, 3, 2]
             )
         )
-        nodes.append(make_node_extended("MatMul", ["query_scaled", "keys_scaled_t"], ["qk"]))
-        nodes.append(make_node_extended("Where", ["mask", "zero", "minfty"], ["bias"]))
-        nodes.append(make_node_extended("Add", ["qk", "bias"], ["qkb"]))
-        nodes.append(make_node_extended("Softmax", ["qkb"], ["qkbs"], axis=-1))
-        nodes.append(make_node_extended("IsNaN", ["qkbs"], ["nans"]))
-        nodes.append(make_node_extended("Where", ["nans", "zero", "qkbs"], ["filt"]))
-        nodes.append(make_node_extended("MatMul", ["filt", "values"], ["Y"]))
+        nodes.append(oh.make_node("MatMul", ["query_scaled", "keys_scaled_t"], ["qk"]))
+        nodes.append(oh.make_node("Where", ["mask", "zero", "minfty"], ["bias"]))
+        nodes.append(oh.make_node("Add", ["qk", "bias"], ["qkb"]))
+        nodes.append(oh.make_node("Softmax", ["qkb"], ["qkbs"], axis=-1))
+        nodes.append(oh.make_node("IsNaN", ["qkbs"], ["nans"]))
+        nodes.append(oh.make_node("Where", ["nans", "zero", "qkbs"], ["filt"]))
+        nodes.append(oh.make_node("MatMul", ["filt", "values"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info(
                 "Y", onnx.TensorProto.FLOAT, shape=("ay", "by", "cy", "dy")
@@ -127,7 +126,6 @@ class FunctionAttentionPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -163,7 +161,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "LocalAttention_to1",
                 ["query", "keys", "values", "mask", "scale_sqrt"],
                 ["Y"],

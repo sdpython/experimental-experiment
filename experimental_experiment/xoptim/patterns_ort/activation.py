@@ -24,7 +24,6 @@ class BiasGeluPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -41,7 +40,7 @@ class BiasGeluPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["B"],
@@ -64,7 +63,7 @@ class BiasGeluPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["sq2"],
@@ -72,7 +71,7 @@ class BiasGeluPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
@@ -80,19 +79,19 @@ class BiasGeluPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["half"],
                 value=onh.from_array(np.array([0.5], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Add", ["X", "B"], ["xb"]))
-        nodes.append(make_node_extended("Div", ["xb", "sq2"], ["xbinv"]))
-        nodes.append(make_node_extended("Erf", ["xbinv"], ["xerf"]))
-        nodes.append(make_node_extended("Add", ["xerf", "one"], ["xerf1"]))
-        nodes.append(make_node_extended("Mul", ["xb", "xerf1"], ["y2"]))
-        nodes.append(make_node_extended("Mul", ["y2", "half"], ["Y"]))
+        nodes.append(oh.make_node("Add", ["X", "B"], ["xb"]))
+        nodes.append(oh.make_node("Div", ["xb", "sq2"], ["xbinv"]))
+        nodes.append(oh.make_node("Erf", ["xbinv"], ["xerf"]))
+        nodes.append(oh.make_node("Add", ["xerf", "one"], ["xerf1"]))
+        nodes.append(oh.make_node("Mul", ["xb", "xerf1"], ["y2"]))
+        nodes.append(oh.make_node("Mul", ["y2", "half"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
@@ -120,7 +119,6 @@ class BiasGeluPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -136,7 +134,7 @@ class BiasGeluPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
-        nodes.append(make_node_extended("BiasGelu", ["X", "B"], ["Y"], domain="com.microsoft"))
+        nodes.append(oh.make_node("BiasGelu", ["X", "B"], ["Y"], domain="com.microsoft"))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
@@ -256,7 +254,6 @@ class GeluOrtPattern(GeluPattern):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -274,7 +271,7 @@ class GeluOrtPattern(GeluPattern):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init10_s1_63"],
@@ -282,7 +279,7 @@ class GeluOrtPattern(GeluPattern):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init10_s_89"],
@@ -292,7 +289,7 @@ class GeluOrtPattern(GeluPattern):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init10_s_90"],
@@ -300,7 +297,7 @@ class GeluOrtPattern(GeluPattern):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init10_s_91"],
@@ -308,21 +305,21 @@ class GeluOrtPattern(GeluPattern):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init10_s_88"],
                 value=onh.from_array(np.array(0.5, dtype=np.float16), name="value"),
             )
         )
-        nodes.append(make_node_extended("Pow", ["linear_73", "init10_s1_63"], ["pow_13"]))
-        nodes.append(make_node_extended("Mul", ["pow_13", "init10_s_89"], ["_onx_mul064"]))
-        nodes.append(make_node_extended("Add", ["linear_73", "_onx_mul064"], ["add_62"]))
-        nodes.append(make_node_extended("Mul", ["add_62", "init10_s_90"], ["_onx_mul065"]))
-        nodes.append(make_node_extended("Tanh", ["_onx_mul065"], ["tanh_12"]))
-        nodes.append(make_node_extended("Add", ["tanh_12", "init10_s_91"], ["add_63"]))
-        nodes.append(make_node_extended("Mul", ["linear_73", "init10_s_88"], ["_onx_mul063"]))
-        nodes.append(make_node_extended("Mul", ["_onx_mul063", "add_63"], ["mul_52"]))
+        nodes.append(oh.make_node("Pow", ["linear_73", "init10_s1_63"], ["pow_13"]))
+        nodes.append(oh.make_node("Mul", ["pow_13", "init10_s_89"], ["_onx_mul064"]))
+        nodes.append(oh.make_node("Add", ["linear_73", "_onx_mul064"], ["add_62"]))
+        nodes.append(oh.make_node("Mul", ["add_62", "init10_s_90"], ["_onx_mul065"]))
+        nodes.append(oh.make_node("Tanh", ["_onx_mul065"], ["tanh_12"]))
+        nodes.append(oh.make_node("Add", ["tanh_12", "init10_s_91"], ["add_63"]))
+        nodes.append(oh.make_node("Mul", ["linear_73", "init10_s_88"], ["_onx_mul063"]))
+        nodes.append(oh.make_node("Mul", ["_onx_mul063", "add_63"], ["mul_52"]))
         outputs.append(
             oh.make_tensor_value_info("mul_52", onnx.TensorProto.FLOAT16, shape=(4, 512, 128))
         )
@@ -350,7 +347,6 @@ class GeluOrtPattern(GeluPattern):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -368,7 +364,7 @@ class GeluOrtPattern(GeluPattern):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Gelu", ["linear_73"], ["mul_52"], domain="com.microsoft", approximate="tanh"
             )
         )
@@ -415,7 +411,6 @@ class GeluErfPattern(EasyPatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -431,7 +426,7 @@ class GeluErfPattern(EasyPatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["sq2"],
@@ -439,7 +434,7 @@ class GeluErfPattern(EasyPatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
@@ -447,18 +442,18 @@ class GeluErfPattern(EasyPatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["half"],
                 value=onh.from_array(np.array([0.5], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Div", ["X", "sq2"], ["xd"]))
-        nodes.append(make_node_extended("Erf", ["xd"], ["exd"]))
-        nodes.append(make_node_extended("Add", ["exd", "one"], ["aexd"]))
-        nodes.append(make_node_extended("Mul", ["X", "aexd"], ["y2"]))
-        nodes.append(make_node_extended("Mul", ["half", "y2"], ["Y"]))
+        nodes.append(oh.make_node("Div", ["X", "sq2"], ["xd"]))
+        nodes.append(oh.make_node("Erf", ["xd"], ["exd"]))
+        nodes.append(oh.make_node("Add", ["exd", "one"], ["aexd"]))
+        nodes.append(oh.make_node("Mul", ["X", "aexd"], ["y2"]))
+        nodes.append(oh.make_node("Mul", ["half", "y2"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
@@ -486,7 +481,6 @@ class GeluErfPattern(EasyPatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -501,7 +495,7 @@ class GeluErfPattern(EasyPatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
-        nodes.append(make_node_extended("Gelu", ["X"], ["Y"], domain="com.microsoft"))
+        nodes.append(oh.make_node("Gelu", ["X"], ["Y"], domain="com.microsoft"))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 8))
         )
@@ -571,7 +565,6 @@ class FastGeluPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 20),
@@ -588,7 +581,7 @@ class FastGeluPattern(PatternOptimization):
                 "linear_65", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384)
             )
         )
-        nodes.append(make_node_extended("Gelu", ["linear_65"], ["mul_44"], approximate="tanh"))
+        nodes.append(oh.make_node("Gelu", ["linear_65"], ["mul_44"], approximate="tanh"))
         outputs.append(
             oh.make_tensor_value_info("mul_44", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384))
         )
@@ -616,7 +609,6 @@ class FastGeluPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 20),
@@ -634,7 +626,7 @@ class FastGeluPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended("FastGelu", ["linear_65"], ["mul_44"], domain="com.microsoft")
+            oh.make_node("FastGelu", ["linear_65"], ["mul_44"], domain="com.microsoft")
         )
         outputs.append(
             oh.make_tensor_value_info("mul_44", onnx.TensorProto.FLOAT16, shape=(4, 512, 16384))
@@ -695,7 +687,6 @@ class BiasSoftmaxPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -713,8 +704,8 @@ class BiasSoftmaxPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(16, 1, 4, 8))
         )
-        nodes.append(make_node_extended("Add", ["X", "Y"], ["xy"]))
-        nodes.append(make_node_extended("Softmax", ["xy"], ["Z"], axis=-1))
+        nodes.append(oh.make_node("Add", ["X", "Y"], ["xy"]))
+        nodes.append(oh.make_node("Softmax", ["xy"], ["Z"], axis=-1))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(16, 8, 4, 8))
         )
@@ -742,7 +733,6 @@ class BiasSoftmaxPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -761,7 +751,7 @@ class BiasSoftmaxPattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(16, 1, 4, 8))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "BiasSoftmax",
                 ["X", "Y"],
                 ["Z"],
@@ -842,7 +832,6 @@ class QuickGeluPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -857,8 +846,8 @@ class QuickGeluPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(1, 8, 6, 6))
         )
-        nodes.append(make_node_extended("Sigmoid", ["X"], ["S"]))
-        nodes.append(make_node_extended("Mul", ["X", "S"], ["Y"]))
+        nodes.append(oh.make_node("Sigmoid", ["X"], ["S"]))
+        nodes.append(oh.make_node("Mul", ["X", "S"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 8, 6, 6))
         )
@@ -886,7 +875,6 @@ class QuickGeluPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -902,7 +890,7 @@ class QuickGeluPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(1, 8, 6, 6))
         )
         nodes.append(
-            make_node_extended("QuickGelu", ["X"], ["Y"], domain="com.microsoft", alpha=1.0)
+            oh.make_node("QuickGelu", ["X"], ["Y"], domain="com.microsoft", alpha=1.0)
         )
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(1, 8, 6, 6))

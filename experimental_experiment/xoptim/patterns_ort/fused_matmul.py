@@ -22,7 +22,6 @@ class FusedMatMulDivPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -41,7 +40,7 @@ class FusedMatMulDivPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 32, 128))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["deux"],
@@ -49,7 +48,7 @@ class FusedMatMulDivPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["X", "Y"],
                 ["zd"],
@@ -57,7 +56,7 @@ class FusedMatMulDivPattern(PatternOptimization):
                 alpha=1.2999999523162842,
             )
         )
-        nodes.append(make_node_extended("Div", ["zd", "deux"], ["Z"]))
+        nodes.append(oh.make_node("Div", ["zd", "deux"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2, 32, 64))
         )
@@ -85,7 +84,6 @@ class FusedMatMulDivPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -104,7 +102,7 @@ class FusedMatMulDivPattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 32, 128))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["X", "Y"],
                 ["Z"],
@@ -206,7 +204,6 @@ class FusedMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -224,8 +221,8 @@ class FusedMatMulPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 64, 128))
         )
-        nodes.append(make_node_extended("Transpose", ["X"], ["xm1"], perm=[0, 1, 3, 2]))
-        nodes.append(make_node_extended("MatMul", ["Y", "xm1"], ["Z"]))
+        nodes.append(oh.make_node("Transpose", ["X"], ["xm1"], perm=[0, 1, 3, 2]))
+        nodes.append(oh.make_node("MatMul", ["Y", "xm1"], ["Z"]))
         outputs.append(
             oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=(2, 2, 64, 32))
         )
@@ -253,7 +250,6 @@ class FusedMatMulPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -272,7 +268,7 @@ class FusedMatMulPattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 64, 128))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["Y", "X"],
                 ["Z"],
@@ -484,7 +480,6 @@ class FusedMatMulx2Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -500,16 +495,16 @@ class FusedMatMulx2Pattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 4))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["deux"],
                 value=onh.from_array(np.array([2.0], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Div", ["X", "deux"], ["half"]))
+        nodes.append(oh.make_node("Div", ["X", "deux"], ["half"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["half", "X"],
                 ["x1"],
@@ -519,7 +514,7 @@ class FusedMatMulx2Pattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["X", "half"],
                 ["x2"],
@@ -558,7 +553,6 @@ class FusedMatMulx2Pattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -574,7 +568,7 @@ class FusedMatMulx2Pattern(PatternOptimization):
             oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=(2, 2, 4, 4))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["X", "X"],
                 ["x1"],
@@ -584,7 +578,7 @@ class FusedMatMulx2Pattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["X", "X"],
                 ["x2"],
@@ -702,7 +696,6 @@ class FusedMatMulTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -721,7 +714,7 @@ class FusedMatMulTransposePattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 5, 6))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["X", "Y"],
                 ["xy"],
@@ -731,7 +724,7 @@ class FusedMatMulTransposePattern(PatternOptimization):
                 transB=1,
             )
         )
-        nodes.append(make_node_extended("Transpose", ["xy"], ["Z"], perm=[0, 1, 3, 2]))
+        nodes.append(oh.make_node("Transpose", ["xy"], ["Z"], perm=[0, 1, 3, 2]))
         outputs.append(
             oh.make_tensor_value_info(
                 "Z", onnx.TensorProto.FLOAT, shape=(2, 2, "UNKNOWNDIM", "UNKNOWNDIM1")
@@ -761,7 +754,6 @@ class FusedMatMulTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -780,7 +772,7 @@ class FusedMatMulTransposePattern(PatternOptimization):
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=(2, 2, 5, 6))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["Y", "X"],
                 ["Z"],
@@ -882,7 +874,6 @@ class ReshapeGemmPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -899,15 +890,15 @@ class ReshapeGemmPattern(PatternOptimization):
             oh.make_tensor_value_info("A", onnx.TensorProto.FLOAT, shape=("a", "b", 8))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["shape"],
                 value=onh.from_array(np.array([-1, 8], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Reshape", ["A", "shape"], ["xr"]))
-        nodes.append(make_node_extended("Gemm", ["xr", "B"], ["Y"], transB=1))
+        nodes.append(oh.make_node("Reshape", ["A", "shape"], ["xr"]))
+        nodes.append(oh.make_node("Gemm", ["xr", "B"], ["Y"], transB=1))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("f", "g")))
         graph = oh.make_graph(
             nodes,
@@ -933,7 +924,6 @@ class ReshapeGemmPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -950,7 +940,7 @@ class ReshapeGemmPattern(PatternOptimization):
             oh.make_tensor_value_info("A", onnx.TensorProto.FLOAT, shape=("a", "b", 8))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s2_-1_4"],
@@ -958,7 +948,7 @@ class ReshapeGemmPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["A", "B"],
                 ["ReshapeGemmPattern--Y"],
@@ -967,7 +957,7 @@ class ReshapeGemmPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended("Reshape", ["ReshapeGemmPattern--Y", "init7_s2_-1_4"], ["Y"])
+            oh.make_node("Reshape", ["ReshapeGemmPattern--Y", "init7_s2_-1_4"], ["Y"])
         )
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("f", "g")))
         graph = oh.make_graph(
@@ -1065,7 +1055,6 @@ class TransposeFusedMatMulBPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1083,8 +1072,8 @@ class TransposeFusedMatMulBPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("A", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
-        nodes.append(make_node_extended("Transpose", ["B"], ["xr"], perm=[0, 2, 3, 1]))
-        nodes.append(make_node_extended("MatMul", ["A", "xr"], ["Y"]))
+        nodes.append(oh.make_node("Transpose", ["B"], ["xr"], perm=[0, 2, 3, 1]))
+        nodes.append(oh.make_node("MatMul", ["A", "xr"], ["Y"]))
         outputs.append(
             oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("m", "n", "o", "p"))
         )
@@ -1112,7 +1101,6 @@ class TransposeFusedMatMulBPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -1131,12 +1119,12 @@ class TransposeFusedMatMulBPattern(PatternOptimization):
             oh.make_tensor_value_info("A", onnx.TensorProto.FLOAT, shape=("a", "b", "c", "d"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose", ["B"], ["TransposeFusedMatMulBPattern--xr"], perm=[0, 2, 1, 3]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "FusedMatMul",
                 ["A", "TransposeFusedMatMulBPattern--xr"],
                 ["Y"],
