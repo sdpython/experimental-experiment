@@ -288,6 +288,123 @@ class SlicesSplitPattern(PatternOptimization):
 class GathersSplitPattern(PatternOptimization):
     """
     Merges multiple parallel gather into a split followed by unsqueeze.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Gather", ["X", "zero"], ["x1"], axis=1))
+        nodes.append(make_node_extended("Gather", ["X", "one"], ["x2"], axis=1))
+        outputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a",)))
+        outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a",)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_1"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Split",
+                ["X"],
+                ["GathersSplitPattern--x1", "GathersSplitPattern--x2"],
+                axis=1,
+                num_outputs=2,
+            )
+        )
+        nodes.append(
+            make_node_extended("Squeeze", ["GathersSplitPattern--x1", "init7_s1_1"], ["x1"])
+        )
+        nodes.append(
+            make_node_extended("Squeeze", ["GathersSplitPattern--x2", "init7_s1_1"], ["x2"])
+        )
+        outputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a",)))
+        outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a",)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def match(
