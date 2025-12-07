@@ -153,6 +153,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
 
         print(pattern_table_doc(get_default_patterns(), as_rst=True))
     """
+    assert ConstantToInitializerPattern
     return [
         # AlmostDoNothingPattern(verbose=verbose),
         BatchNormalizationPattern(verbose=verbose),
@@ -168,7 +169,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ConcatGatherPattern(verbose=verbose),
         ConcatReshapePattern(verbose=verbose),
         ConcatTwiceUnaryPattern(verbose=verbose),
-        ConstantToInitializerPattern(verbose=verbose),
+        # ConstantToInitializerPattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
