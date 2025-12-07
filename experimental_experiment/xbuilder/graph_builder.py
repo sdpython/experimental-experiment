@@ -292,6 +292,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
         self._debug_dyn_dim = os.environ.get("ONNXDYNDIM","").split(",")
+
+    .. warning:: ModelProto may be modified
+
+        The builder tries to minimize the copies of protos. The original
+        model may be modified if the builder is initialized with a model.
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -5513,9 +5518,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             raise RuntimeError(f"The onnx model is empty (no node).\n{self.get_debug_msg()}")
 
         if inline:
+            self._check([], "before-inline")
             self._check_constants("before-inline")
             stats = self.inline_functions(verbose=self.verbose)
             self._check_constants("after-inline")
+            self._check([], "after-inline")
         else:
             stats = None
 
@@ -6134,9 +6141,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
     def _check(self, stats: List[Dict[str, Any]], step: str, shadowing: bool = False):
         begin = time.perf_counter()
-        assert (
-            len(self.nodes) > 0
-        ), f"The onnx model is empty (step {step}, no node){self.get_debug_msg()}"
+        assert len(self.nodes) > 0, (
+            f"The onnx model is empty (step {step!r}, no node, shadowing={shadowing})"
+            f"{self.get_debug_msg()}"
+        )
         known = set(n.name for n in self.inputs) | set(self.initializers_dict) | self._context
         self._check_nodes(self.nodes, known, step, root=True)
         for o in self.outputs:

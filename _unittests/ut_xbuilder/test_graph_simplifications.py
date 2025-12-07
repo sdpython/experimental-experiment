@@ -14,7 +14,9 @@ class TestGraphSimplification(ExtTestCase):
     def call_optimizer(self, onx):
         gr = GraphBuilder(onx, infer_shapes_options=True)
         assert hasattr(gr, "_debug_stop")
+        gr._check([], "before unused")
         gr.remove_unused()
+        gr._check([], "after unused")
         return gr.to_onnx()
 
     def test_remove_unused_nodes(self):
@@ -206,55 +208,57 @@ class TestGraphSimplification(ExtTestCase):
             value_info_proto.name = name
             return value_info_proto
 
-        model = oh.make_model(
-            oh.make_graph(
-                [
-                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
-                    oh.make_node("Add", ["X", "two"], ["X0"]),
-                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
-                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
-                    oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
-                    oh.make_node("Identity", ["two"], ["three"]),
-                    oh.make_node(
-                        "If",
-                        ["cond"],
-                        ["Z_c"],
-                        then_branch=oh.make_graph(
-                            [
-                                # shadowing
-                                oh.make_node("Constant", [], ["three"], value_floats=[2.1]),
-                                oh.make_node("Add", ["X00", "three"], ["Y"]),
-                            ],
-                            "then",
-                            [],
-                            [_mkv_("Y")],
+        def _make_model():
+            return oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                        oh.make_node("Add", ["X", "two"], ["X0"]),
+                        oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                        oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                        oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                        oh.make_node("Identity", ["two"], ["three"]),
+                        oh.make_node(
+                            "If",
+                            ["cond"],
+                            ["Z_c"],
+                            then_branch=oh.make_graph(
+                                [
+                                    # shadowing
+                                    oh.make_node("Constant", [], ["three"], value_floats=[2.1]),
+                                    oh.make_node("Add", ["X00", "three"], ["Y"]),
+                                ],
+                                "then",
+                                [],
+                                [_mkv_("Y")],
+                            ),
+                            else_branch=oh.make_graph(
+                                [
+                                    # not shadowing
+                                    oh.make_node("Sub", ["X0", "three"], ["Y"]),
+                                ],
+                                "else",
+                                [],
+                                [_mkv_("Y")],
+                            ),
                         ),
-                        else_branch=oh.make_graph(
-                            [
-                                # not shadowing
-                                oh.make_node("Sub", ["X0", "three"], ["Y"]),
-                            ],
-                            "else",
-                            [],
-                            [_mkv_("Y")],
-                        ),
-                    ),
-                    oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
-                ],
-                "test",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
-                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
-                ],
-                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
-                [
-                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
-                    onh.from_array(np.array([2], dtype=np.float32), name="two"),
-                ],
-            ),
-            opset_imports=[oh.make_operatorsetid("", 18)],
-            ir_version=10,
-        )
+                        oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                    ],
+                    "test",
+                    [
+                        oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
+                        oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                    ],
+                    [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                    [
+                        onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                        onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                    ],
+                ),
+                opset_imports=[oh.make_operatorsetid("", 18)],
+                ir_version=10,
+            )
+
         feeds = {
             "X": np.array([1, 2, 3], dtype=np.float32),
             "one": np.array([1], dtype=np.float32),
@@ -263,9 +267,12 @@ class TestGraphSimplification(ExtTestCase):
             "X": -np.array([1, 2, 3], dtype=np.float32),
             "one": np.array([1], dtype=np.float32),
         }
+        model = _make_model()
         ref = ExtendedReferenceEvaluator(model, verbose=0)
         expected = ref.run(None, feeds)[0]
         expected2 = ref.run(None, feeds2)[0]
+        # doc.check_model(model)
+        self.dump_onnx("test_remove_identity_shadowing.onnx", model)
 
         gr = GraphBuilder(model, infer_shapes_options=True)
         msg = gr.get_debug_msg()
@@ -277,7 +284,13 @@ class TestGraphSimplification(ExtTestCase):
         # self.assertEqual({}, gr.shadowing_names())
         # gr._check([], "before")
         gr._check([], "identity", shadowing=False)
+        if_node = [n for n in gr.nodes if n.op_type == "If"][0]  # noqa: RUF015
+        else_graph = if_node.attribute[0].g
+        self.assertEqual(else_graph.node[0].input, ["X0", "three"])
         gr.remove_identity_nodes()
+        if_node = [n for n in gr.nodes if n.op_type == "If"][0]  # noqa: RUF015
+        else_graph = if_node.attribute[0].g
+        self.assertEqual(else_graph.node[0].input, ["X0", "two"])
         msg = gr.get_debug_msg()
         self.assertIn("-- 2 INPUTS", msg)
         self.assertIn("-- 2 INITIALIZERS", msg)
@@ -290,6 +303,7 @@ class TestGraphSimplification(ExtTestCase):
         self.assertIn("-- 1 OUTPUTS", msg)
         onx = gr.to_onnx()
         oc.check_model(onx)
+        self.dump_onnx("test_remove_identity_shadowing.opt.onnx", onx)
 
         ref2 = ExtendedReferenceEvaluator(onx)
         got = ref2.run(None, feeds)[0]
@@ -297,6 +311,7 @@ class TestGraphSimplification(ExtTestCase):
         got2 = ref2.run(None, feeds2)[0]
         self.assertEqualAny(expected2, got2)
 
+        model = _make_model()
         onx = self.call_optimizer(model)
         oc.check_model(onx)
         ref2 = ExtendedReferenceEvaluator(onx)
@@ -311,85 +326,87 @@ class TestGraphSimplification(ExtTestCase):
             value_info_proto.name = name
             return value_info_proto
 
-        model = oh.make_model(
-            oh.make_graph(
-                [
-                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
-                    oh.make_node("Add", ["X", "two"], ["X0"]),
-                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
-                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
-                    oh.make_node("ReduceSum", ["X00"], ["Xred2"]),
-                    oh.make_node("Add", ["Xred", "Xred2"], ["Xred3"]),
-                    oh.make_node("Greater", ["Xred3", "one_c"], ["cond"]),
-                    oh.make_node("Identity", ["two"], ["three"]),
-                    oh.make_node(
-                        "If",
-                        ["cond"],
-                        ["Z_c"],
-                        then_branch=oh.make_graph(
-                            [
-                                # shadowing
-                                oh.make_node("Constant", [], ["five"], value_floats=[2.1]),
-                                oh.make_node("Add", ["X00", "five"], ["Y"]),
-                            ],
-                            "then",
-                            [],
-                            [_mkv_("Y")],
+        def _make_model():
+            return oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                        oh.make_node("Add", ["X", "two"], ["X0"]),
+                        oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                        oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                        oh.make_node("ReduceSum", ["X00"], ["Xred2"]),
+                        oh.make_node("Add", ["Xred", "Xred2"], ["Xred3"]),
+                        oh.make_node("Greater", ["Xred3", "one_c"], ["cond"]),
+                        oh.make_node("Identity", ["two"], ["three"]),
+                        oh.make_node(
+                            "If",
+                            ["cond"],
+                            ["Z_c"],
+                            then_branch=oh.make_graph(
+                                [
+                                    # shadowing
+                                    oh.make_node("Constant", [], ["five"], value_floats=[2.1]),
+                                    oh.make_node("Add", ["X00", "five"], ["Y"]),
+                                ],
+                                "then",
+                                [],
+                                [_mkv_("Y")],
+                            ),
+                            else_branch=oh.make_graph(
+                                [
+                                    # not shadowing
+                                    oh.make_node("Identity", ["three"], ["four"]),
+                                    oh.make_node("Sub", ["X0", "four"], ["Y"]),
+                                ],
+                                "else",
+                                [],
+                                [_mkv_("Y")],
+                            ),
                         ),
-                        else_branch=oh.make_graph(
-                            [
-                                # not shadowing
-                                oh.make_node("Identity", ["three"], ["four"]),
-                                oh.make_node("Sub", ["X0", "four"], ["Y"]),
-                            ],
-                            "else",
-                            [],
-                            [_mkv_("Y")],
+                        oh.make_node("CastLike", ["Z_c", "X"], ["Zc"]),
+                        oh.make_node("Neg", ["Zc"], ["five"]),
+                        oh.make_node("Abs", ["five"], ["four"]),
+                        oh.make_node(
+                            "If",
+                            ["cond"],
+                            ["D"],
+                            then_branch=oh.make_graph(
+                                [
+                                    # shadowing
+                                    oh.make_node("Add", ["X00", "five"], ["Y"]),
+                                ],
+                                "then",
+                                [],
+                                [_mkv_("Y")],
+                            ),
+                            else_branch=oh.make_graph(
+                                [
+                                    # not shadowing
+                                    oh.make_node("Sub", ["X0", "three"], ["t"]),
+                                    oh.make_node("Mul", ["t", "four"], ["Y"]),
+                                ],
+                                "else",
+                                [],
+                                [_mkv_("Y")],
+                            ),
                         ),
-                    ),
-                    oh.make_node("CastLike", ["Z_c", "X"], ["Zc"]),
-                    oh.make_node("Neg", ["Zc"], ["five"]),
-                    oh.make_node("Abs", ["five"], ["four"]),
-                    oh.make_node(
-                        "If",
-                        ["cond"],
-                        ["D"],
-                        then_branch=oh.make_graph(
-                            [
-                                # shadowing
-                                oh.make_node("Add", ["X00", "five"], ["Y"]),
-                            ],
-                            "then",
-                            [],
-                            [_mkv_("Y")],
-                        ),
-                        else_branch=oh.make_graph(
-                            [
-                                # not shadowing
-                                oh.make_node("Sub", ["X0", "three"], ["t"]),
-                                oh.make_node("Mul", ["t", "four"], ["Y"]),
-                            ],
-                            "else",
-                            [],
-                            [_mkv_("Y")],
-                        ),
-                    ),
-                    oh.make_node("Add", ["five", "D"], ["Z"]),
-                ],
-                "test",
-                [
-                    oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
-                    oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
-                ],
-                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
-                [
-                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
-                    onh.from_array(np.array([2], dtype=np.float32), name="two"),
-                ],
-            ),
-            opset_imports=[oh.make_operatorsetid("", 18)],
-            ir_version=10,
-        )
+                        oh.make_node("Add", ["five", "D"], ["Z"]),
+                    ],
+                    "test",
+                    [
+                        oh.make_tensor_value_info("X", TensorProto.FLOAT, ["N"]),
+                        oh.make_tensor_value_info("one", TensorProto.FLOAT, ["N"]),
+                    ],
+                    [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                    [
+                        onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                        onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                    ],
+                ),
+                opset_imports=[oh.make_operatorsetid("", 18)],
+                ir_version=10,
+            )
+
         feeds = {
             "X": np.array([1, 2, 3], dtype=np.float32),
             "one": np.array([1], dtype=np.float32),
@@ -398,6 +415,7 @@ class TestGraphSimplification(ExtTestCase):
             "X": -np.array([1, 2, 3], dtype=np.float32),
             "one": np.array([1], dtype=np.float32),
         }
+        model = _make_model()
         ref = ExtendedReferenceEvaluator(model, verbose=0)
         expected = ref.run(None, feeds)[0]
         expected2 = ref.run(None, feeds2)[0]
@@ -425,7 +443,6 @@ class TestGraphSimplification(ExtTestCase):
         self.assertIn("-- 1 OUTPUTS", msg)
         onx = gr.to_onnx()
         oc.check_model(onx)
-        print(self.print_onnx(onx))
 
         ref2 = ExtendedReferenceEvaluator(onx)
         got = ref2.run(None, feeds)[0]
@@ -433,6 +450,7 @@ class TestGraphSimplification(ExtTestCase):
         got2 = ref2.run(None, feeds2)[0]
         self.assertEqualAny(expected2, got2)
 
+        model = _make_model()
         onx = self.call_optimizer(model)
         oc.check_model(onx)
         ref2 = ExtendedReferenceEvaluator(onx)
