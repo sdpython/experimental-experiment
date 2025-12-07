@@ -5331,57 +5331,66 @@ class TestGraphPatternOptimization(ExtTestCase):
             value_info_proto.name = name
             return value_info_proto
 
-        model = oh.make_model(
-            oh.make_graph(
-                [
-                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
-                    oh.make_node("Add", ["X", "two"], ["X0"]),
-                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
-                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
-                    oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
-                    oh.make_node(
-                        "If",
-                        ["cond"],
-                        ["Z_c"],
-                        then_branch=oh.make_graph(
-                            [
-                                oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
-                                oh.make_node("Add", ["X00", "two"], ["Y"]),
-                            ],
-                            "then",
-                            [],
-                            [_mkv_("Y")],
+        def _make_model():
+            return oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                        oh.make_node("Add", ["X", "two"], ["X0"]),
+                        oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                        oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                        oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                        oh.make_node(
+                            "If",
+                            ["cond"],
+                            ["Z_c"],
+                            then_branch=oh.make_graph(
+                                [
+                                    oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
+                                    oh.make_node("Add", ["X00", "two"], ["Y"]),
+                                ],
+                                "then",
+                                [],
+                                [_mkv_("Y")],
+                            ),
+                            else_branch=oh.make_graph(
+                                [
+                                    oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
+                                    oh.make_node("Sub", ["X0", "two"], ["Y"]),
+                                ],
+                                "else",
+                                [],
+                                [_mkv_("Y")],
+                            ),
                         ),
-                        else_branch=oh.make_graph(
-                            [
-                                oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
-                                oh.make_node("Sub", ["X0", "two"], ["Y"]),
-                            ],
-                            "else",
-                            [],
-                            [_mkv_("Y")],
-                        ),
-                    ),
-                    oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
-                ],
-                "test",
-                [
-                    oh.make_tensor_value_info("X", TFLOAT, ["N"]),
-                    oh.make_tensor_value_info("one", TFLOAT, ["N"]),
-                ],
-                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
-                [
-                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
-                    onh.from_array(np.array([2], dtype=np.float32), name="two"),
-                ],
-            ),
-            opset_imports=[oh.make_operatorsetid("", 18)],
-            ir_version=10,
-        )
+                        oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                    ],
+                    "test",
+                    [
+                        oh.make_tensor_value_info("X", TFLOAT, ["N"]),
+                        oh.make_tensor_value_info("one", TFLOAT, ["N"]),
+                    ],
+                    [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                    [
+                        onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                        onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                    ],
+                ),
+                opset_imports=[oh.make_operatorsetid("", 18)],
+                ir_version=10,
+            )
 
+        model = _make_model()
         self.assertEqual(len(model.graph.initializer), 2)
         self.assertEqual(set(i.name for i in model.graph.initializer), {"zero", "two"})
-        opt_onnx = remove_constants_for_initializers(model, verbose=0)
+        self.dump_onnx("test_constant_to_initializer_with_conflict2.onnx", model)
+
+        gr = GraphBuilder(model)
+        onx = gr.to_onnx(optimize=False)
+        self.dump_onnx("test_constant_to_initializer_with_conflict2.2.onnx", onx)
+
+        model = _make_model()
+        opt_onnx = remove_constants_for_initializers(model, verbose=10)
         self.print_model(opt_onnx)
         self.dump_onnx("test_constant_to_initializer_with_conflict2.onnx", opt_onnx)
         self.assertEqual(len(opt_onnx.graph.initializer), 2)

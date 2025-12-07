@@ -586,6 +586,40 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         else:
             raise NotImplementedError(f"{type(target_opset_or_existing_proto)} is not supported.")
 
+    def has_exact_same_constant_in_context(self, name: str) -> Optional[bool]:
+        """
+        Tells if this constant already exiting in the context of the main graph.
+        """
+        cst = self.is_constant(name)
+        cstp = self._parent.is_constant_part_of_previous_context(name)
+        if cst and cstp:
+            # Maybe it the same constant and then it is ok.
+            # Should be compare (only if the cost if not two much)
+            if (
+                self.has_shape(name)
+                and self.has_type(name)
+                and self._parent.has_shape(name)
+                and self._parent.has_type(name)
+            ):
+                shape1 = self.get_shape(name)
+                shape2 = self._parent.get_shape(name)
+                if shape1 != shape2:
+                    return False
+                if self.get_type(name) != self._parent.get_type(name):
+                    return False
+                n_elem = np.prod(shape1)
+                if n_elem < 128:
+                    # Then the code is not much.
+                    cst1 = self.get_constant(name, exc=False, computed_value=True)
+                    cst2 = self.get_constant_from_parent(name, exc=False, computed_value=True)
+                    if cst1 is not None and cst2 is not None:
+                        d = cst1 - cst2
+                        if d.min() == d.max() == 0:
+                            return True
+                else:
+                    return None
+        return False
+
     def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
         """
         Constants are turned into initializers in the main graph.
@@ -600,32 +634,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             # in the parent graph.
             if not self._parent.has_name(name):
                 return False
-            cst = self.is_constant(name)
-            cstp = self._parent.is_constant_part_of_previous_context(name)
-            if cst and cstp:
-                # Maybe it the same constant and then it is ok.
-                # Should be compare (only if the cost if not two much)
-                if (
-                    self.has_shape(name)
-                    and self.has_type(name)
-                    and self._parent.has_shape(name)
-                    and self._parent.has_type(name)
-                ):
-                    shape1 = self.get_shape(name)
-                    shape2 = self._parent.get_shape(name)
-                    if shape1 != shape2:
-                        return True
-                    if self.get_type(name) != self._parent.get_type(name):
-                        return True
-                    n_elem = np.prod(shape1)
-                    if n_elem < 128:
-                        # Then the code is not much.
-                        cst1 = self.get_constant(name, exc=False, computed_value=True)
-                        cst2 = self.get_constant_from_parent(name, exc=False, computed_value=True)
-                        if cst1 is not None and cst2 is not None:
-                            d = cst1 - cst2
-                            if d.min() == d.max() == 0:
-                                return False
+            r = self.has_exact_same_constant_in_context(name)
+            if r is not None:
+                return not r
             return self._parent.do_not_turn_constant_initializers_maybe_because_of_showing(name)
         return False
 
@@ -5077,6 +5088,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_devices={pprint.pformat(self._known_devices)[:10000]}")
+        rows.append(f"_context={pprint.pformat(sorted(self._context))[:10000]}")
         short_sh = {
             k: (v if (isinstance(v, tuple) and len(v) < 10) else string_type(v, with_shape=True))
             for k, v in self._known_value_shape.items()
@@ -9570,6 +9582,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             ), f"Renaming not implemented for sequence {k!r}{self.get_debug_msg()}"
             assert k not in set_outputs, f"Renaming not implemented for output {k!r} yet"
             if not with_existing:
+                if self.has_name(k):
+                    self.set_name(v, marker="GraphBuilder.rename_names")
                 if self.has_type(k):
                     self.set_type(v, self.get_type(k))
                 if self.has_device(k):

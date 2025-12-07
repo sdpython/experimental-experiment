@@ -102,6 +102,9 @@ class GraphBuilderPatternOptimization:
     def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
         return self.builder.do_not_turn_constant_initializers_maybe_because_of_showing(name)
 
+    def has_exact_same_constant_in_context(self, name: str) -> Optional[bool]:
+        return self.builder.has_exact_same_constant_in_context(name)
+
     def has_processor(self, processor: str) -> bool:
         """Checks the process is on the list of used processors."""
         return processor in self.processor
