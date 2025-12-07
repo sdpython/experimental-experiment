@@ -581,14 +581,22 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         else:
             raise NotImplementedError(f"{type(target_opset_or_existing_proto)} is not supported.")
 
-    @property
-    def do_not_turn_constant_initializers(self):
+    def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
         """
         Constants are turned into initializers in the main graph.
         It is not possible in function or not always safe inside subgraphs
         (due to shadowing).
         """
-        return self._do_not_turn_constant_initializers or self._parent
+        if self._do_not_turn_constant_initializers:
+            return True
+        if self._parent:
+            # The current behaviour could be improved because
+            # the name could been create after this subgraph is really used
+            # in the parent graph.
+            return self._parent.has_name(
+                name
+            ) or self._parent.do_not_turn_constant_initializers_maybe_because_of_showing(name)
+        return False
 
     def make_subset_builder(
         self,

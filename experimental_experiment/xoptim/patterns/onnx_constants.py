@@ -101,7 +101,11 @@ class ConstantToInitializerPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if g.do_not_turn_constant_initializers or node.op_type != "Constant" or node.domain != "":
+        if (
+            node.op_type != "Constant"
+            or node.domain != ""
+            or g.do_not_turn_constant_initializers_maybe_because_of_showing(node.output[0])
+        ):
             return self.none()
         return MatchResult(self, [node], self.apply, insert_at=node)
 
