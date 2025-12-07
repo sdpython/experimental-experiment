@@ -1382,7 +1382,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if name not in self.initializers_dict:
             if exc:
                 raise ValueError(
-                    f"Result {name!r} was never evaluated within method 'constant_folding'."
+                    f"Result {name!r} was never evaluated within method 'constant_folding'"
+                    f"{self.get_debug_msg()}"
                 )
             if self._debug_get_constant:
                 print(f"[GraphBuilder-{self._hash()}.get_constant]   J: None, name={name!r}")

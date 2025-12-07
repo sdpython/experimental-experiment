@@ -2033,6 +2033,78 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual(len(split), 2)
         self._check_with_ort(onx)
 
+    def test_gathers_split_rank1(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Gather", ["X", "zero"], ["x1"], axis=1),
+                    oh.make_node("Gather", ["X", "one"], ["x2"], axis=1),
+                    oh.make_node("Add", ["x1", "x2"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2])],
+                [_mkv_("Y", TFLOAT, ["a", 1])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(11, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["GathersSplit"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Split", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_gathers_split_rank0(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Gather", ["X", "zero"], ["x1"], axis=1),
+                    oh.make_node("Gather", ["X", "one"], ["x2"], axis=1),
+                    oh.make_node("Add", ["x1", "x2"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2])],
+                [_mkv_("Y", TFLOAT, ["a"])],
+                [
+                    onh.from_array(np.array(0, dtype=np.int64), name="zero"),
+                    onh.from_array(np.array(1, dtype=np.int64), name="one"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(11, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["GathersSplit"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Split", "Squeeze", "Squeeze", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
     def test_rotary_split_missed(self):
         model = oh.make_model(
             oh.make_graph(

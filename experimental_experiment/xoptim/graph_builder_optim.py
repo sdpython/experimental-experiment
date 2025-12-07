@@ -447,6 +447,17 @@ class GraphBuilderPatternOptimization:
         """Returns an attribute for a node."""
         return self.builder.get_attribute(node, att_name, exc=exc)
 
+    def get_attribute_with_default(self, node: NodeProto, name: str, default_value: Any) -> Any:
+        """
+        Returns an attribute or its default value if missing.
+
+        :param node: node
+        :param name: attribute name
+        :param default_value: default value
+        :return: value
+        """
+        return self.builder.get_attribute_with_default(node, name, default_value)
+
     def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
         """Returns integer or float values for attributes."""
         return self.builder.get_attributes_with_default(node, **default_values)
