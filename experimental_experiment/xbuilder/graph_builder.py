@@ -1379,17 +1379,26 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
             return possible_value
 
-        if name not in self.initializers_dict:
-            if exc:
+        if name in self.initializers_dict:
+            value = self.initializers_dict[name]
+        else:
+            # So it should be stored in a parent.
+            value = self.get_constant_from_parent(
+                name,
+                exc=False,
+                computed_value=computed_value,
+                as_shape=as_shape,
+                multiple_outputs=multiple_outputs,
+            )
+            if value is None and exc:
                 raise ValueError(
-                    f"Result {name!r} was never evaluated within method 'constant_folding'"
-                    f"{self.get_debug_msg()}"
+                    f"Result {name!r} was never evaluated within method 'constant_folding', "
+                    f"known initializers={sorted(self.initializers_dict)}{self.get_debug_msg()}"
                 )
             if self._debug_get_constant:
                 print(f"[GraphBuilder-{self._hash()}.get_constant]   J: None, name={name!r}")
-            return None
-
-        value = self.initializers_dict[name]
+            if value is None:
+                return value
 
         if isinstance(value, np.ndarray):
             if self._debug_get_constant:
@@ -1443,6 +1452,45 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             return np.array(value, dtype=np.float32)
 
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
+
+    def get_constant_from_parent(
+        self,
+        name: str,
+        exc: bool = True,
+        computed_value: bool = False,
+        as_shape: bool = False,
+        multiple_outputs: bool = False,
+    ) -> Union[np.ndarray, NodeProto]:
+        """Tells if this name is part of the previous context."""
+        if not self._parent:
+            assert (
+                not exc
+            ), f"No parent found, unable to retrieve constant name {name!r}{self.get_debug_msg()}"
+            return None
+        value = self._parent.get_constant(
+            name,
+            exc=False,
+            computed_value=computed_value,
+            as_shape=as_shape,
+            multiple_outputs=multiple_outputs,
+        )
+        if value is not None:
+            return value
+        return self._parent.get_constant_from_parent(
+            name,
+            exc=False,
+            computed_value=computed_value,
+            as_shape=as_shape,
+            multiple_outputs=multiple_outputs,
+        )
+
+    def is_constant_part_of_previous_context(self, name: str) -> bool:
+        """Tells if this name is part of the previous context and a constant as well."""
+        if self.is_constant(name):
+            return True
+        if self._parent:
+            return self._parent.is_constant_part_of_previous_context(name)
+        return False
 
     def is_sequence(self, name: str) -> bool:
         """Tells if a result is a sequence."""
