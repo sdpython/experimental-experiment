@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Optional
 from onnx import NodeProto
 from ..patterns_api import MatchResult, PatternOptimization
@@ -101,12 +102,10 @@ class ConstantToInitializerPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if (
-            node.op_type != "Constant"
-            or node.domain != ""
-            or g.do_not_turn_constant_initializers_maybe_because_of_showing(node.output[0])
-        ):
+        if node.op_type != "Constant" or node.domain != "":
             return self.none()
+        if g.do_not_turn_constant_initializers_maybe_because_of_showing(node.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node], self.apply, insert_at=node)
 
     def apply(

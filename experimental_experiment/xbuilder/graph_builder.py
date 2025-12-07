@@ -593,9 +593,35 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             # The current behaviour could be improved because
             # the name could been create after this subgraph is really used
             # in the parent graph.
-            return self._parent.has_name(
-                name
-            ) or self._parent.do_not_turn_constant_initializers_maybe_because_of_showing(name)
+            if not self._parent.has_name(name):
+                return False
+            cst = self.is_constant(name)
+            cstp = self._parent.is_constant_part_of_previous_context(name)
+            if cst and cstp:
+                # Maybe it the same constant and then it is ok.
+                # Should be compare (only if the cost if not two much)
+                if (
+                    self.has_shape(name)
+                    and self.has_type(name)
+                    and self._parent.has_shape(name)
+                    and self._parent.has_type(name)
+                ):
+                    shape1 = self.get_shape(name)
+                    shape2 = self._parent.get_shape(name)
+                    if shape1 != shape2:
+                        return True
+                    if self.get_type(name) != self._parent.get_type(name):
+                        return True
+                    n_elem = np.prod(shape1)
+                    if n_elem < 128:
+                        # Then the code is not much.
+                        cst1 = self.get_constant(name, exc=False, computed_value=True)
+                        cst2 = self.get_constant_from_parent(name, exc=False, computed_value=True)
+                        if cst1 is not None and cst2 is not None:
+                            d = cst1 - cst2
+                            if d.min() == d.max() == 0:
+                                return False
+            return self._parent.do_not_turn_constant_initializers_maybe_because_of_showing(name)
         return False
 
     def make_subset_builder(
@@ -1145,8 +1171,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if att.name == "value_ints":
                     return (len(att.ints),)
                 if att.name == "value":
-                    t = onh.to_array(att.t)
-                    return tuple(t.shape)
+                    return tuple(att.t.dims)
         raise TypeError(
             f"Unexpected or unsupported scenario type {type(proto)}: "
             f"{proto}, attribute={proto.attribute}."

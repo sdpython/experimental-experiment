@@ -2,7 +2,7 @@ import enum
 import functools
 import inspect
 import sys
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
 import ml_dtypes
 from onnx import (
@@ -732,3 +732,16 @@ def make_idg(g: GraphProto) -> str:
     # return f"{id(g)}-{len(g.node)}-{len(g.input)}-{len(g.output)}-{g.name}"
     # id(g) should be enough and faster.
     return id(g)
+
+
+def enumerate_nodes(graph: GraphProto) -> Iterator[NodeProto]:
+    """
+    Enumerates all inputs from a node including all the hidden inputs
+    from subgraphs.
+    """
+    for node in graph.node:
+        yield node
+        if node.op_type[0] in "LSI" and node.op_type in {"Loop", "Scan", "If", "SequenceMap"}:
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    yield from enumerate_nodes(att.g)

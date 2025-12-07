@@ -48,7 +48,7 @@ from experimental_experiment.xshape._shape_helper import (
     compatible_dimensions,
 )
 from experimental_experiment.xoptim import get_pattern_list, remove_constants_for_initializers
-from experimental_experiment.helpers import pretty_onnx
+from experimental_experiment.helpers import pretty_onnx, enumerate_nodes
 from experimental_experiment.xoptim.patterns import MatMulAddPattern
 
 TFLOAT = TensorProto.FLOAT
@@ -5261,8 +5261,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(y1, y2)
 
     @hide_stdout()
-    def test_constant_to_initializer_with_conflict(self):
-
+    def test_constant_to_initializer_with_conflict1(self):
         def _mkv_(name):
             value_info_proto = ValueInfoProto()
             value_info_proto.name = name
@@ -5315,14 +5314,78 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
+        self.assertRaise(lambda: check_model(model), onnx.checker.ValidationError)
 
         self.assertEqual(len(model.graph.initializer), 2)
         self.assertEqual(set(i.name for i in model.graph.initializer), {"zero", "two"})
         opt_onnx = remove_constants_for_initializers(model, verbose=0)
         self.print_model(opt_onnx)
-        self.assertEqual(len(opt_onnx.graph.initializer), 4)
-        check_model(opt_onnx)
+        self.dump_onnx("test_constant_to_initializer_with_conflict1.onnx", opt_onnx)
+        self.assertEqual(len(opt_onnx.graph.initializer), 2)
+        self.assertRaise(lambda: check_model(opt_onnx), onnx.checker.ValidationError)
+
+    @hide_stdout()
+    def test_constant_to_initializer_with_conflict2(self):
+        def _mkv_(name):
+            value_info_proto = ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                    oh.make_node("Add", ["X", "two"], ["X0"]),
+                    oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                    oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                    oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                    oh.make_node(
+                        "If",
+                        ["cond"],
+                        ["Z_c"],
+                        then_branch=oh.make_graph(
+                            [
+                                oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
+                                oh.make_node("Add", ["X00", "two"], ["Y"]),
+                            ],
+                            "then",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                        else_branch=oh.make_graph(
+                            [
+                                oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
+                                oh.make_node("Sub", ["X0", "two"], ["Y"]),
+                            ],
+                            "else",
+                            [],
+                            [_mkv_("Y")],
+                        ),
+                    ),
+                    oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, ["N"]),
+                    oh.make_tensor_value_info("one", TFLOAT, ["N"]),
+                ],
+                [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        self.assertEqual(len(model.graph.initializer), 2)
+        self.assertEqual(set(i.name for i in model.graph.initializer), {"zero", "two"})
+        opt_onnx = remove_constants_for_initializers(model, verbose=0)
         self.print_model(opt_onnx)
+        self.dump_onnx("test_constant_to_initializer_with_conflict2.onnx", opt_onnx)
+        self.assertEqual(len(opt_onnx.graph.initializer), 2)
+        self.assertNotIn("Constant", [n.op_type for n in enumerate_nodes(opt_onnx.graph)])
 
         feeds = {
             "X": np.array([1, 2, 3], dtype=np.float32),
@@ -5330,7 +5393,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         }
         ref = ExtendedReferenceEvaluator(opt_onnx)
         z = ref.run(None, feeds)[0]
-        self.assertEqualArray(z, np.array([5.1, 6.1, 7.1], dtype=np.float32))
+        self.assertEqualArray(z, np.array([5, 6, 7], dtype=np.float32))
 
     def test_squeeze_add_1(self):
         model = oh.make_model(
