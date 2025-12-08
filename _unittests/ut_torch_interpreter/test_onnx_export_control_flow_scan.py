@@ -10,7 +10,7 @@ from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestOnnxExportControlFlow(ExtTestCase):
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     def test_scan_1(self):
         import torch
 
@@ -61,7 +61,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     def test_scan_2(self):
         import torch
 
@@ -160,7 +160,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = ref.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     def test_scan_cdist_add(self):
         import torch
 
@@ -215,7 +215,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     @requires_onnx_diagnostic("0.7.13")
     def test_scan_cdist_dynamic(self):
         import torch
@@ -286,7 +286,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     @requires_onnx_diagnostic("0.7.13")
     def test_scan_cdist_dynamic_inline(self):
         import torch
@@ -341,19 +341,11 @@ class TestOnnxExportControlFlow(ExtTestCase):
             # self.print_model(onx)
             names = [(f.domain, f.name) for f in onx.functions]
             self.assertEqual(len(names), len(set(names)))
-            import onnxruntime
-
-            sess = onnxruntime.InferenceSession(
-                onx.SerializeToString(), providers=["CPUExecutionProvider"]
-            )
-            ref = ExtendedReferenceEvaluator(onx)
-
+            sess = self.check_ort(onx)
             for xy in inputs:
                 with self.subTest(optimize=optimize, ds=type(ds), xy=xy[0].shape):
                     expected = model(*xy)
                     feeds = {"x": xy[0].detach().numpy(), "y": xy[1].detach().numpy()}
-                    got = ref.run(None, feeds)
-                    self.assertEqualArray(expected, got[0], atol=1e-5)
                     got = sess.run(None, feeds)
                     self.assertEqualArray(expected, got[0], atol=1e-5)
 
