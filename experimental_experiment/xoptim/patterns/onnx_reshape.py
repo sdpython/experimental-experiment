@@ -2014,6 +2014,115 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
 class UnsqueezeReshapePattern(PatternOptimization):
     """
     Unsqueeze + Reshape into Unsqueeze at a different place if possible.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array([2], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["shape3"],
+                value=onh.from_array(np.array([0, 1, -1, 0], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Unsqueeze", ["X", "zero"], ["xu0"]))
+        nodes.append(make_node_extended("Reshape", ["xu0", "shape3"], ["Z"]))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("e", "f", "g", "h"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_1"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Unsqueeze", ["X", "init7_s1_1"], ["Z"]))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("e", "f", "g", "h"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     def __init__(self, verbose: int = 0, priority: int = 0):
@@ -2036,6 +2145,10 @@ class UnsqueezeReshapePattern(PatternOptimization):
         if unsq is None or unsq.op_type != "Unsqueeze" or unsq.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
         if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_rank(unsq.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_rank(unsq.input[0]) != len(cst) - 1:
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(unsq.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
@@ -2075,4 +2188,155 @@ class UnsqueezeReshapePattern(PatternOptimization):
                 name=f"{self.__class__.__name__}--{unsqueeze.name}",
                 doc_string=unsqueeze.doc_string,
             ),
+        ]
+
+
+class UnsqueezeOrSqueezeReshapePattern(PatternOptimization):
+    """
+    Replaces the sequence Unsqueeze or Unsqueeze, Reshape by Reshape.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 8, 16))
+        )
+        inputs.append(oh.make_tensor_value_info("shape3", onnx.TensorProto.INT64, shape=(2,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array([0], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["shape3"],
+                value=onh.from_array(np.array([-1, 128], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Unsqueeze", ["X", "zero"], ["xu0"]))
+        nodes.append(make_node_extended("Reshape", ["xu0", "shape3"], ["Z"]))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("2*a", 64))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 8, 16))
+        )
+        inputs.append(oh.make_tensor_value_info("shape3", onnx.TensorProto.INT64, shape=(2,)))
+        nodes.append(make_node_extended("Reshape", ["X", "shape3"], ["Z"]))
+        outputs.append(
+            oh.make_tensor_value_info("Z", onnx.TensorProto.FLOAT, shape=("2*a", 64))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Reshape" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        node_before = g.node_before(node.input[0])
+        if node_before is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if node_before.op_type not in {"Squeeze", "Unsqueeze"} or node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst2 = g.get_computed_constant(node.input[1])
+        if cst2 is None or 0 in cst2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        # The second shape wins it all.
+        return MatchResult(self, [node_before, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node_before: NodeProto,
+        reshape_node: NodeProto,
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "Reshape",
+                [node_before.input[0], reshape_node.input[1]],
+                [reshape_node.output[0]],
+                name=f"{self.__class__.__name__}--{reshape_node.name}",
+                doc_string=reshape_node.doc_string,
+            )
         ]

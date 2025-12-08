@@ -74,6 +74,7 @@ from .onnx_reshape import (
     ShapeBasedReshapeIsSqueezePattern,
     ShapedBasedReshapePattern,
     StaticConcatReshapePattern,
+    UnsqueezeOrSqueezeReshapePattern,
     UnsqueezeReshapePattern,
 )
 from .onnx_rotary import (
@@ -231,6 +232,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         TransposeReshapeTransposePattern(verbose=verbose),
         TransposeTransposePattern(verbose=verbose),
         UnsqueezeEqualPattern(verbose=verbose),
+        UnsqueezeOrSqueezeReshapePattern(verbose=verbose),
         UnsqueezeReshapePattern(verbose=verbose),
         UnsqueezeUnsqueezePattern(verbose=verbose),
         # LLM
