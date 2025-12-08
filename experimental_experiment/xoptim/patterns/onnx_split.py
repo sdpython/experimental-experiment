@@ -285,6 +285,230 @@ class SlicesSplitPattern(PatternOptimization):
         return [node]
 
 
+class GathersSplitPattern(PatternOptimization):
+    """
+    Merges multiple parallel gather into a split followed by unsqueeze.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Gather", ["X", "zero"], ["x1"], axis=1))
+        nodes.append(make_node_extended("Gather", ["X", "one"], ["x2"], axis=1))
+        outputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a",)))
+        outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a",)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 26),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["init7_s1_1"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            make_node_extended(
+                "Split",
+                ["X"],
+                ["GathersSplitPattern--x1", "GathersSplitPattern--x2"],
+                axis=1,
+                num_outputs=2,
+            )
+        )
+        nodes.append(
+            make_node_extended("Squeeze", ["GathersSplitPattern--x1", "init7_s1_1"], ["x1"])
+        )
+        nodes.append(
+            make_node_extended("Squeeze", ["GathersSplitPattern--x2", "init7_s1_1"], ["x2"])
+        )
+        outputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a",)))
+        outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a",)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Gather" or node.domain != "":
+            return self.none()
+
+        if not g.has_shape(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        users = [
+            op for op in g.next_nodes(node.input[0]) if op.op_type == "Gather" and op.domain == ""
+        ]
+        if len(users) <= 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        axis = None
+        csts = set()
+        rank = None
+        keep_users = []
+        for user in users:
+            if len(user.input) != 2:
+                continue
+            a = g.get_attribute_with_default(user, "axis", default_value=0)
+            assert a is not None, f"user={user}"
+            if axis is not None and a != axis:
+                return self.none(node, inspect.currentframe().f_lineno)
+            axis = a
+            if not g.is_constant_scalar(user.input[1]):
+                continue
+            cst = g.get_constant_scalar(user.input[1])
+            if cst is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if cst in csts:
+                return self.none(node, inspect.currentframe().f_lineno)
+            rk = g.get_rank(user.input[1])
+            if rank is not None and rk != rank:
+                return self.none(node, inspect.currentframe().f_lineno)
+            rank = rk
+            csts.add(cst)
+            keep_users.append(user)
+
+        users = keep_users
+        sorted_indices = sorted(csts)
+        if sorted_indices != list(range(len(csts))):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape = g.get_shape(node.input[0])
+        if axis < 0:
+            axis += len(shape)
+        if axis >= len(shape):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not isinstance(shape[axis], int):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if shape[axis] != len(sorted_indices):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, users, self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        *gather_nodes: NodeProto,
+    ) -> List[NodeProto]:
+        # nodes are all slices
+
+        axis = g.get_attribute_with_default(gather_nodes[0], "axis", default_value=0)
+        outputs = [None for u in gather_nodes]
+        rank = g.get_rank(gather_nodes[0].input[1])
+        post_nodes = []
+        if rank == 0:
+            axis_init = g.make_initializer(
+                "", np.array([axis], dtype=np.int64), source=f"{self.__class__.__name__}.axes"
+            )
+        for user in gather_nodes:
+            cst = g.get_constant_scalar(user.input[1])
+            if rank == 1:
+                outputs[cst] = user.output[0]
+            else:
+                name = g.unique_name(f"{self.__class__.__name__}--{user.output[0]}")
+                post_nodes.append(
+                    g.make_node(
+                        "Squeeze",
+                        [name, axis_init],
+                        [user.output[0]],
+                        name=f"{self.__class__.__name__}--{user.name}",
+                    )
+                )
+                outputs[cst] = name
+
+        node = g.make_node(
+            "Split",
+            [gather_nodes[0].input[0]],
+            outputs,
+            axis=axis,
+            num_outputs=len(outputs),
+            name=f"{self.__class__.__name__}--{gather_nodes[0].name}",
+        )
+        return [node, *post_nodes]
+
+
 class SplitConcatPattern(PatternOptimization):
     """
     Replaces Split + Concat into identity if this is equivalent.

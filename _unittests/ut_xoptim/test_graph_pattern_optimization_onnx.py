@@ -48,7 +48,7 @@ from experimental_experiment.xshape._shape_helper import (
     compatible_dimensions,
 )
 from experimental_experiment.xoptim import get_pattern_list, remove_constants_for_initializers
-from experimental_experiment.helpers import pretty_onnx
+from experimental_experiment.helpers import pretty_onnx, enumerate_nodes
 from experimental_experiment.xoptim.patterns import MatMulAddPattern
 
 TFLOAT = TensorProto.FLOAT
@@ -2032,6 +2032,78 @@ class TestGraphPatternOptimization(ExtTestCase):
         split = [n for n in onx.graph.node if n.op_type == "Split"]
         self.assertEqual(len(split), 2)
         self._check_with_ort(onx)
+
+    def test_gathers_split_rank1(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Gather", ["X", "zero"], ["x1"], axis=1),
+                    oh.make_node("Gather", ["X", "one"], ["x2"], axis=1),
+                    oh.make_node("Add", ["x1", "x2"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2])],
+                [_mkv_("Y", TFLOAT, ["a", 1])],
+                [
+                    onh.from_array(np.array([0], dtype=np.int64), name="zero"),
+                    onh.from_array(np.array([1], dtype=np.int64), name="one"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(11, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["GathersSplit"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Split", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_gathers_split_rank0(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Gather", ["X", "zero"], ["x1"], axis=1),
+                    oh.make_node("Gather", ["X", "one"], ["x2"], axis=1),
+                    oh.make_node("Add", ["x1", "x2"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2])],
+                [_mkv_("Y", TFLOAT, ["a"])],
+                [
+                    onh.from_array(np.array(0, dtype=np.int64), name="zero"),
+                    onh.from_array(np.array(1, dtype=np.int64), name="one"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(11, 2)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["GathersSplit"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Split", "Squeeze", "Squeeze", "Add"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
     def test_rotary_split_missed(self):
         model = oh.make_model(
@@ -5189,8 +5261,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(y1, y2)
 
     @hide_stdout()
-    def test_constant_to_initializer_with_conflict(self):
-
+    def test_constant_to_initializer_with_conflict1(self):
         def _mkv_(name):
             value_info_proto = ValueInfoProto()
             value_info_proto.name = name
@@ -5243,14 +5314,87 @@ class TestGraphPatternOptimization(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
+        self.assertRaise(lambda: check_model(model), onnx.checker.ValidationError)
 
         self.assertEqual(len(model.graph.initializer), 2)
         self.assertEqual(set(i.name for i in model.graph.initializer), {"zero", "two"})
         opt_onnx = remove_constants_for_initializers(model, verbose=0)
         self.print_model(opt_onnx)
-        self.assertEqual(len(opt_onnx.graph.initializer), 4)
-        check_model(opt_onnx)
+        self.dump_onnx("test_constant_to_initializer_with_conflict1.onnx", opt_onnx)
+        self.assertEqual(len(opt_onnx.graph.initializer), 2)
+        self.assertRaise(lambda: check_model(opt_onnx), onnx.checker.ValidationError)
+
+    @hide_stdout()
+    def test_constant_to_initializer_with_conflict2(self):
+        def _mkv_(name):
+            value_info_proto = ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        def _make_model():
+            return oh.make_model(
+                oh.make_graph(
+                    [
+                        oh.make_node("ReduceSum", ["X"], ["Xred"]),
+                        oh.make_node("Add", ["X", "two"], ["X0"]),
+                        oh.make_node("Add", ["X0", "zero"], ["X00"]),
+                        oh.make_node("CastLike", ["one", "Xred"], ["one_c"]),
+                        oh.make_node("Greater", ["Xred", "one_c"], ["cond"]),
+                        oh.make_node(
+                            "If",
+                            ["cond"],
+                            ["Z_c"],
+                            then_branch=oh.make_graph(
+                                [
+                                    oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
+                                    oh.make_node("Add", ["X00", "two"], ["Y"]),
+                                ],
+                                "then",
+                                [],
+                                [_mkv_("Y")],
+                            ),
+                            else_branch=oh.make_graph(
+                                [
+                                    oh.make_node("Constant", [], ["two"], value_floats=[2.0]),
+                                    oh.make_node("Sub", ["X0", "two"], ["Y"]),
+                                ],
+                                "else",
+                                [],
+                                [_mkv_("Y")],
+                            ),
+                        ),
+                        oh.make_node("CastLike", ["Z_c", "X"], ["Z"]),
+                    ],
+                    "test",
+                    [
+                        oh.make_tensor_value_info("X", TFLOAT, ["N"]),
+                        oh.make_tensor_value_info("one", TFLOAT, ["N"]),
+                    ],
+                    [oh.make_tensor_value_info("Z", TensorProto.UNDEFINED, ["N"])],
+                    [
+                        onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                        onh.from_array(np.array([2], dtype=np.float32), name="two"),
+                    ],
+                ),
+                opset_imports=[oh.make_operatorsetid("", 18)],
+                ir_version=10,
+            )
+
+        model = _make_model()
+        self.assertEqual(len(model.graph.initializer), 2)
+        self.assertEqual(set(i.name for i in model.graph.initializer), {"zero", "two"})
+        self.dump_onnx("test_constant_to_initializer_with_conflict2.onnx", model)
+
+        gr = GraphBuilder(model)
+        onx = gr.to_onnx(optimize=False)
+        self.dump_onnx("test_constant_to_initializer_with_conflict2.2.onnx", onx)
+
+        model = _make_model()
+        opt_onnx = remove_constants_for_initializers(model, verbose=10)
         self.print_model(opt_onnx)
+        self.dump_onnx("test_constant_to_initializer_with_conflict2.onnx", opt_onnx)
+        self.assertEqual(len(opt_onnx.graph.initializer), 2)
+        self.assertNotIn("Constant", [n.op_type for n in enumerate_nodes(opt_onnx.graph)])
 
         feeds = {
             "X": np.array([1, 2, 3], dtype=np.float32),
@@ -5258,7 +5402,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         }
         ref = ExtendedReferenceEvaluator(opt_onnx)
         z = ref.run(None, feeds)[0]
-        self.assertEqualArray(z, np.array([5.1, 6.1, 7.1], dtype=np.float32))
+        self.assertEqualArray(z, np.array([5, 6, 7], dtype=np.float32))
 
     def test_squeeze_add_1(self):
         model = oh.make_model(
@@ -7131,6 +7275,78 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
+
+    def test_swap_unsqueeze_transpose(self):
+        for axis in [0, 1, 2, -1]:
+            with self.subTest(axis=axis):
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("Unsqueeze", ["X", "axes"], ["xu"]),
+                            oh.make_node("Transpose", ["xu"], ["Y"], perm=[0, 2, 1, 3]),
+                        ],
+                        "test",
+                        [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
+                        [oh.make_tensor_value_info("Y", TFLOAT, ["e", "f", "g", "h"])],
+                        [onh.from_array(np.array([axis], dtype=np.int64), name="axes")],
+                    ),
+                    opset_imports=[oh.make_operatorsetid("", 18)],
+                    ir_version=10,
+                )
+                feeds = dict(X=np.random.randn(4, 3, 7).astype(np.float32))
+                ref = ExtendedReferenceEvaluator(model, verbose=0)
+                z = ref.run(None, feeds)[0]
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(
+                        patterns="SwapUnsqueezeTranspose", verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    ["Transpose", "Unsqueeze"], [n.op_type for n in opt_onx.graph.node]
+                )
+                ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+                zz = ref.run(None, feeds)[0]
+                self.assertEqualArray(z, zz)
+
+    def test_swap_unsqueeze_transpose_2(self):
+        for axes in [[0, 1], [1, 2], [0, 2]]:
+            with self.subTest(axes=axes):
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("Unsqueeze", ["X", "axes"], ["xu"]),
+                            oh.make_node("Transpose", ["xu"], ["Y"], perm=[0, 2, 1, 4, 3]),
+                        ],
+                        "test",
+                        [oh.make_tensor_value_info("X", TFLOAT, ["a", "b", "c"])],
+                        [oh.make_tensor_value_info("Y", TFLOAT, ["e", "f", "g", "h", "i"])],
+                        [onh.from_array(np.array(axes, dtype=np.int64), name="axes")],
+                    ),
+                    opset_imports=[oh.make_operatorsetid("", 18)],
+                    ir_version=10,
+                )
+                feeds = dict(X=np.random.randn(4, 3, 7).astype(np.float32))
+                ref = ExtendedReferenceEvaluator(model, verbose=0)
+                z = ref.run(None, feeds)[0]
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(
+                        patterns="SwapUnsqueezeTranspose", verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    ["Transpose", "Unsqueeze"], [n.op_type for n in opt_onx.graph.node]
+                )
+                ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+                zz = ref.run(None, feeds)[0]
+                self.assertEqualArray(z, zz)
 
 
 if __name__ == "__main__":

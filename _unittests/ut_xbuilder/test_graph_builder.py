@@ -1307,7 +1307,7 @@ class TestGraphBuilder(ExtTestCase):
             return onnx_model
 
         onnx_model = _make_model()
-        ref = ExtendedReferenceEvaluator(onnx_model)
+        ref = self.check_ort(onnx_model)
         feeds = dict(
             X=np.arange(9).reshape((3, 3)).astype(np.float32),
             A=np.arange(9).reshape((3, 3)).astype(np.float32),
@@ -1319,7 +1319,8 @@ class TestGraphBuilder(ExtTestCase):
         assert None not in gr.nodes
         self.assertEqual(len(gr.functions), 2)
         onx = gr.to_onnx(inline=False)
-        assert None not in gr.nodes
+        self.assertNotIn(None, gr.nodes)
+        self.dump_onnx("test_inline_function_with_subgraphs.onnx", onx)
         self.assertEqual(len(onx.functions), 2)
         gr = GraphBuilder(onnx_model, verbose=5)
         gr.inline_functions(verbose=1)
@@ -1336,7 +1337,7 @@ class TestGraphBuilder(ExtTestCase):
         onx = gr.to_onnx(inline=True)
         self.assertEqual(len(gr.functions), 0)
         self.assertEqual(len(onx.functions), 0)
-        ref2 = ExtendedReferenceEvaluator(onx)
+        ref2 = self.check_ort(onx)
         got = ref2.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 

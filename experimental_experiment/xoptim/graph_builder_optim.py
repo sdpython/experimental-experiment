@@ -99,6 +99,12 @@ class GraphBuilderPatternOptimization:
             self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
         self._debug_step = os.environ.get("PATTERNSTEP", "0") in (1, "1", "True", True, "true")
 
+    def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
+        return self.builder.do_not_turn_constant_initializers_maybe_because_of_showing(name)
+
+    def has_exact_same_constant_in_context(self, name: str) -> Optional[bool]:
+        return self.builder.has_exact_same_constant_in_context(name)
+
     def has_processor(self, processor: str) -> bool:
         """Checks the process is on the list of used processors."""
         return processor in self.processor
@@ -443,6 +449,17 @@ class GraphBuilderPatternOptimization:
     ) -> Optional[AttributeProto]:
         """Returns an attribute for a node."""
         return self.builder.get_attribute(node, att_name, exc=exc)
+
+    def get_attribute_with_default(self, node: NodeProto, name: str, default_value: Any) -> Any:
+        """
+        Returns an attribute or its default value if missing.
+
+        :param node: node
+        :param name: attribute name
+        :param default_value: default value
+        :return: value
+        """
+        return self.builder.get_attribute_with_default(node, name, default_value)
 
     def get_attributes_with_default(self, node: NodeProto, **default_values) -> Dict[str, Any]:
         """Returns integer or float values for attributes."""

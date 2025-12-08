@@ -474,6 +474,12 @@ class ReshapeReshapePattern(PatternOptimization):
         if next_node.input[0] != node.output[0]:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        if g.is_constant(next_node.input[1]):
+            cst2 = g.get_computed_constant(next_node.input[1])
+            if cst2 is not None and 0 not in cst2:
+                # The second shape wins it all.
+                return MatchResult(self, [node, next_node], self.apply, insert_at=next_node)
+
         if g.is_constant(next_node.input[1]) and g.is_constant(node.input[1]):
             # handles the case where shape1 == (0, 0, a, b) and shape2 == (0, 0, -1)
             cst1 = g.get_computed_constant(node.input[1])
@@ -577,6 +583,20 @@ class ReshapeReshapePattern(PatternOptimization):
         node: NodeProto,
         next_node: NodeProto,
     ) -> List[NodeProto]:
+        if g.is_constant(next_node.input[1]):
+            cst2 = g.get_computed_constant(next_node.input[1])
+            if 0 not in cst2:
+                # The second shape wins it all.
+                return [
+                    g.make_node(
+                        "Reshape",
+                        [node.input[0], next_node.input[1]],
+                        [next_node.output[0]],
+                        name=f"{self.__class__.__name__}--{next_node.name}",
+                        doc_string=next_node.doc_string,
+                    )
+                ]
+
         same_rank = g.get_rank(node.input[0]) != g.get_rank(next_node.output[0])
         second_input = next_node.input[1]
         pre_nodes = []

@@ -22,7 +22,7 @@ class TestSklConvert(ExtTestCase):
     @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
-    def test_linear_regression(self):
+    def test_skl_linear_regression(self):
         X = np.random.randn(10, 3)
         y = np.random.randn(10, 1)
         lr = sklearn.linear_model.LinearRegression()
@@ -36,7 +36,7 @@ class TestSklConvert(ExtTestCase):
     @ignore_warnings(DeprecationWarning)
     @hide_stdout()
     @skipif_ci_windows("not working")
-    def test_logistic_regression(self):
+    def test_skl_logistic_regression(self):
         X = np.random.randn(20, 3)
         y = (np.random.randn(20, 1) >= 0.5).astype(int)
         lr = sklearn.linear_model.LogisticRegression()
@@ -52,18 +52,21 @@ class TestSklConvert(ExtTestCase):
 
     @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
     @hide_stdout()
-    def test_input_names(self):
+    def test_skl_input_names(self):
         X = np.random.randn(10, 3)
         y = np.random.randn(10, 1)
         lr = sklearn.linear_model.LinearRegression()
         lr.fit(X, y)
+        onx = to_onnx(lr, verbose=10)
+        self.dump_onnx("test_skl_input_names.1.onnx", onx)
         onx = to_onnx(lr, verbose=10, input_names=["S"])
+        self.dump_onnx("test_skl_input_names.2.onnx", onx)
         self.assertEqual(onx.graph.input[0].name, "S")
         ref = ExtendedReferenceEvaluator(onx)
         self.assertEqualArray(lr.predict(X), ref.run(None, {ref.input_names[0]: X})[0], atol=1e-5)
 
     @unittest.skipIf(_to_onnx is None, "sklearn-onnx not recent enough")
-    def test_nan_to_euclidean(self):
+    def test_skl_nan_to_euclidean(self):
         import torch
 
         class NanEuclidean(torch.nn.Module):

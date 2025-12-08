@@ -798,7 +798,7 @@ class TransposeGatherPattern(PatternOptimization):
         if node.op_type != "Gather" or node.domain != "":
             return self.none()
         tr_node = g.node_before(node.input[0])
-        if not tr_node or g.is_used_more_than_once(node.input[0]):
+        if not tr_node:
             return self.none(node, inspect.currentframe().f_lineno)
         if tr_node.op_type != "Transpose" or tr_node.domain != "":
             return self.none(node, inspect.currentframe().f_lineno)
@@ -823,13 +823,194 @@ class TransposeGatherPattern(PatternOptimization):
         perm = transpose_node.attribute[0].ints
         axis = gather_node.attribute[0].i if gather_node.attribute else 0
         new_axis = perm[axis]
+        new_node = g.make_node(
+            "Gather",
+            [transpose_node.input[0], gather_node.input[1]],
+            gather_node.output,
+            axis=new_axis,
+            name=f"{self.__class__.__name__}--{gather_node.name}",
+            doc_string=gather_node.doc_string,
+        )
+        if g.is_used_more_than_once(transpose_node.output[0]):
+            return [transpose_node, new_node]
+        return [new_node]
+
+
+class SwapUnsqueezeTransposePattern(PatternOptimization):
+    """
+    Swaps Unsqueeze and Transpose.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        inputs.append(oh.make_tensor_value_info("axes", onnx.TensorProto.INT64, shape=(2,)))
+        nodes.append(
+            make_node_extended(
+                "Constant",
+                [],
+                ["axes"],
+                value=onh.from_array(np.array([1, 2], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(make_node_extended("Unsqueeze", ["X", "axes"], ["xu"]))
+        nodes.append(make_node_extended("Transpose", ["xu"], ["Y"], perm=[0, 2, 1, 4, 3]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("e", "f", "g", "h", "i")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import make_node_extended
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        inputs.append(oh.make_tensor_value_info("axes", onnx.TensorProto.INT64, shape=(2,)))
+        nodes.append(
+            make_node_extended(
+                "Transpose", ["X"], ["SwapUnsqueezeTransposePattern_Y"], perm=[0, 2, 1]
+            )
+        )
+        nodes.append(
+            make_node_extended("Unsqueeze", ["SwapUnsqueezeTransposePattern_Y", "axes"], ["Y"])
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("e", "f", "g", "h", "i")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 0):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Transpose" or node.domain != "":
+            return self.none()
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        unsq_node = g.node_before(node.input[0])
+        if not unsq_node:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if unsq_node.op_type != "Unsqueeze" or unsq_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(unsq_node.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(unsq_node.input[1])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [unsq_node, node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        unsqueeze_node: NodeProto,
+        transpose_node: NodeProto,
+    ) -> List[NodeProto]:
+        axes = g.get_computed_constant(unsqueeze_node.input[1])
+        perm = transpose_node.attribute[0].ints
+        if axes.min() < 0:
+            axes = (axes + len(perm)) % len(perm)
+        set_axes = {int(i) for i in axes}
+        permf = [p for p in perm if p not in set_axes]
+        iperm = [(p, i) for i, p in enumerate(permf)]
+        iperm.sort()
+        nperm = [(i, ni) for ni, (_p, i) in enumerate(iperm)]
+        nperm.sort()
+        new_perm = [_[1] for _ in nperm]
+
+        new_name = g.unique_name(f"{self.__class__.__name__}_{transpose_node.output[0]}")
+        new_axes = g.make_initializer(
+            "",
+            np.array(sorted([perm[a] for a in axes]), dtype=np.int64),
+            source=f"{self.__class__.__name__}.apply.new_shape",
+        )
+
         return [
             g.make_node(
-                "Gather",
-                [transpose_node.input[0], gather_node.input[1]],
-                gather_node.output,
-                axis=new_axis,
-                name=f"{self.__class__.__name__}--{gather_node.name}",
-                doc_string=gather_node.doc_string,
-            )
+                "Transpose",
+                [unsqueeze_node.input[0]],
+                [new_name],
+                perm=new_perm,
+                name=f"{self.__class__.__name__}--{transpose_node.name}",
+                doc_string=transpose_node.doc_string,
+            ),
+            g.make_node(
+                "Unsqueeze",
+                [new_name, new_axes],
+                [transpose_node.output[0]],
+                name=f"{self.__class__.__name__}--{unsqueeze_node.name}",
+                doc_string=unsqueeze_node.doc_string,
+            ),
         ]

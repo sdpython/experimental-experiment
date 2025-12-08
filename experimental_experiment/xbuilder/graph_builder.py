@@ -292,6 +292,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
         self._debug_dyn_dim = os.environ.get("ONNXDYNDIM","").split(",")
+
+    .. warning:: ModelProto may be modified
+
+        The builder tries to minimize the copies of protos. The original
+        model may be modified if the builder is initialized with a model.
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -470,6 +475,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self.check_empty_source = check_empty_source
         self.user_defined_output_names = output_names or []
         self._context = _context or set()
+        self._do_not_turn_constant_initializers = False
+
         if isinstance(_parent, tuple):
             self._parent = _parent[0]
             self._parent_node = _parent[1]
@@ -578,6 +585,60 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 )
         else:
             raise NotImplementedError(f"{type(target_opset_or_existing_proto)} is not supported.")
+
+    def has_exact_same_constant_in_context(self, name: str) -> Optional[bool]:
+        """
+        Tells if this constant already exiting in the context of the main graph.
+        """
+        cst = self.is_constant(name)
+        cstp = self._parent.is_constant_part_of_previous_context(name)
+        if cst and cstp:
+            # Maybe it the same constant and then it is ok.
+            # Should be compare (only if the cost if not two much)
+            if (
+                self.has_shape(name)
+                and self.has_type(name)
+                and self._parent.has_shape(name)
+                and self._parent.has_type(name)
+            ):
+                shape1 = self.get_shape(name)
+                shape2 = self._parent.get_shape(name)
+                if shape1 != shape2:
+                    return False
+                if self.get_type(name) != self._parent.get_type(name):
+                    return False
+                n_elem = np.prod(shape1)
+                if n_elem < 128:
+                    # Then the code is not much.
+                    cst1 = self.get_constant(name, exc=False, computed_value=True)
+                    cst2 = self.get_constant_from_parent(name, exc=False, computed_value=True)
+                    if cst1 is not None and cst2 is not None:
+                        d = cst1 - cst2
+                        if d.min() == d.max() == 0:
+                            return True
+                else:
+                    return None
+        return False
+
+    def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
+        """
+        Constants are turned into initializers in the main graph.
+        It is not possible in function or not always safe inside subgraphs
+        (due to shadowing).
+        """
+        if self._do_not_turn_constant_initializers:
+            return True
+        if self._parent:
+            # The current behaviour could be improved because
+            # the name could been create after this subgraph is really used
+            # in the parent graph.
+            if not self._parent.has_name(name):
+                return False
+            r = self.has_exact_same_constant_in_context(name)
+            if r is not None:
+                return not r
+            return self._parent.do_not_turn_constant_initializers_maybe_because_of_showing(name)
+        return False
 
     def make_subset_builder(
         self,
@@ -1126,8 +1187,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if att.name == "value_ints":
                     return (len(att.ints),)
                 if att.name == "value":
-                    t = onh.to_array(att.t)
-                    return tuple(t.shape)
+                    return tuple(att.t.dims)
         raise TypeError(
             f"Unexpected or unsupported scenario type {type(proto)}: "
             f"{proto}, attribute={proto.attribute}."
@@ -1360,16 +1420,26 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             ), f"Unable to compute value {name!r}{self.get_debug_msg()}"
             return possible_value
 
-        if name not in self.initializers_dict:
-            if exc:
+        if name in self.initializers_dict:
+            value = self.initializers_dict[name]
+        else:
+            # So it should be stored in a parent.
+            value = self.get_constant_from_parent(
+                name,
+                exc=False,
+                computed_value=computed_value,
+                as_shape=as_shape,
+                multiple_outputs=multiple_outputs,
+            )
+            if value is None and exc:
                 raise ValueError(
-                    f"Result {name!r} was never evaluated within method 'constant_folding'."
+                    f"Result {name!r} was never evaluated within method 'constant_folding', "
+                    f"known initializers={sorted(self.initializers_dict)}{self.get_debug_msg()}"
                 )
             if self._debug_get_constant:
                 print(f"[GraphBuilder-{self._hash()}.get_constant]   J: None, name={name!r}")
-            return None
-
-        value = self.initializers_dict[name]
+            if value is None:
+                return value
 
         if isinstance(value, np.ndarray):
             if self._debug_get_constant:
@@ -1423,6 +1493,45 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             return np.array(value, dtype=np.float32)
 
         raise TypeError(f"Unable to convert type {type(value)} into numpy array.")
+
+    def get_constant_from_parent(
+        self,
+        name: str,
+        exc: bool = True,
+        computed_value: bool = False,
+        as_shape: bool = False,
+        multiple_outputs: bool = False,
+    ) -> Union[np.ndarray, NodeProto]:
+        """Tells if this name is part of the previous context."""
+        if not self._parent:
+            assert (
+                not exc
+            ), f"No parent found, unable to retrieve constant name {name!r}{self.get_debug_msg()}"
+            return None
+        value = self._parent.get_constant(
+            name,
+            exc=False,
+            computed_value=computed_value,
+            as_shape=as_shape,
+            multiple_outputs=multiple_outputs,
+        )
+        if value is not None:
+            return value
+        return self._parent.get_constant_from_parent(
+            name,
+            exc=False,
+            computed_value=computed_value,
+            as_shape=as_shape,
+            multiple_outputs=multiple_outputs,
+        )
+
+    def is_constant_part_of_previous_context(self, name: str) -> bool:
+        """Tells if this name is part of the previous context and a constant as well."""
+        if self.is_constant(name):
+            return True
+        if self._parent:
+            return self._parent.is_constant_part_of_previous_context(name)
+        return False
 
     def is_sequence(self, name: str) -> bool:
         """Tells if a result is a sequence."""
@@ -4979,6 +5088,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         rows.append(f"_known_shapes={pprint.pformat(self._known_shapes)[:10000]}")
         rows.append(f"_known_types={pprint.pformat(self._known_types)[:10000]}")
         rows.append(f"_known_devices={pprint.pformat(self._known_devices)[:10000]}")
+        rows.append(f"_context={pprint.pformat(sorted(self._context))[:10000]}")
         short_sh = {
             k: (v if (isinstance(v, tuple) and len(v) < 10) else string_type(v, with_shape=True))
             for k, v in self._known_value_shape.items()
@@ -5420,9 +5530,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             raise RuntimeError(f"The onnx model is empty (no node).\n{self.get_debug_msg()}")
 
         if inline:
+            self._check([], "before-inline")
             self._check_constants("before-inline")
             stats = self.inline_functions(verbose=self.verbose)
             self._check_constants("after-inline")
+            self._check([], "after-inline")
         else:
             stats = None
 
@@ -6041,9 +6153,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
     def _check(self, stats: List[Dict[str, Any]], step: str, shadowing: bool = False):
         begin = time.perf_counter()
-        assert (
-            len(self.nodes) > 0
-        ), f"The onnx model is empty (step {step}, no node){self.get_debug_msg()}"
+        assert len(self.nodes) > 0, (
+            f"The onnx model is empty (step {step!r}, no node, shadowing={shadowing})"
+            f"{self.get_debug_msg()}"
+        )
         known = set(n.name for n in self.inputs) | set(self.initializers_dict) | self._context
         self._check_nodes(self.nodes, known, step, root=True)
         for o in self.outputs:
@@ -9218,6 +9331,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param verbose: verbosity
         :return: number of moved initializers
         """
+        self._do_not_turn_constant_initializers = True
         if not self.initializers_dict:
             return
 
@@ -9484,6 +9598,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                             self.set_name(v, marker="rename_names_input")
                             break
                     continue
+                elif self.has_name(k):
+                    self.set_name(v, marker="GraphBuilder.rename_names")
 
                 if k in self.initializers_dict:
                     self.initializers_dict[v] = self.initializers_dict[k]

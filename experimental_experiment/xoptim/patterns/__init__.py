@@ -87,9 +87,10 @@ from .onnx_rotary import (
 from .onnx_sequence import SequenceConstructAtPattern
 from .onnx_shape import ShapeBasedShapeShapeAddPattern
 from .onnx_slice import SliceSlicePattern
-from .onnx_split import SplitConcatPattern, SlicesSplitPattern
+from .onnx_split import GathersSplitPattern, SplitConcatPattern, SlicesSplitPattern
 from .onnx_sub import Sub1MulPattern
 from .onnx_transpose import (
+    SwapUnsqueezeTransposePattern,
     TransposeEqualReshapePattern,
     TransposeGatherPattern,
     TransposeReshapeTransposePattern,
@@ -152,6 +153,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
 
         print(pattern_table_doc(get_default_patterns(), as_rst=True))
     """
+    assert ConstantToInitializerPattern
     return [
         # AlmostDoNothingPattern(verbose=verbose),
         BatchNormalizationPattern(verbose=verbose),
@@ -167,11 +169,13 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         ConcatGatherPattern(verbose=verbose),
         ConcatReshapePattern(verbose=verbose),
         ConcatTwiceUnaryPattern(verbose=verbose),
+        ConstantToInitializerPattern(verbose=verbose),
         ConvBiasNullPattern(verbose=verbose),
         DropoutPattern(verbose=verbose),
         ExpandPattern(verbose=verbose),
         ExpandBroadcastPattern(verbose=verbose),
         ExpandSwapPattern(verbose=verbose),
+        GathersSplitPattern(verbose=verbose),
         GeluPattern(verbose=verbose),
         IdentityPattern(verbose=verbose),
         LayerNormalizationPattern(verbose=verbose),
@@ -217,6 +221,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         Sub1MulPattern(verbose=verbose),
         SwapExpandReshapePattern(verbose=verbose),
         SwapUnaryPattern(verbose=verbose),
+        SwapUnsqueezeTransposePattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),
         SwitchReshapeActivationPattern(verbose=verbose),
         TransposeEqualReshapePattern(verbose=verbose),
