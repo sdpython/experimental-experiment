@@ -158,7 +158,7 @@ def hide_stdout(f: Optional[Callable] = None) -> Callable:
 
     def wrapper(fct):
         def call_f(self):
-            if os.environ.get("UNHIDE", ""):
+            if os.environ.get("UNHIDE", "") == "1":
                 fct(self)
                 return
             st = StringIO()

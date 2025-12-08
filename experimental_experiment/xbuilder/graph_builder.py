@@ -9582,8 +9582,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             ), f"Renaming not implemented for sequence {k!r}{self.get_debug_msg()}"
             assert k not in set_outputs, f"Renaming not implemented for output {k!r} yet"
             if not with_existing:
-                if self.has_name(k):
-                    self.set_name(v, marker="GraphBuilder.rename_names")
                 if self.has_type(k):
                     self.set_type(v, self.get_type(k))
                 if self.has_device(k):
@@ -9600,6 +9598,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                             self.set_name(v, marker="rename_names_input")
                             break
                     continue
+                elif self.has_name(k):
+                    self.set_name(v, marker="GraphBuilder.rename_names")
 
                 if k in self.initializers_dict:
                     self.initializers_dict[v] = self.initializers_dict[k]
