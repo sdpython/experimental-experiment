@@ -1044,13 +1044,13 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if hasattr(v, "shape"):
                 shape = " x ".join(map(str, v.shape))
                 dtype = str(v.dtype)
-                prefix = "A" if isinstance(v, np.ndarray) else "T" 
+                prefix = "A" if isinstance(v, np.ndarray) else "T"
                 d = "G" if hasattr(v, "is_cuda") and v.is_cuda else "C"
                 prefix = f"{d}{prefix}"
             elif isinstance(v, TensorProto):
                 shape = tuple(v.dims)
                 dtype = v.data_type
-                prefix = f"CP"
+                prefix = "CP"
             else:
                 shape = "?"
                 dtype = "?"
