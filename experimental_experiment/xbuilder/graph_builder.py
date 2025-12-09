@@ -985,11 +985,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if node.op_type in {"Shape", "Reshape", "Unsqueeze", "Squeeze", "Cast", "Transpose"}:
             atts = []
             for att in node.attribute:
-                if att.kind == AttributeProto.INT:
+                if att.type == AttributeProto.INT:
                     atts.append(f"{att.name}={att.i}")
-                elif att.kind == AttributeProto.FLOAT:
+                elif att.type == AttributeProto.FLOAT:
                     atts.append(f"{att.name}={att.f}")
-                elif att.kind == AttributeProto.INTS:
+                elif att.type == AttributeProto.INTS:
                     atts.append(f"{att.name}={att.ints}")
             suffix = ""
             if len(node.input) == 2 and self.is_constant(node.input[1]):
