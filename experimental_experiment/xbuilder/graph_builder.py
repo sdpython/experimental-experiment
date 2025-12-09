@@ -981,14 +981,38 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             shape_info = " ".join(st)
         else:
             shape_info = ""
-        text = (
-            (
-                f"{node.op_type}[{node.domain}]: "
-                f"{', '.join(node.input)} -> {', '.join(node.output)}"
+
+        if node.op_type in {"Shape", "Reshape", "Unsqueeze", "Squeeze", "Cast", "Transpose"}:
+            atts = []
+            for att in node.attribute:
+                if att.kind == AttributeProto.INT:
+                    atts.append(f"{att.name}={att.i}")
+                elif att.kind == AttributeProto.FLOAT:
+                    atts.append(f"{att.name}={att.f}")
+                elif att.kind == AttributeProto.INTS:
+                    atts.append(f"{att.name}={att.ints}")
+            suffix = ""
+            if len(node.input) == 2 and self.is_constant(node.input[1]):
+                cst = self.get_constant(node.input[1], exc=False)
+                if cst is not None:
+                    suffix = f", {cst.tolist()}"
+            satts = ", ".join(atts)
+            if satts:
+                satts = f", {satts}"
+            text = (
+                f"{node.op_type}(.{suffix}{satts}): {', '.join(node.input)} -> "
+                f"{', '.join(node.output)}"
             )
-            if node.domain
-            else f"{node.op_type}: {', '.join(node.input)} -> {', '.join(node.output)}"
-        )
+        else:
+            text = (
+                (
+                    f"{node.op_type}[{node.domain}]: "
+                    f"{', '.join(node.input)} -> {', '.join(node.output)}"
+                )
+                if node.domain
+                else f"{node.op_type}: {', '.join(node.input)} -> {', '.join(node.output)}"
+            )
+
         if shape_info:
             text = f"{text} ## {shape_info}"
         if short:
@@ -1010,7 +1034,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         Pretty rendering of the graph.
 
         :param add_fx_graph: add the fx Graph to the rendering
-        :param recursive: dig into subgraphs
+        :param recursive: dig into subgraphs (not implemented yet)
         :return: string
         """
 
