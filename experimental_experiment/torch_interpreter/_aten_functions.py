@@ -10512,9 +10512,43 @@ def aten_split_with_sizes(
                     g.get_rank(o, new_ranks[i])
         return res
 
-    assert isinstance(split_sizes, list) and all_int(
-        split_sizes
-    ), f"Not implemented when split_sizes ({split_sizes}) is a constant{g.get_debug_msg()}"
+    if isinstance(split_sizes, list) and all(isinstance(s, str) for s in split_sizes):
+        # Just a regular split.
+        unsq = [g.op.UnsqueezeAnyOpset(s, g.ZERO, name=name) for s in split_sizes]
+        if len(unsq) > 1:
+            splits = g.op.Concat(*unsq, axis=0, name=name)
+        elif len(unsq) == 1:
+            splits = unsq[0]
+        else:
+            raise AssertionError(
+                f"The model is incorrect, split_sizes is empty, x={x!r}{g.get_debug_msg()}"
+            )
+        if use_sequence:
+            res = g.make_node("SplitToSequence", [x, splits], outputs, axis=dim, name=name)
+            if not sts:
+                r = g.get_rank(x)
+                g.set_sequence(res, g.get_type(x), types=[r for o in split_sizes])
+            return res
+        if len(outputs) == 1:
+            o = outputs[0]
+            outputs = [f"{o}#{i}" for i, _ in enumerate(split_sizes)]
+        res = g.make_node("Split", [x, splits], outputs, axis=dim, name=name)
+        if not sts:
+            if g.has_type(x):
+                dt = g.get_type(x)
+                for o in outputs:
+                    g.set_type(o, dt)
+            if g.has_rank(x):
+                dt = g.get_rank(x)
+                for o in outputs:
+                    g.set_type(o, dt)
+        return res
+
+    assert isinstance(split_sizes, list) and all_int(split_sizes), (
+        f"Not implemented when split_sizes ({split_sizes}) is a constant, "
+        f"dim={dim}, input shape is {g.get_shape(x) if g.has_shape(x) else '?'}"
+        f"{g.get_debug_msg()}"
+    )
     assert isinstance(dim, int), f"dim={dim} is not an integer{g.get_debug_msg()}"
     assert all(d > 0 for d in split_sizes), (
         f"split_with_sizes only implemented when all sizes are positive "
