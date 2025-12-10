@@ -721,9 +721,12 @@ class ExtTestCase(unittest.TestCase):
             zip([i.name for i in sess.get_inputs()], [x.detach().numpy() for x in inputs])
         )
         got = sess.run(None, feeds)
-        self.assertEqual(len(expected), len(got))
-        for e, g in zip(expected, got):
-            self.assertEqualArray(e, g, atol=atol, rtol=rtol, msg=msg)
+        if len(got) == 1 and hasattr(expected, "shape"):
+            self.assertEqualArray(expected, got[0], atol=atol, rtol=rtol, msg=msg)
+        else:
+            self.assertEqual(len(expected), len(got))
+            for e, g in zip(expected, got):
+                self.assertEqualArray(e, g, atol=atol, rtol=rtol, msg=msg)
 
 
 def get_figure(ax):

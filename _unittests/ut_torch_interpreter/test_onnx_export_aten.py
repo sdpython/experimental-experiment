@@ -3060,6 +3060,86 @@ class TestOnnxExportAten(ExtTestCase):
         self.dump_onnx("test_aten_unique_consecutive_return_32.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
+    def test_aten_split_int(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                a, b, c = torch.split(x, 2, dim=1)
+                return a + b * 2 + c * 3
+
+        model = Model()
+        x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+        )
+        self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
+    def test_aten_split_int_sizes(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                a, b = torch.split(x, [1, 5], dim=1)
+                return a + b * 2
+
+        model = Model()
+        x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+        )
+        self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
+    def test_aten_split_str_sizes(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                batch = x.shape[0]
+                res = torch.split(x, [batch], dim=0)
+                return res
+
+        model = Model()
+        x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+        )
+        self.dump_onnx("test_aten_split_str_sizes.onnx", onx)
+        self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
+    def test_aten_split_str_sizes_tricky(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                batch = x.shape[0] - 1
+                res = torch.split(x, [batch], dim=0)
+                return res
+
+        model = Model()
+        x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+        )
+        self.dump_onnx("test_aten_split_str_sizes_tricky.onnx", onx)
+        self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
