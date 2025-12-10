@@ -336,6 +336,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         def __repr__(self) -> str:
             return f"WrapSym({self._dynamic_to_str(self.sym)})"
 
+        @property
+        def name(self):
+            return self._dynamic_to_str(self.sym)
+
         def _dynamic_to_str(self, obj: Any) -> Optional[str]:
             if isinstance(obj, str):
                 return obj
@@ -3279,12 +3283,23 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             f"Unexpected dimension type {type(value)}:{value!r}, "
             f"class is {value.__class__.__name__!r} for key={key!r}{self.get_debug_msg()}"
         )
-        keykey = key.name if isinstance(key, self.WrapDim) else key
-        self.dynamic_objects[keykey] = (
-            self.WrapSym(value)
-            if isinstance(value, (self.torch.SymInt, self.torch.SymFloat, self.WrapDim))
-            else value
-        )
+        if isinstance(key, self.WrapDim):
+            keykey = key.name
+        else:
+            assert isinstance(
+                key, str
+            ), f"Unexpected type {type(key)} for key{self.get_debug_msg()}"
+            keykey = key
+        if isinstance(value, (self.torch.SymInt, self.torch.SymFloat, self.WrapDim)):
+            wrapped_value = self.WrapSym(value)
+            self.dynamic_objects[keykey] = wrapped_value
+            wrapped_name = wrapped_value.name
+            if wrapped_name and wrapped_name not in self.dynamic_objects:
+                # This means this informations is a dynamic dimension
+                # used for the first time.
+                self.dynamic_objects[wrapped_name] = wrapped_value
+        else:
+            self.dynamic_objects[keykey] = value
 
         if name is not None and name in self.dynamic_shapes and dim is not None:
             dyn_shape = self.dynamic_shapes[name]
