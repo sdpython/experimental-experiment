@@ -10476,6 +10476,7 @@ def aten_split_with_sizes(
     "split_to_sequence or split"
     if not use_sequence and isinstance(split_sizes, int):
         # Then torch means to split into equal chunk of this size
+        name = f"{name}-a"
         assert g.has_shape(x), (
             f"Not implemented when split_sizes={split_sizes} "
             f"and x has not known shape "
@@ -10514,6 +10515,7 @@ def aten_split_with_sizes(
 
     if isinstance(split_sizes, list) and all(isinstance(s, str) for s in split_sizes):
         # Just a regular split.
+        name = f"{name}-b"
         unsq = [g.op.UnsqueezeAnyOpset(s, g.ZERO, name=name) for s in split_sizes]
         if len(unsq) > 1:
             splits = g.op.Concat(*unsq, axis=0, name=name)
@@ -10529,10 +10531,10 @@ def aten_split_with_sizes(
                 r = g.get_rank(x)
                 g.set_sequence(res, g.get_type(x), types=[r for o in split_sizes])
             return res
-        if len(outputs) == 1:
+        if len(outputs) != len(split_sizes) and len(outputs) == 1:
             o = outputs[0]
             outputs = [f"{o}#{i}" for i, _ in enumerate(split_sizes)]
-        res = g.make_node("Split", [x, splits], outputs, axis=dim, name=name)
+        g.make_node("Split", [x, splits], outputs, axis=dim, name=name)
         if not sts:
             if g.has_type(x):
                 dt = g.get_type(x)
@@ -10542,7 +10544,7 @@ def aten_split_with_sizes(
                 dt = g.get_rank(x)
                 for o in outputs:
                     g.set_type(o, dt)
-        return res
+        return outputs
 
     assert isinstance(split_sizes, list) and all_int(split_sizes), (
         f"Not implemented when split_sizes ({split_sizes}) is a constant, "
@@ -10558,6 +10560,7 @@ def aten_split_with_sizes(
         f"Number of outputs is unexpected, outputs={outputs}, "
         f"split_sizes={split_sizes}{g.get_debug_msg()}"
     )
+    name = f"{name}-c"
     init = g.make_initializer(
         "", np.array(split_sizes, dtype=np.int64), source="aten_split_with_sizes.init"
     )
