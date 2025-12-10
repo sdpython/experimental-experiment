@@ -10531,7 +10531,7 @@ def aten_split_with_sizes(
                 r = g.get_rank(x)
                 g.set_sequence(res, g.get_type(x), types=[r for o in split_sizes])
             return res
-        if len(outputs) != len(split_sizes) and len(outputs) == 1:
+        if len(outputs) == 1:
             o = outputs[0]
             outputs = [f"{o}#{i}" for i, _ in enumerate(split_sizes)]
         g.make_node("Split", [x, splits], outputs, axis=dim, name=name)
