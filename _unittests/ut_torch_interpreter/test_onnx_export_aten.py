@@ -3119,6 +3119,27 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertIn("Split", [n.op_type for n in onx.graph.node])
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
+    def test_aten_split_str_sizes2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                splits = [x.shape[0] // 2, x.shape[0] - x.shape[0] // 2]
+                res = torch.split(x, splits, dim=0)
+                return res
+
+        model = Model()
+        x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
+        expected = model(x)
+        onx = to_onnx(
+            model,
+            (x,),
+            dynamic_shapes=({0: "length"},),
+        )
+        self.dump_onnx("test_aten_split_str_sizes2.onnx", onx)
+        self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
     def test_aten_split_str_sizes_tricky(self):
         import torch
 
