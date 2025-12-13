@@ -13,8 +13,10 @@ from onnx.helper import (
     make_graph,
     make_node,
     make_tensor_sequence_value_info,
+    make_tensor_type_proto,
     make_tensor_value_info,
 )
+from onnx.shape_inference import infer_function_output_types
 from ..helpers import (
     tensor_dtype_to_np_dtype,
     from_array_extended,
@@ -10341,10 +10343,12 @@ def aten_simple_loop_for(
 
     body_proto = g.get_local_function(body_fn, g.local_domain)
 
-    assert isinstance(
-        body_proto, FunctionProto
-    ), f"body is {type(body_proto)} but FunctionProto is needed{g.get_debug_msg()}"
+    assert isinstance(body_proto, FunctionProto), (
+        f"body is {type(body_proto)} but FunctionProto is needed for "
+        f"simple_loop_for{g.get_debug_msg()}"
+    )
     assert len(outputs) == 1, f"Only one outputs is expected but outputs={outputs!r}"
+
     if len(body_proto.output) != 1:
         outputs = [f"{outputs[0]}#{i}" for i in range(len(body_proto.output))]
     input_names = list(body_proto.input)
@@ -10385,19 +10389,32 @@ def aten_simple_loop_for(
     ]
     graph = make_graph(nodes, body_proto.name, inputs, graph_outputs)
 
-    itypes = [
-        graph.output[i].type.sequence_type.elem_type.tensor_type.elem_type
-        for i in range(1, len(graph.output))
-    ]
-    assert len(outputs) == len(
-        itypes
-    ), f"Length mismatch between outputs={outputs} and graph.output={graph.output}"
-    assert (
-        0 not in itypes
-    ), f"Undefined types are not allowed in itype={itypes}, graph.output={graph.output}"
+    # We need to infer shapes, ONNX does not really works.
+    # We need to infer shapes ourselves.
+    function_output_types = infer_function_output_types(
+        body_proto,
+        [
+            make_tensor_type_proto(TensorProto.INT64, []),
+            *[
+                make_tensor_type_proto(g.get_type(operands[i]), None)
+                for i in range(len(operands))
+            ],
+        ],
+        [],
+    )
+    itypes = [t.tensor_type.elem_type for t in function_output_types]
+    assert len(outputs) == len(itypes), (
+        f"Length mismatch between outputs={outputs} and graph.output={graph.output}"
+        f"{g.get_debug_msg}"
+    )
+    assert 0 not in itypes, (
+        f"Undefined types are not allowed in itype={itypes}, graph.output={graph.output}, "
+        f"has_known_types={[g.get_type_known(o) for o in outputs]}, "
+        f"outputs={outputs}{g.get_debug_msg()}"
+    )
     sequences = [g.op.SequenceEmpty(dtype=itype) for itype in itypes]
 
-    outloop = [g.unique_name(f"loop_for_onnx{i}") for i in range(len(sequences))]
+    outloop = [g.unique_name(f"simple_loop_for{i}") for i in range(len(sequences))]
 
     for i, s in enumerate(sequences):
         g.set_sequence(s, graph.output[i].type.tensor_type.elem_type)
