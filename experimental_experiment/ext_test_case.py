@@ -332,6 +332,7 @@ class ExtTestCase(unittest.TestCase):
         logger = logging.getLogger("onnxscript.optimizer.constant_folding")
         logger.setLevel(logging.ERROR)
         unittest.TestCase.setUpClass()
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
 
     @classmethod
     def tearDownClass(cls):

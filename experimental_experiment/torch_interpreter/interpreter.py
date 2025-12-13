@@ -1908,6 +1908,7 @@ class DynamoInterpreter:
         description = []
         if val is not None and fct_name not in {
             "aten_cond",
+            "aten_simple_loop_for",
             "aten_wrap_with_set_grad_enabled",
         }:
             # extracting shape and types
