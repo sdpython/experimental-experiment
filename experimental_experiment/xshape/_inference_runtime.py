@@ -115,7 +115,7 @@ class _InferenceRuntime:
             self.set_shape(k, shape)
             self.set_type(k, dtype)
             if self.verbose > 2 or np.prod(shape) > 100:
-                print(f"[GraphBuilder-{self._hash()}.make_node] {k}[{dtype}: {shape}]")
+                print(f"[GraphBuilder-{self._hash()}.5.make_node] {k}[{dtype}: {shape}]")
             return shape
         elif node.op_type == "ConstantOfShape":
             if len(node.attribute) == 1 and node.attribute[0].name == "value":

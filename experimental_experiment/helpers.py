@@ -2,6 +2,7 @@ import enum
 import functools
 import inspect
 import sys
+import textwrap
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 import numpy as np
 import ml_dtypes
@@ -308,6 +309,8 @@ def pretty_onnx(
             return f"{att.name}={att.floats}"
         if att.type == AttributeProto.STRING:
             return f"{att.name}={att.s!r}"
+        if att.type == AttributeProto.GRAPH:
+            return f"{att.name}\n{textwrap.indent(pretty_onnx(att.g), '    ')}\n"
         if att.type == AttributeProto.TENSOR:
             from .reference import to_array_extended
 

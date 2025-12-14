@@ -8,12 +8,15 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
-from onnx import TensorProto, ValueInfoProto
+from onnx import FunctionProto, TensorProto, ValueInfoProto
 from onnx.helper import (
     make_graph,
     make_node,
+    make_tensor_sequence_value_info,
+    make_tensor_type_proto,
     make_tensor_value_info,
 )
+from onnx.shape_inference import infer_function_output_types
 from ..helpers import (
     tensor_dtype_to_np_dtype,
     from_array_extended,
@@ -10302,6 +10305,142 @@ def aten_silu_(
     "`silu_`, inplace modifications are not allowed, we assume they were removed"
     assert isinstance(inplace, bool), f"wrong type for inplace{g.get_debug_msg()}"
     return aten_silu(g, sts, outputs, x, inplace=inplace, name=name)
+
+
+def aten_simple_loop_for(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    n_iter: T,
+    body_fn: str,
+    operands: Tuple[T, ...],
+    concatenation_dims: Sequence[T],
+    name="simple_for_loop",
+) -> Union[T, Tuple[T, ...]]:
+    """
+    Converts a custom op ``higher_ops::loop_for_onnx...`` into e sequence of node.
+
+    :param g: GreaphBuilder
+    :param sts: if not defined, torch does not know the output shapes
+    :param outputs: output names
+    :param args: input argument known at export time
+    :param body: GraphProto, the loop body
+    :param reduction_dim: the dimension to follow when aggregating the
+        list of tensors after the loop ran
+    :param name: to give the onnx nodes a name
+    :return: output names
+    """
+    assert g.has_local_function(
+        body_fn, g.local_domain
+    ), f"Unable to find local function {body_fn!r}{g.get_debug_msg()}"
+
+    if g._debug_node_type and g._debug_node_type == body_fn:
+        raise AssertionError(
+            f"Stop requested as {g._debug_node_type!r} appears in "
+            f"{body_fn}({', '.join(operands)}) -> {', '.join(outputs)}"
+            f"{g.get_debug_msg()}"
+        )
+
+    body_proto = g.get_local_function(body_fn, g.local_domain)
+
+    assert isinstance(body_proto, FunctionProto), (
+        f"body is {type(body_proto)} but FunctionProto is needed for "
+        f"simple_loop_for{g.get_debug_msg()}"
+    )
+    assert len(outputs) == 1, f"Only one outputs is expected but outputs={outputs!r}"
+
+    if len(body_proto.output) != 1:
+        outputs = [f"{outputs[0]}#{i}" for i in range(len(body_proto.output))]
+
+    # We need to infer shapes, ONNX does not really works.
+    # We need to infer shapes ourselves.
+    function_output_types = infer_function_output_types(
+        body_proto,
+        [
+            make_tensor_type_proto(TensorProto.INT64, []),
+            *[
+                make_tensor_type_proto(g.get_type(operands[i]), None)
+                for i in range(len(operands))
+            ],
+        ],
+        [],
+    )
+    itypes = [t.tensor_type.elem_type for t in function_output_types]
+    assert 0 not in itypes, (
+        f"Undefined types are not allowed in itype={itypes}, operands={operands}, "
+        f"has_known_types={[g.get_type_known(o) for o in outputs]}, "
+        f"outputs={outputs}{g.get_debug_msg()}"
+    )
+    sequences = [g.op.SequenceEmpty(dtype=itype) for itype in itypes]
+
+    # subgraphs
+    assert all(isinstance(o, str) for o in operands), (
+        f"Unexpected type in operands={operands}, types={[type(o) for o in operands]}"
+        f"{g.get_debug_msg()}"
+    )
+    output_names = [f"f_out_{o}" for o in body_proto.output]
+    graph = make_graph(
+        [
+            make_node("Identity", ["cond_unused"], ["cond_out"]),
+            make_node(
+                body_proto.name,
+                [body_proto.input[0], *operands],
+                output_names,
+                domain=body_proto.domain,
+                name=name,
+            ),
+            *[
+                make_node("SequenceInsert", [f"loop_in{i}", output_names[i]], [f"loop_out{i}"])
+                for i in range(len(body_proto.output))
+            ],
+        ],
+        f"loop_over_{body_proto.name}",
+        [
+            make_tensor_value_info(body_proto.input[0], TensorProto.INT64, []),
+            make_tensor_value_info("cond_unused", TensorProto.BOOL, []),
+            *[
+                make_tensor_sequence_value_info(f"loop_in{i}", g.get_type(operands[i]), None)
+                for i in range(len(operands))
+            ],
+            # hidden inputs are not added
+        ],
+        [
+            make_tensor_value_info("cond_out", TensorProto.BOOL, []),
+            *[
+                make_tensor_sequence_value_info(f"loop_out{i}", g.get_type(operands[i]), None)
+                for i in range(len(body_proto.output))
+            ],
+        ],
+    )
+
+    outloop = [g.unique_name(f"simple_loop_for{i}") for i in range(len(sequences))]
+
+    for i, s in enumerate(sequences):
+        g.set_sequence(s, graph.output[i].type.tensor_type.elem_type)
+    cst_bool = g.make_initializer("", np.array(1, dtype=np.bool_), source="simple_loop_for.bool")
+    g.make_node("Loop", [n_iter, cst_bool, *sequences], outloop, name=name, body=graph)
+    for i, o in enumerate(outloop):
+        g.set_sequence(o, graph.output[i].type.tensor_type.elem_type)
+    _res = [
+        g.op.ConcatFromSequence(
+            out,
+            outputs=[o],
+            name=name,
+            axis=(
+                0
+                if not concatenation_dims or i >= len(concatenation_dims)
+                else concatenation_dims[i]
+            ),
+        )
+        for i, (out, o) in enumerate(zip(outloop, outputs))
+    ]
+    if not sts:
+        for i, o in enumerate(outputs):
+            g.set_type(o, graph.output[i].type.sequence_type.elem_type.tensor_type.elem_type)
+            g.set_rank(
+                o, len(graph.output[i].type.sequence_type.elem_type.tensor_type.shape.dims)
+            )
+    return outputs if len(outputs) > 1 else outputs[0]
 
 
 def aten_sin(
