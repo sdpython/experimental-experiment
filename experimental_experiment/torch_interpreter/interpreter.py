@@ -1599,6 +1599,7 @@ class DynamoInterpreter:
                 f"for node={node}{self.builder.get_debug_msg()}"
             )
 
+        str_target = str(node.target)
         self._set_shape_and_type(
             node,
             res,
@@ -1607,7 +1608,7 @@ class DynamoInterpreter:
             or (
                 node.target == self.torch.ops.aten.nonzero_numpy.default
                 or (node.target == self.torch.ops.aten.where.default and len(node.args) == 1)
-                or ("aten" not in str(node.target))
+                or ("aten." not in str_target and "aten_" not in str_target)
             ),
         )
         res = self._check_output_name(node, res, output_names)

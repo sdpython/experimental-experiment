@@ -8365,6 +8365,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 f"Unable to parse an expression expr=[{expr!r}], "
                 f"allow_new_dynamic_dimension={allow_new_dynamic_dimension}, "
                 f"due to {e}, self.dynamic_objects={self.dynamic_objects}, "
+                f"set(self.dynamic_objects_rev)={set(self.dynamic_objects_rev)}, "
                 f"self.dynamic_shapes={self.dynamic_shapes}, "
                 f"self._dynamic_alias={self._dynamic_alias}{self.get_debug_msg()}"
             ) from e

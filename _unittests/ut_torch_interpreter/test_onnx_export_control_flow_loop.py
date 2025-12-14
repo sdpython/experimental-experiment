@@ -70,7 +70,10 @@ class TestOnnxExportControlLoop(ExtTestCase):
             use_control_flow_dispatcher=True,
         ).model_proto
         self.dump_onnx("test_loop_two_custom_concatenation_dims.onnx", onx)
-        self.assert_onnx_disc("test_loop_two_custom_concatenation_dims", onx, model, (n_iter, x))
+        ref = self.check_ort(onx)
+        feeds = dict(n_iter=n_iter.numpy(), x=x.numpy())
+        got = ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
