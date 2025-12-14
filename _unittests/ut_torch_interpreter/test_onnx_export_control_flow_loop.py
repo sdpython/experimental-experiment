@@ -5,6 +5,7 @@ from experimental_experiment.ext_test_case import (
     requires_torch,
 )
 from experimental_experiment.torch_interpreter import to_onnx
+from onnx_diagnostic.export.api import to_onnx as to_onnx_diagnostic
 from onnx_diagnostic.export.control_flow_onnx import loop_for_onnx
 
 
@@ -29,7 +30,7 @@ class TestOnnxExportControlLoop(ExtTestCase):
         onx = to_onnx(model, (n_iter, x), dynamic_shapes=({}, {0: "dimdyn"}))
         self.dump_onnx("test_simple_loop_for_1.onnx", onx)
         ref = self.check_ort(onx)
-        feeds = dict(n_iter=n_iter, x=x.numpy())
+        feeds = dict(n_iter=n_iter.numpy(), x=x.numpy())
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
@@ -57,19 +58,19 @@ class TestOnnxExportControlLoop(ExtTestCase):
             model, (n_iter, x), dynamic_shapes=({}, ({0: torch.export.Dim.DYNAMIC}))
         )
         self.assertIn(
-            "torch.ops.onnx_higher_ops.loop_for_onnx_TestControlFlowOnnx_test_loop_two_custom_concatenation_dims_L_Model_forward_L_body_",
+            "torch.ops.onnx_higher_ops.loop_for_onnx_TestOnnxExportControlLoop_test_loop_two_custom_concatenation_dims_L_Model_forward_L_body_u1x1_1xu2_0x1",
             str(ep),
         )
 
-        onx = to_onnx(
+        onx = to_onnx_diagnostic(
             model,
             (n_iter, x),
             dynamic_shapes=({}, ({0: torch.export.Dim.DYNAMIC})),
             exporter="custom",
             use_control_flow_dispatcher=True,
         ).model_proto
-        self.dump_onnx("test_loop_one_custom.onnx", onx)
-        self.assert_onnx_disc("test_loop_one_custom", onx, model, (n_iter, x))
+        self.dump_onnx("test_loop_two_custom_concatenation_dims.onnx", onx)
+        self.assert_onnx_disc("test_loop_two_custom_concatenation_dims", onx, model, (n_iter, x))
 
 
 if __name__ == "__main__":

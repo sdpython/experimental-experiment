@@ -10351,43 +10351,6 @@ def aten_simple_loop_for(
 
     if len(body_proto.output) != 1:
         outputs = [f"{outputs[0]}#{i}" for i in range(len(body_proto.output))]
-    input_names = list(body_proto.input)
-    inputs = [
-        make_tensor_value_info(n_iter, TensorProto.INT64, []),
-        make_tensor_value_info("cond_unused", TensorProto.BOOL, []),
-        *[
-            make_tensor_sequence_value_info(f"loop_in{i}", g.get_type(operands[i]), None)
-            for i in range(len(operands))
-        ],
-        # hidden inputs are not added
-    ]
-    nodes = [
-        make_node("Identity", ["cond_unused"], ["cond_out"]),
-        *[make_node("Identity", [a], [r]) for a, r in zip(operands[1:], input_names[1:])],
-        make_node(
-            body_proto.name,
-            list(body_proto.input),
-            list(body_proto.output),
-            domain=body_proto.domain,
-            name=name,
-        ),
-        *[
-            make_node(
-                "SequenceInsert",
-                [f"loop_in{i}", body_proto.output[i]],
-                [f"loop_out{i}"],
-            )
-            for i in range(len(body_proto.output))
-        ],
-    ]
-    graph_outputs = [
-        make_tensor_value_info("cond_out", TensorProto.BOOL, []),
-        *[
-            make_tensor_sequence_value_info(f"loop_out{i}", TensorProto.UNDEFINED, None)
-            for i in range(len(body_proto.output))
-        ],
-    ]
-    graph = make_graph(nodes, body_proto.name, inputs, graph_outputs)
 
     # We need to infer shapes, ONNX does not really works.
     # We need to infer shapes ourselves.
@@ -10403,22 +10366,59 @@ def aten_simple_loop_for(
         [],
     )
     itypes = [t.tensor_type.elem_type for t in function_output_types]
-    assert len(outputs) == len(itypes), (
-        f"Length mismatch between outputs={outputs} and graph.output={graph.output}"
-        f"{g.get_debug_msg}"
-    )
     assert 0 not in itypes, (
-        f"Undefined types are not allowed in itype={itypes}, graph.output={graph.output}, "
+        f"Undefined types are not allowed in itype={itypes}, operands={operands}, "
         f"has_known_types={[g.get_type_known(o) for o in outputs]}, "
         f"outputs={outputs}{g.get_debug_msg()}"
     )
     sequences = [g.op.SequenceEmpty(dtype=itype) for itype in itypes]
 
+    # subgraphs
+    assert all(isinstance(o, str) for o in operands), (
+        f"Unexpected type in operands={operands}, types={[type(o) for o in operands]}"
+        f"{g.get_debug_msg()}"
+    )
+    output_names = [f"f_out_{o}" for o in body_proto.output]
+    graph = make_graph(
+        [
+            make_node("Identity", ["cond_unused"], ["cond_out"]),
+            make_node(
+                body_proto.name,
+                [body_proto.input[0], *operands],
+                output_names,
+                domain=body_proto.domain,
+                name=name,
+            ),
+            *[
+                make_node("SequenceInsert", [f"loop_in{i}", output_names[i]], [f"loop_out{i}"])
+                for i in range(len(body_proto.output))
+            ],
+        ],
+        f"loop_over_{body_proto.name}",
+        [
+            make_tensor_value_info(body_proto.input[0], TensorProto.INT64, []),
+            make_tensor_value_info("cond_unused", TensorProto.BOOL, []),
+            *[
+                make_tensor_sequence_value_info(f"loop_in{i}", g.get_type(operands[i]), None)
+                for i in range(len(operands))
+            ],
+            # hidden inputs are not added
+        ],
+        [
+            make_tensor_value_info("cond_out", TensorProto.BOOL, []),
+            *[
+                make_tensor_sequence_value_info(f"loop_out{i}", g.get_type(operands[i]), None)
+                for i in range(len(body_proto.output))
+            ],
+        ],
+    )
+
     outloop = [g.unique_name(f"simple_loop_for{i}") for i in range(len(sequences))]
 
     for i, s in enumerate(sequences):
         g.set_sequence(s, graph.output[i].type.tensor_type.elem_type)
-    g.make_node("Loop", [n_iter, *sequences], outloop, name=name, body=graph)
+    cst_bool = g.make_initializer("", np.array(1, dtype=np.bool_), source="simple_loop_for.bool")
+    g.make_node("Loop", [n_iter, cst_bool, *sequences], outloop, name=name, body=graph)
     for i, o in enumerate(outloop):
         g.set_sequence(o, graph.output[i].type.tensor_type.elem_type)
     _res = [

@@ -1,7 +1,8 @@
 import contextlib
-import pprint
-import time
 import os
+import pprint
+import textwrap
+import time
 import sys
 from collections import Counter
 from enum import IntEnum
@@ -4315,7 +4316,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
         if self.verbose == 2:
             print(
-                f"[GraphBuilder-{self._hash()}.make_node]"
+                f"[GraphBuilder-{self._hash()}.1.make_node]"
                 f"[{self._debug_string_inputs(inputs, output_names)}] "
                 f"{op_type}: {inputs}->{outputs}"
             )
@@ -4426,7 +4427,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if origin is not None:
                 if self.verbose > 2:
                     print(
-                        f"[GraphBuilder-{self._hash()}.make_node] "
+                        f"[GraphBuilder-{self._hash()}.2.make_node] "
                         f"duplicated constant detected for "
                         f"{node.op_type}: {node.input}->{node.output}"
                     )
@@ -4445,7 +4446,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
         if self.verbose > 3:
             print(
-                f"[GraphBuilder-{self._hash()}.make_node] "
+                f"[GraphBuilder-{self._hash()}.3.make_node] "
                 f"[{self._debug_string_inputs(node.input, output_names)}] "
                 f"{node.op_type}: {node.input}->{node.output}"
             )
@@ -5183,7 +5184,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         for io in self.inputs:
             shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
-                f"[GraphBuilder-{hs}.make_tensor_input] {io.name}"
+                f"[GraphBuilder-{hs}.1.make_tensor_input] {io.name}"
                 f"[{io.type.tensor_type.elem_type}:{shh}]"
             )
         rows.append(f"-- {len(self.initializers_dict)} INITIALIZERS")
@@ -5195,7 +5196,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 else "?"
             )
             rows.append(
-                f"[GraphBuilder-{hs}.make_initializer] "
+                f"[GraphBuilder-{hs}.1.make_initializer] "
                 f"{name}[{_dtype(init)}:{_shape(init)}{sval}] "
                 f"- SOURCE: {source}"
             )
@@ -5211,11 +5212,22 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             else:
                 ext = ""
             rows.append(
-                f"[GraphBuilder-{hs}.make_node] "
+                f"[GraphBuilder-{hs}.4.make_node] "
                 f"{_align(node.name, 15)} "
                 f"[{self._debug_string_inputs(node.input, node.output, 6)}] "
                 f"{node.op_type}{ext}:{node.input}->{node.output}"
             )
+            if node.op_type in {"Loop", "Scan", "If"}:
+                for att in node.attribute:
+                    if att.type == AttributeProto.GRAPH:
+                        rows.append(
+                            f"[GraphBuilder-{hs}.4.make_node] -- subgraph {att.name!r}..."
+                        )
+                        rows.append(textwrap.indent(pretty_onnx(att.g), "    "))
+                        rows.append(
+                            f"[GraphBuilder-{hs}.4.make_node] -- subgraph {att.name!r} -- done"
+                        )
+
             if len(rows) > limit:
                 rows.append("...")
                 break
@@ -5224,7 +5236,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         for io in self.outputs:
             shh = _nice_shape(io.type.tensor_type.shape)
             rows.append(
-                f"[GraphBuilder-{hs}.make_tensor_output] {io.name}"
+                f"[GraphBuilder-{hs}.1.make_tensor_output] {io.name}"
                 f"[{io.type.tensor_type.elem_type}:{shh}]"
             )
 
@@ -6228,7 +6240,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if name in self.input_names:
                 position = self.input_names.index(name)
                 assert position < len(self._parent_node.input), (
-                    f"No corresponding input name for {name!r} in node {self._parent_node}"
+                    f"No corresponding input name for {name!r} in node\n"
+                    f"{pretty_onnx(self._parent_node, with_attributes=True)}\n---\n"
                     f"{self.get_debug_msg()}"
                 )
                 parent_name = self._parent_node.input[position]
