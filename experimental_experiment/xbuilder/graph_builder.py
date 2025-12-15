@@ -3793,9 +3793,16 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if isinstance(obj.node, str):
                 return obj.node
             i = obj.node._expr
-            if "sympy" in str(type(i)):
+            if "sympy" in str(type(i)) or (
+                hasattr(i, "__module__") and i.__module__ == "torch.utils._sympy.functions"
+            ):
                 return str(i).replace(" ", "")
+            if isinstance(i, self.torch.SymInt):
+                return self._dynamic_to_str(
+                    i, exc=exc, register_if_not_exist=register_if_not_exist
+                )
             if exc:
+                print("****", [obj, i, type(i), type(obj), [i.__class__, i.__module__]])
                 raise AssertionError(
                     f"Object has {type(obj)} but could not find a dynamic interpretation"
                 )
