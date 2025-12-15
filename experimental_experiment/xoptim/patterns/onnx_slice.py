@@ -213,8 +213,11 @@ class SliceSlicePattern(PatternOptimization):
             )
             inputs.append(new_step)
         elif len(node.input) > 4:
+            cst1 = g.get_computed_constant(before.input[3])
             one = g.make_initializer(
-                "", np.array([1], dtype=np.int64), source="SliceSlicePattern.apply.step.1"
+                "",
+                np.array([1] * cst1.shape[0], dtype=np.int64),
+                source="SliceSlicePattern.apply.step.1",
             )
             new_step = g.unique_name(f"{self.__class__.__name__}_{node.input[0]}_step")
             conc.append(
@@ -228,8 +231,11 @@ class SliceSlicePattern(PatternOptimization):
             )
             inputs.append(new_step)
         elif len(before.input) > 4:
+            cst2 = g.get_computed_constant(node.input[3])
             one = g.make_initializer(
-                "", np.array([1], dtype=np.int64), source="SliceSlicePattern.apply.step.2"
+                "",
+                np.array([1] * cst2.shape[0], dtype=np.int64),
+                source="SliceSlicePattern.apply.step.2",
             )
             new_step = g.unique_name(f"{self.__class__.__name__}_{node.input[0]}_step")
             conc.append(
