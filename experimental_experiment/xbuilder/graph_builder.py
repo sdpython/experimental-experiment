@@ -3802,7 +3802,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     i, exc=exc, register_if_not_exist=register_if_not_exist
                 )
             if exc:
-                print("****", [obj, i, type(i), type(obj), [i.__class__, i.__module__]])
                 raise AssertionError(
                     f"Object has {type(obj)} but could not find a dynamic interpretation"
                 )
