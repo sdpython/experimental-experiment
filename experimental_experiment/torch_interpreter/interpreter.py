@@ -1910,6 +1910,7 @@ class DynamoInterpreter:
         if val is not None and fct_name not in {
             "aten_cond",
             "aten_simple_loop_for",
+            "aten_wrap_with_autocast",
             "aten_wrap_with_set_grad_enabled",
         }:
             # extracting shape and types
@@ -1920,8 +1921,8 @@ class DynamoInterpreter:
                 f"fct_name={fct_name!r}, unexpected type {type(res)}, "
                 f"res={string_type(res, with_shape=True)}, "
                 f"val={string_type(val, with_shape=True)}, "
-                f"node={node}, node.target={node.target}"
-                f"{self.builder.get_debug_msg()}"
+                f"node={node}, node.target={node.target}, "
+                f"res={res!r}{self.builder.get_debug_msg()}"
             )
             if len(val) != len(res):
                 raise RuntimeError(
