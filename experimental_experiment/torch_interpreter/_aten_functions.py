@@ -10400,7 +10400,7 @@ def aten_simple_loop_for(
             make_tensor_value_info("cond_unused", TensorProto.BOOL, []),
             *[
                 make_tensor_sequence_value_info(f"loop_in{i}", g.get_type(operands[i]), None)
-                for i in range(len(operands))
+                for i in range(len(body_proto.output))
             ],
             # hidden inputs are not added
         ],
@@ -11590,9 +11590,9 @@ def aten_trunc(
     sts: Optional[Dict[str, Any]],
     outputs: List[str],
     x: T,
-    name: str = "trunc",
+    name: str = "aten_trunc",
 ) -> T:
-    """trunc"""
+    """aten_trunc"""
     res = g.op.Mul(
         g.op.Floor(g.op.Abs(x, name=name), name=name),
         g.op.Sign(x, name=name),
