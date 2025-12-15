@@ -11085,6 +11085,39 @@ def aten_sym_size_int(
     return res
 
 
+def aten_sym_sum(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    args,
+    name: str = "sym_sum",
+) -> T:
+    """sym_sum"""
+    if len(args) == 0:
+        return g.op.Identity(
+            g.make_initializer("", np.array(0, dtype=np.int64), source="aten_sym_sum"),
+            name=name,
+            outputs=outputs,
+        )
+    args = [
+        (
+            a
+            if isinstance(a, str)
+            else g.make_initializer("", np.array(a, dtype=np.int64), source=f"aten_sym_sum.{i}")
+        )
+        for i, a in enumerate(args)
+    ]
+    if len(args) == 1:
+        return g.op.Identity(args[0], name=name, outputs=outputs)
+    if len(args) == 2:
+        return g.op.Add(args[0], args[1], name=name, outputs=outputs)
+    res = g.op.Sum(*args, name=name, outputs=outputs)
+    if not sts:
+        g.set_type(res, g.get_type(args[0]))
+        g.set_shape(res, g.get_shape(args[0]))
+    return res
+
+
 def aten__to_copy(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
