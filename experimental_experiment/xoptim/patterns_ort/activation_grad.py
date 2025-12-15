@@ -16,6 +16,8 @@ class SoftmaxGradPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "ReduceSum" or node.domain != "":
             return self.none()
+        if len(node.input) == 1:
+            return self.none(node, inspect.currentframe().f_lineno)
 
         axis = g.get_constant_or_attribute(node, "axes", input_index=1, cvt=tuple)
         assert isinstance(axis, tuple), f"unexpected type {type(axis)} for axis"

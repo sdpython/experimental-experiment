@@ -18,3 +18,27 @@ def math_ceil(
     if itype is None:
         itype = TensorProto.INT64
     return g.op.Cast(g.op.Ceil(x, name=name), to=itype, name=name, outputs=outputs)
+
+
+def math_trunc(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name="math_trunc",
+) -> T:
+    "math_trunc"
+    itype = g.get_type_known(outputs[0])
+    if itype is None:
+        itype = TensorProto.INT64
+    res = g.op.Cast(
+        g.op.Mul(
+            g.op.Floor(g.op.Abs(x, name=name), name=name),
+            g.op.Sign(x, name=name),
+            name=name,
+        ),
+        to=itype,
+        name=name,
+        outputs=outputs,
+    )
+    return res

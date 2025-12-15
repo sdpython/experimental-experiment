@@ -24,6 +24,7 @@ from ..helpers import (
     torch_dtype_to_onnx_dtype,
     type_info,
     onnx_dtype_name,
+    pretty_onnx,
 )
 from ..xshape._shape_helper import (
     all_float,
@@ -10354,22 +10355,21 @@ def aten_simple_loop_for(
 
     # We need to infer shapes, ONNX does not really works.
     # We need to infer shapes ourselves.
-    function_output_types = infer_function_output_types(
-        body_proto,
-        [
-            make_tensor_type_proto(TensorProto.INT64, []),
-            *[
-                make_tensor_type_proto(g.get_type(operands[i]), None)
-                for i in range(len(operands))
-            ],
-        ],
-        [],
-    )
+    in_types = [
+        make_tensor_type_proto(TensorProto.INT64, []),
+        *[make_tensor_type_proto(g.get_type(operands[i]), None) for i in range(len(operands))],
+    ]
+    function_output_types = infer_function_output_types(body_proto, in_types, [])
     itypes = [t.tensor_type.elem_type for t in function_output_types]
+    if 0 in itypes:
+        from ..xshape.type_inference import infer_types
+
+        itypes = infer_types(body_proto, [i.tensor_type.elem_type for i in in_types], exc=True)
     assert 0 not in itypes, (
         f"Undefined types are not allowed in itype={itypes}, operands={operands}, "
+        f"in_types={[i.tensor_type.elem_type for i in in_types]}, "
         f"has_known_types={[g.get_type_known(o) for o in outputs]}, "
-        f"outputs={outputs}{g.get_debug_msg()}"
+        f"outputs={outputs}\n---\n{pretty_onnx(body_proto)}\n---{g.get_debug_msg()}"
     )
     sequences = [g.op.SequenceEmpty(dtype=itype) for itype in itypes]
 
@@ -10400,7 +10400,7 @@ def aten_simple_loop_for(
             make_tensor_value_info("cond_unused", TensorProto.BOOL, []),
             *[
                 make_tensor_sequence_value_info(f"loop_in{i}", g.get_type(operands[i]), None)
-                for i in range(len(operands))
+                for i in range(len(body_proto.output))
             ],
             # hidden inputs are not added
         ],
@@ -10991,6 +10991,17 @@ def aten_sym_constrain_range_for_size(
     return g.op.Cast(dim, name=name, to=TensorProto.BOOL, outputs=outputs)
 
 
+def aten_sym_float(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "sym_float",
+):
+    "assert sym_float"
+    return g.op.Cast(x, name=name, to=TensorProto.FLOAT, outputs=outputs)
+
+
 def aten_sym_max(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -11569,6 +11580,25 @@ def aten_triu(
             f"triu: unexpected type={type(diagonal)} for diagonal{g.get_debug_msg()}"
         )
     res = g.op.Trilu(x, k, upper=1, name="triu", outputs=outputs)
+    if not sts:
+        set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_trunc(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    name: str = "aten_trunc",
+) -> T:
+    """aten_trunc"""
+    res = g.op.Mul(
+        g.op.Floor(g.op.Abs(x, name=name), name=name),
+        g.op.Sign(x, name=name),
+        name=name,
+        outputs=outputs,
+    )
     if not sts:
         set_type_shape_unary_op(g, res, x)
     return res
