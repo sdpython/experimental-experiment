@@ -28,7 +28,7 @@ def traceable_local_f_recursive(x, y):
 
 
 class TestPieceByPieceBig(ExtTestCase):
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     @hide_stdout()
     def test_e2e_knn_imputer(self):
         import onnx

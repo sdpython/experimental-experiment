@@ -4670,12 +4670,14 @@ def aten_index_put(
             name += "b_"
             use_where = False
             shape_values = g.get_shape(values) if g.has_shape(values) else None
-            if (
-                shape_values is not None
-                and len(shape_values) > 0
-                and 0 not in shape_values
-                and g.has_shape(x)
-                and g.get_shape(x)[-len(shape_values) :] == shape_values
+            if shape_values is not None and (
+                shape_values in (tuple(), (1,))
+                or (
+                    len(shape_values) > 0
+                    and 0 not in shape_values
+                    and g.has_shape(x)
+                    and g.get_shape(x)[-len(shape_values) :] == shape_values
+                )
             ):
                 # No broadcast is possible
                 use_where = True
