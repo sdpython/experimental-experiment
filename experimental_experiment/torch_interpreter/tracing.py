@@ -1416,6 +1416,7 @@ class CustomTracer(torch.fx.Tracer):
         exported_program: Optional[torch.export.ExportedProgram] = None,
         verbose: int = 0,
         exc: bool = True,
+        recursive: bool = False,
     ) -> int:
         """
         Removes inplace operations.
@@ -1425,6 +1426,7 @@ class CustomTracer(torch.fx.Tracer):
             to make it easier to trace the code source
         :param verbose: verbosity
         :param exc: raise an exception if not possible, other return -1
+        :param recursive: remove node inside submodules
         :return: number of inplace nodes removed, a negative number means
             there are still inplace nodes to be removed but this
             function is unable to do that, only decompositions
@@ -1443,6 +1445,24 @@ class CustomTracer(torch.fx.Tracer):
             %copy_ : [num_users=0] = call_function[target=torch.ops.aten.copy_.default]
                 (args = (%slice_13, %masked_fill), kwargs = {})
         """
+        n_inplace_submobules = 0
+        if recursive:
+            for node in graph.nodes:
+                if node.op == "get_attr":
+                    init = getattr(node.graph.owning_module, node.target)
+                    if not hasattr(init, "graph"):
+                        continue
+                    if verbose:
+                        print(f"[CustomTracer.remove_inplace] submodule {node.name!r} ...")
+                    inpl = cls.remove_inplace(
+                        init.graph, verbose=verbose, exc=exc, recursive=recursive
+                    )
+                    if verbose:
+                        print(f"[CustomTracer.remove_inplace] submodule {node.name!r} done")
+                    if inpl < 0:
+                        return inpl
+                    n_inplace_submobules += inpl
+
         # Remove obvious unused nodes.
         rem = []
         for node in graph.nodes:
@@ -1471,7 +1491,7 @@ class CustomTracer(torch.fx.Tracer):
         inplace = cls._inplace_nodes(graph)
         if len(inplace) == 0:
             # No inplace.
-            return 0
+            return n_inplace_submobules
 
         def delete_user_cb(n, nodes_to_leave):
             return n not in nodes_to_leave
@@ -1491,7 +1511,7 @@ class CustomTracer(torch.fx.Tracer):
 
         if len(inplace) == 0:
             # No inplace anymore.
-            return 0
+            return n_inplace_submobules
 
         # First step: we remove every unused node.
         while True:
@@ -1532,7 +1552,7 @@ class CustomTracer(torch.fx.Tracer):
 
         if len(inplace) == 0:
             # No inplace left.
-            return 0
+            return n_inplace_submobules
 
         # Then the difficult ones, we first operator on a copy to avoid
         # break the consistency of the graph.
@@ -1553,7 +1573,7 @@ class CustomTracer(torch.fx.Tracer):
             return result
         if result == 0:
             # No modification.
-            return result
+            return result + n_inplace_submobules
         inplace = cls._inplace_nodes(graph_copy)
         if len(inplace) > 0 and not exc:
             return -len(inplace)
@@ -1570,4 +1590,4 @@ class CustomTracer(torch.fx.Tracer):
         )
         out = graph.graph_copy(graph_copy, _vmap)
         graph.output(out)
-        return n_inplace
+        return n_inplace + n_inplace_submobules

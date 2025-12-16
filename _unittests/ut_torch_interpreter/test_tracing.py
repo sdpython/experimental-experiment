@@ -2,7 +2,13 @@ import copy
 import operator
 import unittest
 import torch
-from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
+from onnx_diagnostic.torch_export_patches import torch_export_patches
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    hide_stdout,
+    skipif_ci_windows,
+    requires_onnx_diagnostic,
+)
 from experimental_experiment.torch_interpreter.tracing import (
     CustomTracer,
     CustomProxy,
@@ -464,6 +470,103 @@ class TestTracing(ExtTestCase):
     def test_lookup_op(self):
         op = torch._library.utils.lookup_op("aten::masked_fill.Scalar")
         self.assertEqual("aten::masked_fill.Scalar", op.name())
+
+    @requires_onnx_diagnostic("0.8.7")
+    @hide_stdout()
+    def test_tracing_with_submodule(self):
+        def filter_position_ids(
+            patch_attention_mask: torch.Tensor,
+            position_ids: torch.Tensor,
+            boundaries: torch.Tensor,
+            num_patches_per_side: int,
+        ):
+            for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
+                fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / p_attn_mask[:, 0].sum())
+                fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / p_attn_mask[0].sum())
+
+                bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+                bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+                pos_ids = (
+                    bucket_coords_h[:, None] * num_patches_per_side + bucket_coords_w
+                ).flatten()
+                position_ids[batch_idx][p_attn_mask.view(-1)] = pos_ids
+            return position_ids
+
+        def scan_filter_position_ids(
+            patch_attention_mask: torch.Tensor,
+            position_ids: torch.Tensor,
+            boundaries: torch.Tensor,
+            num_patches_per_side: int,
+        ):
+
+            def body(p_attn_mask, position_ids_row):
+                h_len = torch.tensor(1, dtype=p_attn_mask.dtype) / p_attn_mask[:, 0].sum()
+                w_len = torch.tensor(1, dtype=p_attn_mask.dtype) / p_attn_mask[0].sum()
+                torch._check(h_len.item() > 0)
+                fractional_coords_h = torch.arange(
+                    torch.tensor(0.0, dtype=p_attn_mask.dtype),
+                    torch.tensor(1 - 1e-6, dtype=p_attn_mask.dtype),
+                    h_len,
+                )
+                torch._check(w_len.item() > 0)
+                fractional_coords_w = torch.arange(
+                    torch.tensor(0.0, dtype=p_attn_mask.dtype),
+                    torch.tensor(1 - 1e-6, dtype=p_attn_mask.dtype),
+                    w_len,
+                )
+
+                bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+                bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+                pos_ids = (
+                    bucket_coords_h[:, None] * num_patches_per_side + bucket_coords_w
+                ).flatten()
+
+                row = position_ids_row.clone()
+                row[p_attn_mask.view(-1)] = pos_ids
+                return [row]
+
+            return torch.ops.higher_order.scan(
+                body, [], [patch_attention_mask, position_ids], additional_inputs=[]
+            )
+
+        class Model(torch.nn.Module):
+            def forward(self, patch_attention_mask, position_ids, boundaries):
+                res = scan_filter_position_ids(patch_attention_mask, position_ids, boundaries, 32)
+                return res[0]
+
+        patch_attention_mask = torch.randint(0, 17, (32, 32, 32)) >= 1
+        patch_attention_mask[:, :, :] = True
+        position_ids = torch.zeros((32, 1024), dtype=torch.int64)
+        boundaries = (torch.arange(33).to(torch.float32) / 33)[1:-1]
+        inputs = (patch_attention_mask, position_ids, boundaries)
+
+        model = Model()
+        true_expected = filter_position_ids(*(*inputs, 32))
+        expected = model(*inputs)
+        self.assertEqualArray(true_expected, expected)
+
+        DYN = torch.export.Dim.DYNAMIC
+        with torch_export_patches(patch_torch=True):
+            ep = torch.export.export(model, inputs, dynamic_shapes=({0: DYN}, {0: DYN}, {0: DYN}))
+
+        CustomTracer.remove_inplace(ep.graph, recursive=True, verbose=10)
+
+        for node in ep.graph.nodes:
+            if node.op == "get_attr":
+                init = getattr(node.graph.owning_module, node.target)
+                for n in init.graph.nodes:
+                    assert (
+                        n.op != "call_function"
+                        or n.target != torch.ops.aten._assert_scalar.default
+                    ), (
+                        f"One assert function was not removed n.target={n.target} "
+                        f"in node.target={node.target}"
+                    )
+
+        got = ep.module()(*inputs)
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
