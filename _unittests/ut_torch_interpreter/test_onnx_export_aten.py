@@ -3124,6 +3124,7 @@ class TestOnnxExportAten(ExtTestCase):
         self.assertIn("Split", [n.op_type for n in onx.graph.node])
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
+    @requires_onnx_diagnostic("0.8.7")
     def test_aten_bucketize_right(self):
         import torch
 
@@ -3162,6 +3163,7 @@ class TestOnnxExportAten(ExtTestCase):
             onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
+    @requires_onnx_diagnostic("0.8.7")
     def test_aten_bucketize_left(self):
         import torch
 
