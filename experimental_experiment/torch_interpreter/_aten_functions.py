@@ -1370,6 +1370,36 @@ def aten_broadcast_tensors(
     )
 
 
+def aten_bucketize_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    boundaries: T,
+    right: bool = False,
+    out_int32: bool = False,
+    name: str = "bucketize",
+) -> T:
+    "bucketize"
+    tu = g.op.UnsqueezeAnyOpset(x, g.MINUS_ONE, name=name)
+    cmp = (
+        g.op.GreaterOrEqual(tu, boundaries, name=name)
+        if right
+        else g.op.Greater(tu, boundaries, name=name)
+    )
+    itype = TensorProto.INT32 if out_int32 else TensorProto.INT64
+    res = g.op.ReduceSumAnyOpset(
+        g.op.Cast(cmp, to=itype, name=name),
+        g.MINUS_ONE,
+        outputs=outputs,
+        name=name,
+        keepdims=0,
+    )
+    if not sts:
+        set_type_shape_unary_op(g, res, x, dtype=itype)
+    return res
+
+
 def aten_cat(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],

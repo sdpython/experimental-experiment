@@ -3071,11 +3071,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
         expected = model(x)
-        onx = to_onnx(
-            model,
-            (x,),
-            dynamic_shapes=({0: "length"},),
-        )
+        onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
         self.assertIn("Split", [n.op_type for n in onx.graph.node])
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
@@ -3090,11 +3086,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
         expected = model(x)
-        onx = to_onnx(
-            model,
-            (x,),
-            dynamic_shapes=({0: "length"},),
-        )
+        onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
         self.assertIn("Split", [n.op_type for n in onx.graph.node])
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
@@ -3110,11 +3102,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
         expected = model(x)
-        onx = to_onnx(
-            model,
-            (x,),
-            dynamic_shapes=({0: "length"},),
-        )
+        onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
         self.dump_onnx("test_aten_split_str_sizes.onnx", onx)
         self.assertIn("Split", [n.op_type for n in onx.graph.node])
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
@@ -3131,13 +3119,85 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         x = torch.arange(18, dtype=torch.float32).reshape((-1, 6))
         expected = model(x)
-        onx = to_onnx(
-            model,
-            (x,),
-            dynamic_shapes=({0: "length"},),
-        )
+        onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
         self.dump_onnx("test_aten_split_str_sizes2.onnx", onx)
         self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
+    def test_aten_bucketize_right(self):
+        import torch
+
+        def customize_bucketize(t, boundaries, right: bool):
+            if right:
+                cmp = t.unsqueeze(-1) >= boundaries
+            else:
+                cmp = t.unsqueeze(-1) > boundaries
+            return cmp.sum(axis=-1)
+
+        class Model(torch.nn.Module):
+            def forward(self, mask):
+                num_patches_per_side = 5
+                boundaries = torch.arange(
+                    torch.tensor(1 / num_patches_per_side, dtype=torch.float32),
+                    torch.tensor(1.0, dtype=torch.float32),
+                    torch.tensor(1 / num_patches_per_side, dtype=torch.float32),
+                )
+                w_len = torch.tensor(1, dtype=boundaries.dtype) / mask.sum()
+                torch._check(w_len.item() > 0)
+                fractional_coords_w = torch.arange(
+                    torch.tensor(0.0, dtype=boundaries.dtype),
+                    torch.tensor(1 - 1e-6, dtype=boundaries.dtype),
+                    w_len,
+                )
+                bucket_coords_h = torch.bucketize(fractional_coords_w, boundaries, right=True)
+                bucket = customize_bucketize(fractional_coords_w, boundaries, right=True)
+                return bucket_coords_h * 2 - bucket
+
+        model = Model()
+        x = torch.zeros((10,), dtype=torch.bool)
+        x[::2] = True
+        expected = model(x)
+        with torch_export_patches(patch_torch=True):
+            # see https://github.com/pytorch/pytorch/issues/170548
+            onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
+
+    def test_aten_bucketize_left(self):
+        import torch
+
+        def customize_bucketize(t, boundaries, right: bool):
+            if right:
+                cmp = t.unsqueeze(-1) >= boundaries
+            else:
+                cmp = t.unsqueeze(-1) > boundaries
+            return cmp.sum(axis=-1)
+
+        class Model(torch.nn.Module):
+            def forward(self, mask):
+                num_patches_per_side = 5
+                boundaries = torch.arange(
+                    torch.tensor(1 / num_patches_per_side, dtype=torch.float32),
+                    torch.tensor(1.0, dtype=torch.float32),
+                    torch.tensor(1 / num_patches_per_side, dtype=torch.float32),
+                )
+                w_len = torch.tensor(1, dtype=boundaries.dtype) / mask.sum()
+                torch._check(w_len.item() > 0)
+                fractional_coords_w = torch.arange(
+                    torch.tensor(0.0, dtype=boundaries.dtype),
+                    torch.tensor(1 - 1e-6, dtype=boundaries.dtype),
+                    w_len,
+                )
+                bucket_coords_h = torch.bucketize(fractional_coords_w, boundaries, right=False)
+                bucket = customize_bucketize(fractional_coords_w, boundaries, right=False)
+                return bucket_coords_h * 2 - bucket
+
+        model = Model()
+        x = torch.zeros((10,), dtype=torch.bool)
+        x[::2] = True
+        expected = model(x)
+        with torch_export_patches(patch_torch=True):
+            # see https://github.com/pytorch/pytorch/issues/170548
+            onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
 
