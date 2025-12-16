@@ -3202,6 +3202,27 @@ class TestOnnxExportAten(ExtTestCase):
             onx = to_onnx(model, (x,), dynamic_shapes=({0: "length"},))
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
+    def test_aten_index_put_where_not_the_same_shape(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, tensor, mask, values):
+                t = tensor.clone()
+                t[mask] = values
+                return t
+
+        model = Model()
+        inputs = (
+            torch.zeros((10,), dtype=torch.float32),
+            torch.zeros((10,), dtype=torch.bool),
+            (torch.arange(5) + 1).to(torch.float32),
+        )
+        inputs[1][::2] = True
+        expected = model(*inputs)
+        onx = to_onnx(model, inputs)
+        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -4668,18 +4668,17 @@ def aten_index_put(
         if index_dtype == TensorProto.BOOL:
             # index_put1b_ or index_put_1b_
             name += "b_"
-            use_where = True
+            use_where = False
             shape_values = g.get_shape(values) if g.has_shape(values) else None
             if (
                 shape_values is not None
                 and len(shape_values) > 0
-                and all_int(shape_values)
                 and 0 not in shape_values
                 and g.has_shape(x)
-                and g.get_shape(x)[-len(shape_values) :] != shape_values
+                and g.get_shape(x)[-len(shape_values) :] == shape_values
             ):
                 # No broadcast is possible
-                use_where = False
+                use_where = True
 
             if use_where:
                 name += "_where"
@@ -4730,6 +4729,7 @@ def aten_index_put(
                 flat_index,
                 flat_values,
                 reduction="add" if accumulate else "none",
+                name=name,
             )
             res = g.op.Reshape(updated, g.op.Shape(x, name=name), name=name, outputs=outputs)
             if not sts:
@@ -8753,7 +8753,7 @@ def aten_masked_scatter(
         g.ZERO,
         name=name,
     )
-    flat_x_scat = g.op.ScatterElements(flat_x, non_zero, flat_updates)
+    flat_x_scat = g.op.ScatterElements(flat_x, non_zero, flat_updates, name=name)
     res = g.op.Reshape(flat_x_scat, g.op.Shape(x, name=name), name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)
