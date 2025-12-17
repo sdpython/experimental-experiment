@@ -5,13 +5,13 @@ from ..helpers import tensor_dtype_to_np_dtype
 from ..xshape._shape_helper import all_int
 from ..xbuilder.graph_builder import GraphBuilder
 from ..xshape.shape_type_compute import (
-    torch_dtype_to_onnx_dtype,
     set_type_shape_binary_op,
     set_type_shape_unary_op,
     set_type_shape_reduce_op,
     set_type_shape_reshape,
 )
 from ._aten_functions import (
+    torch_dtype_to_onnx_dtype,
     aten_clamp_max,
     aten_clamp_min,
     aten_cos,
