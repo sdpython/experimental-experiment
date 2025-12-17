@@ -2680,6 +2680,47 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_identity_pattern_batch_normalization(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("BatchNormalization", ["X", "scale", "B", "B", "scale"], ["Y"]),
+                    oh.make_node("Neg", ["Y"], ["Z"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT16, ["b", 2])],
+                [_mkv_("Z", TFLOAT16, ["b", 2])],
+                [
+                    onh.from_array(np.array([0, 0], dtype=np.float16), name="B"),
+                    onh.from_array(np.array([1, 1], dtype=np.float16), name="scale"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 20)],
+            ir_version=10,
+        )
+        feeds = {"X": self._range(6, 2).astype(np.float16)}
+        ref = self.check_ort(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["Identity"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Neg"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = self.check_ort(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
     def test_identity_pattern_expand(self):
         model = oh.make_model(
             oh.make_graph(
