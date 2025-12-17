@@ -1,6 +1,6 @@
 import inspect
 from typing import List, Optional
-from onnx import AttributeProto, NodeProto
+from onnx import AttributeProto, NodeProto, TensorProto
 from ...helpers import make_idn
 from ...xshape._onnx_helper import unary_like_op_types
 from ..patterns_api import MatchResult, PatternOptimization
@@ -536,7 +536,14 @@ class IdentityPattern(PatternOptimization):
     """
     Replaces operator such as
     Div(X, 1), Mul(X, 1), Add(X, 0), Sub(X, 0), Transpose(X, [0, 1, 2, ...])
-    by identity nodes.
+    by identity nodes. It looks into patterns involving the following operators:
+
+    .. runpython::
+        :showcode:
+
+        from experimental_experiment.xoptim.patterns.onnx_any import IdentityPattern
+
+        print(IdentityPattern.op_types)
 
     Model with nodes to be fused:
 
@@ -621,6 +628,19 @@ class IdentityPattern(PatternOptimization):
         print("DOT-SECTION", to_dot(model))
     """
 
+    op_types = {
+        "Add",
+        "Mul",
+        "Div",
+        "Sub",
+        "Transpose",
+        "Slice",
+        "And",
+        "Or",
+        "Expand",
+        "BatchNormalization",
+    }
+
     @classmethod
     def _any_value_to_scalar(cls, cst):
         try:
@@ -641,11 +661,7 @@ class IdentityPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if (
-            node.op_type
-            not in {"Add", "Mul", "Div", "Sub", "Transpose", "Slice", "And", "Or", "Expand"}
-            or node.domain != ""
-        ):
+        if node.op_type not in self.op_types or node.domain != "":
             return self.none()
 
         if node.op_type == "Slice":
@@ -691,6 +707,34 @@ class IdentityPattern(PatternOptimization):
             with g.builder.maybe_disable_fake_tensor_mode():
                 unique = set(value)
             if unique != {1}:
+                return self.none(node, inspect.currentframe().f_lineno)
+            return MatchResult(self, [node], self.apply, insert_at=node)
+
+        if node.op_type == "BatchNormalization":
+            if not g.has_type(node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if g.get_type(node.input[0]) not in {TensorProto.FLOAT16, TensorProto.BFLOAT16}:
+                return self.none(node, inspect.currentframe().f_lineno)
+            training_mode = g.get_attribute_with_default(node, "training_mode", 0)
+            epsilon = g.get_attribute_with_default(node, "epsilon", 1e-5)
+            if training_mode != 0 or epsilon > 1e-5:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if (
+                not g.is_constant(node.input[1])
+                or not g.is_constant(node.input[2])
+                or not g.is_constant(node.input[3])
+                or not g.is_constant(node.input[4])
+            ):
+                return self.none(node, inspect.currentframe().f_lineno)
+            csts = [g.get_computed_constant(i) for i in node.input[1:]]
+            if any(c is None for c in csts):
+                return self.none(node, inspect.currentframe().f_lineno)
+            with g.builder.maybe_disable_fake_tensor_mode():
+                minis = [float(c.min()) for c in csts]
+                maxis = [float(c.max()) for c in csts]
+            if any(mi != ma for mi, ma in zip(minis, maxis)):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if minis != [1, 0, 0, 1]:
                 return self.none(node, inspect.currentframe().f_lineno)
             return MatchResult(self, [node], self.apply, insert_at=node)
 
