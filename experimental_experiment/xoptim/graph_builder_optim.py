@@ -1117,7 +1117,6 @@ class GraphBuilderPatternOptimization:
         statistics: Optional[List[Dict[str, Any]]] = None,
     ):
         nodes_id_removed = {id(n) for n in removed_nodes} if removed_nodes else set()
-        nodes_id_added = {id(n) for n in added_nodes} if added_nodes else set()
         for p, node in enumerate(nodes):
             assert (
                 node.domain in self.opsets
@@ -1125,9 +1124,10 @@ class GraphBuilderPatternOptimization:
             if id(node) in nodes_id_removed:
                 continue
             for i in node.input:
-                if i == "":
+                if not i:
                     continue
                 if i not in known:
+                    nodes_id_added = {id(n) for n in added_nodes} if added_nodes else set()
                     after = set()
                     for nn in self.builder.nodes[p:]:
                         after |= set(nn.output)
