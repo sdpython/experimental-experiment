@@ -549,12 +549,12 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 f"{self.__class__.__name__}--{half_node.input[0]}_position_ids"
             )
             seq_length = g.unique_name(
-                f"{self.__class__.__name__}--{half_node.input[0]}--seq_length"
+                f"{self.__class__.__name__}--{half_node.input[0]}_seq_length"
             )
             seq_length_squeezed = g.unique_name(
-                f"{self.__class__.__name__}--{half_node.input[0]}--seqsq"
+                f"{self.__class__.__name__}--{half_node.input[0]}_seqsq"
             )
-            exp_shape = g.unique_name(f"{self.__class__.__name__}--{half_node.input[0]}_pshape")
+            exp_shape = g.unique_name(f"{self.__class__.__name__}_{half_node.input[0]}_pshape")
             flat_pids = g.unique_name(
                 f"{self.__class__.__name__}--{half_node.input[0]}_flat_pids"
             )

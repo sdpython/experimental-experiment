@@ -672,6 +672,8 @@ class IdentityPattern(PatternOptimization):
             value = g.get_computed_constant(node.input[1])
             if value is None:
                 return self.none(node, inspect.currentframe().f_lineno)
+            if not g.has_rank(node.input[0]) or value.shape[0] != g.get_rank(node.input[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
             with g.builder.maybe_disable_fake_tensor_mode():
                 unique = set(value)
             if unique != {1}:
@@ -766,7 +768,8 @@ class IdentityPattern(PatternOptimization):
         name = node.input[
             (
                 1
-                if g.is_constant(node.input[0])
+                if node.op_type in {"Add", "Mul", "Div", "Sub", "And", "Or"}
+                and g.is_constant(node.input[0])
                 and g.has_shape(node.input[0])
                 and g.get_shape(node.input[0]) in {(), (1,)}
                 else 0
@@ -777,7 +780,7 @@ class IdentityPattern(PatternOptimization):
                 "Identity",
                 [name],
                 [node.output[0]],
-                name=f"{self.__class__.__name__}--{node.name}",
+                name=f"{self.__class__.__name__}--{node.name}.{node.op_type}",
             )
         ]
 

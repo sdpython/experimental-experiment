@@ -54,6 +54,8 @@ class GraphBuilderPatternOptimization:
     ``LOG_PATTERN_OPTIMIZE`` overwrites the verbosity.
     Environment variable ``DUMPPATTERNS`` dumps the matched nodes
     and their replacement if it contains a folder name.
+    If ``PATTERNNOREMOVE`` not empty, the optimizer raises an exception when
+    one optimizing steps removes this name.
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -98,6 +100,7 @@ class GraphBuilderPatternOptimization:
                 print(f"[GraphBuilderPatternOptimization] dropping patterns {todrop}")
             self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
         self._debug_step = os.environ.get("PATTERNSTEP", "0") in (1, "1", "True", True, "true")
+        self._debug_removed_name = os.environ.get("PATTERNNOREMOVE", "")
 
     def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
         return self.builder.do_not_turn_constant_initializers_maybe_because_of_showing(name)
@@ -1118,6 +1121,10 @@ class GraphBuilderPatternOptimization:
     ):
         nodes_id_removed = {id(n) for n in removed_nodes} if removed_nodes else set()
         nodes_id_added = {id(n) for n in added_nodes} if added_nodes else set()
+        name_to_check = self._debug_removed_name
+        if name_to_check and not hasattr(self, "_found_names"):
+            self._found_names = {}
+        found = None
         for p, node in enumerate(nodes):
             assert (
                 node.domain in self.opsets
@@ -1203,6 +1210,18 @@ class GraphBuilderPatternOptimization:
 
             if verifies:
                 self._check_graph_verifies(node)
+            if name_to_check and name_to_check in node.output:
+                found = node
+        assert not name_to_check or name_to_check not in self._found_names or found, (
+            f"Name {name_to_check!r} was not found but it should not have disappear, "
+            f"iteration={iteration}, it was produced by node\n"
+            f"{self._found_names[name_to_check]}\n-- step:\n--\n"
+            f"{step if isinstance(step, str) else step()!r}\n--\n"
+            f"\ncode={code}\n-- removed nodes={removed_nodes}"
+            f"\n-- added nodes={added_nodes}"
+        )
+        if name_to_check and found:
+            self._found_names[name_to_check] = found
 
     def _check_graph(
         self,
