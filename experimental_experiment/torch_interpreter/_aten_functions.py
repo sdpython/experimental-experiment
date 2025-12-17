@@ -1370,6 +1370,36 @@ def aten_broadcast_tensors(
     )
 
 
+def aten_bucketize_Tensor(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    boundaries: T,
+    right: bool = False,
+    out_int32: bool = False,
+    name: str = "bucketize",
+) -> T:
+    "bucketize"
+    tu = g.op.UnsqueezeAnyOpset(x, g.MINUS_ONE, name=name)
+    cmp = (
+        g.op.GreaterOrEqual(tu, boundaries, name=name)
+        if right
+        else g.op.Greater(tu, boundaries, name=name)
+    )
+    itype = TensorProto.INT32 if out_int32 else TensorProto.INT64
+    res = g.op.ReduceSumAnyOpset(
+        g.op.Cast(cmp, to=itype, name=name),
+        g.MINUS_ONE,
+        outputs=outputs,
+        name=name,
+        keepdims=0,
+    )
+    if not sts:
+        set_type_shape_unary_op(g, res, x, dtype=itype)
+    return res
+
+
 def aten_cat(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4638,18 +4668,19 @@ def aten_index_put(
         if index_dtype == TensorProto.BOOL:
             # index_put1b_ or index_put_1b_
             name += "b_"
-            use_where = True
+            use_where = False
             shape_values = g.get_shape(values) if g.has_shape(values) else None
-            if (
-                shape_values is not None
-                and len(shape_values) > 0
-                and all_int(shape_values)
-                and 0 not in shape_values
-                and g.has_shape(x)
-                and g.get_shape(x)[-len(shape_values) :] != shape_values
+            if shape_values is not None and (
+                shape_values in (tuple(), (1,))
+                or (
+                    len(shape_values) > 0
+                    and 0 not in shape_values
+                    and g.has_shape(x)
+                    and g.get_shape(x)[-len(shape_values) :] == shape_values
+                )
             ):
                 # No broadcast is possible
-                use_where = False
+                use_where = True
 
             if use_where:
                 name += "_where"
@@ -4700,6 +4731,7 @@ def aten_index_put(
                 flat_index,
                 flat_values,
                 reduction="add" if accumulate else "none",
+                name=name,
             )
             res = g.op.Reshape(updated, g.op.Shape(x, name=name), name=name, outputs=outputs)
             if not sts:
@@ -8723,7 +8755,7 @@ def aten_masked_scatter(
         g.ZERO,
         name=name,
     )
-    flat_x_scat = g.op.ScatterElements(flat_x, non_zero, flat_updates)
+    flat_x_scat = g.op.ScatterElements(flat_x, non_zero, flat_updates, name=name)
     res = g.op.Reshape(flat_x_scat, g.op.Shape(x, name=name), name=name, outputs=outputs)
     if not sts:
         set_type_shape_unary_op(g, res, x)

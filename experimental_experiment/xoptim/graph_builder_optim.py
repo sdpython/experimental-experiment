@@ -54,6 +54,8 @@ class GraphBuilderPatternOptimization:
     ``LOG_PATTERN_OPTIMIZE`` overwrites the verbosity.
     Environment variable ``DUMPPATTERNS`` dumps the matched nodes
     and their replacement if it contains a folder name.
+    If ``PATTERNNOREMOVE`` not empty, the optimizer raises an exception when
+    one optimizing steps removes this name.
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
@@ -98,6 +100,7 @@ class GraphBuilderPatternOptimization:
                 print(f"[GraphBuilderPatternOptimization] dropping patterns {todrop}")
             self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
         self._debug_step = os.environ.get("PATTERNSTEP", "0") in (1, "1", "True", True, "true")
+        self._debug_removed_name = os.environ.get("PATTERNNOREMOVE", "")
 
     def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
         return self.builder.do_not_turn_constant_initializers_maybe_because_of_showing(name)
@@ -1103,6 +1106,54 @@ class GraphBuilderPatternOptimization:
         #     providers=["CPUExecutionProvider"],
         # )
 
+    def _assert_check_graph_nodes_(
+        self, added_nodes, removed_nodes, nodes, statistics, node, step, i, p
+    ):
+        removed_nodes = removed_nodes or []
+        added_nodes = added_nodes or []
+        nodes_id_added = {id(n) for n in added_nodes}
+        after = set()
+        for nn in self.builder.nodes[p:]:
+            after |= set(nn.output)
+        st = max(0, p - 10)
+        assert_text = "\n".join(
+            [
+                f"{il+st:05d} {'+' if id(node) in nodes_id_added else '='} "
+                f"-- {self.builder.pretty_node(node)}"
+                for il, node in enumerate(
+                    self.builder.nodes[st : min(len(self.builder.nodes), p + 10)]
+                )
+            ]
+        )
+        found = "not found after"
+        for pfind, n2 in enumerate(nodes):
+            if n2 is not None and i in n2.output:
+                found = f"input {i!r} found at position {pfind}"
+        foundr = "not found in removed nodes"
+        for pfind, n2 in enumerate(removed_nodes):
+            if n2 is not None and i in n2.output:
+                foundr = f"input {i!r} found at position {pfind} in removed nodes"
+        s_removed_nodes = "\n".join(
+            f"{n.op_type}({n.input})->({n.output})" for n in removed_nodes if n is not None
+        )
+        s_added_nodes = "\n".join(
+            f"{n.op_type}({n.input})->({n.output})" for n in added_nodes if n is not None
+        )
+        stats = (
+            "\n".join(map(str, statistics[max(len(statistics) - 20, 0) :])) if statistics else "?"
+        )
+        raise AssertionError(
+            f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "
+            f"[{node.name}]: {node.input} -> {node.output}, "
+            f"step\n--\n{step if isinstance(step, str) else step()!r}\n--\n"
+            f"found after={i in after} (details={found!r}, {foundr!r})"
+            f"\n------\n{assert_text}\n------\nid(node)={id(node)}, "
+            f"removed_nodes=\n{s_removed_nodes}"
+            f"\n------\nadded_nodes=\n{s_added_nodes}"
+            f"\n------ STATS=\n{stats}"
+            f"\n------\n{self.builder.pretty_text()}"
+        )
+
     def _check_graph_nodes(
         self,
         nodes: List[NodeProto],
@@ -1116,64 +1167,24 @@ class GraphBuilderPatternOptimization:
         added_nodes: Optional[List[NodeProto]] = None,
         statistics: Optional[List[Dict[str, Any]]] = None,
     ):
+
         nodes_id_removed = {id(n) for n in removed_nodes} if removed_nodes else set()
+        name_to_check = self._debug_removed_name
+        if name_to_check and not hasattr(self, "_found_names"):
+            self._found_names = {}
+        found = None
         for p, node in enumerate(nodes):
+            if id(node) in nodes_id_removed:
+                continue
             assert (
                 node.domain in self.opsets
             ), f"domain {node.domain!r} is not registered in {self.opsets}"
-            if id(node) in nodes_id_removed:
-                continue
             for i in node.input:
                 if not i:
                     continue
                 if i not in known:
-                    nodes_id_added = {id(n) for n in added_nodes} if added_nodes else set()
-                    after = set()
-                    for nn in self.builder.nodes[p:]:
-                        after |= set(nn.output)
-                    st = max(0, p - 10)
-                    assert_text = "\n".join(
-                        [
-                            f"{il+st:05d} {'+' if id(node) in nodes_id_added else '='} "
-                            f"-- {self.builder.pretty_node(node)}"
-                            for il, node in enumerate(
-                                self.builder.nodes[st : min(len(self.builder.nodes), p + 10)]
-                            )
-                        ]
-                    )
-                    found = "not found after"
-                    for pfind, n2 in enumerate(nodes):
-                        if n2 is not None and i in n2.output:
-                            found = f"input {i!r} found at position {pfind}"
-                    foundr = "not found in removed nodes"
-                    for pfind, n2 in enumerate(removed_nodes):
-                        if n2 is not None and i in n2.output:
-                            foundr = f"input {i!r} found at position {pfind} in removed nodes"
-                    s_removed_nodes = "\n".join(
-                        f"{n.op_type}({n.input})->({n.output})"
-                        for n in removed_nodes
-                        if n is not None
-                    )
-                    s_added_nodes = "\n".join(
-                        f"{n.op_type}({n.input})->({n.output})"
-                        for n in added_nodes
-                        if n is not None
-                    )
-                    stats = (
-                        "\n".join(map(str, statistics[max(len(statistics) - 20, 0) :]))
-                        if statistics
-                        else "?"
-                    )
-                    raise AssertionError(
-                        f"Unknown input {i!r} at position {p} in node {node.op_type!r}, "
-                        f"[{node.name}]: {node.input} -> {node.output}, "
-                        f"step\n--\n{step if isinstance(step, str) else step()!r}\n--\n"
-                        f"found after={i in after} (details={found!r}, {foundr!r})"
-                        f"\n------\n{assert_text}\n------\nid(node)={id(node)}, "
-                        f"removed_nodes=\n{s_removed_nodes}"
-                        f"\n------\nadded_nodes=\n{s_added_nodes}"
-                        f"\n------ STATS=\n{stats}"
-                        f"\n------\n{self.builder.pretty_text()}"
+                    self._assert_check_graph_nodes_(
+                        added_nodes, removed_nodes, nodes, statistics, node, step, i, p
                     )
             if node.op_type in {"If", "Loop", "Scan", "SequenceMap"}:
                 for att in node.attribute:
@@ -1188,7 +1199,7 @@ class GraphBuilderPatternOptimization:
                         self._check_graph_nodes(
                             g.node,
                             known=k2,
-                            step=f"{step}-{node.op_type}-{att.name}-{node.name}",
+                            step=lambda: f"{step}-{node.op_type}-{att.name}-{node.name}",  # noqa: B023
                             code=code,
                             iteration=iteration,
                             verifies=False,
@@ -1199,10 +1210,24 @@ class GraphBuilderPatternOptimization:
                                 f"op_type={node.op_type!r}, att.name={att.name!r}, "
                                 f"node.name={node.name}"
                             )
-            known |= set(node.output)
-
+            if len(node.output) == 1:
+                known.add(node.output[0])
+            else:
+                known |= set(node.output)
             if verifies:
                 self._check_graph_verifies(node)
+            if name_to_check and name_to_check in node.output:
+                found = node
+        assert not name_to_check or name_to_check not in self._found_names or found, (
+            f"Name {name_to_check!r} was not found but it should not have disappear, "
+            f"iteration={iteration}, it was produced by node\n"
+            f"{self._found_names[name_to_check]}\n-- step:\n--\n"
+            f"{step if isinstance(step, str) else step()!r}\n--\n"
+            f"\ncode={code}\n-- removed nodes={removed_nodes}"
+            f"\n-- added nodes={added_nodes}"
+        )
+        if name_to_check and found:
+            self._found_names[name_to_check] = found
 
     def _check_graph(
         self,

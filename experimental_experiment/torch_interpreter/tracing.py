@@ -1135,7 +1135,7 @@ class CustomTracer(torch.fx.Tracer):
         cls,
         exported_program,
         graph,
-        MAX_ITER=10,
+        MAX_ITER=100,
         verbose: int = 0,
         exc: bool = True,
         err_graph: str = "",
@@ -1157,6 +1157,9 @@ class CustomTracer(torch.fx.Tracer):
                 f"[CustomTracer.remove_inplace] S2: {len(inplace)} inplace nodes "
                 f"and {max_iter} iterations"
             )
+            if verbose > 1:
+                for _, __ in zip(range(3), inplace):
+                    print(f"   {__[0]}: {__[1]}: {__[1].target}({__[1].args})")
         while inplace and max_iter > 0:
             if verbose > 1:
                 print(
@@ -1405,7 +1408,7 @@ class CustomTracer(torch.fx.Tracer):
         if verbose:
             print(
                 f"[CustomTracer.remove_inplace] end with {max_iter} "
-                f"iterations and {len(graph.nodes)} nodes"
+                f"iterations and {len(graph.nodes)} nodes (n_inplace={n_inplace})"
             )
         return n_inplace
 
@@ -1497,11 +1500,17 @@ class CustomTracer(torch.fx.Tracer):
             return n not in nodes_to_leave
 
         if verbose:
-            print(f"[CustomTracer.remove_inplace] starts with {len(graph.nodes)} nodes")
+            print(
+                f"[CustomTracer.remove_inplace] starts with {len(graph.nodes)} "
+                f"nodes (n_inplace_submobules={n_inplace_submobules})"
+            )
 
         n_inplace = len(inplace)
         if verbose:
             print(f"[CustomTracer.remove_inplace] S1: {len(inplace)} inplace nodes")
+            if verbose > 1:
+                for _, __ in zip(range(3), inplace):
+                    print(f"   {__[0]}: {__[1]}: {__[1].target}({__[1].args})")
         changed = cls._replace_getattr(graph)
         changed |= cls._replace_meth_setitem(graph)
 

@@ -2384,9 +2384,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             ), (
                 f"Shape value for {name!r} (value={value!r}) is already "
                 f"registered and is different from the existing "
-                f"value={value!r} (equal_to={equal_to!r}), "
-                f"existing value is {self._known_value_shape.get(name, None)!r}"
-                f"{self.get_debug_msg()}"
+                f"value which is {self._known_value_shape.get(name, None)!r} "
+                f"(equal_to={equal_to!r}){self.get_debug_msg()}"
             )
             if self.verbose > 2:
                 print(f"[GraphBuilder-{self._hash()}.set_value_shape] {name}:{value}")
