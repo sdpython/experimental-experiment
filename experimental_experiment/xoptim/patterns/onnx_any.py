@@ -1,6 +1,6 @@
 import inspect
 from typing import List, Optional
-from onnx import NodeProto, TensorProto
+from onnx import AttributeProto, NodeProto, TensorProto
 from ...helpers import make_idn
 from ...xshape._onnx_helper import unary_like_op_types
 from ..patterns_api import MatchResult, PatternOptimization
@@ -112,7 +112,8 @@ class SameChildrenPattern(PatternOptimization):
     @classmethod
     def _cmp(cls, n1: NodeProto, n2: NodeProto) -> bool:
         "Compares two nodes and say if they are the same."
-        assert make_idn(n1) != make_idn(n2), f"Two nodes are the same not identical copies {n1}"
+        if len(n1.input) != len(n2.input):
+            return False
         if n1.input != n2.input:
             return False
         if len(n1.output) != len(n2.output):
@@ -124,8 +125,21 @@ class SameChildrenPattern(PatternOptimization):
                 return False
             if att1.type != att2.type:
                 return False
+            if att1.type == AttributeProto.INT:
+                if att1.i != att2.i:
+                    return False
+                continue
+            if att1.type == AttributeProto.FLOAT:
+                if att1.f != att2.f:
+                    return False
+                continue
+            if att1.type == AttributeProto.STRING:
+                if att1.s != att2.s:
+                    return False
+                continue
             if att1.SerializeToString() != att2.SerializeToString():
                 return False
+        assert make_idn(n1) != make_idn(n2), f"Two nodes are the same not identical copies {n1}"
         return True
 
     def __init__(self, verbose: int = 0, priority: int = 0):
