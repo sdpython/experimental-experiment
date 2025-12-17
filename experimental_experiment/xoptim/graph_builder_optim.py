@@ -1720,7 +1720,7 @@ class GraphBuilderPatternOptimization:
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                self._check_graph(statistics, "remove_duplicated_shape", it, "B", self.verifies)
+                self._check_graph(statistics, "remove_duplicated_shape", it, "BD", self.verifies)
                 if id_removed > 0:
                     continue_optimization = True
                 if self.verbose >= 10 or self._debug_step:
@@ -1748,7 +1748,7 @@ class GraphBuilderPatternOptimization:
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                self._check_graph(statistics, "remove_identity", it, "B", self.verifies)
+                self._check_graph(statistics, "remove_identity", it, "BI", self.verifies)
                 if id_removed > 0:
                     continue_optimization = True
                 if self.verbose >= 10 or self._debug_step:
@@ -1776,7 +1776,7 @@ class GraphBuilderPatternOptimization:
                         time_in=time.perf_counter() - begin,
                     )
                 )
-                self._check_graph(statistics, "remove_unused", it, "B", self.verifies)
+                self._check_graph(statistics, "remove_unused", it, "BU", self.verifies)
                 if id_removed > 0:
                     continue_optimization = True
                 if self.verbose >= 10 or self._debug_step:
