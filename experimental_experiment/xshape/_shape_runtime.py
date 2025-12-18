@@ -70,7 +70,6 @@ class _ShapeRuntime:
             r = getattr(self, meth_name)(node, values)
             if r is not None:
                 return r
-
         assert r is not None, (
             f"Unable to compute a shape for node {self.pretty_node(node)} "
             f"with values={values}{self.get_debug_msg()}"
@@ -470,3 +469,14 @@ class _ShapeRuntime:
             # Maybe a shape but probably not.
             node.doc_string += "#SV-Sl/3"
             return False
+
+        if len(values[2]) == 1 and values[3][0] == 0:
+            begin, end, step = (
+                values[1][0],
+                values[2][0],
+                (values[4][0] if len(values) > 4 else 1),
+            )
+            res = values[0][begin:end:step]
+            self.set_value_shape(node.output[0], res)
+            node.doc_string += "#SV-Sl4"
+            return True
