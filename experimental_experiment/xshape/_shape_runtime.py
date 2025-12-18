@@ -5,7 +5,11 @@ from ._shape_helper import all_int
 
 
 class _ShapeRuntime:
-    """Runs through a few nodes often used to deal with shapes."""
+    """
+    Runs through a few nodes often used to deal with shapes.
+    It updates shape, type, and value_shape though methods ``set_type``,
+    ``set_shape`` (or ``set_rank`` if full shape is not known), ``set_value_shape``.
+    """
 
     def simple_update_value_shape_with_node(self, node: onnx.NodeProto) -> bool:
         """Updates ``_known`_value_shape`` for a particular node."""
