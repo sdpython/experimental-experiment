@@ -101,6 +101,9 @@ class GraphBuilderPatternOptimization:
             self.patterns = [p for p in self.patterns if p.__class__.__name__ not in todrop]
         self._debug_step = os.environ.get("PATTERNSTEP", "0") in (1, "1", "True", True, "true")
         self._debug_removed_name = os.environ.get("PATTERNNOREMOVE", "")
+        self.disable_node_checking = True
+        if os.environ.get("UNITTEST_GOING", "0") in (1, "1", "True", True, "true"):
+            self.disable_node_checking = False
 
     def do_not_turn_constant_initializers_maybe_because_of_showing(self, name: str) -> bool:
         return self.builder.do_not_turn_constant_initializers_maybe_because_of_showing(name)
@@ -1167,7 +1170,6 @@ class GraphBuilderPatternOptimization:
         added_nodes: Optional[List[NodeProto]] = None,
         statistics: Optional[List[Dict[str, Any]]] = None,
     ):
-
         nodes_id_removed = {id(n) for n in removed_nodes} if removed_nodes else set()
         name_to_check = self._debug_removed_name
         if name_to_check and not hasattr(self, "_found_names"):
@@ -1238,6 +1240,7 @@ class GraphBuilderPatternOptimization:
         verifies: bool,
         removed_nodes: Optional[List[NodeProto]] = None,
         added_nodes: Optional[List[NodeProto]] = None,
+        disable_node_checking: bool = False,
     ):
         """Verifies the graph."""
         begin = time.perf_counter()
@@ -1245,30 +1248,30 @@ class GraphBuilderPatternOptimization:
             f"The onnx model is empty (step "
             f"{step if isinstance(step, str) else step()!r}, no node)"
         )
-        known = (
-            set(n.name for n in self.builder.inputs)
-            | set(self.builder.initializers_dict)
-            | self.builder._context
-        )
-        self._check_graph_nodes(
-            self.builder.nodes,
-            step=step,
-            iteration=iteration,
-            code=code,
-            known=known,
-            verifies=verifies,
-            root=True,
-            removed_nodes=removed_nodes,
-            added_nodes=added_nodes,
-            statistics=statistics,
-        )
-
-        for o in self.builder.outputs:
-            assert o.name in known, (
-                f"Unknown output {o.name!r}, step "
-                f"{step if isinstance(step, str) else step()!r}\n"
-                f"{self.builder.pretty_text()}"
+        if not disable_node_checking:
+            known = (
+                set(n.name for n in self.builder.inputs)
+                | set(self.builder.initializers_dict)
+                | self.builder._context
             )
+            self._check_graph_nodes(
+                self.builder.nodes,
+                step=step,
+                iteration=iteration,
+                code=code,
+                known=known,
+                verifies=verifies,
+                root=True,
+                removed_nodes=removed_nodes,
+                added_nodes=added_nodes,
+                statistics=statistics,
+            )
+            for o in self.builder.outputs:
+                assert o.name in known, (
+                    f"Unknown output {o.name!r}, step "
+                    f"{step if isinstance(step, str) else step()!r}\n"
+                    f"{self.builder.pretty_text()}"
+                )
 
         if verifies:
             self._check_graph_verifies_whole()
@@ -1461,15 +1464,23 @@ class GraphBuilderPatternOptimization:
                 statistics,
                 lambda _=match: _.to_string(False),
                 it,
-                "A",
+                "A1",
                 verifies=self.verifies,
                 removed_nodes=removed_nodes,
                 added_nodes=added_nodes,
+                disable_node_checking=self.disable_node_checking,
             )
 
             n_added += add
             n_removed += rem
             applied_patterns.append(pattern)
+        self._check_graph(
+            statistics,
+            "_optimize_apply_step",
+            it,
+            "A2",
+            verifies=self.verifies,
+        )
         return applied_patterns, added_types, n_added, n_removed
 
     def optimize(
