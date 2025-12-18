@@ -11011,9 +11011,21 @@ def aten_split_with_sizes(
     return res
 
 
-def aten_sqrt(g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T) -> T:
+def aten_square(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name: str = "square"
+) -> T:
+    "square"
+    res = g.make_node("Mul", [x, x], outputs, name=name)
+    if not sts:
+        set_type_shape_unary_op(g, outputs[0], x)
+    return res
+
+
+def aten_sqrt(
+    g: GraphBuilder, sts: Optional[Dict[str, Any]], outputs: List[str], x: T, name: str = "sqrt"
+) -> T:
     "sqrt"
-    res = g.make_node("Sqrt", [x], name="sqrt")
+    res = g.make_node("Sqrt", [x], outputs, name=name)
     if not sts:
         set_type_shape_unary_op(g, outputs[0], x)
     return res
