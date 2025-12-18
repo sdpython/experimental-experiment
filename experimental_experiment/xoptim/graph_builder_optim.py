@@ -1248,12 +1248,12 @@ class GraphBuilderPatternOptimization:
             f"The onnx model is empty (step "
             f"{step if isinstance(step, str) else step()!r}, no node)"
         )
-        known = (
-            set(n.name for n in self.builder.inputs)
-            | set(self.builder.initializers_dict)
-            | self.builder._context
-        )
         if not disable_node_checking:
+            known = (
+                set(n.name for n in self.builder.inputs)
+                | set(self.builder.initializers_dict)
+                | self.builder._context
+            )
             self._check_graph_nodes(
                 self.builder.nodes,
                 step=step,
@@ -1266,13 +1266,12 @@ class GraphBuilderPatternOptimization:
                 added_nodes=added_nodes,
                 statistics=statistics,
             )
-
-        for o in self.builder.outputs:
-            assert o.name in known, (
-                f"Unknown output {o.name!r}, step "
-                f"{step if isinstance(step, str) else step()!r}\n"
-                f"{self.builder.pretty_text()}"
-            )
+            for o in self.builder.outputs:
+                assert o.name in known, (
+                    f"Unknown output {o.name!r}, step "
+                    f"{step if isinstance(step, str) else step()!r}\n"
+                    f"{self.builder.pretty_text()}"
+                )
 
         if verifies:
             self._check_graph_verifies_whole()
@@ -1477,12 +1476,10 @@ class GraphBuilderPatternOptimization:
             applied_patterns.append(pattern)
         self._check_graph(
             statistics,
-            lambda _=match: _.to_string(False),
+            "_optimize_apply_step",
             it,
             "A2",
             verifies=self.verifies,
-            removed_nodes=removed_nodes,
-            added_nodes=added_nodes,
         )
         return applied_patterns, added_types, n_added, n_removed
 
