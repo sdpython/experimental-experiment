@@ -27,6 +27,12 @@ def _unset_fake_temporarily() -> Generator:
 
 
 class _BuilderRuntime:
+    """
+    Computes the output of a couple of nodes knowing their inputs.
+    It supports numpy and torch tensors. Most of the function are
+    used while exporting a model, by :meth:`_InferenceRuntime.compute_constant
+    <experimental_experiment.xshape._inference_runtime._InferenceRuntime.compute_constant>`.
+    """
 
     def _apply_slice_to_shape(
         self,

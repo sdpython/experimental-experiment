@@ -1972,8 +1972,18 @@ class ShapeBasedReshapeIsSqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if g.main_opset < 18:
             return self.none()
-        if node.op_type != "Reshape" or node.domain != "":
+        if node.op_type not in ("Reshape", "Expand") or node.domain != "":
             return self.none()
+        if node.op_type == "Expand":
+            if not g.is_constant(node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            cst = g.get_computed_constant(node.input[1])
+            if cst is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if cst.min() != cst.max():
+                return self.none(node, inspect.currentframe().f_lineno)
+            if cst[0] != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
 
         if not g.has_shape(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)

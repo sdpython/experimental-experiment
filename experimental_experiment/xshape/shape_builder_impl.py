@@ -557,60 +557,12 @@ class BasicShapeBuilder(ShapeBuilder, _BuilderRuntime, _ShapeRuntime, _Inference
         :param limit: limit the string if the model is big
         :return: many pieces of informations about the on going conversion
         """
-        import numpy as np
-        import onnx.numpy_helper as onh
 
         def assert_sorted(inputs):
             try:
                 return sorted(inputs)
             except TypeError:
                 return list(inputs)
-
-        def _align(s, length):
-            if len(s) < length:
-                s += " " * (length - len(s))
-            return s
-
-        def _dtype(t):
-            if hasattr(t, "dtype"):
-                return t.dtype
-            if hasattr(t, "data_type"):
-                return t.data_type
-            raise RuntimeError(f"dtype unknown for type {type(t)}-{t}.")
-
-        def _shape(t):
-            if hasattr(t, "shape"):
-                return t.dtype
-            if hasattr(t, "dims"):
-                return tuple(t.dims)
-            raise RuntimeError(f"dtype unknown for type {type(t)}-{t}.")
-
-        def _size(t):
-            if hasattr(t, "numel"):
-                return t.numel()
-            if hasattr(t, "size"):
-                return t.size
-            if hasattr(t, "dims"):
-                return np.prod(tuple(t.dims))
-            raise RuntimeError(f"Size unknown for type {type(t)}-{t}.")
-
-        def _values(t):
-            if hasattr(t, "detach"):
-
-                def is_allow_non_fake_inputs_enabled():
-                    from torch._guards import detect_fake_mode
-
-                    return detect_fake_mode(t)
-
-                if is_allow_non_fake_inputs_enabled():
-                    return "FakeTensorMode enabled"
-                return t.detach().cpu().flatten().tolist()
-            if hasattr(t, "size"):
-                return t.ravel().tolist()
-            if hasattr(t, "dims"):
-                a = onh.to_array(t)
-                return a.ravel().tolist()
-            raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
         rows = ["", "--DEBUG--"]
         hs = self._hash()
