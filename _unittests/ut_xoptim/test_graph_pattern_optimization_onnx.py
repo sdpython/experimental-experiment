@@ -5819,6 +5819,34 @@ class TestGraphPatternOptimization(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
 
+    def test_shape_based_expand_is_unsqueeze(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [oh.make_node("Expand", ["X", "one"], ["Y"])],
+                "test",
+                [oh.make_tensor_value_info("X", TFLOAT, [2, "d"])],
+                [oh.make_tensor_value_info("Y", TFLOAT, None)],
+                [onh.from_array(np.array([1, 1, 1], dtype=np.int64), name="one")],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+
+        feeds = {"X": np.arange(24).reshape((2, 12)).astype(np.float32)}
+        ref = self.check_ort(model)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="default", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Unsqueeze"], [n.op_type for n in opt_onx.graph.node])
+        ref = self.check_ort(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+
     def test_shape_based_static_expand_reshape(self):
         model = oh.make_model(
             oh.make_graph(
