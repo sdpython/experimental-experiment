@@ -4250,7 +4250,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
 
         self.assertEqual(
-            ["Reshape", "Shape", "Concat", "Reshape", "Shape", "Concat", "Gemm", "Reshape"],
+            ["Shape", "Shape", "Reshape", "Concat", "Reshape", "Concat", "Gemm", "Reshape"],
             [n.op_type for n in opt_onx.graph.node],
         )
 
@@ -5955,7 +5955,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Reshape", "Add", "Shape", "Concat", "Expand"],
+            ["Shape", "Reshape", "Add", "Concat", "Expand"],
             [n.op_type for n in opt_onx.graph.node],
         )
         ref = ExtendedReferenceEvaluator(opt_onx)
@@ -5996,7 +5996,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Reshape", "Add", "Shape", "Concat", "Expand"],
+            ["Shape", "Reshape", "Add", "Concat", "Expand"],
             [n.op_type for n in opt_onx.graph.node],
         )
         ref = ExtendedReferenceEvaluator(opt_onx)
@@ -6039,7 +6039,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Reshape", "Reshape", "Add", "Shape", "Concat", "Expand"],
+            ["Shape", "Reshape", "Reshape", "Add", "Concat", "Expand"],
             [n.op_type for n in opt_onx.graph.node],
         )
         ref = ExtendedReferenceEvaluator(opt_onx)
@@ -6122,7 +6122,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Cast", "Where", "Shape", "Concat", "Expand"],
+            ["Shape", "Cast", "Where", "Concat", "Expand"],
             [n.op_type for n in opt_onx.graph.node],
         )
         ref = ExtendedReferenceEvaluator(opt_onx)
@@ -6164,7 +6164,7 @@ class TestGraphPatternOptimization(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(
-            ["Cast", "Where", "Shape", "Concat", "Expand"],
+            ["Shape", "Cast", "Where", "Concat", "Expand"],
             [n.op_type for n in opt_onx.graph.node],
         )
         ref = ExtendedReferenceEvaluator(opt_onx)
@@ -7309,7 +7309,6 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns="ReshapeReshape", verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        print(opt_onx)
         self.assertEqual(["Reshape"], [n.op_type for n in opt_onx.graph.node])
         ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
         zz = ref.run(None, feeds)[0]
