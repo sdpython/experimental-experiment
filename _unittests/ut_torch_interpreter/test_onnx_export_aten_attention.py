@@ -234,7 +234,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                 onx = to_onnx(model, inputs, dynamic_shapes=ds, target_opset=opset)
                 self.dump_onnx(f"test_group_norm_opset_{opset}.onnx", onx)
                 self.assertEqual(
-                    ["Reshape", "InstanceNormalization", "Shape", "Reshape"],
+                    ["Shape", "Reshape", "InstanceNormalization", "Reshape"],
                     [n.op_type for n in onx.graph.node],
                 )
                 self.assertEqual(

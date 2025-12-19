@@ -6447,18 +6447,19 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if self.optimization_options.remove_unused:
                 na = self.remove_unused()
         elif pass_name == "constant_folding":
-            stats_cf = self.constant_folding(self.optimization_options.constant_folding)
-            nr = stats_cf["n"]
-            for k, v in stats_cf.items():
-                if k == "n":
-                    continue
-                local_stats.append(
-                    dict(
-                        pattern=f"apply_constant_folding_{k}",
-                        value=v,
-                        iteration=0,
+            if self.optimization_options.constant_folding:
+                stats_cf = self.constant_folding(self.optimization_options.constant_folding)
+                nr = stats_cf["n"]
+                for k, v in stats_cf.items():
+                    if k == "n":
+                        continue
+                    local_stats.append(
+                        dict(
+                            pattern=f"apply_constant_folding_{k}",
+                            value=v,
+                            iteration=0,
+                        )
                     )
-                )
         elif pass_name == "patterns":
             if self.optimization_options.patterns is not None:
                 n = len(self.nodes)
