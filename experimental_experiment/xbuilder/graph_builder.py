@@ -9548,7 +9548,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             assert not self.is_sequence(
                 k
             ), f"Renaming not implemented for sequence {k!r}{self.get_debug_msg()}"
-            assert k not in set_outputs, f"Renaming not implemented for output {k!r} yet"
+            assert (
+                "NONE" in k or k not in set_outputs
+            ), f"Renaming not implemented for output {k!r} yet{self.get_debug_msg()}"
             if not with_existing:
                 if self.has_type(k):
                     self.set_type(v, self.get_type(k))
