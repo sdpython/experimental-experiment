@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Any, Dict, List, Optional, Union
 from onnx import ModelProto, helper as oh, load as onnx_load
