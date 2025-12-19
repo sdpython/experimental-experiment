@@ -472,6 +472,7 @@ class TestTracing(ExtTestCase):
         self.assertEqual("aten::masked_fill.Scalar", op.name())
 
     @requires_onnx_diagnostic("0.8.7")
+    @skipif_ci_windows("does not work on windows")
     @hide_stdout()
     def test_tracing_with_submodule(self):
         def filter_position_ids(

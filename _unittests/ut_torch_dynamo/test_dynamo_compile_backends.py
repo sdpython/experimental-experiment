@@ -10,7 +10,6 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
     requires_cuda,
-    requires_onnxruntime_training,
 )
 from experimental_experiment.torch_models.dump_helper import assert_all_close
 from experimental_experiment.torch_dynamo import onnx_debug_backend, onnx_custom_backend
@@ -224,7 +223,6 @@ class TestDynamoCompileBackend(ExtTestCase):
 
     @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
-    @requires_onnxruntime_training()
     def test_aaaa_forward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
 
@@ -238,7 +236,6 @@ class TestDynamoCompileBackend(ExtTestCase):
 
     @requires_torch("2.2.1", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning))
-    @requires_onnxruntime_training()
     def test_aaaa_backward_cpu(self):
         x = torch.rand(3, 4, requires_grad=True)
 

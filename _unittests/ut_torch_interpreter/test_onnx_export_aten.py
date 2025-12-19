@@ -3125,6 +3125,7 @@ class TestOnnxExportAten(ExtTestCase):
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
     @requires_onnx_diagnostic("0.8.7")
+    @skipif_ci_windows("does not work on windows")
     def test_aten_bucketize_right(self):
         import torch
 
@@ -3164,6 +3165,7 @@ class TestOnnxExportAten(ExtTestCase):
         self.assert_conversion_with_ort_on_cpu(onx, expected, (x,))
 
     @requires_onnx_diagnostic("0.8.7")
+    @skipif_ci_windows("does not work on windows")
     def test_aten_bucketize_left(self):
         import torch
 

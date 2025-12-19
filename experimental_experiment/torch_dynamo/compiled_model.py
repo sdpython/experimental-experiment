@@ -1,15 +1,8 @@
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
-from onnx import TensorProto
+import onnx
+from typing import Any, Dict, List, Optional, Union
 from ..export_helpers import torch_export
-from ._dort_cmd_common_models import (
-    _create_configuration_for_benchmark_llama,
-    _create_configuration_for_benchmark_mistral,
-    _create_configuration_for_benchmark_phi,
-    _create_configuration_for_benchmark_phi3,
-)
-from ..torch_interpreter import DEFAULT_TARGET_OPSET
 
 
 def get_fused_aten_ops_dispatcher():
@@ -78,12 +71,12 @@ def get_fused_aten_ops_dispatcher():
             name="scaled_dot_product_efficient_attention",
         )
         g.set_type(output, g.get_type(query))
-        g.set_type(log_sumexp, TensorProto.FLOAT)
+        g.set_type(log_sumexp, onnx.TensorProto.FLOAT)
         g.set_rank(output, g.get_rank(query))
         g.set_rank(log_sumexp, g.get_rank(query))
 
-        g.set_type(philox_seed, TensorProto.INT64)
-        g.set_type(philox_offset, TensorProto.INT64)
+        g.set_type(philox_seed, onnx.TensorProto.INT64)
+        g.set_type(philox_offset, onnx.TensorProto.INT64)
         g.set_shape(philox_seed, tuple())
         g.set_shape(philox_offset, tuple())
 
@@ -208,7 +201,6 @@ def create_compiled_model(
 ) -> Any:
     """
     Creates the compiled model.
-
     :param model: module
     :param backend: kind of backend
     :param use_dynamic: use dynamic shape
@@ -465,193 +457,3 @@ def create_compiled_model(
         return ORTModule(model, opts)
 
     raise ValueError(f"Unexpected backend={backend!r}.")
-
-
-def dort_args(name: str, description: str, new_args: Optional[List[str]] = None):
-    from experimental_experiment.args import get_parsed_args
-
-    args = get_parsed_args(
-        name,
-        description=description,
-        model=("llama", "model to measure, llama, mistral, phi, ..."),
-        backend=(
-            "ort",
-            "ort, ort+, inductor, eager, plug, backort, dynger, custom",
-        ),
-        device=("cpu", "'cpu' or 'cuda'"),
-        num_hidden_layers=("1", "number of hidden layers"),
-        warmup=5,
-        repeat=5,
-        mixed=("0", "mixed precision (based on autocast)"),
-        export=("", "export the dynamo models"),
-        dynamic=("0", "use dynamic shapes"),
-        target_opset=(
-            f"{DEFAULT_TARGET_OPSET}",
-            "opset to convert into, use with backend=custom",
-        ),
-        config=("default", "default, medium, or small to test"),
-        verbose=("0", "verbosity"),
-        implementation=("eager", "eager or sdpa"),
-        disable_pattern=("", "a list of optimization patterns to disable"),
-        enable_pattern=("default", "list of optimization patterns to enable"),
-        dump_folder=("dump_dort_bench", "where to dump the exported model"),
-        dump_patterns=("0", "dumps the patterns in sub folder of dump_folder"),
-        optimize=("1", "optimize the model"),
-        with_mask=("1", "with or without mask, dynamo may fail with a mask"),
-        ort_optimize=("1", "enable or disable onnxruntime optimization"),
-        order=("none", "optimization order see class OrderAlgorithm, none by default"),
-        memory_spy=("1", "enable, disable memory monitoring"),
-        shape_scenario=(
-            "",
-            "shapes to use, 2x1024 by default, 'batch' to get "
-            "shapes with different batch dimensions, 'length' to get "
-            "different length sizes",
-        ),
-        output_data=(
-            "output_data_multi.csv",
-            "when running multiple configuration, save the results in that file",
-        ),
-        expose="backend,repeat,warmup,device,num_hidden_layers,memory_spy,"
-        "mixed,export,config,target_opset,dynamic,verbose,dump_folder,shape_scenario"
-        "enable_pattern,disable_pattern,model,optimize,with_mask,order,output_data",
-        new_args=new_args,
-    )
-    return args
-
-
-def export_args(name: str, description: str, new_args: Optional[List[str]] = None):
-    from experimental_experiment.args import get_parsed_args
-
-    args = get_parsed_args(
-        name,
-        description=description,
-        warmup=5,
-        repeat=10,
-        model=("llama", "model to measure, llama, mistral, phi, ..."),
-        exporter=("custom", "script, dynamo, custom"),
-        device=("cpu", "'cpu' or 'cuda'"),
-        num_hidden_layers=(1, "number of hidden layers"),
-        dtype=("float32", "model float type"),
-        dynamic=("0", "use dynamic shapes"),
-        target_opset=(DEFAULT_TARGET_OPSET, "opset to convert into, use with backend=custom"),
-        config=("default", "default, medium, or small to test"),
-        verbose=(0, "verbosity"),
-        ort=(1, "produce the model optimized by onnxruntime"),
-        implementation=("eager", "eager or sdpa"),
-        disable_pattern=("", "a list of optimization patterns to disable"),
-        enable_pattern=("default", "list of optimization patterns to enable"),
-        optimize=(1, "optimize the model"),
-        ort_optimize=(1, "enable or disable onnxruntime optimization"),
-        with_mask=(1, "with or without mask, dynamo may fail with a mask"),
-        order=("none", "optimization order see class OrderAlgorithm, none by default"),
-        memory_peak=("0", "measure memory peak"),
-        dump_folder=("dump_export", "folder where to dump the model"),
-        large_model=("0", "saves weights in a separate file"),
-        output_data=(
-            "output_data_multi.csv",
-            "when running multiple configuration, save the results in that file",
-        ),
-        expose="exporter,device,num_hidden_layers,ort,"
-        "mixed,config,target_opset,dynamic,verbose,dump_patterns,"
-        "enable_pattern,disable_pattern,model,optimize,with_mask,order"
-        "memory_peak,dump_folder,large_model,dtype,repeat,warmup",
-        new_args=new_args,
-    )
-    return args
-
-
-def create_configuration_for_benchmark(
-    model: str = "llama",
-    config: str = "small",
-    repeat: int = 5,
-    warmup: int = 3,
-    num_hidden_layers: int = 1,
-    implementation: str = "eager",
-    with_mask: bool = True,
-    shape_scenario: Optional[str] = None,
-    dynamic_shapes: bool = False,
-    dtype: str = "float32",
-) -> Dict[str, Union[str, int, List[Tuple[int, int]]]]:
-    """
-    Creates a model based on the given configuration.
-
-    :param model: model name
-    :param config: size of the model (small, medium, large)
-    :param warmup: number of warmup steps
-    :param repeat: number of repetition
-    :param num_hidden_layers: number of hidden layers
-    :param implementation: implementation
-    :param with_mask: use a mask
-    :param shape_scenario: None or empty for all shapes equal to (2, 1024),
-        'batch' for different batch sizes,
-        'length' for different length sizes
-    :param dynamic_shapes: use dynamic shapes
-    :return: dictionary
-    """
-    fcts = {
-        "llama": _create_configuration_for_benchmark_llama,
-        "mistral": _create_configuration_for_benchmark_mistral,
-        "phi": _create_configuration_for_benchmark_phi,
-        "phi3": _create_configuration_for_benchmark_phi3,
-    }
-    assert model in fcts, f"Not implemented for model {model!r}, config={config}"
-    return fcts[model](
-        config=config,
-        repeat=repeat,
-        warmup=warmup,
-        num_hidden_layers=num_hidden_layers,
-        implementation=implementation,
-        with_mask=with_mask,
-        shape_scenario=shape_scenario,
-        dynamic_shapes=dynamic_shapes,
-    )
-
-
-def create_model(
-    model: str,
-    config_dict: Dict[str, Union[int, str]],
-    dtype: Optional[str] = "float32",
-) -> Tuple[Any, List[Tuple[Any, ...]]]:
-    """
-    Returns a model and a list of inputs.
-
-    :param model: model name
-    :param config_dict: configuration
-    :param dtype: dtype to use
-    :return: model, list of inputs
-    """
-    if dtype is not None:
-        import torch
-
-        res = create_model(model, config_dict, dtype=None)
-        torch_dtype = getattr(torch, dtype)
-        return (
-            res[0].to(torch_dtype),
-            [
-                tuple((i.to(torch_dtype) if i.dtype == torch.float32 else i) for i in obs)
-                for obs in res[1]
-            ],
-            *res[2:],
-        )
-
-    if model == "llama":
-        from ..ext_test_case import get_llama_model
-
-        return get_llama_model(**config_dict)
-
-    if model == "mistral":
-        from ..ext_test_case import get_mistral_model
-
-        return get_mistral_model(**config_dict)
-
-    if model == "phi":
-        from ..ext_test_case import get_phi_model
-
-        return get_phi_model(**config_dict)
-
-    if model == "phi3":
-        from ..ext_test_case import get_phi3_model
-
-        return get_phi3_model(**config_dict)
-
-    raise AssertionError(f"not implemented for model={model!r}")

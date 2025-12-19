@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from onnx import (
@@ -49,6 +50,10 @@ class OrtEval:
             self.session_options = onnxruntime.SessionOptions()
         if optimized_model_filepath:
             self.session_options.optimized_model_filepath = optimized_model_filepath
+            self.session_options.add_session_config_entry(
+                "session.optimized_model_external_initializers_file_name",
+                f"{os.path.splitext(os.path.split(optimized_model_filepath)[-1])[0]}.data",
+            )
         if verbose >= 30:
             import onnxruntime
 

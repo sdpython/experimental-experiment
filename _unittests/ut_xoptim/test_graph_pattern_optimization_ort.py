@@ -15,9 +15,9 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     skipif_ci_windows,
-    requires_onnxruntime_training,
     requires_cuda,
     hide_stdout,
+    has_onnxruntime_training,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -86,11 +86,9 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             providers.insert(0, "CUDAExecutionProvider")
         InferenceSession(proto.SerializeToString(), providers=providers)
 
-    @requires_onnxruntime_training()
     def test_fused_matmul_pattern(self):
         origin = self._get_model("bug_fused.onnx")
         check_model(origin)
-        self._check_with_ort(origin)
         gr = GraphBuilder(
             origin,
             infer_shapes_options=True,
@@ -100,8 +98,10 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ),
         )
         onx = gr.to_onnx(optimize=True)
-        self._check_with_ort(onx)
         check_model(onx)
+        if has_onnxruntime_training():
+            self._check_with_ort(origin)
+            self._check_with_ort(onx)
 
     def common_fused_matmul(self, side):
         from onnxruntime import InferenceSession
@@ -534,7 +534,6 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     self.assertEqualArray(expected[0], got[0], atol=1e-5)
                     self.assertEqualArray(expected[1], got[1], atol=1e-5)
 
-    @requires_onnxruntime_training()
     def test_softmax_grad(self):
         from onnxruntime import InferenceSession
 
@@ -570,6 +569,9 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         opt_onx = gr.to_onnx(optimize=True)
         self.assertEqual(["SoftmaxGrad"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(0, len(opt_onx.graph.initializer))
+
+        if not has_onnxruntime_training():
+            raise unittest.SkipTest("no onnxruntime training")
 
         opt_ref = InferenceSession(
             opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]

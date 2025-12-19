@@ -1,3 +1,4 @@
+import os
 from typing import Callable, Dict, List, Optional, Tuple, Union
 import onnx
 import numpy as np
@@ -61,6 +62,10 @@ class _InferenceSession:
                     session_options.enable_profiling = enable_profiling
                 if optimized_model_filepath:
                     session_options.optimized_model_filepath = optimized_model_filepath
+                    session_options.add_session_config_entry(
+                        "session.optimized_model_external_initializers_file_name",
+                        f"{os.path.splitext(os.path.split(optimized_model_filepath)[-1])[0]}.data",
+                    )
                 if log_severity_level is not None:
                     session_options.log_severity_level = log_severity_level
                 if log_verbosity_level is not None:

@@ -8,7 +8,6 @@ import onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
-    requires_onnxruntime_training,
     requires_torch,
     requires_onnx_diagnostic,
     skipif_ci_linux,
@@ -241,13 +240,11 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    @requires_onnxruntime_training()
     def test_huggingface_export_bench_cort_cpu(self):
         self._hg_export_bench_cpu("cort", "101Dummy", process=True, verbose=20, check_file=False)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    @requires_onnxruntime_training()
     def test_huggingface_export_bench_cortgrad_cpu(self):
         self._hg_export_bench_cpu(
             "cortgrad", "101Dummy", process=True, verbose=20, check_file=False

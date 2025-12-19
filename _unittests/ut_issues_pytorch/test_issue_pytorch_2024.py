@@ -10,7 +10,6 @@ from experimental_experiment.ext_test_case import (
     ignore_warnings,
     requires_torch,
     requires_onnxscript,
-    requires_onnxruntime_training,
     requires_onnx_diagnostic,
     skipif_ci_windows,
     has_torch,
@@ -23,7 +22,6 @@ from experimental_experiment.onnx_tools import onnx_find
 
 class TestIssuesPytorch2024(ExtTestCase):
     @ignore_warnings((UserWarning, DeprecationWarning))
-    @requires_onnxruntime_training()
     def test_cort(self):
         import torch
         from torch._dynamo.backends.common import aot_autograd

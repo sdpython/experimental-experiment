@@ -7,12 +7,7 @@ from onnx import ModelProto, TensorProto
 from onnx.checker import check_model
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from experimental_experiment.ext_test_case import (
-    ExtTestCase,
-    ignore_warnings,
-    requires_onnxruntime_training,
-    hide_stdout,
-)
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings, hide_stdout
 from experimental_experiment.reference import ExtendedReferenceEvaluator, OrtEval
 
 TFLOAT = TensorProto.FLOAT
@@ -74,7 +69,6 @@ class TestOrtEval(ExtTestCase):
         self.assertIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
-    @requires_onnxruntime_training()
     @hide_stdout()
     def test_ort_eval_dlpack(self):
         import torch
@@ -108,7 +102,6 @@ class TestOrtEval(ExtTestCase):
         self.assertNotIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
-    @requires_onnxruntime_training()
     @hide_stdout()
     def test_ort_eval_dlpack_whole(self):
         import torch
@@ -142,7 +135,6 @@ class TestOrtEval(ExtTestCase):
         self.assertIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
-    @requires_onnxruntime_training()
     @hide_stdout()
     def test_ort_eval_dlpack_incremental(self):
         import torch
@@ -161,7 +153,6 @@ class TestOrtEval(ExtTestCase):
         self.assertIn("Reshape(xm, shape3) -> Z", out)
 
     @ignore_warnings(DeprecationWarning)
-    @requires_onnxruntime_training()
     def test_debug_pkl(self):
         model = "dump_sdpa_dis_llama/dort-llama-sdpa-custom-no__1.onnx"
         inputs = "dump_sdpa_dis_llama/dort-llama-sdpa-custom-no__1.txt.pkl"

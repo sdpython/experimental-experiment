@@ -628,23 +628,6 @@ def onnx_custom_backend(
             options=options,
             export_options=export_options,
         )
-    elif exporter == "dynamo":
-        from ._dynamo_exporter import _dynamo_export
-
-        onx, builder = _dynamo_export(
-            graph_module,
-            args,
-            verbose,
-            target_opset,
-            dispatcher,
-            optimize,
-            enable_pattern,
-            disable_pattern,
-            rename_inputs,
-            processor,
-            order_algorithm=order_algorithm,
-            dump_patterns=dump_patterns,
-        )
     else:
         raise NotImplementedError(f"Unknown exporter {exporter!r}")
 
