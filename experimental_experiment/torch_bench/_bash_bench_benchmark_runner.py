@@ -1441,6 +1441,9 @@ class BenchmarkRunner:
                 )
             if self.dump_ort:
                 session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
+                session_options.optimized_model_external_initializers_file_name = (
+                    f"{filename}-ortops.data"
+                )
                 if self.verbose > 1:
                     print(
                         f"[BenchmarkRunner.benchmark] saves optimized "
