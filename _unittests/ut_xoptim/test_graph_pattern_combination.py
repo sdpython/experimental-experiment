@@ -20,12 +20,7 @@ from onnx.checker import check_model
 from onnx.shape_inference import infer_shapes
 from onnx.onnx_cpp2py_export.shape_inference import InferenceError
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.ext_test_case import (
-    ExtTestCase,
-    skipif_ci_windows,
-    requires_onnxruntime_training,
-    has_onnxruntime_training,
-)
+from experimental_experiment.ext_test_case import ExtTestCase, skipif_ci_windows
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -423,7 +418,6 @@ class TestGraphPatternCombination(ExtTestCase):
                 self.assertIn("SimplifiedLayerNormalization", types)
                 self._check_ort_cpu_or_cuda(onx)
 
-    @requires_onnxruntime_training()
     def test_simplified_with_all_default(self):
         self._simplified_with_all({}, experimental=False, check_ort=cuda_recent_enough())
 
@@ -525,7 +519,7 @@ class TestGraphPatternCombination(ExtTestCase):
                 ):
                     self.dump_onnx(f"dump_{model}", new_onx)
                     raise AssertionError(f"Model {model!r} has ScatterND.")
-            if check_ort and has_onnxruntime_training():
+            if check_ort:
                 self._check_ort_cpu_or_cuda(new_onx, model=model)
 
     @skipif_ci_windows("crash")

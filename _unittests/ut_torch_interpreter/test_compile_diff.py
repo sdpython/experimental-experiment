@@ -6,7 +6,6 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     ignore_warnings,
-    requires_onnxruntime_training,
     requires_torch,
 )
 
@@ -35,7 +34,6 @@ class TestDynamoCompileDiff(ExtTestCase):
     @skipif_ci_windows("dynamo does not work on windows")
     @requires_torch("2.4", "onnxrt not fully implemented")
     @ignore_warnings((UserWarning, RuntimeWarning, DeprecationWarning, FutureWarning))
-    @requires_onnxruntime_training()
     def test_standalone(self):
         import logging
         import onnx

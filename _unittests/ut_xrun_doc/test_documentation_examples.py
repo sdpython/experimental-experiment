@@ -222,13 +222,6 @@ class TestDocumentationExamples(ExtTestCase):
                 except ImportError:
                     reason = "missing onnx-array-pi"
 
-            if (
-                not reason
-                and not has_onnxruntime_training()
-                and name in {"plot_llama_diff_dort_301.py"}
-            ):
-                reason = "onnxruntime-training is missing"
-
             if reason:
 
                 @unittest.skip(reason)
