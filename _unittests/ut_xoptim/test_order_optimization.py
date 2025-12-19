@@ -100,6 +100,8 @@ class TestGraphOrderOptimization(ExtTestCase):
         try:
             onnxruntime.InferenceSession(onx.SerializeToString(), options, providers=providers)
         except (Fail, InvalidArgument) as e:
+            if "com.microsoft:SoftmaxGrad(-1) is not a registered function/op" in str(e):
+                raise unittest.SkipTest("onnxruntime-training is not installed")
             err = []
             rows = []
             for i in onx.graph.input:
