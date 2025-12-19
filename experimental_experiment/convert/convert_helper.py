@@ -180,7 +180,7 @@ def ort_optimize(
     opts.optimized_model_filepath = output
     opts.add_session_config_entry(
         "session.optimized_model_external_initializers_file_name",
-        f"{os.path.splitext(output)[0]}.data",
+        f"{os.path.splitext(os.path.split(output)[-1])[0]}.data",
     )
     if disable_aot:
         opts.add_session_config_entry("session.disable_aot_function_inlining", "1")

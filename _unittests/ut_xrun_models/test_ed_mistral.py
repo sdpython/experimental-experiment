@@ -6,7 +6,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnxruntime_training,
     skipif_ci_windows,
 )
-from experimental_experiment.torch_bench._dort_cmd_common import create_compiled_model
+from experimental_experiment.torch_dynamo.compiled_model import create_compiled_model
 from experimental_experiment.torch_models.training_helper import train_loop
 
 

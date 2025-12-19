@@ -20,8 +20,6 @@
     _bash_bench_set_torchbench
     _bash_bench_set_torchbench_ado
     _bash_bench_untrained
-    _dort_cmd_common
-    _dort_cmd_common_models
     bash_bench_agg
     bash_bench_explicit
     bash_bench_huggingface
@@ -30,9 +28,6 @@
     bash_bench_torchbench_ado
     bash_bench_untrained
     check_model
-    dort_bench
-    dort_bench_profile
-    dort_profile
     export_model
     export_model_helper
 

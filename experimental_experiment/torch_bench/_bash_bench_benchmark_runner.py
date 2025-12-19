@@ -1443,7 +1443,7 @@ class BenchmarkRunner:
                 session_options.optimized_model_filepath = f"{filename}-ortopt.onnx"
                 session_options.add_session_config_entry(
                     "session.optimized_model_external_initializers_file_name",
-                    f"{filename}-ortops.data",
+                    f"{os.path.splitext(os.path.split(filename)[-1])[0]}-ortops.data",
                 )
                 if self.verbose > 1:
                     print(
