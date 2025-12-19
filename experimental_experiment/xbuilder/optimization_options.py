@@ -37,6 +37,9 @@ class OptimizationOptions:
     :param processor: optimization should be made for this processor
         or this list of processors (comma separated value)
     :param order: order algorithm to apply
+    :param passes: this defines the order of the passes to apply to the final
+        graph, they are applied in that order to skipped depending on the
+        other attributes defined in this class
 
     It is possible to define a precise of the pattern to apply to a model.
     The value is interpreter by :func:`experimental_experiment.xoptim.get_pattern_list`.
@@ -93,7 +96,22 @@ class OptimizationOptions:
         verifies: bool = False,
         dump_applied_patterns: Optional[str] = None,
         processor: str = "CPU",
-        order: Optional["OrderAlgorithm"] = None,  # noqa: F821
+        order: Optional[Union["OrderAlgorithm", str]] = "SHAPE",  # noqa: F821
+        passes: Tuple[str, ...] = (
+            "remove_identity",
+            "remove_unused",
+            "constant_folding",
+            "remove_unused",
+            "patterns",
+            "remove_unused",
+            "remove_identity",
+            "constant_folding",
+            "remove_unused",
+            "remove_duplicated_initializer",
+            "remove_identity",
+            "remove_unused",
+            "order",
+        ),
     ):
         self.remove_unused = remove_unused
         self.constant_folding = (
@@ -108,6 +126,7 @@ class OptimizationOptions:
         self.order = order
         self.max_iter = max_iter
         self.recursive = recursive
+        self.passes = passes
         if isinstance(patterns, str):
             from ..xoptim import get_pattern_list
 

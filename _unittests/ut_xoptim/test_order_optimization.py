@@ -197,12 +197,88 @@ class TestGraphOrderOptimization(ExtTestCase):
                     onx,
                     infer_shapes_options=False,
                     optimization_options=OptimizationOptions(
-                        patterns=None, verbose=0, order=OrderAlgorithm.RANDOM
+                        patterns=None,
+                        verbose=10,
+                        order=OrderAlgorithm.RANDOM,
                     ),
                     verbose=0,
                 )
                 onx = gr.to_onnx(optimize=True)
                 self._check_ort_cpu_or_cuda(onx)
+
+    @ignore_warnings(RuntimeWarning)
+    @hide_stdout()
+    def test_shape_order(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Add", ["X", "Y"], ["xy1"]),
+                    oh.make_node("Mul", ["X", "Y"], ["xy2"]),
+                    oh.make_node("Sub", ["X", "Y"], ["xy3"]),
+                    oh.make_node("Div", ["X", "Y"], ["xy4"]),
+                    oh.make_node("Add", ["xy1", "xy2"], ["xy10"]),
+                    oh.make_node("Mul", ["xy1", "xy2"], ["xy12"]),
+                    oh.make_node("Sub", ["xy3", "xy4"], ["xy13"]),
+                    oh.make_node("Div", ["xy3", "xy4"], ["xy14"]),
+                    oh.make_node("Add", ["xy10", "xy12"], ["r20"]),
+                    oh.make_node("Add", ["xy13", "xy14"], ["r21"]),
+                    oh.make_node("Shape", ["xy1"], ["shape"]),
+                    oh.make_node("Add", ["r21", "r20"], ["zs"]),
+                    oh.make_node("Reshape", ["zs", "shape"], ["Z"]),
+                ],
+                "dummy",
+                [
+                    oh.make_tensor_value_info("X", TFLOAT, [4, 4]),
+                    oh.make_tensor_value_info("Y", TFLOAT, [4, 4]),
+                ],
+                [oh.make_tensor_value_info("Z", TFLOAT, [4, 4])],
+            )
+        )
+        check_model(model)
+        op_types = [n.op_type for n in model.graph.node]
+
+        verbose = 10
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=None,
+                verbose=verbose,
+                order=OrderAlgorithm.SHAPE,
+                passes=("order",),
+            ),
+            verbose=0,
+        )
+
+        feeds = {"X": self._range(4, 4), "Y": self._range(4, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        opt_onx = gr.to_onnx(optimize=True)
+        new_op_types = [n.op_type for n in opt_onx.graph.node]
+        self.assertEqual(
+            [
+                "Add",
+                "Shape",
+                "Mul",
+                "Sub",
+                "Div",
+                "Add",
+                "Mul",
+                "Sub",
+                "Div",
+                "Add",
+                "Add",
+                "Add",
+                "Reshape",
+            ],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        self.assertEqual(len(op_types), len(new_op_types))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
