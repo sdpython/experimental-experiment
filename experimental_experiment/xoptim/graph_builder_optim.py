@@ -1844,7 +1844,7 @@ class GraphBuilderPatternOptimization:
                         f"{self.builder._hash()}.optimize] reapply "
                         f"{applied_patterns_names & same_children_pattern_names}"
                     )
-                n_added, n_removed, p_applied, itsame = 0, 0, 0, 0
+                n_added, n_removed, p_applied, itsame, max_match = 0, 0, 0, 0, 0
                 begin = time.perf_counter()
                 while applied_patterns_names & same_children_pattern_names:
                     same_patterns = [
@@ -1863,6 +1863,7 @@ class GraphBuilderPatternOptimization:
                             current_priority_index,
                         )
                     )
+                    max_match = max(max_match, len(matches))
                     applied_patterns, added_types, _added, _removed = self._optimize_apply_step(
                         it, matches, statistics
                     )
@@ -1887,6 +1888,8 @@ class GraphBuilderPatternOptimization:
                         added=n_added,
                         removed=n_removed,
                         time_in=time.perf_counter() - begin,
+                        repeated=itsame,
+                        max_match=max_match,
                     )
                 )
                 if p_applied > 0:

@@ -209,6 +209,13 @@ class SameChildrenPattern(PatternOptimization):
                 o1, o2 = node1.output[0], node2.output[0]
                 next1 = g.next_nodes(o1)
                 next2 = g.next_nodes(o2)
+                if len(next1) == 1 or len(next2) == 1:
+                    if len(next1) == 1:
+                        op_type = next1[0].op_type
+                        next2 = [n for n in next2 if n.op_type == op_type]
+                    else:
+                        op_type = next2[0].op_type
+                        next1 = [n for n in next1 if n.op_type == op_type]
                 if len(next1) != 1 or len(next1) != len(next2):
                     break
                 n1, n2 = next1[0], next2[0]
