@@ -571,8 +571,6 @@ class TestOperatorsCort(ExtTestCase):
     def test_add_broadcast(self):
         x = torch.randn(2, 3, requires_grad=True).double()
         y = torch.randn(3, requires_grad=True).double()
-        r = x + y
-        print(r.type, r.shape)
         self.assertONNX(operator.add, (x, y), onnx_export=inspect.currentframe().f_code.co_name)
 
     @ignore_warnings(UserWarning)

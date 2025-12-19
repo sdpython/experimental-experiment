@@ -9,17 +9,21 @@ class OrderAlgorithm(IntEnum):
     """
     Defines the possible order algorithm.
 
-    * NONE: does not change anything
-    * RANDOM: random order
+    * ``NONE``: does not change anything
+    * ``RANDOM``: random order
+    * ``SHAPE``: moves every shape node just behind the node producing its input
     """
 
     NONE = 0
     RANDOM = 1
+    SHAPE = 2
 
 
 class OrderOptimization:
     """
     Optimizes the order of computation.
+    It tries to minimize the distance between a producer and the consumer
+    or a results. The idea is to reduce the memory usage.
 
     :param builder: GraphBuilder holding the model
     :param algorithm: to apply
@@ -33,7 +37,9 @@ class OrderOptimization:
         verbose: int = 0,
     ):
         self.builder = builder
-        self.algorithm = algorithm
+        self.algorithm = (
+            getattr(OrderAlgorithm, algorithm) if isinstance(algorithm, str) else algorithm
+        )
         self.verbose = verbose
 
     def __repr__(self) -> str:
@@ -45,26 +51,22 @@ class OrderOptimization:
         Optimizes the model inplace. It optimizes the model in the builder
         itself by switching nodes.
         """
-        begin = time.perf_counter()
-
+        stats = []
+        if self.verbose:
+            print(f"[OrderOptimization.optimize] ALGO-{self.algorithm}")
         if self.algorithm == OrderAlgorithm.NONE:
+            pass
+        elif self.algorithm == OrderAlgorithm.RANDOM:
             if self.verbose:
-                print(f"[OrderOptimization.optimize] {self.algorithm}: does nothing")
-            duration = time.perf_counter() - begin
-            if self.verbose:
-                print(f"[OrderOptimization.optimize] done in {duration}")
-            return [dict(pattern="order", time_in=duration)]
-        if self.algorithm == OrderAlgorithm.RANDOM:
-            if self.verbose:
-                print(f"[OrderOptimization.optimize] {self.algorithm}: does nothing")
-            duration = time.perf_counter() - begin
+                print(f"[OrderOptimization.optimize] ALGO-{self.algorithm}")
             stats = self.random_order()
-            if self.verbose:
-                print(f"[OrderOptimization.optimize] done in {duration}")
-            stats.append(dict(pattern="order", algo=str(self.algorithm), time_in=duration))
-            return stats
-
-        raise AssertionError(f"Unsupported algorithm {self.algorithm}.")
+            stats.append(dict(pattern="order", algo=str(self.algorithm)))
+        elif self.algorithm == OrderAlgorithm.SHAPE:
+            stats = self.shape_order()
+            stats.append(dict(pattern="order", algo=str(self.algorithm)))
+        else:
+            raise AssertionError(f"Unsupported algorithm {self.algorithm}.")
+        return stats
 
     def _position(self):
         output = {}
@@ -90,31 +92,36 @@ class OrderOptimization:
             couples.append((minp, maxp))
         return couples
 
-    def random_order(self):
-        """
-        Moves nodes by random.
-        """
+    def _check(self, stats, step, build_context=False, context=None):
+        begin = time.perf_counter()
+        assert (
+            len(self.builder.nodes) > 0
+        ), f"The onnx model is empty (step {step}, no node).\n{self.builder.get_debug_msg()}"
+        known = (
+            set(n.name for n in self.builder.inputs)
+            | set(self.builder.initializers_dict)
+            | (context or set())
+        )
+        context = set()
+        for node in self.builder.nodes:
+            assert (
+                node.domain in self.builder.opsets
+            ), f"Domain {node.domain!r} is not registered in {self.builder.opsets}"
+            for i in node.input:
+                if i == "":
+                    continue
+                if build_context:
+                    context.add(i)
+                    known.add(i)
+                assert i in known, f"Unknown input {i!r}, step {step!r} in node {node}"
+            known |= set(node.output)
+        for o in self.builder.outputs:
+            assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
+        stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
+        return context
 
-        def _check(stats, step):
-            begin = time.perf_counter()
-            assert len(self.builder.nodes) > 0, (
-                f"The onnx model is empty (step {step}, no node)."
-                f"\n{self.builder.get_debug_msg()}"
-            )
-            known = set(n.name for n in self.builder.inputs)
-            known |= set(self.builder.initializers_dict)
-            for node in self.builder.nodes:
-                assert (
-                    node.domain in self.builder.opsets
-                ), f"Domain {node.domain!r} is not registered in {self.builder.opsets}"
-                for i in node.input:
-                    if i == "":
-                        continue
-                    assert i in known, f"Unknown input {i!r}, step {step!r} in node {node}"
-                known |= set(node.output)
-            for o in self.builder.outputs:
-                assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
-            stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
+    def random_order(self):
+        """Moves nodes by random."""
 
         if self.verbose:
             begin = time.perf_counter()
@@ -126,7 +133,7 @@ class OrderOptimization:
 
         begin = time.perf_counter()
         stats = []
-        _check(stats, "orderA")
+        context = self._check(stats, "orderA", build_context=True)
         n_changes = 0
         n_moved = 0
         expected = len([n for n in self.builder.nodes if n is not None])
@@ -190,7 +197,7 @@ class OrderOptimization:
                 i += 1
                 n_changes += 1
 
-            _check(stats, "orderL")
+            self._check(stats, "orderL", context=context)
 
         if self.verbose:
             print(
@@ -204,6 +211,63 @@ class OrderOptimization:
                 changed=n_changes,
                 scale=n_moved,
                 iter=n_iter,
+                time_in=time.perf_counter() - begin,
+            )
+        )
+        return stats
+
+    def shape_order(self):
+        """Moves shape right after the node it consumes is created."""
+
+        if self.verbose:
+            begin = time.perf_counter()
+            print(
+                f"[OrderOptimization.random_order] -- starts with "
+                f"{len(self.builder.nodes)} nodes, "
+                f"{len(self.builder.initializers_dict)} initializers"
+            )
+
+        begin = time.perf_counter()
+        stats = []
+        context = self._check(stats, "orderA", build_context=True)
+        n_changes = 0
+        n_moved = 0
+        positions = {
+            **{i.name: -1 for i in self.builder.inputs},
+            **{i: -2 for i in self.builder.initializers_dict},  # noqa: C420
+            **{c: -3 for c in context},  # noqa: C420
+        }
+        ordered_nodes = []
+        for pos, node in enumerate(self.builder.nodes):
+            if node.op_type in ("Shape", "Size") and not node.domain:
+                assert node.input[0] in positions, f"Missing input {node.input[0]!r}"
+                produced = positions[node.input[0]]
+                if pos > produced + 1:
+                    n_changes += 1
+                    n_moved += pos - (produced + 1)
+                    ordered_nodes.append(
+                        (produced + 0.1 + pos * 1.0 / len(self.builder.nodes), node)
+                    )
+                else:
+                    ordered_nodes.append((pos, node))
+            else:
+                ordered_nodes.append((pos, node))
+            for o in node.output:
+                positions[o] = pos
+        ordered_nodes.sort()
+        self.builder.nodes = [_[1] for _ in ordered_nodes]
+        self._check(stats, "orderL", context=context)
+        if self.verbose:
+            print(
+                f"[OrderOptimization.shape_order] done after "
+                f"in {time.perf_counter() -begin}s "
+                f"with changed={n_changes} scale={n_moved}"
+            )
+        stats.append(
+            dict(
+                pattern="shape_order",
+                changed=n_changes,
+                scale=n_moved,
                 time_in=time.perf_counter() - begin,
             )
         )

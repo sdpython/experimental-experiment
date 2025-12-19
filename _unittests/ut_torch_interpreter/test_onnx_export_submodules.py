@@ -248,8 +248,8 @@ class TestOnnxExportSubModules(ExtTestCase):
             options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=False),
         )
         init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
-        self.assertEqual(init_names2 & init_names, init_names)
         self.check_ort(onx2)
+        self.assertEqual(init_names2 & init_names, init_names)
 
     @requires_torch("2.6", "owning_module is None")
     def test_dummy_llm_strict_pieces_true(self):

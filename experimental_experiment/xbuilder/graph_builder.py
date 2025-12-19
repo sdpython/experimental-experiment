@@ -6406,178 +6406,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         else:
             self._check(statistics, "A-opt")
 
-        if self.optimization_options.remove_identity:
-            begin = time.perf_counter()
-            nr, na = self.remove_identity_nodes()
-            statistics.append(
-                dict(
-                    pattern="remove_identity_nodes",
-                    removed=nr,
-                    added=na,
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-            self._check(statistics, "B-remove-identity")
+        n = len(self.nodes)
 
-        if self.optimization_options.remove_unused:
-            begin = time.perf_counter()
-            n = self.remove_unused()
-            statistics.append(
-                dict(
-                    pattern="remove_unused",
-                    removed=n,
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-            self._check(statistics, "C-remove-unused")
+        for order, pass_name in enumerate(self.optimization_options.passes):
+            self.optimize_pass(pass_name, order=order, statistics=statistics)
 
-        if self.optimization_options.constant_folding:
-            # First constant removal
-            begin = time.perf_counter()
-            stats_cf = self.constant_folding(self.optimization_options.constant_folding)
-            statistics.append(
-                dict(
-                    pattern="apply_constant_folding",
-                    removed=stats_cf["n"],
-                    time_in=time.perf_counter() - begin,
-                    iteration=0,
-                )
-            )
-            for k, v in stats_cf.items():
-                if k == "n":
-                    continue
-                statistics.append(
-                    dict(
-                        pattern=f"apply_constant_folding_{k}",
-                        value=v,
-                        iteration=0,
-                    )
-                )
-            self._check(statistics, "Da-constant-folding")
-            if self.optimization_options.remove_unused:
-                begin = time.perf_counter()
-                n = self.remove_unused()
-                statistics.append(
-                    dict(
-                        pattern="remove_unused",
-                        removed=n,
-                        time_in=time.perf_counter() - begin,
-                    )
-                )
-                self._check(statistics, "Ea-remove-unused")
-
-        if self.optimization_options.patterns:
-            assert (
-                self.optimization_options.remove_unused
-            ), "remove_unused must be positive for pattern optimizations"
-            n = len(self.nodes)
-            begin = time.perf_counter()
-            res = self.optimize_with_patterns(recursive=False)
-            statistics.extend(res)
-            statistics.append(
-                dict(
-                    pattern="pattern_optimization",
-                    removed=n - len(self.nodes),
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-            self._check(statistics, "F-patterns")
-            begin = time.perf_counter()
-            n = self.remove_unused()
-            statistics.append(
-                dict(
-                    pattern="remove_unused",
-                    removed=n,
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-            self._check(statistics, "G-remove-unused")
-
-        if self.optimization_options.remove_identity:
-            begin = time.perf_counter()
-            nr, na = self.remove_identity_nodes()
-            statistics.append(
-                dict(
-                    pattern="remove_identity_nodes",
-                    removed=nr,
-                    added=na,
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-            self._check(statistics, "G-remove-identity")
-
-        if self.optimization_options.constant_folding:
-            # Second constant removal
-            begin = time.perf_counter()
-            stats_cf = self.constant_folding(self.optimization_options.constant_folding)
-            statistics.append(
-                dict(
-                    pattern="apply_constant_folding",
-                    removed=stats_cf["n"],
-                    time_in=time.perf_counter() - begin,
-                    iteration=1,
-                )
-            )
-            for k, v in stats_cf.items():
-                if k == "n":
-                    continue
-                statistics.append(
-                    dict(
-                        pattern=f"apply_constant_folding_{k}",
-                        value=v,
-                        iteration=1,
-                    )
-                )
-            self._check(statistics, "Db-constant-folding")
-            if self.optimization_options.remove_unused:
-                begin = time.perf_counter()
-                n = self.remove_unused()
-                statistics.append(
-                    dict(
-                        pattern="remove_unused",
-                        removed=n,
-                        time_in=time.perf_counter() - begin,
-                    )
-                )
-                self._check(statistics, "Eb-remove-unused")
-
-        if self.optimization_options.remove_identity:
-            begin = time.perf_counter()
-            nr, na = self.remove_duplicated_initializer()
-            statistics.append(
-                dict(
-                    pattern="remove_duplicated_initializer",
-                    removed=nr,
-                    added=na,
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-            self._check(statistics, "H-remove-duplicated-initializer")
-            statistics.append(
-                dict(
-                    pattern="remove_identity_nodes",
-                    removed=nr,
-                    added=na,
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-
-        if self.optimization_options.remove_unused:
-            begin = time.perf_counter()
-            n = self.remove_unused()
-            statistics.append(
-                dict(
-                    pattern="remove_unused",
-                    removed=n,
-                    time_in=time.perf_counter() - begin,
-                )
-            )
-            self._check(statistics, "H-remove-unused")
-
-        if self.optimization_options.order:
-            res = self.optimize_order()
-            statistics.extend(res)
-            self._check(statistics, "order")
+        na, nr = (0, n - len(self.nodes)) if len(self.nodes) < n else (len(self.nodes) - n, 0)
 
         if self.verbose or self.optimization_options.verbose:
             duration = time.perf_counter() - main_begin
@@ -6587,7 +6421,76 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             )
             if self.verbose > 1:
                 print(self._compile_statistics(statistics))
+        statistics.append(
+            dict(
+                pattern="optimization",
+                removed=nr,
+                added=na,
+                time_in=time.perf_counter() - main_begin,
+            )
+        )
+        return statistics
 
+    def optimize_pass(
+        self,
+        pass_name: str,
+        order: Optional[int] = None,
+        statistics: Optional[List[Dict[str, Any]]] = None,
+    ):
+        begin = time.perf_counter()
+        nr, na = 0, 0
+        local_stats = []
+        if pass_name == "remove_identity":
+            if self.optimization_options.remove_identity:
+                nr, na = self.remove_identity_nodes()
+        elif pass_name == "remove_unused":
+            if self.optimization_options.remove_unused:
+                na = self.remove_unused()
+        elif pass_name == "constant_folding":
+            if self.optimization_options.constant_folding:
+                stats_cf = self.constant_folding(self.optimization_options.constant_folding)
+                nr = stats_cf["n"]
+                for k, v in stats_cf.items():
+                    if k == "n":
+                        continue
+                    local_stats.append(
+                        dict(
+                            pattern=f"apply_constant_folding_{k}",
+                            value=v,
+                            iteration=0,
+                        )
+                    )
+        elif pass_name == "patterns":
+            if self.optimization_options.patterns is not None:
+                n = len(self.nodes)
+                local_stats = self.optimize_with_patterns(recursive=False)
+                if len(self.nodes) < n:
+                    nr = n - len(self.nodes)
+                else:
+                    na = len(self.nodes) - n
+        elif pass_name == "remove_duplicated_initializer":
+            nr, na = self.remove_duplicated_initializer()
+        elif pass_name == "order":
+            if self.optimization_options.order:
+                local_stats = self.optimize_order()
+        else:
+            raise ValueError(f"Unknown pass name {pass_name!r}")
+
+        if statistics is not None:
+            statistics.append(
+                dict(
+                    pattern=pass_name,
+                    removed=nr,
+                    added=na,
+                    time_in=time.perf_counter() - begin,
+                )
+            )
+            if local_stats:
+                if isinstance(local_stats, list):
+                    statistics.extend(local_stats)
+                else:
+                    statistics.append(local_stats)
+        self._check(statistics, f"{pass_name}-{order or 0}")
         return statistics
 
     def _compile_statistics(self, statistics: List[Dict[str, Any]]) -> str:
@@ -8928,7 +8831,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         stats.append(
             dict(
                 pattern="inline",
-                time_inline=time.perf_counter() - begin,
+                time_in=time.perf_counter() - begin,
                 iteration=0,
                 inlined=inlined,
             )
@@ -8944,7 +8847,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             stats.append(
                 dict(
                     pattern="inline",
-                    time_inline=time.perf_counter() - begin,
+                    time_in=time.perf_counter() - begin,
                     iteration=0,
                     inlined=inlined,
                 )
@@ -9646,7 +9549,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             assert not self.is_sequence(
                 k
             ), f"Renaming not implemented for sequence {k!r}{self.get_debug_msg()}"
-            assert k not in set_outputs, f"Renaming not implemented for output {k!r} yet"
+            assert (
+                "NONE" in k or k not in set_outputs
+            ), f"Renaming not implemented for output {k!r} yet{self.get_debug_msg()}"
             if not with_existing:
                 if self.has_type(k):
                     self.set_type(v, self.get_type(k))
