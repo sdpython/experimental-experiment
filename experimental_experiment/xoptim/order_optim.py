@@ -92,13 +92,17 @@ class OrderOptimization:
             couples.append((minp, maxp))
         return couples
 
-    def _check(self, stats, step):
+    def _check(self, stats, step, build_context=False, context=None):
         begin = time.perf_counter()
         assert (
             len(self.builder.nodes) > 0
         ), f"The onnx model is empty (step {step}, no node).\n{self.builder.get_debug_msg()}"
-        known = set(n.name for n in self.builder.inputs)
-        known |= set(self.builder.initializers_dict)
+        known = (
+            set(n.name for n in self.builder.inputs)
+            | set(self.builder.initializers_dict)
+            | (context or set())
+        )
+        context = set()
         for node in self.builder.nodes:
             assert (
                 node.domain in self.builder.opsets
@@ -106,11 +110,15 @@ class OrderOptimization:
             for i in node.input:
                 if i == "":
                     continue
+                if build_context:
+                    context.add(i)
+                    known.add(i)
                 assert i in known, f"Unknown input {i!r}, step {step!r} in node {node}"
             known |= set(node.output)
         for o in self.builder.outputs:
             assert o.name in known, f"Unknown output {o.name!r}, step {step!r} "
         stats.append(dict(pattern=f"check_{step}", time_in=time.perf_counter() - begin))
+        return context
 
     def random_order(self):
         """Moves nodes by random."""
@@ -125,7 +133,7 @@ class OrderOptimization:
 
         begin = time.perf_counter()
         stats = []
-        self._check(stats, "orderA")
+        context = self._check(stats, "orderA", build_context=True)
         n_changes = 0
         n_moved = 0
         expected = len([n for n in self.builder.nodes if n is not None])
@@ -189,7 +197,7 @@ class OrderOptimization:
                 i += 1
                 n_changes += 1
 
-            self._check(stats, "orderL")
+            self._check(stats, "orderL", context=context)
 
         if self.verbose:
             print(
@@ -221,12 +229,13 @@ class OrderOptimization:
 
         begin = time.perf_counter()
         stats = []
-        self._check(stats, "orderA")
+        context = self._check(stats, "orderA", build_context=True)
         n_changes = 0
         n_moved = 0
         positions = {
             **{i.name: -1 for i in self.builder.inputs},
             **{i: -2 for i in self.builder.initializers_dict},  # noqa: C420
+            **{c: -3 for c in context},  # noqa: C420
         }
         ordered_nodes = []
         for pos, node in enumerate(self.builder.nodes):
@@ -247,7 +256,7 @@ class OrderOptimization:
                 positions[o] = pos
         ordered_nodes.sort()
         self.builder.nodes = [_[1] for _ in ordered_nodes]
-        self._check(stats, "orderL")
+        self._check(stats, "orderL", context=context)
         if self.verbose:
             print(
                 f"[OrderOptimization.shape_order] done after "
