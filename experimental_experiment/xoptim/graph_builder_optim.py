@@ -1288,6 +1288,26 @@ class GraphBuilderPatternOptimization:
         """Tells if a node can be removed."""
         return self.builder.do_not_remove(node)
 
+    def _optimize_matching_step_second(
+        self,
+        it: int,
+        patterns_list: List[PatternOptimization],
+        n_applied,
+        stop_after,
+        statistics,
+        priorities,
+        current_priority_index,
+    ):
+        return self._optimize_matching_step(
+            it,
+            patterns_list,
+            n_applied,
+            stop_after,
+            statistics,
+            priorities,
+            current_priority_index,
+        )
+
     def _optimize_matching_step(
         self,
         it: int,
@@ -1833,7 +1853,7 @@ class GraphBuilderPatternOptimization:
                         if p.__class__.__name__ in same_children_pattern_names
                     ]
                     found, matches, durations, continue_optimization = (
-                        self._optimize_matching_step(
+                        self._optimize_matching_step_second(
                             it,
                             same_patterns,
                             n_applied,
