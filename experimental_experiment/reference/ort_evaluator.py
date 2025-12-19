@@ -50,8 +50,9 @@ class OrtEval:
             self.session_options = onnxruntime.SessionOptions()
         if optimized_model_filepath:
             self.session_options.optimized_model_filepath = optimized_model_filepath
-            self.session_options.optimized_model_external_initializers_file_name = (
-                f"{os.path.splitext(optimized_model_filepath)[0]}.data"
+            self.session_options.add_session_config_entry(
+                "session.optimized_model_external_initializers_file_name",
+                f"{os.path.splitext(optimized_model_filepath)[0]}.data",
             )
         if verbose >= 30:
             import onnxruntime

@@ -178,7 +178,10 @@ def ort_optimize(
 
     opts = onnxruntime.SessionOptions()
     opts.optimized_model_filepath = output
-    opts.optimized_model_external_initializers_file_name = f"{os.path.splitext(output)[0]}.data"
+    opts.add_session_config_entry(
+        "session.optimized_model_external_initializers_file_name",
+        f"{os.path.splitext(output)[0]}.data",
+    )
     if disable_aot:
         opts.add_session_config_entry("session.disable_aot_function_inlining", "1")
 
