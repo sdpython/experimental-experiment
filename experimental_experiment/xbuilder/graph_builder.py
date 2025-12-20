@@ -6505,12 +6505,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     "removed": 0,
                     "added": 0,
                     "instances": 0,
+                    "repeated": 0,
+                    "max_match": 0,
                 }
             o = stats[pattern]
             for k, v in obs.items():
                 if k == "pattern":
                     continue
-                if k in {"time_in", "removed", "added", "instances"}:
+                if k in {"time_in", "removed", "added", "instances", "repeated"}:
                     o[k] += v
                     continue
                 if k in {"changed", "scale"}:
@@ -6518,7 +6520,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                         o[k] = 0
                     o[k] += v
                     continue
-                if k in {"iter"}:
+                if k in {"iter", "max_match"}:
                     if k not in o:
                         o[k] = 0
                     o[k] = max(o[k], v)

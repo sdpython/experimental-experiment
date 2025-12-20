@@ -1297,6 +1297,7 @@ class GraphBuilderPatternOptimization:
         statistics,
         priorities,
         current_priority_index,
+        subset_nodes: Optional[List[NodeProto]] = None,
     ):
         return self._optimize_matching_step(
             it,
@@ -1306,6 +1307,7 @@ class GraphBuilderPatternOptimization:
             statistics,
             priorities,
             current_priority_index,
+            subset_nodes=subset_nodes,
         )
 
     def _optimize_matching_step(
@@ -1317,6 +1319,7 @@ class GraphBuilderPatternOptimization:
         statistics,
         priorities,
         current_priority_index,
+        subset_nodes: Optional[List[NodeProto]] = None,
     ):
         found = False
         marked = set()
@@ -1344,7 +1347,7 @@ class GraphBuilderPatternOptimization:
             before = len(matches)
 
             # loop over the nodes
-            for match in pattern.enumerate_matches(self):
+            for match in pattern.enumerate_matches(self, subset_nodes=subset_nodes):
                 # bypass this node if the name contains some specific name
                 fail_match = False
                 for n in match.nodes:
@@ -1412,11 +1415,12 @@ class GraphBuilderPatternOptimization:
 
     def _optimize_apply_step(
         self, it: int, matches: List[MatchResult], statistics: List[Dict[str, Any]]
-    ):
+    ) -> Tuple[MatchResult, Set[str], int, int, List[NodeProto]]:
         added_types = set()
         n_added = 0
         n_removed = 0
         applied_patterns = []
+        all_added_nodes = []
 
         # loop over patterns
         for im, (pattern, match) in enumerate(matches):
@@ -1428,6 +1432,7 @@ class GraphBuilderPatternOptimization:
 
             begin = time.perf_counter()
             added_nodes = self.apply_match(match, stats=statistics)
+            all_added_nodes.extend(added_nodes)
             added_types |= set(n.op_type for n in added_nodes)
 
             removed_nodes = [n for n in match.nodes if id(n) not in {id(r) for r in added_nodes}]
@@ -1501,7 +1506,7 @@ class GraphBuilderPatternOptimization:
             "A2",
             verifies=self.verifies,
         )
-        return applied_patterns, added_types, n_added, n_removed
+        return applied_patterns, added_types, n_added, n_removed, all_added_nodes
 
     def optimize(
         self,
@@ -1712,8 +1717,8 @@ class GraphBuilderPatternOptimization:
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - apply_step with "
                     f"{len(matches)} matches"
                 )
-            applied_patterns, added_types, n_added, n_removed = self._optimize_apply_step(
-                it, matches, statistics
+            applied_patterns, added_types, n_added, n_removed, subset_nodes = (
+                self._optimize_apply_step(it, matches, statistics)
             )
             n_applied += len(applied_patterns)
             if applied_patterns:
@@ -1846,7 +1851,7 @@ class GraphBuilderPatternOptimization:
                     )
                 n_added, n_removed, p_applied, itsame, max_match = 0, 0, 0, 0, 0
                 begin = time.perf_counter()
-                while applied_patterns_names & same_children_pattern_names:
+                while subset_nodes and applied_patterns_names & same_children_pattern_names:
                     same_patterns = [
                         p
                         for p in applied_patterns
@@ -1861,11 +1866,12 @@ class GraphBuilderPatternOptimization:
                             statistics,
                             priorities,
                             current_priority_index,
+                            subset_nodes=subset_nodes,
                         )
                     )
                     max_match = max(max_match, len(matches))
-                    applied_patterns, added_types, _added, _removed = self._optimize_apply_step(
-                        it, matches, statistics
+                    applied_patterns, added_types, _added, _removed, subset_nodes = (
+                        self._optimize_apply_step(it, matches, statistics)
                     )
                     n_added += _added
                     n_removed += _removed
