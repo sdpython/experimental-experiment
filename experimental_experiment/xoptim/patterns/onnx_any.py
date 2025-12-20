@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 from onnx import AttributeProto, NodeProto, TensorProto
 from ...helpers import make_idn
 from ...xshape._onnx_helper import unary_like_op_types
@@ -142,6 +142,40 @@ class SameChildrenPattern(PatternOptimization):
         assert make_idn(n1) != make_idn(n2), f"Two nodes are the same not identical copies {n1}"
         return True
 
+    @classmethod
+    def _cmp_with_alias(cls, n1: NodeProto, n2: NodeProto, sames: Dict[str, Set[str]]) -> bool:
+        "Compares two nodes and say if they are the same."
+        if len(n1.input) != len(n2.input):
+            return False
+        if len(n1.output) != len(n2.output):
+            return False
+        if len(n1.attribute) != len(n2.attribute):
+            return False
+        for i1, i2 in zip(n1.input, n2.input):
+            if i1 != i2 and i1 not in sames.get(i2, set()):
+                return False
+        for att1, att2 in zip(n1.attribute, n2.attribute):
+            if att1.name != att2.name:
+                return False
+            if att1.type != att2.type:
+                return False
+            if att1.type == AttributeProto.INT:
+                if att1.i != att2.i:
+                    return False
+                continue
+            if att1.type == AttributeProto.FLOAT:
+                if att1.f != att2.f:
+                    return False
+                continue
+            if att1.type == AttributeProto.STRING:
+                if att1.s != att2.s:
+                    return False
+                continue
+            if att1.SerializeToString() != att2.SerializeToString():
+                return False
+        assert make_idn(n1) != make_idn(n2), f"Two nodes are the same not identical copies {n1}"
+        return True
+
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
 
@@ -151,16 +185,60 @@ class SameChildrenPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
+        # match results
+        match = None
         for i in range(len(node.output)):
             next_nodes = g.next_nodes(node.output[i])
             if len(next_nodes) <= 1:
                 continue
-            res = self._match_with_nodes(g, node, next_nodes)
-            if res is not None:
-                return res
+            match = self._match_with_nodes(g, node, next_nodes)
+            if match is not None:
+                break
+        if match and len(match.nodes) == 2:
+            # Then we continue further
+            nodes = match.nodes
+            node1, node2 = nodes
+            sames = {}
+            # Let's continue
+            stack = [(node1, node2)]
+            while stack:
+                node1, node2 = stack.pop()
+                for o1, o2 in zip(node1.output, node2.output):
+                    sames[o1] = {o2}
+                    sames[o2] = {o1}
+                if len(node1.output) != 1 or len(node2.output) != 1:
+                    # Shortcut, another iteration will pick it up.
+                    break
+                o1, o2 = node1.output[0], node2.output[0]
+                next1 = g.next_nodes(o1)
+                next2 = g.next_nodes(o2)
+                dnext1, dnext2 = {}, {}
+                for n in next1:
+                    if n.op_type in dnext1:
+                        dnext1[n.op_type].append(n)
+                    else:
+                        dnext1[n.op_type] = [n]
+                for n in next2:
+                    if n.op_type in dnext2:
+                        dnext2[n.op_type].append(n)
+                    else:
+                        dnext2[n.op_type] = [n]
+                common = set(dnext1) & set(dnext2)
+                for c in common:
+                    for n1 in dnext1[c]:
+                        for n2 in dnext2[c]:
+                            if id(n1) == id(n2) or n1.domain != n2.domain:
+                                continue
+                            if self._cmp_with_alias(n1, n2, sames):
+                                nodes.extend([n1, n2])
+                                stack.append((n1, n2))
+            match = MatchResult(self, nodes, self.apply)
+
+        if match:
+            return match
         return self.none()
 
-    def _match_with_nodes(self, g, node, next_nodes):
+    def _match_with_nodes(self, g, node, next_nodes) -> Optional[MatchResult]:
         if len(next_nodes) == 2:
             n1, n2 = next_nodes
             if n1.op_type != n2.op_type or n1.op_type == "Identity":

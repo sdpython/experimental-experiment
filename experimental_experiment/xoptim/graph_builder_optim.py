@@ -1288,6 +1288,28 @@ class GraphBuilderPatternOptimization:
         """Tells if a node can be removed."""
         return self.builder.do_not_remove(node)
 
+    def _optimize_matching_step_second(
+        self,
+        it: int,
+        patterns_list: List[PatternOptimization],
+        n_applied,
+        stop_after,
+        statistics,
+        priorities,
+        current_priority_index,
+        subset_nodes: Optional[List[NodeProto]] = None,
+    ) -> Tuple[bool, Tuple[PatternOptimization, MatchResult], Dict[str, Any], bool]:
+        return self._optimize_matching_step(
+            it,
+            patterns_list,
+            n_applied,
+            stop_after,
+            statistics,
+            priorities,
+            current_priority_index,
+            subset_nodes=subset_nodes,
+        )
+
     def _optimize_matching_step(
         self,
         it: int,
@@ -1297,7 +1319,8 @@ class GraphBuilderPatternOptimization:
         statistics,
         priorities,
         current_priority_index,
-    ):
+        subset_nodes: Optional[List[NodeProto]] = None,
+    ) -> Tuple[bool, Tuple[PatternOptimization, MatchResult], Dict[str, Any], bool]:
         found = False
         marked = set()
         matches = []
@@ -1392,11 +1415,12 @@ class GraphBuilderPatternOptimization:
 
     def _optimize_apply_step(
         self, it: int, matches: List[MatchResult], statistics: List[Dict[str, Any]]
-    ):
+    ) -> Tuple[MatchResult, Set[str], int, int, List[NodeProto]]:
         added_types = set()
         n_added = 0
         n_removed = 0
         applied_patterns = []
+        all_added_nodes = []
 
         # loop over patterns
         for im, (pattern, match) in enumerate(matches):
@@ -1408,6 +1432,7 @@ class GraphBuilderPatternOptimization:
 
             begin = time.perf_counter()
             added_nodes = self.apply_match(match, stats=statistics)
+            all_added_nodes.extend(added_nodes)
             added_types |= set(n.op_type for n in added_nodes)
 
             removed_nodes = [n for n in match.nodes if id(n) not in {id(r) for r in added_nodes}]
@@ -1481,7 +1506,7 @@ class GraphBuilderPatternOptimization:
             "A2",
             verifies=self.verifies,
         )
-        return applied_patterns, added_types, n_added, n_removed
+        return applied_patterns, added_types, n_added, n_removed, all_added_nodes
 
     def optimize(
         self,
@@ -1612,6 +1637,7 @@ class GraphBuilderPatternOptimization:
         last_it = 0
         current_priority_index = 0
         for it in range(max_iter):
+            begin_iteration = time.perf_counter()
             if not continue_optimization or stop_after_cond:
                 if self.verbose > 0 or self._debug_step:
                     print(
@@ -1692,8 +1718,8 @@ class GraphBuilderPatternOptimization:
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - apply_step with "
                     f"{len(matches)} matches"
                 )
-            applied_patterns, added_types, n_added, n_removed = self._optimize_apply_step(
-                it, matches, statistics
+            applied_patterns, added_types, n_added, n_removed, _subset_nodes = (
+                self._optimize_apply_step(it, matches, statistics)
             )
             n_applied += len(applied_patterns)
             if applied_patterns:
@@ -1824,7 +1850,7 @@ class GraphBuilderPatternOptimization:
                         f"{self.builder._hash()}.optimize] reapply "
                         f"{applied_patterns_names & same_children_pattern_names}"
                     )
-                n_added, n_removed, p_applied, itsame = 0, 0, 0, 0
+                n_added, n_removed, p_applied, itsame, max_match = 0, 0, 0, 0, 0
                 begin = time.perf_counter()
                 while applied_patterns_names & same_children_pattern_names:
                     same_patterns = [
@@ -1833,7 +1859,7 @@ class GraphBuilderPatternOptimization:
                         if p.__class__.__name__ in same_children_pattern_names
                     ]
                     found, matches, durations, continue_optimization = (
-                        self._optimize_matching_step(
+                        self._optimize_matching_step_second(
                             it,
                             same_patterns,
                             n_applied,
@@ -1841,10 +1867,12 @@ class GraphBuilderPatternOptimization:
                             statistics,
                             priorities,
                             current_priority_index,
+                            "",
                         )
                     )
-                    applied_patterns, added_types, _added, _removed = self._optimize_apply_step(
-                        it, matches, statistics
+                    max_match = max(max_match, len(matches))
+                    applied_patterns, added_types, _added, _removed, _subset_nodes = (
+                        self._optimize_apply_step(it, matches, statistics)
                     )
                     n_added += _added
                     n_removed += _removed
@@ -1867,6 +1895,8 @@ class GraphBuilderPatternOptimization:
                         added=n_added,
                         removed=n_removed,
                         time_in=time.perf_counter() - begin,
+                        repeated=itsame,
+                        max_match=max_match,
                     )
                 )
                 if p_applied > 0:
@@ -1917,6 +1947,15 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - next"
                 )
+
+            statistics.append(
+                dict(
+                    pattern=f"iteration_{it}",
+                    iteration=it,
+                    n_nodes=len(self.builder.nodes),
+                    time_in=time.perf_counter() - begin_iteration,
+                )
+            )
 
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all

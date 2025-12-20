@@ -148,8 +148,15 @@ class PatternOptimization:
     def enumerate_matches(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
-    ) -> Iterator:
-        """Enumerates all the possible matches."""
+        subset_nodes: Optional[List[NodeProto]] = None,
+    ) -> Iterator[MatchResult]:
+        """
+        Enumerates all the possible matches.
+
+        :param g: graph optimizer
+        :param subset_nodes: subset of nodes to look at or all of them if empty
+        :return: Iterator on matching results
+        """
         if self.verbose >= 10:
             print(
                 f"[PatternOptimization.enumerate_matches] start {self.__class__.__name__} "
@@ -159,7 +166,9 @@ class PatternOptimization:
             matched = []
             # g.iter_nodes() iterates on g.builder.nodes: ->
             #   too slow to have a secondary iterator
-            for node in g.builder.nodes:
+            if subset_nodes is None:
+                subset_nodes = g.builder.nodes
+            for node in subset_nodes:
                 # This expression seems awkard but it saves 10% just by looking into
                 # the first item of the list and then, if necessary, walking through the
                 # rest of the outputs.
