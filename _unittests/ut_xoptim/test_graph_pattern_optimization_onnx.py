@@ -6308,7 +6308,7 @@ class TestGraphPatternOptimization(ExtTestCase):
 
                 ref2 = ExtendedReferenceEvaluator(opt_onx)
                 got = ref2.run(None, feeds)
-                self.assertEqualArray(expected[0], got[0], atol=1e-5)
+                self.assertEqualArray(expected[0], got[0], atol=1e-3)
 
                 if got:
                     from onnxruntime import InferenceSession

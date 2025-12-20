@@ -200,31 +200,38 @@ class SameChildrenPattern(PatternOptimization):
             node1, node2 = nodes
             sames = {}
             # Let's continue
-            while node1 is not None and node2 is not None:
+            stack = [(node1, node2)]
+            while stack:
+                node1, node2 = stack.pop()
                 for o1, o2 in zip(node1.output, node2.output):
                     sames[o1] = {o2}
                     sames[o2] = {o1}
                 if len(node1.output) != 1 or len(node2.output) != 1:
+                    # Shortcut, another iteration will pick it up.
                     break
                 o1, o2 = node1.output[0], node2.output[0]
                 next1 = g.next_nodes(o1)
                 next2 = g.next_nodes(o2)
-                if len(next1) == 1 or len(next2) == 1:
-                    if len(next1) == 1:
-                        op_type = next1[0].op_type
-                        next2 = [n for n in next2 if n.op_type == op_type]
+                dnext1, dnext2 = {}, {}
+                for n in next1:
+                    if n.op_type in dnext1:
+                        dnext1[n.op_type].append(n)
                     else:
-                        op_type = next2[0].op_type
-                        next1 = [n for n in next1 if n.op_type == op_type]
-                if len(next1) != 1 or len(next1) != len(next2):
-                    break
-                n1, n2 = next1[0], next2[0]
-                if id(n1) == id(n2) or (n1.op_type != n2.op_type or n1.domain != n2.domain):
-                    break
-                if not self._cmp_with_alias(n1, n2, sames):
-                    break
-                nodes.extend([n1, n2])
-                node1, node2 = n1, n2
+                        dnext1[n.op_type] = [n]
+                for n in next2:
+                    if n.op_type in dnext2:
+                        dnext2[n.op_type].append(n)
+                    else:
+                        dnext2[n.op_type] = [n]
+                common = set(dnext1) & set(dnext2)
+                for c in common:
+                    for n1 in dnext1[c]:
+                        for n2 in dnext2[c]:
+                            if id(n1) == id(n2) or n1.domain != n2.domain:
+                                continue
+                            if self._cmp_with_alias(n1, n2, sames):
+                                nodes.extend([n1, n2])
+                                stack.append((n1, n2))
             match = MatchResult(self, nodes, self.apply)
 
         if match:

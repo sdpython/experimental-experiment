@@ -1298,7 +1298,7 @@ class GraphBuilderPatternOptimization:
         priorities,
         current_priority_index,
         subset_nodes: Optional[List[NodeProto]] = None,
-    ):
+    ) -> Tuple[bool, Tuple[PatternOptimization, MatchResult], Dict[str, Any], bool]:
         return self._optimize_matching_step(
             it,
             patterns_list,
@@ -1320,7 +1320,7 @@ class GraphBuilderPatternOptimization:
         priorities,
         current_priority_index,
         subset_nodes: Optional[List[NodeProto]] = None,
-    ):
+    ) -> Tuple[bool, Tuple[PatternOptimization, MatchResult], Dict[str, Any], bool]:
         found = False
         marked = set()
         matches = []
@@ -1347,7 +1347,7 @@ class GraphBuilderPatternOptimization:
             before = len(matches)
 
             # loop over the nodes
-            for match in pattern.enumerate_matches(self, subset_nodes=subset_nodes):
+            for match in pattern.enumerate_matches(self):
                 # bypass this node if the name contains some specific name
                 fail_match = False
                 for n in match.nodes:
@@ -1637,6 +1637,7 @@ class GraphBuilderPatternOptimization:
         last_it = 0
         current_priority_index = 0
         for it in range(max_iter):
+            begin_iteration = time.perf_counter()
             if not continue_optimization or stop_after_cond:
                 if self.verbose > 0 or self._debug_step:
                     print(
@@ -1717,7 +1718,7 @@ class GraphBuilderPatternOptimization:
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - apply_step with "
                     f"{len(matches)} matches"
                 )
-            applied_patterns, added_types, n_added, n_removed, subset_nodes = (
+            applied_patterns, added_types, n_added, n_removed, _subset_nodes = (
                 self._optimize_apply_step(it, matches, statistics)
             )
             n_applied += len(applied_patterns)
@@ -1851,7 +1852,7 @@ class GraphBuilderPatternOptimization:
                     )
                 n_added, n_removed, p_applied, itsame, max_match = 0, 0, 0, 0, 0
                 begin = time.perf_counter()
-                while subset_nodes and applied_patterns_names & same_children_pattern_names:
+                while applied_patterns_names & same_children_pattern_names:
                     same_patterns = [
                         p
                         for p in applied_patterns
@@ -1866,11 +1867,11 @@ class GraphBuilderPatternOptimization:
                             statistics,
                             priorities,
                             current_priority_index,
-                            subset_nodes=subset_nodes,
+                            "",
                         )
                     )
                     max_match = max(max_match, len(matches))
-                    applied_patterns, added_types, _added, _removed, subset_nodes = (
+                    applied_patterns, added_types, _added, _removed, _subset_nodes = (
                         self._optimize_apply_step(it, matches, statistics)
                     )
                     n_added += _added
@@ -1946,6 +1947,15 @@ class GraphBuilderPatternOptimization:
                     f"[GraphBuilderPatternOptimization-{self.builder._hash()}.optimize] "
                     f"it={it}C{_b(continue_optimization)}F{_b(found)} - next"
                 )
+
+            statistics.append(
+                dict(
+                    pattern=f"iteration_{it}",
+                    iteration=it,
+                    n_nodes=len(self.builder.nodes),
+                    time_in=time.perf_counter() - begin_iteration,
+                )
+            )
 
         if self.verbose > 0:
             duration = time.perf_counter() - begin_all

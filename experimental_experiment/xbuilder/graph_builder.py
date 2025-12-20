@@ -6507,12 +6507,13 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     "instances": 0,
                     "repeated": 0,
                     "max_match": 0,
+                    "n_nodes": 0,
                 }
             o = stats[pattern]
             for k, v in obs.items():
                 if k == "pattern":
                     continue
-                if k in {"time_in", "removed", "added", "instances", "repeated"}:
+                if k in {"time_in", "removed", "added", "instances", "repeated", "n_nodes"}:
                     o[k] += v
                     continue
                 if k in {"changed", "scale"}:
