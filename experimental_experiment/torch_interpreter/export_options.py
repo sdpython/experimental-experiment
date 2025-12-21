@@ -51,6 +51,7 @@ class ExportOptions:
         :func:`experimental_experiment.export_helpers.torch_export`
     :param prefer_deferred_runtime_asserts_over_guards:
         see func:`torch.export.export`
+    :param fake: use fake tensors as inputs
 
     The fallback strategy tries the following in order:
 
@@ -96,6 +97,7 @@ class ExportOptions:
         "fallback-decall": {"fallback": True, "decomposition_table": "all"},
         "dec": {"decomposition_table": "default"},
         "decall": {"decomposition_table": "all"},
+        "fake": {"fake": True},
     }
 
     def __init__(
@@ -116,6 +118,7 @@ class ExportOptions:
         validate_ep: Union[float, bool] = False,
         backed_size_oblivious: Union[bool, str] = "auto",
         prefer_deferred_runtime_asserts_over_guards: bool = False,
+        fake: bool = False,
     ):
         self.strict = strict
         self.fallback = fallback
@@ -135,6 +138,7 @@ class ExportOptions:
         self.prefer_deferred_runtime_asserts_over_guards = (
             prefer_deferred_runtime_asserts_over_guards
         )
+        self.fake = fake
         if aten_as_function is None:
             from experimental_experiment.torch_interpreter.onnx_export import (
                 get_default_aten_as_function,
@@ -379,6 +383,27 @@ class ExportOptions:
                 f"\n---exported-program---\n{exported_program}"
             ) from e
 
+    def use_str_not_dyn(self, dynamic_shapes: Any, default_value=None) -> Any:
+        if not hasattr(self, "_c_use_str_not_dyn"):
+            self._c_use_str_not_dyn = 0
+        if isinstance(dynamic_shapes, list):
+            return [self.use_str_not_dyn(a, default_value=default_value) for a in dynamic_shapes]
+        if isinstance(dynamic_shapes, tuple):
+            return tuple(
+                self.use_str_not_dyn(a, default_value=default_value) for a in dynamic_shapes
+            )
+        if isinstance(dynamic_shapes, dict):
+            return {
+                k: self.use_str_not_dyn(v, default_value=default_value)
+                for k, v in dynamic_shapes.items()
+            }
+        if isinstance(dynamic_shapes, set):
+            return {self.use_str_not_dyn(a, default_value=default_value) for a in dynamic_shapes}
+        if not isinstance(dynamic_shapes, int) and dynamic_shapes is not None:
+            self._c_use_str_not_dyn += 1
+            return f"dim{self._c_use_str_not_dyn}"
+        return dynamic_shapes
+
     def export(
         self,
         mod: Any,
@@ -396,6 +421,43 @@ class ExportOptions:
         from .tracing import CustomTracer
 
         print_exported_program = os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1")
+
+        if self.fake:
+            from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
+            from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
+
+            assert not (
+                args and kwargs
+            ), "Option with fake tensors is not available if both args and kwargs are specified"
+            dynamic_shapes_str = self.use_str_not_dyn(dynamic_shapes)
+            if kwargs:
+                if verbose:
+                    print(
+                        f"[ExportOptions.export] true kwargs="
+                        f"{string_type(kwargs, with_shape=True)}"
+                    )
+                kwargs = torch_deepcopy(kwargs)
+                kwargs, _ = make_fake_with_dynamic_dimensions(
+                    kwargs, dynamic_shapes=dynamic_shapes_str
+                )
+                if verbose:
+                    print(
+                        f"[ExportOptions.export] fake kwargs="
+                        f"{string_type(kwargs, with_shape=True)}"
+                    )
+            else:
+                if verbose:
+                    print(
+                        f"[ExportOptions.export] true args={string_type(args, with_shape=True)}"
+                    )
+                args = torch_deepcopy(args)
+                args, _ = make_fake_with_dynamic_dimensions(
+                    args, dynamic_shapes=dynamic_shapes_str
+                )
+                if verbose:
+                    print(
+                        f"[ExportOptions.export] fake args={string_type(args, with_shape=True)}"
+                    )
 
         if self.fallback or self.strategy in {
             "fallback",
