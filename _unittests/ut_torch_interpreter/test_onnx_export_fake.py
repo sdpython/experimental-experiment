@@ -5,7 +5,11 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.torch_interpreter import to_onnx, match_input_parameters
+from experimental_experiment.torch_interpreter import (
+    to_onnx,
+    match_input_parameters,
+    ExportOptions,
+)
 
 
 class TestOnnxExportInputList(ExtTestCase):
@@ -41,6 +45,34 @@ class TestOnnxExportInputList(ExtTestCase):
         nfeeds = {k: v.detach().numpy() for k, v in pfeeds.items()}
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, nfeeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    def test_export_with_option_fake(self):
+        import torch
+
+        class Neuron(torch.nn.Module):
+            def __init__(self, n_dims: int, n_targets: int):
+                super(Neuron, self).__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                return torch.relu(self.linear(x))
+
+        model = Neuron(5, 3)
+        x = torch.rand(2, 5)
+        expected = model(x)
+        onx, _out, _err = self.capture(
+            lambda: to_onnx(
+                model,
+                (x,),
+                dynamic_shapes=({0: "batch"},),
+                export_options=ExportOptions(fake=True),
+                verbose=10,
+            )
+        )
+        self.assertIn("[ExportOptions.export] fake args=(F1s", _out)
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, {"x": x.numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
