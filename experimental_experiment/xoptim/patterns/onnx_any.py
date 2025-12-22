@@ -200,7 +200,9 @@ class SameChildrenPattern(PatternOptimization):
             node1, node2 = nodes
             sames = {}
             # Let's continue
+            name_used_as_outputs = set(o for o in node1.output if o)
             stack = [(node1, node2)]
+            cannot_continue = False
             while stack:
                 node1, node2 = stack.pop()
                 for o1, o2 in zip(node1.output, node2.output):
@@ -225,13 +227,27 @@ class SameChildrenPattern(PatternOptimization):
                         dnext2[n.op_type] = [n]
                 common = set(dnext1) & set(dnext2)
                 for c in common:
+                    if c == "Identity":
+                        continue
                     for n1 in dnext1[c]:
                         for n2 in dnext2[c]:
                             if id(n1) == id(n2) or n1.domain != n2.domain:
                                 continue
                             if self._cmp_with_alias(n1, n2, sames):
+                                if any(o in name_used_as_outputs for o in n1.output if o) or any(
+                                    o in name_used_as_outputs for o in n2.output if o
+                                ):
+                                    cannot_continue = True
+                                    break
                                 nodes.extend([n1, n2])
                                 stack.append((n1, n2))
+                                name_used_as_outputs |= {o for o in n1.output if o} | {
+                                    o for o in n2.output if o
+                                }
+                    if cannot_continue:
+                        break
+                if cannot_continue:
+                    break
             match = MatchResult(self, nodes, self.apply)
 
         if match:
@@ -309,12 +325,20 @@ class SameChildrenPattern(PatternOptimization):
             len(nodes) % 2 == 0
         ), f"Expecting an even number of nodes but len(nodes) == {len(nodes)}"
         new_nodes = []
+        already_added = set()
         for i in range(0, len(nodes), 2):
-            new_nodes.append(nodes[i])
+            idn = id(nodes[i])
+            if idn not in already_added:
+                new_nodes.append(nodes[i])
+                already_added.add(idn)
 
             for o1, o2 in zip(nodes[i].output, nodes[i + 1].output):
                 if not o1 and not o2:
                     continue
+                assert o1, (
+                    f"o1 is empty, this is unlikely to happen, fix it when it does, "
+                    f"node1={nodes[i]}, node2={nodes[i+1]}"
+                )
                 new_nodes.append(
                     g.make_node(
                         "Identity",

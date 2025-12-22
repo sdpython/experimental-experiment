@@ -1949,7 +1949,7 @@ class DynamoInterpreter:
 
             for i, (v, r) in enumerate(zip(val, res)):
                 if isinstance(v, self.torch.Tensor):
-                    self.builder.set_device(r, v.get_device())
+                    self.builder.set_device(r, v.get_device(), keep_this_device=True)
                     dtype = _get_type(v.dtype)
                     if i >= 1 and node.target.name() in {
                         "aten::_native_batch_norm_legit.no_stats",
