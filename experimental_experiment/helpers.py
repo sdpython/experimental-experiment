@@ -578,6 +578,10 @@ def torch_dtype_to_onnx_dtype(to: "torch.dtype") -> int:  # noqa: F821
         return TensorProto.COMPLEX64
     if to == torch.complex128:
         return TensorProto.COMPLEX128
+    if isinstance(to, bool):
+        return TensorProto.BOOL
+    if isinstance(to, int):
+        return TensorProto.INT64
     raise NotImplementedError(
         f"Unable to convert torch dtype {to!r}, type(to)={type(to)} to onnx dtype."
     )

@@ -699,7 +699,7 @@ def _make_builder_interpreter(
         signature=inspect.signature(mod.forward) if hasattr(mod, "forward") else None,
         check_empty_source=True,
         graph_module=graph_module,
-        exe_path=f"{exe_path}-export_options={export_options}",
+        exe_path=f"{exe_path}\nexport_options={export_options}\nfunction_options={function_options}",
         output_dynamic_shapes=output_dynamic_shapes,
     )
 
@@ -736,7 +736,7 @@ def _make_builder_interpreter(
         parameter_naming=parameter_naming,
         module_name=module_name,
         default_values=_default_values_from_sig(mod),
-        exe_path=f"{exe_path}-export_options={export_options}",
+        exe_path=f"{exe_path}\nexport_options={export_options}\nfunction_options={function_options}",
     )
 
     # hidden trick to get some information about time processing
@@ -956,6 +956,10 @@ def to_onnx(
     assert options is None or isinstance(
         options, OptimizationOptions
     ), f"Unexpected type {type(options)} for options"
+    assert as_function or not export_options or not export_options.tracing, (
+        f"function_options must be enabled when tracing is used to capture the fx graph, "
+        f"function_options={function_options}, export_options={export_options}"
+    )
     from . import DEFAULT_TARGET_OPSET
 
     if target_opset is None:

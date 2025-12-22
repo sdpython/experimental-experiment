@@ -2430,7 +2430,13 @@ class DynamoInterpreter:
         else:
             # nodes are inserted inline
             self.builder._check_constants("before-make_nodes(2)")
-            self.builder.make_nodes(builder, args, output_names, prefix=f"_sub_{name}_")
+            self.builder.make_nodes(
+                builder,
+                args,
+                output_names,
+                prefix=f"_sub_{name}_{node.name}_",
+                function_options=self.function_options,
+            )
             self.builder._check_constants("after-make_nodes(2)")
 
         return output_names
