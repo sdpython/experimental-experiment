@@ -12,8 +12,7 @@ from experimental_experiment.torch_interpreter import (
 )
 
 
-class TestOnnxExportInputList(ExtTestCase):
-
+class TestOnnxExportFake(ExtTestCase):
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
     def test_export_with_fake_tensor(self):

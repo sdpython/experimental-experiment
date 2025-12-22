@@ -17,9 +17,7 @@ class LEAVE_INPLACE:
 
 
 def setitem_with_transformation(a, b, transformations):
-    """
-    Extended version of setitem to deal with inplace modification.
-    """
+    """Extended version of setitem to deal with inplace modification."""
     function_table = {"exp": torch.exp_, "sigmoid": torch.sigmoid_}
     assert transformations, "transformations is empty, it means identity?"
     for name, args in transformations:
@@ -143,18 +141,14 @@ class CustomProxy(torch.fx.proxy.Proxy):
 
 
 def _len(x: Any) -> Union[int, CustomProxy]:
-    """
-    Overloads `len` to return a proxy if the input is the proxy.
-    """
+    """Overloads `len` to return a proxy if the input is the proxy."""
     if isinstance(x, CustomProxy):
         return x.length()
     return len(x)
 
 
 def _isinstance(x, cls):
-    """
-    Overloads `isinstance` to deal with CustomProxy.
-    """
+    """Overloads `isinstance` to deal with CustomProxy."""
     if isinstance(x, CustomProxy):
         return x.instanceof(cls)
     return isinstance(x, list)
@@ -177,9 +171,7 @@ class CustomProxyFloat(CustomProxy):
 
 
 class CustomAttribute(CustomProxy):
-    """
-    To trace attributes.
-    """
+    """To trace attributes."""
 
     def __init__(self, root: CustomProxy, attr: str):
         self.root = root

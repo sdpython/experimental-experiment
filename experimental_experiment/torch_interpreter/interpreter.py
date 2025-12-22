@@ -1949,7 +1949,7 @@ class DynamoInterpreter:
 
             for i, (v, r) in enumerate(zip(val, res)):
                 if isinstance(v, self.torch.Tensor):
-                    self.builder.set_device(r, v.get_device())
+                    self.builder.set_device(r, v.get_device(), keep_this_device=True)
                     dtype = _get_type(v.dtype)
                     if i >= 1 and node.target.name() in {
                         "aten::_native_batch_norm_legit.no_stats",
@@ -2430,7 +2430,13 @@ class DynamoInterpreter:
         else:
             # nodes are inserted inline
             self.builder._check_constants("before-make_nodes(2)")
-            self.builder.make_nodes(builder, args, output_names, prefix=f"_sub_{name}_")
+            self.builder.make_nodes(
+                builder,
+                args,
+                output_names,
+                prefix=f"_sub_{name}_{node.name}_",
+                force_rename_with_prefix=node.name,
+            )
             self.builder._check_constants("after-make_nodes(2)")
 
         return output_names

@@ -2096,7 +2096,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self.set_rank(name, self.get_rank(like))
 
     def set_device(
-        self, name: str, device: Union[int, "torch.dtype"], exc: bool = True  # noqa: F821
+        self,
+        name: str,
+        device: Union[int, "torch.dtype"],  # noqa: F821
+        exc: bool = True,
+        keep_this_device: bool = False,
     ):
         """
         Sets the shape for a result. It is exists, it checks the new shape
@@ -2105,11 +2109,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param name: name
         :param device: an integer or a torch device then converted into an integer
         :param exc: raises an exception
+        :param keep_this_device: keeps this device anyway, this may happen if a constant
+            is created, then the device may not be the one from the input (a shape)
+            but the most frequent for any result tensor
         """
         assert exc, f"not implemented when exc={exc}"
         if not isinstance(device, int):
             device = -1 if device.type == "cpu" else device.index
-        if name in self._known_devices:
+        if name in self._known_devices and not keep_this_device:
             assert self._known_devices[name] == device, (
                 f"device mismatch for name={name!r}, got {self._known_devices[name]}, "
                 f"new device is {device}{self.get_debug_msg()}"
@@ -4601,6 +4608,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         prefix: str = "",
         function_options: Optional[FunctionOptions] = None,
         optimize: bool = False,
+        force_rename_with_prefix: Optional[str] = None,
     ) -> Union[str, List[str]]:
         """
         Appends all nodes and initializers from another builder.
@@ -4613,6 +4621,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param prefix: prefix all name from this builder if `function_options` is None
         :param function_options: defines how to create a local function if needed
         :param optimize: optimize the function
+        :param force_rename_with_prefix: even if a parameter name should be renamed,
+            the prefix *name* is used
         :return: output names
         """
         if function_options is not None and function_options.export_as_function:
@@ -4660,10 +4670,18 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     continue
                 if init in builder._parameter_norename:
                     name = init
-                    assert not self.has_name(init), (
-                        f"Parameter {init!r} must be renamed as another one "
-                        f"already exists{self.get_debug_msg()}"
-                    )
+                    if self.has_name(init):
+                        if force_rename_with_prefix:
+                            name = f"{force_rename_with_prefix}.{name}"
+                            assert not self.has_name(name), (
+                                f"Parameter {init!r} was renamed into {name!r} "
+                                f"but it already exists{self.get_debug_msg()}"
+                            )
+                        else:
+                            assert not self.has_name(init), (
+                                f"Parameter {init!r} must be renamed as another one "
+                                f"already exists{self.get_debug_msg()}"
+                            )
                 else:
                     name = self.unique_name(f"{prefix}{init}")
                 renaming[init] = name
@@ -5059,7 +5077,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 return a.ravel().tolist()
             raise RuntimeError(f"Values unknown for type {type(t)}-{t}.")
 
-        rows = ["", "--DEBUG--"]
+        rows = ["", "--DEBUG--", "-- to print the exported program: PRINT_EXPORTED_PROGRAM=1", ""]
         hs = self._hash()
         rows.append(
             f"[GraphBuilder-{hs}] Message starts, there are "
@@ -7181,7 +7199,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     assert v not in replacements, (
                         f"replacement {k}->{v} is not possible because of "
                         f"[{v}->{replacements[v]}], old_name={old_name!r}, "
-                        f"new_name={new_name!r}"
+                        f"new_name={new_name!r}\n---\n{pprint.pformat(replacements)}"
+                        f"{self.get_debug_msg()}"
                     )
             removed += 1
 
