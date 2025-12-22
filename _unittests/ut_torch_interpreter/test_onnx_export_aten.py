@@ -2169,7 +2169,7 @@ class TestOnnxExportAten(ExtTestCase):
         )
         self.dump_onnx("test_repeat_interleave_tensor.onnx", onx)
         feeds = dict(zip(["x", "ind"], [x.detach().cpu().numpy() for x in inputs]))
-        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        ref = self.check_ort(onx)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
@@ -2197,7 +2197,7 @@ class TestOnnxExportAten(ExtTestCase):
         )
         self.dump_onnx("test_repeat_interleave_tensor_3d.onnx", onx)
         feeds = dict(zip(["x", "ind"], [x.detach().cpu().numpy() for x in inputs]))
-        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        ref = self.check_ort(onx)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
@@ -2225,10 +2225,11 @@ class TestOnnxExportAten(ExtTestCase):
         )
         self.dump_onnx("test_repeat_interleave_tensor_none.onnx", onx)
         feeds = dict(zip(["x", "ind"], [x.detach().cpu().numpy() for x in inputs]))
-        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        ref = self.check_ort(onx)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    @ignore_warnings(FutureWarning)
     def test_repeat_interleave_tensor_none_decompose(self):
         import torch
 
@@ -2254,10 +2255,11 @@ class TestOnnxExportAten(ExtTestCase):
         )
         self.dump_onnx("test_repeat_interleave_tensor_none_decompose.onnx", onx)
         feeds = dict(zip(["x", "ind"], [x.detach().cpu().numpy() for x in inputs]))
-        ref = ExtendedReferenceEvaluator(onx, verbose=0)
+        ref = self.check_ort(onx)
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    @ignore_warnings(FutureWarning)
     def test_repeat_interleave_symbolic_tensor(self):
         import torch
 
