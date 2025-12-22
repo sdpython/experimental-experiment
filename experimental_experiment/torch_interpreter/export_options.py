@@ -399,9 +399,9 @@ class ExportOptions:
             }
         if isinstance(dynamic_shapes, set):
             return {self.use_str_not_dyn(a, default_value=default_value) for a in dynamic_shapes}
-        if not isinstance(dynamic_shapes, int) and dynamic_shapes is not None:
+        if not isinstance(dynamic_shapes, (int, str)) and dynamic_shapes is not None:
             self._c_use_str_not_dyn += 1
-            return f"dim{self._c_use_str_not_dyn}"
+            return f"udim{self._c_use_str_not_dyn}"
         return dynamic_shapes
 
     def export(
@@ -430,6 +430,9 @@ class ExportOptions:
                 args and kwargs
             ), "Option with fake tensors is not available if both args and kwargs are specified"
             dynamic_shapes_str = self.use_str_not_dyn(dynamic_shapes)
+            if verbose:
+                print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
+                print(f"[ExportOptions.export] dynamic_shapes_str={dynamic_shapes_str}")
             if kwargs:
                 if verbose:
                     print(

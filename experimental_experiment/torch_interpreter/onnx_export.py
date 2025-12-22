@@ -419,27 +419,6 @@ class ParameterNaming:
         return res
 
 
-def rewrite_dynamic_shapes(dynamic_shapes: Any) -> Any:
-    """
-    Dynamic shapes may be given by names (string). This function
-    replaces them with ``torch.export.Dim.DYNAMIC``.
-    """
-    if dynamic_shapes is None:
-        return dynamic_shapes
-    if isinstance(dynamic_shapes, tuple):
-        return tuple(rewrite_dynamic_shapes(_) for _ in dynamic_shapes)
-    if isinstance(dynamic_shapes, list):
-        return [rewrite_dynamic_shapes(_) for _ in dynamic_shapes]
-    if isinstance(dynamic_shapes, dict):
-        return {k: rewrite_dynamic_shapes(v) for k, v in dynamic_shapes.items()}
-    if isinstance(dynamic_shapes, str):
-        import torch
-
-        assert hasattr(torch.export.Dim, "DYNAMIC"), "This functionality requires pytorch>=2.6."
-        return torch.export.Dim.DYNAMIC
-    return dynamic_shapes
-
-
 def get_default_aten_as_function(target_opset: Optional[int] = None) -> Tuple[str]:
     """
     Returns the list of aten functions to export as local functions
@@ -606,7 +585,7 @@ def _make_builder_interpreter(
                 args if isinstance(args, tuple) else (tuple() if args is None else args),
                 kwargs,
                 tracing_mode=tracing_mode,
-                dynamic_shapes=rewrite_dynamic_shapes(dynamic_shapes),
+                dynamic_shapes=dynamic_shapes,
                 same_signature=same_signature,
                 input_names=input_names,
                 verbose=verbose,
