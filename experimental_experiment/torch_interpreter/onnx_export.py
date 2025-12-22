@@ -956,10 +956,6 @@ def to_onnx(
     assert options is None or isinstance(
         options, OptimizationOptions
     ), f"Unexpected type {type(options)} for options"
-    assert as_function or not export_options or not export_options.tracing, (
-        f"function_options must be enabled when tracing is used to capture the fx graph, "
-        f"function_options={function_options}, export_options={export_options}"
-    )
     from . import DEFAULT_TARGET_OPSET
 
     if target_opset is None:

@@ -2435,7 +2435,7 @@ class DynamoInterpreter:
                 args,
                 output_names,
                 prefix=f"_sub_{name}_{node.name}_",
-                function_options=self.function_options,
+                force_rename_with_prefix=node.name,
             )
             self.builder._check_constants("after-make_nodes(2)")
 

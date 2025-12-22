@@ -1,7 +1,7 @@
 import unittest
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.reference import ExtendedReferenceEvaluator
-from experimental_experiment.torch_interpreter import to_onnx, ExportOptions, FunctionOptions
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestOnnxExportTracing(ExtTestCase):
@@ -49,9 +49,7 @@ class TestOnnxExportTracing(ExtTestCase):
             (x, y),
             dynamic_shapes=({0: "batch"}, {0: "batch"}),
             export_options=ExportOptions(tracing=True),
-            function_options=FunctionOptions(rename_allowed=True),
             verbose=0,
-            as_function=True,
         )
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, {"x": x.numpy(), "y": y.numpy()})

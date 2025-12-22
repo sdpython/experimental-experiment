@@ -4601,6 +4601,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         prefix: str = "",
         function_options: Optional[FunctionOptions] = None,
         optimize: bool = False,
+        force_rename_with_prefix: Optional[str] = None,
     ) -> Union[str, List[str]]:
         """
         Appends all nodes and initializers from another builder.
@@ -4613,6 +4614,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param prefix: prefix all name from this builder if `function_options` is None
         :param function_options: defines how to create a local function if needed
         :param optimize: optimize the function
+        :param force_rename_with_prefix: even if a parameter name should be renamed,
+            the prefix *name* is used
         :return: output names
         """
         if function_options is not None and function_options.export_as_function:
@@ -4660,10 +4663,18 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     continue
                 if init in builder._parameter_norename:
                     name = init
-                    assert not self.has_name(init), (
-                        f"Parameter {init!r} must be renamed as another one "
-                        f"already exists{self.get_debug_msg()}"
-                    )
+                    if self.has_name(init):
+                        if force_rename_with_prefix:
+                            name = f"{force_rename_with_prefix}.{name}"
+                            assert not self.has_name(name), (
+                                f"Parameter {init!r} was renamed into {name!r} "
+                                f"but it already exists{self.get_debug_msg()}"
+                            )
+                        else:
+                            assert not self.has_name(init), (
+                                f"Parameter {init!r} must be renamed as another one "
+                                f"already exists{self.get_debug_msg()}"
+                            )
                 else:
                     name = self.unique_name(f"{prefix}{init}")
                 renaming[init] = name
