@@ -449,13 +449,13 @@ class SkipLayerNormalizationPattern(PatternOptimization):
             atts.append(epsilon)
         u1 = (
             g.unique_name("unused")
-            if len(norm_node.input) < 2 or not norm_node.input[1]
-            else norm_node.input[1]
+            if len(norm_node.output) < 2 or not norm_node.output[1]
+            else norm_node.output[1]
         )
         u2 = (
             g.unique_name("unused")
-            if len(norm_node.input) < 3 or not norm_node.input[2]
-            else norm_node.input[2]
+            if len(norm_node.output) < 3 or not norm_node.output[2]
+            else norm_node.output[2]
         )
         layer = g.make_node(
             "SkipLayerNormalization",

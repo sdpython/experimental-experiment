@@ -248,6 +248,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             options=OptimizationOptions(patterns="default+onnxruntime", constant_folding=False),
         )
         init_names2 = set(i.name for i in onx2.graph.initializer if "mask" not in i.name)
+        self.dump_onnx("test_dummy_llm_opts.2.onnx", onx2)
         self.check_ort(onx2)
         self.assertEqual(init_names2 & init_names, init_names)
 
