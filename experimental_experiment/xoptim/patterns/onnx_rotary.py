@@ -1562,8 +1562,8 @@ class FunctionCausalMaskPattern(PatternOptimization):
         nodes_to_return = []
         if (
             g.is_used_more_than_once(dim_squeeze1.output[0])
-            or g.is_used_more_than_once(range1.output[0])
-            or g.is_used_more_than_once(rg_unsqueeze1.output[0])
+            or g.is_used_more_than_once(range2.output[0])
+            or g.is_used_more_than_once(rg_unsqueeze2.output[0])
         ):
             nodes_to_return.append(dim_squeeze1)
         if (
