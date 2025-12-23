@@ -7505,6 +7505,152 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_same_children_many_duplicated(self):
+        nodes = [
+            oh.make_node("Add", ["X", "one"], ["x1"]),
+            oh.make_node("Add", ["x1", "one"], ["x11"]),
+            oh.make_node("Add", ["x1", "one"], ["x12"]),
+            oh.make_node("Add", ["x11", "one"], ["x111"]),
+            oh.make_node("Add", ["x11", "one"], ["x112"]),
+            oh.make_node("Add", ["x12", "one"], ["x121"]),
+            oh.make_node("Add", ["x12", "one"], ["x122"]),
+            #
+            oh.make_node("Add", ["x111", "one"], ["x1111"]),
+            oh.make_node("Add", ["x111", "one"], ["x1112"]),
+            oh.make_node("Add", ["x112", "one"], ["x1121"]),
+            oh.make_node("Add", ["x112", "one"], ["x1122"]),
+            oh.make_node("Add", ["x121", "one"], ["x1211"]),
+            oh.make_node("Add", ["x121", "one"], ["x1212"]),
+            oh.make_node("Add", ["x122", "one"], ["x1221"]),
+            oh.make_node("Add", ["x122", "one"], ["x1222"]),
+            #
+            oh.make_node(
+                "Sum",
+                ["x1111", "x1112", "x1121", "x1122", "x1211", "x1212", "x1221", "x1222"],
+                ["Z"],
+            ),
+        ]
+        model = oh.make_model(
+            oh.make_graph(
+                nodes,
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b", "c"])],
+                [_mkv_("Z", TFLOAT, ["a", "b", "c"])],
+                [onh.from_array(np.array([1], dtype=np.float32), name="one")],
+            )
+        )
+        feeds = {"X": self._range(2, 3, 4), "Y": self._range(1, 3, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["SameChildren"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_same_children_many_duplicated.onnx", opt_onx)
+        self.assertEqual(
+            ["Add", "Add", "Add", "Add", "Sum"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_function_causal_mask_bug(self):
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("local_functions", 1),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        initializers = []
+        inputs = [
+            oh.make_tensor_value_info(
+                "past_key_values_self_attention_cache_key_3::Shape2:3",
+                onnx.TensorProto.INT64,
+                shape=(1,),
+            ),
+            oh.make_tensor_value_info(
+                "SqueezeAddPattern_add_907", onnx.TensorProto.INT64, shape=(1,)
+            ),
+        ]
+        nodes = [
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s_0"],
+                value=onh.from_array(np.array(0, dtype=np.int64), name="value"),
+            ),
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s_1"],
+                value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
+            ),
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s3_0_1_2"],
+                value=onh.from_array(np.array([0, 1, 2], dtype=np.int64), name="value"),
+            ),
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s3_0_1_3"],
+                value=onh.from_array(np.array([0, 1, 3], dtype=np.int64), name="value"),
+            ),
+            oh.make_node(
+                "Squeeze",
+                ["past_key_values_self_attention_cache_key_3::Shape2:3"],
+                ["sym_size_int_196"],
+            ),
+            oh.make_node("Squeeze", ["SqueezeAddPattern_add_907"], ["add_907"]),
+            oh.make_node("Range", ["init7_s_0", "add_907", "init7_s_1"], ["arange_8"]),
+            oh.make_node("Range", ["sym_size_int_196", "add_907", "init7_s_1"], ["arange_5"]),
+            oh.make_node("Unsqueeze", ["arange_8", "init7_s3_0_1_2"], ["unsqueeze_23"]),
+            oh.make_node("Unsqueeze", ["arange_5", "init7_s3_0_1_3"], ["unsqueeze_20"]),
+            oh.make_node("LessOrEqual", ["unsqueeze_23", "unsqueeze_20"], ["le_12"]),
+        ]
+        outputs = [
+            oh.make_tensor_value_info(
+                "le_12",
+                onnx.TensorProto.BOOL,
+                shape=(1, 1, "sequence_length", "s16+sequence_length"),
+            ),
+            oh.make_tensor_value_info(
+                "arange_5", onnx.TensorProto.INT64, shape=("sequence_length",)
+            ),
+        ]
+        graph = oh.make_graph(nodes, "pattern", inputs, outputs, initializers)
+        model = oh.make_model(graph, opset_imports=opset_imports, ir_version=0)
+        self.dump_onnx("test_function_causal_mask_bug.onnx", model)
+
+        feeds = {
+            "past_key_values_self_attention_cache_key_3::Shape2:3": np.array([8], dtype=np.int64),
+            "SqueezeAddPattern_add_907": np.array([8], dtype=np.int64),
+        }
+        ref = self.check_ort(model)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="FunctionCausalMask", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_function_causal_mask_bug.opt.onnx", opt_onx)
+        ref = self.check_ort(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz)
+        self.assertEqual(
+            ["Squeeze", "Squeeze", "CausalMask", "Constant", "Range"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
