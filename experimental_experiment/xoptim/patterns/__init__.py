@@ -18,7 +18,7 @@ from .onnx_cast import (
     CastCastBinaryPattern,
     CastCastPattern,
     CastOpCastPattern,
-    ComputationCastOpCastPattern,
+    # ComputationCastOpCastPattern,
 )
 from .onnx_clip import ClipClipPattern
 from .onnx_concat import ConcatEmptyPattern, ConcatGatherPattern, ConcatTwiceUnaryPattern
@@ -165,7 +165,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         CastCastPattern(verbose=verbose),
         CastOpCastPattern(verbose=verbose),
         ClipClipPattern(verbose=verbose),
-        ComputationCastOpCastPattern(verbose=verbose),
+        # ComputationCastOpCastPattern(verbose=verbose),
         ConcatEmptyPattern(verbose=verbose),
         ConcatGatherPattern(verbose=verbose),
         ConcatReshapePattern(verbose=verbose),
