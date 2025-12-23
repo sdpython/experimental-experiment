@@ -43,6 +43,7 @@ from experimental_experiment.xoptim.graph_builder_optim import (
     GraphBuilderPatternOptimization,
 )
 from experimental_experiment.xoptim.patterns import ConstantToInitializerPattern
+from experimental_experiment.xoptim.patterns.onnx_cast import ComputationCastOpCastPattern
 from experimental_experiment.xshape._shape_helper import (
     compatible_shapes,
     compatible_dimensions,
@@ -2588,7 +2589,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             model,
             infer_shapes_options=True,
             optimization_options=OptimizationOptions(
-                patterns=["ComputationCastOpCast"], verbose=0
+                patterns=[ComputationCastOpCastPattern()], verbose=0
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
