@@ -167,7 +167,7 @@ class CustomProxyFloat(CustomProxy):
 
     def instanceof(self, cls):
         """isinstance"""
-        return cls in {CustomProxyInt, CustomProxy, float}
+        return cls in {CustomProxyFloat, CustomProxy, float}
 
 
 class CustomAttribute(CustomProxy):
@@ -321,15 +321,11 @@ class CustomTracer(torch.fx.Tracer):
         return self.create_node("get_attr", cand, args=(), kwargs={})
 
     def proxy(self, node: torch.fx.Node, cls: type[CustomProxy] = CustomProxy) -> torch.fx.Proxy:
-        """
-        Overwrites this method to replace the default Proxy by CustomProxy.
-        """
+        """Overwrites this method to replace the default Proxy by CustomProxy."""
         return cls(node, self)
 
     def create_arg(self, a: Any) -> "Argument":  # noqa: F821
-        """
-        Overwrites this method to deal with more argument.
-        """
+        """Overwrites this method to deal with more argument."""
         if a is bool:
             return torch.bool
         if a is int:
@@ -341,9 +337,7 @@ class CustomTracer(torch.fx.Tracer):
         return super().create_arg(a)
 
     def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
-        """
-        See :meth:`torch.fx.Tracer.getattr`.
-        """
+        """See :meth:`torch.fx.Tracer.getattr`."""
 
         def maybe_get_proxy_for_attr(attr_val, collection_to_search, parameter_proxy_cache):
             for n, p in collection_to_search:
@@ -409,7 +403,7 @@ class CustomTracer(torch.fx.Tracer):
             concrete_args, dict
         ), f"Unexpected type for concrete_args: {string_type(concrete_args)}"
         with replace_problematic_function_before_tracing():
-            graph = super().trace(root)
+            graph = super().trace(root, concrete_args)
         if concrete_args:
             for node in graph.nodes:
                 if node.op == "placeholder":
@@ -452,9 +446,7 @@ class CustomTracer(torch.fx.Tracer):
 
     @classmethod
     def _get_aten_name(cls, node: torch.fx.Node) -> str:
-        """
-        Returns the aten name for the target as a string.
-        """
+        """Returns the aten name for the target as a string."""
         assert hasattr(node, "target"), f"Unable to return aten name for {node}"
         known = {
             operator.getitem: "getitem",

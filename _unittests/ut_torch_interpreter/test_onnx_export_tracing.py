@@ -55,16 +55,19 @@ class TestOnnxExportTracing(ExtTestCase):
         got = ref.run(None, {"x": x.numpy(), "y": y.numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @unittest.skip("not implemented yet")
+    # @unittest.skip("not implemented yet")
     def test_tracing_dynamic_cache(self):
         import torch
         from onnx_diagnostic.helpers import flatten_object
         from onnx_diagnostic.helpers.cache_helper import CacheKeyValue, make_dynamic_cache
         from onnx_diagnostic.torch_export_patches import torch_export_patches
 
+        a_cache = make_dynamic_cache([(torch.ones((5, 6, 5, 6)), torch.ones((5, 6, 5, 6)) + 2)])
+        cls_cache = a_cache.__class__
+
         class SubModelCache(torch.nn.Module):
             def forward(self, cache):
-                d = cache.__class__()
+                d = cls_cache()
                 dc = CacheKeyValue(cache)
                 d.update(dc.key_cache[0] + 1, dc.value_cache[0] + 2, 0)
                 return d
