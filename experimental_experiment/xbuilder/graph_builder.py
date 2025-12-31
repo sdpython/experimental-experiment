@@ -9406,7 +9406,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"example_value={string_type(example_value)}"
                     f"{self.get_debug_msg()}"
                 )
-            return [self.get_input_dynamic_shape(None, 0, example_value[0].shape, tuple(info))]
+            return [
+                self.get_input_dynamic_shape(
+                    None, 0, example_value[0].shape, info if info is None else tuple(info)
+                )
+            ]
 
         if example_shape is None and example_shape is None:
             if self.input_args is not None and input_index < len(self.input_args):

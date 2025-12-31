@@ -209,7 +209,10 @@ class DynamoInterpreter:
             )
             v = node.meta.get("val", None) if hasattr(node, "meta") else None
             val = (
-                f"{torch_dtype_to_onnx_dtype(v.dtype)}'{tuple(v.shape)}"
+                (
+                    f"{torch_dtype_to_onnx_dtype(v.dtype)}'"
+                    f"{tuple(self.builder._torch_sym_int_to_str(_) for _ in v.shape)}"
+                )
                 if hasattr(v, "dtype")
                 else ""
             )

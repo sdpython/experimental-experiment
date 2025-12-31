@@ -373,12 +373,17 @@ class CustomTracer(torch.fx.Tracer):
 
         return attr_val
 
+    def _proxy_placeholder(self, name, concrete_args, sig, fn_for_analysis):
+        res = torch.fx.Tracer._proxy_placeholder(self, name, concrete_args, sig, fn_for_analysis)
+        return res
+
     def trace(
         self,
         root: Union[torch.nn.Module, Callable[..., Any]],
         concrete_args: Optional[Dict[str, Any]] = None,
         remove_inplace: bool = True,
         update_model_with_callable: bool = True,
+        verbose: int = 0,
     ) -> torch.fx.Graph:
         """
         Trace ``root`` and return the corresponding FX ``Graph`` representation. ``root``
@@ -397,36 +402,56 @@ class CustomTracer(torch.fx.Tracer):
         :param remove_inplace: Removes inplace nodes
         :param update_model_with_attribute: in some cases (control flow),
             the model needs to be
+        :param verbose: verbosity
         :return: A ``Graph`` representing the semantics of the passed-in ``root``.
         """
         assert concrete_args is None or isinstance(
             concrete_args, dict
         ), f"Unexpected type for concrete_args: {string_type(concrete_args)}"
+        if verbose:
+            print(
+                f"[CustomTracer.trace] trace with concrete_args="
+                f"{string_type(concrete_args, with_shape=True)}"
+            )
         with replace_problematic_function_before_tracing():
-            graph = super().trace(root, concrete_args)
+            graph = super().trace(root)
+        if verbose >= 10:
+            print("[CustomTracer.trace] -- graph")
+            print(graph)
         if concrete_args:
+            mapped = set()
             for node in graph.nodes:
                 if node.op == "placeholder":
                     if node.name in concrete_args:
+                        if verbose:
+                            print(
+                                f"[CustomTracer.trace] assign.1 {node.name!r} with "
+                                f"{string_type(concrete_args[node.name], with_shape=True)}"
+                            )
                         node.meta["example_value"] = concrete_args[node.name]
+                        mapped.add(node.name)
+            assert set(mapped) == set(concrete_args), (
+                f"Missing mapped inputs, set(concrete_args)={set(concrete_args)}, "
+                f"mapped={mapped}\n{graph}"
+            )
 
         self._replace_problematic_functions(graph)
         if update_model_with_callable and self._callables:
             for k, v in self._callables.items():
                 setattr(root, k, v)
-        self.remove_unnecessary_slices(graph)
-        if not remove_inplace:
-            graph.lint()
-            return graph
-        self.remove_inplace(graph)
+        self.remove_unnecessary_slices(graph, verbose=verbose)
+        if remove_inplace:
+            self.remove_inplace(graph, verbose=verbose)
         graph.lint()
         return graph
 
     @classmethod
-    def _replace_problematic_functions(cls, graph: torch.fx.Graph) -> int:
+    def _replace_problematic_functions(cls, graph: torch.fx.Graph, verbose: int = 0) -> int:
         """
         The tracing introduced some problematic functions which need to be replaced.
 
+        :param graph: graph to process
+        :param verbose: verbosity level
         :return: number of impacted nodes
         """
         replaces = {
@@ -438,6 +463,11 @@ class CustomTracer(torch.fx.Tracer):
             if node.op == "call_function":
                 if node.target in replaces:
                     n += 1
+                    if verbose > 1:
+                        print(
+                            f"[CustomTracer._replace_problematic_functions] replace "
+                            f"{node.target} by {replaces[node.target]}"
+                        )
                     node.target = replaces[node.target]
                 elif isinstance(node.target, CondCCOp):
                     n += 1
@@ -556,11 +586,12 @@ class CustomTracer(torch.fx.Tracer):
         return len(to_replace)
 
     @classmethod
-    def remove_unnecessary_slices(cls, graph: torch.fx.Graph) -> int:
+    def remove_unnecessary_slices(cls, graph: torch.fx.Graph, verbose: int = 0) -> int:
         """
         Removes unnecessary slices and other nodes doing nothing.
 
         :param graph: graph to modify
+        :param vervbose: verbosity level
         :return: number of inplace nodes removed
 
         ::
@@ -595,6 +626,11 @@ class CustomTracer(torch.fx.Tracer):
                 f"cannot be removed and replaced by {old_name} in \n{graph}."
             )
             graph.erase_node(old_name)
+            if verbose > 1:
+                print(
+                    f"[CustomTracer.remove_unnecessary_slices.1] replace "
+                    f"{old_name!r} by {new_name!r}"
+                )
             removed += 1
 
         # copy_.default
@@ -635,6 +671,11 @@ class CustomTracer(torch.fx.Tracer):
                 f" in \n{graph}"
             )
             graph.erase_node(old_name)
+            if verbose > 1:
+                print(
+                    f"[CustomTracer.remove_unnecessary_slices.2] replace "
+                    f"{old_name!r} by {new_name!r}"
+                )
             removed += 1
         return removed
 

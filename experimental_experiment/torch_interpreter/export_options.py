@@ -633,7 +633,7 @@ class ExportOptions:
                     f"{string_type(concrete_args, limit=20)}"
                 )
 
-            graph = CustomTracer().trace(mod, concrete_args=concrete_args)
+            graph = CustomTracer().trace(mod, concrete_args=concrete_args, verbose=verbose)
             if self.remove_inplace:
                 if verbose:
                     print("[ExportOptions.export] remove_inplace_nodes")
