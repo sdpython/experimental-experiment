@@ -610,9 +610,12 @@ class ExportOptions:
             from .tracing import CustomTracer
 
             concrete_args = kwargs.copy() if kwargs else {}
+            trace_dynamic_shapes = (
+                dynamic_shapes.copy() if isinstance(dynamic_shapes, dict) else {}
+            )
             if args:
                 sig = inspect.signature(mod.forward)
-                for p, a in zip(sig.parameters, args):
+                for ip, (p, a) in enumerate(zip(sig.parameters, args)):
                     if a is not None and p not in concrete_args:
                         if isinstance(a, int):
                             # not traceable otherise
@@ -622,6 +625,7 @@ class ExportOptions:
                             concrete_args[p] = torch.tensor(a, dtype=torch.float32)
                         else:
                             concrete_args[p] = a
+                    trace_dynamic_shapes[p] = dynamic_shapes[ip]
 
             if verbose:
                 print(f"[ExportOptions.export] CustomTracer().trace, verbose={verbose}")
@@ -633,7 +637,12 @@ class ExportOptions:
                     f"{string_type(concrete_args, limit=20)}"
                 )
 
-            graph = CustomTracer().trace(mod, concrete_args=concrete_args, verbose=verbose)
+            graph = CustomTracer().trace(
+                mod,
+                concrete_args=concrete_args,
+                verbose=verbose,
+                dynamic_shapes=trace_dynamic_shapes,
+            )
             if self.remove_inplace:
                 if verbose:
                     print("[ExportOptions.export] remove_inplace_nodes")

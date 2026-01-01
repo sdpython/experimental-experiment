@@ -440,6 +440,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     @hide_stdout()
     def test_signature_llm_s_tracing(self):
         if False:

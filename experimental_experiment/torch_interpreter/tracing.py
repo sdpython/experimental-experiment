@@ -377,12 +377,19 @@ class CustomTracer(torch.fx.Tracer):
         res = torch.fx.Tracer._proxy_placeholder(self, name, concrete_args, sig, fn_for_analysis)
         return res
 
+    def create_args_for_root(self, root_fn, is_module, concrete_args=None):
+        root_fn, args = torch.fx.Tracer.create_args_for_root(
+            self, root_fn, is_module, concrete_args=concrete_args
+        )
+        return root_fn, args
+
     def trace(
         self,
         root: Union[torch.nn.Module, Callable[..., Any]],
         concrete_args: Optional[Dict[str, Any]] = None,
         remove_inplace: bool = True,
         update_model_with_callable: bool = True,
+        dynamic_shapes: Optional[Any] = None,
         verbose: int = 0,
     ) -> torch.fx.Graph:
         """
@@ -402,6 +409,7 @@ class CustomTracer(torch.fx.Tracer):
         :param remove_inplace: Removes inplace nodes
         :param update_model_with_attribute: in some cases (control flow),
             the model needs to be
+        :param dynamic_shapes: dynamic shapes
         :param verbose: verbosity
         :return: A ``Graph`` representing the semantics of the passed-in ``root``.
         """
@@ -413,8 +421,14 @@ class CustomTracer(torch.fx.Tracer):
                 f"[CustomTracer.trace] trace with concrete_args="
                 f"{string_type(concrete_args, with_shape=True)}"
             )
+            print(f"[CustomTracer.trace] trace with dynamic_shapes={dynamic_shapes}")
+        if concrete_args:
+            from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
+
+            concrete_args, _ = make_fake_with_dynamic_dimensions(concrete_args, dynamic_shapes)
         with replace_problematic_function_before_tracing():
-            graph = super().trace(root)
+            # concrete arguments are replaced by constants whatever is given to the function
+            graph = super().trace(root)  # , concrete_args)
         if verbose >= 10:
             print("[CustomTracer.trace] -- graph")
             print(graph)
@@ -432,7 +446,7 @@ class CustomTracer(torch.fx.Tracer):
                         mapped.add(node.name)
             assert set(mapped) == set(concrete_args), (
                 f"Missing mapped inputs, set(concrete_args)={set(concrete_args)}, "
-                f"mapped={mapped}\n{graph}"
+                f"mapped={mapped}\n{graph}\nroot={root}"
             )
 
         self._replace_problematic_functions(graph)

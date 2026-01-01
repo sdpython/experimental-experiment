@@ -1,5 +1,5 @@
 import unittest
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, ignore_warnings
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
@@ -56,6 +56,7 @@ class TestOnnxExportTracing(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     # @unittest.skip("not implemented yet")
+    @ignore_warnings(UserWarning)
     def test_tracing_dynamic_cache(self):
         import torch
         from onnx_diagnostic.helpers import flatten_object
@@ -87,7 +88,7 @@ class TestOnnxExportTracing(ExtTestCase):
                 return self.sub(x, self.subcache(cache))
 
         model = Model()
-        inputs = torch.rand((5, 6)), make_dynamic_cache(
+        inputs = torch.rand((5, 6, 5, 6)), make_dynamic_cache(
             [(torch.ones((5, 6, 5, 6)), torch.ones((5, 6, 5, 6)) + 2)]
         )
         expected = model(*inputs)
