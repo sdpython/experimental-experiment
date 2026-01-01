@@ -378,8 +378,15 @@ class CustomTracer(torch.fx.Tracer):
         return res
 
     def create_args_for_root(self, root_fn, is_module, concrete_args=None):
+        from onnx_diagnostic.helpers import string_type
+
         root_fn, args = torch.fx.Tracer.create_args_for_root(
             self, root_fn, is_module, concrete_args=concrete_args
+        )
+        assert len(self._traced_concrete_args) == len(args) - 1, (
+            f"Mismatch between _traced_concrete_args="
+            f"{string_type(self._traced_concrete_args, with_shape=True)} and "
+            f"args={string_type(args, with_shape=True)}"
         )
         return root_fn, args
 
@@ -435,7 +442,11 @@ class CustomTracer(torch.fx.Tracer):
                 )
             from onnx_diagnostic.helpers import string_type
 
-            concrete_args, _ = make_fake_with_dynamic_dimensions(concrete_args, dynamic_shapes)
+            self._traced_concrete_args, _ = make_fake_with_dynamic_dimensions(
+                concrete_args, dynamic_shapes
+            )
+        else:
+            self._traced_concrete_args = None
         with replace_problematic_function_before_tracing():
             # concrete arguments are replaced by constants whatever is given to the function
             graph = super().trace(root)  # , concrete_args)

@@ -185,6 +185,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), (x,), sig)
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_s1d_r(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -203,6 +204,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), (x,), sig, dynamic_shapes=dyn, others=(x2,))
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_s2d_r(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -408,7 +410,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), inputs, sig_tracing)
 
     @skipif_ci_windows("not working on windows")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_index_d_r(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -483,7 +485,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_llm_d_r(self):
         import torch
         from experimental_experiment.torch_test_helper import dummy_llm
