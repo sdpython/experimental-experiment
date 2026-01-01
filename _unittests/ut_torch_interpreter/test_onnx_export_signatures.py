@@ -248,7 +248,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
         dyn = {
             "x": {0: torch.export.Dim("batch", min=1, max=1024)},
-            "i": None,  # torch.export.Dim("ii", min=0, max=3)}
+            "i": {},  # torch.export.Dim("ii", min=0, max=3)}
         }
         sname = inspect.currentframe().f_code.co_name
         self._check_exporter(

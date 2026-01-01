@@ -611,7 +611,9 @@ class ExportOptions:
 
             concrete_args = kwargs.copy() if kwargs else {}
             trace_dynamic_shapes = (
-                dynamic_shapes.copy() if isinstance(dynamic_shapes, dict) else {}
+                None
+                if dynamic_shapes is None
+                else (dynamic_shapes.copy() if isinstance(dynamic_shapes, dict) else {})
             )
             if args:
                 sig = inspect.signature(mod.forward)
@@ -625,7 +627,8 @@ class ExportOptions:
                             concrete_args[p] = torch.tensor(a, dtype=torch.float32)
                         else:
                             concrete_args[p] = a
-                    trace_dynamic_shapes[p] = dynamic_shapes[ip]
+                    if trace_dynamic_shapes is not None and not isinstance(dynamic_shapes, dict):
+                        trace_dynamic_shapes[p] = dynamic_shapes[ip]
 
             if verbose:
                 print(f"[ExportOptions.export] CustomTracer().trace, verbose={verbose}")

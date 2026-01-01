@@ -417,6 +417,8 @@ class CustomTracer(torch.fx.Tracer):
             concrete_args, dict
         ), f"Unexpected type for concrete_args: {string_type(concrete_args)}"
         if verbose:
+            from onnx_diagnostic.helpers import string_type
+
             print(
                 f"[CustomTracer.trace] trace with concrete_args="
                 f"{string_type(concrete_args, with_shape=True)}"
@@ -424,6 +426,14 @@ class CustomTracer(torch.fx.Tracer):
             print(f"[CustomTracer.trace] trace with dynamic_shapes={dynamic_shapes}")
         if concrete_args:
             from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
+
+            if dynamic_shapes is None:
+                dynamic_shapes = (
+                    ({},) * len(concrete_args)
+                    if isinstance(concrete_args, tuple)
+                    else {k: {} for k in concrete_args}
+                )
+            from onnx_diagnostic.helpers import string_type
 
             concrete_args, _ = make_fake_with_dynamic_dimensions(concrete_args, dynamic_shapes)
         with replace_problematic_function_before_tracing():
