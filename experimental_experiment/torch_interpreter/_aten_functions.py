@@ -4189,6 +4189,22 @@ def aten_getattr(
                 g.set_rank(shape, 1)
         return shape
 
+    if attr_name == "dtype":
+        assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+        res = g.op.Identity(np.array(g.get_type(x), dtype=np.int64), outputs=outputs, name=name)
+        if not sts:
+            g.set_type(res, TensorProto.INT64)
+            g.set_shape(res, tuple())
+        return res
+
+    if attr_name == "device":
+        assert g.has_device(x), f"Missing device for {x!r}{g.get_debug_msg()}"
+        res = g.op.Identity(np.array(g.get_device(x), dtype=np.int64), outputs=outputs, name=name)
+        if not sts:
+            g.set_type(res, TensorProto.INT64)
+            g.set_shape(res, tuple())
+        return res
+
     raise AssertionError(
         f"attr_name={attr_name!r} is not implemented with x={x!r}{g.get_debug_msg()}"
     )
@@ -8300,20 +8316,32 @@ def aten_ones(
     else:
         isize = g.op.Cast(size, to=TensorProto.INT64)
         new_shape = None
-    if dtype is None:
-        import torch
 
-        dtype = torch.float32
+    if dtype is None:
+        dtype = np.float32
+        itype = TensorProto.FLOAT
+    elif isinstance(dtype, str):
+        # It is a constant. It happens when tracing the model.
+        assert g.is_constant(dtype), f"{dtype!r} is not constant{g.get_debug_msg()}"
+        itype = int(g.get_constant(dtype, computed_value=True))
+        dtype = tensor_dtype_to_np_dtype(itype)
+    else:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        dtype = tensor_dtype_to_np_dtype(itype)
+
+    if isinstance(device, str):
+        # It is a constant. It happens when tracing the model.
+        assert g.is_constant(device), f"{device!r} is not constant{g.get_debug_msg()}"
+        device = int(g.get_constant(device, computed_value=True))
+
     res = g.op.ConstantOfShape(
         isize,
-        value=from_array_extended(
-            np.array([1], dtype=tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype)))
-        ),
+        value=from_array_extended(np.array([1], dtype=dtype)),
         outputs=outputs,
         name=name,
     )
     if not sts:
-        g.set_type(res, dtype)
+        g.set_type(res, itype)
         if new_shape:
             g.set_shape(res, new_shape)
         if device is not None:
