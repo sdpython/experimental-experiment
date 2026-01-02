@@ -221,7 +221,7 @@ class TestOnnxExportTracing(ExtTestCase):
                     {0: "batch", 2: "DIM"},
                 ),
                 export_options=ExportOptions(tracing=True),
-                verbose=10,
+                verbose=0,
             )
         feeds = dict(
             zip(

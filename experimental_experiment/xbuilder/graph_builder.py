@@ -2114,6 +2114,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             but the most frequent for any result tensor
         """
         assert exc, f"not implemented when exc={exc}"
+        if isinstance(device, str):
+            # This happens while tracing.
+            assert self.is_constant(device), f"{device!r} is not a constant{self.get_debug_msg()}"
+            device = int(self.get_constant(device, computed_value=True))
         if not isinstance(device, int):
             device = -1 if device.type == "cpu" else device.index
         if name in self._known_devices and not keep_this_device:
@@ -4081,6 +4085,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             k += 2
         if self.has_shape(i):
             k += 4
+        if self.has_device(i):
+            k += 8
         return k
 
     def _debug_string_inputs(
@@ -4090,16 +4096,25 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         Meaning:
 
         - ``"-"``: (0) none
-        - ``"T"``: (1) type
-        - ``"R"``: (2) rank
-        - ``"U"``: (3) rank + type
-        - ``"S"``: (4) shape
-        - ``"V"``: (5) shape + type
-        - ``"W"``: (6) shape + rank
+        - ``"t"``: (1) type
+        - ``"r"``: (2) rank
+        - ``"u"``: (3) rank + type
+        - ``"s"``: (4) shape
+        - ``"v"``: (5) shape + type
+        - ``"w"``: (6) shape + rank
         - ``"#"``: (7) shape + type + rank
+        - ``"?"``: (8) device
+        - ``"T"``: (9) type + device
+        - ``"R"``: (10) rank + device
+        - ``"U"``: (11) rank + type + device
+        - ``"S"``: (12)) shape + device
+        - ``"V"``: (13) shape + type + device
+        - ``"W"``: (14) shape + rank + device
+        - ``"@"``: (15) shape + type + rank + device
         """
         st = ""
-        c = "-TRUSVW#"
+        #  ..0123456789012345
+        c = "-trusvw#?TRUSVW@"
         for i in inputs:
             st += c[self._get_symbol(i)]
         st += ":"

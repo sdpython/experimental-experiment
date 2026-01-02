@@ -3950,7 +3950,11 @@ def aten_full(
             value = np.array(fill_value, dtype=ntype).reshape((1,))
             suffx = "C"
     else:
-        itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
+        if isinstance(dtype, str):
+            assert g.is_constant(dtype), f"{dtype!r} should be a constant{g.get_debug_msg()}"
+            itype = int(g.get_constant(dtype, computed_value=True))
+        else:
+            itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
         ntype = tensor_dtype_to_np_dtype(itype)
         value = np.array(0 if fill_value is None else fill_value, dtype=ntype).reshape((1,))
         suffx = "D"
@@ -7478,6 +7482,38 @@ def aten_nan_to_num(
     ), f"nan_to_num not implemented with posinf={posinf} or neginf={neginf}{g.get_debug_msg()}"
     if not sts:
         set_type_shape_unary_op(g, res, x)
+    return res
+
+
+def aten_narrow(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    start: int,
+    length: int,
+    name: str = "narrow",
+):
+    "narrow"
+    assert (
+        isinstance(length, int) and length >= 0
+    ), f"Unexpected value for length={length}{g.get_debug_msg()}"
+    res = g.op.Slice(
+        x,
+        np.array([start], dtype=np.int64),
+        np.array([start + length], dtype=np.int64),
+        np.array([dim], dtype=np.int64),
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        if g.has_rank(x):
+            g.set_rank(res, g.get_rank(x))
+        if g.has_device(x):
+            g.set_device(res, g.get_device(x))
     return res
 
 
