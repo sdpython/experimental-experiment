@@ -383,7 +383,9 @@ class CustomTracer(torch.fx.Tracer):
         root_fn, args = torch.fx.Tracer.create_args_for_root(
             self, root_fn, is_module, concrete_args=concrete_args
         )
-        assert len(self._traced_concrete_args) == len(args) - 1, (
+        assert (
+            self._traced_concrete_args is None or len(self._traced_concrete_args) == len(args) - 1
+        ), (
             f"Mismatch between _traced_concrete_args="
             f"{string_type(self._traced_concrete_args, with_shape=True)} and "
             f"args={string_type(args, with_shape=True)}"
