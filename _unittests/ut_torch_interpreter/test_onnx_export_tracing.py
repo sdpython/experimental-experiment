@@ -122,7 +122,7 @@ class TestOnnxExportTracing(ExtTestCase):
         got = ref.run(None, {"x": x.numpy(), "y": y.numpy()})
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @requires_onnx_diagnostic("0.8.8")    
+    @requires_onnx_diagnostic("0.8.8")
     @ignore_warnings(UserWarning)
     def test_tracing_dynamic_cache1(self):
         import torch
