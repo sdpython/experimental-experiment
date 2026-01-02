@@ -209,7 +209,10 @@ class DynamoInterpreter:
             )
             v = node.meta.get("val", None) if hasattr(node, "meta") else None
             val = (
-                f"{torch_dtype_to_onnx_dtype(v.dtype)}'{tuple(v.shape)}"
+                (
+                    f"{torch_dtype_to_onnx_dtype(v.dtype)}'"
+                    f"{tuple(self.builder._torch_sym_int_to_str(_) for _ in v.shape)}"
+                )
                 if hasattr(v, "dtype")
                 else ""
             )
@@ -447,6 +450,7 @@ class DynamoInterpreter:
         users: Iterable[str],
         fake_tensor: bool = False,
         default_initializer: Optional[Any] = None,
+        device: Optional[int] = None,
     ) -> str:
         ret = self._make_tensor_check(name, fake_tensor, users)
         if ret is not None:
@@ -460,6 +464,7 @@ class DynamoInterpreter:
             shape,
             is_dimension=is_dimension,
             default_initializer=default_initializer,
+            device=device,
             marker="DynamoInterpreter._make_tensor_input",
         )
 
@@ -548,6 +553,7 @@ class DynamoInterpreter:
                     shape=(1,),
                     is_dimension=True,
                     users=node.users,
+                    device=-1,  # cpu
                 )
 
             if isinstance(example_value, (int, float)):
@@ -562,6 +568,7 @@ class DynamoInterpreter:
                     shape=(1,),
                     is_dimension=False,
                     users=node.users,
+                    device=-1,  # cpu
                 )
             if isinstance(example_value, (self.torch.Tensor, VirtualTensor)):
                 return self._make_tensor_input(
@@ -570,6 +577,7 @@ class DynamoInterpreter:
                     shape=example_value.shape,
                     is_dimension=False,
                     users=node.users,
+                    device=example_value.get_device(),
                 )
             if isinstance(example_value, list) and all(
                 isinstance(t, self.torch.Tensor) for t in example_value
@@ -617,6 +625,7 @@ class DynamoInterpreter:
                         fake_tensor=isinstance(
                             val, self.torch._subclasses.fake_tensor.FakeTensor
                         ),
+                        device=val.get_device(),
                     )
             if value is None:
                 if "nn_module_stack" not in node.meta:
@@ -646,7 +655,13 @@ class DynamoInterpreter:
                     dtype = val.dtype
                     shape = val.shape
                     return self._make_tensor_input(
-                        node.name, dtype, shape, False, users=node.users, fake_tensor=True
+                        node.name,
+                        dtype,
+                        shape,
+                        False,
+                        users=node.users,
+                        fake_tensor=True,
+                        device=val.get_device(),
                     )
                 raise RuntimeError(f"value is None, unable to retrieve target {node.target!r}")
             parameter_name = (
@@ -681,6 +696,7 @@ class DynamoInterpreter:
                 shape=tuple(),  # scalar should have no dimension
                 is_dimension=False,
                 users=node.users,
+                device=-1,  # cpu
             )
 
         if isinstance(val, VirtualTensor):
@@ -690,6 +706,7 @@ class DynamoInterpreter:
                 shape=val.shape,
                 is_dimension=False,
                 users=node.users,
+                device=val.get_device(),
             )
 
         raise RuntimeError(
@@ -2132,7 +2149,12 @@ class DynamoInterpreter:
                             else None
                         )
                     )
-                    new_args.append(VirtualTensor(name=name, dtype=dtype, shape=shape))
+                    device = (
+                        self.builder.get_device(name) if self.builder.has_device(name) else None
+                    )
+                    new_args.append(
+                        VirtualTensor(name=name, dtype=dtype, shape=shape, device=device)
+                    )
                 elif isinstance(a, self.torch.Tensor):
                     new_args.append(a)
                 else:

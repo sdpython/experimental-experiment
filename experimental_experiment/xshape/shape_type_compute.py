@@ -125,6 +125,8 @@ def set_type_shape_unary_op(
     itype: Optional[int] = None,
 ) -> bool:
     """Sets the shape and type for an unary operator (abs, exp, ...)."""
+    if g.has_device(input_name):
+        g.set_device(name, g.get_device(input_name))
     if not itype and not g.has_type(input_name):
         return
     g.set_type(name, itype or g.get_type(input_name))
@@ -144,6 +146,8 @@ def set_type_shape_unary_op_abs(
     itype: Optional[int] = None,
 ) -> bool:
     """Sets the shape and type for an unary operator (abs, exp, ...)."""
+    if g.has_device(input_name):
+        g.set_device(name, g.get_device(input_name))
     if not itype and not g.has_type(input_name):
         return
     if not itype:
@@ -186,6 +190,16 @@ def set_type_shape_binary_op(
     itype: Optional[int] = None,
 ) -> bool:
     """Sets the shape and type for a binary operator (add, mul, ...)."""
+    # device
+    if all(g.has_device(i) for i in input_names):
+        devs = {g.get_device(i) for i in input_names}
+        if len(devs) == 1:
+            g.set_device(name, devs.pop())
+    elif len(input_names) == 2:
+        if g.has_device(input_names[0]) and not g.has_device(input_names[1]):
+            g.set_device(name, g.get_device(input_names[0]))
+        elif not g.has_device(input_names[1]) and g.has_device(input_names[0]):
+            g.set_device(name, g.get_device(input_names[1]))
     # type
     dtype = None
     if itype:
@@ -244,6 +258,9 @@ def set_type_shape_binary_op(
 
 def set_type_shape_matmul(g: ShapeBuilder, name: str, x: str, y: str) -> bool:
     "Sets the output shape for node type MatMul."
+    # device
+    if g.has_device(x) and g.has_device(y) and g.get_device(x) == g.get_device(y):
+        g.set_device(name, g.get_device(x))
     if not g.has_type(x):
         return
     g.set_type(name, g.get_type(x))
@@ -305,6 +322,8 @@ def set_type_shape_gemm(
     "Sets the output shape for node type Gemm."
     if transA == 0 and transB == 0:
         return set_type_shape_matmul(g, name, x, y)
+    if g.has_device(x) and g.has_device(y) and g.get_device(x) == g.get_device(y):
+        g.set_device(name, g.get_device(x))
     g.set_type(name, g.get_type(x))
     if g.has_shape(x) and g.has_shape(y):
         sh1 = g.get_shape(x)
@@ -328,6 +347,8 @@ def set_type_shape_reduce_op(
 ):
     "Sets the output shape for any Reduce type."
     assert keepdim in {None, 0, 1}, f"keepdim={keepdim!r} must be in {{0, 1}}"
+    if g.has_device(x):
+        g.set_device(name, g.get_device(x))
     if keepdim is None:
         keepdim = 1
     if g.has_type(x):
@@ -411,6 +432,10 @@ def _set_shape_type_op_any_compress(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_concat(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Concat."
+    if all(self.has_device(i) for i in node.input):
+        devs = {self.get_device(i) for i in node.input}
+        if len(devs) == 1:
+            self.set_device(node.output[0], devs.pop())
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
     if all(self.has_shape(s) for s in node.input):
@@ -456,6 +481,8 @@ def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
         )
         conv_f3(d,s,stride,ceil_mode,p) = ... (see the code)
     """
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if not self.has_type(node.input[0]):
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "
@@ -640,6 +667,8 @@ def _set_shape_type_op_any_conv_max_pool(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_gather(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Gather."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
@@ -673,6 +702,8 @@ def _set_shape_type_op_any_gather(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_gather_elements(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type GatherElements."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_shape(node.input[0]) and self.has_shape(node.input[1]):
@@ -734,6 +765,8 @@ def _set_shape_type_op_any_non_zero(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_pad(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Pad."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if self.has_type(node.input[0]):
         self.set_type(node.output[0], self.get_type(node.input[0]))
     else:
@@ -868,6 +901,8 @@ def _set_shape_type_op_any_reduce(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_reshape(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Reshape."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     k = node.output[0]
     if self.has_type(node.input[0]):
         self.set_type(k, self.get_type(node.input[0]))
@@ -901,6 +936,8 @@ def _set_shape_type_op_any_reshape(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_expand(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Reshape."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     k = node.output[0]
     if self.has_type(node.input[0]):
         self.set_type(k, self.get_type(node.input[0]))
@@ -940,6 +977,8 @@ def _set_shape_type_op_any_sign(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_slice(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Slice."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
@@ -952,6 +991,9 @@ def _set_shape_type_op_any_slice(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Split."
+    if self.has_device(node.input[0]):
+        for o in node.output:
+            self.set_device(o, self.get_device(node.input[0]))
     num_outputs = self.get_attribute(node, "num_outputs", exc=False)
     assert num_outputs is None or num_outputs.i == len(
         node.output
@@ -1018,6 +1060,8 @@ def _set_shape_type_op_any_split(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_scatternd(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type ScatterND."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
         assert not self._debug_shape_missing, (
@@ -1050,6 +1094,8 @@ def _set_shape_type_op_any_sequence_empty(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_transpose(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Transpose."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
         assert not self._debug_shape_missing, (
@@ -1083,6 +1129,8 @@ def _set_shape_type_op_any_transpose(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_tile(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Tile."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
@@ -1095,6 +1143,9 @@ def _set_shape_type_op_any_tile(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_topk(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type TopK."
+    if self.has_device(node.input[0]):
+        for o in node.output:
+            self.set_device(o, self.get_device(node.input[0]))
     is_scalar = self.is_constant(node.input[1])
     if is_scalar and self.has_shape(node.input[0]):
         att = self.get_attribute(node, "axis", exc=False)
@@ -1139,6 +1190,8 @@ def _set_shape_type_op_any_topk(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Unsqueeze."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
         assert not self._debug_shape_missing, (
@@ -1201,6 +1254,8 @@ def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Squeeze."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if not self.has_type(node.input[0]):
         # the main type is missing, cannot continue
         assert not self._debug_shape_missing, (
@@ -1274,6 +1329,8 @@ def _set_shape_type_op_any_squeeze(self: ShapeBuilder, node: NodeProto):
 
 def _set_shape_type_op_any_where(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Where."
+    if self.has_device(node.input[0]):
+        self.set_device(node.output[0], self.get_device(node.input[0]))
     if not self.has_type(node.input[2]):
         assert not self._debug_shape_missing, (
             f"Unable to compute shape for node: "

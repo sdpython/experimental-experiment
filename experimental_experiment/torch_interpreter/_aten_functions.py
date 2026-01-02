@@ -3950,7 +3950,11 @@ def aten_full(
             value = np.array(fill_value, dtype=ntype).reshape((1,))
             suffx = "C"
     else:
-        itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
+        if isinstance(dtype, str):
+            assert g.is_constant(dtype), f"{dtype!r} should be a constant{g.get_debug_msg()}"
+            itype = int(g.get_constant(dtype, computed_value=True))
+        else:
+            itype = dtype if isinstance(dtype, int) else torch_dtype_to_onnx_dtype(dtype)
         ntype = tensor_dtype_to_np_dtype(itype)
         value = np.array(0 if fill_value is None else fill_value, dtype=ntype).reshape((1,))
         suffx = "D"
@@ -4188,6 +4192,22 @@ def aten_getattr(
             else:
                 g.set_rank(shape, 1)
         return shape
+
+    if attr_name == "dtype":
+        assert g.has_type(x), f"Missing type for {x!r}{g.get_debug_msg()}"
+        res = g.op.Identity(np.array(g.get_type(x), dtype=np.int64), outputs=outputs, name=name)
+        if not sts:
+            g.set_type(res, TensorProto.INT64)
+            g.set_shape(res, tuple())
+        return res
+
+    if attr_name == "device":
+        assert g.has_device(x), f"Missing device for {x!r}{g.get_debug_msg()}"
+        res = g.op.Identity(np.array(g.get_device(x), dtype=np.int64), outputs=outputs, name=name)
+        if not sts:
+            g.set_type(res, TensorProto.INT64)
+            g.set_shape(res, tuple())
+        return res
 
     raise AssertionError(
         f"attr_name={attr_name!r} is not implemented with x={x!r}{g.get_debug_msg()}"
@@ -7465,6 +7485,38 @@ def aten_nan_to_num(
     return res
 
 
+def aten_narrow(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    dim: int,
+    start: int,
+    length: int,
+    name: str = "narrow",
+):
+    "narrow"
+    assert (
+        isinstance(length, int) and length >= 0
+    ), f"Unexpected value for length={length}{g.get_debug_msg()}"
+    res = g.op.Slice(
+        x,
+        np.array([start], dtype=np.int64),
+        np.array([start + length], dtype=np.int64),
+        np.array([dim], dtype=np.int64),
+        name=name,
+        outputs=outputs,
+    )
+    if not sts:
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        if g.has_rank(x):
+            g.set_rank(res, g.get_rank(x))
+        if g.has_device(x):
+            g.set_device(res, g.get_device(x))
+    return res
+
+
 def aten_native_dropout(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -8300,20 +8352,32 @@ def aten_ones(
     else:
         isize = g.op.Cast(size, to=TensorProto.INT64)
         new_shape = None
-    if dtype is None:
-        import torch
 
-        dtype = torch.float32
+    if dtype is None:
+        dtype = np.float32
+        itype = TensorProto.FLOAT
+    elif isinstance(dtype, str):
+        # It is a constant. It happens when tracing the model.
+        assert g.is_constant(dtype), f"{dtype!r} is not constant{g.get_debug_msg()}"
+        itype = int(g.get_constant(dtype, computed_value=True))
+        dtype = tensor_dtype_to_np_dtype(itype)
+    else:
+        itype = torch_dtype_to_onnx_dtype(dtype)
+        dtype = tensor_dtype_to_np_dtype(itype)
+
+    if isinstance(device, str):
+        # It is a constant. It happens when tracing the model.
+        assert g.is_constant(device), f"{device!r} is not constant{g.get_debug_msg()}"
+        device = int(g.get_constant(device, computed_value=True))
+
     res = g.op.ConstantOfShape(
         isize,
-        value=from_array_extended(
-            np.array([1], dtype=tensor_dtype_to_np_dtype(torch_dtype_to_onnx_dtype(dtype)))
-        ),
+        value=from_array_extended(np.array([1], dtype=dtype)),
         outputs=outputs,
         name=name,
     )
     if not sts:
-        g.set_type(res, dtype)
+        g.set_type(res, itype)
         if new_shape:
             g.set_shape(res, new_shape)
         if device is not None:

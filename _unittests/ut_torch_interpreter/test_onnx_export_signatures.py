@@ -8,9 +8,11 @@ from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache, CacheKeyVal
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    hide_stdout,
     skipif_ci_windows,
     requires_torch,
     requires_onnx_diagnostic,
+    ignore_warnings,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -62,7 +64,10 @@ class TestOnnxExportSignatures(ExtTestCase):
                         f"names={name}, type={type(xi)}"
                     )
         else:
-            raise AssertionError(f"not implemented names={names}, n_inputs={len(inputs)}")
+            raise AssertionError(
+                f"not implemented names={names}, n_inputs={len(inputs)}, "
+                f"inputs={string_type(inputs, with_shape=True)}"
+            )
         return feeds
 
     def _check_exporter(
@@ -180,6 +185,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), (x,), sig)
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_s1d_r(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -198,6 +204,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), (x,), sig, dynamic_shapes=dyn, others=(x2,))
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_s2d_r(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -225,6 +232,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), inputs, sig, dynamic_shapes=dyn, others=inputs2)
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_s1d_i_r_v1(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -243,7 +251,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
         dyn = {
             "x": {0: torch.export.Dim("batch", min=1, max=1024)},
-            "i": None,  # torch.export.Dim("ii", min=0, max=3)}
+            "i": {},  # torch.export.Dim("ii", min=0, max=3)}
         }
         sname = inspect.currentframe().f_code.co_name
         self._check_exporter(
@@ -335,6 +343,8 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
+    @ignore_warnings(UserWarning)
     def test_signature_s1d_ls_r_tracing(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -378,6 +388,7 @@ class TestOnnxExportSignatures(ExtTestCase):
             exporter="custom-tracing",
             others=inputs2,
             atol=1e-4,
+            verbose=0,
         )
 
     @skipif_ci_windows("not working on windows")
@@ -401,7 +412,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), inputs, sig_tracing)
 
     @skipif_ci_windows("not working on windows")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_index_d_r(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
@@ -433,6 +444,8 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
+    @hide_stdout()
     def test_signature_llm_s_tracing(self):
         if False:
             for cls_name in ["AttentionBlock", "MultiAttentionBlock", "DecoderLayer"]:
@@ -457,6 +470,7 @@ class TestOnnxExportSignatures(ExtTestCase):
                 expected_signature="NOCHECK",
                 optimize=False,
                 exporter="custom-tracing",
+                verbose=10,
             )
 
     @skipif_ci_windows("not working on windows")
@@ -473,7 +487,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
-    @requires_onnx_diagnostic("0.7.13")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_llm_d_r(self):
         import torch
         from experimental_experiment.torch_test_helper import dummy_llm

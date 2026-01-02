@@ -3,6 +3,7 @@ import warnings
 from collections import Counter
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
+    requires_onnx_diagnostic,
     requires_torch,
     skipif_ci_windows,
     hide_stdout,
@@ -343,6 +344,7 @@ class TestOnnxExportControlFlow(ExtTestCase):
             got = sess.run(None, {"x": _x.detach().numpy()})
             self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @requires_onnx_diagnostic("0.8.8")
     def test_cond_llm_image_embedding(self):
         import torch
 

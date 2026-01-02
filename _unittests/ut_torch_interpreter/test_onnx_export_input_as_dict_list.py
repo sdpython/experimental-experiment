@@ -143,6 +143,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @requires_onnx_diagnostic("0.8.8")
     def test_tensor_input_tracer(self):
         import torch
 
@@ -177,6 +178,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @requires_onnx_diagnostic("0.8.8")
     def test_list_input_tracer(self):
         import torch
 
@@ -221,6 +223,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @requires_onnx_diagnostic("0.8.8")
     def test_neuron_tracer(self):
         import torch
 
