@@ -433,6 +433,7 @@ class CustomTracer(torch.fx.Tracer):
                 f"{string_type(concrete_args, with_shape=True)}"
             )
             print(f"[CustomTracer.trace] trace with dynamic_shapes={dynamic_shapes}")
+
         if concrete_args:
             from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
 
@@ -447,8 +448,17 @@ class CustomTracer(torch.fx.Tracer):
             self._traced_concrete_args, _ = make_fake_with_dynamic_dimensions(
                 concrete_args, dynamic_shapes
             )
+            flat_args = (
+                concrete_args.values() if isinstance(concrete_args, dict) else concrete_args
+            )
+
+            assert not any(type(a) in torch.utils._pytree.SUPPORTED_NODES for a in flat_args), (
+                f"One argument needs to be flattened. This is not implemented yet: "
+                f"{string_type(concrete_args, with_shape=True)}"
+            )
         else:
             self._traced_concrete_args = None
+
         with replace_problematic_function_before_tracing():
             # concrete arguments are replaced by constants whatever is given to the function
             graph = super().trace(root)  # , concrete_args)

@@ -342,6 +342,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         )
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     @ignore_warnings(UserWarning)
     def test_signature_s1d_ls_r_tracing(self):
         class Neuron(torch.nn.Module):
