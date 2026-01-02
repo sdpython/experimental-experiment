@@ -232,6 +232,7 @@ class TestOnnxExportSignatures(ExtTestCase):
         self._check_exporter(sname, Neuron(), inputs, sig, dynamic_shapes=dyn, others=inputs2)
 
     @skipif_ci_windows("not working on windows")
+    @requires_onnx_diagnostic("0.8.8")
     def test_signature_s1d_i_r_v1(self):
         class Neuron(torch.nn.Module):
             def __init__(self, n_dims: int = 3, n_targets: int = 1):
