@@ -501,7 +501,9 @@ class CustomTracer(torch.fx.Tracer):
             print(f"[CustomTracer.trace] trace with dynamic_shapes={dynamic_shapes}")
 
         if concrete_args:
+            from onnx_diagnostic.helpers import string_type
             from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
+            from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 
             if dynamic_shapes is None:
                 dynamic_shapes = (
@@ -509,7 +511,6 @@ class CustomTracer(torch.fx.Tracer):
                     if isinstance(concrete_args, tuple)
                     else {k: {} for k in concrete_args}
                 )
-            from onnx_diagnostic.helpers import string_type
 
             flat_args = (
                 concrete_args.values() if isinstance(concrete_args, dict) else concrete_args
@@ -521,7 +522,7 @@ class CustomTracer(torch.fx.Tracer):
                     print("[CustomTracer.trace] wraps for serializable args")
                 new_model, new_names = self.make_wrapped_model(root, concrete_args)
                 traced_concrete_args, _ = make_fake_with_dynamic_dimensions(
-                    concrete_args, dynamic_shapes
+                    torch_deepcopy(concrete_args), dynamic_shapes
                 )
                 self._traced_concrete_args, _ = torch.utils._pytree.tree_flatten(
                     traced_concrete_args
@@ -531,6 +532,7 @@ class CustomTracer(torch.fx.Tracer):
                 self._traced_concrete_args, _ = make_fake_with_dynamic_dimensions(
                     concrete_args, dynamic_shapes
                 )
+                new_model = root
             if verbose > 0:
                 print(
                     f"[CustomTracer.trace] _traced_concrete_args="
