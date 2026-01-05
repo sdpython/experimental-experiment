@@ -625,6 +625,7 @@ class TestTracing(ExtTestCase):
                 for k in a:
                     self.assertEqual(type(a[k]), type(b[k]))
 
+    @requires_onnx_diagnostic("0.8.8")
     def test_tree_unflatten_with_proxy_dynamic_cache(self):
         graph = torch.fx.Graph()
         tr = CustomTracer()
