@@ -6132,11 +6132,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             invalues = [self.value_as_shape(i) for i in node.input]
             outvalues = [self.value_as_shape(i) for i in node.output]
             if any(i is not None for i in invalues):
-                data["invalueshape"] = " / ".join(
+                data["invalueshapes"] = " / ".join(
                     map(str, ["" if i is None else i for i in invalues])
                 )
             if any(i is not None for i in outvalues):
-                data["outvalueshape"] = " / ".join(
+                data["outvalueshapes"] = " / ".join(
                     map(str, ["" if i is None else i for i in outvalues])
                 )
             for k, v in data.items():
