@@ -2,6 +2,7 @@ import copy
 import operator
 import unittest
 import torch
+from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
@@ -15,6 +16,7 @@ from experimental_experiment.torch_interpreter.tracing import (
     _len,
     _isinstance,
     setitem_with_transformation,
+    tree_unflatten_with_proxy,
 )
 
 
@@ -568,6 +570,98 @@ class TestTracing(ExtTestCase):
 
         got = ep.module()(*inputs)
         self.assertEqualArray(expected, got)
+
+    def test_tree_unflatten_with_proxy_none(self):
+        import torch
+
+        nested = [
+            torch.randn((4, 5)),
+            [torch.randn((7, 5)), torch.randn((8, 5))],
+            {
+                "a": torch.randn((14, 5)),
+                "b": torch.randn((12, 5)),
+                "cl": [torch.randn((11, 5))],
+            },
+        ]
+        flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
+
+        self.assertEqual(len(flat_list), 6)
+        unflatten = tree_unflatten_with_proxy(tree_spec, flat_list)
+        self.assertEqualAny(nested, unflatten)
+
+    def test_tree_unflatten_with_proxy_custom_proxy(self):
+        graph = torch.fx.Graph()
+        tr = CustomTracer()
+        tr.graph = torch.fx.Graph(tracer_cls=CustomTracer)
+        cps = []
+        for i in range(6):
+            node = graph.create_node("placeholder", f"tx{i}", args=(), kwargs={}, name=f"txn{i}")
+            cps.append(CustomProxy(node, tr))
+
+        nested = [
+            torch.randn((4, 5)),
+            [torch.randn((7, 5)), torch.randn((8, 5))],
+            {
+                "a": torch.randn((14, 5)),
+                "b": torch.randn((12, 5)),
+                "cl": [torch.randn((11, 5))],
+            },
+        ]
+        flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
+        self.assertEqual(len(flat_list), 6)
+        unflatten = tree_unflatten_with_proxy(tree_spec, cps)
+
+        expected = [cps[0], [cps[1], cps[2]], {"a": cps[3], "b": cps[4], "cl": [cps[5]]}]
+        self.assertEqual(len(expected), len(unflatten))
+        for a, b in zip(expected, unflatten):
+            self.assertEqual(type(a), type(b))
+            if isinstance(a, list):
+                self.assertEqual(len(a), len(b))
+                for aa, bb in zip(a, b):
+                    self.assertEqual(type(aa), type(bb))
+            elif isinstance(a, dict):
+                self.assertEqual(len(a), len(b))
+                self.assertEqual(set(a), set(b))
+                for k in a:
+                    self.assertEqual(type(a[k]), type(b[k]))
+
+    def test_tree_unflatten_with_proxy_dynamic_cache(self):
+        graph = torch.fx.Graph()
+        tr = CustomTracer()
+        tr.graph = torch.fx.Graph(tracer_cls=CustomTracer)
+        cps = []
+        for i in range(7):
+            node = graph.create_node("placeholder", f"tx{i}", args=(), kwargs={}, name=f"txn{i}")
+            cps.append(CustomProxy(node, tr))
+
+        nested = [
+            torch.randn((4, 5)),
+            [torch.randn((7, 5)), torch.randn((8, 5))],
+            make_dynamic_cache(
+                [(torch.randn(2, 32, 30, 96), torch.randn(2, 32, 30, 96)) for i in range(2)]
+            ),
+        ]
+        with torch_export_patches(patch_transformers=True):
+            flat_list, tree_spec = torch.utils._pytree.tree_flatten(nested)
+            self.assertEqual(len(flat_list), 7)
+            unflatten = tree_unflatten_with_proxy(tree_spec, cps)
+
+            self.assertEqual(len(nested), len(unflatten))
+            for a, b in zip(nested, unflatten):
+                if isinstance(a, torch.Tensor):
+                    self.assertIsInstance(a, torch.Tensor)
+                    self.assertIsInstance(b, CustomProxy)
+                else:
+                    self.assertEqual(type(a), type(b))
+                    t = self.string_type(b, with_shape=True)
+                    if "DynamicCache" in t:
+                        self.assertEqual(
+                            (
+                                "DynamicCache(key_cache=#2[CustomProxy(txn3),CustomProxy(txn5)], "
+                                "value_cache=#2[CustomProxy(txn4),CustomProxy(txn6)])"
+                            ),
+                            t,
+                        )
 
 
 if __name__ == "__main__":

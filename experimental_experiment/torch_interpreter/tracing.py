@@ -4,7 +4,7 @@ import math
 import operator
 import textwrap
 import types
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import torch
 from torch.fx import Node
 from torch.fx.proxy import TracerBase
@@ -37,7 +37,7 @@ class CustomProxy(torch.fx.proxy.Proxy):
     <experimental_experiment.torch_interpreter.tracing.CustomTracer>`.
     """
 
-    def __init__(self, node: Node, tracer: "Optional[TracerBase]" = None):
+    def __init__(self, node: Node, tracer: Optional["TracerBase"] = None):
         super().__init__(node, tracer=tracer)
         assert isinstance(
             self.tracer, CustomTracer
@@ -229,6 +229,56 @@ class CustomParameterProxy(CustomProxy):
 
     def nelement(self):
         return self.param.nelement()
+
+
+def tree_unflatten_with_proxy(
+    tree_spec: torch.utils._pytree.PyTree, leaves: Iterable[Any]
+) -> Any:
+    """
+    More robust implementation of ``torch.utils._pytree.tree_unflatten``
+    supported ``DynamicCache``.
+    """
+    if isinstance(leaves, (list, tuple)):
+        leaves = list(leaves)
+    assert len(leaves) == tree_spec.num_leaves, (
+        f"treespec.unflatten(leaves): `leaves` has length {len(leaves)} "
+        f"but the spec refers to a pytree that holds {tree_spec.num_leaves} "
+        f"items ({tree_spec}).",
+    )
+    if tree_spec.is_leaf():
+        return leaves[0]
+
+    unflatten_fn = torch.utils._pytree.SUPPORTED_NODES[tree_spec.type].unflatten_fn
+
+    # Recursively unflatten the children
+    start = 0
+    end = 0
+    child_pytrees = []
+    for child_spec in tree_spec._children:
+        end += child_spec.num_leaves
+        if child_spec and child_spec.type and child_spec.type.__name__ == "DynamicCache":
+            import transformers
+
+            n = (end - start) // 2
+            cache = transformers.cache_utils.DynamicCache()
+            cache.layers.extend([transformers.cache_utils.DynamicLayer() for _ in range(n)])
+            for i in range(n):
+                cache.layers[i].keys = leaves[start + i * 2]
+                cache.layers[i].values = leaves[start + i * 2 + 1]
+            child_pytrees.append(cache)
+        else:
+            assert (
+                not child_spec
+                or not child_spec.type
+                or not child_spec.type.__name__.endswith("Cache")
+            ), (
+                f"tree_unflatten_with_proxy is not implemented yet for {child_spec.type}, "
+                f"child_spec={child_spec}"
+            )
+            child_pytrees.append(child_spec.unflatten(leaves[start:end]))
+        start = end
+
+    return unflatten_fn(child_pytrees, tree_spec._context)
 
 
 class CondCCOp(torch._ops.HigherOrderOperator):
@@ -436,15 +486,17 @@ class CustomTracer(torch.fx.Tracer):
 
         def make_method(n, nc):
             args = ", ".join(f"a{i}" for i in range(n))
-            cargs = ", ".join(f"ca{i}" for i in range(nc))
             src = textwrap.dedent(
                 f"""
                 def f(self, {args}):
-                    {cargs} = torch.utils._pytree.tree_unflatten([{args}], self._spec)
-                    return self._m({cargs})
+                    res = tree_unflatten_with_proxy(self._spec, [{args}])
+                    assert isinstance(res, dict), (
+                        "A dictionary is expected but unflattened type is %r" % type(res)
+                    )
+                    return self._m(**res)
                 """
             )
-            ns = {"torch": torch}
+            ns = {"tree_unflatten_with_proxy": tree_unflatten_with_proxy}
             exec(src, ns)
             return ns["f"]
 
