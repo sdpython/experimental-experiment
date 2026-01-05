@@ -571,6 +571,7 @@ class TestTracing(ExtTestCase):
         got = ep.module()(*inputs)
         self.assertEqualArray(expected, got)
 
+    @requires_onnx_diagnostic("0.8.8")
     def test_tree_unflatten_with_proxy_none(self):
         import torch
 
@@ -589,6 +590,7 @@ class TestTracing(ExtTestCase):
         unflatten = tree_unflatten_with_proxy(tree_spec, flat_list)
         self.assertEqualAny(nested, unflatten)
 
+    @requires_onnx_diagnostic("0.8.8")
     def test_tree_unflatten_with_proxy_custom_proxy(self):
         graph = torch.fx.Graph()
         tr = CustomTracer()
