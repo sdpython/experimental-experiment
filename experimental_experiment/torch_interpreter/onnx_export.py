@@ -868,6 +868,45 @@ def is_wrapped(model: Any, dynamic_shapes: Optional[Any] = None) -> bool:
     raise AssertionError(f"Unable to tell for type {type(model)}")
 
 
+def build_source_lines(
+    model: "torch.nn.Module",  # noqa: F821
+) -> Dict[str, Tuple[str, Tuple[int, int]]]:
+    import torch
+
+    sub_modules = 0
+    sources = {}
+    skip_methods = (set(dir(torch.nn.Module)) - {"forward", "backward"}) | {"_wrapped_call"}
+    for name, mod in model.named_modules():
+        sub_modules += 1
+        if not name:
+            continue
+        for meth in dir(mod.__class__):
+            if (meth.startswith("__") and meth.endswith("__")) or meth in skip_methods:
+                continue
+            m = getattr(mod, meth)
+            if hasattr(m, "forward"):
+                continue
+            if callable(m):
+                try:
+                    source = inspect.getsourcefile(m)
+                except TypeError as e:
+                    raise AssertionError(
+                        f"Unable to get source for module {name!r}, "
+                        f"type {type(mod)}, method={meth!r}, "
+                        f"m={m}, already captured={len(sources)}"
+                    ) from e
+                source = source.replace("\\", "/")
+                lines, lineno = inspect.getsourcelines(m)
+                interval = lineno, lineno + len(lines)
+                if source not in sources:
+                    sources[source] = []
+                sources[source].append((f"{name}.{meth}", interval))
+    assert (
+        sub_modules <= 1 or sources
+    ), f"Module type {type(mod)} has no known sources, sub_modules={sub_modules}"
+    return sources
+
+
 def to_onnx(
     mod: Union["torch.nn.Module", "torch.fx.GraphModule"],  # noqa: F821
     args: Optional[Sequence["torch.Tensor"]] = None,  # noqa: F821
@@ -1043,8 +1082,9 @@ def to_onnx(
         print("[to_onnx] start creating the onnx nodes")
         print(f"[to_onnx] interpreter.function_options={interpreter.function_options!r}")
 
+    source_lines = build_source_lines(mod)
     begin = t
-    builder.process(graph_module, interpreter)
+    builder.process(graph_module, interpreter, source_lines)
     t = time.perf_counter()
     add_stats["time_export_builder_process"] = t - begin
     if verbose:

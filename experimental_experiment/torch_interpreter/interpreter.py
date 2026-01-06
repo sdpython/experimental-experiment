@@ -184,7 +184,11 @@ class DynamoInterpreter:
         ), "A graph was not processed or it is not the same greaph."
         self.graph_begin_processed = None
 
-    def run_node(self, node: "torch.fx.Node"):  # noqa: F821
+    def run_node(
+        self,
+        node: "torch.fx.Node",  # noqa: F821
+        source_lines: Optional[Dict[str, Tuple[str, Tuple[int, int]]]] = None,
+    ):
         """Runs a node: call the approrpiate method based on the node type."""
         assert (
             hasattr(self, "graph_begin_processed") and self.graph_begin_processed
@@ -255,11 +259,14 @@ class DynamoInterpreter:
             raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
         if (
-            node.op in {"call_module", "call_function", "call_method", "get_attr"}
+            source_lines
+            and node.op in {"call_module", "call_function", "call_method", "get_attr"}
             and node.meta
             and "stack_trace" in node.meta
         ):
-            self._set_submodule_name_in_model_as_metadata(node.meta["stack_trace"], last_added)
+            self._set_submodule_name_in_model_as_metadata(
+                source_lines, node.meta["stack_trace"], last_added
+            )
 
         # Checks consistency of shapes and types
         name = node.name
@@ -295,66 +302,28 @@ class DynamoInterpreter:
                 )
         return res
 
-    def _set_submodule_name_in_model_as_metadata(self, stack_trace: str, start_node: int):
+    def _set_submodule_name_in_model_as_metadata(
+        self,
+        source_lines: Dict[str, Tuple[str, Tuple[int, int]]],
+        stack_trace: str,
+        start_node: int,
+    ):
         """Adds information about where in the model the created node come from."""
         reg = re.compile('File "([^"]+?)", line (\\d+)')
         files = reg.findall(stack_trace)
         if not files:
             return
 
-        if (
-            (not hasattr(self, "_sourcelines") or not self._sourcelines)
-            and hasattr(self, "graph_begin_processed")
-            and self.graph_begin_processed
-        ):
-            sources = {}
-            owning = self.graph_begin_processed.owning_module
-            sub_modules = 0
-            skip_methods = (set(dir(self.torch.nn.Module)) - {"forward", "backward"}) | {
-                "_wrapped_call"
-            }
-            for name, mod in owning.named_modules():
-                sub_modules += 1
-                if not name:
-                    continue
-                for meth in dir(mod):
-                    if (meth.startswith("__") and meth.endswith("__")) or meth in skip_methods:
-                        continue
-                    m = getattr(mod, meth)
-                    if callable(m):
-                        try:
-                            source = inspect.getsourcefile(m)
-                        except TypeError as e:
-                            raise AssertionError(
-                                f"Unable to get source for module {name!r}, "
-                                f"type {type(mod)}, method={meth!r}, "
-                                f"m={m}, already captured={len(sources)}"
-                            ) from e
-                        source = source.replace("\\", "/")
-                        lines, lineno = inspect.getsourcelines(m)
-                        interval = [lineno, lineno + len(lines)]
-                        if source not in sources:
-                            sources[source] = []
-                        sources[source].append((name, m, interval))
-            assert sub_modules <= 1 or sources, (
-                f"Module {self.graph_begin_processed.owning_module} has no known sources, "
-                f"sub_modules={sub_modules}, type is "
-                f"{type(self.graph_begin_processed.owning_module)}"
-            )
-
-            self._sourcelines = sources
-
-        if not hasattr(self, "_sourcelines") or not self._sourcelines:
-            return
         names = []
         for filename, line_number in files:
             filename = filename.replace("\\", "/")
-            if filename not in self._sourcelines:
+            if filename not in source_lines:
                 continue
             line = int(line_number)
-            for name, _m, interval in self._sourcelines[filename]:
+            for name, interval in source_lines[filename]:
                 if line >= interval[0] and line <= interval[1]:
                     names.append(name)
+                    break
 
         if names:
             for node in self.builder.nodes[start_node:]:
