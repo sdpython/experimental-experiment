@@ -227,7 +227,7 @@ class TestBashBenchRunnerCmdUntrained(ExtTestCase):
             "custom",
             "arnir0/Tiny-LLM",
             verbose=1,
-            debug=True,
+            debug=False,
             check_file=False,
             dynamic=True,
         )
