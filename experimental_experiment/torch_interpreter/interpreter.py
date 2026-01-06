@@ -1,8 +1,9 @@
-import os
 import inspect
 import math
 import operator
+import os
 import pprint
+import re
 import types
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 import numpy as np
@@ -234,6 +235,7 @@ class DynamoInterpreter:
         val = ("val", v.dtype, v.shape) if hasattr(v, "dtype") else ""
         self.builder.set_shapes_types(node.name, "run_node", (exa, val))
         self.builder.register_users(node.name, node.users)
+        last_added = len(self.builder.nodes)
 
         if node.op == "placeholder":
             res = self.placeholder(node)
@@ -251,6 +253,13 @@ class DynamoInterpreter:
             res = self.call_method(node)
         else:
             raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
+
+        if (
+            node.op in {"call_module", "call_function", "call_method", "get_attr"}
+            and node.meta
+            and "stack_trace" in node.meta
+        ):
+            self._set_submodule_name_in_model_as_metadata(node.meta["stack_trace"], last_added)
 
         # Checks consistency of shapes and types
         name = node.name
@@ -285,6 +294,74 @@ class DynamoInterpreter:
                     register_int=False,
                 )
         return res
+
+    def _set_submodule_name_in_model_as_metadata(self, stack_trace: str, start_node: int):
+        """Adds information about where in the model the created node come from."""
+        reg = re.compile('File "([^"]+?)", line (\\d+)')
+        files = reg.findall(stack_trace)
+        if not files:
+            return
+
+        if (
+            (not hasattr(self, "_sourcelines") or not self._sourcelines)
+            and hasattr(self, "graph_begin_processed")
+            and self.graph_begin_processed
+        ):
+            sources = {}
+            owning = self.graph_begin_processed.owning_module
+            sub_modules = 0
+            skip_methods = (set(dir(self.torch.nn.Module)) - {"forward", "backward"}) | {
+                "_wrapped_call"
+            }
+            for name, mod in owning.named_modules():
+                sub_modules += 1
+                if not name:
+                    continue
+                for meth in dir(mod):
+                    if (meth.startswith("__") and meth.endswith("__")) or meth in skip_methods:
+                        continue
+                    m = getattr(mod, meth)
+                    if callable(m):
+                        try:
+                            source = inspect.getsourcefile(m)
+                        except TypeError as e:
+                            raise AssertionError(
+                                f"Unable to get source for module {name!r}, "
+                                f"type {type(mod)}, method={meth!r}, "
+                                f"m={m}, already captured={len(sources)}"
+                            ) from e
+                        source = source.replace("\\", "/")
+                        lines, lineno = inspect.getsourcelines(m)
+                        interval = [lineno, lineno + len(lines)]
+                        if source not in sources:
+                            sources[source] = []
+                        sources[source].append((name, m, interval))
+            assert sub_modules <= 1 or sources, (
+                f"Module {self.graph_begin_processed.owning_module} has no known sources, "
+                f"sub_modules={sub_modules}, type is "
+                f"{type(self.graph_begin_processed.owning_module)}"
+            )
+
+            self._sourcelines = sources
+
+        if not hasattr(self, "_sourcelines") or not self._sourcelines:
+            return
+        names = []
+        for filename, line_number in files:
+            filename = filename.replace("\\", "/")
+            if filename not in self._sourcelines:
+                continue
+            line = int(line_number)
+            for name, _m, interval in self._sourcelines[filename]:
+                if line >= interval[0] and line <= interval[1]:
+                    names.append(name)
+
+        if names:
+            for node in self.builder.nodes[start_node:]:
+                for i, name in enumerate(names):
+                    p = node.metadata_props.add()
+                    p.key = f"source[{i}]"
+                    p.value = name
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
         """Retrieves an attribute."""
