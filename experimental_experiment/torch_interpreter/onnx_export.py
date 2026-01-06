@@ -871,6 +871,14 @@ def is_wrapped(model: Any, dynamic_shapes: Optional[Any] = None) -> bool:
 def build_source_lines(
     model: "torch.nn.Module",  # noqa: F821
 ) -> Dict[str, Tuple[str, Tuple[int, int]]]:
+    """
+    Extracts source file and line number for method of the model and submodules.
+
+    :param model: model to investigate
+    :return: source files and lines
+    """
+    if not hasattr(model, "named_modules"):
+        return None
     import torch
 
     sub_modules = 0
