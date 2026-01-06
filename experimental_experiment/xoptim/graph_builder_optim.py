@@ -858,7 +858,44 @@ class GraphBuilderPatternOptimization:
             )
         if self.dump_applied_patterns:
             self._save_pattern_as_proto(self.dump_applied_patterns, match, new_nodes)
+        self._propagate_metadata(match.nodes, new_nodes)
         return new_nodes
+
+    def _propagate_metadata(self, old_nodes: List[NodeProto], new_nodes: List[NodeProto]):
+        """Propagates metadata."""
+        merged = None
+        for node in old_nodes:
+            if not node:
+                continue
+            data = {
+                d.key: d.value
+                for d in node.metadata_props
+                if d.key
+                not in {
+                    "intypes",
+                    "outtypes",
+                    "inshapes",
+                    "outshapes",
+                    "invalueshapes",
+                    "outvalueshapes",
+                }
+            }
+            if merged is None:
+                merged = data
+            else:
+                for k, v in data.items():
+                    if k not in merged:
+                        merged[k] = v
+                    elif merged[k] != data[k]:
+                        del merged[k]
+        if merged:
+            for node in new_nodes:
+                if not node:
+                    continue
+                for k, v in merged.items():
+                    entry = node.metadata_props.add()
+                    entry.key = k
+                    entry.value = v
 
     def _to_cstop(self, init: Any, name: Optional[str] = None) -> NodeProto:
         if isinstance(init, NodeProto):
