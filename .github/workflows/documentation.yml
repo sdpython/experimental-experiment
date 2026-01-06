@@ -89,13 +89,13 @@ jobs:
           pip install pytest
           pip install pytest-cov
           export PYTHONPATH=.
-          UNITTEST_GOING=1 pytest --cov=./experimental_experiment/ --cov-report=xml --durations=10 --ignore-glob=**LONG*.py --ignore-glob=**notebook*.py --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py _unittests
+          UNITTEST_GOING=1 pytest --cov=./experimental_experiment/ --cov-report=xml --durations=10 --ignore-glob=**LONG*.py --ignore-glob=**notebook*.py --ignore=_unittests/ut_torch_interpreter/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py _unittests
           export PYTHONPATH=
 
       - name: Generate coverage report
         run: |
           export PYTHONPATH=.
-          UNITTEST_GOING=1 pytest _unittests/ut_torch_models/test_piece_by_piece_big.py
+          UNITTEST_GOING=1 pytest _unittests/ut_torch_interpreter/test_piece_by_piece_big.py
           export PYTHONPATH=
 
       - name: Upload coverage reports to Codecov

@@ -65,10 +65,10 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models _unittests/ut_torch_bench --durations=20 --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench --durations=20
     displayName: 'Runs Unit Tests'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python _unittests/ut_torch_models/test_piece_by_piece_big.py
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python _unittests/ut_torch_interpreter/test_piece_by_piece_big.py
     displayName: 'Runs Unit Tests KNN'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -145,7 +145,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_models --ignore=_unittests/ut_torch_bench --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_interpreter/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_bench --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
     displayName: 'Runs Unit Tests'
 
 - job: 'L3_training_and_models_torch_nightly'
@@ -219,7 +219,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_gradient _unittests/ut_reference _unittests/ut_torch_interpreter --ignore=_unittests/ut_torch_models/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_gradient _unittests/ut_reference _unittests/ut_torch_interpreter --ignore=_unittests/ut_torch_interpreter/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
     displayName: 'Test Interpreter'
   - script: |
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench --ignore _unittests/ut_torch_bench/test_bash_bench_runner_cmd_options.py --ignore _unittests/ut_torch_bench/test_bash_bench_runner_cmd_untrained.py --durations=20
@@ -231,10 +231,7 @@ jobs:
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_bench/test_bash_bench_runner_cmd_untrained.py --durations=20
     displayName: 'Test Bench 2 - untrained'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models --ignore=_unittests/ut_torch_models/test_llm_model_helper.py --ignore=_unittests/ut_torch_models/test_chronos_model_helper.py --durations=20
-    displayName: 'Test Models'
-  - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_piece_by_piece_big.py --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_interpreter/test_piece_by_piece_big.py --durations=20
     displayName: 'Test PieceByPiece'
 
 - job: 'L4_scan_loop_torch_nightly'
@@ -320,7 +317,7 @@ jobs:
       UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_interpreter/test_onnx_export_control_flow.py --durations=2
     displayName: 'Test Control Flow'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_models/test_piece_by_piece_big.py --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests/ut_torch_interpreter/test_piece_by_piece_big.py --durations=20
     displayName: 'Big Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -411,7 +408,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_models --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --ignore _unittests/ut_torch_bench --durations=20
+      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_interpreter/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --ignore _unittests/ut_torch_bench --durations=20
     displayName: 'Runs Unit Tests'
   - task: PublishPipelineArtifact@0
     inputs:
@@ -473,7 +470,7 @@ jobs:
       python -m pip freeze
     displayName: 'pip freeze'
   - script: |
-      python -m pytest _unittests --ignore=_unittests/ut_torch_models --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
+      python -m pytest _unittests --ignore=_unittests/ut_torch_interpreter/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
     displayName: 'Runs Unit Tests'
   - script: |
       python -u setup.py bdist_wheel
@@ -522,7 +519,7 @@ jobs:
 #      python -m pip freeze
 #    displayName: 'pip freeze'
 #  - script: |
-#      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_models --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
+#      UNITTEST_ONNXRT=1 UNITTEST_GOING=1 python -m pytest _unittests --ignore=_unittests/ut_torch_interpreter/test_piece_by_piece_big.py --ignore=_unittests/ut_torch_interpreter/test_onnx_export_control_flow_scan.py --durations=20
 #    displayName: 'Runs Unit Tests'
 #  - script: |
 #      python -u setup.py bdist_wheel
