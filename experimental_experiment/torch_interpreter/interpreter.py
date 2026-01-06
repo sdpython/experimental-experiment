@@ -1,8 +1,9 @@
-import os
 import inspect
 import math
 import operator
+import os
 import pprint
+import re
 import types
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 import numpy as np
@@ -183,7 +184,11 @@ class DynamoInterpreter:
         ), "A graph was not processed or it is not the same greaph."
         self.graph_begin_processed = None
 
-    def run_node(self, node: "torch.fx.Node"):  # noqa: F821
+    def run_node(
+        self,
+        node: "torch.fx.Node",  # noqa: F821
+        source_lines: Optional[Dict[str, Tuple[str, Tuple[int, int]]]] = None,
+    ):
         """Runs a node: call the approrpiate method based on the node type."""
         assert (
             hasattr(self, "graph_begin_processed") and self.graph_begin_processed
@@ -234,6 +239,7 @@ class DynamoInterpreter:
         val = ("val", v.dtype, v.shape) if hasattr(v, "dtype") else ""
         self.builder.set_shapes_types(node.name, "run_node", (exa, val))
         self.builder.register_users(node.name, node.users)
+        last_added = len(self.builder.nodes)
 
         if node.op == "placeholder":
             res = self.placeholder(node)
@@ -251,6 +257,16 @@ class DynamoInterpreter:
             res = self.call_method(node)
         else:
             raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
+
+        if (
+            source_lines
+            and node.op in {"call_module", "call_function", "call_method", "get_attr"}
+            and node.meta
+            and "stack_trace" in node.meta
+        ):
+            self._set_submodule_name_in_model_as_metadata(
+                source_lines, node.meta["stack_trace"], last_added
+            )
 
         # Checks consistency of shapes and types
         name = node.name
@@ -285,6 +301,36 @@ class DynamoInterpreter:
                     register_int=False,
                 )
         return res
+
+    def _set_submodule_name_in_model_as_metadata(
+        self,
+        source_lines: Dict[str, Tuple[str, Tuple[int, int]]],
+        stack_trace: str,
+        start_node: int,
+    ):
+        """Adds information about where in the model the created node come from."""
+        reg = re.compile('File "([^"]+?)", line (\\d+)')
+        files = reg.findall(stack_trace)
+        if not files:
+            return
+
+        names = []
+        for filename, line_number in files:
+            filename = filename.replace("\\", "/")
+            if filename not in source_lines:
+                continue
+            line = int(line_number)
+            for name, interval in source_lines[filename]:
+                if line >= interval[0] and line <= interval[1]:
+                    names.append(name)
+                    break
+
+        if names:
+            for node in self.builder.nodes[start_node:]:
+                for i, name in enumerate(names):
+                    p = node.metadata_props.add()
+                    p.key = f"source[{i}]"
+                    p.value = name
 
     def get_attr(self, node: "torch.fx.Node"):  # noqa: F821
         """Retrieves an attribute."""

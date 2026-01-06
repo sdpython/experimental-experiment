@@ -5304,6 +5304,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self,
         graph_module: "torch.fx.GraphModule",  # noqa: F821
         interpreter: "DynamoInterpreter",  # noqa: F821
+        source_lines: Optional[Dict[str, Tuple[str, Tuple[int, int]]]] = None,
     ):
         """
         Environment variable ``ONNX_BUILDER_PROGRESS=1`` can be used to show
@@ -5359,7 +5360,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             self._debug_msg["process.progress"] = (
                 f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
             )
-            interpreter.run_node(node)
+            interpreter.run_node(node, source_lines=source_lines)
         interpreter.end_graph(graph_module.graph)
 
     def _extend_local_function_inputs(self) -> Tuple[Tuple[str, Any], Set[Tuple[str, str]]]:
@@ -8967,6 +8968,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             new_nodes = self._convert_function(
                 node.input, node.output, self.functions[key], attributes=node.attribute
             )
+            self._propaggate_metadata(node, new_nodes)
             if verbose:
                 print(
                     f"[GraphBuilder-{self._hash()}._inline_functions_iterations] "
@@ -8983,7 +8985,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         for pos, node, new_nodes in reversed(replacements):
             self.insert_and_remove_nodes(pos, new_nodes, removed=[pos])
             self._check(stat, step=f"after inlining function {node.op_type!r}")
-
         return n_replacements
 
     def _inline_functions_subgraph(
@@ -9071,6 +9072,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 self._convert_function(node.input, node.output, self.functions[key]),
                 replacements={n: n for n in (set(node.input) | set(node.output))},
             )
+            self._propaggate_metadata(node, functions_nodes)
             new_nodes.extend(functions_nodes)
             if verbose:
                 print(
@@ -9087,6 +9089,23 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 f"{make_idg(g)} and {n_replacements} replacements"
             )
         return n_replacements
+
+    def _propaggate_metadata(self, source_node: NodeProto, new_nodes: List[NodeProto]):
+        """Propagates some of the metadata to the created nodes."""
+        data = []
+        for p in source_node.metadata_props:
+            if p.key not in {
+                "intypes",
+                "outtypes",
+                "inshapes",
+                "outshapes",
+                "invalueshapes",
+                "outvalueshapes",
+            }:
+                data.append(p)
+        if data:
+            for node in new_nodes:
+                node.metadata_props.extend(data)
 
     def _rename_results(
         self, nodes: List[NodeProto], replacements: Dict[str, str]
