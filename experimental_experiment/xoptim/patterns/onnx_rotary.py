@@ -2182,7 +2182,7 @@ class FunctionCosSinCachePattern(PatternOptimization):
 
         range_node = g.node_before(last_node.input[0])
         if range_node is None:
-            if cst_position_ids != (1,):
+            if tuple(cst_position_ids) != (1,):
                 return self.none(node, inspect.currentframe().f_lineno)
         elif (
             g.is_used_more_than_once(range_node.input[0])
