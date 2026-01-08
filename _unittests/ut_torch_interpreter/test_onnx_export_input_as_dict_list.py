@@ -178,7 +178,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_onnx_diagnostic("0.8.8")
-    @requires_torch("2.10")
+    @requires_torch("2.9.99")
     def test_list_input_tracer(self):
         import torch
 
