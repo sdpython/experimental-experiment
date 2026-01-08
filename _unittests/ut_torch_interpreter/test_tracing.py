@@ -9,6 +9,7 @@ from experimental_experiment.ext_test_case import (
     hide_stdout,
     skipif_ci_windows,
     requires_onnx_diagnostic,
+    requires_torch,
 )
 from experimental_experiment.torch_interpreter.tracing import (
     CustomTracer,
@@ -572,6 +573,7 @@ class TestTracing(ExtTestCase):
         self.assertEqualArray(expected, got)
 
     @requires_onnx_diagnostic("0.8.8")
+    @requires_torch("2.10")
     def test_tree_unflatten_with_proxy_none(self):
         import torch
 
@@ -591,6 +593,7 @@ class TestTracing(ExtTestCase):
         self.assertEqualAny(nested, unflatten)
 
     @requires_onnx_diagnostic("0.8.8")
+    @requires_torch("2.10")
     def test_tree_unflatten_with_proxy_custom_proxy(self):
         graph = torch.fx.Graph()
         tr = CustomTracer()
@@ -628,6 +631,7 @@ class TestTracing(ExtTestCase):
                     self.assertEqual(type(a[k]), type(b[k]))
 
     @requires_onnx_diagnostic("0.8.8")
+    @requires_torch("2.10")
     def test_tree_unflatten_with_proxy_dynamic_cache(self):
         graph = torch.fx.Graph()
         tr = CustomTracer()
