@@ -40,7 +40,7 @@ class TestOnnxExportComplex(ExtTestCase):
             x = x + bias
         return x.reshape(tuple(shape)).to(torch.float32)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     @requires_torch("2.7")
     @skipif_ci_windows("broken")
     def test_fft_simple_1(self):
@@ -98,7 +98,7 @@ class TestOnnxExportComplex(ExtTestCase):
                 got = ref.run(None, {"x": x.numpy()})
                 self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     @requires_torch("2.7")
     @skipif_ci_windows("broken")
     def test_fft_simple_2(self):
@@ -158,7 +158,7 @@ class TestOnnxExportComplex(ExtTestCase):
                 got = ref.run(None, {"x": x.numpy()})
                 self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     @requires_torch("2.7")
     @skipif_ci_windows("broken")
     def test_ifft_simple_1(self):
@@ -217,7 +217,7 @@ class TestOnnxExportComplex(ExtTestCase):
                 got = ref.run(None, {"x": x.numpy()})
                 self.assertEqualArray(expected, got[0], atol=1e-5)
 
-    @ignore_warnings(UserWarning)
+    @ignore_warnings((UserWarning, FutureWarning))
     @requires_torch("2.7")
     @skipif_ci_windows("broken")
     def test_ifft_simple_2(self):

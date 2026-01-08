@@ -52,6 +52,7 @@ class TestTorchOnnxExport2025(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("not working")
+    @ignore_warnings(UserWarning)
     @requires_torch("2.9")
     def test_of_scaled_dot_product_attention_23(self):
         import torch

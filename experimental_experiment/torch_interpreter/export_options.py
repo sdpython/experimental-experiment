@@ -640,7 +640,8 @@ class ExportOptions:
                     f"{string_type(concrete_args, limit=20)}"
                 )
 
-            graph = CustomTracer().trace(
+            tracer = CustomTracer()
+            graph = tracer.trace(
                 mod,
                 concrete_args=concrete_args,
                 verbose=verbose,
@@ -656,7 +657,7 @@ class ExportOptions:
                 save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
                 with open(f"{save_ep}.tracing", "w") as f:
                     f.write(str(graph))
-            gm = torch.fx.GraphModule(mod, graph)
+            gm = torch.fx.GraphModule(getattr(tracer, "traced_model", None) or mod, graph)
             return gm
 
         if verbose:

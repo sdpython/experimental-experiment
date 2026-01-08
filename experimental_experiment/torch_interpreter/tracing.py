@@ -385,7 +385,8 @@ class CustomTracer(torch.fx.Tracer):
             return torch.float32
         if a is complex:
             return torch.complex64
-        return super().create_arg(a)
+        res = super().create_arg(a)
+        return res
 
     def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
         """See :meth:`torch.fx.Tracer.getattr`."""
@@ -465,7 +466,7 @@ class CustomTracer(torch.fx.Tracer):
                         t = a0
                         args = [{args1}]
                         cache = make_dynamic_cache(list(zip(args[::2], args[1::2])))
-                        return self._m(t, cache)
+                        return self._traced_m1(t, cache)
                     """
                 )
                 ns = {"torch": torch, "make_dynamic_cache": make_dynamic_cache}
@@ -475,7 +476,7 @@ class CustomTracer(torch.fx.Tracer):
             class FlatArgWrap(torch.nn.Module):
                 def __init__(self, m, spec):
                     super().__init__()
-                    self._m = m
+                    self._traced_m1 = m
                     self._spec = spec
 
                 forward = make_method(len(flat_concrete_args))
@@ -493,7 +494,7 @@ class CustomTracer(torch.fx.Tracer):
                     assert isinstance(res, dict), (
                         "A dictionary is expected but unflattened type is %r" % type(res)
                     )
-                    return self._m(**res)
+                    return self._traced_m2(**res)
                 """
             )
             ns = {"tree_unflatten_with_proxy": tree_unflatten_with_proxy}
@@ -503,7 +504,7 @@ class CustomTracer(torch.fx.Tracer):
         class FlatArgWrap(torch.nn.Module):
             def __init__(self, m, spec):
                 super().__init__()
-                self._m = m
+                self._traced_m2 = m
                 self._spec = spec
 
             forward = make_method(len(flat_concrete_args), len(concrete_args))
@@ -538,7 +539,10 @@ class CustomTracer(torch.fx.Tracer):
             the model needs to be
         :param dynamic_shapes: dynamic shapes
         :param verbose: verbosity
-        :return: A ``Graph`` representing the semantics of the passed-in ``root``.
+        :return: A ``Graph`` representing the semantics of the passed-in ``root``
+
+        If the model had to wrapped before being traced, attribute ``traced_model``
+        is added to the tracer.
         """
         assert concrete_args is None or isinstance(
             concrete_args, dict
@@ -552,6 +556,7 @@ class CustomTracer(torch.fx.Tracer):
             )
             print(f"[CustomTracer.trace] trace with dynamic_shapes={dynamic_shapes}")
 
+        traced_model = None
         if concrete_args:
             from onnx_diagnostic.helpers import string_type
             from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
@@ -579,6 +584,7 @@ class CustomTracer(torch.fx.Tracer):
                 self._traced_concrete_args, _ = torch.utils._pytree.tree_flatten(
                     traced_concrete_args
                 )
+                traced_model = new_model
             else:
                 new_names = None
                 self._traced_concrete_args, _ = make_fake_with_dynamic_dimensions(
@@ -650,6 +656,7 @@ class CustomTracer(torch.fx.Tracer):
         if remove_inplace:
             self.remove_inplace(graph, verbose=verbose)
         graph.lint()
+        self.traced_model = traced_model
         return graph
 
     @classmethod
