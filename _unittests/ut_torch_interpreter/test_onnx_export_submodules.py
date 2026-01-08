@@ -6,6 +6,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     skipif_ci_windows,
     requires_torch,
+    ignore_warnings,
 )
 from experimental_experiment.xbuilder import FunctionOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -18,6 +19,7 @@ class TestOnnxExportSubModules(ExtTestCase):
 
     @skipif_ci_windows("not available on windows")
     @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
     def test_submodule_local_functions_simple(self):
         import torch
 
@@ -60,6 +62,7 @@ class TestOnnxExportSubModules(ExtTestCase):
 
     @skipif_ci_windows("not available on windows")
     @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
     def test_submodule_local_functions_double(self):
         import torch
 
@@ -105,6 +108,7 @@ class TestOnnxExportSubModules(ExtTestCase):
 
     @skipif_ci_windows("not available on windows")
     @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
     def test_submodule_local_functions_two_outputs(self):
         import torch
 
@@ -147,6 +151,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @skipif_ci_windows("bug")
+    @ignore_warnings(FutureWarning)
     def test_dummy_llm_flat_strict_true(self):
         model, inputs = dummy_llm()
         onx = to_onnx(
@@ -170,6 +175,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.check_ort(onx)
 
     @requires_torch("2.11", "flacky")
+    @ignore_warnings(FutureWarning)
     def test_dummy_llm_strict_true(self):
         model, inputs = dummy_llm()
         onx = to_onnx(
@@ -217,6 +223,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.check_ort(onx2)
 
     @requires_torch("2.6", "owning_module is None")
+    @ignore_warnings(FutureWarning)
     def test_dummy_llm_opts(self):
         model, inputs = dummy_llm()
         onx = to_onnx(
@@ -253,6 +260,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqual(init_names2 & init_names, init_names)
 
     @requires_torch("2.6", "owning_module is None")
+    @ignore_warnings(FutureWarning)
     def test_dummy_llm_strict_pieces_true(self):
         for cls_name in ["DecoderLayer", "AttentionBlock", "MultiAttentionBlock"]:
             with self.subTest(cls_name=cls_name):
@@ -281,6 +289,7 @@ class TestOnnxExportSubModules(ExtTestCase):
                 self.check_ort(onx)
 
     @requires_torch("2.6", "owning_module is None")
+    @ignore_warnings(FutureWarning)
     def test_dummy_llm_strict_false(self):
         model, inputs = dummy_llm()
         onx = to_onnx(
@@ -307,6 +316,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertEqual(init_names2 & init_names, init_names)
         self.check_ort(onx2)
 
+    @ignore_warnings(FutureWarning)
     def test_dummy_llm_opts_inline(self):
         model, inputs = dummy_llm()
         onx = to_onnx(

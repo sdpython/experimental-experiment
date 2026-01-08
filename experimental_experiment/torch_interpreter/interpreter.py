@@ -345,6 +345,10 @@ class DynamoInterpreter:
                 if name == node.target:
                     init = p
             if init is None:
+                for name, p in node.graph.owning_module.named_buffers():
+                    if name == node.target:
+                        init = p
+            if init is None:
                 raise AttributeError(
                     f"Unable to find attribute {node.target!r} (node.name={node.name!r}) in "
                     f"type(owning_module)={type(node.graph.owning_module)}, "
@@ -352,6 +356,8 @@ class DynamoInterpreter:
                     f"{sorted([_[0] for _ in node.graph.owning_module.named_modules()])}"
                     f"\nparameters="
                     f"{sorted([_[0] for _ in node.graph.owning_module.named_parameters()])}"
+                    f"\nbuffers="
+                    f"{sorted([_[0] for _ in node.graph.owning_module.named_buffers()])}"
                     f"\nnode.__dict__={node.__dict__}{self.builder.get_debug_msg()}"
                 ) from e
 
@@ -2195,6 +2201,7 @@ class DynamoInterpreter:
                             else None
                         )
                     )
+                    # shape is None if the module is traced.
                     device = (
                         self.builder.get_device(name) if self.builder.has_device(name) else None
                     )
@@ -2219,7 +2226,8 @@ class DynamoInterpreter:
         else:
             # https://docs.pytorch.org/docs/stable/fx.html
             tracer_class = self.torch.fx.Tracer
-            graph = tracer_class().trace(sub_module)
+            tracer = tracer_class()
+            graph = tracer.trace(sub_module)
             # Let's propulate with type
             if new_args:
                 ii = 0
@@ -2234,7 +2242,9 @@ class DynamoInterpreter:
                         else:
                             node.meta["example_value"] = ag
                         ii += 1
-            gm = self.torch.fx.GraphModule(sub_module, graph)
+            gm = self.torch.fx.GraphModule(
+                getattr(tracer, "traced_model", None) or sub_module, graph
+            )
 
         graph_module, builder, interpreter, mask_outputs = _make_builder_interpreter(
             gm,
@@ -2264,6 +2274,7 @@ class DynamoInterpreter:
                 )
             ),
         )
+        builder._parent = self.builder
         assert mask_outputs is None or all(
             mask_outputs
         ), f"Unexpected value for mask_outputs={mask_outputs}{self.get_debug_msg()}"

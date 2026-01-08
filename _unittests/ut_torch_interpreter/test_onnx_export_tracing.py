@@ -3,6 +3,7 @@ from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
     requires_onnx_diagnostic,
+    requires_torch,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -239,6 +240,7 @@ class TestOnnxExportTracing(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_onnx_diagnostic("0.8.8")
+    @requires_torch("2.9.99")
     @ignore_warnings(UserWarning)
     def test_tracing_dynamic_cache2(self):
         import torch

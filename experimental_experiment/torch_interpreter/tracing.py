@@ -385,7 +385,8 @@ class CustomTracer(torch.fx.Tracer):
             return torch.float32
         if a is complex:
             return torch.complex64
-        return super().create_arg(a)
+        res = super().create_arg(a)
+        return res
 
     def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
         """See :meth:`torch.fx.Tracer.getattr`."""
@@ -444,8 +445,32 @@ class CustomTracer(torch.fx.Tracer):
         return root_fn, args
 
     @classmethod
+    def make_args_names(cls, concrete_args, flat_concrete_args):
+        if not isinstance(concrete_args, dict):
+            return [f"a{i}" for i in range(len(flat_concrete_args))]
+        from onnx_diagnostic.helpers import flatten_object
+
+        flat_conc = {k: flatten_object(v, drop_keys=True) for k, v in concrete_args.items()}
+        lengths = [len(v) if isinstance(v, list) else 1 for v in flat_conc.values()]
+        assert sum(lengths) == len(
+            flat_concrete_args
+        ), f"{sum(lengths)} flattened objects != {len(flat_concrete_args)}"
+        names = []
+        for k, v in flat_conc.items():
+            if isinstance(v, list):
+                names.extend([f"{k}_{i}" for i in range(len(v))])
+            else:
+                names.append(k)
+        assert len(names) == len(
+            flat_concrete_args
+        ), f"len(names)={len(names)} != {len(flat_concrete_args)}, names={names}"
+        return names
+
+    @classmethod
     def make_wrapped_model(cls, root, concrete_args):
         flat_concrete_args, spec = torch.utils._pytree.tree_flatten(concrete_args)
+        args_names = cls.make_args_names(concrete_args, flat_concrete_args)
+
         if (
             len(concrete_args) == 2
             and isinstance(concrete_args, dict)
@@ -456,16 +481,15 @@ class CustomTracer(torch.fx.Tracer):
             # this is a not generic case to check one unit test
             from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 
-            def make_method(n):
-                args = ", ".join(f"a{i}" for i in range(n))
-                args1 = ", ".join(f"a{i}" for i in range(1, n))
+            def make_method(args_names):
+                args = ", ".join(args_names)
+                args1 = ", ".join(args_names[1:])
                 src = textwrap.dedent(
                     f"""
                     def f(self, {args}):
-                        t = a0
                         args = [{args1}]
                         cache = make_dynamic_cache(list(zip(args[::2], args[1::2])))
-                        return self._m(t, cache)
+                        return self._traced_m1({args[0]}, cache)
                     """
                 )
                 ns = {"torch": torch, "make_dynamic_cache": make_dynamic_cache}
@@ -475,17 +499,17 @@ class CustomTracer(torch.fx.Tracer):
             class FlatArgWrap(torch.nn.Module):
                 def __init__(self, m, spec):
                     super().__init__()
-                    self._m = m
+                    self._traced_m1 = m
                     self._spec = spec
 
-                forward = make_method(len(flat_concrete_args))
+                forward = make_method(args_names)
 
-            return FlatArgWrap(root, spec), [f"a{i}" for i in range(len(flat_concrete_args))]
+            return FlatArgWrap(root, spec), args_names
 
         # torch.utils._pytree.tree_unflatten does not work on CustomProxy
 
-        def make_method(n, nc):
-            args = ", ".join(f"a{i}" for i in range(n))
+        def make_method(args_names):
+            args = ", ".join(args_names)
             src = textwrap.dedent(
                 f"""
                 def f(self, {args}):
@@ -493,7 +517,7 @@ class CustomTracer(torch.fx.Tracer):
                     assert isinstance(res, dict), (
                         "A dictionary is expected but unflattened type is %r" % type(res)
                     )
-                    return self._m(**res)
+                    return self._traced_m2(**res)
                 """
             )
             ns = {"tree_unflatten_with_proxy": tree_unflatten_with_proxy}
@@ -503,12 +527,12 @@ class CustomTracer(torch.fx.Tracer):
         class FlatArgWrap(torch.nn.Module):
             def __init__(self, m, spec):
                 super().__init__()
-                self._m = m
+                self._traced_m2 = m
                 self._spec = spec
 
-            forward = make_method(len(flat_concrete_args), len(concrete_args))
+            forward = make_method(args_names)
 
-        return FlatArgWrap(root, spec), [f"a{i}" for i in range(len(flat_concrete_args))]
+        return FlatArgWrap(root, spec), args_names
 
     def trace(
         self,
@@ -538,7 +562,10 @@ class CustomTracer(torch.fx.Tracer):
             the model needs to be
         :param dynamic_shapes: dynamic shapes
         :param verbose: verbosity
-        :return: A ``Graph`` representing the semantics of the passed-in ``root``.
+        :return: A ``Graph`` representing the semantics of the passed-in ``root``
+
+        If the model had to wrapped before being traced, attribute ``traced_model``
+        is added to the tracer.
         """
         assert concrete_args is None or isinstance(
             concrete_args, dict
@@ -552,6 +579,7 @@ class CustomTracer(torch.fx.Tracer):
             )
             print(f"[CustomTracer.trace] trace with dynamic_shapes={dynamic_shapes}")
 
+        traced_model = None
         if concrete_args:
             from onnx_diagnostic.helpers import string_type
             from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
@@ -579,6 +607,7 @@ class CustomTracer(torch.fx.Tracer):
                 self._traced_concrete_args, _ = torch.utils._pytree.tree_flatten(
                     traced_concrete_args
                 )
+                traced_model = new_model
             else:
                 new_names = None
                 self._traced_concrete_args, _ = make_fake_with_dynamic_dimensions(
@@ -650,6 +679,7 @@ class CustomTracer(torch.fx.Tracer):
         if remove_inplace:
             self.remove_inplace(graph, verbose=verbose)
         graph.lint()
+        self.traced_model = traced_model
         return graph
 
     @classmethod

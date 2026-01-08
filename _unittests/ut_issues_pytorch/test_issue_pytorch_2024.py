@@ -432,9 +432,11 @@ class TestIssuesPytorch2024(ExtTestCase):
         expected_output = model(example_input)
         self.assertEqualArray(expected_output, output[0], atol=1e-3)
 
+    @ignore_warnings(UserWarning)
     def test_in_projection_packed_script(self):
         self._in_projection_packed("script")
 
+    @ignore_warnings(UserWarning)
     def test_in_projection_packed_custom(self):
         self._in_projection_packed("custom")
 

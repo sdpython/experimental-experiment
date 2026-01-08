@@ -1172,6 +1172,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @ignore_warnings(FutureWarning)
     def test_aten_index_put_inplace_column_0(self):
         import torch
 
@@ -2291,6 +2292,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-2)
 
+    @ignore_warnings(RuntimeWarning)
     def test_attention_scale_dot_product_attention(self):
         import torch
 
@@ -2928,6 +2930,7 @@ class TestOnnxExportAten(ExtTestCase):
         got = sess.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    @ignore_warnings(FutureWarning)
     def test_aten_inplace_add(self):
         import torch
 

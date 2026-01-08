@@ -10,7 +10,6 @@ from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 
 
 class TestOnnxExportInputDictList(ExtTestCase):
-
     @skipif_ci_windows("not yet supported on Windows")
     @requires_torch("2.4")
     def test_input_dict(self):
@@ -179,16 +178,17 @@ class TestOnnxExportInputDictList(ExtTestCase):
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
     @requires_onnx_diagnostic("0.8.8")
+    @requires_torch("2.9.99")
     def test_list_input_tracer(self):
         import torch
 
         class RawTest(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.p = torch.nn.Parameter(torch.tensor([2], dtype=torch.float32))
+                self.ppp = torch.nn.Parameter(torch.tensor([2], dtype=torch.float32))
 
-            def forward(self, x, list_yz):
-                return x + list_yz[0] + list_yz[1] + self.p
+            def forward(selff, x, list_yz):
+                return x + list_yz[0] + list_yz[1] + selff.ppp
 
         x = torch.rand(4, 4)
         list_yz = [torch.rand(4, 1), torch.rand(4, 1)]
@@ -213,13 +213,9 @@ class TestOnnxExportInputDictList(ExtTestCase):
             for i in onx.graph.input
         ]
         self.assertEqual(shapes[0], ("batch", 4))
-        feeds = {"x": x.numpy(), "list_yz": [_.numpy() for _ in list_yz]}
-
         expected = model(x, list_yz)
-
-        from onnxruntime import InferenceSession
-
-        ref = InferenceSession(onx.SerializeToString(), providers=["CPUExecutionProvider"])
+        ref = self.check_ort(onx)
+        feeds = dict(zip([i.name for i in ref.get_inputs()], [_.numpy() for _ in [x, *list_yz]]))
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 

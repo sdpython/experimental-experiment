@@ -16,6 +16,7 @@ class TestTorchExportExport(ExtTestCase):
 
     @skipif_ci_windows("not available on Windows")
     @skipif_ci_apple("not able to fix it")
+    @ignore_warnings(FutureWarning)
     @requires_torch("2.5")
     def test_scaled_dot_product_attention_export_issue(self):
 
@@ -62,7 +63,8 @@ class TestTorchExportExport(ExtTestCase):
             m: torch.nn.Module, tracer_class: type = torch.fx.Tracer
         ) -> torch.nn.Module:
             modified = False
-            graph = tracer_class().trace(m)
+            tracer = tracer_class()
+            graph = tracer.trace(m)
             for node in graph.nodes:
                 if (node.op != "call_method" or node.target != "transpose") and (
                     node.op != "call_function"
@@ -95,7 +97,7 @@ class TestTorchExportExport(ExtTestCase):
                 return None
 
             graph.lint()
-            return torch.fx.GraphModule(m, graph)
+            return torch.fx.GraphModule(getattr(tracer, "traced_model", None) or m, graph)
 
         rewritten_model = transform(model)
         self.assertNotEmpty(rewritten_model)
