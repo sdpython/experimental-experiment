@@ -9459,7 +9459,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                         f"self.input_args={self.input_args}, "
                         f"as_function={self.as_function}{self.get_debug_msg()}"
                     )
-                assert example_shape is not None, (
+                assert self._parent is not None or example_shape is not None, (
                     f"example_shape is None, example_value is None, the input "
                     f"VirtualTensor has no shape as well, "
                     f"type input_arg={type(self.input_args[input_index])}, "
@@ -9479,7 +9479,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"self.input_args={self.input_args}, "
                     f"as_function={self.as_function}{self.get_debug_msg()}"
                 )
-        assert example_value is None and example_shape is not None, (
+        assert (example_value is None and example_shape is not None) or (
+            self._parent is not None and example_shape is None
+        ), (
             f"At this stage, a tensor is expected but example_value="
             f"{string_type(example_value)}, example_shape={example_shape}, "
             f"dynamic_shapes={dynamic_shapes}, input_index={input_index}, "
@@ -9567,9 +9569,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     def make_new_dynamic_shape(
         self, rank: int, prefix: str = "d"
     ) -> Tuple["torch.SymInt", ...]:  # noqa: F821
-        """
-        Creates a dynamic shape of a known rank with new dynamic dimension.
-        """
+        """Creates a dynamic shape of a known rank with new dynamic dimension."""
 
         def _new_name(d):
             if d not in self.dynamic_objects:

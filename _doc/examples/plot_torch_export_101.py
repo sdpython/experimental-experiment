@@ -158,29 +158,6 @@ exported_program = torch.export.export(
 )
 print(exported_program.graph)
 
-# %%
-# Export for training
-# +++++++++++++++++++
-#
-# In that case, the weights are exported as inputs.
-
-
-class Neuron(torch.nn.Module):
-    def __init__(self, n_dims: int = 5, n_targets: int = 3):
-        super().__init__()
-        self.linear = torch.nn.Linear(n_dims, n_targets)
-
-    def forward(self, x):
-        z = self.linear(x)
-        return torch.sigmoid(z)
-
-
-print("-- training")
-mod = Neuron()
-mod.train()
-exported_program = torch.export.export_for_training(mod, (torch.randn(1, 5),))
-print(exported_program.graph)
-
 
 # %%
 # Preserve Modules

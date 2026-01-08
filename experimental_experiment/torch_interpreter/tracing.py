@@ -445,8 +445,31 @@ class CustomTracer(torch.fx.Tracer):
         return root_fn, args
 
     @classmethod
+    def make_args_names(cls, concrete_args, flat_concrete_args):
+        if not isinstance(concrete_args, dict):
+            return [f"a{i}" for i in range(len(flat_concrete_args))]
+        from onnx_diagnostic.helpers import flatten_object
+
+        flat_conc = {k: flatten_object(v, drop_keys=True) for k, v in concrete_args.items()}
+        lengths = [len(v) if isinstance(v, list) else 1 for v in flat_conc.values()]
+        assert sum(lengths) == len(
+            flat_concrete_args
+        ), f"{sum(lengths)} flattened objects != {len(flat_concrete_args)}"
+        names = []
+        for k, v in flat_conc.items():
+            if isinstance(v, list):
+                names.extend([f"{k}_{i}" for i in range(len(v))])
+            else:
+                names.append(k)
+        assert len(names) == len(
+            flat_concrete_args
+        ), f"len(names)={len(names)} != {len(flat_concrete_args)}, names={names}"
+        return names
+
+    @classmethod
     def make_wrapped_model(cls, root, concrete_args):
         flat_concrete_args, spec = torch.utils._pytree.tree_flatten(concrete_args)
+
         if (
             len(concrete_args) == 2
             and isinstance(concrete_args, dict)
@@ -457,9 +480,10 @@ class CustomTracer(torch.fx.Tracer):
             # this is a not generic case to check one unit test
             from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 
-            def make_method(n):
-                args = ", ".join(f"a{i}" for i in range(n))
-                args1 = ", ".join(f"a{i}" for i in range(1, n))
+            def make_method(concrete_args, flat_concrete_args):
+                args_name = cls.make_args_names(concrete_args, flat_concrete_args)
+                args = ", ".join(args_name)
+                args1 = ", ".join(args_name[1:])
                 src = textwrap.dedent(
                     f"""
                     def f(self, {args}):
@@ -479,14 +503,15 @@ class CustomTracer(torch.fx.Tracer):
                     self._traced_m1 = m
                     self._spec = spec
 
-                forward = make_method(len(flat_concrete_args))
+                forward = make_method(concrete_args, flat_concrete_args)
 
             return FlatArgWrap(root, spec), [f"a{i}" for i in range(len(flat_concrete_args))]
 
         # torch.utils._pytree.tree_unflatten does not work on CustomProxy
 
         def make_method(n, nc):
-            args = ", ".join(f"a{i}" for i in range(n))
+            args_name = cls.make_args_names(concrete_args, flat_concrete_args)
+            args = ", ".join(args_name)
             src = textwrap.dedent(
                 f"""
                 def f(self, {args}):
@@ -507,7 +532,7 @@ class CustomTracer(torch.fx.Tracer):
                 self._traced_m2 = m
                 self._spec = spec
 
-            forward = make_method(len(flat_concrete_args), len(concrete_args))
+            forward = make_method(concrete_args, flat_concrete_args)
 
         return FlatArgWrap(root, spec), [f"a{i}" for i in range(len(flat_concrete_args))]
 

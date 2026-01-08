@@ -2201,6 +2201,7 @@ class DynamoInterpreter:
                             else None
                         )
                     )
+                    # shape is None if the module is traced.
                     device = (
                         self.builder.get_device(name) if self.builder.has_device(name) else None
                     )
@@ -2273,6 +2274,7 @@ class DynamoInterpreter:
                 )
             ),
         )
+        builder._parent = self.builder
         assert mask_outputs is None or all(
             mask_outputs
         ), f"Unexpected value for mask_outputs={mask_outputs}{self.get_debug_msg()}"
