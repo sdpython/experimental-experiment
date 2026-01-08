@@ -451,16 +451,18 @@ class CustomTracer(torch.fx.Tracer):
         from onnx_diagnostic.helpers import flatten_object
 
         flat_conc = {k: flatten_object(v, drop_keys=True) for k, v in concrete_args.items()}
-        lengths = [len(v) if isinstance(v, list) else 1 for v in flat_conc.values()]
-        assert sum(lengths) == len(
-            flat_concrete_args
-        ), f"{sum(lengths)} flattened objects != {len(flat_concrete_args)}"
+        lengths = [1 if isinstance(v, torch.Tensor) else len(v) for v in flat_conc.values()]
+        assert sum(lengths) == len(flat_concrete_args), (
+            f"{sum(lengths)} flattened objects != {len(flat_concrete_args)}, lengths={lengths}, "
+            f"concrete_args={string_type(concrete_args, with_shape=True)}, "
+            f"flat_concrete_args={string_type(flat_concrete_args, with_shape=True)}, "
+        )
         names = []
         for k, v in flat_conc.items():
-            if isinstance(v, list):
-                names.extend([f"{k}_{i}" for i in range(len(v))])
-            else:
+            if isinstance(v, torch.Tensor):
                 names.append(k)
+            else:
+                names.extend([f"{k}_{i}" for i in range(len(v))])
         assert len(names) == len(
             flat_concrete_args
         ), f"len(names)={len(names)} != {len(flat_concrete_args)}, names={names}"

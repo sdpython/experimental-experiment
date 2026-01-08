@@ -904,7 +904,10 @@ def build_source_lines(
                         f"m={m}, already captured={len(sources)}"
                     ) from e
                 source = source.replace("\\", "/")
-                lines, lineno = inspect.getsourcelines(m)
+                try:
+                    lines, lineno = inspect.getsourcelines(m)
+                except OSError:
+                    continue
                 interval = lineno, lineno + len(lines)
                 if source not in sources:
                     sources[source] = []

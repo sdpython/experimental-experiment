@@ -117,7 +117,7 @@ class ExportOptions:
         save_ep: Optional[Union[Tuple[str, int], str]] = None,
         validate_ep: Union[float, bool] = False,
         backed_size_oblivious: Union[bool, str] = "auto",
-        prefer_deferred_runtime_asserts_over_guards: bool = False,
+        prefer_deferred_runtime_asserts_over_guards: bool = True,
         fake: bool = False,
     ):
         self.strict = strict
