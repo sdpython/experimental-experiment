@@ -469,6 +469,7 @@ class CustomTracer(torch.fx.Tracer):
     @classmethod
     def make_wrapped_model(cls, root, concrete_args):
         flat_concrete_args, spec = torch.utils._pytree.tree_flatten(concrete_args)
+        args_names = cls.make_args_names(concrete_args, flat_concrete_args)
 
         if (
             len(concrete_args) == 2
@@ -480,17 +481,15 @@ class CustomTracer(torch.fx.Tracer):
             # this is a not generic case to check one unit test
             from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 
-            def make_method(concrete_args, flat_concrete_args):
-                args_name = cls.make_args_names(concrete_args, flat_concrete_args)
-                args = ", ".join(args_name)
-                args1 = ", ".join(args_name[1:])
+            def make_method(args_names):
+                args = ", ".join(args_names)
+                args1 = ", ".join(args_names[1:])
                 src = textwrap.dedent(
                     f"""
                     def f(self, {args}):
-                        t = a0
                         args = [{args1}]
                         cache = make_dynamic_cache(list(zip(args[::2], args[1::2])))
-                        return self._traced_m1(t, cache)
+                        return self._traced_m1({args[0]}, cache)
                     """
                 )
                 ns = {"torch": torch, "make_dynamic_cache": make_dynamic_cache}
@@ -503,15 +502,14 @@ class CustomTracer(torch.fx.Tracer):
                     self._traced_m1 = m
                     self._spec = spec
 
-                forward = make_method(concrete_args, flat_concrete_args)
+                forward = make_method(args_names)
 
-            return FlatArgWrap(root, spec), [f"a{i}" for i in range(len(flat_concrete_args))]
+            return FlatArgWrap(root, spec), args_names
 
         # torch.utils._pytree.tree_unflatten does not work on CustomProxy
 
-        def make_method(n, nc):
-            args_name = cls.make_args_names(concrete_args, flat_concrete_args)
-            args = ", ".join(args_name)
+        def make_method(args_names):
+            args = ", ".join(args_names)
             src = textwrap.dedent(
                 f"""
                 def f(self, {args}):
@@ -532,9 +530,9 @@ class CustomTracer(torch.fx.Tracer):
                 self._traced_m2 = m
                 self._spec = spec
 
-            forward = make_method(concrete_args, flat_concrete_args)
+            forward = make_method(args_names)
 
-        return FlatArgWrap(root, spec), [f"a{i}" for i in range(len(flat_concrete_args))]
+        return FlatArgWrap(root, spec), args_names
 
     def trace(
         self,
