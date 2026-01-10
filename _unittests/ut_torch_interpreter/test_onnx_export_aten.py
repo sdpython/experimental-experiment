@@ -3228,7 +3228,6 @@ class TestOnnxExportAten(ExtTestCase):
         inputs[1][::2] = True
         expected = model(*inputs)
         onx = to_onnx(model, inputs)
-        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
 
     def test_aten_movedim1(self):
@@ -3242,7 +3241,6 @@ class TestOnnxExportAten(ExtTestCase):
         inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
         expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs)
-        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
 
     def test_aten_movedim10(self):
@@ -3256,7 +3254,6 @@ class TestOnnxExportAten(ExtTestCase):
         inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
         expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs)
-        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
 
     def test_aten_movedim11(self):
@@ -3270,7 +3267,6 @@ class TestOnnxExportAten(ExtTestCase):
         inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
         expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs)
-        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
 
     def test_aten_movedim2(self):
@@ -3284,7 +3280,24 @@ class TestOnnxExportAten(ExtTestCase):
         inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
         expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs)
-        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
+
+    @unittest.skip("unable to run_decompositions")
+    def test_aten_add_batch_dim11(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x, y):
+                f = lambda x, y: x * y + 1  # noqa: E731
+                return torch.vmap(f)(x, y)
+
+        inputs = (torch.tensor([1.0, 2.0, 3.0]), torch.tensor([0.1, 0.2, 0.3]))
+        DYN = torch.export.Dim.DYNAMIC
+        dynamic = {"x": {0: DYN}, "y": {0: DYN}}
+
+        model = Model()
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
 
 
