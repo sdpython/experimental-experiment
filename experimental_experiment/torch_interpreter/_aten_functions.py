@@ -7308,6 +7308,49 @@ def aten_fmod_Scalar(
     return res
 
 
+def aten_movedim_intlist(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    source: Tuple[int, ...],
+    destination: Tuple[int, ...],
+    name="movedim",
+) -> T:
+    "movedim_intlist"
+    assert g.has_rank(x), f"Missing rank for x={x!r}{g.get_debug_msg()}"
+    perm = list(range(g.get_rank(x)))
+    for s, d in zip(reversed(source), reversed(destination)):
+        if d == s:
+            continue
+        if d > s:
+            perm.insert(d + 1, perm[s])
+            del perm[s]
+        else:
+            v = perm[s]
+            perm.insert(d, v)
+            del perm[s + 1]
+    res = g.op.Transpose(x, perm=perm, outputs=outputs, name=name)
+    if not sts:
+        if g.has_type(x):
+            g.set_type(res, g.get_type(x))
+        g.set_rank(res, g.get_rank(x))
+    return res
+
+
+def aten_movedim_int(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    source: int,
+    destination: int,
+    name="movedim_int",
+) -> T:
+    "movedim_int"
+    return aten_movedim_intlist(g, sts, outputs, x, (source,), (destination,), name=name)
+
+
 def aten_mse_loss(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
