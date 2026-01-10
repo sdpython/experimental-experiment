@@ -21,6 +21,7 @@ from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.helpers import torch_dtype_to_onnx_dtype, string_type
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from experimental_experiment.torch_test_helper import to_numpy
 
 
@@ -3226,6 +3227,62 @@ class TestOnnxExportAten(ExtTestCase):
         )
         inputs[1][::2] = True
         expected = model(*inputs)
+        onx = to_onnx(model, inputs)
+        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
+
+    def test_aten_movedim1(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x.movedim(0, 2)
+
+        model = Model()
+        inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs)
+        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
+
+    def test_aten_movedim10(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x.movedim(2, 2)
+
+        model = Model()
+        inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs)
+        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
+
+    def test_aten_movedim11(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x.movedim(2, 0)
+
+        model = Model()
+        inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs)
+        self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
+
+    def test_aten_movedim2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x.movedim((0, 1), (2, 3))
+
+        model = Model()
+        inputs = (torch.rand((1, 2, 3, 4), dtype=torch.float32),)
+        expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs)
         self.dump_onnx("test_aten_index_put_where_not_the_same_shape.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
