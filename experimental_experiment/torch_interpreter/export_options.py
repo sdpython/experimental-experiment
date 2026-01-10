@@ -304,7 +304,11 @@ class ExportOptions:
             }:
                 ret = len(node.users) == 0
                 continue
-            if target_name in {"aten::lstm.input"}:
+            if target_name in {
+                "aten::lstm.input",
+                "torch._functorch.predispatch._add_batch_dim",
+                "torch._functorch.predispatch._remove_batch_dim",
+            }:
                 return True, True
         return ret, False
 
