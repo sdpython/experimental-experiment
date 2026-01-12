@@ -249,7 +249,7 @@ class ExportOptions:
                 print("-- EXPORTED PROGRAM AFTER DECOMPOSITION -- ")
                 print(dec)
                 print("-- DONE -- ")
-            return dec
+            exported_program = dec
 
         if self.remove_inplace:
             if verbose:
@@ -263,7 +263,11 @@ class ExportOptions:
                     f"[ExportOptions.export] done remove inplace in "
                     f"{time.perf_counter() - begin}, modified={modified}"
                 )
-            need_dec, need_dec_all = self.need_run_decompositions(exported_program)
+            need_dec, need_dec_all = (
+                self.need_run_decompositions(exported_program)
+                if not self.decomposition_table
+                else (False, False)
+            )
             if need_dec or need_dec_all or modified <= -1:
                 # We need to run decomposition to fully remove all inplace operations.
                 if verbose:
