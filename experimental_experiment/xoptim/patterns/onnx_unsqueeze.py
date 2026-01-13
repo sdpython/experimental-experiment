@@ -379,9 +379,15 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
         if len(axis1) == 1 and len(axis2) == 1:
             # No need to be clever.
+            if axis2[0] == axis1[0]:
+                new_axis_value = [*axis2, *(axis1 + 1)]
+            elif axis1[0] < axis2[0]:
+                new_axis_value = [*axis1, *axis2]
+            else:
+                new_axis_value = [*axis2, *(axis1 + 1)]
             new_axis = g.make_initializer(
                 "",
-                np.array(sorted([*axis1, *axis2]), dtype=np.int64),
+                np.array(new_axis_value, dtype=np.int64),
                 source="UnsqueezeUnsqueezePattern.apply.new_axis.0",
             )
             new_node = g.make_node(
