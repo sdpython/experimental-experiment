@@ -50,7 +50,7 @@ class ExportOptions:
         to allow dynamic dimension equal to 1, this class calls
         :func:`experimental_experiment.export_helpers.torch_export`
     :param prefer_deferred_runtime_asserts_over_guards:
-        see func:`torch.export.export`
+        see :func:`torch.export.export`
     :param fake: use fake tensors as inputs
 
     The fallback strategy tries the following in order:

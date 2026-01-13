@@ -216,6 +216,44 @@ class TestGraphPatternOptimization(ExtTestCase):
                     got = ref.run(None, feeds)
                     self.assertEqualArray(expected[0], got[0])
 
+    def test_unsqueeze_unsqueeze_00_00(self):
+        for i, j, k, m in itertools.product([0, 1, 2], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]):
+            if i >= j or k >= m:
+                continue
+            with self.subTest(i=i, j=j, k=k, m=m):
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("Unsqueeze", ["X", "ii"], ["x1"]),
+                            oh.make_node("Unsqueeze", ["x1", "jj"], ["Y"]),
+                        ],
+                        "dummy",
+                        [_mkv_("X", TFLOAT, ["a", "b"])],
+                        [_mkv_("Y", TFLOAT, [1, 1, "a", "b"])],
+                        [
+                            onh.from_array(np.array([i, j], dtype=np.int64), "ii"),
+                            onh.from_array(np.array([k, m], dtype=np.int64), "jj"),
+                        ],
+                    ),
+                    opset_imports=[oh.make_opsetid("", 18)],
+                    ir_version=10,
+                )
+                feeds = dict(X=self._range(3, 4))
+
+                gr = GraphBuilder(
+                    model,
+                    optimization_options=OptimizationOptions(
+                        patterns=["UnsqueezeUnsqueeze"], verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx()
+                self.assertEqual(len(opt_onx.graph.node), 1)
+                ref = ExtendedReferenceEvaluator(model, verbose=0)
+                expected = ref.run(None, feeds)
+                ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
+                got = ref.run(None, feeds)
+                self.assertEqualArray(expected[0], got[0])
+
     def test_cast(self):
         origin = self._get_model("dort-c-custom__0.onnx")
         before = [node for node in origin.graph.node if node.op_type == "Cast"]
