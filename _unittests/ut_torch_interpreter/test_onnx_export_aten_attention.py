@@ -193,6 +193,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                         "aten_name",
                         "args",
                         "kwargs",
+                        "module[0]",
                         "intypes",
                         "outtypes",
                         "inshapes",

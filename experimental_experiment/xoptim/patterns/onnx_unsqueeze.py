@@ -340,8 +340,6 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     ) -> Optional[MatchResult]:
         if node.op_type != "Unsqueeze" or node.domain != "":
             return self.none()
-        if not g.has_rank(node.input[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
         next_nodes = [n for n in g.next_nodes(node.output[0]) if n.op_type == "Unsqueeze"]
         if not next_nodes:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -355,6 +353,10 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         if not g.has_rank(node.input[1]) or not g.has_rank(next_node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(node.input[1]) != 1 or g.get_rank(next_node.input[1]) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        axis1 = g.get_constant_or_attribute(node, "axis", 1)
+        axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
+        if (len(axis1) > 1 or len(axis2) > 1) and not g.has_rank(node.input[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node, next_node], self.apply, insert_at=node)
 
@@ -375,6 +377,24 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
     ) -> List[NodeProto]:
         axis1 = g.get_constant_or_attribute(node, "axis", 1)
         axis2 = g.get_constant_or_attribute(next_node, "axis", 1)
+        if len(axis1) == 1 and len(axis2) == 1:
+            # No need to be clever.
+            new_axis = g.make_initializer(
+                "",
+                np.array(sorted([*axis1, *axis2]), dtype=np.int64),
+                source="UnsqueezeUnsqueezePattern.apply.new_axis.0",
+            )
+            new_node = g.make_node(
+                "Unsqueeze",
+                [node.input[0], new_axis],
+                next_node.output,
+                name=f"{self.__class__.__name__}--{node.name}",
+                doc_string=next_node.doc_string,
+            )
+            if g.is_used_more_than_once(node.output[0]):
+                return [node, new_node]
+            return [new_node]
+
         rk = g.get_rank(node.input[0])
         existing = [False for i in range(rk)]
         existing = self._unsqueeze(existing, axis1)
@@ -388,7 +408,7 @@ class UnsqueezeUnsqueezePattern(PatternOptimization):
         new_axis = g.make_initializer(
             "",
             np.array(new_axes, dtype=np.int64),
-            source="UnsqueezeUnsqueezePattern.apply.new_axis",
+            source="UnsqueezeUnsqueezePattern.apply.new_axis.1",
         )
         new_node = g.make_node(
             "Unsqueeze",
