@@ -6482,7 +6482,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 nr, na = self.remove_identity_nodes()
         elif pass_name == "remove_unused":
             if self.optimization_options.remove_unused:
-                na = self.remove_unused()
+                nr = self.remove_unused()
         elif pass_name == "constant_folding":
             if self.optimization_options.constant_folding:
                 stats_cf = self.constant_folding(self.optimization_options.constant_folding)
