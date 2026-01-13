@@ -165,7 +165,9 @@ class _InferenceRuntime:
             if self.has_type(node.input[0]):
                 self.set_type(node.output[0], self.get_type(node.input[0]))
             if self.has_device(node.input[0]):
-                self.set_device(node.output[0], self.get_device(node.input[0]))
+                self.set_device(
+                    node.output[0], self.get_device(node.input[0]), keep_this_device=True
+                )
             if (
                 self.has_shape(node.input[0])
                 and is_static_shape(self.get_shape(node.input[0]))

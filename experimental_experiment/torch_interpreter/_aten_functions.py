@@ -5985,8 +5985,6 @@ def aten_instance_norm(
     name: str = "instance_norm",
 ) -> T:
     """instance_norm"""
-    assert cudnn_enabled, "Not implemented when cudnn_enabled is True"
-
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
 
