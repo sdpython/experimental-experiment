@@ -259,14 +259,18 @@ class DynamoInterpreter:
             raise ValueError(f"Unable to process node kind {node.op!r} ({node}).")
 
         if (
-            source_lines
-            and node.op in {"call_module", "call_function", "call_method", "get_attr"}
+            node.op in {"call_module", "call_function", "call_method", "get_attr"}
             and node.meta
-            and "stack_trace" in node.meta
+            and ("stack_trace" in node.meta or "nn_module_stack" in node.meta)
         ):
             self._set_submodule_name_in_model_as_metadata(
-                source_lines, node.meta["stack_trace"], last_added
+                source_lines,
+                node.meta.get("stack_trace", None),
+                last_added,
+                nn_module_stack=node.meta.get("nn_module_stack", None),
             )
+        else:
+            print("****", node.op, getattr(node, "target", None))
 
         # Checks consistency of shapes and types
         name = node.name
@@ -304,11 +308,44 @@ class DynamoInterpreter:
 
     def _set_submodule_name_in_model_as_metadata(
         self,
-        source_lines: Dict[str, Tuple[str, Tuple[int, int]]],
-        stack_trace: str,
+        source_lines: Optional[Dict[str, Tuple[str, Tuple[int, int]]]],
+        stack_trace: Optional[str],
         start_node: int,
+        nn_module_stack: Optional[Any],
     ):
         """Adds information about where in the model the created node come from."""
+        attr_names = []
+        module_names = []
+        if nn_module_stack:
+            for name, nn_module in nn_module_stack.values():
+                nn_module_name = None
+                if isinstance(nn_module, str):
+                    nn_module_name = nn_module
+                else:
+                    nn_module_name = nn_module.__module__
+                    if nn_module_name is None:
+                        nn_module_name = nn_module.__name__
+                    else:
+                        nn_module_name += f".{nn_module.__name__}"
+                if nn_module_name not in module_names:
+                    module_names.append(nn_module_name)
+                if name:
+                    attr_names.append(name)
+
+        if module_names:
+            for node in self.builder.nodes[start_node:]:
+                if attr_names:
+                    p = node.metadata_props.add()
+                    p.key = "scope"
+                    p.value = ".".join(attr_names)
+                for i, name in enumerate(module_names):
+                    p = node.metadata_props.add()
+                    p.key = f"module[{i}]"
+                    p.value = name
+
+        if not stack_trace or not source_lines:
+            return
+
         reg = re.compile('File "([^"]+?)", line (\\d+)')
         files = reg.findall(stack_trace)
         if not files:
