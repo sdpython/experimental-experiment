@@ -269,8 +269,6 @@ class DynamoInterpreter:
                 last_added,
                 nn_module_stack=node.meta.get("nn_module_stack", None),
             )
-        else:
-            print("****", node.op, getattr(node, "target", None))
 
         # Checks consistency of shapes and types
         name = node.name
