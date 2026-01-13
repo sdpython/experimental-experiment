@@ -2121,9 +2121,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if not isinstance(device, int):
             device = -1 if device.type == "cpu" else device.index
         if name in self._known_devices and not keep_this_device:
-            assert self._known_devices[name] == device, (
+            assert (keep_this_device and self.is_constant(name)) or self._known_devices[
+                name
+            ] == device, (
                 f"device mismatch for name={name!r}, got {self._known_devices[name]}, "
-                f"new device is {device}{self.get_debug_msg()}"
+                f"new device is {device}, is_constant={self.is_constant(name)}"
+                f"{self.get_debug_msg()}"
             )
             return
         self._known_devices[name] = device
@@ -7552,7 +7555,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             for i, n in enumerate(new_nodes):
                 assert isinstance(n, NodeProto), f"Unexpected type {type(n)} for a node"
                 self.nodes.insert(insert_at + i, n)
-                self._make_node_set_type_shape_constant(n, True)
+                self._make_node_set_type_shape_constant(n, None)
                 self._make_node_set_type_shape(n)
                 self.simple_update_value_shape_with_node(n)
                 assert (
