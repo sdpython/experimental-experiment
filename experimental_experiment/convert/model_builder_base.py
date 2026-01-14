@@ -19,9 +19,24 @@ class ModelBuilderBase:
         output_types: Dict[str, int],
         output_shapes: Dict[str, Tuple[Union[str, int], ...]],
         num_attn_heads: int,
+        num_kv_heads: int,
+        head_size: int,
+        intermediate_size: int,
         exclude_embeds: bool = True,
+        exclude_lm_head: bool = True,
+        op_attention_type: str = "MultiHeadAttention",
         ep: Optional[str] = None,
         sparse_block_size: int = 0,
+        rms_norm_eps: float = 1e-6,
+        partial_rotary_factor: float = 1.0,
+        rope_theta: float = 10000.0,
+        attn_softcap: float = 0.0,
+        position_scale: int = 1,
+        rotemb_dim: int = 0,
+        window_size: int = -1,
+        context_length: Optional[int] = None,
+        original_context_length: Optional[int] = None,
+        activation: Optional[callable] = None,
     ):
         self.input_names = input_names
         self.input_types = input_types
@@ -30,11 +45,26 @@ class ModelBuilderBase:
         self.output_types = output_types
         self.output_shapes = output_shapes
         self.num_attn_heads = num_attn_heads
+        self.head_size = head_size
+        self.hidden_size = num_attn_heads * head_size
+        self.intermediate_size = intermediate_size
         self.exclude_embeds = exclude_embeds
+        self.exclude_lm_head = exclude_lm_head
         self.ep = ep
+        self.context_length = context_length
+        self.original_context_length = original_context_length
+        self.num_kv_heads = num_kv_heads
+        self.window_size = window_size
+
+        activations = {"SiLUActivation": "silu"}
+        assert (
+            activation.__class__.__name__ in activations
+        ), f"Unknown {activation.__class__.__name__!r}, cannot find it in {activations}"
+        self.activation = activations[activation.__class__.__name__]
 
         self.extra_options = {}
         self.io_dtype = self.output_types[self.output_names[0]]
+        self.onnx_dtype = self.io_dtype
 
         self.graph = ir.Graph(
             inputs=(),
@@ -51,7 +81,7 @@ class ModelBuilderBase:
             # Use SimplifiedLayerNorm/SkipSimplifiedLayerNorm vs. LayerNorm/SkipLayerNorm
             "simple": True,
             # 1st LayerNorm = LayerNorm, then SkipLayerNorm for all subsequent LayerNorms
-            "first_layernorm": True,
+            "first_layernorm": False,
             # Last LayerNorm = SkipLayerNorm with only output 0 (no output 3)
             "last_layernorm": False,
             "root_input": "",  # Root input from parent node for LayerNorm and SkipLayerNorm
@@ -59,7 +89,7 @@ class ModelBuilderBase:
             "output_0": "",  # Output 0 for LayerNorm and SkipLayerNorm
             "output_3": "",  # Output 3 for SkipLayerNorm
             "add_offset": 0,  # Offset value for LayerNorm weight
-            # "epsilon": epsilon,  # Epsilon value to avoid `sqrt(0)` in LayerNorm
+            "epsilon": rms_norm_eps,  # Epsilon value to avoid `sqrt(0)` in LayerNorm
             "cast": {  # Casting LayerNorm-specific variables
                 "use_fp32": False,  # Use float32 precision to compute LayerNorm
                 "root_input": False,  # Cast root_input
@@ -75,23 +105,23 @@ class ModelBuilderBase:
             # Auto-save cos/sin caches for rotary embeddings after creation
             "save_caches": True,
             # Cache length to use when creating cos/sin caches for rotary embeddings
-            # "cache_length": self.context_length,
+            "cache_length": self.context_length,
             # Base value if calculating cos/sin caches from scratch
-            # "theta": rope_theta,
+            "theta": rope_theta,
             # Factor for partial rotary embeddings
-            # "partial_rotary_factor": partial_rotary_factor,
+            "partial_rotary_factor": partial_rotary_factor,
             # Interleave the rotary embeddings
             # (e.g. [0, 0, 0, 1, 1, 1] to [0, 1, 0, 1, 0, 1],
             # RotaryEmbedding kernel expects a default value of 0)
             "interleaved": 0,
             # For partial rotary embeddings (RotaryEmbedding kernel expects a default value of 0)
-            # "rotary_embedding_dim": rotemb_dim,
+            "rotary_embedding_dim": rotemb_dim,
             # Rescale factors when calculating `inv_freq` in rotary embeddings
             "rescale_factors": 1,
             # Torch dtype when calculating `t` in rotary embeddings
             "t_dtype": torch.int64,
             # Scale value when calculating `t` in rotary embeddings
-            # "position_scale": position_scale,
+            "position_scale": position_scale,
             # Magnitude scaling factor when scaling `emb.cos()/emb.sin()` in rotary embeddings
             "mscale": 1,
             # Magnitude scaling policy when scaling `emb.cos()/emb.sin()` in rotary embeddings
@@ -101,11 +131,11 @@ class ModelBuilderBase:
             "q_path": "",  # Q path to attention
             "k_path": "",  # K path to attention
             "v_path": "",  # V path to attention
-            "op_type": "MultiHeadAttention",  # Attention op to use
+            "op_type": op_attention_type,  # Attention op to use
             # Scale value after calculating Q x K' in attention
-            # "scale": 1 / np.sqrt(self.head_size),
+            "scale": 1 / np.sqrt(self.head_size),
             # Softcap value to prevent values from exploding in attention
-            # "softcap": attn_softcap,
+            "softcap": attn_softcap,
             # Use rotary embeddings within attention (instead of a separate RotaryEmbedding op)
             "use_rope_in_attn": False,
             # Use packed MatMul (instead of 3 separate MatMuls for Q/K/V)
@@ -194,6 +224,9 @@ class ModelBuilderBase:
         **kwargs,
     ):
         assert name, "Node name must be provided"
+        assert (
+            not inputs or inputs[0]
+        ), f"First inputs cannot be empty, inputs={inputs}, op_type={op_type!r}"
         if name in self.node_names:
             # Note:
             #
@@ -489,7 +522,14 @@ class ModelBuilderBase:
             return self.make_matmul_op(matmul, basename, root_input, **kwargs)
 
     def make_matmul_op(self, matmul, basename, root_input, **kwargs):
-        if self.onnx_dtype in {ir.DataType.FLOAT16, ir.DataType.BFLOAT16, ir.DataType.FLOAT}:
+        if self.onnx_dtype in {
+            ir.DataType.FLOAT16,
+            ir.DataType.BFLOAT16,
+            ir.DataType.FLOAT,
+            onnx.TensorProto.FLOAT16,
+            onnx.TensorProto.BFLOAT16,
+            onnx.TensorProto.FLOAT,
+        }:
             return self.make_matmul_float(matmul, basename, root_input, **kwargs)
         elif self.onnx_dtype in {ir.DataType.INT4, ir.DataType.UINT4}:
             if self.quant_attrs["use_qdq"]:
@@ -3620,9 +3660,9 @@ class ModelBuilderBase:
         self.make_mlp(layer_id, layer.mlp, root_input=self.layernorm_attrs["output_0"])
 
         self.layernorm_attrs["first_layernorm"] = False
-        if layer_id == self.num_layers - 1:
-            # Norm after last decoder layer of model (last layer --> norm)
-            self.layernorm_attrs["last_layernorm"] = True
+        # if layer_id == self.num_layers - 1:
+        #    # Norm after last decoder layer of model (last layer --> norm)
+        #    self.layernorm_attrs["last_layernorm"] = True
 
     def make_model(self, model):
         # Make inputs and outputs to ONNX model
@@ -3631,9 +3671,14 @@ class ModelBuilderBase:
         # Make pre-processing nodes
         self.make_preprocessing_nodes()
 
+        is_model_layer = model.__class__.__name__.endswith("DecoderLayer")
+        if is_model_layer:
+            self.layernorm_attrs["root_input"] = self.input_names[0]
+
         # Loop through model and map each module to ONNX/ORT ops
         self.layer_id = 0
         num_layers = None
+        layer_class = None
         for module in model.modules():
             if isinstance(module, torch.nn.ModuleList):
                 num_layers = len(module)
@@ -3658,9 +3703,14 @@ class ModelBuilderBase:
             ) and (num_layers is None or self.layer_id < num_layers):
                 # Each decoder layer of model
                 self.make_layer(self.layer_id, module)
+                layer_class = model.__class__
                 self.layer_id += 1
 
-            elif self.layer_id == self.num_layers and self.has_final_norm(module, model):
+            elif (
+                hasattr(self, "num_layers")
+                and self.layer_id == self.num_layers
+                and self.has_final_norm(module, model)
+            ):
                 # SkipLayerNorm after last decoder layer (MatMul --> SkipLayerNorm)
                 self.make_layernorm(
                     self.layer_id,
@@ -3670,14 +3720,23 @@ class ModelBuilderBase:
                     location="final_norm",
                 )
 
-            elif (
-                isinstance(module, torch.nn.Linear) and module.out_features == self.vocab_size
-            ) or (hasattr(model, "lm_head") and module == model.lm_head):
+            elif not self.exclude_lm_head and (
+                (isinstance(module, torch.nn.Linear) and module.out_features == self.vocab_size)
+                or (hasattr(model, "lm_head") and module == model.lm_head)
+            ):
                 # Checks (Hugging Face logic) or (GGUF logic)
-                if not self.exclude_lm_head:
-                    # Language modeling head (SkipLayerNorm --> logits)
-                    print("Reading LM head")
-                    self.make_lm_head(module)
+                # Language modeling head (SkipLayerNorm --> logits)
+                self.make_lm_head(module)
+
+        assert (
+            is_model_layer and layer_class and isinstance(model, layer_class)
+        ), f"Final stets not implemented for {layer_class}, is_model_layer={is_model_layer}"
+        self.make_node(
+            "Identity",
+            ["/model/layers.0/mlp/down_proj/MatMul/output_0"],
+            [self.output_names[0]],
+            name="identity",
+        )
 
     def has_final_norm(self, module, orig_model):
         # Find where the language model is stored to check attributes. Some classes

@@ -1,9 +1,22 @@
 import unittest
+import onnx
+import onnx_ir
 from onnx_diagnostic.helpers import flatten_object
 from onnx_diagnostic.helpers.torch_helper import torch_dtype_to_onnx_dtype, torch_deepcopy
 from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.convert.model_builder_base import ModelBuilderBase
+
+
+def torch_dtype_to_ir_data_type(dt):
+    itype = torch_dtype_to_onnx_dtype(dt)
+    return {
+        onnx.TensorProto.FLOAT: onnx_ir.DataType.FLOAT,
+        onnx.TensorProto.FLOAT16: onnx_ir.DataType.FLOAT16,
+        onnx.TensorProto.BFLOAT16: onnx_ir.DataType.BFLOAT16,
+        onnx.TensorProto.INT64: onnx_ir.DataType.INT64,
+        onnx.TensorProto.BOOL: onnx_ir.DataType.BOOL,
+    }[itype]
 
 
 class TestModelBuilderHelper(ExtTestCase):
@@ -30,6 +43,7 @@ class TestModelBuilderHelper(ExtTestCase):
         model.model.layers[0].forward = steal_layer0
         model.generate(input_ids=input_ids, attention_mask=attention_mask)
 
+        layer_export = model.model.layers[0]
         # for i, aa in enumerate(store):
         #     print(f"{i}: {self.string_type(aa, with_shape=True)}")
         args, kwargs = store[2]
@@ -48,41 +62,50 @@ class TestModelBuilderHelper(ExtTestCase):
                     continue
                 self.assertEqual(len(flat), 2 * n_layers)
                 for i in range(0, len(flat), 2):
-                    new_inputs[f"past_key_values_keys_{i//2}"] = flat[i]
-                    new_inputs[f"past_key_values_values_{i//2}"] = flat[i + 1]
+                    new_inputs[f"past_key_values.{i//2}.key"] = flat[i]
+                    new_inputs[f"past_key_values.{i//2}.value"] = flat[i + 1]
         self.assertEqual(
             [
                 "hidden_states",
                 "attention_mask",
                 "position_ids",
-                "past_key_values_keys_0",
-                "past_key_values_values_0",
+                "past_key_values.0.key",
+                "past_key_values.0.value",
                 "cache_position",
             ],
             list(new_inputs),
         )
-        cache_dtype = torch_dtype_to_onnx_dtype(new_inputs["past_key_values_keys_0"].dtype)
+        cache_dtype = torch_dtype_to_ir_data_type(new_inputs["past_key_values.0.key"].dtype)
         present_shape = store[4][1]["past_key_values"].layers[0].keys.shape
         builder = ModelBuilderBase(
             input_names=list(new_inputs),
-            input_types={k: torch_dtype_to_onnx_dtype(t.dtype) for k, t in new_inputs.items()},
+            input_types={k: torch_dtype_to_ir_data_type(t.dtype) for k, t in new_inputs.items()},
             input_shapes={k: tuple(int(i) for i in t.shape) for k, t in new_inputs.items()},
-            output_names=["output", "present_key_values_keys_0", "present_key_values_values_0"],
+            output_names=["output", "present_key_values.0.key", "present_key_values.0.value"],
             output_types={
-                "output": torch_dtype_to_onnx_dtype(output.dtype),
-                "present_key_values_keys_0": cache_dtype,
-                "present_key_values_values_0": cache_dtype,
+                "output": torch_dtype_to_ir_data_type(output.dtype),
+                "present_key_values.0.key": cache_dtype,
+                "present_key_values.0.value": cache_dtype,
             },
             output_shapes={
                 "output": tuple(int(i) for i in output.shape),
-                "present_key_values_keys_0": present_shape,
-                "present_key_values_values_0": present_shape,
+                "present_key_values.0.key": present_shape,
+                "present_key_values.0.value": present_shape,
             },
-            num_attn_heads=present_shape[1],
+            num_attn_heads=args[0].shape[1],
+            num_kv_heads=present_shape[1],
+            head_size=present_shape[3],
+            op_attention_type="GroupQueryAttention",
+            rms_norm_eps=layer_export.post_attention_layernorm.variance_epsilon,
+            context_length=model.model.rotary_emb.max_seq_len_cached,
+            original_context_length=model.model.rotary_emb.original_max_seq_len,
+            activation=layer_export.mlp.act_fn,
+            intermediate_size=layer_export.mlp.intermediate_size,
         )
-        builder.make_model(model.model.layers[0])
+        builder.make_model(layer_export)
         onx = builder.build_model()
-        self.dump_onnx("test_model_builder_attention.onnx", onx)
+        model_proto = onnx_ir.serde.serialize_model(onx)
+        self.dump_onnx("test_model_builder_attention.onnx", model_proto)
 
 
 if __name__ == "__main__":
