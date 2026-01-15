@@ -1064,10 +1064,8 @@ def to_onnx(
         print(f"[to_onnx] graph module done in {t - begin} s")
 
     if export_modules_as_functions:
-        import torch.export
-
         assert isinstance(
-            graph_module, torch.export.ExportedProgram
+            graph_module, builder.torch.export.ExportedProgram
         ), f"Unexpected type {type(graph_module)} for graph_module"
 
         if export_modules_as_functions is True:
@@ -1082,12 +1080,12 @@ def to_onnx(
             )
 
         a = time.perf_counter()
-        new_graph_module = torch.export.unflatten(graph_module)
+        new_graph_module = builder.torch.export.unflatten(graph_module)
         add_stats["time_export_unflatten"] = t - a
         graph_module = new_graph_module
 
     if filename:
-        if isinstance(graph_module, torch.export.ExportedProgram):
+        if isinstance(graph_module, builder.torch.export.ExportedProgram):
             filename_root = os.path.splitext(filename)[0]
             ep_filename = f"{filename_root}.txt.ep"
             with open(ep_filename, "w") as f:
@@ -1095,7 +1093,7 @@ def to_onnx(
             ep_filename = f"{filename_root}.txt.ep.graph"
             with open(ep_filename, "w") as f:
                 f.write(str(graph_module.graph))
-        elif isinstance(graph_module, torch.export.UnflattenedModule):
+        elif isinstance(graph_module, builder.torch.export.UnflattenedModule):
             filename_root = os.path.splitext(filename)[0]
             ep_filename = f"{filename_root}.txt.ep.unflat.graph"
             with open(ep_filename, "w") as f:
