@@ -5380,7 +5380,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 print(f"node.users={list(node.users)}")
                 print(f"node.name in inputs_to_remove={node.name in inputs_to_remove!r}")
                 if "val" in node.meta:
-                    print(f"value type={type(node.meta["val"])}")
+                    print(f"value type={type(node.meta['val'])}")
                 pprint.pprint(node.meta)
             if node.op == "placeholder" and node.name in inputs_to_remove and not node.users:
                 continue
