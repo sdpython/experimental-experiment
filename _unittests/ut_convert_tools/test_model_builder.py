@@ -4,6 +4,7 @@ import onnx_ir
 from onnx_diagnostic.helpers import flatten_object
 from onnx_diagnostic.helpers.torch_helper import torch_dtype_to_onnx_dtype, torch_deepcopy
 from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.convert.model_builder_base import ModelBuilderBase
@@ -109,12 +110,12 @@ class TestModelBuilderHelper(ExtTestCase):
         model_proto = onnx_ir.serde.serialize_model(onx)
         self.dump_onnx("test_model_builder_attention.onnx", model_proto)
 
-    def test_export_with_layer_exposed_tiny_llm(self):
+    def test_custom_export_with_layer_exposed_tiny_llm(self):
         model_id = "arnir0/Tiny-LLM"
         data = get_untrained_model_with_inputs(model_id)
         model, inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
         layer_class = type(model.model.layers[0])
-        filename = self.get_dump_file("test_export_with_layer_exposed_tiny_llm.onnx")
+        filename = self.get_dump_file("test_custom_export_with_layer_exposed_tiny_llm.onnx")
         with torch_export_patches(patch_transformers=True):
             to_onnx(
                 model,
@@ -126,6 +127,58 @@ class TestModelBuilderHelper(ExtTestCase):
                 filename=filename,
                 verbose=1,
             )
+
+    def test_dynamo_export_with_layer_exposed_tiny_llm(self):
+        import torch
+
+        model_id = "arnir0/Tiny-LLM"
+        data = get_untrained_model_with_inputs(model_id)
+        model, inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        dsr = use_dyn_not_str(ds)
+        layer_class = type(model.model.layers[0])
+        names_to_preserve = []
+        for name, mod in model.named_modules():
+            if isinstance(mod, layer_class):
+                names_to_preserve.append(name)
+        self.assertEqual(["model.layers.0"], names_to_preserve)
+        with torch_export_patches(patch_transformers=True):
+            # case 1: does not work
+            # ep = torch.export.export(
+            #    model,
+            #    (),
+            #    kwargs=inputs,
+            #    dynamic_shapes=dsr,
+            #    preserve_module_call_signature=tuple(names_to_preserve),
+            # )
+            # filename = self.get_dump_file(
+            #   "test_dynamo_export_with_layer_exposed_tiny_llm.1.onnx")
+            # torch.onnx.export(ep, (), filename, kwargs=inputs, dynamic_shapes=ds)
+
+            # case 2
+            ep = torch.export.export(model, (), kwargs=inputs, dynamic_shapes=dsr)
+            new_ep = torch.export.unflatten(ep)
+            # does not work
+            # filename = self.get_dump_file(
+            #   "test_dynamo_export_with_layer_exposed_tiny_llm.2.onnx")
+            # torch.onnx.export(new_ep, (), filename, kwargs=inputs, dynamic_shapes=ds)
+
+            # case 3: works but does not produce what is expected
+            class Model(torch.nn.Module):
+                def __init__(self, m):
+                    super().__init__()
+                    self.m = m
+
+                def forward(self, input_ids, attention_mask, position_ids, past_key_values):
+                    return self.m(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        past_key_values=past_key_values,
+                    )
+
+            model = Model(new_ep)
+            filename = self.get_dump_file("test_dynamo_export_with_layer_exposed_tiny_llm.3.onnx")
+            torch.onnx.export(model, (), filename, kwargs=inputs, dynamic_shapes=ds)
 
 
 if __name__ == "__main__":

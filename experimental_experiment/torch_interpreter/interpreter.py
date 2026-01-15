@@ -2209,7 +2209,13 @@ class DynamoInterpreter:
             last_node.doc_string += "\n".join(description)
 
     def _interpret_sub_module(
-        self, sub_module, args, kwargs, source_node=None, local_domain=None
+        self,
+        sub_module,
+        args,
+        kwargs,
+        source_node=None,
+        local_domain=None,
+        preserve_as_submodule=False,
     ):
         from .onnx_export import _make_builder_interpreter
 
@@ -2313,17 +2319,22 @@ class DynamoInterpreter:
         assert mask_outputs is None or all(
             mask_outputs
         ), f"Unexpected value for mask_outputs={mask_outputs}{self.get_debug_msg()}"
-        # We register the dynamic elements in case the submodule is using them.
-        for k, v in self.builder.dynamic_objects.items():
-            # We assume the list of dynamic objects is valid.
-            if not self.builder.has_name(k):
-                builder.add_dynamic_object(k, v, check_tokens=False)
-                if self.builder.has_type(k):
-                    builder.set_type(k, self.builder.get_type(k))
-                if self.builder.has_device(k):
-                    builder.set_device(k, self.builder.get_device(k))
-                if self.builder.has_shape(k):
-                    builder.set_shape(k, self.builder.get_shape(k))
+
+        if not preserve_as_submodule:
+            # We register the dynamic elements in case the submodule is using them.
+            # But only if it not preserved as a submodule. In that case,
+            # these information are likely to become inputs.
+            for k, v in self.builder.dynamic_objects.items():
+                # We assume the list of dynamic objects is valid.
+                if not self.builder.has_name(k):
+                    builder.add_dynamic_object(k, v, check_tokens=False)
+                    if self.builder.has_type(k):
+                        builder.set_type(k, self.builder.get_type(k))
+                    if self.builder.has_device(k):
+                        builder.set_device(k, self.builder.get_device(k))
+                    if self.builder.has_shape(k):
+                        builder.set_shape(k, self.builder.get_shape(k))
+
         if self.preserved_modules and hasattr(self, "named_modules"):
             assert (
                 source_node is not None
@@ -2332,6 +2343,8 @@ class DynamoInterpreter:
             if module_name in self.named_modules:
                 module_child = self.named_modules[module_name]
                 interpreter.register_named_modules(self, None, dict(module_child.named_modules()))
+
+        # processes the submodules
         builder.process(graph_module, interpreter)
         assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
 
@@ -2345,7 +2358,12 @@ class DynamoInterpreter:
         if val is not None and isinstance(val, tuple):
             n_outputs = len(val)
             output_names = [f"{source_node.name}#{i}" for i in range(n_outputs)]
-        elif self.preserved_modules and val is not None and isinstance(val, list):
+        elif (
+            preserve_as_submodule
+            and self.preserved_modules
+            and val is not None
+            and isinstance(val, list)
+        ):
             n_outputs = len(val)
             output_names = [f"{source_node.name}#{i}" for i in range(n_outputs)]
             val = tuple(val)
@@ -2357,54 +2375,41 @@ class DynamoInterpreter:
             val = (val,)
 
         # if not none
-        if val is not None:
-            if self.preserved_modules and len(val) == 1 and isinstance(val[0], list):
-                # submodules with multiple outputs
-                assert len(val[0]) == len(builder.outputs), (
-                    f"Output mismatch {len(val[0])} != {len(builder.outputs)}, "
-                    f"source_node.name={source_node.name!r}, target={source_node.target!r}"
-                    f"type(val)={string_type(val)}, "
-                    f"builder.outputs={string_type(builder.outputs)}"
-                    f"{self.builder.get_debug_msg()}"
-                )
-                # Shapes and types are set outside this function when the final node is added.
-            else:
-                # regular node
-                assert len(val) == len(builder.outputs), (
-                    f"Output mismatch {len(val)} != {len(builder.outputs)}, "
-                    f"source_node.name={source_node.name!r}, target={source_node.target!r}"
-                    f"type(val)={string_type(val)}, "
-                    f"builder.outputs={string_type(builder.outputs)}"
-                    f"{self.builder.get_debug_msg()}"
-                )
-                for i in range(len(val)):
-                    name = builder.outputs[i].name
-                    if not builder.has_shape(name):
-                        builder.set_shape(name, val[i].shape)
-                    if not builder.has_type(name):
-                        builder.set_type(name, val[i].dtype)
-                    if isinstance(val[i], self.builder.torch.Tensor):
-                        self.builder.set_shapes_types(
-                            source_node.name, "call_module", (val[i].dtype, val[i].shape)
-                        )
-                        if not builder.has_device(name):
-                            builder.set_device(name, val[i].get_device())
-                    elif isinstance(val[i], (self.builder.torch.SymInt)):
-                        self.builder.set_shapes_types(
-                            source_node.name,
-                            "call_module",
-                            (self.builder.torch.SymInt, tuple()),
-                        )
-                    elif isinstance(val[i], (self.builder.torch.SymFloat)):
-                        self.builder.set_shapes_types(
-                            source_node.name,
-                            "call_module",
-                            (self.builder.torch.SymFloat, tuple()),
-                        )
-        else:
-            # We could use the informations stored in the builder.
-            pass
-
+        if val is not None and not preserve_as_submodule:
+            # regular node
+            if isinstance(val, tuple) and len(val) == 1 and isinstance(val[0], list):
+                val = val[0]
+            assert len(val) == len(builder.outputs), (
+                f"Output mismatch {len(val)} != {len(builder.outputs)}, "
+                f"source_node.name={source_node.name!r}, target={source_node.target!r}"
+                f"type(val)={string_type(val)}, "
+                f"builder.outputs={string_type(builder.outputs)}"
+                f"{self.builder.get_debug_msg()}"
+            )
+            for i in range(len(val)):
+                name = builder.outputs[i].name
+                if not builder.has_shape(name):
+                    builder.set_shape(name, val[i].shape)
+                if not builder.has_type(name):
+                    builder.set_type(name, val[i].dtype)
+                if isinstance(val[i], self.builder.torch.Tensor):
+                    self.builder.set_shapes_types(
+                        source_node.name, "call_module", (val[i].dtype, val[i].shape)
+                    )
+                    if not builder.has_device(name):
+                        builder.set_device(name, val[i].get_device())
+                elif isinstance(val[i], (self.builder.torch.SymInt)):
+                    self.builder.set_shapes_types(
+                        source_node.name,
+                        "call_module",
+                        (self.builder.torch.SymInt, tuple()),
+                    )
+                elif isinstance(val[i], (self.builder.torch.SymFloat)):
+                    self.builder.set_shapes_types(
+                        source_node.name,
+                        "call_module",
+                        (self.builder.torch.SymFloat, tuple()),
+                    )
         return builder, args, kwargs, output_names
 
     def get_submodule_name(
@@ -2460,8 +2465,16 @@ class DynamoInterpreter:
 
         self.builder._check_constants("before-_interpret_sub_module")
 
+        node_module = self.named_modules[node.target] if node.target else None
+        preserve_as_submodule = node_module and type(node_module) in self.preserved_modules
+
         builder, args, kwargs, output_names = self._interpret_sub_module(
-            sub_module, node.args, node.kwargs, source_node=node, local_domain=f"{root}.{n}"
+            sub_module,
+            node.args,
+            node.kwargs,
+            source_node=node,
+            local_domain=f"{root}.{n}",
+            preserve_as_submodule=preserve_as_submodule,
         )
 
         self.builder._check_constants("after-_interpret_sub_module")
@@ -2475,18 +2488,18 @@ class DynamoInterpreter:
         local_function_name = None
         if sub_module.__class__.__name__ == "InterpreterModule":
             # a local function is added.
-            assert node.target in self.named_modules, (
+            assert node_module, (
                 f"Unable to find module name {node.target!r} in "
                 f"{sorted(self.named_modules)}{self.builder.get_debug_msg()}"
             )
-            m = self.named_modules[node.target]
-            if type(m) in self.preserved_modules:
+            if preserve_as_submodule:
                 # Which name to give the submodule?
                 # The class, the module name, ...?
-                local_function_name = name = self.get_submodule_name(node.target, m)
+                local_function_name = name = self.get_submodule_name(node.target, node_module)
                 assert local_function_name, (
                     f"empty value for local_function_name={local_function_name!r}, "
-                    f"type(m)={type(m)}, self.preserved_modules={self.preserved_modules}, "
+                    f"type(m)={type(node_module)}, "
+                    f"self.preserved_modules={self.preserved_modules}, "
                     f"node={node!r}, node.target={node.target}{self.builder.get_debug_msg()}"
                 )
 
@@ -2548,8 +2561,17 @@ class DynamoInterpreter:
                         f"{builder.get_debug_msg()}\n--\n--\n--"
                         f"{self.builder.get_debug_msg()}\n------\n"
                     )
+                self._set_shape_and_type(
+                    node,
+                    output_names[0] if len(output_names) == 1 else tuple(output_names),
+                    allow_new_dynamic_dimension=True,
+                )
                 return output_names
-
+        else:
+            assert not preserve_as_submodule, (
+                f"Unable to preserve module class {type(node_module)} for node {node!r} "
+                f"type(sub_module)={type(sub_module)}{self.builder.get_debug_msg()}"
+            )
         # nodes are inserted inline
         self.builder._check_constants("before-make_nodes(2)")
         self.builder.make_nodes(
@@ -2560,5 +2582,4 @@ class DynamoInterpreter:
             force_rename_with_prefix=node.name,
         )
         self.builder._check_constants("after-make_nodes(2)")
-
         return output_names

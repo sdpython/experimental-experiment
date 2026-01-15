@@ -2543,12 +2543,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             )
             # The dimension is already registered but it is used for another input.
             _append_to_source(name, input_name, axis, value)
-            if isinstance(value, self.torch.SymInt):
-                self.set_type(name, TensorProto.INT64)
-                self.set_shape(name, tuple())
-            elif isinstance(value, self.torch.SymFloat):
-                self.set_type(name, TensorProto.FLOAT)
-                self.set_shape(name, tuple())
             return None
 
         assert (
@@ -2616,12 +2610,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 is_dimension=True,
                 marker="make_dynamic_object",
             )
-        elif isinstance(value, self.torch.SymInt):
-            self.set_type(name, TensorProto.INT64)
-            self.set_shape(name, tuple())
-        elif isinstance(value, self.torch.SymFloat):
-            self.set_type(name, TensorProto.FLOAT)
-            self.set_shape(name, tuple())
         return self._known_value_shape.get(name, name)
 
     def get_dimension_as_result(self, name: str) -> str:
@@ -3605,6 +3593,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                         [name],
                         name="make_tensor_input_id",
                     )
+                self.input_names.append(input_name)
             else:
                 self.input_names.append(name)
                 input_name = name
@@ -4659,6 +4648,20 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             the prefix *name* is used
         :return: output names
         """
+        for key, f in builder.functions.items():
+            # What if on is already existing?
+            old_key = f.domain, f.name
+            new_key = self.add_function(
+                f,
+                rename_allowed=False,
+                merge_allowed=True,
+                builder=builder.functions_builder.get(key),
+            )
+            assert new_key == old_key, (
+                f"We probably need to rename, old_key={old_key}, new_key={new_key}"
+                f"{self.get_debug_msg()}"
+            )
+
         if function_options is not None and function_options.export_as_function:
             if self._debug_local_function:
                 print(
@@ -4783,7 +4786,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                         self.set_device(no, builder.get_device(o))
 
             assert len(output_names) == len(builder.outputs), (
-                f"Inconsistency between output_names={output_names} and "
+                f"Inconsistency between {len(output_names)} != {len(builder.outputs)}, "
+                f"output_names={output_names} and "
                 f"outputs={builder.outputs}, renaming={renaming}{self.get_debug_msg()}"
             )
             for name, out in zip(output_names, builder.outputs):
@@ -5113,11 +5117,15 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
         rows = ["", "--DEBUG--", "-- to print the exported program: PRINT_EXPORTED_PROGRAM=1", ""]
         hs = self._hash()
-        rows.append(
-            f"[GraphBuilder-{hs}] Message starts, there are "
-            f"{len(self.initializers_dict)} initializers, "
-            f"{len(self.nodes)} nodes, {len(self.inputs)} inputs, "
-            f"{len(self.inputs)} outputs."
+        rows.extend(
+            [
+                f"[GraphBuilder-{hs}] Message starts, there are "
+                f"{len(self.initializers_dict)} initializers, "
+                f"{len(self.nodes)} nodes, {len(self.inputs)} inputs, "
+                f"{len(self.inputs)} outputs.",
+                f"input_names={self.input_names}",
+                f"output_names={self.output_names}",
+            ]
         )
 
         if self._implicit_decisions:
@@ -8637,7 +8645,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         assert list(locf.input) >= b.input_names, (
             f"Local builder and local function disagrees on the inputs "
             f"{locf.input} != {b.input_names}\n-----{b.get_debug_msg()}\n----"
-            f"{self.get_debug_msg()}"
+            f"\n####{self.get_debug_msg()}"
         )
         return new_inits, (new_domain, new_name)
 
