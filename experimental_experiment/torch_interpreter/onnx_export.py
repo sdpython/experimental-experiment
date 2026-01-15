@@ -1086,6 +1086,21 @@ def to_onnx(
         add_stats["time_export_unflatten"] = t - a
         graph_module = new_graph_module
 
+    if filename:
+        if isinstance(graph_module, torch.export.ExportedProgram):
+            filename_root = os.path.splitext(filename)[0]
+            ep_filename = f"{filename_root}.txt.ep"
+            with open(ep_filename, "w") as f:
+                f.write(str(graph_module))
+            ep_filename = f"{filename_root}.txt.ep.graph"
+            with open(ep_filename, "w") as f:
+                f.write(str(graph_module.graph))
+        elif isinstance(graph_module, torch.export.UnflattenedModule):
+            filename_root = os.path.splitext(filename)[0]
+            ep_filename = f"{filename_root}.txt.ep.unflat.graph"
+            with open(ep_filename, "w") as f:
+                f.write(str(graph_module.graph))
+
     if verbose > 4:
         print(f"[to_onnx] -- fx graph --\n{graph_module.graph}")
 

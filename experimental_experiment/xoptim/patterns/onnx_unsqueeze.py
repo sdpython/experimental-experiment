@@ -727,8 +727,6 @@ class SqueezeBinaryUnsqueezePattern(PatternOptimization):
         if len(squeeze.input) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.has_rank(squeeze.input[0]):
-            print("-------")
-            print(g.builder.get_debug_msg())
             return self.none(node, inspect.currentframe().f_lineno)
         if g.get_rank(squeeze.input[0]) != 1:
             return self.none(node, inspect.currentframe().f_lineno)

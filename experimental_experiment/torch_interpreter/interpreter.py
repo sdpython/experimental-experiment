@@ -2484,73 +2484,81 @@ class DynamoInterpreter:
                 # Which name to give the submodule?
                 # The class, the module name, ...?
                 local_function_name = name = self.get_submodule_name(node.target, m)
-
-            self.builder._check_constants("before-make_nodes")
-
-            # let's create a function under the appropriate name
-            self.builder.make_nodes(
-                builder,
-                args,
-                output_names,
-                prefix=f"_sub_{name}_",
-                function_options=FunctionOptions(
-                    name=local_function_name,
-                    domain=LOCAL_DOMAIN,
-                    export_as_function=True,
-                    return_initializer=True,
-                    move_initializer_to_constant=self.function_options.move_initializer_to_constant,
-                    external_threshold=self.function_options.external_threshold,
-                    merge_allowed=self.function_options.merge_allowed,
-                    rename_allowed=self.function_options.rename_allowed,
-                ),
-                optimize=self.optimize_submodules,
-            )
-
-            self.builder._check_constants("after-make_nodes")
-
-            if len(output_names) == len(builder.outputs):
-                # One output, both tensor
-                for name, out_name in zip(builder.output_names, output_names):
-                    if builder.has_type(name):
-                        self.builder.set_type(out_name, builder.get_type(name))
-                    if builder.has_device(name):
-                        self.builder.set_device(out_name, builder.get_device(name))
-                    if builder.has_shape(name):
-                        existing_shape = builder.get_shape(name)
-                        # We need to move any dynamic objects necessary from the submodules
-                        # to the parent module.
-                        self.builder.register_dynamic_objects_from_shape(existing_shape)
-                        self.builder.set_shape(out_name, existing_shape)
-                    elif builder.has_rank(name):
-                        self.builder.set_rank(out_name, builder.get_rank(name))
-            elif len(output_names) == 1 and len(builder.outputs) > 1:
-                # The module outputs more than one output
-                itypes, shapes, ranks = [], [], []
-                for name in builder.output_names:
-                    itypes.append(builder.get_type(name) if builder.has_type(name) else None)
-                    shapes.append(builder.get_shape(name) if builder.has_shape(name) else None)
-                    ranks.append(builder.get_rank(name) if builder.has_rank(name) else None)
-                self.builder.set_sequence(
-                    output_names[0], tuple(itypes), shapes=tuple(shapes), ranks=ranks
+                assert local_function_name, (
+                    f"empty value for local_function_name={local_function_name!r}, "
+                    f"type(m)={type(m)}, self.preserved_modules={self.preserved_modules}, "
+                    f"node={node!r}, node.target={node.target}{self.builder.get_debug_msg()}"
                 )
-            else:
-                raise AssertionError(
-                    f"Unexpected number of outputs, output_names={output_names}, "
-                    f"len(builder.outputs)={len(builder.outputs)}, "
-                    f"builder.output_names={builder.output_names}"
-                    f"{builder.get_debug_msg()}\n--\n--\n--"
-                    f"{self.builder.get_debug_msg()}\n------\n"
+
+                self.builder._check_constants("before-make_nodes")
+
+                # let's create a function under the appropriate name
+                self.builder.make_nodes(
+                    builder,
+                    args,
+                    output_names,
+                    prefix=f"_sub_{name}_",
+                    function_options=FunctionOptions(
+                        name=local_function_name,
+                        domain=LOCAL_DOMAIN,
+                        export_as_function=True,
+                        return_initializer=True,
+                        move_initializer_to_constant=self.function_options.move_initializer_to_constant,
+                        external_threshold=self.function_options.external_threshold,
+                        merge_allowed=self.function_options.merge_allowed,
+                        rename_allowed=self.function_options.rename_allowed,
+                    ),
+                    optimize=self.optimize_submodules,
                 )
-        else:
-            # nodes are inserted inline
-            self.builder._check_constants("before-make_nodes(2)")
-            self.builder.make_nodes(
-                builder,
-                args,
-                output_names,
-                prefix=f"_sub_{name}_{node.name}_",
-                force_rename_with_prefix=node.name,
-            )
-            self.builder._check_constants("after-make_nodes(2)")
+
+                self.builder._check_constants("after-make_nodes")
+
+                if len(output_names) == len(builder.outputs):
+                    # One output, both tensor
+                    for name, out_name in zip(builder.output_names, output_names):
+                        if builder.has_type(name):
+                            self.builder.set_type(out_name, builder.get_type(name))
+                        if builder.has_device(name):
+                            self.builder.set_device(out_name, builder.get_device(name))
+                        if builder.has_shape(name):
+                            existing_shape = builder.get_shape(name)
+                            # We need to move any dynamic objects necessary from the submodules
+                            # to the parent module.
+                            self.builder.register_dynamic_objects_from_shape(existing_shape)
+                            self.builder.set_shape(out_name, existing_shape)
+                        elif builder.has_rank(name):
+                            self.builder.set_rank(out_name, builder.get_rank(name))
+                elif len(output_names) == 1 and len(builder.outputs) > 1:
+                    # The module outputs more than one output
+                    itypes, shapes, ranks = [], [], []
+                    for name in builder.output_names:
+                        itypes.append(builder.get_type(name) if builder.has_type(name) else None)
+                        shapes.append(
+                            builder.get_shape(name) if builder.has_shape(name) else None
+                        )
+                        ranks.append(builder.get_rank(name) if builder.has_rank(name) else None)
+                    self.builder.set_sequence(
+                        output_names[0], tuple(itypes), shapes=tuple(shapes), ranks=ranks
+                    )
+                else:
+                    raise AssertionError(
+                        f"Unexpected number of outputs, output_names={output_names}, "
+                        f"len(builder.outputs)={len(builder.outputs)}, "
+                        f"builder.output_names={builder.output_names}"
+                        f"{builder.get_debug_msg()}\n--\n--\n--"
+                        f"{self.builder.get_debug_msg()}\n------\n"
+                    )
+                return output_names
+
+        # nodes are inserted inline
+        self.builder._check_constants("before-make_nodes(2)")
+        self.builder.make_nodes(
+            builder,
+            args,
+            output_names,
+            prefix=f"_sub_{name}_{node.name}_",
+            force_rename_with_prefix=node.name,
+        )
+        self.builder._check_constants("after-make_nodes(2)")
 
         return output_names

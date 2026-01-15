@@ -4,8 +4,10 @@ import onnx_ir
 from onnx_diagnostic.helpers import flatten_object
 from onnx_diagnostic.helpers.torch_helper import torch_dtype_to_onnx_dtype, torch_deepcopy
 from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+from onnx_diagnostic.torch_export_patches import torch_export_patches
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.convert.model_builder_base import ModelBuilderBase
+from experimental_experiment.torch_interpreter import to_onnx
 
 
 def torch_dtype_to_ir_data_type(dt):
@@ -106,6 +108,24 @@ class TestModelBuilderHelper(ExtTestCase):
         onx = builder.build_model()
         model_proto = onnx_ir.serde.serialize_model(onx)
         self.dump_onnx("test_model_builder_attention.onnx", model_proto)
+
+    def test_export_with_layer_exposed_tiny_llm(self):
+        model_id = "arnir0/Tiny-LLM"
+        data = get_untrained_model_with_inputs(model_id)
+        model, inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+        layer_class = type(model.model.layers[0])
+        filename = self.get_dump_file("test_export_with_layer_exposed_tiny_llm.onnx")
+        with torch_export_patches(patch_transformers=True):
+            to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=ds,
+                export_modules_as_functions={layer_class},
+                inline=False,
+                optimize=False,
+                filename=filename,
+                verbose=1,
+            )
 
 
 if __name__ == "__main__":

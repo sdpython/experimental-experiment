@@ -143,7 +143,7 @@ class FunctionOptions:
         if name:
             export_as_function = True
         assert not export_as_function or name, (
-            f"to be removed help track bugs, name={name!r}, domain={domain!r}, "
+            f"to be removed, helps tracking bugs, name={name!r}, domain={domain!r}, "
             f"export_as_function={export_as_function!r}"
         )
         assert export_as_function or (not name and not domain), (
@@ -293,6 +293,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self._debug_shape_missing = int(os.environ.get("ONNXSHAPECOMPUTE", "0"))
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
         self._debug_dyn_dim = os.environ.get("ONNXDYNDIM","").split(",")
+        self._debug_print_node = os.environ.get("PRINTNAME","").split(",")
 
     .. warning:: ModelProto may be modified
 
@@ -403,9 +404,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             return f"InitializerInfo({self.name!r}, source={self.source!r})"
 
         def add_source(self, source: str):
-            """
-            Adds other sources.
-            """
+            """Adds other sources."""
             self.source += f"##{source}"
 
     # Size of a tensor kept in the onnx file and not stored as exrternal weight.
@@ -526,6 +525,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self._debug_constant_folding = int(os.environ.get("ONNXCONSTANTFOLD", "0"))
         self._debug_foldnot = int(os.environ.get("ONNXFOLDNOT", "0"))
         self._debug_dyn_dim = set(os.environ.get("ONNXDYNDIM", "").split(","))
+        self._debug_print_node = set(os.environ.get("PRINTNAME", "").split(","))
         self.CONTINUE = int(os.environ.get("CONTINUE", "0"))
         if self._debug_dyn_dim == {""}:
             self._debug_dyn_dim = set()
@@ -2537,8 +2537,18 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     self.dynamic_dimensions_source[name] = [source]
 
         if name in self.dynamic_objects:
+            assert not shape_as_input or name in self.input_names, (
+                f"The dimension {name!r} is already registered but it is not an input "
+                f"{self.input_names}{self.get_debug_msg()}"
+            )
             # The dimension is already registered but it is used for another input.
             _append_to_source(name, input_name, axis, value)
+            if isinstance(value, self.torch.SymInt):
+                self.set_type(name, TensorProto.INT64)
+                self.set_shape(name, tuple())
+            elif isinstance(value, self.torch.SymFloat):
+                self.set_type(name, TensorProto.FLOAT)
+                self.set_shape(name, tuple())
             return None
 
         assert (
@@ -2606,6 +2616,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 is_dimension=True,
                 marker="make_dynamic_object",
             )
+        elif isinstance(value, self.torch.SymInt):
+            self.set_type(name, TensorProto.INT64)
+            self.set_shape(name, tuple())
+        elif isinstance(value, self.torch.SymFloat):
+            self.set_type(name, TensorProto.FLOAT)
+            self.set_shape(name, tuple())
         return self._known_value_shape.get(name, name)
 
     def get_dimension_as_result(self, name: str) -> str:
@@ -5358,6 +5374,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         inputs_to_remove = set(inputs_to_remove)
         self._debug_msg["process.inputs_to_remove"] = inputs_to_remove
         for i, node in loop:
+            if self._debug_print_node and node.name in self._debug_print_node:
+                print(f"-- PRINT-NODE {node.name!r} --")
+                print(f"node.target={node.target!r}")
+                print(f"node.users={list(node.users)}")
+                print(f"node.name in inputs_to_remove={node.name in inputs_to_remove!r}")
+                if "val" in node.meta:
+                    print(f"value type={type(node.meta["val"])}")
+                pprint.pprint(node.meta)
             if node.op == "placeholder" and node.name in inputs_to_remove and not node.users:
                 continue
             self._debug_msg["process.progress"] = (
