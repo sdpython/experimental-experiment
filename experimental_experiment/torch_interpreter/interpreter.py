@@ -2465,7 +2465,13 @@ class DynamoInterpreter:
 
         self.builder._check_constants("before-_interpret_sub_module")
 
-        node_module = self.named_modules[node.target] if node.target else None
+        node_module = (
+            self.named_modules[node.target]
+            if node.target
+            and hasattr(self, "named_modules")
+            and node.target in self.named_modules
+            else None
+        )
         preserve_as_submodule = node_module and type(node_module) in self.preserved_modules
 
         builder, args, kwargs, output_names = self._interpret_sub_module(
