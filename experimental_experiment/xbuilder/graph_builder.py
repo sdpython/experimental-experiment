@@ -2780,7 +2780,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
         assert all(not self.has_rank(t) or self.get_rank(t) == 1 for t in conc), (
             f"All tensors to concatenate must have rank 1, got ranks: "
-            f"{[self.get_rank(t) if self.has_rank(t) else '?' for t in conc]}{self.get_debug_msg()}"
+            f"{[self.get_rank(t) if self.has_rank(t) else '?' for t in conc]}"
+            f"{self.get_debug_msg()}"
         )
         if len(conc) > 1:
             res = self.make_node("Concat", conc, axis=0, name=f"_mkshape_{name}")
@@ -4366,7 +4367,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if op_type == "Identity" and inputs == output_names:
             # No need.
             return output_names[0]
-        if False and op_type == "Concat":
+        if op_type == "Concat":
             types = [self.get_rank(t) for t in inputs if self.has_rank(t)]
             assert not types or len(set(types)) == 1, (
                 f"All inputs must have the same rank for Concat, "
