@@ -1000,7 +1000,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             if len(node.input) == 2 and self.is_constant(node.input[1]):
                 cst = self.get_constant(node.input[1], exc=False)
                 if cst is not None:
-                    suffix = f", {cst.tolist()}"
+                    if isinstance(cst, NodeProto):
+                        suffix = ", NodeProto"
+                    else:
+                        suffix = f", {string_type(cst, with_shape=True)}"
             satts = ", ".join(atts)
             if satts:
                 satts = f", {satts}"
@@ -4623,6 +4626,60 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         res = {k: v for k, v in res.items() if v is not None}
         return res
 
+    def _update_other_builder_local_function_before_merging(self, builder: "GraphBuilder"):
+        def _check_():
+            local_domains = {k[0] for k in builder.functions}
+            for node in builder.nodes:
+                assert (
+                    node.domain not in local_domains
+                    or (node.domain, node.op_type) in builder.functions
+                    or (node.domain, node.op_type) in builder.functions_builder
+                ), (
+                    f"Node {builder.pretty_node(node)} not found in {sorted(builder.functions)} "
+                    f"or {sorted(builder.functions_builder)}, "
+                    f"local_domains={local_domains}, {builder.get_debug_msg()}"
+                )
+            for key, f in builder.functions.items():
+                assert key == (f.domain, f.name), f"disrepancy {key} vs {(f.domain, f.name)}"
+
+        _check_()
+        needs_renaming = set()
+        if builder.functions:
+            for key in builder.functions:
+                if key in self.functions and not same_function_proto(
+                    builder.functions[key], self.functions[key]
+                ):
+                    # needs rewriting
+                    needs_renaming.add(key)
+        replacements = {}
+        for domain, name in needs_renaming:
+            i = 2
+            candidate = domain, f"{name}_{i}"
+            while candidate in self.functions:
+                i += 1
+                candidate = domain, f"{name}_{i}"
+            replacements[domain, name] = candidate
+
+        if replacements:
+            builder.rename_in_local_functions(replacements, delete_replaced=True)
+
+        for node in builder.nodes:
+            key = node.domain, node.op_type
+            if key in replacements:
+                new_key = replacements[key]
+                node.domain = new_key[0]
+                node.op_type = new_key[1]
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    builder._rename_local_functions_in_graph(att.g, replacements)
+
+        assert not (set(replacements) & set(builder.functions)), (
+            f"The builder has some remaining functions it should not have, "
+            f"replacements={replacements}, "
+            f"builder.functions={sorted(builder.functions)}"
+        )
+        _check_()
+
     def make_nodes(
         self,
         builder: "GraphBuilder",
@@ -4648,18 +4705,14 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             the prefix *name* is used
         :return: output names
         """
+        self._update_other_builder_local_function_before_merging(builder)
         for key, f in builder.functions.items():
-            # What if on is already existing?
-            old_key = f.domain, f.name
-            new_key = self.add_function(
+            print("    mmm", key, f.domain, f.name)
+            self.add_function(
                 f,
                 rename_allowed=False,
                 merge_allowed=True,
                 builder=builder.functions_builder.get(key),
-            )
-            assert new_key == old_key, (
-                f"We probably need to rename, old_key={old_key}, new_key={new_key}"
-                f"{self.get_debug_msg()}"
             )
 
         if function_options is not None and function_options.export_as_function:
@@ -4675,6 +4728,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             )
             if self._debug_local_function:
                 print(f"[GraphBuilder-{self._hash()}.make_nodes-f] new_inits={new_inits}")
+            assert len(builder.output_names) == len(output_names), (
+                f"Number of output mismatch: output_names={output_names}, "
+                f"builder.output_names={builder.output_names}{self.get_debug_msg()}"
+            )
             self.make_node(
                 fname,
                 [*input_names, *new_inits],
@@ -8652,29 +8709,95 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     def rename_in_local_functions(
         self,
         replacements: Dict[Tuple[str, str], Tuple[str, str]],
-        list_keys: List[Tuple[str, str]],
-        proto: FunctionProto,
-    ) -> FunctionProto:
+        list_keys: Optional[List[Tuple[str, str]]] = None,
+        proto: Optional[Union[FunctionProto, List[FunctionProto]]] = None,
+        delete_replaced: bool = False,
+    ) -> Union[FunctionProto, List[FunctionProto]]:
         """
         Renames local function in a given list of local functions.
 
         :param replacements: replacements to make
-        :param list_keys: list of local function to modify
-        :param proto: one function to update as well
+        :param list_keys: list of local function to modify, if None,
+            it is equal to the list of functions in the builder itself,
+            proto must be None in that case
+        :param proto: one function to update as well, if None
+        :param delete_replaced: deletes the replaced functions
         :return: the modified proto for proto
 
         The function does not modify inplace the functions,
         it creates a copy assuming this one is not too big.
         """
+        if list_keys is None:
+            list_keys = list(set(self.functions) | set(self.functions_builder))
+            assert proto is None, "proto must be None if list_keys is None"
+            proto = list(self.functions.values())
         for key in list_keys:
             assert (
                 key in self.functions
             ), f"Local function {key!r} is missing from {assert_sorted(self.functions)}"
             new_f = self._rename_op_type_in_local_functions(self.functions[key], replacements)
             self.functions[key] = new_f
+            if key in replacements:
+                new_f.domain, new_f.name = replacements[key]
+                self.functions[replacements[key]] = new_f
+            if key in self.functions_builder:
+                self.functions_builder[key].rename_local_functions(replacements)
+                if key in replacements:
+                    self.functions_builder[replacements[key]] = self.functions_builder[key]
+        if delete_replaced:
+            self.functions = {k: v for k, v in self.functions.items() if k not in replacements}
+            self.functions_builder = {
+                k: v for k, v in self.functions_builder.items() if k not in replacements
+            }
         if proto is None:
             return None
+        if isinstance(proto, list):
+            return [self._rename_op_type_in_local_functions(p, replacements) for p in proto]
         return self._rename_op_type_in_local_functions(proto, replacements)
+
+    def rename_local_functions(self, replacements: Dict[Tuple[str, str], Tuple[str, str]]):
+        """
+        Renames local functions in the builder.
+
+        :param replacements: dictionary mapping old (domain, name) to new (domain, name)
+        """
+        if not replacements:
+            return
+
+        for node in self.nodes:
+            key = node.domain, node.op_type
+            if key in replacements:
+                new_key = replacements[key]
+                node.domain = new_key[0]
+                node.op_type = new_key[1]
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    self._rename_local_functions_in_graph(att.g, replacements)
+
+        # Rename in self.functions
+        assert not self.functions, "not implemented yet"
+        assert not self.functions_builder, "not implemented yet"
+
+    def _rename_local_functions_in_graph(
+        self, g: GraphProto, replacements: Dict[Tuple[str, str], Tuple[str, str]]
+    ):
+        """
+        Renames local function calls in a GraphProto (inplace).
+
+        :param g: the graph to modify
+        :param replacements: dictionary mapping old (domain, name) to new (domain, name)
+        """
+        to_rename = set(replacements)
+        for node in g.node:
+            key = node.domain, node.op_type
+            if key in to_rename:
+                new_key = replacements[key]
+                node.domain = new_key[0]
+                node.op_type = new_key[1]
+            # Recursively check subgraphs
+            for att in node.attribute:
+                if att.type == AttributeProto.GRAPH:
+                    self._rename_local_functions_in_graph(att.g, replacements)
 
     @classmethod
     def _detect_op_type_replacements(
@@ -8788,7 +8911,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             f"Function {key} was already added, rename_allowed={rename_allowed}, "
             f"merge_allowed={merge_allowed}, same: "
             f"{same_function_proto(self.functions[key], f)}"
-            f"\n{self.pretty_text()}"
+            f"\n----------------------------------------------"
+            f"\n{pretty_onnx(f)}"
+            f"\n----------------------------------------------"
+            f"\n{pretty_onnx(self.functions[key])}"
         )
         if self._debug_local_function:
             print(

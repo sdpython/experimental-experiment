@@ -2355,7 +2355,7 @@ class DynamoInterpreter:
 
         # looking at the sample example
         val = source_node.meta.get("val", None)
-        if val is not None and isinstance(val, tuple):
+        if val is not None and isinstance(val, (tuple, list)):
             n_outputs = len(val)
             output_names = [f"{source_node.name}#{i}" for i in range(n_outputs)]
         elif (
@@ -2578,7 +2578,7 @@ class DynamoInterpreter:
                 f"Unable to preserve module class {type(node_module)} for node {node!r} "
                 f"type(sub_module)={type(sub_module)}{self.builder.get_debug_msg()}"
             )
-        # nodes are inserted inline
+
         self.builder._check_constants("before-make_nodes(2)")
         self.builder.make_nodes(
             builder,
