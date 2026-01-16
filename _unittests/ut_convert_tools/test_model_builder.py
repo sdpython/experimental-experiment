@@ -6,7 +6,7 @@ from onnx_diagnostic.helpers.torch_helper import torch_dtype_to_onnx_dtype, torc
 from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
 from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from onnx_diagnostic.torch_export_patches import torch_export_patches
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
 from experimental_experiment.convert.model_builder_base import ModelBuilderBase
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -110,6 +110,8 @@ class TestModelBuilderHelper(ExtTestCase):
         model_proto = onnx_ir.serde.serialize_model(onx)
         self.dump_onnx("test_model_builder_attention.onnx", model_proto)
 
+    @hide_stdout()
+    @ignore_warnings(FutureWarning)
     def test_custom_export_with_layer_exposed_tiny_llm(self):
         model_id = "arnir0/Tiny-LLM"
         data = get_untrained_model_with_inputs(model_id)
@@ -127,6 +129,7 @@ class TestModelBuilderHelper(ExtTestCase):
                 filename=filename,
                 verbose=1,
             )
+        self.check_ort(onnx.load(filename))
 
     def test_dynamo_export_with_layer_exposed_tiny_llm(self):
         import torch

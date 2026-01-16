@@ -2778,6 +2778,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"{shape}{self.get_debug_msg()}"
                 )
 
+        assert all(not self.has_rank(t) or self.get_rank(t) == 1 for t in conc), (
+            f"All tensors to concatenate must have rank 1, got ranks: "
+            f"{[self.get_rank(t) if self.has_rank(t) else '?' for t in conc]}{self.get_debug_msg()}"
+        )
         if len(conc) > 1:
             res = self.make_node("Concat", conc, axis=0, name=f"_mkshape_{name}")
             if shape_shape is None:
@@ -4362,6 +4366,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if op_type == "Identity" and inputs == output_names:
             # No need.
             return output_names[0]
+        if False and op_type == "Concat":
+            types = [self.get_rank(t) for t in inputs if self.has_rank(t)]
+            assert not types or len(set(types)) == 1, (
+                f"All inputs must have the same rank for Concat, "
+                f"types={types}, inputs={inputs}{self.get_debug_msg()}"
+            )
 
         if check is not False:
             for i in inputs:
@@ -4707,7 +4717,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         """
         self._update_other_builder_local_function_before_merging(builder)
         for key, f in builder.functions.items():
-            print("    mmm", key, f.domain, f.name)
             self.add_function(
                 f,
                 rename_allowed=False,
@@ -4798,6 +4807,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     itype=builder._known_types[init],
                     shape=builder._known_shapes[init],
                     source=f"GraphBuilder.make_nodes/from{init}{src}",
+                    allow_empty=True,
                 )
 
             for k, v in builder.dynamic_objects.items():
@@ -4821,6 +4831,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
                 for o, no in zip(node.output, new_outputs):
                     renaming[o] = no
+
                 self.make_node(
                     node.op_type,
                     new_inputs,

@@ -2491,6 +2491,7 @@ class DynamoInterpreter:
         )
 
         name = sub_module.__class__.__name__
+        prefix = f"_sub_{name}_{node.name}__"
         local_function_name = None
         if sub_module.__class__.__name__ == "InterpreterModule":
             # a local function is added.
@@ -2512,11 +2513,12 @@ class DynamoInterpreter:
                 self.builder._check_constants("before-make_nodes")
 
                 # let's create a function under the appropriate name
+                prefix = f"_sub_IM_{node.name}__"
                 self.builder.make_nodes(
                     builder,
                     args,
                     output_names,
-                    prefix=f"_sub_{name}_",
+                    prefix=prefix,
                     function_options=FunctionOptions(
                         name=local_function_name,
                         domain=LOCAL_DOMAIN,
@@ -2573,6 +2575,7 @@ class DynamoInterpreter:
                     allow_new_dynamic_dimension=True,
                 )
                 return output_names
+            prefix = f"_sub_ime__{node.name}_"
         else:
             assert not preserve_as_submodule, (
                 f"Unable to preserve module class {type(node_module)} for node {node!r} "
@@ -2581,11 +2584,7 @@ class DynamoInterpreter:
 
         self.builder._check_constants("before-make_nodes(2)")
         self.builder.make_nodes(
-            builder,
-            args,
-            output_names,
-            prefix=f"_sub_{name}_{node.name}_",
-            force_rename_with_prefix=node.name,
+            builder, args, output_names, prefix=prefix, force_rename_with_prefix=node.name
         )
         self.builder._check_constants("after-make_nodes(2)")
         return output_names

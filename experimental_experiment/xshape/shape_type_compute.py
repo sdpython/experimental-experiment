@@ -979,7 +979,8 @@ def _set_shape_type_op_any_slice(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Slice."
     if self.has_device(node.input[0]):
         self.set_device(node.output[0], self.get_device(node.input[0]))
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
         return True
