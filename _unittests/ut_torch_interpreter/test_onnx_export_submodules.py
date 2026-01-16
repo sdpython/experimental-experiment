@@ -777,6 +777,73 @@ class TestOnnxExportSubModules(ExtTestCase):
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
 
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_shapes(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return z1.shape[0], torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                batch_dim, y3 = self.sublevela(x)
+                ones = torch.ones((batch_dim, y3.shape[1]), dtype=y3.dtype, device=y3.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones) + y3
+
+        class Level3(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevelb = Level2(n_dims, n_targets)
+                self.linear3 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                w1 = self.linear3(x)
+                w2 = self.sublevelb(x)
+                ones = torch.ones(w2.shape, dtype=w2.dtype, device=w2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(w1 + ones) + w2
+
+        model = Level3()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file("test_submodule_local_functions_shapes.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions={Level1},
+            optimize=True,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 1)
+        self.assertEqual(["<locals>.Level1"], [f.name for f in onx.functions])
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -125,7 +125,7 @@ class TestModelBuilderHelper(ExtTestCase):
                 dynamic_shapes=ds,
                 export_modules_as_functions={layer_class},
                 inline=False,
-                optimize=False,
+                optimize=True,
                 filename=filename,
                 verbose=1,
             )

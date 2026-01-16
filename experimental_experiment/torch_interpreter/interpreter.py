@@ -1310,7 +1310,7 @@ class DynamoInterpreter:
                 self.builder.set_device(node.name, val.get_device())
                 sts = {"dtype": val.dtype}
             elif isinstance(val, self.torch.SymInt):
-                self.builder.set_shape(node.name, (1,))
+                self.builder.set_shape(node.name, tuple())
                 self.builder.set_type(node.name, TensorProto.INT64)
                 self.builder.set_device(node.name, -1)
                 sts = {"dtype": self.torch.int64}

@@ -1693,9 +1693,10 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
         local_function_builder = self.get_local_function(
             node.op_type, domain=node.domain, builder=True
         )
-        assert (
-            local_function_builder is not None
-        ), f"Missing local function for node {(node.domain, node.op_type)}"
+        assert local_function_builder is not None, (
+            f"Missing local function for node {(node.domain, node.op_type)}"
+            f"{self.get_debug_msg()}"
+        )
         assert isinstance(local_function_builder, self.__class__), (
             f"Unexpected type {type(local_function_builder)} "
             f"for node {(node.domain, node.op_type)} "
