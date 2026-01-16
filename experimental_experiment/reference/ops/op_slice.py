@@ -8,7 +8,6 @@ class Slice_10(SliceCommon):
 
 class Slice_1(SliceCommon):
     def __init__(self, onnx_node, run_params):
-        print(onnx_node)
         SliceCommon.__init__(self, onnx_node, run_params)
         for f in ["starts", "ends", "steps", "axes"]:
             if not hasattr(self, f):
