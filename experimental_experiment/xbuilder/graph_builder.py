@@ -4637,7 +4637,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         res = {k: v for k, v in res.items() if v is not None}
         return res
 
-    def _update_other_builder_local_function_before_merging(self, builder: "GraphBuilder"):
+    def _update_other_builder_local_function_before_merging(
+        self, builder: "GraphBuilder", merged_allowed: bool = True
+    ):
         def _check_():
             local_domains = {k[0] for k in builder.functions}
             for node in builder.nodes:
@@ -4658,8 +4660,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         needs_renaming = set()
         if builder.functions:
             for key in builder.functions:
-                if key in self.functions and not same_function_proto(
-                    builder.functions[key], self.functions[key]
+                if key in self.functions and (
+                    not merged_allowed
+                    or not same_function_proto(builder.functions[key], self.functions[key])
                 ):
                     # needs rewriting
                     needs_renaming.add(key)
@@ -4723,7 +4726,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             the prefix *name* is used
         :return: output names
         """
-        self._update_other_builder_local_function_before_merging(builder, merge_allowed=True)
+        self._update_other_builder_local_function_before_merging(
+            builder, merge_allowed=function_options is None or function_options.merge_allowed
+        )
         for key, f in builder.functions.items():
             self.add_function(
                 f,
@@ -8580,7 +8585,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         )
 
         if function_options.rename_allowed and self.functions:
-            self._update_other_builder_local_function_before_merging(builder)
+            self._update_other_builder_local_function_before_merging(
+                builder, merged_allowed=function_options.merge_allowed
+            )
         self._check_function_order()
 
         fct = builder.to_onnx(
