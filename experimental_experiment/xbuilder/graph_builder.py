@@ -5508,7 +5508,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         known_functions = set()
         for k, v in self.functions.items():
             for node in v.node:
-                if node.domain in {"", "ai.onnx.ml"} or ".onnx" in node.domain:
+                # TODO: This is very restrictive. This should be changed.
+                if node.domain in {"", "ai.onnx.ml", "com.microsoft"} or ".onnx" in node.domain:
                     continue
                 key = node.domain, node.op_type
                 assert key in known_functions, (

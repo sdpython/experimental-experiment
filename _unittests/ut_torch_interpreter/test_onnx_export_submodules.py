@@ -189,7 +189,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         self.dump_onnx("test_dummy_llm_strict_true.onnx", onx)
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"])
+        self.assertEqual(node_names, ["<locals>_Embedding", "<locals>_DecoderLayer", "Identity"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -238,7 +238,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         self.dump_onnx("test_dummy_llm_opts.onnx", onx)
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer"])
+        self.assertEqual(node_names, ["<locals>_Embedding", "<locals>_DecoderLayer"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -302,7 +302,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             inline=False,
         )
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"])
+        self.assertEqual(node_names, ["<locals>_Embedding", "<locals>_DecoderLayer", "Identity"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -579,7 +579,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 1)
-        self.assertEqual(["<locals>.Level2"], [f.name for f in onx.functions])
+        self.assertEqual(["<locals>_Level2"], [f.name for f in onx.functions])
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
@@ -648,7 +648,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 1)
-        self.assertEqual(["<locals>.Level1"], [f.name for f in onx.functions])
+        self.assertEqual(["<locals>_Level1"], [f.name for f in onx.functions])
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
@@ -772,7 +772,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 1)
-        self.assertEqual(["<locals>.Level2"], [f.name for f in onx.functions])
+        self.assertEqual(["<locals>_Level2"], [f.name for f in onx.functions])
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
@@ -839,7 +839,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         check_model(onx)
         self.assertEqual(len(onx.functions), 1)
-        self.assertEqual(["<locals>.Level1"], [f.name for f in onx.functions])
+        self.assertEqual(["<locals>_Level1"], [f.name for f in onx.functions])
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
