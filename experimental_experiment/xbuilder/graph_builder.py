@@ -4332,6 +4332,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 f"[GraphBuilder-{self._hash()}.make_node-f?] {op_type}[{domain}] "
                 f"({', '.join(inputs)}) -> {', '.join(outputs)}"
             )
+        assert "." not in op_type, f"'.' not allowed in operator '{domain}.{op_type}'"
         assert name is not None and not name.startswith("None"), (
             f"It is good practice to give every node a name so that is "
             f"easier to see where this node is created but name={name!r} "
@@ -5509,10 +5510,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             for node in v.node:
                 if node.domain in {"", "ai.onnx.ml"} or ".onnx" in node.domain:
                     continue
-                key = node.domain, node.name
+                key = node.domain, node.op_type
                 assert key in known_functions, (
                     f"Function {k} is using function {key} not in {known_functions}, "
-                    f"available functions are {list(self.functions)}"
+                    f"available functions are {list(self.functions)}, node=\n{node}"
                 )
             known_functions.add(k)
 
@@ -8914,6 +8915,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         You should use method :meth:`make_local_function` for this.
         """
         key = f.domain, f.name
+        assert "." not in f.name, f"'.' not allowed in function '{f.domain}.{f.name}'"
         if merge_allowed and key in self.functions:
             existing = self.functions[key]
             if same_function_proto(existing, f):
@@ -8936,6 +8938,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 key = f.domain, f"{f.name}_l{i}l"
             f.name = key[1]
 
+        assert "." not in f.name, f"'.' not allowed in function '{f.domain}.{f.name}'"
         assert key not in self.functions, (
             f"Function {key} was already added, rename_allowed={rename_allowed}, "
             f"merge_allowed={merge_allowed}, same: "
