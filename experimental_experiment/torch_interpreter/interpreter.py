@@ -1800,7 +1800,9 @@ class DynamoInterpreter:
                 f"({', '.join(input_names)}) -> {', '.join(output_names)}"
             )
 
-        new_builder = self.builder.make_subset_builder(input_names, name=name_fct, domain=domain)
+        new_builder = self.builder.make_subset_builder(
+            input_names, name=name_fct.replace(".", "_"), domain=domain
+        )
         try:
             res = fct(new_builder, can_set, output_names, *args, **kwargs)
         except AssertionError as e:
@@ -1819,6 +1821,7 @@ class DynamoInterpreter:
                 is_dimension=self.builder.get_is_dimension(o, exc=False),
                 doc_string=f"#C:{o}",
             )
+        new_builder._check_function_order()
         inits, (fdomain, fname) = self.builder.make_local_function(
             new_builder,
             FunctionOptions(
@@ -2419,7 +2422,7 @@ class DynamoInterpreter:
         """Gets a submodule name, simple but unique."""
         assert self.submodule_naming, "submodule_naming is null"
         assert self.parameter_naming, "parameter_naming is null"
-        return self.submodule_naming(module_name, module)
+        return self.submodule_naming(module_name, module).replace(".", "_")
 
     def call_module(self, node: "torch.fx.Node"):  # noqa: F821
         """Called for a module."""
