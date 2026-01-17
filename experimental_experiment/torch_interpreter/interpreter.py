@@ -1847,6 +1847,7 @@ class DynamoInterpreter:
                     init.name, init, source="add_aten_as_function"
                 )
                 new_inits.append(new_init)
+
         self.builder.make_node(
             fname,
             [*input_names, *new_inits],
