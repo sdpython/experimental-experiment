@@ -4638,7 +4638,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         return res
 
     def _update_other_builder_local_function_before_merging(
-        self, builder: "GraphBuilder", merged_allowed: bool = True
+        self, builder: "GraphBuilder", merge_allowed: bool = True
     ):
         def _check_():
             local_domains = {k[0] for k in builder.functions}
@@ -4661,7 +4661,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if builder.functions:
             for key in builder.functions:
                 if key in self.functions and (
-                    not merged_allowed
+                    not merge_allowed
                     or not same_function_proto(builder.functions[key], self.functions[key])
                 ):
                     # needs rewriting
@@ -8586,7 +8586,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
 
         if function_options.rename_allowed and self.functions:
             self._update_other_builder_local_function_before_merging(
-                builder, merged_allowed=function_options.merge_allowed
+                builder, merge_allowed=function_options.merge_allowed
             )
         self._check_function_order()
 
