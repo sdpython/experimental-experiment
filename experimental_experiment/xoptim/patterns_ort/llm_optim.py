@@ -506,7 +506,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             ), f"Unexpected first node {prefix_nodes[0]}"
             cos_sin = prefix_nodes[0]
             position_ids = cos_sin.input[0]
-            (max_ids, max_ids_1, new_positions_ids, cos_out, sin_out, range_ids) = [
+            max_ids, max_ids_1, new_positions_ids, cos_out, sin_out, range_ids = [
                 g.unique_name(f"{self.__class__.__name__}--{position_ids}") for i in range(6)
             ]
             zero = g.make_initializer("", g.ZERO, source=f"{self.__class__.__name__}.0")

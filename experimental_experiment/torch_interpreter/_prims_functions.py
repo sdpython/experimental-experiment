@@ -9,7 +9,6 @@ from ..xshape.shape_type_compute import (
     set_type_shape_reduce_op,
 )
 
-
 T = str
 
 

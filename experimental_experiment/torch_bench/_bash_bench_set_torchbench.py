@@ -23,8 +23,7 @@ from ._bash_bench_model_runner import (
 class TorchBenchRunner(BenchmarkRunner):
     SUITE = "TorchBench"
 
-    YAML = textwrap.dedent(
-        """
+    YAML = textwrap.dedent("""
         # Some models have large dataset that doesn't fit in memory. Lower the batch
         # size to test the accuracy.
         batch_size:
@@ -288,11 +287,9 @@ class TorchBenchRunner(BenchmarkRunner):
         max_batch_size:
             hf_GPT2: 2
             pytorch_unet: 2
-        """
-    )
+        """)
 
-    MODELS_FILENAME = textwrap.dedent(
-        """
+    MODELS_FILENAME = textwrap.dedent("""
         BERT_pytorch,128
         Background_Matting,1
         LearningToPaint,1024
@@ -321,11 +318,9 @@ class TorchBenchRunner(BenchmarkRunner):
         timm_vision_transformer,256
         timm_vovnet,128
         vgg16,128
-        """
-    )
+        """)
 
-    EXPECTED_MODELS = textwrap.dedent(
-        """
+    EXPECTED_MODELS = textwrap.dedent("""
         BERT_pytorch
         Background_Matting
         DALLE2_pytorch
@@ -414,8 +409,7 @@ class TorchBenchRunner(BenchmarkRunner):
         vgg16
         vision_maskrcnn
         yolov3
-        """
-    )
+        """)
 
     BATCH_SIZE_KNOWN_MODELS = dict()
 

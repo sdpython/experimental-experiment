@@ -12,8 +12,7 @@ def get_main_parser() -> ArgumentParser:
         prog="experimental-experiment",
         description="experiment-experiment main command line.\n",
         formatter_class=RawTextHelpFormatter,
-        epilog=textwrap.dedent(
-            """
+        epilog=textwrap.dedent("""
         Type 'python -m experimental_experiment <cmd> --help'
         to get help for a specific command.
 
@@ -23,8 +22,7 @@ def get_main_parser() -> ArgumentParser:
         run        - runs a model and measure the inference time
         print      - prints the model on standard output
         find       - find node consuming or producing a result
-        """
-        ),
+        """),
     )
     parser.add_argument(
         "cmd",
@@ -37,12 +35,10 @@ def get_main_parser() -> ArgumentParser:
 def get_parser_lighten() -> ArgumentParser:
     parser = ArgumentParser(
         prog="lighten",
-        description=dedent(
-            """
+        description=dedent("""
         Removes the weights from a heavy model, stores statistics to restore
         random weights.
-        """
-        ),
+        """),
         epilog="This is mostly used to write unit tests without adding "
         "a big onnx file to the repository.",
     )
@@ -94,12 +90,10 @@ def _cmd_lighten(argv: List[Any]):
 def get_parser_unlighten() -> ArgumentParser:
     parser = ArgumentParser(
         prog="unlighten",
-        description=dedent(
-            """
+        description=dedent("""
         Restores random weights for a model reduces with command lighten,
         the command expects to find a file nearby with extension '.stats'.
-        """
-        ),
+        """),
         epilog="This is mostly used to write unit tests without adding "
         "a big onnx file to the repository.",
     )
@@ -145,15 +139,12 @@ def get_parser_optimize() -> ArgumentParser:
     parser = ArgumentParser(
         prog="optimize",
         formatter_class=RawTextHelpFormatter,
-        description=dedent(
-            """
+        description=dedent("""
         Optimizes an onnx model by fusing nodes. It looks for patterns in the graphs
         and replaces them by the corresponding nodes. It also does basic optimization
         such as removing identity nodes or unused nodes.
-        """
-        ),
-        epilog=textwrap.dedent(
-            """
+        """),
+        epilog=textwrap.dedent("""
         The goal is to make the model faster.
         Argument patterns defines the patterns to apply or the set of patterns.
         It defines the following sets of patterns
@@ -176,8 +167,7 @@ def get_parser_optimize() -> ArgumentParser:
         obtained by running:
 
             python -m experimental_experiment optimize --patterns=list -i '' -o ''
-        """
-        ),
+        """),
     )
     parser.add_argument(
         "-i",
@@ -222,11 +212,9 @@ def get_parser_optimize() -> ArgumentParser:
     parser.add_argument(
         "--processor",
         default="CPU",
-        help=textwrap.dedent(
-            """
+        help=textwrap.dedent("""
             optimization for a specific processor, CPU, CUDA or both CPU,CUDA,
-            some operators are only available in one processor"""
-        ).strip("\n"),
+            some operators are only available in one processor""").strip("\n"),
     )
     parser.add_argument(
         "--patterns",
@@ -320,16 +308,12 @@ def get_parser_run() -> ArgumentParser:
     parser = ArgumentParser(
         prog="run",
         formatter_class=RawTextHelpFormatter,
-        description=dedent(
-            """
+        description=dedent("""
         Runs a model with dummy inputs and measures the inference time.
-        """
-        ),
-        epilog=textwrap.dedent(
-            """
+        """),
+        epilog=textwrap.dedent("""
         It checks a model runs and the inference time on the same inputs.
-        """
-        ),
+        """),
     )
     parser.add_argument(
         "-m",
@@ -374,11 +358,9 @@ def get_parser_run() -> ArgumentParser:
         "-p",
         "--processor",
         default="CPU",
-        help=textwrap.dedent(
-            """
+        help=textwrap.dedent("""
             providers to launch, CPU, CUDA, CUDA,CPU.
-            """
-        ).strip("\n"),
+            """).strip("\n"),
     )
     parser.add_argument("--validate", default="", help="validate the output with another model")
     return parser
@@ -407,11 +389,9 @@ def _cmd_run(argv: List[Any]):
 def get_parser_print() -> ArgumentParser:
     parser = ArgumentParser(
         prog="print",
-        description=dedent(
-            """
+        description=dedent("""
         Prints the model on the standard output.
-        """
-        ),
+        """),
         epilog="To show a model.",
     )
     parser.add_argument(
@@ -443,12 +423,10 @@ def _cmd_print(argv: List[Any]):
 def get_parser_find() -> ArgumentParser:
     parser = ArgumentParser(
         prog="find",
-        description=dedent(
-            """
+        description=dedent("""
         Look into a model and search for a set of names,
         tells which node is consuming or producing it.
-        """
-        ),
+        """),
         epilog="Enables Some quick validation.",
     )
     parser.add_argument(

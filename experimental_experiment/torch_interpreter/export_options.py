@@ -764,7 +764,7 @@ class ExportOptions:
         """Validates the exported program by running the model."""
         from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 
-        (ar, kws) = torch_deepcopy((args, kwargs))
+        ar, kws = torch_deepcopy((args, kwargs))
         if verbose:
             print(
                 f"[ExportOptions.validate_exported_program] run model with "
@@ -772,7 +772,7 @@ class ExportOptions:
                 f"kwargs={string_type(kwargs, with_shape=True)}"
             )
         expected = model(*(ar or []), **(kws or {}))
-        (ar, kws) = torch_deepcopy((args, kwargs))
+        ar, kws = torch_deepcopy((args, kwargs))
         if verbose:
             print(
                 f"[ExportOptions.validate_exported_program] run exported_program with "

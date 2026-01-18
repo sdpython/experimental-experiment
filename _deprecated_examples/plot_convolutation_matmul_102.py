@@ -33,7 +33,6 @@ from experimental_experiment.gradient.grad_helper import (
     DerivativeOptions,
 )
 
-
 shape = (5, 7)
 N = np.prod(shape)
 data = np.arange(N).astype(np.float32).reshape(shape)

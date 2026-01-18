@@ -1183,7 +1183,7 @@ def validate_exported_onnx(
     from onnx_diagnostic.helpers.rt_helper import make_feeds
     from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 
-    (ar, kws) = torch_deepcopy((args, kwargs))
+    ar, kws = torch_deepcopy((args, kwargs))
     if verbose:
         print(
             f"[validate_exported_onnx] run model with "
@@ -1191,7 +1191,7 @@ def validate_exported_onnx(
             f"kwargs={string_type(kwargs, with_shape=True)}"
         )
     expected = model(*(ar or []), **(kws or {}))
-    (ar, kws) = torch_deepcopy((args, kwargs))
+    ar, kws = torch_deepcopy((args, kwargs))
 
     if verbose:
         print(f"[validate_exported_onnx] create onnxruntime session with {filename!r}")

@@ -17,7 +17,6 @@ from onnx_array_api.plotting.graphviz_helper import plot_dot
 from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.torch_interpreter import to_onnx
 
-
 # %%
 # We define a model with a control flow (-> graph break)
 

@@ -11,7 +11,6 @@ from ..helpers import tensor_dtype_to_np_dtype, from_array_extended
 from ..xbuilder.graph_builder import GraphBuilder
 from ..xshape.shape_type_compute import set_type_shape_unary_op, set_type_shape_binary_op
 
-
 T = str
 
 

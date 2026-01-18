@@ -55,8 +55,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         code = to_graph_builder_code(model)
 
         expected = (
-            textwrap.dedent(
-                """
+            textwrap.dedent("""
         import numpy as np
         from onnx import TensorProto
         from onnx.numpy_helper import from_array
@@ -88,8 +87,7 @@ class TestReverseGraphBuilder(ExtTestCase):
 
 
         model = make_my_model()
-        """
-            )
+        """)
             .strip("\n")
             .replace(
                 "__LONG__",
@@ -129,8 +127,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         code = to_graph_builder_code(model)
 
         expected = (
-            textwrap.dedent(
-                """
+            textwrap.dedent("""
         import numpy as np
         from onnx import TensorProto
         from onnx.numpy_helper import from_array
@@ -160,8 +157,7 @@ class TestReverseGraphBuilder(ExtTestCase):
 
 
         model = make_my_model()
-        """
-            )
+        """)
             .strip("\n")
             .replace(
                 "__LONG__",
@@ -212,9 +208,7 @@ class TestReverseGraphBuilder(ExtTestCase):
         )
         code = to_graph_builder_code(onnx_model)
 
-        expected = (
-            textwrap.dedent(
-                """
+        expected = textwrap.dedent("""
             import numpy as np
             from onnx import TensorProto
             from onnx.numpy_helper import from_array
@@ -265,11 +259,7 @@ class TestReverseGraphBuilder(ExtTestCase):
 
 
             model = make_my_model()
-        """
-            )
-            .strip("\n")
-            .replace("__SUFFIX__", ", is_dimension=False, indexed=False")
-        )
+        """).strip("\n").replace("__SUFFIX__", ", is_dimension=False, indexed=False")
         self.maxDiff = None
         self.assertEqual(expected, code.strip("\n"))
 

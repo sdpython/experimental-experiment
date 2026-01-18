@@ -62,8 +62,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         "ViTModel",
     ]
 
-    MODELS_FILENAME = textwrap.dedent(
-        """
+    MODELS_FILENAME = textwrap.dedent("""
         AlbertForMaskedLM,8
         AlbertForQuestionAnswering,8
         AllenaiLongformerBase,8
@@ -115,8 +114,7 @@ class HuggingfaceRunner(BenchmarkRunner):
         XGLMForCausalLM,32
         XLNetLMHeadModel,16
         YituTechConvBert,32
-        """
-    )
+        """)
 
     BATCH_SIZE_KNOWN_MODELS = dict()
 

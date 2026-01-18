@@ -19,7 +19,6 @@ from onnx_diagnostic.helpers.onnx_helper import pretty_onnx
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx
 
-
 # %%
 # We define a model padding to a multiple of a constant.
 

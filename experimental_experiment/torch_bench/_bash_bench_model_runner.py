@@ -15,7 +15,6 @@ from onnx_diagnostic.helpers.torch_helper import to_any
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from onnx_diagnostic.torch_export_patches.patch_module_helper import code_needing_rewriting
 
-
 try:
     from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 except ImportError:

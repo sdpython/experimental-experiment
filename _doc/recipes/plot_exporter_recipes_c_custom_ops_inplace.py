@@ -22,7 +22,6 @@ from experimental_experiment.xbuilder import GraphBuilder
 from experimental_experiment.helpers import pretty_onnx
 from experimental_experiment.torch_interpreter import to_onnx, Dispatcher, ExportOptions
 
-
 # %%
 # We define a model with a custom operator.
 

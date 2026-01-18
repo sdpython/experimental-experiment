@@ -24,7 +24,6 @@ import transformers
 from onnx_diagnostic.helpers import string_type
 from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 
-
 MODEL_NAME = "arnir0/Tiny-LLM"
 tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL_NAME)
 model = transformers.AutoModelForCausalLM.from_pretrained(MODEL_NAME)
