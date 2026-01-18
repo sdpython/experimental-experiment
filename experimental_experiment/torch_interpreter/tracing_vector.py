@@ -1,5 +1,6 @@
 import enum
 import traceback
+from typing import Callable
 import torch
 
 TRACING_TENSOR_INDEX = 0
@@ -22,6 +23,35 @@ class TracingKind(enum.IntEnum):
     OPS = 2
 
 
+class WrapperParent:
+    def __init__(self, wrap_tensor: Callable, wrap_tracing_tensor: Callable):
+        self.wrap_tensor = wrap_tensor
+        self.wrap_tracing_tensor = wrap_tracing_tensor
+
+    def wraps(self, res):
+        if res is None:
+            return None
+        if isinstance(res, tuple):
+            return tuple(self.wraps(t) for t in res)
+        if type(res) is list:
+            return [self.wraps(t) for t in res]
+        if type(res) is dict:
+            return {k: self.wraps(t) for k, t in res.items()}
+        if type(res) is torch.Tensor:
+            return self.wrap_tensor(res)
+        if type(res) is TracingTensor:
+            return self.wrap_tracing_tensor(res)
+        if isinstance(res, torch.Tensor):
+            return self.wrap_tensor(res)
+        if isinstance(res, (int, float, bool, str)):
+            return res
+        if type(res) in (torch.dtype, torch.device):
+            return res
+        raise NotImplementedError(
+            f"wraps_with_tracing_tensor not implemented for type({type(res)})"
+        )
+
+
 class TracingTensor(torch.Tensor):
     @staticmethod
     def __new__(cls, data: torch.Tensor, **kwargs):
@@ -33,46 +63,15 @@ class TracingTensor(torch.Tensor):
 
     @classmethod
     def wraps_with_tracing_tensor(cls, res):
-        if res is None:
-            return None
-        if isinstance(res, tuple):
-            return tuple(cls.wraps_with_tracing_tensor(t) for t in res)
-        if type(res) is list:
-            return [cls.wraps_with_tracing_tensor(t) for t in res]
-        if type(res) is dict:
-            return {k: cls.wraps_with_tracing_tensor(t) for k, t in res.items()}
-        if type(res) is torch.Tensor:
-            return TracingTensor(res)
-        if type(res) is TracingTensor:
-            return res
-        if isinstance(res, (int, float, bool, str)):
-            return res
-        if type(res) in (torch.dtype, torch.device):
-            return res
-        raise NotImplementedError(
-            f"wraps_with_tracing_tensor not implemented for type({type(res)})"
-        )
+        return WrapperParent(lambda t: TracingTensor(t), lambda t: t).wraps(res)
 
     @classmethod
     def tracing_tensor_as_ids(cls, context, res):
-        if res is None:
-            return None
-        if isinstance(res, tuple):
-            return tuple(cls.tracing_tensor_as_ids(context, t) for t in res)
-        if type(res) is list:
-            return [cls.tracing_tensor_as_ids(context, t) for t in res]
-        if type(res) is dict:
-            return {k: cls.tracing_tensor_as_ids(context, t) for k, t in res.items()}
-        if type(res) is TracingTensor:
-            return res.__INDEX__
-        if isinstance(res, torch.Tensor):
+        def wrap_tensor(t):
             context.store_tensor_constant(res)
-            return res
-        if isinstance(res, (int, float, bool, str)):
-            return res
-        if type(res) in (torch.dtype, torch.device):
-            return res
-        raise NotImplementedError(f"tracing_tensor_as_ids not implemented for type({type(res)})")
+            return t
+
+        return WrapperParent(wrap_tensor, lambda t: t.__INDEX__).wraps(res)
 
 
 class TracingDispatch(torch.utils._python_dispatch.TorchDispatchMode):
