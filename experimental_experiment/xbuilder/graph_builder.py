@@ -5515,7 +5515,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         for k, v in self.functions.items():
             for node in v.node:
                 # TODO: This is very restrictive. This should be changed.
-                if node.domain in {"", "ai.onnx.ml", "com.microsoft"} or ".onnx" in node.domain:
+                if (
+                    node.domain in {"", "ai.onnx.ml", "com.microsoft", "ai.onnx.training"}
+                    or ".onnx" in node.domain
+                ):
                     continue
                 key = node.domain, node.op_type
                 assert key in known_functions, (
@@ -5525,7 +5528,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             known_functions.add(k)
         for node in self.nodes:
             assert (
-                node.domain in {"", "ai.onnx.ml"}
+                node.domain in {"", "ai.onnx.ml", "com.microsoft", "ai.onnx.training"}
                 or node.domain.startswith("ai")
                 or (node.domain, node.op_type) in known_functions
             ), (
@@ -8936,7 +8939,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         else:
             for node in f.node:
                 assert (
-                    node.domain in {"", "ai.onnx.ml"}
+                    node.domain in {"", "ai.onnx.ml", "ai.onnx.training", "com.microsoft"}
                     or node.domain.startswith("ai")
                     or (node.domain, node.op_type) in self.functions
                 ), (
