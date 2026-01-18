@@ -6,8 +6,7 @@ from experimental_experiment.torch_interpreter.control_flows import refactor_if_
 
 class TestControlFlows(ExtTestCase):
     def test_rewrite_code_if(self):
-        original_code = textwrap.dedent(
-            """
+        original_code = textwrap.dedent("""
         def compute():
             x = 5
             y = 10
@@ -18,12 +17,10 @@ class TestControlFlows(ExtTestCase):
                 y = y + 3
                 x = x - 1
             return x, y
-        """
-        ).strip(" \n")
+        """).strip(" \n")
 
         expected = (
-            textwrap.dedent(
-                """
+            textwrap.dedent("""
         def compute():
             x = 5
             y = 10
@@ -42,10 +39,8 @@ class TestControlFlows(ExtTestCase):
             y = y + 3
             x = x - 1
             return (x, y)
-        """
-            ).strip(" \n"),
-            textwrap.dedent(
-                """
+        """).strip(" \n"),
+            textwrap.dedent("""
         def compute():
             x = 5
             y = 10
@@ -64,8 +59,7 @@ class TestControlFlows(ExtTestCase):
             y = y + 3
             x = x - 1
             return (y, x)
-        """
-            ).strip(" \n"),
+        """).strip(" \n"),
         )
 
         # Extract if-else branches

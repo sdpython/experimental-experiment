@@ -1053,8 +1053,7 @@ class GraphBuilderPatternOptimization:
             f.write(code2)
 
         rst = (
-            textwrap.dedent(
-                """
+            textwrap.dedent("""
             Model with nodes to be fused:
 
             .. gdot::
@@ -1074,8 +1073,7 @@ class GraphBuilderPatternOptimization:
                 from experimental_experiment.doc import to_dot
             __CODE2__
                 print("DOT-SECTION", to_dot(model))
-            """
-            )
+            """)
             .replace("__CODE1__", textwrap.indent(code1, "    "))
             .replace("__CODE2__", textwrap.indent(code2, "    "))
         )

@@ -486,14 +486,12 @@ class CustomTracer(torch.fx.Tracer):
             def make_method(args_names):
                 args = ", ".join(args_names)
                 args1 = ", ".join(args_names[1:])
-                src = textwrap.dedent(
-                    f"""
+                src = textwrap.dedent(f"""
                     def f(self, {args}):
                         args = [{args1}]
                         cache = make_dynamic_cache(list(zip(args[::2], args[1::2])))
                         return self._traced_m1({args[0]}, cache)
-                    """
-                )
+                    """)
                 ns = {"torch": torch, "make_dynamic_cache": make_dynamic_cache}
                 exec(src, ns)
                 return ns["f"]
@@ -512,16 +510,14 @@ class CustomTracer(torch.fx.Tracer):
 
         def make_method(args_names):
             args = ", ".join(args_names)
-            src = textwrap.dedent(
-                f"""
+            src = textwrap.dedent(f"""
                 def f(self, {args}):
                     res = tree_unflatten_with_proxy(self._spec, [{args}])
                     assert isinstance(res, dict), (
                         "A dictionary is expected but unflattened type is %r" % type(res)
                     )
                     return self._traced_m2(**res)
-                """
-            )
+                """)
             ns = {"tree_unflatten_with_proxy": tree_unflatten_with_proxy}
             exec(src, ns)
             return ns["f"]

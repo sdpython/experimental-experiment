@@ -5,8 +5,7 @@ from ._bash_bench_set_torchbench import TorchBenchRunner
 class TorchBenchAdoRunner(TorchBenchRunner):
     SUITE = "Ado"
 
-    EXPECTED_MODELS = textwrap.dedent(
-        """
+    EXPECTED_MODELS = textwrap.dedent("""
         codellama
         hf_distil_whisper
         hf_mixtral
@@ -22,8 +21,7 @@ class TorchBenchAdoRunner(TorchBenchRunner):
         stable_diffusion_text_encoder
         stable_diffusion_unet
         stable_diffusion_xl
-        """
-    )
+        """)
 
     def initialize(self):
         """Steps to run before running the benchmark."""

@@ -848,20 +848,14 @@ if onx:
 
 if onx:
     code = to_graph_builder_code(onx)
-    addition = (
-        f"""
+    addition = f"""
 
     feeds = {feeds!r}
     expected = {expected!r}
     ref = ExtendedReferenceEvaluator(model)
     got = ref.run(None, feeds)
     print("disrepancies:", max_diff(expected, got[0]))
-    """.replace(
-            "nan", "np.nan"
-        )
-        .replace("array", "np.array")
-        .replace("float32", "np.float32")
-    )
+    """.replace("nan", "np.nan").replace("array", "np.array").replace("float32", "np.float32")
     code = f"""
     from experimental_experiment.reference import ExtendedReferenceEvaluator
     from experimental_experiment.helpers import max_diff

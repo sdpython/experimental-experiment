@@ -11,7 +11,6 @@ from argparse import Namespace
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-
 _DEFAULT_STRING_LIMIT = 2000
 
 

@@ -17,8 +17,7 @@ from ._bash_bench_model_runner import (
 
 class TimmRunner(BenchmarkRunner):
     SUITE = "Timm"
-    MODELS_FILENAME = textwrap.dedent(
-        """
+    MODELS_FILENAME = textwrap.dedent("""
         adv_inception_v3 128
         beit_base_patch16_224 128
         botnet26t_256 128
@@ -80,8 +79,7 @@ class TimmRunner(BenchmarkRunner):
         vit_base_patch16_224 128
         volo_d1_224 128
         xcit_large_24_p8_224 16
-        """
-    )
+        """)
 
     BATCH_SIZE_DIVISORS = {
         "beit_base_patch16_224": 2,
@@ -150,8 +148,7 @@ class TimmRunner(BenchmarkRunner):
         "mobilenetv3_large_100",
     }
 
-    EXPECTED = textwrap.dedent(
-        """
+    EXPECTED = textwrap.dedent("""
         adv_inception_v3
         beit_base_patch16_224
         botnet26t_256
@@ -213,8 +210,7 @@ class TimmRunner(BenchmarkRunner):
         vit_base_patch16_224
         volo_d1_224
         xcit_large_24_p8_224
-        """
-    )
+        """)
 
     TIMM_MODELS = {}
 

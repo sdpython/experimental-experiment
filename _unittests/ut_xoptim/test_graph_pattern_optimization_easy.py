@@ -23,7 +23,6 @@ from experimental_experiment.xbuilder.graph_builder import (
     OptimizationOptions,
 )
 
-
 TFLOAT = TensorProto.FLOAT
 TFLOAT16 = TensorProto.FLOAT16
 TINT64 = TensorProto.INT64

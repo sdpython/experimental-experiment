@@ -8,7 +8,6 @@ from onnx.helper import tensor_dtype_to_np_dtype
 from .onnx_export_templates import get_numpy_template
 from .numpy_helper import make_numpy_code
 
-
 _keywords = {
     "False",
     "await",

@@ -2,7 +2,6 @@ from typing import Any, Dict, List, Optional
 from onnx import TensorProto
 from ..xbuilder.graph_builder import GraphBuilder
 
-
 T = str
 
 

@@ -20,21 +20,18 @@ class TestDynamo(ExtTestCase):
 
         obs = {"j": 3, "hh": 5, "ll": [77]}
         o = pprint_storage(obs).strip(" \n")
-        expected = textwrap.dedent(
-            """
+        expected = textwrap.dedent("""
         {
           'j': 3,
           'hh': 5,
           'll': [77],
         }
-        """
-        ).strip(" \n")
+        """).strip(" \n")
         self.assertEqual(expected, o)
 
         obs = {"j": 3, "hh": 5, "ll": [(77, 55)]}
         o = pprint_storage(obs).strip(" \n")
-        expected = textwrap.dedent(
-            """
+        expected = textwrap.dedent("""
         {
           'j': 3,
           'hh': 5,
@@ -42,15 +39,13 @@ class TestDynamo(ExtTestCase):
             (77, 55),
           ],
         }
-        """
-        ).strip(" \n")
+        """).strip(" \n")
         self.assertEqual(expected, o)
 
     def test_pprint_storage_long(self):
         obs = {"j": 3, "hh": 5, "ll": [4, [77, 55, 0, 1, 2, 3, 4, 5, 6, 8, 9, 10]]}
         o = pprint_storage(obs).strip(" \n")
-        expected = textwrap.dedent(
-            """
+        expected = textwrap.dedent("""
         {
           'j': 3,
           'hh': 5,
@@ -72,8 +67,7 @@ class TestDynamo(ExtTestCase):
             ],
           ],
         }
-        """
-        ).strip(" \n")
+        """).strip(" \n")
         self.assertEqual(expected, o)
 
 

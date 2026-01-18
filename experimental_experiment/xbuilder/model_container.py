@@ -10,7 +10,6 @@ from onnx.inliner import inline_local_functions
 from onnx_diagnostic.helpers.mini_onnx_builder import proto_from_array
 from ..helpers import tensor_dtype_to_np_dtype, torch_dtype_to_onnx_dtype
 
-
 STORAGE_TYPE = {
     TensorProto.FLOAT16: np.int16,
     TensorProto.BFLOAT16: np.int16,

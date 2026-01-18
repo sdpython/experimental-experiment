@@ -22,7 +22,6 @@ from experimental_experiment.xbuilder.graph_builder import (
 )
 from experimental_experiment.xoptim import EasyPatternOptimization
 
-
 proto = oh.make_model(
     oh.make_graph(
         [
