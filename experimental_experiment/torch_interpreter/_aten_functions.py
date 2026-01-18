@@ -415,7 +415,7 @@ def aten_add_Tensor(
     name: str = "add_Tensor",
 ) -> T:
     "add"
-    assert alpha in (None, 1), f"alpha={alpha}, not implemented"
+    assert alpha in (None, 1), f"alpha={alpha}, not implemented{g.get_debug_msg()}"
     if (
         isinstance(x, str)
         and isinstance(y, str)

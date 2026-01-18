@@ -189,7 +189,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         self.dump_onnx("test_dummy_llm_strict_true.onnx", onx)
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"])
+        self.assertEqual(node_names, ["<locals>_Embedding", "<locals>_DecoderLayer", "Identity"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -238,7 +238,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         )
         self.dump_onnx("test_dummy_llm_opts.onnx", onx)
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer"])
+        self.assertEqual(node_names, ["<locals>_Embedding", "<locals>_DecoderLayer"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -302,7 +302,7 @@ class TestOnnxExportSubModules(ExtTestCase):
             inline=False,
         )
         node_names = [n.op_type for n in onx.graph.node]
-        self.assertEqual(node_names, ["<locals>.Embedding", "<locals>.DecoderLayer", "Identity"])
+        self.assertEqual(node_names, ["<locals>_Embedding", "<locals>_DecoderLayer", "Identity"])
         node_names = [n.op_type for n in onx.functions[1].node]
         self.assertEqual(node_names, ["Embedding", "Embedding", "Add", "Identity"])
         p_names = set(name for name, _ in model.named_parameters())
@@ -330,6 +330,519 @@ class TestOnnxExportSubModules(ExtTestCase):
             export_modules_as_functions=True,
         )
         self.dump_onnx("test_dummy_llm_opts.onnx", onx)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_more_depth_static(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                y2 = self.sublevela(x)
+                ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones) + y2
+
+        class Level3(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevelb = Level2(n_dims, n_targets)
+                self.linear3 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                w1 = self.linear3(x)
+                w2 = self.sublevelb(x)
+                ones = torch.ones(w2.shape, dtype=w2.dtype, device=w2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(w1 + ones) + w2
+
+        model = Level3()
+        inputs = (torch.randn(1, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file("test_submodule_local_functions_more_depth_static.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions=True,
+            optimize=False,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 3)
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_more_depth_dynamic1(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                y2 = self.sublevela(x)
+                ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones) + y2
+
+        model = Level2()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file("test_submodule_local_functions_more_depth_dynamic1.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions=True,
+            optimize=False,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 2)
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_more_depth_dynamic2(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                y2 = self.sublevela(x)
+                ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones) + y2
+
+        class Level3(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevelb = Level2(n_dims, n_targets)
+                self.linear3 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                w1 = self.linear3(x)
+                w2 = self.sublevelb(x)
+                ones = torch.ones(w2.shape, dtype=w2.dtype, device=w2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(w1 + ones) + w2
+
+        model = Level3()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file("test_submodule_local_functions_more_depth_dynamic2.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions=True,
+            optimize=False,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 3)
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_more_depth_dynamic2_preserve2(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                y2 = self.sublevela(x)
+                ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones) + y2
+
+        class Level3(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevelb = Level2(n_dims, n_targets)
+                self.linear3 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                w1 = self.linear3(x)
+                w2 = self.sublevelb(x)
+                ones = torch.ones(w2.shape, dtype=w2.dtype, device=w2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(w1 + ones) + w2
+
+        model = Level3()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file(
+            "test_submodule_local_functions_more_depth_dynamic2_preserve2.onnx"
+        )
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions={Level2},
+            optimize=False,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 1)
+        self.assertEqual(["<locals>_Level2"], [f.name for f in onx.functions])
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_more_depth_dynamic2_preserve1(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                y2 = self.sublevela(x)
+                ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones) + y2
+
+        class Level3(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevelb = Level2(n_dims, n_targets)
+                self.linear3 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                w1 = self.linear3(x)
+                w2 = self.sublevelb(x)
+                ones = torch.ones(w2.shape, dtype=w2.dtype, device=w2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(w1 + ones) + w2
+
+        model = Level3()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file(
+            "test_submodule_local_functions_more_depth_dynamic2_preserve1.onnx"
+        )
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions={Level1},
+            optimize=False,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 1)
+        self.assertEqual(["<locals>_Level1"], [f.name for f in onx.functions])
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_more_depth_dynamic1_2io(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return z1, torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                y2, y3 = self.sublevela(x)
+                ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + y2 + ones) + y3
+
+        model = Level2()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file(
+            "test_submodule_local_functions_more_depth_dynamic1_2io.onnx"
+        )
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions=True,
+            optimize=False,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 2)
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_more_depth_dynamic2_preserve2_2io1(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return z1, torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                y2, y3 = self.sublevela(x)
+                ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones + y2) + y3
+
+        class Level3(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevelb = Level2(n_dims, n_targets)
+                self.linear3 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                w1 = self.linear3(x)
+                w2 = self.sublevelb(x)
+                ones = torch.ones(w2.shape, dtype=w2.dtype, device=w2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(w1 + ones) + w2
+
+        model = Level3()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file(
+            "test_submodule_local_functions_more_depth_dynamic2_preserve2_2io1.onnx"
+        )
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions={Level2},
+            optimize=False,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 1)
+        self.assertEqual(["<locals>_Level2"], [f.name for f in onx.functions])
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_shapes(self):
+        import torch
+
+        class Level1(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.linear1 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                z1 = self.linear1(x)
+                ones = torch.ones(z1.shape, dtype=z1.dtype, device=z1.device)
+                ones[0, 0] = 0
+                return z1.shape[0], torch.sigmoid(z1 + ones)
+
+        class Level2(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevela = Level1(n_dims, n_targets)
+                self.linear2 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                y1 = self.linear2(x)
+                batch_dim, y3 = self.sublevela(x)
+                ones = torch.ones((batch_dim, y3.shape[1]), dtype=y3.dtype, device=y3.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(y1 + ones) + y3
+
+        class Level3(torch.nn.Module):
+            def __init__(self, n_dims: int = 5, n_targets: int = 3):
+                super().__init__()
+                self.sublevelb = Level2(n_dims, n_targets)
+                self.linear3 = torch.nn.Linear(n_dims, n_targets)
+
+            def forward(self, x):
+                w1 = self.linear3(x)
+                w2 = self.sublevelb(x)
+                ones = torch.ones(w2.shape, dtype=w2.dtype, device=w2.device)
+                ones[0, 0] = 0
+                return torch.sigmoid(w1 + ones) + w2
+
+        model = Level3()
+        inputs = (torch.randn(2, 5),)
+        expected = model(*inputs)
+        feeds = {"x": inputs[0].numpy()}
+
+        filename = self.get_dump_file("test_submodule_local_functions_shapes.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            export_modules_as_functions={Level1},
+            optimize=True,
+            verbose=0,
+            function_options=FunctionOptions(merge_allowed=True, external_threshold=0),
+            inline=False,
+            filename=filename,
+            dynamic_shapes=({0: "batch"},),
+        )
+        check_model(onx)
+        self.assertEqual(len(onx.functions), 1)
+        self.assertEqual(["<locals>_Level1"], [f.name for f in onx.functions])
+        ref = ExtendedReferenceEvaluator(onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":

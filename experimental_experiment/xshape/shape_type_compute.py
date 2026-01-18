@@ -979,7 +979,8 @@ def _set_shape_type_op_any_slice(self: ShapeBuilder, node: NodeProto):
     "Sets the output shape for node type Slice."
     if self.has_device(node.input[0]):
         self.set_device(node.output[0], self.get_device(node.input[0]))
-    self.set_type(node.output[0], self.get_type(node.input[0]))
+    if self.has_type(node.input[0]):
+        self.set_type(node.output[0], self.get_type(node.input[0]))
     if self.has_rank(node.input[0]):
         self.set_rank(node.output[0], self.get_rank(node.input[0]))
         return True
@@ -1692,9 +1693,10 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
         local_function_builder = self.get_local_function(
             node.op_type, domain=node.domain, builder=True
         )
-        assert (
-            local_function_builder is not None
-        ), f"Missing local function for node {(node.domain, node.op_type)}"
+        assert local_function_builder is not None, (
+            f"Missing local function for node {(node.domain, node.op_type)}"
+            f"{self.get_debug_msg()}"
+        )
         assert isinstance(local_function_builder, self.__class__), (
             f"Unexpected type {type(local_function_builder)} "
             f"for node {(node.domain, node.op_type)} "

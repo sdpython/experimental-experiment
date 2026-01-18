@@ -301,12 +301,12 @@ class TestReverseGraphBuilder(ExtTestCase):
 
         def make_my_model() -> onnx.ModelProto:
             g = GraphBuilder({"": 14, "custom": 1}, ir_version=11)
+            make_custom_LinearRegression(g)
             g.make_tensor_input("X", TFLOAT, (None, None))
             g.make_tensor_input("A", TFLOAT, (None, None))
             g.make_tensor_input("B", TFLOAT, (None, None))
             example(g.op, "X", "A", "B")
             g.make_tensor_output("Y", TFLOAT, (None, None), is_dimension=False, indexed=False)
-            make_custom_LinearRegression(g)
             model = g.to_onnx()
             return model
 

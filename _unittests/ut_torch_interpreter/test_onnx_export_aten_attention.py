@@ -174,7 +174,7 @@ class TestOnnxExportAtenAttention(ExtTestCase):
         self.assertEqual(
             [
                 "aten_scaled_dot_product_attention_default",
-                "aten_scaled_dot_product_attention_default__v2",
+                "aten_scaled_dot_product_attention_default_l2l",
                 "aten_scaled_dot_product_attention_default",
                 "Transpose",
                 "Transpose",

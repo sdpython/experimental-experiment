@@ -1102,17 +1102,22 @@ class CustomTracer(torch.fx.Tracer):
             and node.target not in {"clone"}
             and (
                 not hasattr(node.target, "name")
-                or node.target.name() not in {"aten::clone", "aten::zeros"}
+                or node.target.name() not in {"aten::clone", "aten::zeros", "aten::ones"}
             )
             and node.args
         ):
             if isinstance(node.args[0], torch.fx.immutable_collections.immutable_list):
                 arg = node.args[0]
                 while isinstance(arg, torch.fx.immutable_collections.immutable_list):
+                    print("+++", node, node.target)
                     # something like
                     # aten.zeros.default](args = ([%sym_size_int_18, %add_179, %add_179],)
                     if len(arg) == 0:
                         break
+                    assert hasattr(arg[0], "args"), (
+                        f"Unexpected value for arg={arg}, type is {type(arg[0])} "
+                        f"node={node!r}, node.target={node.target}"
+                    )
                     node = arg[0]
                     if not node.args:
                         break
@@ -1620,6 +1625,12 @@ class CustomTracer(torch.fx.Tracer):
                 if predecessor_name in {"aten::slice.Tensor", "aten::select.int"}:
                     # We face a schema such as
                     # K_33[2:-2, 2:-2, :-1] = sumx[None, 2:-2, None]
+                    if verbose > 5:
+                        print(
+                            f"[CustomTracer.remove_inplace] _modify_graph_clone_index_copy_ "
+                            f"{pos}/{len(graph.nodes)}: {node} with args={node.args} "
+                            f"and target={node.target}"
+                        )
                     do_break = cls._modify_graph_clone_index_copy_(
                         graph,
                         node,
@@ -1641,6 +1652,13 @@ class CustomTracer(torch.fx.Tracer):
                         break
                     continue
 
+                if verbose > 5:
+                    print(
+                        f"[CustomTracer.remove_inplace] _modify_graph_clone_copy_ "
+                        f"{pos}/{len(graph.nodes)}: {node} with args={node.args} "
+                        f"and target={node.target}"
+                    )
+
                 do_break = cls._modify_graph_clone_copy_(
                     graph,
                     node,
@@ -1661,6 +1679,8 @@ class CustomTracer(torch.fx.Tracer):
                 if do_break:
                     break
 
+            if verbose > 5:
+                print(f"[CustomTracer.remove_inplace] continue with {node_target_name!r}")
             # We need to continue in case one unused node left another one
             # after it was removed. It could be improved by looking at
             inplace = cls._inplace_nodes(graph)

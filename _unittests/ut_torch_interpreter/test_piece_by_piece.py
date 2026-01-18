@@ -1350,6 +1350,7 @@ class TestPieceByPiece(ExtTestCase):
         self.assertIn("torch.ops.aten.abs", report)
         self.assertEqual(diag.children[0].forward_expected_output_type, ["dict__2_da__dm"])
 
+    @ignore_warnings(FutureWarning)
     def test_serialize_any(self):
         nested = [
             torch.randn((4, 5)),
@@ -1401,6 +1402,7 @@ class TestPieceByPiece(ExtTestCase):
 
     @requires_torch("2.6")
     @hide_stdout()
+    @ignore_warnings(FutureWarning)
     def test_piece_by_piece_piece_dict_list(self):
         class SubModel(torch.nn.Module):
             def forward(self, x, y):
@@ -1654,6 +1656,7 @@ class TestPieceByPiece(ExtTestCase):
 
     @requires_torch("2.7")
     @hide_stdout()
+    @ignore_warnings(FutureWarning)
     def test_piece_by_piece_piece_dict_dict(self):
         import torch
         import transformers
