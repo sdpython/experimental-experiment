@@ -8142,7 +8142,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             assert self.opsets, "opsets must be not None"
         if self.ir_version is None and isinstance(proto, ModelProto):
             self.ir_version = proto.ir_version
-        self.nodes = list(proto_graph.node)
         self.functions = {}
         self.functions_builder = {}
         if isinstance(proto_graph, GraphProto):
@@ -8163,6 +8162,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if isinstance(proto, ModelProto):
             for f in proto.functions:
                 self.add_function(f)
+        self.nodes = list(proto_graph.node)
         self.value_info = (
             list(proto_graph.value_info)
             if not (infer_shapes_options & InferShapesOptions.NEW)
@@ -8930,6 +8930,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         This function does not add the domain to the list of supported opsets.
         You should use method :meth:`make_local_function` for this.
         """
+        self._check_function_order()
         if builder:
             builder._check_function_order()
         else:
@@ -8942,7 +8943,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"Node '{node.domain}.{node.op_type}' is unknown ({pretty_onnx(node)}), "
                     f"local functions = {list(self.functions)}"
                 )
-        self._check_function_order()
 
         key = f.domain, f.name
         assert "." not in f.name, f"'.' not allowed in function '{f.domain}.{f.name}'"
