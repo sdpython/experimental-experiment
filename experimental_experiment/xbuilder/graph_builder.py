@@ -650,6 +650,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         input_names: List[str],
         name: str,
         domain: str,
+        add_local_functions: bool = False,
     ) -> "GraphBuilder":
         """
         Creates a copy of the existing builder but with information reduced to the input_names
@@ -658,6 +659,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         :param input_names: new inputs
         :param name: function name
         :param domain: domain name for the function
+        :param add_local_functions: adds the local function as well
         :return: shortened builder
         """
         # new dynamic_shapes
@@ -702,9 +704,13 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 is_dimension=self.get_is_dimension(n),
                 marker=f"make_subset_builder-{name}",
             )
-        for k, v in self.functions.items():
-            if v.domain != domain:
-                new_builder.functions[k] = v
+        if add_local_functions:
+            for k, v in self.functions.items():
+                assert k == (v.domain, v.name), (
+                    f"Not implemented when k={k} and function is '{v.domain}.{v.name}'"
+                    f"{self.get_debug_msg()}"
+                )
+                new_builder.add_function(v, rename_allowed=False, merge_allowed=False)
         return new_builder
 
     @classmethod
@@ -5517,6 +5523,15 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"available functions are {list(self.functions)}, node=\n{node}"
                 )
             known_functions.add(k)
+        for node in self.nodes:
+            assert (
+                node.domain in {"", "ai.onnx.ml"}
+                or node.domain.startswith("ai")
+                or (node.domain, node.op_type) in known_functions
+            ), (
+                f"Node '{node.domain}.{node.op_type}' is unknown ({pretty_onnx(node)}), "
+                f"local functions = {known_functions}"
+            )
 
     def _check_constant(self, node: NodeProto, prefix: str):
         assert isinstance(node, NodeProto), f"Unexpected type {type(node)} for node"
@@ -8915,6 +8930,20 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         This function does not add the domain to the list of supported opsets.
         You should use method :meth:`make_local_function` for this.
         """
+        if builder:
+            builder._check_function_order()
+        else:
+            for node in f.node:
+                assert (
+                    node.domain in {"", "ai.onnx.ml"}
+                    or node.domain.startswith("ai")
+                    or (node.domain, node.op_type) in self.functions
+                ), (
+                    f"Node '{node.domain}.{node.op_type}' is unknown ({pretty_onnx(node)}), "
+                    f"local functions = {list(self.functions)}"
+                )
+        self._check_function_order()
+
         key = f.domain, f.name
         assert "." not in f.name, f"'.' not allowed in function '{f.domain}.{f.name}'"
         if merge_allowed and key in self.functions:

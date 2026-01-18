@@ -1800,6 +1800,7 @@ class DynamoInterpreter:
                 f"({', '.join(input_names)}) -> {', '.join(output_names)}"
             )
 
+        self.builder._check_function_order()
         new_builder = self.builder.make_subset_builder(
             input_names, name=name_fct.replace(".", "_"), domain=domain
         )
