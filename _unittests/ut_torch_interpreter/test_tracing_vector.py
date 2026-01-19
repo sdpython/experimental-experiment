@@ -27,6 +27,7 @@ class TestTracingVeector(ExtTestCase):
                 self.linear2 = torch.nn.Linear(n_dims, n_targets)
 
             def forward(self, x):
+                x = x.squeeze(-1)
                 y1 = self.linear2(x)
                 y2 = self.sublevela(x)
                 ones = torch.ones(y2.shape, dtype=y2.dtype, device=y2.device)
@@ -34,10 +35,23 @@ class TestTracingVeector(ExtTestCase):
                 return torch.sigmoid(y1 + ones) + y2
 
         model = Level2()
-        inputs = (torch.randn(2, 5),)
+        inputs = (torch.randn(2, 5, 1),)
         expected = model(*inputs)
+
+        all_ops = []
+
+        class DispatchLog(torch.utils._python_dispatch.TorchDispatchMode):
+            def __torch_dispatch__(self, func, types, args, kwargs=None):
+                all_ops.append(func)
+                return func(*args, **(kwargs or {}))
+
+        with DispatchLog():
+            model(*inputs)
+
+        self.assertEqual(len(all_ops), 23)
+
         inputs = (TracingTensor(inputs[0]),)
-        context = TracingContext()
+        context = TracingContext(model, verbose=1)
         with context:
             got = model(*inputs)
             self.assertIsInstance(got, TracingTensor)
