@@ -78,14 +78,6 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertExists(p)
         return onnx_load(p)
 
-    def _check_with_ort(self, proto: ModelProto):
-        from onnxruntime import InferenceSession, get_available_providers
-
-        providers = ["CPUExecutionProvider"]
-        if "CUDAExecutionProvider" in get_available_providers():
-            providers.insert(0, "CUDAExecutionProvider")
-        InferenceSession(proto.SerializeToString(), providers=providers)
-
     def test_fused_matmul_pattern(self):
         origin = self._get_model("bug_fused.onnx")
         check_model(origin)
@@ -1251,6 +1243,55 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 opt_ref = InferenceSession(
                     opt_onx.SerializeToString(), providers=["CPUExecutionProvider"]
                 )
+                got = opt_ref.run(None, feeds)
+                self.assertEqualArray(expected[0].ravel(), got[0].ravel())
+                self.assertEqualArray(expected[0], got[0])
+
+    def test_reshape_gemm_reshape(self):
+        for transB in [0, 1]:
+            with self.subTest(transB=transB):
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("Shape", ["A"], ["shapeA"], start=0, end=-1),
+                            oh.make_node("Concat", ["shapeA", "mone"], ["shapey"], axis=0),
+                            oh.make_node("Reshape", ["A", "shape"], ["xr"]),
+                            oh.make_node("Gemm", ["xr", "B"], ["y2"], transB=transB),
+                            oh.make_node("Reshape", ["y2", "shapey"], ["yy"]),
+                            oh.make_node("Identity", ["yy"], ["Y"]),
+                        ],
+                        "dummy",
+                        [
+                            oh.make_tensor_value_info("A", TFLOAT, ["a", "b", "c"]),
+                            oh.make_tensor_value_info("B", TFLOAT, [4, 8] if transB else [8, 4]),
+                        ],
+                        [oh.make_tensor_value_info("Y", TFLOAT, ["a", "b", "c"])],
+                        [
+                            onh.from_array(np.array([-1, 8], dtype=np.int64), name="shape"),
+                            onh.from_array(np.array([-1], dtype=np.int64), name="mone"),
+                        ],
+                    ),
+                    opset_imports=[oh.make_opsetid("", 18)],
+                    ir_version=9,
+                )
+                feeds = {
+                    "A": self._range(2, 3, 8),
+                    "B": self._range(*([4, 8] if transB else [8, 4])),
+                }
+                ref = self._check_with_ort(model)
+                expected = ref.run(None, feeds)
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["ReshapeGemmReshape"], verbose=0
+                    ),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(["FusedMatMul"], [n.op_type for n in opt_onx.graph.node])
+
+                opt_ref = self._check_with_ort(opt_onx)
                 got = opt_ref.run(None, feeds)
                 self.assertEqualArray(expected[0].ravel(), got[0].ravel())
                 self.assertEqualArray(expected[0], got[0])
