@@ -16,7 +16,6 @@ from typing import Optional
 import numpy as np
 import onnx
 from onnx import (
-    ModelProto,
     TensorProto,
     ValueInfoProto,
     helper as oh,
@@ -83,19 +82,6 @@ class TestGraphPatternOptimization(ExtTestCase):
         res = get_pattern_list(["default+onnxruntime"])
         self.assertGreater(len(res), 3)
         self.assertEqual(res1 + res2, res)
-
-    def _check_with_ort(self, proto: ModelProto):
-        from onnxruntime import InferenceSession, get_available_providers
-        from onnxruntime.capi.onnxruntime_pybind11_state import Fail
-
-        providers = ["CPUExecutionProvider"]
-        if "CUDAExecutionProvider" in get_available_providers():
-            providers.insert(0, "CUDAExecutionProvider")
-        try:
-            InferenceSession(proto.SerializeToString(), providers=providers)
-        except Fail as e:
-            saved = self.dump_onnx("test_graph_pattern_optimization.onnx", proto)
-            raise AssertionError(f"Fails due to {e}, model saved into {saved!r}")  # noqa: B904
 
     @ignore_warnings(DeprecationWarning)
     def test_try_with_custom_model(self):

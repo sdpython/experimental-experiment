@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import onnx.helper as oh
 import onnx.numpy_helper as onh
-from onnx import TensorProto, ModelProto
+from onnx import TensorProto
 from onnx.checker import check_model
 from experimental_experiment.ext_test_case import ExtTestCase
 from experimental_experiment.xbuilder.graph_builder import (
@@ -15,14 +15,6 @@ TFLOAT = TensorProto.FLOAT
 
 
 class TestGraphSmallModelOptimization(ExtTestCase):
-    def _check_with_ort(self, proto: ModelProto):
-        from onnxruntime import InferenceSession, get_available_providers
-
-        providers = ["CPUExecutionProvider"]
-        if "CUDAExecutionProvider" in get_available_providers():
-            providers.insert(0, "CUDAExecutionProvider")
-        InferenceSession(proto.SerializeToString(), providers=providers)
-
     def test_remove_unused_nodes_np(self):
         model = oh.make_model(
             oh.make_graph(

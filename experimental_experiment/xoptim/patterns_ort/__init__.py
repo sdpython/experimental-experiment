@@ -34,6 +34,7 @@ def get_onnxruntime_patterns(
         FusedMatMulx2Pattern,
         FusedMatMulTransposePattern,
         ReshapeGemmPattern,
+        ReshapeGemmReshapePattern,
         TransposeFusedMatMulBPattern,
     )
     from .llm_optim import (
@@ -72,6 +73,7 @@ def get_onnxruntime_patterns(
         QuickGeluPattern(verbose=verbose),
         # GatherGradPattern(verbose=verbose),
         ReshapeGemmPattern(verbose=verbose),
+        ReshapeGemmReshapePattern(verbose=verbose),
         SimplifiedLayerNormalizationPattern(verbose=verbose),
         SimplifiedLayerNormalizationMulPattern(verbose=verbose),
         SkipLayerNormalizationPattern(verbose=verbose),

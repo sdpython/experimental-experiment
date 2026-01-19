@@ -982,7 +982,7 @@ class ReshapeGemmPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type not in "Gemm" or node.domain != "" or len(node.input) == 3:
+        if node.op_type != "Gemm" or node.domain != "" or len(node.input) == 3:
             return self.none()
 
         transA = g.get_attributes_with_default(node, transA=0)["transA"]
@@ -1036,6 +1036,171 @@ class ReshapeGemmPattern(PatternOptimization):
             name=f"{self.__class__.__name__}--{gemm_node.name}",
         )
         return [new_node, reshape_node]
+
+
+class ReshapeGemmReshapePattern(PatternOptimization):
+    """
+    Replaces the sequence Reshape + Gemm + Reshape into FusedMatMul.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(8, 4)))
+        inputs.append(
+            oh.make_tensor_value_info("A", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["shape"],
+                value=onh.from_array(np.array([-1, 8], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(oh.make_node("Reshape", ["A", "shape"], ["xr"]))
+        nodes.append(oh.make_node("Gemm", ["xr", "B"], ["y2"], transB=0))
+        nodes.append(oh.make_node("Reshape", ["y2", "shapey"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+        from onnx_array_api.translate_api.make_helper import oh.make_node
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("B", onnx.TensorProto.FLOAT, shape=(8, 4)))
+        inputs.append(
+            oh.make_tensor_value_info("A", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        nodes.append(
+            oh.make_node("FusedMatMul", ["A", "B"], ["Y"], domain="com.microsoft")
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
+
+    def __init__(self, verbose: int = 0, priority: int = 3):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Gemm" or node.domain != "" or len(node.input) != 2:
+            return self.none()
+        transA = g.get_attributes_with_default(node, transA=0)["transA"]
+        if transA != 0:
+            return self.none(node, inspect.currentframe().f_lineno)
+        node_before = g.node_before(node.input[0])
+        if node_before is None or node_before.op_type != "Reshape" or node_before.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.is_used_more_than_once(node.input[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(node_before.input[1])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if cst[0] != -1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        next_nodes = g.next_nodes(node.output[0])
+        if (
+            len(next_nodes) != 1
+            or next_nodes[0].op_type != "Reshape"
+            or next_nodes[0].domain != ""
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(node_before.input[0]) or not g.has_shape(next_nodes[0].output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape_final = g.get_shape(next_nodes[0].output[0])[:-1]
+        if g.get_shape(node_before.input[0])[: len(shape_final)] != shape_final:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node_before, node, next_nodes[0]], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        reshape_before: NodeProto,
+        gemm_node: NodeProto,
+        reshape_after: NodeProto,
+    ) -> List[NodeProto]:
+        kwargs = {}
+        transB = g.get_attributes_with_default(gemm_node, transB=0)["transB"]
+        if transB:
+            kwargs["transB"] = transB
+        return [
+            g.make_node(
+                "FusedMatMul",
+                [reshape_before.input[0], *gemm_node.input[1:]],
+                [reshape_after.output[0]],
+                domain="com.microsoft",
+                name=f"{self.__class__.__name__}--{gemm_node.name}",
+                **kwargs,
+            )
+        ]
 
 
 class TransposeFusedMatMulBPattern(PatternOptimization):
