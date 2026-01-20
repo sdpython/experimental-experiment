@@ -1,7 +1,7 @@
 import unittest
 import torch
 from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
-from experimental_experiment.torch_interpreter.tracing_vector import TracingTensor, TracingContext
+from experimental_experiment.investigate.tracing_vector import TracingTensor, TracingContext
 
 
 class TestTracingVeector(ExtTestCase):
