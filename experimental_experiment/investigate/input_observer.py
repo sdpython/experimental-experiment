@@ -47,7 +47,7 @@ class InputObserverInfo:
         self.inputs_specs.append(spec)
         self.n_args.append(len(args))
         self.kwargs_keys.append(tuple(kwargs))
-        cloned = [t.clone().detach() for t in flat_args]
+        cloned = [(None if t is None else t.clone().detach()) for t in flat_args]
         self.flat_inputs.append(cloned)
 
         cloned_args, cloned_kwargs = torch.utils._pytree.tree_unflatten(cloned, spec)
@@ -62,17 +62,6 @@ class InputObserverInfo:
         self.flat_outputs.append([t.clone().detach() for t in flat_res])
 
     def build_inputs_completed_with_none_values(self):
-        sizes = [len(flat) for flat in self.flat_inputs]
-        if len(set(sizes)) == 1:
-            return self.flat_inputs, self.inputs_specs[0]
-        # The flattened list has not always the same size. We need to align
-        # all the sequences. A necessary condition to detect that cases is
-        # len(set(sizes)) != 1, but even if this condition is verified,
-        # we could find a case where by chance the number of flattened tensors
-        # is always the same even though it is coming from different inputs.
-        # This case is not detected but still handled by that function
-        # assuming this does not happen in one of the nested structures.
-
         # Let's compute the sizes of each indenpendently.
         max_spec = torch.utils._pytree.tree_flatten((self._max_args, self._max_kwargs))[1]
         arg_sizes = [len(torch.utils._pytree.tree_flatten(a)[0]) for a in self._max_args]

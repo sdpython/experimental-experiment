@@ -174,9 +174,7 @@ class TestTracingVeector(ExtTestCase):
                 return x - y
 
         inputs = [
-            dict(
-                x=torch.randn((5, 6)),
-            ),
+            dict(x=torch.randn((5, 6))),
             dict(x=torch.randn((6, 7)), y=torch.randn((1, 7))),
             dict(x=torch.randn((7, 8)), y=torch.randn((1, 8))),
             dict(x=torch.randn((8, 9)), y=torch.randn((1, 9))),
@@ -241,6 +239,30 @@ class TestTracingVeector(ExtTestCase):
             dict(x={0: cst, 1: cst}, y={1: cst}, z={0: cst, 1: cst}, w={1: cst}),
             observer.infer_dynamic_shapes(),
         )
+
+    def test_io_captured_not_supported_kwargs(self):
+        class Model(torch.nn.Module):
+            def forward(self, x=None, y=None):
+                if y is None:
+                    return x
+                if x is None:
+                    return y
+                return x - y
+
+        inputs = [
+            dict(x=torch.randn((5, 6))),
+            dict(y=torch.randn((1, 7))),
+            dict(y=torch.randn((1, 7))),
+            dict(y=torch.randn((1, 7))),
+        ]
+
+        model = Model()
+        observer = InputObserver()
+        with observer(model):
+            for kwargs in inputs:
+                model(**kwargs)
+        with self.assertRaises(RuntimeError):
+            observer.infer_dynamic_shapes()
 
 
 if __name__ == "__main__":
