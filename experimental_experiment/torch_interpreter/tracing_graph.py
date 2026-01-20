@@ -27,7 +27,15 @@ class WrapperWalker:
 
 
 class Node:
-    OP_VALUES = {"placeholder", "call_function", "call_method", "call_module", "input", "output"}
+    OP_VALUES = {
+        "placeholder",
+        "call_function",
+        "call_method",
+        "call_module",
+        "input",
+        "output",
+        "lifted",
+    }
 
     def __init__(
         self,
@@ -68,21 +76,28 @@ class Node:
             self.meta["example_value"] = example_value
 
     def __str__(self) -> str:
+        sname = f"%{self.name}[{self.value.__INDEX__}]"
         if self.op in {"call_method", "call_function"}:
-            vs = [(f"%{a.name}" if hasattr(a, "name") else str(a)) for a in self.args]
+            vs = [(f"{a.name}" if hasattr(a, "name") else str(a)) for a in self.args]
             vss = ", ".join(vs)
             if not self.kwargs:
-                return f"[{self.op[:6]}] %{self.name} = {self.target}({vss})"
-            return f"[{self.op[:6]}] %{self.name} = {self.target}({vss}, {self.kwargs})"
+                return f"[{self.op[:6]}] {sname} = {self.target}({vss})"
+            return f"[{self.op[:6]}] {sname} = {self.target}({vss}, {self.kwargs})"
         if self.op == "placeholder":
             value = self.value
             return (
-                f"[placeh] %{self.name} = {value.__class__.__name__}: "
+                f"[placeh] {sname} = {value.__class__.__name__}: "
+                f"{value.dtype}: {tuple(value.true_shape)}"
+            )
+        if self.op == "lifted":
+            value = self.value
+            return (
+                f"[lifted] {sname} = {value.__class__.__name__}: "
                 f"{value.dtype}: {tuple(value.true_shape)}"
             )
         if self.op == "input":
             value = self.value
-            return f"[input-] %{self.name} = {value.__class__.__name__}: {value.dtype}"
+            return f"[input-] {sname} = {value.__class__.__name__}: {value.dtype}"
         raise NotImplementedError(f"Not implemented for op={self.op!r} in node.op={self.op!r}")
 
     def __repr__(self) -> str:
@@ -116,6 +131,7 @@ class Graph:
         self.traced_nodes = {}
         self.traced_values = {}
         self.verbose = verbose
+        self.counts = {}
 
     def new_node_name(self) -> str:
         return f"n{len(self.nodes)}"
@@ -129,39 +145,45 @@ class Graph:
         return self.traced_constants[key]
 
     def has_traced_node(self, key):
-        assert (isinstance(key, str) and key) or hasattr(key, "index"), f"key={key!r}"
+        assert isinstance(key, str) and key, f"key={key!r}"
         return key in self.traced_nodes
 
     def get_traced_node(self, key):
-        assert (isinstance(key, str) and key) or hasattr(key, "index"), f"key={key!r}"
+        assert isinstance(key, str) and key, f"key={key!r}"
         return self.traced_constants[key]
 
-    def has_traced_values(self, key):
-        assert (isinstance(key, str) and key) or hasattr(key, "index"), f"key={key!r}"
+    def has_traced_value(self, key):
+        assert hasattr(key, "index"), f"key={key!r}"
         return key in self.traced_values
 
-    def get_traced_values(self, key):
-        assert (isinstance(key, str) and key) or hasattr(key, "index"), f"key={key!r}"
+    def get_traced_value(self, key):
+        assert hasattr(key, "index"), f"key={key!r}"
         return self.traced_values[key]
 
     def add_node(self, node: Node) -> Node:
         if self.verbose:
             print(f"[Graph.add_node] {node}")
         self.nodes.append(node)
+
+        if node.op not in self.counts:
+            self.counts[node.op] = 0
+        self.counts[node.op] += 1
+
+        assert node.has_value(), f"value is missing for node={node}"
+        value = node.value
+        assert (
+            value.__class__.__name__ == "TracingTensor"
+        ), f"Not implemented when type(value)={type(value)}"
+        self.traced_nodes[node.name] = node
+        self.traced_values[value.__INDEX__] = node
+
         if node.op == "placeholder":
-            assert node.has_value(), f"value is missing for node={node}"
-            self.traced_constants[node.index] = node
-            self.traced_nodes[node.name] = node
-            self.traced_values[node.value.__INDEX__] = node
+            self.traced_constants[node.key] = node
+            return node
+        if node.op == "lifted":
+            self.traced_constants[node.key] = node
             return node
         if node.op == "input":
-            assert node.has_value(), f"value is missing for node={node}"
-            value = node.value
-            assert (
-                value.__class__.__name__ == "TracingTensor"
-            ), f"Not implemented when type(value)={type(value)}"
-            self.traced_nodes[node.name] = node
-            self.traced_values[value.__INDEX__] = node
             return node
         if node.op == "call_function":
             assert all(
@@ -171,12 +193,8 @@ class Graph:
             assert all(
                 isinstance(v, (int, float, Node, str, bool)) for v in node.args
             ), f"Not implemented when args types = {[type(v) for v in node.args]}"
-            assert node.has_value(), f"value is missing for node={node}"
-            value = node.value
-            assert (
-                value.__class__.__name__ == "TracingTensor"
-            ), f"Not implemented when type(value)={type(value)}"
-            self.traced_nodes[node.name] = node
-            self.traced_values[value.__INDEX__] = node
             return node
         raise NotImplementedError(f"Not implemented for op={self.op!r} in node={self}")
+
+    def __str__(self) -> str:
+        return "\n".join(["Graph()", *[f"    {n}" for n in self.nodes]])

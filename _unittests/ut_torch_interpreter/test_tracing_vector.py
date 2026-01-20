@@ -1,10 +1,11 @@
 import unittest
 import torch
-from experimental_experiment.ext_test_case import ExtTestCase
+from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout
 from experimental_experiment.torch_interpreter.tracing_vector import TracingTensor, TracingContext
 
 
 class TestTracingVeector(ExtTestCase):
+    @hide_stdout()
     def test_tracing_vector(self):
         class Level1(torch.nn.Module):
             def __init__(self, n_dims: int = 5, n_targets: int = 3):
@@ -50,15 +51,22 @@ class TestTracingVeector(ExtTestCase):
 
         self.assertEqual(len(all_ops), 23)
 
-        inputs = (TracingTensor(inputs[0]),)
-        context = TracingContext(model, verbose=1)
+        traced_inputs = (TracingTensor(inputs[0]),)
+        context = TracingContext(model, verbose=1, debug_counts={"input": 1})
         with context:
-            got = model(*inputs)
+            got = model(*traced_inputs)
             self.assertIsInstance(got, TracingTensor)
         # This comparison cannot happen in with context
-        self.assertEqualArray(expected, got)
+        self.assertEqual(expected.tolist(), got.tolist())
         self.assertEqual(context.level, 0)
-        self.assertEqual(80, len(context.stack))
+        self.assertEqual(156, len(context.stack))
+
+        ep = torch.export.export(model, inputs, dynamic_shapes=({0: torch.export.Dim.DYNAMIC},))
+        print("--------")
+        print(ep.graph)
+        print("--------")
+        print(context.graph)
+        print("--------")
 
 
 if __name__ == "__main__":
