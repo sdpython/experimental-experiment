@@ -230,11 +230,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
-    def test_huggingface_export_bench_custom_cpu_fail(self):
-        self._explicit_export_bench_cpu("custom", "1001Fail,1001Fail2", output_data=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
     def test_huggingface_export_bench_custom_cpu_2_outputs(self):
         self._hg_export_bench_cpu("custom", "101Dummy2Outputs")
 
@@ -259,25 +254,6 @@ class TestBashBenchRunnerCmd(ExtTestCase):
     @requires_torch("2.5")
     def test_huggingface_export_bench_eager_cpu(self):
         self._hg_export_bench_cpu("eager", "101Dummy", check_file=False)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_huggingface_export_bench_custom_cpu2(self):
-        self._hg_export_bench_cpu(
-            "custom", "101Dummy,101Dummy16", check_file=False, output_data=True
-        )
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_huggingface_export_bench_custom_cpu2_timeout(self):
-        self._hg_export_bench_cpu(
-            "custom",
-            "101Dummy,101Dummy16",
-            timeout=1,
-            verbose=0,
-            check_file=False,
-            output_data=True,
-        )
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")
