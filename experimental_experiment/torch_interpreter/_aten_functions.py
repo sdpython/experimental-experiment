@@ -4056,6 +4056,54 @@ def aten_FunctionCtx(
     raise NotImplementedError(f"args={args}, kwargs={kwargs}")
 
 
+def aten__fused_rms_norm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    input: T,
+    normalized_shape: List[int],
+    weight: Optional[T],
+    eps: Optional[float],
+    name: str = "_fused_rms_norm",
+) -> Tuple[T, T]:
+    "_fused_rms_norm"
+    assert g.has_rank(input), f"missing rank for {input!r}{g.get_debug_msg()}"
+    rk = g.get_rank(input)
+    dims_to_reduce: list[int] = []
+    for i in range(len(normalized_shape)):
+        dims_to_reduce.append(rk - i - 1)
+
+    itype = g.get_type(input) if g.has_type(input) else 0
+    if itype != TensorProto.FLOAT:
+        input_cast = g.op.Cast(input, to=TensorProto.FLOAT, name=name)
+    else:
+        input_cast = input
+
+    # computation_dtype would be one of [Double, Float, ComplexFloat, ComplexDouble]
+    if eps is None:
+        eps = np.finfo(np.float32).eps
+
+    pow = g.op.Pow(input_cast, np.array([2], dtype=np.float32), name=name)
+    red = g.op.ReduceMeanAnyOpset(pow, np.array(dims_to_reduce, dtype=np.int64), name=name)
+    add = g.op.Add(red, np.array([eps], dtype=np.float32), name=name)
+    rqrst_input = g.op.Reciprocal(g.op.Sqrt(add, name=name), name=name, outputs=outputs[1:])
+
+    upcasted_result = g.op.Mul(input_cast, rqrst_input, name=name)
+
+    if weight is not None:
+        upcasted_result = g.op.Mul(upcasted_result, weight, name=name)
+
+    result = (
+        g.op.Cast(upcasted_result, to=itype, name=name, outputs=outputs[:1])
+        if itype != 0
+        else g.op.Identity(upcasted_result, name=name, outputs=outputs[:1])
+    )
+    if not sts:
+        set_type_shape_unary_op(g, result, input)
+        g.set_type(rqrst_input, TensorProto.FLOAT)
+    return result, rqrst_input
+
+
 def aten_gather(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
