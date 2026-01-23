@@ -8,8 +8,6 @@
     :maxdepth: 1
     :caption: modules
 
-
-    _dynamo_exporter
     backend_helper
     compiled_model
     debug_backend
