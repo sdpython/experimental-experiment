@@ -1475,7 +1475,7 @@ def _select_model_metrics(
             if c in df.columns.names:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=(FutureWarning, PerformanceWarning))
-                    df = df.stack(c, dropna=np.nan)
+                    df = df.stack(c)
     df = df.sort_index(axis=1)
     return df
 

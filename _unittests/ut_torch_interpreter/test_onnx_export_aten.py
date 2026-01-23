@@ -3300,6 +3300,56 @@ class TestOnnxExportAten(ExtTestCase):
         onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
 
+    def test_aten_fused_rms(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.ops.aten._fused_rms_norm(
+                    x, [4], torch.ones((x.shape[1]), dtype=x.dtype) * 2, eps=1e-5
+                )
+
+        inputs = (torch.rand((3, 4)),)
+        DYN = torch.export.Dim.DYNAMIC
+        dynamic = ({0: DYN},)
+
+        model = Model()
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+
+    def test_aten_fused_rms_none(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.ops.aten._fused_rms_norm(x, [4], None, None)
+
+        inputs = (torch.rand((3, 4)),)
+        DYN = torch.export.Dim.DYNAMIC
+        dynamic = ({0: DYN},)
+
+        model = Model()
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+
+    def test_aten_fused_rms_none_float16(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.ops.aten._fused_rms_norm(x, [4], None, None)
+
+        inputs = (torch.rand((3, 4), dtype=torch.float16),)
+        DYN = torch.export.Dim.DYNAMIC
+        dynamic = ({0: DYN},)
+
+        model = Model()
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
