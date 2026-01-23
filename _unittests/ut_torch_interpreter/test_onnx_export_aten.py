@@ -3316,7 +3316,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
-        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
 
     def test_aten_fused_rms_none(self):
         import torch
@@ -3332,7 +3332,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
-        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-3)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
 
     def test_aten_fused_rms_none_float16(self):
         import torch
@@ -3348,7 +3348,7 @@ class TestOnnxExportAten(ExtTestCase):
         model = Model()
         expected = model(*torch_deepcopy(inputs))
         onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
-        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-3)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
 
 
 if __name__ == "__main__":
