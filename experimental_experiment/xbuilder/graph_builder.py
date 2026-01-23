@@ -5671,6 +5671,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             node2.domain = node.domain
             node2.input.extend([self._parameter_renaming.get(i, i) for i in node.input])
             node2.output.extend(node.output)
+            if node.metadata_props:
+                node2.metadata_props.extend(node.metadata_props)
 
             atts = []
             for att in node.attribute:
