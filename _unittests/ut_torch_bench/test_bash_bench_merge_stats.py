@@ -395,7 +395,7 @@ class TestBashBenchMergeStats(ExtTestCase):
         avg = time["ITER", "custom", "default"].mean()
         self.assertEqual(avg, 152.34884692227206)
 
-    @ignore_warnings((FutureWarning,))
+    @ignore_warnings((FutureWarning, PerformanceWarning))
     @hide_stdout()
     def test_build_historical_report(self):
         data = [
