@@ -8,7 +8,6 @@ from ._bash_bench_models_helper import (
     get_dummy_model_fail,
     get_dummy_model_fail_convert,
     get_llama_model_layer,
-    get_speech2text2_causal_ml_not_trained_model,
 )
 
 
@@ -23,7 +22,6 @@ class ExplicitRunner(BenchmarkRunner):
                 "1001Fail": get_dummy_model_fail,
                 "1001Fail2": get_dummy_model_fail_convert,
                 "101Dummy": get_dummy_model,
-                "Speech2Text2ForCausalLMNotTrained": get_speech2text2_causal_ml_not_trained_model,  # noqa: E501
                 "Llama2Layer": lambda: get_llama_model_layer(num_hidden_layers=2),
             }
         )

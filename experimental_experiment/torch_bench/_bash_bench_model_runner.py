@@ -712,7 +712,6 @@ class ModelRunner:
             assert strategy in (
                 None,
                 "none",
-                "fallback",
                 "detailed",
             ), f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_onnx_dynamo(
@@ -724,7 +723,6 @@ class ModelRunner:
                 verbose=verbose,
                 target_opset=target_opset,
                 detailed=strategy == "detailed",
-                fallback=strategy == "fallback",
                 patch=patch,
             )
         if exporter == "eager":
@@ -773,9 +771,6 @@ class ModelRunner:
                 "decall",
                 "nostrict",
                 "none",
-                "fallback",
-                "fallback-dec",
-                "fallback-decall",
                 "jit",
             }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_export(
@@ -793,9 +788,6 @@ class ModelRunner:
                 None,
                 "nostrict",
                 "none",
-                "fallback",
-                "fallback-dec",
-                "fallback-decall",
                 "jit",
             }, f"strategy={strategy!r} not implemented for {exporter!r}"
             return self._to_executorch(
@@ -1254,7 +1246,6 @@ class ModelRunner:
         verbose: int,
         target_opset: int,
         detailed: bool = False,
-        fallback: bool = False,
         patch: bool = True,
     ):
         assert not fake_tensor, "fake_tensor not implemented."
@@ -1276,7 +1267,7 @@ class ModelRunner:
         dyn_shapes = self.get_dynamic_shapes(dynamic)
 
         if verbose:
-            print(f"[ModelRunner._to_onnx_dynamo] detailed={detailed}, fallback={fallback}")
+            print(f"[ModelRunner._to_onnx_dynamo] detailed={detailed}")
             print(f"[ModelRunner._to_onnx_dynamo] additional_kwargs={additional_kwargs}")
             print(f"[ModelRunner._to_onnx_dynamo] dynamic_shapes={dyn_shapes!r}")
             print(
@@ -1298,13 +1289,12 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    name if fallback else None,
+                    None,
                     kwargs=export_kw_inputs,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
                     dynamic_shapes=dyn_shapes,
-                    fallback=fallback,
                     **additional_kwargs,
                 )
         else:
@@ -1314,13 +1304,12 @@ class ModelRunner:
                 onnx_program = torch.onnx.export(
                     self.model,
                     export_inputs,
-                    name if fallback else None,
+                    None,
                     kwargs=export_kw_inputs,
                     opset_version=target_opset,
                     dynamo=True,
                     external_data=True,
                     dynamic_shapes=dyn_shapes,
-                    fallback=fallback,
                     **additional_kwargs,
                 )
 
@@ -1351,7 +1340,7 @@ class ModelRunner:
                     "-",
                 ), f"Unexpected optimization scenario {opt!r} in {opts!r}"
             onnx_program.save(name, external_data=True)
-        elif not fallback:
+        else:
             # The model was not save in that case.
             onnx_program.save(name, external_data=True)
         return onnx.load(name, load_external_data=False), stats

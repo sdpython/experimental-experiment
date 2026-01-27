@@ -353,12 +353,10 @@ class TestBashBenchRunnerCmd(ExtTestCase):
         from experimental_experiment.torch_bench._bash_bench_models_helper import (
             get_dummy_model,
             get_llama_model_layer,
-            get_speech2text2_causal_ml_not_trained_model,
         )
 
         get_dummy_model()
         get_llama_model_layer()
-        get_speech2text2_causal_ml_not_trained_model()
 
     # name1
 
