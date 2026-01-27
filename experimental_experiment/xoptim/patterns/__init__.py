@@ -62,6 +62,7 @@ from .onnx_matmul import (
     TransposeMatMulPattern,
     TransposeReshapeMatMulPattern,
 )
+from .onnx_range import SwapRangeAddScalarPattern
 from .onnx_reduce import ReduceSumNormalizePattern
 from .onnx_reshape import (
     ConcatReshapePattern,
@@ -221,6 +222,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         StaticConcatReshapePattern(verbose=verbose),
         Sub1MulPattern(verbose=verbose),
         SwapExpandReshapePattern(verbose=verbose),
+        SwapRangeAddScalarPattern(verbose=verbose),
         SwapUnaryPattern(verbose=verbose),
         SwapUnsqueezeTransposePattern(verbose=verbose),
         SwitchOrderBinaryPattern(verbose=verbose),

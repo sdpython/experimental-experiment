@@ -128,11 +128,9 @@ class PatternOptimization:
         self.verbose = max(self.verbose, int(value))
         self.priority = priority
         self.min_opset = min_opset
-        pattern = os.environ.get("PATTERN", "")
-        if pattern in (
-            self.__class__.__name__,
-            self.__class__.__name__.replace("Pattern", ""),
-        ):
+        pattern = set(os.environ.get("PATTERN", "").split(","))
+        cls_name = {self.__class__.__name__, self.__class__.__name__.replace("Pattern", "")}
+        if pattern & cls_name:
             self.verbose = max(self.verbose, 10)
 
     def __str__(self) -> str:

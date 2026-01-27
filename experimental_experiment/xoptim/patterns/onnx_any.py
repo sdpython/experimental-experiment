@@ -115,6 +115,11 @@ class SameChildrenPattern(PatternOptimization):
         if len(n1.input) != len(n2.input):
             return False
         if n1.input != n2.input:
+            if n1.op_type in {"Add", "Mul"} and (
+                (n1.input[0] == n2.input[0] and n1.input[1] == n2.input[1])
+                or (n1.input[0] == n2.input[1] and n1.input[1] == n2.input[0])
+            ):
+                return True
             return False
         if len(n1.output) != len(n2.output):
             return False

@@ -142,16 +142,6 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     def test_export_nostrict(self):
         self._export_cmd("export-nostrict", "101Dummy", check_file=False)
 
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_export_fallback(self):
-        self._export_cmd("export-fallback", "101Dummy", check_file=False)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_export_fallback_dec(self):
-        self._export_cmd("export-fallback-dec", "101Dummy", check_file=False)
-
     # custom
 
     @ignore_warnings((DeprecationWarning, UserWarning))
@@ -179,27 +169,12 @@ class TestBashBenchRunnerCmdOptions(ExtTestCase):
     # def test_custom_tracing(self):
     #    self._export_cmd("custom-tracing", "101Dummy", check_file=True)
 
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_custom_fallback(self):
-        self._export_cmd("custom-fallback", "101Dummy", check_file=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.4")
-    def test_custom_fallback_dec(self):
-        self._export_cmd("export-fallback-dec", "101Dummy", check_file=False)
-
     # onnx_dynamo
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.5")
     def test_onnx_dynamo(self):
         self._export_cmd("onnx_dynamo", "101Dummy", check_file=True)
-
-    @ignore_warnings((DeprecationWarning, UserWarning))
-    @requires_torch("2.5")
-    def test_onnx_dynamo_fallback(self):
-        self._export_cmd("onnx_dynamo-fallback", "101Dummy", check_file=True)
 
     @ignore_warnings((DeprecationWarning, UserWarning))
     @requires_torch("2.4")

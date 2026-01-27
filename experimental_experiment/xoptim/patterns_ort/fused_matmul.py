@@ -1107,7 +1107,6 @@ class ReshapeGemmReshapePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import oh.make_node
 
         opset_imports = [
             oh.make_opsetid("", 18),
