@@ -3,8 +3,6 @@
 .xoptim.patterns
 ================
 
-
-
 .. toctree::
     :maxdepth: 1
     :caption: modules
@@ -24,6 +22,7 @@
     onnx_layer_normalization
     onnx_matmul
     onnx_mul
+    onnx_range
     onnx_reduce
     onnx_reshape
     onnx_rotary
@@ -34,7 +33,6 @@
     onnx_sequence
     onnx_transpose
     onnx_unsqueeze
-
 
 .. automodule:: experimental_experiment.xoptim.patterns
     :members:

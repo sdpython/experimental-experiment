@@ -36,4 +36,5 @@ about how it is implemented. It may not be fully up to date.
     
     exporter
     optimizer
+    optimizer_patterns
     backends

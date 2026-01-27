@@ -431,7 +431,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             anc_cos = g.node_before(cos_name)
             anc_sin = g.node_before(sin_name)
             if anc_cos is None or anc_sin is None:
-                return None
+                return self.none(concat_cos, inspect.currentframe().f_lineno)
             if anc_cos.input[0] == anc_sin.input[0] and id(anc_cos) == id(anc_sin):
                 if len(anc_cos.output) == 2:
                     if (
@@ -446,7 +446,7 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 # cos/sin are not produced the usual way (CosSinCache)
                 return []
             nodes.extend([anc_cos, anc_sin])
-        return None
+        return self.none(concat_cos, inspect.currentframe().f_lineno)
 
     def apply(
         self,

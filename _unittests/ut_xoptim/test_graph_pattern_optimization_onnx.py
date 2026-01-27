@@ -2398,6 +2398,41 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_same_children_pattern_add_mul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xc"], to=TensorProto.FLOAT16),
+                    oh.make_node("Cast", ["Y"], ["yc"], to=TensorProto.FLOAT16),
+                    oh.make_node("Add", ["xc", "yc"], ["xy"]),
+                    oh.make_node("Add", ["yc", "xc"], ["xy2"]),
+                    oh.make_node("Add", ["xy", "xy2"], ["Z"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2, 3, 4]), _mkv_("Y", TFLOAT, ["a", 1, 3, 4])],
+                [_mkv_("Z", TFLOAT16, ["a", 2, 3, 4])],
+            )
+        )
+        feeds = {"X": self._range(2, 3, 4), "Y": self._range(1, 3, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+        inputs = [tuple(n.input) for n in model.graph.node]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["SameChildren"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Cast", "Cast", "Add", "Add"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        new_inputs = [tuple(n.input) for n in opt_onx.graph.node]
+        self.assertNotEqual(inputs, new_inputs)
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
     def test_same_children_pattern_from_input(self):
         model = oh.make_model(
             oh.make_graph(
@@ -7675,6 +7710,83 @@ class TestGraphPatternOptimization(ExtTestCase):
             ["Squeeze", "Squeeze", "CausalMask", "Constant", "Range"],
             [n.op_type for n in opt_onx.graph.node],
         )
+
+    def test_swap_range_add_cst(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Range", ["zero", "END", "one"], ["arange"]),
+                    oh.make_node("Add", ["arange", "PLUS"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("END", TINT64, []), _mkv_("PLUS", TINT64, [1])],
+                [_mkv_("Y", TINT64, [])],
+                [
+                    onh.from_array(np.array(1, dtype=np.int64), name="one"),
+                    onh.from_array(np.array(0, dtype=np.int64), name="zero"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = {"END": np.array(10, dtype=np.int64), "PLUS": np.array(40, dtype=np.int64)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["SwapRangeAddScalar"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_swap_range_add_cst.onnx", opt_onx)
+        self.assertEqual(["Squeeze", "Add", "Range"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_swap_range_add(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Range", ["START", "END", "one"], ["arange"]),
+                    oh.make_node("Add", ["arange", "PLUS"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("START", TINT64, []),
+                    _mkv_("END", TINT64, []),
+                    _mkv_("PLUS", TINT64, [1]),
+                ],
+                [_mkv_("Y", TINT64, [])],
+                [onh.from_array(np.array(1, dtype=np.int64), name="one")],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = {
+            "START": np.array(2, dtype=np.int64),
+            "END": np.array(10, dtype=np.int64),
+            "PLUS": np.array(40, dtype=np.int64),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["SwapRangeAddScalar"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_swap_range_add.onnx", opt_onx)
+        self.assertEqual(
+            ["Squeeze", "Add", "Add", "Range"], [n.op_type for n in opt_onx.graph.node]
+        )
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
