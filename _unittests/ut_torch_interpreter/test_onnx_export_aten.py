@@ -3350,6 +3350,46 @@ class TestOnnxExportAten(ExtTestCase):
         onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
 
+    def test_identity_model(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return x
+
+        inputs = (torch.rand((3, 4), dtype=torch.float16),)
+        DYN = torch.export.Dim.DYNAMIC
+        dynamic = ({0: DYN},)
+
+        model = Model()
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs, dynamic_shapes=dynamic)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+
+    def test_weird_model(self):
+        import torch
+        import torchvision.models as tv_models
+
+        class X(torch.nn.Module):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
+                self.mean = torch.Tensor([0.0, 0.0, 0.0]).reshape(1, 3, 1, 1, 1)
+
+            def forward(self, v):
+                return self.model(v - self.mean)
+
+            def __setattr__(self, n, v):
+                if isinstance(v, torch.nn.Module):
+                    v.eval()
+                torch.nn.Module.__setattr__(self, n, v)
+
+        inputs = (torch.randn(1, 3, 16, 112, 112),)
+        model = X(tv_models.video.r2plus1d_18())
+        expected = model(*torch_deepcopy(inputs))
+        onx = to_onnx(model, inputs)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
