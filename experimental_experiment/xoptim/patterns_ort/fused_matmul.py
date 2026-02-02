@@ -807,7 +807,7 @@ class FusedMatMulTransposePattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if (node.op_type not in "MatMul" or node.domain != "") and (
+        if (node.op_type != "MatMul" or node.domain != "") and (
             node.op_type != "FusedMatMul" or node.domain != "com.microsoft"
         ):
             return self.none()
