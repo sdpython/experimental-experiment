@@ -383,7 +383,7 @@ class ModelRunner:
         repeat: int,
         suite: str,
         autocast: bool = False,
-        wrap_kind: Optional[None] = None,
+        wrap_kind: Optional[str] = None,
         nvtx: bool = False,
         model_name: Optional[str] = None,
         export_options: Optional[Dict[str, Any]] = None,

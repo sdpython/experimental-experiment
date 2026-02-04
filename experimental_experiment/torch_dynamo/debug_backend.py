@@ -65,7 +65,7 @@ def onnx_debug_backend(
     target_opset: Optional[int] = None,
     backend: Union[str, Callable[[ModelProto, Optional[bool]], Any]] = "ort",
     verbose: Union[int, Tuple[int, int]] = 0,
-    dump_prefix: Optional[None] = None,
+    dump_prefix: Optional[str] = None,
     dump_patterns: Optional[str] = None,
     providers: Optional[Tuple[str]] = None,
     raise_exc: bool = True,

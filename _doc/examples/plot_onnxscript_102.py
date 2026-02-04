@@ -40,5 +40,5 @@ def do_this_or_do_that(x, y, do_this_or_do_that: bool = True):
 # %%
 # Then we export the model into ONNX.
 
-proto = do_this_or_do_that.to_model_proto(functions=[do_this, do_that])
+proto = do_this_or_do_that.to_model_proto()
 print(onnx.printer.to_text(proto))
