@@ -12857,6 +12857,11 @@ def aten_where(
         return aten_nonzero(g, sts, outputs, condition, as_tuple=True, name=f"{name}_nonzero")
     assert x, f"where: x is missing{g.get_debug_msg()}"
     assert other, f"where: other is missing{g.get_debug_msg()}"
+    assert isinstance(
+        condition, str
+    ), f"Unexpected type for condition {type(condition)}{g.get_debug_msg()}"
+    assert isinstance(x, str), f"Unexpected type for x {type(x)}{g.get_debug_msg()}"
+    assert isinstance(other, str), f"Unexpected type for other {type(other)}{g.get_debug_msg()}"
     res = g.op.Where(condition, x, other, name=name, outputs=outputs)
     if not sts:
         set_type_shape_binary_op(g, res, condition, x, other, begin=1)
