@@ -3481,6 +3481,51 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-5)
 
+    def test_transpose_equal_reshape_null(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["X"], ["xt"], perm=[0, 1, 3, 2]),
+                    oh.make_node("Add", ["xt", "ok"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 256, 1, 48])],
+                [_mkv_("Y", TFLOAT, ["a", 256, 48, 2])],
+                [onh.from_array(np.array([1, 1], dtype=np.float32), name="ok")],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=11,
+        )
+        check_model(model)
+
+        for feeds in [
+            {"X": self._range(3, 256, 1, 48)},
+            {"X": np.empty((0, 256, 1, 48), dtype=np.float32)},
+        ]:
+            with self.subTest(shape=feeds["X"].shape):
+                ref = self._check_with_ort(model)
+                expected = ref.run(None, feeds)[0]
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(
+                        patterns=["TransposeEqualReshape"],
+                        verbose=10,
+                    ),
+                    verbose=0,
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                self.assertEqual(
+                    ["Reshape", "Add"],
+                    [n.op_type for n in opt_onx.graph.node],
+                )
+                self.assertEqual(2, len(opt_onx.graph.initializer))
+
+                opt_ref = self._check_with_ort(opt_onx)
+                got = opt_ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got, atol=1e-5)
+
     def test_cast_layer_normalization_cast(self):
         model = oh.make_model(
             oh.make_graph(

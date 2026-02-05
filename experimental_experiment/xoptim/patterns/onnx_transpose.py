@@ -656,21 +656,28 @@ class TransposeEqualReshapePattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [node], self.apply, insert_at=node)
 
+    def _make_new_shape(self, input_shape, perm):
+        new_shape = []
+        for i, p in perm:
+            if i == p:
+                new_shape.append(0)
+            elif input_shape[p] == 1:
+                new_shape.append(1)
+            elif isinstance(input_shape[p], int):
+                new_shape.append(input_shape[p])
+            else:
+                new_shape.append(-1)
+        return new_shape
+
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
         transpose_node: NodeProto,
     ) -> List[NodeProto]:
-        perms = list(enumerate(g.get_attribute(transpose_node, "perm").ints))
-        shape = g.get_shape(transpose_node.input[0])
-        new_shape = []
-        for i, p in perms:
-            if i == p:
-                new_shape.append(0)
-            elif shape[p] == 1:
-                new_shape.append(1)
-            else:
-                new_shape.append(-1)
+        new_shape = self._make_new_shape(
+            g.get_shape(transpose_node.input[0]),
+            list(enumerate(g.get_attribute(transpose_node, "perm").ints)),
+        )
         return [
             g.make_node(
                 "Reshape",
