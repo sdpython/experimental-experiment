@@ -720,15 +720,21 @@ class ExtTestCase(unittest.TestCase):
         atol: float = 0,
         rtol: float = 0,
         msg: Optional[str] = None,
+        use_python: bool = False,
     ):
         import onnxruntime
+        from .reference import ExtendedReferenceEvaluator
 
-        sess = onnxruntime.InferenceSession(
-            onx.SerializeToString(), providers=["CPUExecutionProvider"]
-        )
-        feeds = dict(
-            zip([i.name for i in sess.get_inputs()], [x.detach().numpy() for x in inputs])
-        )
+        if use_python:
+            sess = ExtendedReferenceEvaluator(onx, verbose=10)
+            feeds = dict(zip(sess.input_names, [x.detach().numpy() for x in inputs]))
+        else:
+            sess = onnxruntime.InferenceSession(
+                onx.SerializeToString(), providers=["CPUExecutionProvider"]
+            )
+            feeds = dict(
+                zip([i.name for i in sess.get_inputs()], [x.detach().numpy() for x in inputs])
+            )
         got = sess.run(None, feeds)
         if len(got) == 1 and hasattr(expected, "shape"):
             self.assertEqualArray(expected, got[0], atol=atol, rtol=rtol, msg=msg)

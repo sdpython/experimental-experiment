@@ -302,6 +302,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
     """
 
     MINUS_ONE = np.array([-1], dtype=np.int64)
+    MINUS_TWO = np.array([-2], dtype=np.int64)
     ONE = np.array([1], dtype=np.int64)
     ONE_NO_DIM = np.array(1, dtype=np.int64)
     ZERO = np.array([0], dtype=np.int64)

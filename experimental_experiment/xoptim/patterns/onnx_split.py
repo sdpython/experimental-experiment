@@ -269,7 +269,28 @@ class SlicesSplitPattern(PatternOptimization):
             # 9223372036854775807 is what torch uses to specify the end
             shape = g.get_shape(nodes[0].input[0])
             cst_ends[-1] = shape[axis]
-        n_els = [cst_ends[i] - cst_starts[i] for i in range(len(starts))]
+
+        n_els = []
+        total_int = None
+        for i in range(len(starts)):
+            if (cst_ends[i] < 0 and cst_starts[i] >= 0) or (
+                cst_ends[i] >= 0 and cst_starts[i] < 0
+            ):
+                if total_int is None:
+                    if g.has_shape(nodes[0].input[0]):
+                        shape = g.get_shape(nodes[0].input[0])
+                        if isinstance(shape[axis], int):
+                            total_int = shape[axis]
+                assert total_int is not None, "should not be possible"
+                delta = (
+                    (cst_ends[i] + total_int - cst_starts[i])
+                    if cst_ends[i] < 0
+                    else (cst_ends[i] - cst_starts[i] - total_int)
+                )
+            else:
+                delta = cst_ends[i] - cst_starts[i]
+            assert delta >= 0, f"{delta=} < 0, {cst_starts[i]=}, {cst_ends[i]=}, {total_int=}"
+            n_els.append(delta)
 
         splits = g.make_initializer(
             "", np.array(n_els, dtype=np.int64), source="SlicesSplitPattern.apply.splits"

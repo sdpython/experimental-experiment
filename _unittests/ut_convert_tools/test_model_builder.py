@@ -6,7 +6,12 @@ from onnx_diagnostic.helpers.torch_helper import torch_dtype_to_onnx_dtype, torc
 from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
 from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from onnx_diagnostic.torch_export_patches import torch_export_patches
-from experimental_experiment.ext_test_case import ExtTestCase, hide_stdout, ignore_warnings
+from experimental_experiment.ext_test_case import (
+    ExtTestCase,
+    hide_stdout,
+    ignore_warnings,
+    requires_onnx_diagnostic,
+)
 from experimental_experiment.convert.model_builder_base import ModelBuilderBase
 from experimental_experiment.torch_interpreter import to_onnx
 
@@ -23,6 +28,7 @@ def torch_dtype_to_ir_data_type(dt):
 
 
 class TestModelBuilderHelper(ExtTestCase):
+    @requires_onnx_diagnostic("0.9.1")
     def test_model_builder_attention(self):
         import torch
 

@@ -1811,6 +1811,7 @@ class DynamoInterpreter:
                 f"The conversion of operator {name_fct!r} into a local function\n--ERROR--\n"
                 f"{e}{self.builder.get_debug_msg()}"
             ) from e
+
         assert (len(output_names) == 1 and res == output_names[0]) or res == output_names, (
             f"Mismatch issue res={res!r}, output_names={output_names!r} "
             f"for function {name_fct!r}{self.builder.get_debug_msg()}"
