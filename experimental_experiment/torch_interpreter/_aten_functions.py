@@ -4613,7 +4613,7 @@ def aten__grouped_mm(
     )
     g.set_type(scan_output, TensorProto.FLOAT)
     if dtype_a != TensorProto.FLOAT:
-        res = g.op.Cast(scan_output, to=dtype_a, name=name)
+        res = g.op.Cast(scan_output, to=dtype_a, name=name, outputs=outputs)
     else:
         res = g.op.Identity(scan_output, name=name, outputs=outputs)
     if not sts:

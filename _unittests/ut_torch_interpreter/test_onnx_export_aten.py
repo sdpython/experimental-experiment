@@ -3489,6 +3489,7 @@ class TestOnnxExportAten(ExtTestCase):
         names = [str(n.target) for n in ep.graph.nodes]
         self.assertIn("aten._grouped_mm.default", names)
         onx = to_onnx(model, (a, b), dynamic_shapes=({0: "M", 1: "K"}, {0: "N", 1: "K"}))
+        self.dump_onnx("test_aten_grouped_mm_offsets.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b), atol=1e-4)
 
     def test_aten_grouped_mm_offsets_no_constant(self):
@@ -3522,7 +3523,9 @@ class TestOnnxExportAten(ExtTestCase):
         onx = to_onnx(
             model, (a, b, offs), dynamic_shapes=({0: "M", 1: "K"}, {0: "N", 1: "K"}, {0: "S"})
         )
-        self.assertIn("Scan", [n.op_type for n in onx.graph.node])
+        self.assertEqual(len(onx.functions), 1)
+        self.assertIn("Scan", [n.op_type for n in onx.functions[0].node])
+        self.dump_onnx("test_aten_grouped_mm_offsets_no_constant.onnx", onx)
         self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b, offs), atol=1e-4)
 
     def test_aten_grouped_mm_offsets_semi_constant(self):
@@ -3557,7 +3560,8 @@ class TestOnnxExportAten(ExtTestCase):
             model, (a, b, offs), dynamic_shapes=({0: "M", 1: "K"}, {0: "N", 1: "K"}, {})
         )
         self.dump_onnx("test_aten_grouped_mm_offsets_semi_constant.onnx", onx)
-        self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assertEqual(len(onx.functions), 1)
+        self.assertIn("Split", [n.op_type for n in onx.functions[0].node])
         self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b, offs), atol=1e-4)
 
 
