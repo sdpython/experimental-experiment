@@ -1706,8 +1706,14 @@ class RMSNormalizationPattern(PatternOptimization):
             to = g.get_attribute(cast_1, "to").i
             if to == g.get_type(node.input[0]):
                 cast_2 = g.next_node(node_mul.output[0])
-                if cast_2 is None:
+                if cast_2 is None or cast_2.op_type != "Cast":
                     cast_1 = None
+                    cast_2 = None
+                if cast_2 is not None:
+                    to2 = g.get_attribute(cast_2, "to").i
+                    if to2 != g.get_type(cast_1.input[0]):
+                        cast_1 = None
+                        cast_2 = None
             else:
                 cast_1 = None
 
@@ -1730,8 +1736,8 @@ class RMSNormalizationPattern(PatternOptimization):
         node_pow: NodeProto,
         node_reduce: NodeProto,
         node_add: NodeProto,
-        node_sqrt: NodeProto,
-        node_reciprocal: NodeProto,
+        _node_sqrt: NodeProto,
+        _node_reciprocal: NodeProto,
         node_mul: NodeProto,
         cast_2: NodeProto,
     ) -> List[NodeProto]:
@@ -1787,6 +1793,5 @@ class RMSNormalizationPattern(PatternOptimization):
             stash_type=stash_type,
             name=f"{self.__class__.__name__}--{nname}",
         )
-
         nodes.append(layer)
         return nodes

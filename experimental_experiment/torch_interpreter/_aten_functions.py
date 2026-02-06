@@ -4413,6 +4413,220 @@ def aten_group_norm(
     return res
 
 
+def aten__grouped_mm(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    mat_a: T,
+    mat_b: T,
+    offs: Optional[T] = None,
+    bias: Optional[T] = None,
+    out_dtype: Optional["dtype"] = None,  # noqa: F821
+    name: str = "aten_grouped_mm",
+) -> T:
+    "grouped_mm"
+    assert out_dtype is None, f"not implemented yet when {out_dtype=}{g.get_debug_msg()}"
+    assert bias is None, f"not implemented yet when bias shape is {bias.shape}{g.get_debug_msg()}"
+    assert g.has_rank(mat_a), f"not type for {mat_a=}{g.get_debug_msg()}"
+    assert g.has_rank(mat_b), f"not type for {mat_b=}{g.get_debug_msg()}"
+    dtype_a, dtype_b = g.get_type(mat_a), g.get_type(mat_b)
+    assert dtype_a == dtype_b, (
+        f"not implemented when {dtype_a=} != {dtype_b=} "
+        f"for mat_a={mat_a!r} and mat_b={mat_b!r}{g.get_debug_msg()}"
+    )
+    assert dtype_a in {
+        TensorProto.BFLOAT16,
+        TensorProto.FLOAT,
+        TensorProto.FLOAT16,
+    }, f"unexpected type for mat_a={mat_a!r}: {dtype_a=}{g.get_debug_msg()}"
+    if offs is None:
+        if dtype_a != TensorProto.FLOAT:
+            ma = g.op.Cast(mat_a, to=TensorProto.FLOAT, name=name)
+            mb = g.op.Cast(mat_b, to=TensorProto.FLOAT, name=name)
+            mm = g.op.MatMul(ma, mb, name=name)
+            res = g.op.Cast(mm, to=dtype_a, name=name, outputs=outputs)
+        else:
+            ma, mb = mat_a, mat_b
+            res = g.op.MatMul(ma, mb, name=name, outputs=outputs)
+        if not sts:
+            set_type_shape_matmul(g, res, mat_a, mat_b)
+        return res
+
+    if isinstance(offs, list) or g.is_constant(offs):
+        if isinstance(offs, list):
+            offsets = offs
+        else:
+            cst = g.get_constant(offs, computed_value=True)
+            assert (
+                cst is not None
+            ), f"unable to retrieve constant offs={offs!r} is not a constant{g.get_debug_msg()}"
+            offsets = cst.tolist()
+
+        if dtype_a != TensorProto.FLOAT:
+            ma = g.op.Cast(mat_a, to=TensorProto.FLOAT, name=name)
+            mb = g.op.Cast(mat_b, to=TensorProto.FLOAT, name=name)
+        else:
+            ma, mb = mat_a, mat_b
+
+        cats = []
+        last = 0
+        for off in offsets:
+            start = np.array([last], dtype=np.int64)
+            end = np.array([off], dtype=np.int64)
+            mm = g.op.MatMul(
+                g.op.Slice(ma, start, end, g.MINUS_ONE, name=name),
+                g.op.Slice(mb, start, end, g.MINUS_TWO, name=name),
+                name=name,
+            )
+            cats.append(g.op.UnsqueezeAnyOpset(mm, g.ZERO, name=name))
+            last = off
+        concatenation = g.op.Concat(*cats, axis=0, name=name)
+        if dtype_a != TensorProto.FLOAT:
+            concatenation = g.op.Cast(concatenation, to=dtype_a, name=name)
+        res = g.op.Identity(concatenation, name=name, outputs=outputs)
+        if not sts:
+            g.set_type(res, dtype_a)
+            if g.has_shape(mat_a) and g.has_shape(mat_b):
+                g.set_shape(res, (len(offsets), *g.get_shape(mat_a)[:-1], g.get_shape(mat_b)[-1]))
+            else:
+                g.set_rank(res, g.get_rank(mat_a) + 1)
+        return res
+
+    if g.has_shape(offs) and is_static_shape(g.get_shape(offs)):
+        # static shape
+        assert (
+            g.get_rank(offs) == 1
+        ), f"Unexpected rank for {offs=}, rank={g.get_rank(offs)}{g.get_debug_msg()}"
+        loop_size = g.get_shape(offs)[0]
+        total_size = g.op.Shape(mat_a, start=-1, name=name)
+        last_split = g.op.Slice(
+            offs, g.MINUS_ONE, np.array([loop_size], dtype=np.int64), g.ZERO, name=name
+        )
+
+        if dtype_a != TensorProto.FLOAT:
+            ma = g.op.Cast(mat_a, to=TensorProto.FLOAT, name=name)
+            mb = g.op.Cast(mat_b, to=TensorProto.FLOAT, name=name)
+        else:
+            ma, mb = mat_a, mat_b
+
+        starts = g.op.Concat(
+            np.array([0], dtype=tensor_dtype_to_np_dtype(g.get_type(offs))),
+            g.op.Slice(offs, g.ZERO, g.MINUS_ONE, g.ZERO, name=name),
+            axis=0,
+            name=name,
+        )
+        ends = offs
+        g.set_shape(starts, (loop_size,))
+        g.set_shape(ends, (loop_size,))
+        split_size_miss = g.op.Cast(
+            g.op.Sub(ends, starts, name=name), to=TensorProto.INT64, name=name
+        )
+        left = g.op.Sub(
+            total_size, g.op.Cast(last_split, to=TensorProto.INT64, name=name), name=name
+        )
+        split_size = g.op.Concat(split_size_miss, left, axis=0, name=name)
+
+        split_a = [g.unique_name(f"gma#{i}") for i in range(loop_size + 1)]
+        split_b = [g.unique_name(f"gmb#{i}") for i in range(loop_size + 1)]
+        g.make_node("Split", [ma, split_size], split_a, axis=-1, name=name)
+        g.make_node("Split", [mb, split_size], split_b, axis=-2, name=name)
+
+        cats = []
+        last = 0
+        for msa, msb in zip(split_a[:-1], split_b[:-1]):
+            mm = g.op.MatMul(msa, msb, name=name)
+            cats.append(g.op.UnsqueezeAnyOpset(mm, g.ZERO, name=name))
+        concatenation = g.op.Concat(*cats, axis=0, name=name)
+        if dtype_a != TensorProto.FLOAT:
+            concatenation = g.op.Cast(concatenation, to=dtype_a, name=name)
+        res = g.op.Identity(concatenation, name=name, outputs=outputs)
+        if not sts:
+            g.set_type(res, dtype_a)
+            if g.has_shape(mat_a) and g.has_shape(mat_b):
+                g.set_shape(res, (loop_size, *g.get_shape(mat_a)[:-1], g.get_shape(mat_b)[-1]))
+            else:
+                g.set_rank(res, g.get_rank(mat_a) + 1)
+        return res
+
+    # generic case, no constant
+    if dtype_a != TensorProto.FLOAT:
+        ma = g.op.Cast(mat_a, to=TensorProto.FLOAT, name=name)
+        mb = g.op.Cast(mat_b, to=TensorProto.FLOAT, name=name)
+    else:
+        ma, mb = mat_a, mat_b
+
+    offsun = g.op.UnsqueezeAnyOpset(offs, g.ONE, name=name)
+    starts = g.op.Concat(
+        np.array([[0]], dtype=tensor_dtype_to_np_dtype(g.get_type(offs))),
+        g.op.Slice(offsun, g.ZERO, g.MINUS_ONE, g.ZERO, name=name),
+        axis=0,
+        name=name,
+    )
+    ends = offsun
+    off_itype = g.get_type(offs)
+    off_dtype = tensor_dtype_to_np_dtype(off_itype)
+    g.set_type(starts, off_itype)
+    g.set_type(ends, off_itype)
+    if g.has_shape(offs):
+        new_shape = (*g.get_shape(offs), 1)
+        g.set_shape(starts, new_shape)
+        g.set_shape(ends, new_shape)
+
+    def mkv(name):
+        value_info_proto = ValueInfoProto()
+        value_info_proto.name = name
+        return value_info_proto
+
+    body = make_graph(
+        [
+            make_node(
+                "Slice", [ma, "start", "end", "mm_last"], ["mpa"], name=g.unique_node_name(name)
+            ),
+            make_node(
+                "Slice",
+                [mb, "start", "end", "mm_before_last"],
+                ["mpb"],
+                name=g.unique_node_name(name),
+            ),
+            make_node("MatMul", ["mpa", "mpb"], ["mmu"], name=g.unique_node_name(name)),
+        ],
+        "graph_grouped_mm",
+        [mkv("start"), mkv("end")],
+        [mkv("mmu")],
+        [
+            from_array_extended(np.array([-1], dtype=off_dtype), name="mm_last"),
+            from_array_extended(np.array([-2], dtype=off_dtype), name="mm_before_last"),
+        ],
+    )
+    scan_output = g.unique_name("grouped_mm_out")
+    g.make_node(
+        "Scan",
+        [starts, ends],
+        [scan_output],
+        name=g.unique_node_name(name),
+        body=body,
+        num_scan_inputs=2,
+        scan_input_directions=[0, 0],
+        scan_input_axes=[0, 0],
+        scan_output_axes=[0],
+        scan_output_directions=[0],
+    )
+    g.set_type(scan_output, TensorProto.FLOAT)
+    if dtype_a != TensorProto.FLOAT:
+        res = g.op.Cast(scan_output, to=dtype_a, name=name)
+    else:
+        res = g.op.Identity(scan_output, name=name, outputs=outputs)
+    if not sts:
+        g.set_type(res, dtype_a)
+        if g.has_shape(mat_a) and g.has_shape(mat_b) and g.has_shape(offs):
+            g.set_shape(
+                res, (g.get_shape(offs)[0], *g.get_shape(mat_a)[:-1], g.get_shape(mat_b)[-1])
+            )
+        else:
+            g.set_rank(res, g.get_rank(mat_a) + 1)
+    return res
+
+
 def aten_gt(
     g: GraphBuilder,
     sts: Optional[Dict[str, Any]],
@@ -4578,8 +4792,15 @@ def aten_histc(
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
-    keep_x = g.op.Where(
-        g.op.And(
+    if itype in {TensorProto.INT32, TensorProto.INT64}:
+        # No NaN
+        cond = g.op.And(
+            g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
+            g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
+            name=name,
+        )
+    else:
+        cond = g.op.And(
             g.op.Not(g.op.IsNaN(flat_x, name=name), name=name),
             g.op.And(
                 g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
@@ -4587,11 +4808,8 @@ def aten_histc(
                 name=name,
             ),
             name=name,
-        ),
-        flat_x,
-        np.array([min - 1], dtype=dtype),
-        name=name,
-    )
+        )
+    keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
     delta = (max - min) / (bins * 1.0)
     bins = np.arange(min, max + delta, delta).astype(dtype).reshape((-1, 1))
     # max is included.

@@ -1244,6 +1244,10 @@ def _set_shape_type_op_any_unsqueeze(self: ShapeBuilder, node: NodeProto):
             )
     elif self.has_rank(node.input[0]) and self.is_constant(node.input[1]):
         cst = self.get_constant(node.input[1], computed_value=True)
+        assert cst is not None, (
+            f"unable to extract constant {node.input[1]!r} in node "
+            f"{self.pretty_node(node)}{self.get_debug_msg()}"
+        )
         self.set_rank(node.output[0], self.get_rank(node.input[0]) + cst.size)
         return True
     else:

@@ -3431,6 +3431,135 @@ class TestOnnxExportAten(ExtTestCase):
                 got = sess.run(None, {"x": inputs[0].detach().numpy()})
                 self.assertEqualArray(expected, got[0])
 
+    def test_aten_grouped_mm_no_offset(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, a, b):
+                res = torch.nn.functional.grouped_mm(
+                    a.to(torch.bfloat16), b.transpose(-2, -1).to(torch.bfloat16)
+                )
+                torch._check(res.dtype == torch.bfloat16, lambda: f"{res.dtype=}")
+                return res.to(torch.float32)
+
+        G, M, N, K = 4, 16, 32, 64
+        a = torch.randn(G, M, K, device="cpu", dtype=torch.float32)
+        b = torch.randn(G, N, K, device="cpu", dtype=torch.float32)
+        model = Model()
+        expected = model(a, b)
+        self.assertEqualArray(
+            expected,
+            (a.to(torch.bfloat16) @ b.transpose(-2, -1).to(torch.bfloat16)).to(torch.float32),
+        )
+        ep = torch.export.export(model, (a, b))
+        names = [str(n.target) for n in ep.graph.nodes]
+        self.assertIn("aten._grouped_mm.default", names)
+        onx = to_onnx(
+            model, (a, b), dynamic_shapes=({0: "G", 1: "M", 2: "K"}, {0: "G", 1: "N", 2: "K"})
+        )
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b), atol=1e-3)
+
+    def test_aten_grouped_mm_offsets(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, a, b):
+                res = torch.nn.functional.grouped_mm(
+                    a.to(torch.bfloat16),
+                    b.T.to(torch.bfloat16),
+                    offs=torch.tensor([1, 4], dtype=torch.int32),
+                )
+                torch._check(res.dtype == torch.bfloat16, lambda: f"{res.dtype=}")
+                return res.to(torch.float32)
+
+        M, N, K = 2, 2, 16
+        a = torch.ones(M, K, device="cpu", dtype=torch.float32)
+        b = torch.ones(N, K, device="cpu", dtype=torch.float32)
+        model = Model()
+        expected = model(a, b)
+        ab, bb = a.to(torch.bfloat16), b.to(torch.bfloat16)
+        acc = []
+        last = 0
+        for off in [1, 4]:
+            acc.append(ab[:, last:off] @ bb[:, last:off].T)
+            last = off
+        acc = [t.unsqueeze(0) for t in acc]
+        self.assertEqualArray(expected, torch.cat(acc, dim=0).to(torch.float32))
+        ep = torch.export.export(model, (a, b))
+        names = [str(n.target) for n in ep.graph.nodes]
+        self.assertIn("aten._grouped_mm.default", names)
+        onx = to_onnx(model, (a, b), dynamic_shapes=({0: "M", 1: "K"}, {0: "N", 1: "K"}))
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b), atol=1e-4)
+
+    def test_aten_grouped_mm_offsets_no_constant(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, a, b, offs):
+                res = torch.nn.functional.grouped_mm(
+                    a.to(torch.bfloat16), b.T.to(torch.bfloat16), offs=offs
+                )
+                torch._check(res.dtype == torch.bfloat16, lambda: f"{res.dtype=}")
+                return res.to(torch.float32)
+
+        M, N, K = 2, 2, 16
+        a = torch.ones(M, K, device="cpu", dtype=torch.float32)
+        b = torch.ones(N, K, device="cpu", dtype=torch.float32)
+        offs = torch.tensor([1, 4, 6], dtype=torch.int32)
+        model = Model()
+        expected = model(a, b, offs)
+        ab, bb = a.to(torch.bfloat16), b.to(torch.bfloat16)
+        acc = []
+        last = 0
+        for off in offs:
+            acc.append(ab[:, last:off] @ bb[:, last:off].T)
+            last = off
+        acc = [t.unsqueeze(0) for t in acc]
+        self.assertEqualArray(expected, torch.cat(acc, dim=0).to(torch.float32))
+        ep = torch.export.export(model, (a, b, offs))
+        names = [str(n.target) for n in ep.graph.nodes]
+        self.assertIn("aten._grouped_mm.default", names)
+        onx = to_onnx(
+            model, (a, b, offs), dynamic_shapes=({0: "M", 1: "K"}, {0: "N", 1: "K"}, {0: "S"})
+        )
+        self.assertIn("Scan", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b, offs), atol=1e-4)
+
+    def test_aten_grouped_mm_offsets_semi_constant(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, a, b, offs):
+                res = torch.nn.functional.grouped_mm(
+                    a.to(torch.bfloat16), b.T.to(torch.bfloat16), offs=offs
+                )
+                torch._check(res.dtype == torch.bfloat16, lambda: f"{res.dtype=}")
+                return res.to(torch.float32)
+
+        M, N, K = 2, 2, 16
+        a = torch.ones(M, K, device="cpu", dtype=torch.float32)
+        b = torch.ones(N, K, device="cpu", dtype=torch.float32)
+        offs = torch.tensor([1, 4, 6], dtype=torch.int32)
+        model = Model()
+        expected = model(a, b, offs)
+        ab, bb = a.to(torch.bfloat16), b.to(torch.bfloat16)
+        acc = []
+        last = 0
+        for off in offs:
+            acc.append(ab[:, last:off] @ bb[:, last:off].T)
+            last = off
+        acc = [t.unsqueeze(0) for t in acc]
+        self.assertEqualArray(expected, torch.cat(acc, dim=0).to(torch.float32))
+        ep = torch.export.export(model, (a, b, offs))
+        names = [str(n.target) for n in ep.graph.nodes]
+        self.assertIn("aten._grouped_mm.default", names)
+        onx = to_onnx(
+            model, (a, b, offs), dynamic_shapes=({0: "M", 1: "K"}, {0: "N", 1: "K"}, {})
+        )
+        self.dump_onnx("test_aten_grouped_mm_offsets_semi_constant.onnx", onx)
+        self.assertIn("Split", [n.op_type for n in onx.graph.node])
+        self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b, offs), atol=1e-4)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
