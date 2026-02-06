@@ -4595,7 +4595,11 @@ def aten_histc(
     delta = (max - min) / (bins * 1.0)
     bins = np.arange(min, max + delta, delta).astype(dtype).reshape((-1, 1))
     # max is included.
-    bins[-1] = np.nextafter(bins[-1], np.inf, dtype=dtype)
+    bins[-1] = (
+        (bins[-1] + 1)
+        if np.issubdtype(dtype, np.integer)
+        else np.nextafter(bins[-1], np.array(np.inf, dtype=dtype), dtype=dtype)
+    )
     less = g.op.Cast(
         g.op.Less(
             g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name),
