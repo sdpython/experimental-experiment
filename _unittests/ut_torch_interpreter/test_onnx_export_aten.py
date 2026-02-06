@@ -3390,6 +3390,26 @@ class TestOnnxExportAten(ExtTestCase):
         onx = to_onnx(model, inputs)
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
 
+    def test_aten_histc(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.histc(x, 3, 0, 2)
+
+        inputs = ((torch.arange(20) / 10).to(torch.float32),)
+        model = Model()
+        expected = model(*inputs)
+        onx = to_onnx(model, inputs, dynamic_shapes=({0: "batch"},))
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+        sess = self._check_with_ort(onx)
+        for k in range(101):
+            with self.subTest(k=k):
+                inputs = (torch.tensor([(k - 1) / 49.0], dtype=torch.float32),)
+                expected = model(*inputs)
+                got = sess.run(None, {"x": inputs[0].detach().numpy()})
+                self.assertEqualArray(expected, got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

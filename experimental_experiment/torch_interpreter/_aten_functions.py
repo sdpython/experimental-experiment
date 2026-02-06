@@ -4560,6 +4560,65 @@ def aten_hardtanh_backward(
     return res
 
 
+def aten_histc(
+    g: GraphBuilder,
+    sts: Optional[Dict[str, Any]],
+    outputs: List[str],
+    x: T,
+    bins: int,
+    min: T,
+    max: T,
+    name: str = "histc",
+) -> T:
+    "histc"
+    assert (
+        isinstance(min, (int, float)) and isinstance(max, (int, float)) and min < max
+    ), f"histc not implemented when {min=}, {max=}, {bins=}{g.get_debug_msg()}"
+    assert g.has_type(x), f"Missing type for {x=}{g.get_debug_msg()}"
+    itype = g.get_type(x)
+    dtype = tensor_dtype_to_np_dtype(itype)
+    flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
+    keep_x = g.op.Where(
+        g.op.And(
+            g.op.Not(g.op.IsNaN(flat_x, name=name), name=name),
+            g.op.And(
+                g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
+                g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
+                name=name,
+            ),
+            name=name,
+        ),
+        flat_x,
+        np.array([min - 1], dtype=dtype),
+        name=name,
+    )
+    delta = (max - min) / (bins * 1.0)
+    bins = np.arange(min, max + delta, delta).astype(dtype).reshape((-1, 1))
+    # max is included.
+    bins[-1] = np.nextafter(bins[-1], np.inf, dtype=dtype)
+    less = g.op.Cast(
+        g.op.Less(
+            g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name),
+            bins,
+            name=name,
+        ),
+        to=itype,
+        name=name,
+    )
+    sums = g.op.ReduceSumAnyOpset(less, g.ONE, name=name, keepdims=0)
+    res = g.op.Sub(
+        g.op.Slice(sums, g.ONE, g.op.Shape(sums, name=name), g.ZERO, name=name),
+        g.op.Slice(sums, g.ZERO, g.MINUS_ONE, g.ZERO, name=name),
+        name=name,
+        outputs=outputs,
+    )
+
+    if not sts:
+        g.set_type(res, g.get_type(x))
+        g.set_shape(res, (bins,))
+    return res
+
+
 def _get_im2col_indices_along_dim(
     input_d: DYNAMIC_SHAPE,
     kernel_size_d: int,
