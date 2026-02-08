@@ -435,6 +435,7 @@ def get_default_aten_as_function(target_opset: Optional[int] = None) -> Tuple[st
         pprint.pprint(get_default_aten_as_function(23))
     """
     return (
+        "aten.histc.default",
         "aten.index_copy.default",
         "aten.index_put.default",
         "aten._grouped_mm.default",

@@ -51,7 +51,7 @@ class MissingRangePattern(PatternOptimization):
                 new_inputs,
                 [n],
                 domain=node.domain,
-                name=f"{self.__class__.__name__}",
+                name=f"{self.__class__.__name__}--{node.name}",
             )
         )
         nodes.append(
@@ -96,20 +96,126 @@ class MissingCosSinPattern(PatternOptimization):
                 [node.input[0]],
                 [n1],
                 to=other_to,
-                name=f"{self.__class__.__name__}--Cast",
+                name=f"{self.__class__.__name__}--Cast1",
             ),
             g.make_node(
                 node.op_type,
                 [n1],
                 [n2],
                 domain=node.domain,
-                name=f"{self.__class__.__name__}",
+                name=f"{self.__class__.__name__}--{node.name}",
             ),
             g.make_node(
                 "Cast",
                 [n2],
                 [node.output[0]],
                 to=to,
-                name=f"{self.__class__.__name__}--Cast",
+                name=f"{self.__class__.__name__}--Cast2",
             ),
         ]
+
+
+class MissingReduceMaxPattern(PatternOptimization):
+    """Replaces Range by Cast Range Cast because of some missing kernels."""
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"ReduceMax", "ReduceMin"} or node.domain != "":
+            return self.none()
+        if not g.has_type(node.input[0]) or g.get_type(node.input[0]) not in {
+            TensorProto.BFLOAT16
+        }:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        to = g.get_type(node.input[0])
+        other_to = TensorProto.FLOAT
+        nodes = []
+        n_in = g.unique_name(f"{self.__class__.__name__}--{node.input[0]}")
+        nodes.append(
+            g.make_node(
+                "Cast",
+                [node.input[0]],
+                [n_in],
+                to=other_to,
+                name=f"{self.__class__.__name__}--Cast1",
+            )
+        )
+        n_out = g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")
+        nodes.append(
+            g.make_node(
+                node.op_type,
+                [n_in, *node.input[1:]],
+                [n_out],
+                domain=node.domain,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+        )
+        nodes.append(
+            g.make_node(
+                "Cast", [n_out], [node.output[0]], to=to, name=f"{self.__class__.__name__}--Cast2"
+            )
+        )
+        return nodes
+
+
+class MissingTopKPattern(PatternOptimization):
+    """Replaces Range by Cast Range Cast because of some missing kernels."""
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type not in {"TopK"} or node.domain != "":
+            return self.none()
+        if not g.has_type(node.input[0]) or g.get_type(node.input[0]) not in {
+            TensorProto.BFLOAT16
+        }:
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node], self.apply, insert_at=node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        node: NodeProto,
+    ) -> List[NodeProto]:
+        to = g.get_type(node.input[0])
+        other_to = TensorProto.FLOAT
+        nodes = []
+        n_in = g.unique_name(f"{self.__class__.__name__}--{node.input[0]}")
+        nodes.append(
+            g.make_node(
+                "Cast",
+                [node.input[0]],
+                [n_in],
+                to=other_to,
+                name=f"{self.__class__.__name__}--Cast1",
+            )
+        )
+        n_out = g.unique_name(f"{self.__class__.__name__}--{node.output[0]}")
+        nodes.append(
+            g.make_node(
+                node.op_type,
+                [n_in, *node.input[1:]],
+                [n_out, *node.output[1:]],
+                domain=node.domain,
+                name=f"{self.__class__.__name__}--{node.name}",
+            )
+        )
+        nodes.append(
+            g.make_node(
+                "Cast", [n_out], [node.output[0]], to=to, name=f"{self.__class__.__name__}--Cast2"
+            )
+        )
+        return nodes
