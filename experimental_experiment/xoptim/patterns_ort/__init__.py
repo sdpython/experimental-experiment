@@ -42,7 +42,12 @@ def get_onnxruntime_patterns(
         ContribRotaryEmbedding3DPattern,
         MultiHeadAttention3DPattern,
     )
-    from .missing_kernels import MissingCosSinPattern, MissingRangePattern
+    from .missing_kernels import (
+        MissingCosSinPattern,
+        MissingRangePattern,
+        MissingReduceMaxPattern,
+        MissingTopKPattern,
+    )
 
     # from .gather_grad import GatherGradPattern
     from .simplified_layer_normalization import (
@@ -68,6 +73,8 @@ def get_onnxruntime_patterns(
         FusedMatMulTransposePattern(verbose=verbose),
         MissingCosSinPattern(verbose=verbose),
         MissingRangePattern(verbose=verbose),
+        MissingReduceMaxPattern(verbose=verbose),
+        MissingTopKPattern(verbose=verbose),
         MultiHeadAttention3DPattern(verbose=verbose),
         OrtBatchNormalizationTrainingPattern(verbose=verbose),
         QuickGeluPattern(verbose=verbose),
