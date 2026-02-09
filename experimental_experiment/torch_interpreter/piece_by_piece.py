@@ -15,10 +15,10 @@ import onnx
 import torch
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type, string_sig
 from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
+from ..helpers.torch_helper import torch_deepcopy
 from ..export_helpers import torch_export
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions
-from ._torch_helper import make_copy
 from .piece_by_piece_serialize import (
     choose_kwargs_for_dynamic_shapes,
     deserialize_args,
@@ -417,13 +417,13 @@ class ModelDiagnoseOutput:
             if self.forward_kwargs and k not in self.forward_ordered_parameter_names:
                 self.forward_fill_kwargs = False
 
-        self.inputs.append(make_copy((args, kwargs)))
+        self.inputs.append(torch_deepcopy((args, kwargs)))
 
     def add_outputs(self, args: Tuple[Any, ...]):
         """Stores returned outputs. Makes a copy."""
         if not isinstance(args, tuple):
             args = (args,)
-        self.outputs.append(make_copy(args))
+        self.outputs.append(torch_deepcopy(args))
 
     def add_child(self, diag: "ModelDiagnoseOutput"):
         """Adds a submodule."""
@@ -1699,7 +1699,7 @@ class ModelDiagnoseOutput:
         ), f"Not implemented yet for replace_by_custom_op={replace_by_custom_op!r}"
         index = self._index_best_input_to_export(default=0)
         export_inputs = modificator(self.inputs[index]) if modificator else self.inputs[index]
-        export_inputs = make_copy(export_inputs)
+        export_inputs = torch_deepcopy(export_inputs)
         if use_dynamic_shapes is None:
             use_dynamic_shapes = len(self.inputs) > 1
         assert (
@@ -1749,7 +1749,7 @@ class ModelDiagnoseOutput:
             self.exporter_outputs = []
             self.exporter_discs = []
             for i, (inp, out) in enumerate(zip(self.inputs, self.outputs)):
-                copy_inp = make_copy(modificator(inp) if modificator else inp)
+                copy_inp = torch_deepcopy(modificator(inp) if modificator else inp)
                 args, kwargs = copy_inp
                 if verbose > 2:
                     print(f"[try_export-{exporter.upper()}] {self.dot_name}: CALL {fct}")
