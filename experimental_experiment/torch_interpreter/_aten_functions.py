@@ -46,6 +46,7 @@ from ..xshape.shape_type_compute import (
     set_type_shape_matmul,
 )
 from ._exceptions import FunctionNotFoundError
+from ._torch_helper import _tune_thresholds_histc
 
 
 def _get_input_type(g: GraphBuilder, x: Any, python_default: bool) -> int:
@@ -4848,7 +4849,6 @@ def aten_histc(
                 name=name,
             )
         keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
-        delta = (float(max) - float(min)) / float(bins)
 
         # bins = np.array([min + delta * i for i in range(bins + 1)], dtype=dtype)
 
@@ -4867,6 +4867,7 @@ def aten_histc(
         #   }, {p_begin, p_end});
         # });
 
+        delta = (float(max) - float(min)) / float(bins)
         ctype = np.float16
         delta = np.array(delta, dtype=ctype)
         min = np.array(min, dtype=ctype)
@@ -4878,7 +4879,7 @@ def aten_histc(
             thresholds[i] = min + delta * i
         for i in range(halfway, bins + 1):
             thresholds[i] = max - delta * (bins - i)
-        thresholds = _tune_thresholds_histc(thresholds.astype(dtype))
+        thresholds = _tune_thresholds_histc(thresholds.astype(dtype), bins=bins, min=min, max=max)
 
         # max is included.
         thresholds[-1] = (

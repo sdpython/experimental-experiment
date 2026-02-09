@@ -65,4 +65,33 @@ def make_copy(obj: Any) -> Any:
         ) from e
 
 
-_tune_thresholds_histc
+def _tune_thresholds_histc(
+    tensor: torch.Tensor, bins: int, min: float, max: float
+) -> torch.Tensor:
+    """
+    Adjusts tensor threshold for function :func:`torch.histc`.
+    """
+    if tensor.dtype not in {torch.float16, torch.bfloat16}:
+        # Nothing to do.
+        return tensor
+    assert tensor.ndim == 1, f"tensor should be 1D not {tensor.ndim}D."
+    minf = torch.tensor(-torch.inf, dtype=tensor.dtype)
+    pinf = torch.tensor(torch.inf, dtype=tensor.dtype)
+    new_tensor = tensor.clone()
+    buffer = torch.empty((1,), dtype=tensor.dtype)
+    for i in range(tensor.numel()-1):
+        th = tensor[i]
+        buffer[0] = th
+        buffer = torch.nextafter(buffer, minf)
+        buffer[0] -= (th - buffer[0]) * 10
+
+        it = 0
+        while it < 20:
+            buffer = torch.nextafter(buffer, pinf)
+            res = torch.histc(buffer, bins, min, max)
+            index = torch.argmax(res)
+            if i == index:
+                new_tensor[i] = buffer[0]
+                break
+            it += 1
+    return new_tensor
