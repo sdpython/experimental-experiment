@@ -4867,17 +4867,18 @@ def aten_histc(
         #   }, {p_begin, p_end});
         # });
 
-        ctype = np.float32
+        ctype = np.float16
         delta = np.array(delta, dtype=ctype)
         min = np.array(min, dtype=ctype)
         max = np.array(max, dtype=ctype)
         bins = int(bins)
         thresholds = np.zeros((bins + 1,), dtype=dtype)
-        for i in range((bins + 1) // 2):
+        halfway = bins + 1 - (bins + 1) // 2
+        for i in range(halfway):
             thresholds[i] = min + delta * i
-        for i in range((bins + 1) // 2, bins + 1):
+        for i in range(halfway, bins + 1):
             thresholds[i] = max - delta * (bins - i)
-        thresholds = thresholds.astype(dtype)
+        thresholds = _tune_thresholds_histc(thresholds.astype(dtype))
 
         # max is included.
         thresholds[-1] = (

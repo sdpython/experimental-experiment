@@ -63,3 +63,6 @@ def make_copy(obj: Any) -> Any:
         raise RuntimeError(
             f"deepcopy did not work on type {type(obj)}: {string_type(obj)}"
         ) from e
+
+
+_tune_thresholds_histc
