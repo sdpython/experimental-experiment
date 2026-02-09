@@ -4846,7 +4846,7 @@ def aten_histc(
             )
         keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
         delta = (max - min) / (bins * 1.0)
-        bins = np.arange(min, max + delta, delta).astype(dtype).reshape((-1, 1))
+        bins = np.array([min + delta * i for i in range(bins + 1)], dtype=dtype).reshape((-1, 1))
         # max is included.
         bins[-1] = (
             (bins[-1] + 1)
