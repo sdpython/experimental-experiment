@@ -3423,6 +3423,19 @@ class TestOnnxExportAten(ExtTestCase):
         onx = to_onnx(model, inputs, dynamic_shapes=({0: "batch"},))
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
 
+    def test_aten_histc_float_bigger2(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.histc(x, 20, -5, 5)
+
+        inputs = (torch.rand((10, 10, 10), dtype=torch.float16),)
+        model = Model()
+        expected = model(*inputs)
+        onx = to_onnx(model, inputs, dynamic_shapes=({0: "batch"},))
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+
     def test_aten_histc_float16(self):
         import torch
 

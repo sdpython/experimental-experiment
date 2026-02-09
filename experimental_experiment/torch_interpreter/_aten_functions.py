@@ -4810,7 +4810,7 @@ def aten_histc(
         delta = g.op.Div(
             g.op.Sub(max_x, min_x, name=name), np.array(bins, dtype=dtype), name=name
         )
-        bins = g.op.UnsqueezeAnyOpset(
+        thresholds = g.op.UnsqueezeAnyOpset(
             g.op.Range(
                 min_x,
                 g.op.Sub(max_x, g.op.Div(delta, np.array(2, dtype=dtype), name=name), name=name),
@@ -4820,13 +4820,16 @@ def aten_histc(
             g.ONE,
             name=name,
         )
-        bins = g.op.Concat(
-            bins,
+        thresholds = g.op.Concat(
+            thresholds,
             g.op.Add(max_x, g.op.Mul(delta, np.array([[2]], dtype=dtype), name=name), name=name),
             axis=0,
             name=name,
         )
     else:
+        if min == max:
+            min -= 1
+            max += 1
         if itype in {TensorProto.INT32, TensorProto.INT64}:
             # No NaN
             cond = g.op.And(
@@ -4845,19 +4848,49 @@ def aten_histc(
                 name=name,
             )
         keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
-        delta = (max - min) / (bins * 1.0)
-        bins = np.array([min + delta * i for i in range(bins + 1)], dtype=dtype).reshape((-1, 1))
+        delta = (float(max) - float(min)) / float(bins)
+
+        # bins = np.array([min + delta * i for i in range(bins + 1)], dtype=dtype)
+
+        # Torch code is the following.
+        # const step_t step =
+        #       (static_cast<step_t>(end) - static_cast<step_t>(start)) / (steps - 1);
+        # int64_t halfway = steps / 2;
+        # at::parallel_for(0, steps, internal::GRAIN_SIZE, [&](int64_t p_begin, int64_t p_end) {
+        # int64_t idx(p_begin);
+        #   TensorIterator it(iter);
+        #   cpu_serial_kernel(
+        #   it,
+        #   [start, end, step, halfway, steps, &idx]() -> scalar_t {
+        #     if (idx < halfway) { return start + step * (idx++); }
+        #     else { return end - step * (steps - (idx++) - 1); }
+        #   }, {p_begin, p_end});
+        # });
+
+        ctype = np.float32
+        delta = np.array(delta, dtype=ctype)
+        min = np.array(min, dtype=ctype)
+        max = np.array(max, dtype=ctype)
+        bins = int(bins)
+        thresholds = np.zeros((bins + 1,), dtype=dtype)
+        for i in range((bins + 1) // 2):
+            thresholds[i] = min + delta * i
+        for i in range((bins + 1) // 2, bins + 1):
+            thresholds[i] = max - delta * (bins - i)
+        thresholds = thresholds.astype(dtype)
+
         # max is included.
-        bins[-1] = (
-            (bins[-1] + 1)
+        thresholds[-1] = (
+            (thresholds[-1] + 1)
             if np.issubdtype(dtype, np.integer)
-            else np.nextafter(bins[-1], np.array(np.inf, dtype=dtype), dtype=dtype)
+            else np.nextafter(thresholds[-1], np.array(np.inf, dtype=dtype), dtype=dtype)
         )
+        thresholds = thresholds.reshape((-1, 1))
 
     less = g.op.Cast(
         g.op.Less(
             g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name),
-            bins,
+            thresholds,
             name=name,
         ),
         to=itype,
