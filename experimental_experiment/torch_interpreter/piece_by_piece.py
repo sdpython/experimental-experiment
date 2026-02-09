@@ -15,7 +15,7 @@ import onnx
 import torch
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type, string_sig
 from onnx_diagnostic.helpers.cache_helper import CacheKeyValue
-from ..helpers.torch_helper import torch_deepcopy
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from ..export_helpers import torch_export
 from ..xbuilder import OptimizationOptions
 from . import to_onnx, FunctionOptions, Dispatcher, ExportOptions

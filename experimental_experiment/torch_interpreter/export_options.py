@@ -4,9 +4,9 @@ import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from ..export_helpers import torch_export
 from ..helpers import string_sig, get_sig_kwargs
-from ..helpers.torch_helper import torch_deepcopy
 from ._doc_ import TorchOpOverload
 
 
