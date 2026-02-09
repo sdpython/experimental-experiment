@@ -4785,39 +4785,75 @@ def aten_histc(
     name: str = "histc",
 ) -> T:
     "histc"
-    assert (
-        isinstance(min, (int, float)) and isinstance(max, (int, float)) and min < max
+    assert isinstance(min, (int, float)) and isinstance(
+        max, (int, float)
     ), f"histc not implemented when {min=}, {max=}, {bins=}{g.get_debug_msg()}"
+    use_min_x = min == max == 0
     assert g.has_type(x), f"Missing type for {x=}{g.get_debug_msg()}"
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
-    if itype in {TensorProto.INT32, TensorProto.INT64}:
-        # No NaN
-        cond = g.op.And(
-            g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
-            g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
+    if use_min_x:
+        if itype in {TensorProto.INT32, TensorProto.INT64}:
+            keep_x = flat_x
+        else:
+            nan_x = g.op.IsNaN(flat_x, name=name)
+            keep_x = g.op.Where(nan_x, np.array([-np.inf], dtype=dtype), flat_x, name=name)
+
+        min_x = g.op.ReduceMinAnyOpset(
+            g.op.Compress(flat_x, g.op.Not(nan_x, name=name), name=name),
+            name=name,
+            keepdims=0,
+        )
+        max_x = g.op.ReduceMaxAnyOpset(keep_x, name=name, keepdims=0)
+        # torch does not say what happens if max_x == min_x, it produces something.
+        delta = g.op.Div(
+            g.op.Sub(max_x, min_x, name=name), np.array(bins, dtype=dtype), name=name
+        )
+        bins = g.op.UnsqueezeAnyOpset(
+            g.op.Range(
+                min_x,
+                g.op.Sub(max_x, g.op.Div(delta, np.array(2, dtype=dtype), name=name), name=name),
+                delta,
+                name=name,
+            ),
+            g.ONE,
+            name=name,
+        )
+        bins = g.op.Concat(
+            bins,
+            g.op.Add(max_x, g.op.Mul(delta, np.array([[2]], dtype=dtype), name=name), name=name),
+            axis=0,
             name=name,
         )
     else:
-        cond = g.op.And(
-            g.op.Not(g.op.IsNaN(flat_x, name=name), name=name),
-            g.op.And(
+        if itype in {TensorProto.INT32, TensorProto.INT64}:
+            # No NaN
+            cond = g.op.And(
                 g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
                 g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
                 name=name,
-            ),
-            name=name,
+            )
+        else:
+            cond = g.op.And(
+                g.op.Not(g.op.IsNaN(flat_x, name=name), name=name),
+                g.op.And(
+                    g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
+                    g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
+                    name=name,
+                ),
+                name=name,
+            )
+        keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
+        delta = (max - min) / (bins * 1.0)
+        bins = np.arange(min, max + delta, delta).astype(dtype).reshape((-1, 1))
+        # max is included.
+        bins[-1] = (
+            (bins[-1] + 1)
+            if np.issubdtype(dtype, np.integer)
+            else np.nextafter(bins[-1], np.array(np.inf, dtype=dtype), dtype=dtype)
         )
-    keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
-    delta = (max - min) / (bins * 1.0)
-    bins = np.arange(min, max + delta, delta).astype(dtype).reshape((-1, 1))
-    # max is included.
-    bins[-1] = (
-        (bins[-1] + 1)
-        if np.issubdtype(dtype, np.integer)
-        else np.nextafter(bins[-1], np.array(np.inf, dtype=dtype), dtype=dtype)
-    )
+
     less = g.op.Cast(
         g.op.Less(
             g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name),
