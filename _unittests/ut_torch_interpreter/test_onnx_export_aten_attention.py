@@ -322,6 +322,42 @@ class TestOnnxExportAtenAttention(ExtTestCase):
                 got = sess.run(None, feeds)[0]
                 self.assertEqualArray(expected, got, atol=1e-2)
 
+    def test_enable_gqa_in_attention(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, q, k, v):
+                return torch.nn.functional.scaled_dot_product_attention(q, k, v, enable_gqa=True)
+
+        model = Model()
+        query = torch.randn(2, 4, 8, 16)
+        key = torch.randn(2, 2, 8, 16)
+        value = torch.randn(2, 2, 8, 16)
+        inputs = (query, key, value)
+        dynamic_shapes = ({0: "batch", 2: "seq"}, {0: "batch", 2: "seq"}, {0: "batch", 2: "seq"})
+
+        for opset in [18, 24]:
+            with self.subTest(opset=opset):
+                onx = to_onnx(
+                    model,
+                    inputs,
+                    dynamic_shapes=dynamic_shapes,
+                    target_opset=opset,
+                    export_options=(
+                        ExportOptions(
+                            aten_as_function={"aten.scaled_dot_product_attention.default"}
+                        )
+                        if opset < 24
+                        else None
+                    ),
+                )
+                self.dump_onnx(f"test_enable_gqa_in_attention.{opset}.onnx", onx)
+                sess = self._check_with_ort(onx)
+                expected = model(*inputs)
+                feeds = dict(zip("qkv", [i.detach().numpy() for i in inputs]))
+                got = sess.run(None, feeds)
+                self.assertEqualArray(expected, got[0], atol=1e-5)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
