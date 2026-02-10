@@ -7,6 +7,7 @@ import onnx
 import onnx.helper as oh
 from onnx.checker import check_model
 from onnx_diagnostic.helpers import max_diff
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from experimental_experiment.ext_test_case import (
@@ -20,9 +21,9 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.torch_interpreter._torch_helper import _tune_thresholds_histc
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.helpers import torch_dtype_to_onnx_dtype, string_type
-from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from experimental_experiment.torch_test_helper import to_numpy
 
 
@@ -3467,15 +3468,14 @@ class TestOnnxExportAten(ExtTestCase):
                         g = sess.run(None, {"x": t.numpy()})
                         md = max_diff(e, g[0])
                         if md["abs"] > 0:
-                            thres = (
-                                (torch.arange(21) * (0.5) - 5).to(torch.float16).to(torch.float32)
-                            )
+                            thres = (torch.arange(21) * (0.5) - 5).to(torch.float16)
                             e = e.to(torch.int)
                             g[0] = torch.from_numpy(g[0]).to(torch.int)
                             raise AssertionError(
                                 f"{ind=}, issue with {ti[ind]=}, "
                                 f"(as float {ti[ind].to(torch.float32)}) error={md}, "
-                                f"\n---{e=}\n{g[0]=}\n{thres=}"
+                                f"\n---{e=}\n{g[0]=}\n{thres=}\n"
+                                f"{_tune_thresholds_histc(thres, 20, -5, 5)}"
                             )
                 self.assertEqualArray(expected, got[0])
 
