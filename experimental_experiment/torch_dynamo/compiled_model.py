@@ -201,6 +201,7 @@ def create_compiled_model(
 ) -> Any:
     """
     Creates the compiled model.
+
     :param model: module
     :param backend: kind of backend
     :param use_dynamic: use dynamic shape
@@ -208,7 +209,7 @@ def create_compiled_model(
     :param enable_pattern: to enable optimization pattern
     :param disable_pattern: to disable optimization pattern
     :param return_storage: return a container for the models,
-        only works with backend *custom* and *debug*
+        only works with backend `custom` and `debug`
     :param rename_inputs: rename inputs into ``input_{i}``
     :param dump_prefix: dumps the models (backend, custom and debug)
     :param dump_patterns: dumps the optimization applied patterns if applicable
