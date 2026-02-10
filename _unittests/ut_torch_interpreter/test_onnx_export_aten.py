@@ -6,6 +6,8 @@ import numpy as np
 import onnx
 import onnx.helper as oh
 from onnx.checker import check_model
+from onnx_diagnostic.helpers import max_diff
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from onnx_diagnostic.torch_export_patches import torch_export_patches
 from onnx_diagnostic.torch_export_patches.patch_inputs import use_dyn_not_str
 from experimental_experiment.ext_test_case import (
@@ -19,9 +21,9 @@ from experimental_experiment.ext_test_case import (
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.torch_interpreter._torch_helper import _tune_thresholds_histc
 from experimental_experiment.xbuilder import OptimizationOptions
 from experimental_experiment.helpers import torch_dtype_to_onnx_dtype, string_type
-from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from experimental_experiment.torch_test_helper import to_numpy
 
 
@@ -3406,6 +3408,173 @@ class TestOnnxExportAten(ExtTestCase):
         for k in range(101):
             with self.subTest(k=k):
                 inputs = (torch.tensor([(k - 1) / 49.0], dtype=torch.float32),)
+                expected = model(*inputs)
+                got = sess.run(None, {"x": inputs[0].detach().numpy()})
+                self.assertEqualArray(expected, got[0])
+
+    def test_aten_histc_float_bigger(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.histc(x, 60, -10, 10)
+
+        inputs = ((torch.arange(20) / 10).to(torch.float32),)
+        model = Model()
+        expected = model(*inputs)
+        onx = to_onnx(model, inputs, dynamic_shapes=({0: "batch"},))
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+
+    @unittest.skip("see https://github.com/pytorch/pytorch/issues/174668")
+    def test_aten_histc_float16_rounding(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.histc(x, 20, -5, 5)
+
+        keep = []
+        hh = np.array(0.997, dtype=np.float16)
+        for _ in range(20):
+            keep.append(float(hh))
+            hh = np.nextafter(hh, np.array(np.inf, dtype=np.float16), dtype=np.float16)
+
+        inputs = [
+            (torch.tensor(keep[::-1], dtype=torch.float16).reshape((-1, 10)),),
+            (torch.tensor(keep, dtype=torch.float16).reshape((-1, 10)),),
+            ((torch.tensor(keep[::-1], dtype=torch.float16) + 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep, dtype=torch.float16) + 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep[::-1], dtype=torch.float16) - 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep, dtype=torch.float16) - 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep[::-1], dtype=torch.float16) - 1).reshape((-1, 10)),),
+            ((torch.tensor(keep, dtype=torch.float16) - 1).reshape((-1, 10)),),
+        ]
+        model = Model()
+        onx = to_onnx(model, inputs[1], dynamic_shapes=({0: "batch"},))
+        sess = self._check_with_ort(onx)
+        for i in range(len(inputs)):
+            with self.subTest(i=i):
+                expected = model(*inputs[i])
+                got = sess.run(None, {"x": inputs[i][0].numpy()})
+                diff = max_diff(expected, got[0])
+                if diff["abs"] > 0:
+                    ti = inputs[i][0].reshape((-1,))
+                    for ind in range(inputs[i][0].numel()):
+                        t = ti.clone()
+                        t *= 0
+                        t[ind] = ti[ind]
+                        t[t == 0] = torch.nan
+                        t = t.reshape(inputs[i][0].shape)
+                        e = model(t)
+                        g = sess.run(None, {"x": t.numpy()})
+                        md = max_diff(e, g[0])
+                        if md["abs"] > 0:
+                            thres = (torch.arange(21) * (0.5) - 5).to(torch.float16)
+                            e = e.to(torch.int)
+                            g[0] = torch.from_numpy(g[0]).to(torch.int)
+                            raise AssertionError(
+                                f"{ind=}, issue with {ti[ind]=}, "
+                                f"(as float {ti[ind].to(torch.float32)}) error={md}, "
+                                f"\n---{e=}\n{g[0]=}\n{thres=}\n"
+                                f"{_tune_thresholds_histc(thres, 20, -5, 5)}"
+                            )
+                self.assertEqualArray(expected, got[0])
+
+    def test_aten_histc_float32_rounding(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.histc(x, 20, -5, 5)
+
+        keep = []
+        hh = np.array(0.999, dtype=np.float32)
+        for _ in range(20):
+            keep.append(float(hh))
+            hh = np.nextafter(hh, np.array(np.inf, dtype=np.float32), dtype=np.float32)
+
+        inputs = [
+            (torch.tensor(keep[::-1], dtype=torch.float32).reshape((-1, 10)),),
+            (torch.tensor(keep, dtype=torch.float32).reshape((-1, 10)),),
+            ((torch.tensor(keep[::-1], dtype=torch.float32) + 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep, dtype=torch.float32) + 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep[::-1], dtype=torch.float32) - 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep, dtype=torch.float32) - 0.5).reshape((-1, 10)),),
+            ((torch.tensor(keep[::-1], dtype=torch.float32) - 1).reshape((-1, 10)),),
+            ((torch.tensor(keep, dtype=torch.float32) - 1).reshape((-1, 10)),),
+        ]
+        model = Model()
+        onx = to_onnx(model, inputs[1], dynamic_shapes=({0: "batch"},))
+        sess = self._check_with_ort(onx)
+        for i in range(len(inputs)):
+            with self.subTest(i=i):
+                expected = model(*inputs[i])
+                got = sess.run(None, {"x": inputs[i][0].numpy()})
+                diff = max_diff(expected, got[0])
+                if diff["abs"] > 0:
+                    ti = inputs[i][0].reshape((-1,))
+                    for ind in range(inputs[i][0].numel()):
+                        t = ti.clone()
+                        t *= 0
+                        t[ind] = ti[ind]
+                        t[t == 0] = torch.nan
+                        t = t.reshape(inputs[i][0].shape)
+                        e = model(t)
+                        g = sess.run(None, {"x": t.numpy()})
+                        md = max_diff(e, g[0])
+                        if md["abs"] > 0:
+                            thres = (torch.arange(21) * (0.5) - 5).to(torch.float32)
+                            e = e.to(torch.int)
+                            g[0] = torch.from_numpy(g[0]).to(torch.int)
+                            raise AssertionError(
+                                f"{ind=}, issue with {ti[ind]=}, "
+                                f"(as float {ti[ind].to(torch.float32)}) error={md}, "
+                                f"\n---{e=}\n{g[0]=}\n{thres=}"
+                            )
+                self.assertEqualArray(expected, got[0])
+
+    def test_aten_histc_float16(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.histc(x, 3, 0, 2)
+
+        inputs = ((torch.arange(20) / 10).to(torch.float16),)
+        model = Model()
+        expected = model(*inputs)
+        onx = to_onnx(model, inputs, dynamic_shapes=({0: "batch"},))
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+        sess = self._check_with_ort(onx)
+        for k in range(101):
+            with self.subTest(k=k):
+                inputs = (torch.tensor([(k - 1) / 49.0], dtype=torch.float16),)
+                expected = model(*inputs)
+                got = sess.run(None, {"x": inputs[0].detach().numpy()})
+                self.assertEqualArray(expected, got[0])
+
+    def test_aten_histc_float_00(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def forward(self, x):
+                return torch.histc(x, 3, 0, 0)
+
+        inputs = ((torch.arange(20) / 10).to(torch.float32),)
+        model = Model()
+        expected = model(*inputs)
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=({0: "batch"},),
+            export_options=ExportOptions(aten_as_function=set()),
+        )
+        self.dump_onnx("test_aten_histc_float_00.onnx", onx)
+        self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
+        sess = self._check_with_ort(onx)
+        for k in range(101):
+            with self.subTest(k=k):
+                inputs = (torch.tensor([0, (k - 1) / 49.0, 2], dtype=torch.float32),)
                 expected = model(*inputs)
                 got = sess.run(None, {"x": inputs[0].detach().numpy()})
                 self.assertEqualArray(expected, got[0])

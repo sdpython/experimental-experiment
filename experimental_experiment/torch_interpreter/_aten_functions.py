@@ -4785,43 +4785,123 @@ def aten_histc(
     name: str = "histc",
 ) -> T:
     "histc"
-    assert (
-        isinstance(min, (int, float)) and isinstance(max, (int, float)) and min < max
+    assert isinstance(min, (int, float)) and isinstance(
+        max, (int, float)
     ), f"histc not implemented when {min=}, {max=}, {bins=}{g.get_debug_msg()}"
+    use_min_x = min == max == 0
     assert g.has_type(x), f"Missing type for {x=}{g.get_debug_msg()}"
     itype = g.get_type(x)
     dtype = tensor_dtype_to_np_dtype(itype)
     flat_x = g.op.Reshape(x, g.MINUS_ONE, name=name)
-    if itype in {TensorProto.INT32, TensorProto.INT64}:
-        # No NaN
-        cond = g.op.And(
-            g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
-            g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
+    if use_min_x:
+        if itype in {TensorProto.INT32, TensorProto.INT64}:
+            keep_x = flat_x
+        else:
+            nan_x = g.op.IsNaN(flat_x, name=name)
+            keep_x = g.op.Where(nan_x, np.array([-np.inf], dtype=dtype), flat_x, name=name)
+
+        min_x = g.op.ReduceMinAnyOpset(
+            g.op.Compress(flat_x, g.op.Not(nan_x, name=name), name=name),
+            name=name,
+            keepdims=0,
+        )
+        max_x = g.op.ReduceMaxAnyOpset(keep_x, name=name, keepdims=0)
+        # torch does not say what happens if max_x == min_x, it produces something.
+        delta = g.op.Div(
+            g.op.Sub(max_x, min_x, name=name), np.array(bins, dtype=dtype), name=name
+        )
+        thresholds = g.op.UnsqueezeAnyOpset(
+            g.op.Range(
+                min_x,
+                g.op.Sub(max_x, g.op.Div(delta, np.array(2, dtype=dtype), name=name), name=name),
+                delta,
+                name=name,
+            ),
+            g.ONE,
+            name=name,
+        )
+        thresholds = g.op.Concat(
+            thresholds,
+            g.op.Add(max_x, g.op.Mul(delta, np.array([[2]], dtype=dtype), name=name), name=name),
+            axis=0,
             name=name,
         )
     else:
-        cond = g.op.And(
-            g.op.Not(g.op.IsNaN(flat_x, name=name), name=name),
-            g.op.And(
+        if min == max:
+            min -= 1
+            max += 1
+        if itype in {TensorProto.INT32, TensorProto.INT64}:
+            # No NaN
+            cond = g.op.And(
                 g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
                 g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
                 name=name,
-            ),
-            name=name,
+            )
+        else:
+            cond = g.op.And(
+                g.op.Not(g.op.IsNaN(flat_x, name=name), name=name),
+                g.op.And(
+                    g.op.GreaterOrEqual(flat_x, np.array([min], dtype=dtype), name=name),
+                    g.op.LessOrEqual(flat_x, np.array([max], dtype=dtype), name=name),
+                    name=name,
+                ),
+                name=name,
+            )
+        keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
+
+        # bins = np.array([min + delta * i for i in range(bins + 1)], dtype=dtype)
+
+        # Torch code is the following.
+        # const step_t step =
+        #       (static_cast<step_t>(end) - static_cast<step_t>(start)) / (steps - 1);
+        # int64_t halfway = steps / 2;
+        # at::parallel_for(0, steps, internal::GRAIN_SIZE, [&](int64_t p_begin, int64_t p_end) {
+        # int64_t idx(p_begin);
+        #   TensorIterator it(iter);
+        #   cpu_serial_kernel(
+        #   it,
+        #   [start, end, step, halfway, steps, &idx]() -> scalar_t {
+        #     if (idx < halfway) { return start + step * (idx++); }
+        #     else { return end - step * (steps - (idx++) - 1); }
+        #   }, {p_begin, p_end});
+        # });
+
+        delta = (float(max) - float(min)) / float(bins)
+        ctype = np.float16
+        delta = np.array(delta, dtype=ctype)
+        min = np.array(min, dtype=ctype)
+        max = np.array(max, dtype=ctype)
+        bins = int(bins)
+        thresholds = np.zeros((bins + 1,), dtype=dtype)
+        halfway = bins + 1 - (bins + 1) // 2
+        for i in range(halfway):
+            thresholds[i] = min + delta * i
+        for i in range(halfway, bins + 1):
+            thresholds[i] = max - delta * (bins - i)
+
+        # see https://github.com/pytorch/pytorch/issues/174668
+        # thresholds = _tune_thresholds_histc(
+        #     thresholds.astype(dtype), bins=bins, fmin=min, fmax=max
+        # )
+
+        # max is included.
+        thresholds[-1] = (
+            (thresholds[-1] + 1)
+            if np.issubdtype(dtype, np.integer)
+            else np.nextafter(thresholds[-1], np.array(np.inf, dtype=dtype), dtype=dtype)
         )
-    keep_x = g.op.Where(cond, flat_x, np.array([min - 1], dtype=dtype), name=name)
-    delta = (max - min) / (bins * 1.0)
-    bins = np.arange(min, max + delta, delta).astype(dtype).reshape((-1, 1))
-    # max is included.
-    bins[-1] = (
-        (bins[-1] + 1)
-        if np.issubdtype(dtype, np.integer)
-        else np.nextafter(bins[-1], np.array(np.inf, dtype=dtype), dtype=dtype)
-    )
+        thresholds = thresholds.reshape((-1, 1))
+
     less = g.op.Cast(
         g.op.Less(
-            g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name),
-            bins,
+            g.op.Cast(
+                g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name), to=TensorProto.FLOAT, name=name
+            ),
+            (
+                thresholds.astype(np.float32)
+                if isinstance(thresholds, np.ndarray)
+                else g.op.Cast(thresholds, to=TensorProto.FLOAT, name=name)
+            ),
             name=name,
         ),
         to=itype,
