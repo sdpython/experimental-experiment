@@ -28,10 +28,7 @@ class TestTorchInterpreterTorchHelper(ExtTestCase):
         thresholds = torch.from_numpy(thresholds)
 
         # tuning
-        print("----")
-        print(thresholds)
-        thresholds = _tune_thresholds_histc(thresholds, bins=ibins, min=fmin, max=fmax)
-        print(thresholds)
+        thresholds = _tune_thresholds_histc(thresholds, bins=ibins, fmin=fmin, fmax=fmax)
 
         # inputs
         keep = []
@@ -61,9 +58,7 @@ class TestTorchInterpreterTorchHelper(ExtTestCase):
             res = value[:-1] - value[1:]
             res = res.to(torch.float16)
             if torch.abs(expected - res).max() > 0:
-                raise AssertionError(
-                    f"ERROR\n{expected=}\n-----{res=}\n{x=}\n{thresholds=}"
-                )
+                raise AssertionError(f"ERROR\n{expected=}\n-----{res=}\n{x=}\n{thresholds=}")
             self.assertEqualArray(expected, res)
 
 

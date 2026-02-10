@@ -4879,7 +4879,9 @@ def aten_histc(
             thresholds[i] = min + delta * i
         for i in range(halfway, bins + 1):
             thresholds[i] = max - delta * (bins - i)
-        thresholds = _tune_thresholds_histc(thresholds.astype(dtype), bins=bins, min=min, max=max)
+        thresholds = _tune_thresholds_histc(
+            thresholds.astype(dtype), bins=bins, fmin=min, fmax=max
+        )
 
         # max is included.
         thresholds[-1] = (

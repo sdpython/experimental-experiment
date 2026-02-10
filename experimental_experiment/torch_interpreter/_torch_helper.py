@@ -66,7 +66,7 @@ def make_copy(obj: Any) -> Any:
 
 
 def _tune_thresholds_histc(
-    tensor: torch.Tensor, bins: int, min: float, max: float
+    tensor: torch.Tensor, bins: int, fmin: float, fmax: float
 ) -> torch.Tensor:
     """
     Adjusts tensor threshold for function :func:`torch.histc`.
@@ -79,16 +79,17 @@ def _tune_thresholds_histc(
     pinf = torch.tensor(torch.inf, dtype=tensor.dtype)
     new_tensor = tensor.clone()
     buffer = torch.empty((1,), dtype=tensor.dtype)
-    for i in range(tensor.numel()-1):
+    for i in range(tensor.numel() - 1):
         th = tensor[i]
         buffer[0] = th
-        buffer = torch.nextafter(buffer, minf)
-        buffer[0] -= (th - buffer[0]) * 10
+        n = int(max(10, 1.0 / max(torch.abs(th), 1e-4)))
+        for _ in range(n):
+            buffer = torch.nextafter(buffer, minf)
 
         it = 0
-        while it < 20:
+        while it < 2 * n:
             buffer = torch.nextafter(buffer, pinf)
-            res = torch.histc(buffer, bins, min, max)
+            res = torch.histc(buffer, bins, fmin, fmax)
             index = torch.argmax(res)
             if i == index:
                 new_tensor[i] = buffer[0]
