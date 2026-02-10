@@ -114,11 +114,43 @@ def aten_scaled_dot_product_attention(
     *L* is the target sequence length,
     *S* is the source sequence length, and E is the embedding size.
     """
-    assert not enable_gqa, f"not implemented if enable_gqa={enable_gqa}"
     assert (not is_causal) or (is_causal and attn_mask is None), (
         f"is_causal and attn_mask cannot be set at the same time"
         f"is_causal={is_causal}, attn_mask={attn_mask}{g.get_debug_msg()}"
     )
+
+    if enable_gqa:
+        assert g.has_shape(query), f"Missing shape for {query!r}{g.get_debug_msg()}"
+        assert g.has_shape(key), f"Missing shape for {key!r}{g.get_debug_msg()}"
+        assert g.has_shape(value), f"Missing shape for {value!r}{g.get_debug_msg()}"
+        shape_query = g.get_shape(query)
+        shape_key = g.get_shape(key)
+        shape_value = g.get_shape(value)
+        assert (
+            isinstance(shape_query[1], int)
+            and isinstance(shape_key[1], int)
+            and isinstance(shape_value[1], int)
+        ), (
+            f"One of the shape is wrong {shape_query=}, {shape_key=}, "
+            f"{shape_value=}{g.get_debug_msg()}"
+        )
+        assert (
+            shape_key[1] == shape_value[1]
+        ), f"One of the shape is wrong {shape_key=}, {shape_value=}{g.get_debug_msg()}"
+        if shape_query[1] == shape_key[1]:
+            # nothing to do
+            pass
+        else:
+            from ._aten_functions import aten_repeat_interleave
+
+            n_rep = shape_query[1] // shape_key[1]
+            assert n_rep > 0, (
+                f"One of the shape is wrong {n_rep=}, {shape_query=}, {shape_key=}, "
+                f"{shape_value=}{g.get_debug_msg()}"
+            )
+            key = aten_repeat_interleave(g, {}, None, key, repeats=n_rep, dim=1, name=name)
+            value = aten_repeat_interleave(g, {}, None, value, repeats=n_rep, dim=1, name=name)
+
     if g.main_opset >= 24:
         # Attention has a bug in opset 23
         if dropout_p == 0:
