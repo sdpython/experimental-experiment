@@ -3425,6 +3425,7 @@ class TestOnnxExportAten(ExtTestCase):
         onx = to_onnx(model, inputs, dynamic_shapes=({0: "batch"},))
         self.assert_conversion_with_ort_on_cpu(onx, expected, inputs, atol=1e-4)
 
+    @unittest.skip("see https://github.com/pytorch/pytorch/issues/174668")
     def test_aten_histc_float16_rounding(self):
         import torch
 
