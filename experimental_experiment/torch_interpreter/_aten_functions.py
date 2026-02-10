@@ -46,7 +46,6 @@ from ..xshape.shape_type_compute import (
     set_type_shape_matmul,
 )
 from ._exceptions import FunctionNotFoundError
-from ._torch_helper import _tune_thresholds_histc
 
 
 def _get_input_type(g: GraphBuilder, x: Any, python_default: bool) -> int:
@@ -4879,9 +4878,11 @@ def aten_histc(
             thresholds[i] = min + delta * i
         for i in range(halfway, bins + 1):
             thresholds[i] = max - delta * (bins - i)
-        thresholds = _tune_thresholds_histc(
-            thresholds.astype(dtype), bins=bins, fmin=min, fmax=max
-        )
+
+        # see https://github.com/pytorch/pytorch/issues/174668
+        # thresholds = _tune_thresholds_histc(
+        #     thresholds.astype(dtype), bins=bins, fmin=min, fmax=max
+        # )
 
         # max is included.
         thresholds[-1] = (
@@ -4893,8 +4894,14 @@ def aten_histc(
 
     less = g.op.Cast(
         g.op.Less(
-            g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name),
-            thresholds,
+            g.op.Cast(
+                g.op.UnsqueezeAnyOpset(keep_x, g.ZERO, name=name), to=TensorProto.FLOAT, name=name
+            ),
+            (
+                thresholds.astype(np.float32)
+                if isinstance(thresholds, np.ndarray)
+                else g.op.Cast(thresholds, to=TensorProto.FLOAT, name=name)
+            ),
             name=name,
         ),
         to=itype,

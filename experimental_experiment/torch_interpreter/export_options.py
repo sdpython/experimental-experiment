@@ -4,9 +4,10 @@ import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type
+from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
+from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from ..export_helpers import torch_export
 from ..helpers import string_sig, get_sig_kwargs
-from ._torch_helper import make_copy
 from ._doc_ import TorchOpOverload
 
 
@@ -431,9 +432,6 @@ class ExportOptions:
         print_exported_program = os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1")
 
         if self.fake:
-            from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
-            from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
-
             assert not (
                 args and kwargs
             ), "Option with fake tensors is not available if both args and kwargs are specified"
@@ -677,8 +675,8 @@ class ExportOptions:
             # torch.export.export may turn Tensor into FakeTensor.
             # We need to make a copy to avoid getting FakeTensor instead
             args0, kwargs0 = args, kwargs
-            args = make_copy(args)
-            kwargs = make_copy(kwargs)
+            args = torch_deepcopy(args)
+            kwargs = torch_deepcopy(kwargs)
         if verbose:
             t0 = time.perf_counter()
             print(f"[ExportOptions.export] export start with strict={self.strict}...")
@@ -762,8 +760,6 @@ class ExportOptions:
 
     def validate_exported_program(self, model, exported_program, args, kwargs, verbose: int = 0):
         """Validates the exported program by running the model."""
-        from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
-
         ar, kws = torch_deepcopy((args, kwargs))
         if verbose:
             print(
