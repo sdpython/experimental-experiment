@@ -4,6 +4,7 @@ import pprint
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from onnx_diagnostic.helpers import max_diff, string_diff, string_type
+from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
 from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
 from ..export_helpers import torch_export
 from ..helpers import string_sig, get_sig_kwargs
@@ -431,9 +432,6 @@ class ExportOptions:
         print_exported_program = os.environ.get("PRINT_EXPORTED_PROGRAM", "0") in (1, "1")
 
         if self.fake:
-            from onnx_diagnostic.helpers.torch_helper import torch_deepcopy
-            from onnx_diagnostic.export.shape_helper import make_fake_with_dynamic_dimensions
-
             assert not (
                 args and kwargs
             ), "Option with fake tensors is not available if both args and kwargs are specified"
