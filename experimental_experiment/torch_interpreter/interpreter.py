@@ -410,23 +410,25 @@ class DynamoInterpreter:
             else:
                 trace_init = init
 
-            builder, _args, _kwargs, _output_names = self._interpret_sub_module(
+            builder, _args, _kwargs, output_names = self._interpret_sub_module(
                 trace_init, None, None, source_node=node, local_domain=f"{root}.{n}"
             )
-            self.builder.make_local_function(
-                builder,
-                function_options=FunctionOptions(
-                    name=node.name,
-                    domain=self.builder.local_domain,
-                    export_as_function=True,
-                    return_initializer=True,
-                    move_initializer_to_constant=self.function_options.move_initializer_to_constant,
-                    external_threshold=self.function_options.external_threshold,
-                    merge_allowed=self.function_options.merge_allowed,
-                    rename_allowed=self.function_options.rename_allowed,
-                ),
-                optimize=self.optimize_submodules,
-            )
+            if output_names:
+                # If no output, then it cannot be used.
+                self.builder.make_local_function(
+                    builder,
+                    function_options=FunctionOptions(
+                        name=node.name,
+                        domain=self.builder.local_domain,
+                        export_as_function=True,
+                        return_initializer=True,
+                        move_initializer_to_constant=self.function_options.move_initializer_to_constant,
+                        external_threshold=self.function_options.external_threshold,
+                        merge_allowed=self.function_options.merge_allowed,
+                        rename_allowed=self.function_options.rename_allowed,
+                    ),
+                    optimize=self.optimize_submodules,
+                )
             return None
 
         if isinstance(init, self.builder.torch.utils._pytree.TreeSpec):
@@ -2352,7 +2354,8 @@ class DynamoInterpreter:
 
         # processes the submodules
         builder.process(graph_module, interpreter)
-        assert builder.outputs, f"No output detected for node={source_node}, graph={gm}"
+        if not builder.outputs:
+            return builder, None, None, []
 
         # processing args, kwargs
         fx_args, fx_kwargs = self._fill_in_default_kwargs(source_node)
