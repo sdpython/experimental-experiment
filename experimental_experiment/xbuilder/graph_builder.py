@@ -5743,7 +5743,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         dtype = t.data_type
         return np.prod(shape) * size_type(dtype)
 
-    def _add_hidden_inputs_to_nodes(self, nodes: Optional[List[NodeProto]]):
+    def _add_hidden_inputs_to_nodes(self, nodes: Optional[List[NodeProto]] = None):
         if nodes is None:
             nodes = self.nodes
         for node in nodes:
@@ -5751,7 +5751,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 continue
             hiddens = []
             for att in node.attribute:
-                if att.kind != AttributeProto.GRAPH:
+                if att.type != AttributeProto.GRAPH:
                     continue
                 self._add_hidden_inputs_to_nodes(att.g.node)
                 hidden = self._get_hidden_inputs(att.g)
