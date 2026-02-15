@@ -5743,6 +5743,25 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         dtype = t.data_type
         return np.prod(shape) * size_type(dtype)
 
+    def _add_hidden_inputs_to_nodes(self, nodes: Optional[List[NodeProto]] = None):
+        if nodes is None:
+            nodes = self.nodes
+        for node in nodes:
+            if node.op_type not in {"Scan", "If", "Loop"}:
+                continue
+            hiddens = []
+            for att in node.attribute:
+                if att.type != AttributeProto.GRAPH:
+                    continue
+                self._add_hidden_inputs_to_nodes(att.g.node)
+                hidden = self._get_hidden_inputs(att.g)
+                if hidden:
+                    hiddens.append((att.name, hidden))
+            for name, hidden in hiddens:
+                data = node.metadata_props.add()
+                data.key = f"hidden_input_{name}"
+                data.value = ",".join(hidden)
+
     def to_onnx(
         self,
         optimize: bool = True,
@@ -5821,6 +5840,8 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 f"Length mismatch between mask={mask_outputs} and outputs "
                 f"{self.outputs}{self.get_debug_msg()}"
             )
+
+        self._add_hidden_inputs_to_nodes()
 
         if function_options.export_as_function:
             # export as a function
