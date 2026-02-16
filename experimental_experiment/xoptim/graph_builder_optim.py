@@ -374,7 +374,7 @@ class GraphBuilderPatternOptimization:
         cst = self.get_computed_constant(name)
         assert hasattr(cst, "numpy") or isinstance(
             cst, np.ndarray
-        ), f"Unexpected type for constant {name}!r, type is {type(cst)}"
+        ), f"Unexpected type for constant {name!r}, type is {type(cst)}"
         assert cst.shape == tuple() or (
             (broadcast and set(cst.shape) == {1}) or (not broadcast and cst.shape == (1,))
         ), f"Unexpected shape {cst.shape} for constant {name!r}"
