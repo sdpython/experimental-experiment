@@ -19,6 +19,7 @@ from experimental_experiment.ext_test_case import (
     requires_cuda,
     hide_stdout,
     has_onnxruntime_training,
+    has_onnxscript,
 )
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
@@ -2401,8 +2402,9 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
         got = ort.run(None, feeds)
         self.assertEqualArray(expected, got[0])
-        f2 = self.get_dump_file("test_gqa.dynamo.onnx")
-        od_to_onnx(model, inputs, dynamic_shapes=ds, exporter="onnx-dynamo", filename=f2)
+        if has_onnxscript("0.6.4"):
+            f2 = self.get_dump_file("test_gqa.dynamo.onnx")
+            od_to_onnx(model, inputs, dynamic_shapes=ds, exporter="onnx-dynamo", filename=f2)
 
 
 if __name__ == "__main__":

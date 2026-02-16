@@ -231,6 +231,8 @@ class FunctionAttentionPattern(PatternOptimization):
             # Where(mask, -inf, X)
             add_node = None
             where_node = node_before
+            if not g.is_constant_scalar(where_node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
             cst_zero = None
             cst_inf = g.get_constant_scalar(where_node.input[1])
             if not np.isinf(cst_inf):
