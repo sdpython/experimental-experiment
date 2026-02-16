@@ -11,6 +11,7 @@ from onnx import (
     load as onnx_load,
 )
 from onnx.checker import check_model
+from onnx_diagnostic.export.api import to_onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -2188,6 +2189,134 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         ref = self.make_inference_session(opt_onx)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz, atol=1e-4)
+
+    @hide_stdout()
+    def test_gqa(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(
+                self,
+                sequence_length,
+                num_heads,
+                kv_num_heads,
+                head_size,
+                softmax_scale,
+                use_smooth_softmax,
+            ):
+                super().__init__()
+                self.sequence_length = sequence_length
+                self.num_heads = num_heads
+                self.kv_num_heads = kv_num_heads
+                self.head_size = head_size
+                self.softmax_scale = softmax_scale
+                self.use_smooth_softmax = use_smooth_softmax
+
+            def concat_cache(self, past_key_cache, new_key):
+                assert past_key_cache.size(0) == new_key.size(
+                    0
+                ), f"Batch sizes do not match, {past_key_cache.shape=}, {new_key.shape=}"
+                assert past_key_cache.size(1) == new_key.size(
+                    1
+                ), f"Number of heads do not match, {past_key_cache.shape=}, {new_key.shape=}"
+                assert past_key_cache.size(3) == new_key.size(
+                    3
+                ), f"Head dimensions do not match, {past_key_cache.shape=}, {new_key.shape=}"
+                concatenated_keys = torch.cat((past_key_cache, new_key), dim=2)
+                return concatenated_keys
+
+            def smooth_softmax_ref(self, x, head_sink):
+                assert len(x.shape) == 4
+                b, n, s, _t = x.shape
+
+                if head_sink is not None:
+                    assert len(head_sink.shape) == 1
+                    assert head_sink.shape[0] == x.shape[1]
+                    sink = head_sink.reshape(1, n, 1, 1).expand(b, -1, s, -1)
+                else:
+                    sink = torch.zeros(b, n, s, 1, dtype=x.dtype)
+
+                y = torch.cat([x, sink], dim=-1)
+                y = torch.softmax(y, dim=-1)
+                y = y[..., :-1]
+                return y
+
+            def group_query_attention_reference(
+                self,
+                query,
+                key,
+                value,
+                scale=None,
+                mask=None,
+            ):
+                if scale is None:
+                    scale = 1.0 / (self.head_size**0.5)
+
+                num_key_value_groups = self.num_heads // self.kv_num_heads
+                value = torch.repeat_interleave(value, dim=1, repeats=num_key_value_groups)
+                key = torch.repeat_interleave(key, dim=1, repeats=num_key_value_groups)
+                # attn = torch.einsum("bhmd,bhnd->bhmn", query, key).float() * scale
+                attn = torch.matmul(query * scale**0.5, key.transpose(2, 3) * scale**0.5)
+                if mask is not None:
+                    attn = attn.masked_fill((1 - mask).bool(), float("-inf")).to(query.dtype)
+
+                attn = (
+                    self.smooth_softmax_ref(attn, None)
+                    if self.use_smooth_softmax
+                    else attn.softmax(-1)
+                )
+                # attn_output = torch.einsum("bhmn,bhnd->bhmd", attn.type_as(value), value)
+                attn_output = torch.matmul(attn, value)
+                result = attn_output
+                return result
+
+            def forward(self, query, key, value, attention_mask, past_key, past_value):
+                present_key = self.concat_cache(past_key, key)
+                present_value = self.concat_cache(past_value, value)
+                return self.group_query_attention_reference(
+                    query,
+                    present_key,
+                    present_value,
+                    scale=self.softmax_scale,
+                    mask=attention_mask,
+                )
+
+        model = Model(
+            sequence_length=23,
+            num_heads=8,
+            kv_num_heads=4,
+            head_size=32,
+            softmax_scale=None,
+            use_smooth_softmax=False,
+        )
+
+        query = torch.rand((1, model.num_heads, model.sequence_length, model.head_size))
+        key = torch.rand((1, model.kv_num_heads, model.sequence_length, model.head_size))
+        value = torch.rand((1, model.kv_num_heads, model.sequence_length, model.head_size))
+        past_key = torch.rand(
+            (1, model.kv_num_heads, model.sequence_length // 2, model.head_size)
+        )
+        past_value = torch.rand(
+            (1, model.kv_num_heads, model.sequence_length // 2, model.head_size)
+        )
+        attention_mask = torch.zeros(
+            (model.sequence_length, model.sequence_length + model.sequence_length // 2)
+        )
+        inputs = (query, key, value, attention_mask, past_key, past_value)
+        expected = model.forward(*inputs)
+        self.assertEqual((1, 8, 23, 32), expected.shape)
+        ds = (
+            {0: "batch", 2: "seq_length"},
+            {0: "batch", 2: "seq_length"},
+            {0: "batch", 2: "seq_length"},
+            {0: "seq_length", 1: "total_length"},
+            {0: "batch", 2: "past_length"},
+            {0: "batch", 2: "past_length"},
+        )
+        f1 = self.get_dump_file("test_gqa.custom.onnx")
+        to_onnx(model, inputs, dynamic_shapes=ds, exporter="custom", filename=f1)
+        f2 = self.get_dump_file("test_gqa.dynamo.onnx")
+        to_onnx(model, inputs, dynamic_shapes=ds, exporter="onnx-dynamo", filename=f2)
 
 
 if __name__ == "__main__":
