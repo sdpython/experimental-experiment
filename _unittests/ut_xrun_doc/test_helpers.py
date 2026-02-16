@@ -57,6 +57,9 @@ class TestHelpers(ExtTestCase):
         self.assertEqual("batch", rename_dynamic_expression("1*batch", {}))
         self.assertEqual("batch", rename_dynamic_expression("batch*1", {}))
 
+    def test_rename_dynamic_expression_reorder(self):
+        self.assertEqual("a+b", rename_dynamic_expression("b+a", {}))
+
     def test_dot_plot(self):
         TFLOAT = onnx.TensorProto.FLOAT
         model = oh.make_model(

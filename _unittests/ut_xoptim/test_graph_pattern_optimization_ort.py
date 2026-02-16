@@ -2395,7 +2395,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             inputs,
             dynamic_shapes=ds,
             filename=f1,
-            options=OptimizationOptions(patterns="default+onnxruntime"),
+            options=OptimizationOptions(patterns="default"),
         )
         # self.assertEqual(["Attention"], [f.name for f in onx.functions])
         ort = self._check_with_ort(onx)
