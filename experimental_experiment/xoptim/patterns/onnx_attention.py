@@ -203,39 +203,66 @@ class FunctionAttentionPattern(PatternOptimization):
         axis = g.get_attribute(node, "axis").i
         if axis != -1:
             return self.none(node, inspect.currentframe().f_lineno)
-        add_node = g.node_before(node.input[0])
-        if add_node is None or add_node.op_type != "Add":
-            return self.none(node, inspect.currentframe().f_lineno)
-        where_node = g.node_before(add_node.input[1])
-        if where_node is None or where_node.op_type != "Where":
-            return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant_scalar(where_node.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant_scalar(where_node.input[2]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        cst_zero = g.get_constant_scalar(where_node.input[1])
-        if cst_zero != 0:
-            return self.none(node, inspect.currentframe().f_lineno)
-        cst_inf = g.get_constant_scalar(where_node.input[2])
-        if not np.isinf(cst_inf):
+
+        node_before = g.node_before(node.input[0])
+        if node_before.op_type == "Add":
+            # Add(X, Where(mask, 0, -inf))
+            add_node = node_before
+            where_node = g.node_before(add_node.input[1])
+            if where_node is None or where_node.op_type != "Where":
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            if not g.is_constant_scalar(where_node.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if not g.is_constant_scalar(where_node.input[2]):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            cst_zero = g.get_constant_scalar(where_node.input[1])
+            if cst_zero != 0:
+                return self.none(node, inspect.currentframe().f_lineno)
+            cst_inf = g.get_constant_scalar(where_node.input[2])
+            if not np.isinf(cst_inf):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            mat_qk = g.node_before(add_node.input[0])
+            if mat_qk is None or mat_qk.op_type not in ("MatMul", "FusedMatMul"):
+                return self.none(node, inspect.currentframe().f_lineno)
+        elif node_before.op_type == "Where":
+            # Where(mask, -inf, X)
+            add_node = None
+            where_node = node_before
+            cst_zero = None
+            cst_inf = g.get_constant_scalar(where_node.input[1])
+            if not np.isinf(cst_inf):
+                return self.none(node, inspect.currentframe().f_lineno)
+            mat_qk = g.node_before(where_node.input[2])
+            if mat_qk is None or mat_qk.op_type not in ("MatMul", "FusedMatMul"):
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        mat_qk = g.node_before(add_node.input[0])
-        if mat_qk is None or mat_qk.op_type != "MatMul":
-            return self.none(node, inspect.currentframe().f_lineno)
         mul1 = g.node_before(mat_qk.input[0])
         if mul1 is None or mul1.op_type != "Mul":
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant_scalar(mul1.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        transpose = g.node_before(mat_qk.input[1])
-        if transpose is None or transpose.op_type != "Transpose":
-            return self.none(node, inspect.currentframe().f_lineno)
-        perm = g.get_attribute(transpose, "perm").ints
-        if tuple(perm) != (0, 1, 3, 2):
-            return self.none(node, inspect.currentframe().f_lineno)
-        mul2 = g.node_before(transpose.input[0])
+        if mat_qk.op_type == "MatMul":
+            transpose = g.node_before(mat_qk.input[1])
+            if transpose is None or transpose.op_type != "Transpose":
+                return self.none(node, inspect.currentframe().f_lineno)
+            perm = g.get_attribute(transpose, "perm").ints
+            if tuple(perm) != (0, 1, 3, 2):
+                return self.none(node, inspect.currentframe().f_lineno)
+            mul2 = g.node_before(transpose.input[0])
+        else:
+            transA = g.get_attribute_with_default(mat_qk, "transA", 0)
+            transB = g.get_attribute_with_default(mat_qk, "transB", 1)
+            if transA != 0 or transB != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+            transpose = None
+            mul2 = g.node_before(mat_qk.input[1])
+
         if mul2 is None or mul2.op_type != "Mul":
             return self.none(node, inspect.currentframe().f_lineno)
         if mul2.input[1] != mul1.input[1]:
@@ -279,17 +306,25 @@ class FunctionAttentionPattern(PatternOptimization):
         g: "GraphBuilder",  # noqa: F821
         mul1: NodeProto,
         mul2: NodeProto,
-        transpose: NodeProto,
+        transpose: Optional[NodeProto],
         mat_qk: NodeProto,
         where_node: NodeProto,
-        add_node: NodeProto,
+        add_node: Optional[NodeProto],
         softmax: NodeProto,
         isnan: NodeProto,
         where: NodeProto,
         mat_qkv: NodeProto,
     ) -> List[NodeProto]:
         itype = g.get_type(mul1.input[1])
-        name = f"{self._operator_name}_to{itype}"
+        suffix = []
+        if transpose is None:
+            assert (
+                mat_qk.op_type == "FusedMatMul"
+            ), f"transpose is None but mat_qk={g.pretty_node(mat_qk)}"
+            suffix.append("noT")
+        if add_node is None:
+            suffix.append("noA")
+        name = f"{self._operator_name}{''.join(suffix)}_to{itype}"
         attention_nodes = [
             g.make_node(
                 name,

@@ -7835,6 +7835,38 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_where_add(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Where", ["mask", "zero", "inf"], ["fmask"]),
+                    oh.make_node("Add", ["fmask", "X"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", "b"]), _mkv_("mask", TensorProto.BOOL, ["a", "b"])],
+                [_mkv_("Y", TFLOAT, ["a", "b"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([-np.inf], dtype=np.float32), name="inf"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(32, 8), "mask": np.random.randint(0, 1, size=(32, 8))}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["WhereAdd"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Where"], [n.op_type for n in opt_onx.graph.node])
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -33,6 +33,7 @@
     onnx_sequence
     onnx_transpose
     onnx_unsqueeze
+    onnx_where
 
 .. automodule:: experimental_experiment.xoptim.patterns
     :members:

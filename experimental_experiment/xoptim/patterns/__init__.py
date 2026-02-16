@@ -104,6 +104,7 @@ from .onnx_unsqueeze import (
     SqueezeUnsqueezePattern,
     UnsqueezeUnsqueezePattern,
 )
+from .onnx_where import WhereAddPattern
 
 
 class AlmostDoNothingPattern(PatternOptimization):
@@ -237,6 +238,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         UnsqueezeOrSqueezeReshapePattern(verbose=verbose),
         UnsqueezeReshapePattern(verbose=verbose),
         UnsqueezeUnsqueezePattern(verbose=verbose),
+        WhereAddPattern(verbose=verbose),
         # LLM
         RotaryConcatPartPattern(verbose=verbose),
         FunctionAttentionPattern(verbose=verbose),

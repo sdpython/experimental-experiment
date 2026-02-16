@@ -11,7 +11,7 @@ from onnx import (
     load as onnx_load,
 )
 from onnx.checker import check_model
-from onnx_diagnostic.export.api import to_onnx
+from onnx_diagnostic.export.api import to_onnx as od_to_onnx
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     ignore_warnings,
@@ -33,6 +33,7 @@ from experimental_experiment.xbuilder._onnx_helper import (
     compatible_opsets,
 )
 from experimental_experiment.reference import ExtendedReferenceEvaluator
+from experimental_experiment.torch_interpreter import to_onnx
 
 TFLOAT = TensorProto.FLOAT
 TINT64 = TensorProto.INT64
@@ -2190,6 +2191,77 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz, atol=1e-4)
 
+    def test_multi_head_attention_where_add(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["query"], ["t_query"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["keys"], ["t_keys"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["values"], ["t_values"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Concat", ["past_keys", "t_keys"], ["ct_keys"], axis=-2),
+                    oh.make_node("Concat", ["past_values", "t_values"], ["ct_values"], axis=-2),
+                    oh.make_node("Mul", ["t_query", "scale_sqrt"], ["query_scaled"]),
+                    oh.make_node("Mul", ["ct_keys", "scale_sqrt"], ["keys_scaled"]),
+                    oh.make_node(
+                        "Transpose", ["keys_scaled"], ["keys_scaled_t"], perm=[0, 1, 3, 2]
+                    ),
+                    oh.make_node("MatMul", ["query_scaled", "keys_scaled_t"], ["qk"]),
+                    oh.make_node("Where", ["mask", "zero", "minfty"], ["bias"]),
+                    oh.make_node("Add", ["qk", "bias"], ["qkb"]),
+                    oh.make_node("Softmax", ["qkb"], ["qkbs"], axis=-1),
+                    oh.make_node("IsNaN", ["qkbs"], ["nans"]),
+                    oh.make_node("Where", ["nans", "zero", "qkbs"], ["filt"]),
+                    oh.make_node("MatMul", ["filt", "ct_values"], ["prob"]),
+                    oh.make_node("Transpose", ["prob"], ["Y"], perm=[0, 2, 1, 3]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("query", TFLOAT, ["aq", "bq", 8, 64]),
+                    oh.make_tensor_value_info("keys", TFLOAT, ["ak", "bk", 8, 64]),
+                    oh.make_tensor_value_info("values", TFLOAT, ["av", "bv", 8, 64]),
+                    oh.make_tensor_value_info("past_keys", TFLOAT, ["pak", 8, "pck", 64]),
+                    oh.make_tensor_value_info("past_values", TFLOAT, ["pav", 8, "pcv", 64]),
+                    oh.make_tensor_value_info("mask", TensorProto.BOOL, ["am", 1, "cm", "dm"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["ay", "by", "cy", "dy"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([-np.inf], dtype=np.float32), name="minfty"),
+                    onh.from_array(np.array([0.1**0.5], dtype=np.float32), name="scale_sqrt"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = dict(
+            query=np.random.randn(32, 128, 8, 64).astype(np.float32),
+            keys=np.random.randn(32, 128, 8, 64).astype(np.float32),
+            values=np.random.randn(32, 128, 8, 64).astype(np.float32),
+            mask=np.random.rand(32, 1, 128, 256) >= 0.5,
+            past_keys=np.random.randn(32, 8, 128, 64).astype(np.float32),
+            past_values=np.random.randn(32, 8, 128, 64).astype(np.float32),
+        )
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionAttention", "MultiHeadAttention3D"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_multi_head_attention.onnx", opt_onx)
+        self.assertEqual(
+            ["Reshape", "Reshape", "Reshape", "Where", "MultiHeadAttention", "Reshape"],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+        ref = self.make_inference_session(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz, atol=1e-4)
+
+    @ignore_warnings((UserWarning, FutureWarning))
     @hide_stdout()
     def test_gqa(self):
         import torch
@@ -2265,6 +2337,9 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     if self.use_smooth_softmax
                     else attn.softmax(-1)
                 )
+                attn = torch.where(
+                    attn.isnan(), torch.tensor(0, dtype=query.dtype, device=query.device), attn
+                )
                 # attn_output = torch.einsum("bhmn,bhnd->bhmd", attn.type_as(value), value)
                 attn_output = torch.matmul(attn, value)
                 result = attn_output
@@ -2288,7 +2363,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             head_size=32,
             softmax_scale=None,
             use_smooth_softmax=False,
-        )
+        ).eval()
 
         query = torch.rand((1, model.num_heads, model.sequence_length, model.head_size))
         key = torch.rand((1, model.kv_num_heads, model.sequence_length, model.head_size))
@@ -2314,9 +2389,20 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             {0: "batch", 2: "past_length"},
         )
         f1 = self.get_dump_file("test_gqa.custom.onnx")
-        to_onnx(model, inputs, dynamic_shapes=ds, exporter="custom", filename=f1)
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            filename=f1,
+            options=OptimizationOptions(patterns="default+onnxruntime"),
+        )
+        # self.assertEqual(["Attention"], [f.name for f in onx.functions])
+        ort = self._check_with_ort(onx)
+        feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
+        got = ort.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
         f2 = self.get_dump_file("test_gqa.dynamo.onnx")
-        to_onnx(model, inputs, dynamic_shapes=ds, exporter="onnx-dynamo", filename=f2)
+        od_to_onnx(model, inputs, dynamic_shapes=ds, exporter="onnx-dynamo", filename=f2)
 
 
 if __name__ == "__main__":
