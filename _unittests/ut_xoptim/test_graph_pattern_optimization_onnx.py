@@ -7564,7 +7564,7 @@ class TestGraphPatternOptimization(ExtTestCase):
                     "ShapeBasedExpandSwap",
                     "FunctionAttention",
                 ],
-                verbose=10,
+                verbose=0,
             ),
         )
         ort = self._check_with_ort(onx)

@@ -71,7 +71,7 @@ The method returns None if no match is found or an instance of class :class:`Mat
         self,
         node: Optional[NodeProto] = None,
         lineno: Optional[int] = None,
-        msg: str = "",
+        msg: Optional[Union[Callable[[], str], str]] = None,
     ):
 
 It may be useful which reason made a pattern matching fail.
@@ -84,6 +84,8 @@ expression:
 
 By setting the verbosity (see next Section), the user may then know
 which lines in the code returned None and which condition failed.
+The last parameter is used to print a more comprehensive message about the
+reason why the match failed.
 
 PatternOptimization.apply
 +++++++++++++++++++++++++

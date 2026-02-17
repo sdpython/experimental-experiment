@@ -586,7 +586,11 @@ class FunctionAttentionPattern(PatternOptimization):
             shape1 = g.get_shape_renamed(gqa_unsqueeze.input[0])
             shape2 = g.get_shape_renamed(gqa_reshape.output[0])
             if shape1[0] != shape2[0] or shape1[2] != shape2[2] or shape1[3] != shape2[3]:
-                return self.none(node, inspect.currentframe().f_lineno)
+                return self.none(
+                    node,
+                    inspect.currentframe().f_lineno,
+                    msg=lambda: f"Shape mismatch {shape1=}, {shape2=}",
+                )
         else:
             # No Attention, no MultiHeadAttention, no GroupQueryAttention
             return self.none(node, inspect.currentframe().f_lineno)

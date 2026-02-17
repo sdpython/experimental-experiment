@@ -2085,7 +2085,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if hasattr(self, "replacements_dimensions_"):
             self.replacements_dimensions_[name] = tuple(
                 (
-                    rename_dynamic_expression(_, self.replacements_for_replacements_dimensions_)
+                    simplify_expression(
+                        rename_dynamic_expression(
+                            _, self.replacements_for_replacements_dimensions_
+                        )
+                    )
                     if isinstance(_, str)
                     else _
                 )
@@ -6175,7 +6179,11 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 if v is None:
                     continue
                 self.replacements_dimensions_[k] = tuple(
-                    (rename_dynamic_expression(_, replacements) if isinstance(_, str) else _)
+                    (
+                        simplify_expression(rename_dynamic_expression(_, replacements))
+                        if isinstance(_, str)
+                        else _
+                    )
                     for _ in v
                 )
         return replacements
