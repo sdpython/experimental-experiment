@@ -63,7 +63,7 @@ from .onnx_matmul import (
     TransposeReshapeMatMulPattern,
 )
 from .onnx_range import SwapRangeAddScalarPattern
-from .onnx_reduce import ReduceSumNormalizePattern
+from .onnx_reduce import ReduceArgTopKPattern, ReduceSumNormalizePattern
 from .onnx_reshape import (
     ConcatReshapePattern,
     ReshapePattern,
@@ -185,6 +185,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         LayerNormalizationScalePattern(verbose=verbose),
         LeakyReluPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
+        ReduceArgTopKPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReduceSumNormalizePattern(verbose=verbose),
         ReshapePattern(verbose=verbose),
