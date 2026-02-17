@@ -477,7 +477,7 @@ class FunctionAttentionPattern(PatternOptimization):
         node: NodeProto,
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
-        if node.op_type != "Softmax" or node.domain != "":
+        if node.op_type != "Softmax" or node.domain != "" or g.main_opset < 18:
             return self.none()
         axis = g.get_attribute(node, "axis").i
         if axis != -1:
@@ -716,7 +716,7 @@ class FunctionAttentionPattern(PatternOptimization):
             ), f"transpose is None but mat_qk={g.pretty_node(mat_qk)}"
             suffix.append("noT")
         if gqa_reshape:
-            gqa = "GQA"
+            gqa = "GQA" if gqa_reshape.op_type == "Reshape" else "GQAsQ"
             gqa_args = [gqa_expand.input[1], gqa_reshape.input[1]]
         else:
             gqa = ""
@@ -744,13 +744,24 @@ class FunctionAttentionPattern(PatternOptimization):
         # Creates the local function
         if not g.builder.has_local_function(name, domain=self._domain_name):
             self._add_local_function(
-                g.builder, name, itype=itype, gqa=gqa, switch_where=add_node is None
+                g.builder,
+                name,
+                itype=itype,
+                gqa=gqa,
+                switch_where=add_node is None,
+                use_qga_squeeze=gqa_reshape and gqa_reshape.op_type == "Squeeze",
             )
         return nodes_to_return
 
     @classmethod
     def _add_local_function(
-        cls, g: GraphBuilder, name: str, itype: int, gqa: bool, switch_where: bool
+        cls,
+        g: GraphBuilder,
+        name: str,
+        itype: int,
+        gqa: bool,
+        switch_where: bool,
+        use_qga_squeeze: bool,
     ):
         lg = GraphBuilder(g.main_opset, as_function=True)
         lg.make_tensor_input("query")
@@ -769,8 +780,12 @@ class FunctionAttentionPattern(PatternOptimization):
             unsq_values = lg.op.UnsqueezeAnyOpset("values", two, name=cls.__name__)
             exp_keys = lg.op.Expand(unsq_keys, "expand_shape")
             exp_values = lg.op.Expand(unsq_values, "expand_shape")
-            resh_keys = lg.op.Reshape(exp_keys, "gqa_shape")
-            resh_values = lg.op.Reshape(exp_values, "gqa_shape")
+            if use_qga_squeeze:
+                resh_keys = lg.op.Squeeze(exp_keys, "gqa_shape")
+                resh_values = lg.op.Squeeze(exp_values, "gqa_shape")
+            else:
+                resh_keys = lg.op.Reshape(exp_keys, "gqa_shape")
+                resh_values = lg.op.Reshape(exp_values, "gqa_shape")
             scaled_keys = resh_keys
             values = resh_values
         else:
@@ -1046,7 +1061,12 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
     ) -> Optional[Tuple[NodeProto, NodeProto, NodeProto, Tuple[Tuple[Union[int, str], ...]]]]:
 
         gqa_reshape = g.node_before(keys_or_values)
-        if not gqa_reshape or gqa_reshape.op_type != "Reshape" or gqa_reshape.domain != "":
+        if (
+            not gqa_reshape
+            or gqa_reshape.op_type not in ("Reshape", "Squeeze")
+            or gqa_reshape.domain != ""
+            or g.main_opset < 18
+        ):
             return self.none(node, inspect.currentframe().f_lineno)
 
         gqa_expand = g.node_before(gqa_reshape.input[0])
@@ -1069,9 +1089,15 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(gqa_reshape.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
+
         resh_shape = g.get_computed_constant(gqa_reshape.input[1])
-        if resh_shape.size != 4:
-            return self.none(node, inspect.currentframe().f_lineno)
+        if gqa_reshape.op_type == "Reshape":
+            if resh_shape.size != 4:
+                return self.none(node, inspect.currentframe().f_lineno)
+        elif gqa_reshape.op_type == "Squeeze":
+            if resh_shape.size != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+
         if not g.has_shape(gqa_unsqueeze.input[0]) or not g.has_shape(gqa_reshape.output[0]):
             return self.none(node, inspect.currentframe().f_lineno)
         shape1 = g.get_shape_renamed(gqa_unsqueeze.input[0])
@@ -1148,7 +1174,8 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
         attn: NodeProto,
     ) -> List[NodeProto]:
         itype = g.get_type(gqa_unsqueeze.input[0])
-        name = f"{self._operator_gqa_name}{attn.op_type[len(self._operator_name):]}"
+        gqa = "" if gqa_reshape.op_type == "Reshape" else "sQ"
+        name = f"{self._operator_gqa_name}{gqa}{attn.op_type[len(self._operator_name):]}"
         attention_nodes = [
             g.make_node(
                 name,
@@ -1170,6 +1197,11 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
         # Creates the local function
         if not g.builder.has_local_function(name, domain=self._domain_name):
             self._add_local_function(
-                g.builder, name, itype=itype, gqa=True, switch_where="SW" in attn.op_type
+                g.builder,
+                name,
+                itype=itype,
+                gqa=True,
+                switch_where="SW" in attn.op_type,
+                use_qga_squeeze=gqa_reshape_v.op_type == "Squeeze",
             )
         return attention_nodes
