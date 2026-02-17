@@ -199,7 +199,6 @@ class FunctionAttentionPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -243,7 +242,7 @@ class FunctionAttentionPattern(PatternOptimization):
             oh.make_tensor_value_info("init7_s5_1_1_2_1_1", onnx.TensorProto.INT64, shape=(5,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s_::RSh1"],
@@ -253,7 +252,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_2"],
@@ -261,7 +260,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s_::RSh12"],
@@ -271,7 +270,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s5_1_1_2_1_1"],
@@ -279,7 +278,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s4_0_8_-1_32"],
@@ -287,7 +286,7 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init1_s1_"],
@@ -295,24 +294,24 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["c_lifted_tensor_0"],
                 value=onh.from_array(np.array(0.0, dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Mul", ["query", "init1_s_::RSh1"], ["_onx_mul_query"]))
-        nodes.append(make_node_extended("Unsqueeze", ["cat", "init7_s1_2"], ["cat::UnSq2"]))
+        nodes.append(oh.make_node("Mul", ["query", "init1_s_::RSh1"], ["_onx_mul_query"]))
+        nodes.append(oh.make_node("Unsqueeze", ["cat", "init7_s1_2"], ["cat::UnSq2"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Mul",
                 ["cat::UnSq2", "init1_s_::RSh12"],
                 ["ShapeBasedExpandSwapPattern_SwapUnaryPattern--repeat_interleave_1"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Expand",
                 [
                     "ShapeBasedExpandSwapPattern_SwapUnaryPattern--repeat_interleave_1",
@@ -322,14 +321,14 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape",
                 ["SwapUnaryPattern--repeat_interleave_1", "init7_s4_0_8_-1_32"],
                 ["SwapUnaryPattern--transpose"],
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose",
                 ["SwapUnaryPattern--transpose"],
                 ["_onx_mul_transpose"],
@@ -337,30 +336,30 @@ class FunctionAttentionPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended("MatMul", ["_onx_mul_query", "_onx_mul_transpose"], ["matmul"])
+            oh.make_node("MatMul", ["_onx_mul_query", "_onx_mul_transpose"], ["matmul"])
         )
         nodes.append(
-            make_node_extended("Where", ["to", "init1_s1_", "matmul"], ["masked_fill"])
+            oh.make_node("Where", ["to", "init1_s1_", "matmul"], ["masked_fill"])
         )
-        nodes.append(make_node_extended("Softmax", ["masked_fill"], ["softmax"], axis=-1))
-        nodes.append(make_node_extended("IsNaN", ["softmax"], ["isnan"]))
+        nodes.append(oh.make_node("Softmax", ["masked_fill"], ["softmax"], axis=-1))
+        nodes.append(oh.make_node("IsNaN", ["softmax"], ["isnan"]))
         nodes.append(
-            make_node_extended("Where", ["isnan", "c_lifted_tensor_0", "softmax"], ["where"])
+            oh.make_node("Where", ["isnan", "c_lifted_tensor_0", "softmax"], ["where"])
         )
-        nodes.append(make_node_extended("Unsqueeze", ["cat_1", "init7_s1_2"], ["cat_1::UnSq2"]))
+        nodes.append(oh.make_node("Unsqueeze", ["cat_1", "init7_s1_2"], ["cat_1::UnSq2"]))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Expand", ["cat_1::UnSq2", "init7_s5_1_1_2_1_1"], ["_onx_expand_cat_1::UnSq2"]
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Reshape",
                 ["_onx_expand_cat_1::UnSq2", "init7_s4_0_8_-1_32"],
                 ["repeat_interleave"],
             )
         )
-        nodes.append(make_node_extended("MatMul", ["where", "repeat_interleave"], ["output_0"]))
+        nodes.append(oh.make_node("MatMul", ["where", "repeat_interleave"], ["output_0"]))
         outputs.append(
             oh.make_tensor_value_info(
                 "output_0", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
@@ -390,7 +389,6 @@ class FunctionAttentionPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -434,7 +432,7 @@ class FunctionAttentionPattern(PatternOptimization):
             oh.make_tensor_value_info("init7_s5_1_1_2_1_1", onnx.TensorProto.INT64, shape=(5,))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "LocalAttentionGQASW_to1",
                 [
                     "query",
@@ -806,6 +804,232 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
     """
     Merges onnx nodes equivalent to repeat interleave followed by function
     ``LocalAttention`` into ``LocalAttentionGQA`` (GQA for GroupQueryAttention).
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "cat", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length+seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init1_s_::RSh1", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "to", onnx.TensorProto.BOOL, shape=("seq_length", "total_length")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init7_s4_0_8_-1_32", onnx.TensorProto.INT64, shape=(4,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init7_s5_1_1_2_1_1", onnx.TensorProto.INT64, shape=(5,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "cat_1",
+                onnx.TensorProto.FLOAT,
+                shape=("batch", 4, "past_length+seq_length", 32),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s1_2"],
+                value=onh.from_array(np.array([2], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s5_1_1_2_1_1"],
+                value=onh.from_array(np.array([1, 1, 2, 1, 1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s4_0_8_-1_32"],
+                value=onh.from_array(np.array([0, 8, -1, 32], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init1_s_::RSh1"],
+                value=onh.from_array(
+                    np.array([0.4204482138156891], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(oh.make_node("Unsqueeze", ["cat", "init7_s1_2"], ["cat::UnSq2"]))
+        nodes.append(
+            oh.make_node(
+                "Expand", ["cat::UnSq2", "init7_s5_1_1_2_1_1"], ["_onx_expand_cat::UnSq2"]
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["_onx_expand_cat::UnSq2", "init7_s4_0_8_-1_32"],
+                ["repeat_interleave_1"],
+            )
+        )
+        nodes.append(oh.make_node("Unsqueeze", ["cat_1", "init7_s1_2"], ["cat_1::UnSq2"]))
+        nodes.append(
+            oh.make_node(
+                "Expand", ["cat_1::UnSq2", "init7_s5_1_1_2_1_1"], ["_onx_expand_cat_1::UnSq2"]
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["_onx_expand_cat_1::UnSq2", "init7_s4_0_8_-1_32"],
+                ["repeat_interleave"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "LocalAttentionSW_to1",
+                ["query", "repeat_interleave_1", "repeat_interleave", "to", "init1_s_::RSh1"],
+                ["output_0"],
+                domain="intermediate",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "output_0", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "cat", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length+seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init1_s_::RSh1", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "to", onnx.TensorProto.BOOL, shape=("seq_length", "total_length")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init7_s4_0_8_-1_32", onnx.TensorProto.INT64, shape=(4,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("init7_s5_1_1_2_1_1", onnx.TensorProto.INT64, shape=(5,))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "cat_1",
+                onnx.TensorProto.FLOAT,
+                shape=("batch", 4, "past_length+seq_length", 32),
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "LocalAttentionGQASW_to1",
+                [
+                    "query",
+                    "cat",
+                    "cat_1",
+                    "to",
+                    "init1_s_::RSh1",
+                    "init7_s5_1_1_2_1_1",
+                    "init7_s4_0_8_-1_32",
+                ],
+                ["output_0"],
+                domain="intermediate",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "output_0", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_gqa_name = f"{FunctionAttentionPattern._operator_name}GQA"
