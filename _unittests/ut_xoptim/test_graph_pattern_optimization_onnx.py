@@ -33,6 +33,7 @@ from experimental_experiment.ext_test_case import (
     has_onnxruntime,
     hide_stdout,
 )
+from experimental_experiment.torch_interpreter import to_onnx
 from experimental_experiment.xbuilder.graph_builder import (
     GraphBuilder,
     OptimizationOptions,
@@ -7387,6 +7388,191 @@ class TestGraphPatternOptimization(ExtTestCase):
         ref = ExtendedReferenceEvaluator(opt_onx, verbose=0)
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz)
+
+    def _get_gqa_model(self):
+        import torch
+
+        class Model(torch.nn.Module):
+            def __init__(
+                self,
+                sequence_length,
+                num_heads,
+                kv_num_heads,
+                head_size,
+                softmax_scale,
+                use_smooth_softmax,
+            ):
+                super().__init__()
+                self.sequence_length = sequence_length
+                self.num_heads = num_heads
+                self.kv_num_heads = kv_num_heads
+                self.head_size = head_size
+                self.softmax_scale = softmax_scale
+                self.use_smooth_softmax = use_smooth_softmax
+
+            def concat_cache(self, past_key_cache, new_key):
+                assert past_key_cache.size(0) == new_key.size(
+                    0
+                ), f"Batch sizes do not match, {past_key_cache.shape=}, {new_key.shape=}"
+                assert past_key_cache.size(1) == new_key.size(
+                    1
+                ), f"Number of heads do not match, {past_key_cache.shape=}, {new_key.shape=}"
+                assert past_key_cache.size(3) == new_key.size(
+                    3
+                ), f"Head dimensions do not match, {past_key_cache.shape=}, {new_key.shape=}"
+                concatenated_keys = torch.cat((past_key_cache, new_key), dim=2)
+                return concatenated_keys
+
+            def smooth_softmax_ref(self, x, head_sink):
+                assert len(x.shape) == 4
+                b, n, s, _t = x.shape
+
+                if head_sink is not None:
+                    assert len(head_sink.shape) == 1
+                    assert head_sink.shape[0] == x.shape[1]
+                    sink = head_sink.reshape(1, n, 1, 1).expand(b, -1, s, -1)
+                else:
+                    sink = torch.zeros(b, n, s, 1, dtype=x.dtype)
+
+                y = torch.cat([x, sink], dim=-1)
+                y = torch.softmax(y, dim=-1)
+                y = y[..., :-1]
+                return y
+
+            def group_query_attention_reference(
+                self,
+                query,
+                key,
+                value,
+                scale=None,
+                mask=None,
+            ):
+                if scale is None:
+                    scale = 1.0 / (self.head_size**0.5)
+
+                num_key_value_groups = self.num_heads // self.kv_num_heads
+                value = torch.repeat_interleave(value, dim=1, repeats=num_key_value_groups)
+                key = torch.repeat_interleave(key, dim=1, repeats=num_key_value_groups)
+                # attn = torch.einsum("bhmd,bhnd->bhmn", query, key).float() * scale
+                attn = torch.matmul(query * scale**0.5, key.transpose(2, 3) * scale**0.5)
+                if mask is not None:
+                    attn = attn.masked_fill((1 - mask).bool(), float("-inf")).to(query.dtype)
+
+                attn = (
+                    self.smooth_softmax_ref(attn, None)
+                    if self.use_smooth_softmax
+                    else attn.softmax(-1)
+                )
+                attn = torch.where(
+                    attn.isnan(), torch.tensor(0, dtype=query.dtype, device=query.device), attn
+                )
+                # attn_output = torch.einsum("bhmn,bhnd->bhmd", attn.type_as(value), value)
+                attn_output = torch.matmul(attn, value)
+                result = attn_output
+                return result
+
+            def forward(self, query, key, value, attention_mask, past_key, past_value):
+                present_key = self.concat_cache(past_key, key)
+                present_value = self.concat_cache(past_value, value)
+                return self.group_query_attention_reference(
+                    query,
+                    present_key,
+                    present_value,
+                    scale=self.softmax_scale,
+                    mask=attention_mask,
+                )
+
+        model = Model(
+            sequence_length=23,
+            num_heads=8,
+            kv_num_heads=4,
+            head_size=32,
+            softmax_scale=None,
+            use_smooth_softmax=False,
+        ).eval()
+
+        query = torch.rand((1, model.num_heads, model.sequence_length, model.head_size))
+        key = torch.rand((1, model.kv_num_heads, model.sequence_length, model.head_size))
+        value = torch.rand((1, model.kv_num_heads, model.sequence_length, model.head_size))
+        past_key = torch.rand(
+            (1, model.kv_num_heads, model.sequence_length // 2, model.head_size)
+        )
+        past_value = torch.rand(
+            (1, model.kv_num_heads, model.sequence_length // 2, model.head_size)
+        )
+        attention_mask = torch.zeros(
+            (model.sequence_length, model.sequence_length + model.sequence_length // 2)
+        )
+        inputs = (query, key, value, attention_mask, past_key, past_value)
+        expected = model.forward(*inputs)
+        self.assertEqual((1, 8, 23, 32), expected.shape)
+        ds = (
+            {0: "batch", 2: "seq_length"},
+            {0: "batch", 2: "seq_length"},
+            {0: "batch", 2: "seq_length"},
+            {0: "seq_length", 1: "total_length"},
+            {0: "batch", 2: "past_length"},
+            {0: "batch", 2: "past_length"},
+        )
+        return model, inputs, ds, expected
+
+    @hide_stdout()
+    def test_local_attention_gqa_0(self):
+        model, inputs, ds, expected = self._get_gqa_model()
+        f1 = self.get_dump_file("test_local_attention_gqa_0.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            filename=f1,
+            options=OptimizationOptions(
+                patterns=[
+                    "FunctionAttention",
+                    "WhereAdd",
+                    "SwapUnary",
+                    "ShapeBasedEditDistanceReshape",
+                    "Cast",
+                    "SwapUnary",
+                    "ShapeBasedExpandSwap",
+                ],
+                verbose=10,
+            ),
+        )
+        ort = self._check_with_ort(onx)
+        feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
+        got = ort.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+        self.assertEqual(["LocalAttentionSW_to1"], [f.name for f in onx.functions])
+        self.assertIn("LocalAttentionSW_to1", [n.op_type for n in onx.graph.node])
+
+    @hide_stdout()
+    def test_local_attention_gqa_1(self):
+        model, inputs, ds, expected = self._get_gqa_model()
+        f1 = self.get_dump_file("test_local_attention_gqa_1.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            filename=f1,
+            options=OptimizationOptions(
+                patterns=[
+                    "WhereAdd",
+                    "SwapUnary",
+                    "ShapeBasedEditDistanceReshape",
+                    "Cast",
+                    "SwapUnary",
+                    "ShapeBasedExpandSwap",
+                    "FunctionAttention",
+                ],
+                verbose=10,
+            ),
+        )
+        ort = self._check_with_ort(onx)
+        feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
+        got = ort.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+        self.assertEqual(["LocalAttentionGQASW_to1"], [f.name for f in onx.functions])
+        self.assertIn("LocalAttentionGQASW_to1", [n.op_type for n in onx.graph.node])
 
     def test_reshape_reshape_single(self):
         model = oh.make_model(
