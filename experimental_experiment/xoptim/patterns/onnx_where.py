@@ -21,7 +21,6 @@ class WhereAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -38,7 +37,7 @@ class WhereAddPattern(PatternOptimization):
             oh.make_tensor_value_info("mask", onnx.TensorProto.BOOL, shape=("a", "b"))
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -46,15 +45,15 @@ class WhereAddPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["inf"],
                 value=onh.from_array(np.array([-inf], dtype=np.float32), name="value"),
             )
         )
-        nodes.append(make_node_extended("Where", ["mask", "zero", "inf"], ["fmask"]))
-        nodes.append(make_node_extended("Add", ["fmask", "X"], ["Y"]))
+        nodes.append(oh.make_node("Where", ["mask", "zero", "inf"], ["fmask"]))
+        nodes.append(oh.make_node("Add", ["fmask", "X"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(
             nodes,
@@ -80,7 +79,6 @@ class WhereAddPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -96,7 +94,7 @@ class WhereAddPattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("mask", onnx.TensorProto.BOOL, shape=("a", "b"))
         )
-        nodes.append(make_node_extended("Where", ["mask", "X", "inf"], ["Y"]))
+        nodes.append(oh.make_node("Where", ["mask", "X", "inf"], ["Y"]))
         outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", "b")))
         graph = oh.make_graph(
             nodes,

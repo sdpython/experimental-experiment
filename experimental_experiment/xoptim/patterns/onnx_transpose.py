@@ -859,7 +859,6 @@ class SwapUnsqueezeTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -875,15 +874,15 @@ class SwapUnsqueezeTransposePattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("axes", onnx.TensorProto.INT64, shape=(2,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["axes"],
                 value=onh.from_array(np.array([1, 2], dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Unsqueeze", ["X", "axes"], ["xu"]))
-        nodes.append(make_node_extended("Transpose", ["xu"], ["Y"], perm=[0, 2, 1, 4, 3]))
+        nodes.append(oh.make_node("Unsqueeze", ["X", "axes"], ["xu"]))
+        nodes.append(oh.make_node("Transpose", ["xu"], ["Y"], perm=[0, 2, 1, 4, 3]))
         outputs.append(
             oh.make_tensor_value_info(
                 "Y", onnx.TensorProto.FLOAT, shape=("e", "f", "g", "h", "i")
@@ -913,7 +912,6 @@ class SwapUnsqueezeTransposePattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 18),
@@ -929,12 +927,12 @@ class SwapUnsqueezeTransposePattern(PatternOptimization):
         )
         inputs.append(oh.make_tensor_value_info("axes", onnx.TensorProto.INT64, shape=(2,)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Transpose", ["X"], ["SwapUnsqueezeTransposePattern_Y"], perm=[0, 2, 1]
             )
         )
         nodes.append(
-            make_node_extended("Unsqueeze", ["SwapUnsqueezeTransposePattern_Y", "axes"], ["Y"])
+            oh.make_node("Unsqueeze", ["SwapUnsqueezeTransposePattern_Y", "axes"], ["Y"])
         )
         outputs.append(
             oh.make_tensor_value_info(
