@@ -322,7 +322,6 @@ class GathersSplitPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -335,7 +334,7 @@ class GathersSplitPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["zero"],
@@ -343,15 +342,15 @@ class GathersSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["one"],
                 value=onh.from_array(np.array(1, dtype=np.int64), name="value"),
             )
         )
-        nodes.append(make_node_extended("Gather", ["X", "zero"], ["x1"], axis=1))
-        nodes.append(make_node_extended("Gather", ["X", "one"], ["x2"], axis=1))
+        nodes.append(oh.make_node("Gather", ["X", "zero"], ["x1"], axis=1))
+        nodes.append(oh.make_node("Gather", ["X", "one"], ["x2"], axis=1))
         outputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a",)))
         outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a",)))
         graph = oh.make_graph(
@@ -378,7 +377,6 @@ class GathersSplitPattern(PatternOptimization):
         import onnx
         import onnx.helper as oh
         import onnx.numpy_helper as onh
-        from onnx_array_api.translate_api.make_helper import make_node_extended
 
         opset_imports = [
             oh.make_opsetid("", 26),
@@ -391,7 +389,7 @@ class GathersSplitPattern(PatternOptimization):
         functions = []
         inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Constant",
                 [],
                 ["init7_s1_1"],
@@ -399,7 +397,7 @@ class GathersSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended(
+            oh.make_node(
                 "Split",
                 ["X"],
                 ["GathersSplitPattern--x1", "GathersSplitPattern--x2"],
@@ -408,10 +406,10 @@ class GathersSplitPattern(PatternOptimization):
             )
         )
         nodes.append(
-            make_node_extended("Squeeze", ["GathersSplitPattern--x1", "init7_s1_1"], ["x1"])
+            oh.make_node("Squeeze", ["GathersSplitPattern--x1", "init7_s1_1"], ["x1"])
         )
         nodes.append(
-            make_node_extended("Squeeze", ["GathersSplitPattern--x2", "init7_s1_1"], ["x2"])
+            oh.make_node("Squeeze", ["GathersSplitPattern--x2", "init7_s1_1"], ["x2"])
         )
         outputs.append(oh.make_tensor_value_info("x2", onnx.TensorProto.FLOAT, shape=("a",)))
         outputs.append(oh.make_tensor_value_info("x1", onnx.TensorProto.FLOAT, shape=("a",)))
