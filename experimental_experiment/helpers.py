@@ -78,7 +78,7 @@ def size_type(dtype: Any) -> int:
         return 4
     if dtype == np.float16 or dtype == np.int16 or dtype == ml_dtypes.bfloat16:
         return 2
-    if dtype == np.int8 or dtype == np.uint8:
+    if dtype == np.int8 or dtype == np.uint8 or dtype == np.bool_:
         return 1
     if hasattr(np, "uint64"):
         # it fails on mac
@@ -107,7 +107,7 @@ def size_type(dtype: Any) -> int:
             return 4
         if dtype in {torch.uint16}:
             return 2
-    raise AssertionError(f"Unexpected dtype={dtype}")
+    raise AssertionError(f"Unexpected dtype={dtype} {[dtype]}")
 
 
 def tensor_dtype_to_np_dtype(tensor_dtype: int) -> np.dtype:

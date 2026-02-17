@@ -8083,6 +8083,46 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_reduce_arg_topk(self):
+        for keepdims in [0, 1]:
+            with self.subTest(keepdims=keepdims):
+                model = oh.make_model(
+                    oh.make_graph(
+                        [
+                            oh.make_node("ReduceMin", ["X", "one"], ["Y1"], keepdims=keepdims),
+                            oh.make_node("ArgMin", ["X"], ["Y2"], axis=1, keepdims=keepdims),
+                        ],
+                        "dummy",
+                        [_mkv_("X", TFLOAT, ["a", "b"])],
+                        [
+                            _mkv_("Y1", TFLOAT, ["a", 1] if keepdims else ["a"]),
+                            _mkv_("Y2", TINT64, ["a", 1] if keepdims else ["a"]),
+                        ],
+                        [onh.from_array(np.array([1], dtype=np.int64), name="one")],
+                    ),
+                    opset_imports=[oh.make_opsetid("", 22)],
+                    ir_version=11,
+                )
+                check_model(model)
+                feeds = {"X": (self._range(32, 8) * 3).astype(int).astype(np.float32)}
+                ref = self._check_with_ort(model)
+                expected = ref.run(None, feeds)[0]
+
+                gr = GraphBuilder(
+                    model,
+                    infer_shapes_options=True,
+                    optimization_options=OptimizationOptions(patterns=["ReduceArgTopK"]),
+                )
+                opt_onx = gr.to_onnx(optimize=True)
+                check_model(opt_onx)
+                self.assertEqual(
+                    ["TopK"] if keepdims else ["TopK", "Squeeze", "Squeeze"],
+                    [n.op_type for n in opt_onx.graph.node],
+                )
+                opt_ref = self._check_with_ort(opt_onx)
+                got = opt_ref.run(None, feeds)[0]
+                self.assertEqualArray(expected, got)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

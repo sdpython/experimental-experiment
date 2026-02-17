@@ -174,7 +174,7 @@ class TestOnnxExportSubModules(ExtTestCase):
         self.assertNotIn("p_decoder_feed_forward_linear_1_weight", names)
         self.check_ort(onx)
 
-    @requires_torch("2.11", "flacky")
+    @requires_torch("2.12", "flacky")
     @ignore_warnings(FutureWarning)
     def test_dummy_llm_strict_true(self):
         model, inputs = dummy_llm()

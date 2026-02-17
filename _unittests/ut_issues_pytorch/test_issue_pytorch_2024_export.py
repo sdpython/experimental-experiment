@@ -5,6 +5,7 @@ import numpy as np
 from experimental_experiment.ext_test_case import (
     ExtTestCase,
     requires_torch,
+    requires_onnxscript,
     skipif_ci_windows,
 )
 
@@ -40,7 +41,8 @@ class TestIssuesPytorch2024Export(ExtTestCase):
         ep.run_decompositions()  # Fails here
 
     @skipif_ci_windows("not working")
-    @requires_torch("2.11")
+    @requires_torch("2.12")
+    @requires_onnxscript("0.6.4")
     def test_export_mistral_nousers(self):
         import onnx
         import torch

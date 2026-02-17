@@ -6885,9 +6885,6 @@ def aten_linspace(
         None,
         False,
     ), f"not implemented for pin_memory={pin_memory!r} {g.get_debug_msg()}"
-    assert (
-        device is None
-    ), f"Not implemented when device is not None, device={device}{g.get_debug_msg()}"
 
     if isinstance(start, float) and isinstance(end, float):
         # A constant will do.
