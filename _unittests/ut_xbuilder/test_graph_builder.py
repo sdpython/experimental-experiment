@@ -1018,7 +1018,7 @@ class TestGraphBuilder(ExtTestCase):
             (
                 ("s23", 1, "seq_length", "s31+seq_length"),
                 (-1,),
-                ("s23*seq_length*(s31+seq_length)",),
+                ("s23*(s31+seq_length)*seq_length",),
             ),
             (("s44", 16, 1), (0, 1, -1), ("s44", 1, 16)),
         ]

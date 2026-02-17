@@ -230,7 +230,7 @@ class PatternOptimization:
         self,
         node: Optional[NodeProto] = None,
         lineno: Optional[int] = None,
-        msg: Optional[Union[Callable, str]] = None,
+        msg: Optional[Union[Callable[[], str], str]] = None,
     ):
         """
         It may be useful which reason made a pattern matching fail.
@@ -250,11 +250,11 @@ class PatternOptimization:
             elif callable(msg):
                 msg = msg()
             if msg:
-                msg = f"\n{msg}"
+                msg = f"\n  reason: {msg}"
             if self.verbose >= 10 and hasattr(self, "_debug"):
                 msg2 = self._debug_print()
                 if msg2:
-                    msg2 = f"\n{textwrap.indent(msg2, '    ')}"
+                    msg2 = f"\n  reason: {textwrap.indent(msg2, '    ')}"
                 print(
                     f"[{self.__class__.__name__}.match] NONE - line: {lineno}:"
                     f"{os.path.split(self.__class__.__module__)[-1]}, "

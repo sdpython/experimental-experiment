@@ -8,6 +8,11 @@ def _dump_node(n: ast.AST) -> str:
 
 
 class _Common:
+    """
+    Base class for common visitors and transformers.
+
+    :param expr: used only for error messages.
+    """
 
     def __init__(self, expr: Optional[str] = None):
         self.expr = expr
@@ -19,12 +24,24 @@ class _Common:
 
 
 class CommonVisitor(ast.NodeVisitor, _Common):
+    """
+    Base class for custom AST visitors.
+
+    :param expr: used only for error messages.
+    """
+
     def __init__(self, expr: Optional[str] = None):
         ast.NodeVisitor.__init__(self)
         _Common.__init__(self, expr)
 
 
 class CommonTransformer(ast.NodeTransformer, _Common):
+    """
+    Base class for custom AST transformers.
+
+    :param expr: used only for error messages.
+    """
+
     def __init__(self, expr: Optional[str] = None):
         ast.NodeTransformer.__init__(self)
         _Common.__init__(self, expr)
@@ -218,6 +235,108 @@ class ExpressionSimplifierAddVisitor(CommonVisitor):
         return res.replace(" ", "")
 
 
+class ReorderCommutativeOpsTransformer(CommonTransformer):
+    """Sorts terms in additions or multiplications ``b+a`` -> ``a+b``."""
+
+    def visit_BinOp(self, node: ast.BinOp):
+        # First recurse into children
+        self.generic_visit(node)
+
+        # Only process + and *
+        if isinstance(node.op, (ast.Add, ast.Mult)):
+            operands = self._flatten(node, type(node.op))
+            operands.sort(key=self._expr_key)
+            return self._rebuild(operands, node.op)
+        return node
+
+    def _flatten(self, node: ast.AST, op_type) -> List[ast.AST]:
+        """Flattens a chain of same-type binary operations."""
+        if isinstance(node, ast.BinOp) and isinstance(node.op, op_type):
+            return self._flatten(node.left, op_type) + self._flatten(node.right, op_type)
+        return [node]
+
+    def _rebuild(self, operands: List[ast.AST], op: ast.operator) -> ast.AST:
+        """Rebuilds a binary tree from sorted operands."""
+        expr = operands[0]
+        for operand in operands[1:]:
+            expr = ast.BinOp(left=expr, op=op, right=operand)
+        return expr
+
+    def _expr_key(self, node: ast.AST) -> str:
+        """Generates a sortable key for expressions."""
+        return ast.unparse(node)
+
+
+class ExactMulDivConstantFolderTransformer(CommonTransformer):
+    """
+    Folds integer constants in multiplicative chains with true division,
+    but only when exact (no remainder).
+    Example: ``1024*a//2`` -> ``512*a``
+    """
+
+    def visit_BinOp(self, node: ast.BinOp):
+        node = self.generic_visit(node)
+
+        if not isinstance(node, ast.BinOp):
+            return node
+        if not isinstance(node.op, (ast.Mult, ast.FloorDiv)):
+            return node
+
+        numer, denom = self._flatten_mul_div(node)
+
+        num_const = 1
+        den_const = 1
+        num_other: List[ast.AST] = []
+        den_other: List[ast.AST] = []
+
+        for n in numer:
+            if isinstance(n, ast.Constant) and isinstance(n.value, int):
+                num_const *= n.value
+            else:
+                num_other.append(n)
+
+        for d in denom:
+            if isinstance(d, ast.Constant) and isinstance(d.value, int):
+                den_const *= d.value
+            else:
+                den_other.append(d)
+
+        # Only fold exact integer divisions and avoid division by zero.
+        if den_const == 0:
+            return node
+        if den_other:
+            return node
+        if num_const % den_const != 0:
+            return node
+
+        folded = num_const // den_const
+
+        factors: List[ast.AST] = []
+        if folded != 1 or not num_other:
+            factors.append(ast.Constant(value=folded))
+        factors.extend(num_other)
+
+        new_node = self._build_product(factors)
+        return ast.copy_location(new_node, node)
+
+    def _flatten_mul_div(self, node: ast.AST) -> Tuple[List[ast.AST], List[ast.AST]]:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+            lnum, lden = self._flatten_mul_div(node.left)
+            rnum, rden = self._flatten_mul_div(node.right)
+            return lnum + rnum, lden + rden
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.FloorDiv):
+            lnum, lden = self._flatten_mul_div(node.left)
+            rnum, rden = self._flatten_mul_div(node.right)
+            return lnum + rden, lden + rnum
+        return [node], []
+
+    def _build_product(self, factors: List[ast.AST]) -> ast.AST:
+        out = factors[0]
+        for f in factors[1:]:
+            out = ast.BinOp(left=out, op=ast.Mult(), right=f)
+        return out
+
+
 def simplify_expression(expr: Union[str, int]) -> Union[str, int]:
     """Simplifies an expression."""
     if isinstance(expr, int):
@@ -227,8 +346,11 @@ def simplify_expression(expr: Union[str, int]) -> Union[str, int]:
     transformers = [
         SimpleSimpliflyTransformer(expr=expr),
         MulDivCancellerTransformer(expr=expr),
+        ExactMulDivConstantFolderTransformer(expr=expr),
+        MulDivCancellerTransformer(expr=expr),
         MaxToXorTransformer(expr=expr),
         SimplifyParensTransformer(expr=expr),
+        ReorderCommutativeOpsTransformer(expr=expr),
     ]
     for tr in transformers:
         tree = tr.visit(tree)

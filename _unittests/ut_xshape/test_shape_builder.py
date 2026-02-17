@@ -321,14 +321,14 @@ class TestShapeBuilder(ExtTestCase):
         builder.run_model(model)
         self.assertEqual(
             builder._known_shapes,
-            {"Y": ("batch", "seq1"), "X": ("batch", "seq2"), "Z": ("batch", "seq2+seq1")},
+            {"Y": ("batch", "seq1"), "X": ("batch", "seq2"), "Z": ("batch", "seq1+seq2")},
         )
         feeds = dict(
             X=np.random.rand(3, 5).astype(np.float32), Y=np.random.rand(3, 6).astype(np.float32)
         )
         got = ExtendedReferenceEvaluator(model).run(None, feeds)
         res = builder.compare_with_true_inputs(feeds, got)
-        self.assertEqual(res, {"Z": (("batch", 3, 3), ("seq2+seq1", 11, 11))})
+        self.assertEqual(res, {"Z": (("batch", 3, 3), ("seq1+seq2", 11, 11))})
 
     def test_concat_split(self):
         model = oh.make_model(

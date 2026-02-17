@@ -48,6 +48,20 @@ class TestSimplifyExpressions(ExtTestCase):
     def test_simplify_function(self):
         self.assertEqual("CeilToInt(b+c,2)", simplify_expression("CeilToInt(b+c,2)"))
 
+    def test_simplify_function_order(self):
+        self.assertEqual("a+b", simplify_expression("b+a"))
+
+    def test_simplify_function_order3(self):
+        self.assertEqual("a+b+c", simplify_expression("c+b+a"))
+        self.assertEqual("a+b+c", simplify_expression("b+c+a"))
+        self.assertEqual("a+b+c", simplify_expression("a+c+b"))
+
+    def test_simplify_function_floordiv_int(self):
+        self.assertEqual("512*a", simplify_expression("1024*a//2"))
+        self.assertEqual("a", simplify_expression("1024*a//1024"))
+        self.assertEqual("a+b", simplify_expression("1024*(a+b)//1024"))
+        self.assertEqual("2*a+2*b", simplify_expression("1024*(a+b)//1024*2"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
