@@ -1,5 +1,5 @@
 import ast
-from typing import Dict, List, Optional, Set
+from typing import Dict, Optional, Set
 from .simplify_expressions import SimpleSimpliflyTransformer, CommonTransformer
 
 
@@ -20,58 +20,20 @@ def parse_expression_tokens(expr: str) -> Set[str]:
 
 
 class RenameTransformer(CommonTransformer):
-    def __init__(self, mapping, expr: Optional[str] = None):
+    """
+    Renames variable names into other based on a mapping.
+
+    :param magging: mapping
+    :param expr: only use for error messages
+    """
+
+    def __init__(self, mapping: Dict[str, str], expr: Optional[str] = None):
         super().__init__(expr)
         self.mapping = mapping
 
     def visit_Name(self, node):
         if node.id in self.mapping:
             return ast.copy_location(ast.Name(id=self.mapping[node.id], ctx=node.ctx), node)
-        return node
-
-
-class ReorderCommutativeOpsTransformer(ast.NodeTransformer):
-    def __init__(self):
-        super().__init__()
-
-    def visit_BinOp(self, node: ast.BinOp):
-        # First recurse into children
-        self.generic_visit(node)
-
-        # Only process + and *
-        if isinstance(node.op, (ast.Add, ast.Mult)):
-            operands = self._flatten(node, type(node.op))
-            operands.sort(key=self._expr_key)
-            return self._rebuild(operands, node.op)
-
-        return node
-
-    def _flatten(self, node: ast.AST, op_type) -> List[ast.AST]:
-        """Flattens a chain of same-type binary operations."""
-        if isinstance(node, ast.BinOp) and isinstance(node.op, op_type):
-            return self._flatten(node.left, op_type) + self._flatten(node.right, op_type)
-        return [node]
-
-    def _rebuild(self, operands: List[ast.AST], op: ast.operator) -> ast.AST:
-        """Rebuilds a binary tree from sorted operands."""
-        expr = operands[0]
-        for operand in operands[1:]:
-            expr = ast.BinOp(left=expr, op=op, right=operand)
-        return expr
-
-    def _expr_key(self, node: ast.AST) -> str:
-        """Generates a sortable key for expressions."""
-        return ast.unparse(node)
-
-
-class RenameVariable(CommonTransformer):
-    def __init__(self, mapping, expr: Optional[str] = None):
-        super().__init__()
-        self.mapping = mapping
-
-    def visit_Name(self, node):
-        if node.id in self.mapping:
-            node.id = self.mapping[node.id]
         return node
 
 
@@ -85,8 +47,7 @@ def rename_expression(expr: str, mapping: Dict[str, str]) -> str:
     """
     tree = ast.parse(expr, mode="eval")
     transformer = RenameTransformer(mapping)
-    reorder = ReorderCommutativeOpsTransformer()
-    new_tree = reorder.visit(transformer.visit(tree))
+    new_tree = transformer.visit(tree)
     ast.fix_missing_locations(new_tree)
     return ast.unparse(new_tree).replace(" ", "")
 
@@ -104,10 +65,9 @@ def rename_dynamic_expression(expression: str, replacements: Dict[str, str]):
         tree = ast.parse(expression)
     except SyntaxError:
         return expression
-    transformer = RenameVariable(replacements)
+    transformer = RenameTransformer(replacements)
     simplify = SimpleSimpliflyTransformer()
-    reorder = ReorderCommutativeOpsTransformer()
-    new_tree = reorder.visit(simplify.visit(transformer.visit(tree)))
+    new_tree = simplify.visit(transformer.visit(tree))
     res = ast.unparse(new_tree).replace(" ", "")
     return res
 
