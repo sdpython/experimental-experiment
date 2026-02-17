@@ -7574,6 +7574,36 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqual(["LocalAttentionGQASW_to1"], [f.name for f in onx.functions])
         self.assertIn("LocalAttentionGQASW_to1", [n.op_type for n in onx.graph.node])
 
+    @hide_stdout()
+    def test_local_attention_gqa_2(self):
+        model, inputs, ds, expected = self._get_gqa_model()
+        f1 = self.get_dump_file("test_local_attention_gqa_2.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            filename=f1,
+            options=OptimizationOptions(
+                patterns=[
+                    "FunctionAttention",
+                    "WhereAdd",
+                    "SwapUnary",
+                    "ShapeBasedEditDistanceReshape",
+                    "Cast",
+                    "SwapUnary",
+                    "ShapeBasedExpandSwap",
+                    "FunctionAttentionGQA",
+                ],
+                verbose=0,
+            ),
+        )
+        ort = self._check_with_ort(onx)
+        feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
+        got = ort.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
+        self.assertIn("LocalAttentionGQASW_to1", [f.name for f in onx.functions])
+        self.assertIn("LocalAttentionGQASW_to1", [n.op_type for n in onx.graph.node])
+
     def test_reshape_reshape_single(self):
         model = oh.make_model(
             oh.make_graph(

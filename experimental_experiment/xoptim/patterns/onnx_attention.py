@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Optional
+from typing import List, Optional, Tuple, Union
 import numpy as np
 from onnx import NodeProto
 from ...helpers import tensor_dtype_to_np_dtype
@@ -800,3 +800,148 @@ class FunctionAttentionPattern(PatternOptimization):
         assert g.has_local_function(
             name, domain=cls._domain_name
         ), f"The function {cls._domain_name}.{name} was not added to the builder."
+
+
+class FunctionAttentionGQAPattern(FunctionAttentionPattern):
+    """
+    Merges onnx nodes equivalent to repeat interleave followed by function
+    ``LocalAttention`` into ``LocalAttentionGQA`` (GQA for GroupQueryAttention).
+    """
+
+    _operator_gqa_name = f"{FunctionAttentionPattern._operator_name}GQA"
+
+    def _match_keys_or_values(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        keys_or_values: str,
+    ) -> Optional[Tuple[NodeProto, NodeProto, NodeProto, Tuple[Tuple[Union[int, str], ...]]]]:
+
+        gqa_reshape = g.node_before(keys_or_values)
+        if not gqa_reshape or gqa_reshape.op_type != "Reshape" or gqa_reshape.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        gqa_expand = g.node_before(gqa_reshape.input[0])
+        if gqa_expand.op_type != "Expand":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        gqa_unsqueeze = g.node_before(gqa_expand.input[0])
+        if gqa_unsqueeze.op_type != "Unsqueeze":
+            return self.none(node, inspect.currentframe().f_lineno)
+        #
+        if not g.is_constant(gqa_expand.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        exp_shape = g.get_computed_constant(gqa_expand.input[1])
+        if tuple(exp_shape[:2]) != (1, 1) or tuple(exp_shape[3:]) != (1, 1):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(gqa_unsqueeze.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        unsq_shape = g.get_computed_constant(gqa_unsqueeze.input[1])
+        if tuple(unsq_shape) != (2,):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(gqa_reshape.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        resh_shape = g.get_computed_constant(gqa_reshape.input[1])
+        if resh_shape.size != 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.has_shape(gqa_unsqueeze.input[0]) or not g.has_shape(gqa_reshape.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape1 = g.get_shape_renamed(gqa_unsqueeze.input[0])
+        shape2 = g.get_shape_renamed(gqa_reshape.output[0])
+        if shape1[0] != shape2[0] or shape1[2] != shape2[2] or shape1[3] != shape2[3]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return (
+            gqa_unsqueeze,
+            gqa_expand,
+            gqa_reshape,
+            (tuple(unsq_shape), tuple(exp_shape), tuple(resh_shape)),
+        )
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            not node.op_type.startswith(FunctionAttentionPattern._operator_name)
+            or node.op_type.startswith(FunctionAttentionGQAPattern._operator_gqa_name)
+            or node.domain != FunctionAttentionGQAPattern._domain_name
+        ):
+            return self.none()
+
+        keys, values = node.input[1:3]
+
+        matched_keys = self._match_keys_or_values(g, node, keys)
+        if not matched_keys:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        matched_values = self._match_keys_or_values(g, node, values)
+        if not matched_values:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        gqa_unsqueeze, gqa_expand, gqa_reshape, shapes = matched_keys
+        gqa_unsqueeze_v, gqa_expand_v, gqa_reshape_v, _shapes_v = matched_values
+
+        unsq_shape, exp_shape, resh_shape = shapes
+        unsq_shape_v, exp_shape_v, resh_shape_v = shapes
+
+        if unsq_shape_v != unsq_shape:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if exp_shape != exp_shape_v:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if resh_shape_v != resh_shape:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        nodes = [
+            gqa_unsqueeze,
+            gqa_expand,
+            gqa_reshape,
+            gqa_unsqueeze_v,
+            gqa_expand_v,
+            gqa_reshape_v,
+            node,
+        ]
+        for n in nodes[:-1]:
+            if g.is_used_more_than_once(n.output[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, nodes, self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        gqa_unsqueeze: NodeProto,
+        gqa_expand: NodeProto,
+        gqa_reshape: NodeProto,
+        gqa_unsqueeze_v: NodeProto,
+        gqa_expand_v: NodeProto,
+        gqa_reshape_v: NodeProto,
+        attn: NodeProto,
+    ) -> List[NodeProto]:
+        itype = g.get_type(gqa_unsqueeze.input[0])
+        name = f"{self._operator_gqa_name}{attn.op_type[len(self._operator_name):]}"
+        attention_nodes = [
+            g.make_node(
+                name,
+                [
+                    attn.input[0],
+                    gqa_unsqueeze.input[0],
+                    gqa_unsqueeze_v.input[0],
+                    attn.input[3] if len(attn.input) > 3 else "",
+                    attn.input[4] if len(attn.input) > 4 else "",
+                    gqa_expand.input[1],
+                    gqa_reshape.input[1],
+                ],
+                [attn.output[0]],
+                name=f"{self.__class__.__name__}--{attn.name}",
+                domain=self._domain_name,
+            )
+        ]
+
+        # Creates the local function
+        if not g.builder.has_local_function(name, domain=self._domain_name):
+            self._add_local_function(
+                g.builder, name, itype=itype, gqa=True, switch_where="SW" in attn.op_type
+            )
+        return attention_nodes

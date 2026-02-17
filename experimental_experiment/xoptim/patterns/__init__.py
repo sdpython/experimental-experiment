@@ -12,7 +12,7 @@ from .onnx_any import (
     ShapeBasedSameChildrenPattern,
     SwapUnaryPattern,
 )
-from .onnx_attention import FunctionAttentionPattern
+from .onnx_attention import FunctionAttentionPattern, FunctionAttentionGQAPattern
 from .onnx_cast import (
     CastPattern,
     CastCastBinaryPattern,
@@ -242,6 +242,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         # LLM
         RotaryConcatPartPattern(verbose=verbose),
         FunctionAttentionPattern(verbose=verbose),
+        FunctionAttentionGQAPattern(verbose=verbose),
         FunctionCausalMaskPattern(verbose=verbose),
         FunctionCausalMaskMulAddPattern(verbose=verbose),
         FunctionCosSinCachePattern(verbose=verbose),
