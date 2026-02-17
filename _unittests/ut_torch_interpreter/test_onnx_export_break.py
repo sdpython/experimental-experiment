@@ -109,7 +109,7 @@ class TestOnnxExportBreak(ExtTestCase):
         InferenceSession(name.SerializeToString(), providers=["CPUExecutionProvider"])
 
     @skipif_ci_windows("not supported yet on Windows")
-    @requires_torch("2.11")
+    @requires_torch("2.12")
     def test_simple_export_pool(self):
         from onnxruntime import InferenceSession
 

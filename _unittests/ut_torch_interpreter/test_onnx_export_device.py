@@ -4,7 +4,7 @@ from experimental_experiment.torch_interpreter import to_onnx
 
 
 class TestOnnxExportDevice(ExtTestCase):
-    @requires_torch("2.11")
+    @requires_torch("2.12")
     def test_export_dynamic_shapes_kwargs(self):
         import torch
 

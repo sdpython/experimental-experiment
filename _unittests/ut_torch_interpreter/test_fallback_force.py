@@ -276,9 +276,7 @@ class TestFallbackForce(ExtTestCase):
         )
         from onnx_diagnostic.torch_export_patches import torch_export_patches
 
-        model, example_args_collection = self.get_llama_model(
-            input_dims=[(9, 15)], _attn_implementation="sdpa", with_mask=False
-        )
+        model, example_args_collection = self.get_llama_model()
         expected = model(*example_args_collection[0])
         with torch.no_grad(), torch_export_patches(patch_transformers=True):
             onx = to_onnx(

@@ -70,7 +70,7 @@ class TestIssuesPytorch2025Export(ExtTestCase):
         onnx.save(onx, self.get_dump_file("test_pads_with_constant_2.custom.onnx"))
         onnx.checker.check_model(onx)
 
-    @requires_torch("2.11")
+    @requires_torch("2.12")
     def test_multinomial(self):
         # https://github.com/pytorch/pytorch/issues/149048
         import torch
