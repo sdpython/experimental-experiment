@@ -2354,7 +2354,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                 )
 
         model = Model(
-            sequence_length=23,
+            sequence_length=1,
             num_heads=8,
             kv_num_heads=4,
             head_size=32,
@@ -2362,30 +2362,19 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             use_smooth_softmax=False,
         ).eval()
 
+        past_length = 22
         query = torch.rand((1, model.num_heads, model.sequence_length, model.head_size))
         key = torch.rand((1, model.kv_num_heads, model.sequence_length, model.head_size))
         value = torch.rand((1, model.kv_num_heads, model.sequence_length, model.head_size))
-        past_key = torch.rand(
-            (1, model.kv_num_heads, model.sequence_length // 2, model.head_size)
-        )
-        past_value = torch.rand(
-            (1, model.kv_num_heads, model.sequence_length // 2, model.head_size)
-        )
+        past_key = torch.rand((1, model.kv_num_heads, past_length, model.head_size))
+        past_value = torch.rand((1, model.kv_num_heads, past_length, model.head_size))
         attention_mask = torch.randint(
-            0, 2, (model.sequence_length, model.sequence_length + model.sequence_length // 2)
+            0, 2, (model.sequence_length, model.sequence_length + past_length)
         ).to(bool)
-
-        # query[:, :, :, :] = 1
-        # key[:, :, :, :] = 1
-        # value[:, :, :, :] = 0.7
-        # past_key[:, :, :, :] = 1
-        # past_value[:, :, :, :] = 0.7
-        # past_value[0,0,0,0] = -100
-        # attention_mask[:, :] = False
 
         inputs = (query, key, value, attention_mask, past_key, past_value)
         expected = model.forward(*inputs)
-        self.assertEqual((1, 8, 23, 32), expected.shape)
+        self.assertEqual((1, 8, model.sequence_length, 32), expected.shape)
         ds = (
             {0: "batch", 2: "seq_length"},
             {0: "batch", 2: "seq_length"},
@@ -2408,7 +2397,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             filename=f1,
             options=OptimizationOptions(patterns="default"),
         )
-        # self.assertEqual(["Attention"], [f.name for f in onx.functions])
+        self.assertIn("LocalAttentionGQASW_to1", [f.op_type for f in onx.graph.node])
         ort = self._check_with_ort(onx, cpu=True)
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
         got = ort.run(None, feeds)
@@ -2416,7 +2405,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
     @ignore_warnings((UserWarning, FutureWarning))
     @hide_stdout()
-    def test_gqa_ort(self):
+    def test_gqa_ort_contribops(self):
         model, inputs, ds, expected = self._get_model_attention()
         f1 = self.get_dump_file("test_gqa.default.ort.custom.onnx")
         onx = to_onnx(
@@ -2427,7 +2416,27 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             options=OptimizationOptions(patterns="default+onnxruntime"),
             target_opset=24,
         )
-        self.assertInOr(("Attention", "GroupQueryAttention"), [f.op_type for f in onx.graph.node])
+        self.assertIn("GroupQueryAttention", [f.op_type for f in onx.graph.node])
+        ort = self._check_with_ort(onx, cpu=True)
+        feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
+        got = ort.run(None, feeds)
+        self.assertEqualArray(expected, got[0], 1e-5)
+
+    @ignore_warnings((UserWarning, FutureWarning))
+    @hide_stdout()
+    def test_gqa_ort_attention(self):
+        model, inputs, ds, expected = self._get_model_attention()
+        f1 = self.get_dump_file("test_gqa.default.ort.attention.custom.onnx")
+        with self.set_env("ONNXOPT_ATTENTION", "1"):
+            onx = to_onnx(
+                model,
+                inputs,
+                dynamic_shapes=ds,
+                filename=f1,
+                options=OptimizationOptions(patterns="default+onnxruntime"),
+                target_opset=24,
+            )
+        self.assertIn("Attention", [f.op_type for f in onx.graph.node])
         ort = self._check_with_ort(onx, cpu=True)
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
         got = ort.run(None, feeds)
@@ -2439,26 +2448,18 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         num_heads = 8
         kv_num_heads = 4
         head_size = 32
-        sequence_length = 23
+        sequence_length = 1
+        past_length = 22
         scale = 0.43 / head_size**0.5
 
         query = np.random.rand(*(1, num_heads, sequence_length, head_size))
         key = np.random.rand(*(1, kv_num_heads, sequence_length, head_size))
         value = np.random.rand(*(1, kv_num_heads, sequence_length, head_size))
-        past_key = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
-        past_value = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
+        past_key = np.random.rand(*(1, kv_num_heads, past_length, head_size))
+        past_value = np.random.rand(*(1, kv_num_heads, past_length, head_size))
         attention_mask = np.random.randint(
-            0, 1, size=(sequence_length, sequence_length + sequence_length // 2)
+            0, 1, size=(sequence_length, sequence_length + past_length)
         ).astype(bool)
-
-        # something is wrong here
-        # query[:,:,:,:] = 1
-        # key[:,:,:,:] = 1
-        value[:, :, :, :] = 1  # use sequence_length==1 if past_sequence_length > 0
-        # value[-1,-1,-1,-1] = 0
-        # past_key[:,:,:,:] = 1
-        past_value[:, :, :, :] = 1
-        # attention_mask[:,:] = False
 
         inputs = (
             query.astype(np.float32),
@@ -2571,25 +2572,17 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         kv_num_heads = 4
         head_size = 32
         sequence_length = 1
+        past_length = 22
         scale = 0.43 / head_size**0.5
 
         query = np.random.rand(*(1, sequence_length, num_heads * head_size))
         key = np.random.rand(*(1, sequence_length, kv_num_heads * head_size))
         value = np.random.rand(*(1, sequence_length, kv_num_heads * head_size))
-        past_key = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
-        past_value = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
+        past_key = np.random.rand(*(1, kv_num_heads, past_length, head_size))
+        past_value = np.random.rand(*(1, kv_num_heads, past_length, head_size))
         attention_mask = np.random.randint(
-            0, 1, size=(sequence_length, sequence_length + sequence_length // 2)
+            0, 1, size=(sequence_length, sequence_length + past_length)
         ).astype(bool)
-
-        # something is wrong here
-        # query[:,:,:,:] = 1
-        # key[:,:,:,:] = 1
-        # value[:, :, :] = 1
-        # value[-1,-1,-1,-1] = 0
-        # past_key[:,:,:,:] = 1
-        # past_value[:, :, :, :] = 1
-        # attention_mask[:,:] = False
 
         inputs = (
             query.astype(np.float32),
@@ -2695,25 +2688,26 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         num_heads = 8
         kv_num_heads = 4
         head_size = 32
-        sequence_length = 23
+        sequence_length = 1
+        past_length = 22
         scale = 0.43 / head_size**0.5
 
         query = np.random.rand(*(1, sequence_length, num_heads * head_size))
         key = np.random.rand(*(1, sequence_length, kv_num_heads * head_size))
         value = np.random.rand(*(1, sequence_length, kv_num_heads * head_size))
-        past_key = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
-        past_value = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
+        past_key = np.random.rand(*(1, kv_num_heads, past_length, head_size))
+        past_value = np.random.rand(*(1, kv_num_heads, past_length, head_size))
         attention_mask = np.random.randint(
-            0, 1, size=(sequence_length, sequence_length + sequence_length // 2)
+            0, 1, size=(sequence_length, sequence_length + past_length)
         ).astype(bool)
 
         # something is wrong here
         # query[:,:,:,:] = 1
         # key[:,:,:,:] = 1
-        value[:, :, :] = 1
+        # value[:, :, :] = 1
         # value[-1,-1,-1,-1] = 0
         # past_key[:,:,:,:] = 1
-        past_value[:, :, :, :] = 1
+        # past_value[:, :, :, :] = 1
         # attention_mask[:,:] = False
 
         inputs = (

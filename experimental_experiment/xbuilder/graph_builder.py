@@ -7908,7 +7908,6 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                 n.domain != ""
                 or any(not self.has_type(o) for o in n.input if o)
                 or all(self.has_type(o) for o in n.output if o)
-                or n.op_type == "Attention"
             ), (
                 f"Missing one output type in node={self.pretty_node(n)}, "
                 f"input_has_type={[self.has_type(o) for o in n.input]}, "

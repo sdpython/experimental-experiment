@@ -1,4 +1,5 @@
 import inspect
+import os
 from typing import List, Optional, Sequence
 import numpy as np
 from onnx import NodeProto, TensorProto
@@ -1103,6 +1104,9 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         f"{FunctionAttentionPattern._operator_name}sQ_to",
     )
 
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super().__init__(verbose, priority)
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -1258,10 +1262,21 @@ class MultiHeadAttention3DPattern(PatternOptimization):
 
 
 class GroupQueryAttention3DPattern(PatternOptimization):
+    """
+    Fuse LocalAttention into GroupQueryAttention.
+    The envrionment variable ``ONNXOPT_ATTENTION=1`` replaces
+    `GroupQueryAttention` into `Attention` from the main
+    opst. Opset must be >= 23 to do so.
+    """
+
     _prefixes_operator_name = (
         f"{FunctionAttentionGQAPattern._operator_gqa_name}SW_to",
         f"{FunctionAttentionGQAPattern._operator_gqa_name}SWsQ_to",
     )
+
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super().__init__(verbose, priority)
+        self._use_attention = os.environ.get("ONNXOPT_ATTENTION", "0") == "1"
 
     def match(
         self,
@@ -1377,7 +1392,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
             float_mask = mask
 
         # Attention node
-        if g.main_opset < 23:
+        if not self._use_attention or g.main_opset < 23:
             attention_node = g._make_node(
                 "GroupQueryAttention",
                 [
