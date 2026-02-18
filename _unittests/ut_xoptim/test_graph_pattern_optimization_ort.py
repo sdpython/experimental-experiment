@@ -2454,7 +2454,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         # something is wrong here
         # query[:,:,:,:] = 1
         # key[:,:,:,:] = 1
-        value[:, :, :, :] = 1
+        value[:, :, :, :] = 1  # use sequence_length==1 if past_sequence_length > 0
         # value[-1,-1,-1,-1] = 0
         # past_key[:,:,:,:] = 1
         past_value[:, :, :, :] = 1
@@ -2570,7 +2570,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         num_heads = 8
         kv_num_heads = 4
         head_size = 32
-        sequence_length = 23
+        sequence_length = 1
         scale = 0.43 / head_size**0.5
 
         query = np.random.rand(*(1, sequence_length, num_heads * head_size))
@@ -2585,10 +2585,10 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         # something is wrong here
         # query[:,:,:,:] = 1
         # key[:,:,:,:] = 1
-        value[:, :, :] = 1
+        # value[:, :, :] = 1
         # value[-1,-1,-1,-1] = 0
         # past_key[:,:,:,:] = 1
-        past_value[:, :, :, :] = 1
+        # past_value[:, :, :, :] = 1
         # attention_mask[:,:] = False
 
         inputs = (
