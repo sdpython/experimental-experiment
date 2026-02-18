@@ -290,7 +290,7 @@ class FunctionAttentionPattern(PatternOptimization):
                 "Constant",
                 [],
                 ["init1_s1_"],
-                value=onh.from_array(np.array([-inf], dtype=np.float32), name="value"),
+                value=onh.from_array(np.array([-np.inf], dtype=np.float32), name="value"),
             )
         )
         nodes.append(
