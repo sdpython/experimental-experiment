@@ -40,6 +40,7 @@ def get_onnxruntime_patterns(
     from .llm_optim import (
         ContribRotaryEmbeddingPattern,
         ContribRotaryEmbedding3DPattern,
+        GroupQueryAttention3DPattern,
         MultiHeadAttention3DPattern,
     )
     from .missing_kernels import (
@@ -65,6 +66,7 @@ def get_onnxruntime_patterns(
         ContribRotaryEmbedding3DPattern(verbose=verbose),
         GeluOrtPattern(verbose=verbose),
         GeluErfPattern(verbose=verbose),
+        GroupQueryAttention3DPattern(verbose=verbose),
         FusedConvPattern(verbose=verbose),
         FastGeluPattern(verbose=verbose),
         FusedMatMulPattern(verbose=verbose),

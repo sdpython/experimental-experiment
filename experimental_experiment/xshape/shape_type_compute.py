@@ -1751,6 +1751,14 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
             self.set_rank(node.output[0], self.get_rank(node.input[0]))
         return None
 
+    # to be improved later
+    if node.op_type in {"GroupQueryAttention"} and node.domain == "com.microsoft":
+        if self.has_type(node.input[0]):
+            self.set_type(node.output[0], self.get_type(node.input[0]))
+        if self.has_rank(node.input[0]):
+            self.set_rank(node.output[0], self.get_rank(node.input[0]))
+        return None
+
     assert node.op_type in {"GatherGrad", "SoftmaxGrad", "ConcatTraining"} or node.domain not in {
         "ai.onnx.ml",
         "intermediate",

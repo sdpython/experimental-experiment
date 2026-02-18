@@ -2262,9 +2262,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz, atol=1e-4)
 
-    @ignore_warnings((UserWarning, FutureWarning))
-    @hide_stdout()
-    def test_gqa(self):
+    def _get_model_attention(self):
         import torch
 
         class Model(torch.nn.Module):
@@ -2389,7 +2387,13 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             {0: "batch", 2: "past_length"},
             {0: "batch", 2: "past_length"},
         )
-        f1 = self.get_dump_file("test_gqa.custom.onnx")
+        return model, inputs, ds, expected
+
+    @ignore_warnings((UserWarning, FutureWarning))
+    @hide_stdout()
+    def test_gqa_default(self):
+        model, inputs, ds, expected = self._get_model_attention()
+        f1 = self.get_dump_file("test_gqa.default.default.custom.onnx")
         onx = to_onnx(
             model,
             inputs,
@@ -2402,8 +2406,26 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
         got = ort.run(None, feeds)
         self.assertEqualArray(expected, got[0])
+
+    @ignore_warnings((UserWarning, FutureWarning))
+    @hide_stdout()
+    def test_gqa_ort(self):
+        model, inputs, ds, expected = self._get_model_attention()
+        f1 = self.get_dump_file("test_gqa.default.ort.custom.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            filename=f1,
+            options=OptimizationOptions(patterns="default+onnxruntime"),
+        )
+        # self.assertEqual(["Attention"], [f.name for f in onx.functions])
+        ort = self._check_with_ort(onx)
+        feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
+        got = ort.run(None, feeds)
+        self.assertEqualArray(expected, got[0])
         if has_onnxscript("0.6.4"):
-            f2 = self.get_dump_file("test_gqa.dynamo.onnx")
+            f2 = self.get_dump_file("test_gqa.default.ort.onnx")
             od_to_onnx(model, inputs, dynamic_shapes=ds, exporter="onnx-dynamo", filename=f2)
 
 
