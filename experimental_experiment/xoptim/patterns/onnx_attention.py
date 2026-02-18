@@ -514,7 +514,7 @@ class FunctionAttentionPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             cst_zero = None
             cst_inf = g.get_constant_scalar(where_node.input[1])
-            if not np.isinf(cst_inf):
+            if not np.isinf(cst_inf) or cst_inf > 0:
                 return self.none(node, inspect.currentframe().f_lineno)
             mat_qk = g.node_before(where_node.input[2])
             if mat_qk is None or mat_qk.op_type not in ("MatMul", "FusedMatMul"):
@@ -767,7 +767,8 @@ class FunctionAttentionPattern(PatternOptimization):
         lg.make_tensor_input("query")
         lg.make_tensor_input("keys")
         lg.make_tensor_input("values")
-        lg.make_tensor_input("mask")
+        mask_name = "not_mask" if switch_where else "mask"
+        lg.make_tensor_input(mask_name)
         lg.make_tensor_input("scale_sqrt")
 
         scaled_keys = lg.op.Mul("keys", "scale_sqrt", name=cls.__name__)
@@ -798,7 +799,7 @@ class FunctionAttentionPattern(PatternOptimization):
         zero = np.array([0], dtype=dtype)
         minfty = np.array([-np.inf], dtype=dtype)
         where_args = (minfty, qk) if switch_where else (qk, minfty)
-        masked_qk = lg.op.Where("mask", *where_args, name=cls.__name__)
+        masked_qk = lg.op.Where(mask_name, *where_args, name=cls.__name__)
         softmax = lg.op.Softmax(masked_qk, axis=-1, name=cls.__name__)
         filtered = lg.op.Where(
             lg.op.IsNaN(softmax, name=cls.__name__), zero, softmax, name=cls.__name__

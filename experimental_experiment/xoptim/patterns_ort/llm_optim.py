@@ -1285,6 +1285,11 @@ class GroupQueryAttention3DPattern(PatternOptimization):
             concats[1], "axis", 0
         ):
             return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) != 2:
+            # Only 2D ranks allowed.
+            return self.none(node, inspect.currentframe().f_lineno)
+
         if not g.is_constant_scalar(node.input[4]):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(node.input[5]):
@@ -1329,8 +1334,11 @@ class GroupQueryAttention3DPattern(PatternOptimization):
             np.array([0, 0, -1, head_size], dtype=np.int64),
             source=f"{self.__class__.__name__}.00_1",
         )
-        cst11 = g.make_initializer(
-            "", np.array([1, 1], dtype=np.int64), source=f"{self.__class__.__name__}.11"
+        cst01 = g.make_initializer(
+            "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
+        )
+        one32 = g.make_initializer(
+            "", np.array([1], dtype=np.int32), source=f"{self.__class__.__name__}.1i"
         )
 
         query3D = g.unique_name(f"{self.__class__.__name__}--{query}")
@@ -1342,13 +1350,12 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         attn3D = g.unique_name(f"{self.__class__.__name__}--{local_attantion_gqa.output[0]}")
         attn4D = g.unique_name(f"{self.__class__.__name__}--{local_attantion_gqa.output[0]}")
 
-        seqlensk64 = g.unique_name(f"{self.__class__.__name__}--sl")
         seqlensk = g.unique_name(f"{self.__class__.__name__}--sl")
-        total_sequence_sequence_length64 = g.unique_name(f"{self.__class__.__name__}--tl")
-        total_sequence_sequence_length = g.unique_name(f"{self.__class__.__name__}--tl")
+        total_length64 = g.unique_name(f"{self.__class__.__name__}--tl")
+        total_length = g.unique_name(f"{self.__class__.__name__}--tl")
+        total_length_1 = g.unique_name(f"{self.__class__.__name__}--tl_1")
 
-        batch_head_shape = g.unique_name(f"{self.__class__.__name__}--{query}")
-        mask_shape = g.unique_name(f"{self.__class__.__name__}--{mask}")
+        batch_shape = g.unique_name(f"{self.__class__.__name__}--{query}")
         expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
 
         nodes = []
@@ -1359,31 +1366,25 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                 "", np.array([0], dtype=dtype), source=f"{self.__class__.__name__}.0"
             )
             infty = g.make_initializer(
-                "", np.array([-np.inf], dtype=dtype), source=f"{self.__class__.__name__}.inf"
+                "",
+                np.array([np.finfo(dtype).min], dtype=dtype),
+                source=f"{self.__class__.__name__}.inf{itype}",
             )
             float_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
-            nodes.append(g._make_node("Where", [mask, zero, infty], [float_mask]))
-            mask = float_mask
+            # mask is not mask
+            nodes.append(g._make_node("Where", [mask, infty, zero], [float_mask]))
+        else:
+            float_mask = mask
 
+        # We only allowed 2D masks.
         nodes.extend(
             [
-                g._make_node("Shape", [query], [batch_head_shape], start=0, end=2),
-                g._make_node("Concat", [batch_head_shape, cst11], [mask_shape], axis=0),
-                g._make_node("Expand", [mask, mask_shape], [expanded_mask]),
-                g._make_node("Shape", [query], [seqlensk64], start=2, end=3),
-                g._make_node("Cast", [seqlensk64], [seqlensk], to=TensorProto.INT32),
-                g._make_node(
-                    "Shape",
-                    [mask],
-                    [total_sequence_sequence_length64],
-                    start=-1,
-                ),
-                g._make_node(
-                    "Cast",
-                    [total_sequence_sequence_length64],
-                    [total_sequence_sequence_length],
-                    to=TensorProto.INT32,
-                ),
+                g._make_node("Shape", [query], [batch_shape], start=0, end=1),
+                g._make_node("Unsqueeze", [float_mask, cst01], [expanded_mask]),
+                g._make_node("Shape", [float_mask], [total_length64], start=-1),
+                g._make_node("Cast", [total_length64], [total_length], to=TensorProto.INT32),
+                g._make_node("Sub", [total_length, one32], [total_length_1]),
+                g._make_node("Expand", [total_length_1, batch_shape], [seqlensk]),
                 g._make_node("Transpose", [query], [query4D], perm=[0, 2, 1, 3]),
                 g._make_node(
                     "Transpose", [keys_concat_node.input[1]], [keys4D], perm=[0, 2, 1, 3]
@@ -1403,7 +1404,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                         keys_concat_node.input[0],
                         values_concat_node.input[0],
                         seqlensk,
-                        total_sequence_sequence_length,
+                        total_length,
                         "",
                         "",
                         "",
