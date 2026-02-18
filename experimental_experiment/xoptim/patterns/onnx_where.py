@@ -49,7 +49,7 @@ class WhereAddPattern(PatternOptimization):
                 "Constant",
                 [],
                 ["inf"],
-                value=onh.from_array(np.array([-inf], dtype=np.float32), name="value"),
+                value=onh.from_array(np.array([-np.inf], dtype=np.float32), name="value"),
             )
         )
         nodes.append(oh.make_node("Where", ["mask", "zero", "inf"], ["fmask"]))

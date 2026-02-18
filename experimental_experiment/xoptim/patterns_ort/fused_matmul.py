@@ -1069,6 +1069,9 @@ class ReshapeGemmReshapePattern(PatternOptimization):
         inputs.append(
             oh.make_tensor_value_info("A", onnx.TensorProto.FLOAT, shape=("a", "b", "c"))
         )
+        inputs.append(
+            oh.make_tensor_value_info("shapey", onnx.TensorProto.INT64, shape=("e",))
+        )
         nodes.append(
             oh.make_node(
                 "Constant",
