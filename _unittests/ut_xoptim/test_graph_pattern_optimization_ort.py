@@ -2411,7 +2411,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             options=OptimizationOptions(patterns="default"),
         )
         # self.assertEqual(["Attention"], [f.name for f in onx.functions])
-        ort = self._check_with_ort(onx)
+        ort = self._check_with_ort(onx, cpu=True)
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
         got = ort.run(None, feeds)
         self.assertEqualArray(expected, got[0], 1e-5)
@@ -2429,7 +2429,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             options=OptimizationOptions(patterns="default+onnxruntime"),
         )
         # self.assertEqual(["Attention"], [f.name for f in onx.functions])
-        ort = self._check_with_ort(onx)
+        ort = self._check_with_ort(onx, cpu=True)
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
         got = ort.run(None, feeds)
         self.assertEqualArray(expected, got[0], 1e-5)
@@ -2438,7 +2438,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         #    f2 = self.get_dump_file("test_gqa.default.ort.onnx")
         #    od_to_onnx(model, inputs, dynamic_shapes=ds, exporter="onnx-dynamo", filename=f2)
 
-    def test_onnx_gqa_no_rotary(self):
+    def test_onnx_gqa_no_rotary_4D(self):
         _mkv_ = oh.make_tensor_value_info
 
         num_heads = 8
@@ -2560,9 +2560,134 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         model = shape_inference.infer_shapes(model)
         check_model(model)
-        self.dump_onnx("test_onnx_gqa_no_rotary.onnx", model)
+        self.dump_onnx("test_onnx_gqa_no_rotary_4D.onnx", model)
 
-        sess = self._check_with_ort(model)
+        sess = self._check_with_ort(model, cpu=True)
+        feeds = dict(zip([i.name for i in model.graph.input], inputs))
+        got = sess.run(None, feeds)
+        self.assertEqualArray(got[1], got[4], atol=1e-5)
+        self.assertEqualArray(got[2], got[5], atol=1e-5)
+        self.assertEqualArray(got[0], got[3], atol=1e-5)
+
+    def test_onnx_gqa_no_rotary_3D(self):
+        _mkv_ = oh.make_tensor_value_info
+
+        num_heads = 8
+        kv_num_heads = 4
+        head_size = 32
+        sequence_length = 23
+        scale = 0.43 / head_size**0.5
+
+        query = np.random.rand(*(1, sequence_length, num_heads * head_size))
+        key = np.random.rand(*(1, sequence_length, kv_num_heads * head_size))
+        value = np.random.rand(*(1, sequence_length, kv_num_heads * head_size))
+        past_key = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
+        past_value = np.random.rand(*(1, kv_num_heads, sequence_length // 2, head_size))
+        attention_mask = np.random.randint(
+            0, 1, size=(sequence_length, sequence_length + sequence_length // 2)
+        ).astype(bool)
+
+        # something is wrong here
+        # query[:,:,:,:] = 1
+        # key[:,:,:,:] = 1
+        value[:, :, :] = 1
+        # value[-1,-1,-1,-1] = 0
+        # past_key[:,:,:,:] = 1
+        past_value[:, :, :, :] = 1
+        # attention_mask[:,:] = False
+
+        inputs = (
+            query.astype(np.float32),
+            key.astype(np.float32),
+            value.astype(np.float32),
+            attention_mask,
+            past_key.astype(np.float32),
+            past_value.astype(np.float32),
+        )
+
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node(
+                        "Attention",
+                        ["query", "key", "value", "mask", "past_key", "past_value"],
+                        ["attn", "present_key", "present_value"],
+                        scale=scale,
+                        q_num_heads=num_heads,
+                        kv_num_heads=kv_num_heads,
+                    ),
+                    # QGA contribops
+                    oh.make_node("Shape", ["query"], ["batch"], end=1),
+                    oh.make_node("Where", ["mask", "zero", "infty"], ["float_mask"]),
+                    oh.make_node("Unsqueeze", ["float_mask", "cst01"], ["expanded_mask"]),
+                    oh.make_node("Shape", ["mask"], ["total_seqlength64"], start=-1),
+                    oh.make_node(
+                        "Cast", ["total_seqlength64"], ["total_seqlength"], to=TensorProto.INT32
+                    ),
+                    oh.make_node("Sub", ["total_seqlength", "one"], ["total_seqlength_1"]),
+                    oh.make_node("Expand", ["total_seqlength_1", "batch"], ["seqlensk"]),
+                    oh.make_node(
+                        "GroupQueryAttention",
+                        [
+                            "query",
+                            "key",
+                            "value",
+                            "past_key",
+                            "past_value",
+                            "seqlensk",
+                            "total_seqlength",
+                            "",
+                            "",
+                            "",
+                            "expanded_mask",
+                        ],
+                        ["attn_gqa", "present_key_gqa", "present_value_gqa"],
+                        do_rotary=0,
+                        num_heads=num_heads,
+                        kv_num_heads=kv_num_heads,
+                        rotary_interleaved=0,
+                        scale=scale,
+                        domain="com.microsoft",
+                    ),
+                ],
+                "gqa",
+                [
+                    _mkv_("query", TFLOAT, ["b", "l", "hs"]),
+                    _mkv_("key", TFLOAT, ["b", "l2", "h2s"]),
+                    _mkv_("value", TFLOAT, ["b", "l2", "h2s"]),
+                    _mkv_("mask", TensorProto.BOOL, ["m1", "m2"]),
+                    _mkv_("past_key", TFLOAT, ["b", "h3", "lp", "s"]),
+                    _mkv_("past_value", TFLOAT, ["b", "h3", "lp", "s"]),
+                ],
+                [
+                    _mkv_("attn", TFLOAT, ["b", "l3", "h3s"]),
+                    _mkv_("present_key", TFLOAT, ["b", "ho", "lo", "s"]),
+                    _mkv_("present_value", TFLOAT, ["b", "ho", "lo", "s"]),
+                    _mkv_("attn_gqa", TFLOAT, ["b", "l3", "h3s"]),
+                    _mkv_("present_key_gqa", TFLOAT, ["b", "ho", "lo", "s"]),
+                    _mkv_("present_value_gqa", TFLOAT, ["b", "ho", "lo", "s"]),
+                ],
+                [
+                    # onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="shape00"),
+                    # onh.from_array(
+                    #    np.array([0, 0, -1, head_size], dtype=np.int64), name="shape0000"
+                    # ),
+                    onh.from_array(np.array([0, 1], dtype=np.int64), name="cst01"),
+                    onh.from_array(np.array([1], dtype=np.int32), name="one"),
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(
+                        np.array([np.finfo(np.float32).min], dtype=np.float32), name="infty"
+                    ),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 24), oh.make_opsetid("com.microsoft", 1)],
+            ir_version=11,
+        )
+        model = shape_inference.infer_shapes(model)
+        check_model(model)
+        self.dump_onnx("test_onnx_gqa_no_rotary_3D.onnx", model)
+
+        sess = self._check_with_ort(model, cpu=True)
         feeds = dict(zip([i.name for i in model.graph.input], inputs))
         got = sess.run(None, feeds)
         self.assertEqualArray(got[1], got[4], atol=1e-5)
