@@ -1317,7 +1317,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         local_attantion_gqa: NodeProto,
     ) -> List[NodeProto]:
         query, _keys, _values, mask = local_attantion_gqa.input[:4]
-        scale = g.get_constant_scalar(local_attantion_gqa.input[4])
+        scale = g.get_constant_scalar(local_attantion_gqa.input[4])  # this scale ** 0.5
         expand_shape = g.get_computed_constant(local_attantion_gqa.input[5])
         repeat = int(expand_shape[2])
         reshape_shape = g.get_computed_constant(local_attantion_gqa.input[6])
@@ -1376,6 +1376,48 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         else:
             float_mask = mask
 
+        # Attention node
+        if g.main_opset < 23:
+            attention_node = g._make_node(
+                "GroupQueryAttention",
+                [
+                    query3D,
+                    keys3D,
+                    values3D,
+                    keys_concat_node.input[0],
+                    values_concat_node.input[0],
+                    seqlensk,
+                    total_length,
+                    "",
+                    "",
+                    "",
+                    expanded_mask,
+                ],
+                [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
+                num_heads=num_heads,
+                kv_num_heads=kv_num_heads,
+                scale=scale**2,
+                do_rotary=0,
+                rotary_interleaved=0,
+                domain="com.microsoft",
+            )
+        else:
+            attention_node = g._make_node(
+                "Attention",
+                [
+                    query3D,
+                    keys3D,
+                    values3D,
+                    expanded_mask,
+                    keys_concat_node.input[0],
+                    values_concat_node.input[0],
+                ],
+                [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
+                q_num_heads=num_heads,
+                kv_num_heads=kv_num_heads,
+                scale=scale**2,
+            )
+
         # We only allowed 2D masks.
         nodes.extend(
             [
@@ -1395,29 +1437,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                 g._make_node("Reshape", [query4D, shape00], [query3D]),
                 g._make_node("Reshape", [keys4D, shape00], [keys3D]),
                 g._make_node("Reshape", [values4D, shape00], [values3D]),
-                g._make_node(
-                    "GroupQueryAttention",
-                    [
-                        query3D,
-                        keys3D,
-                        values3D,
-                        keys_concat_node.input[0],
-                        values_concat_node.input[0],
-                        seqlensk,
-                        total_length,
-                        "",
-                        "",
-                        "",
-                        expanded_mask,
-                    ],
-                    [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
-                    do_rotary=0,
-                    num_heads=num_heads,
-                    kv_num_heads=kv_num_heads,
-                    rotary_interleaved=0,
-                    scale=scale,
-                    domain="com.microsoft",
-                ),
+                attention_node,
                 g._make_node("Reshape", [attn3D, shape0000], [attn4D]),
                 g._make_node(
                     "Transpose", [attn4D], [local_attantion_gqa.output[0]], perm=[0, 2, 1, 3]
