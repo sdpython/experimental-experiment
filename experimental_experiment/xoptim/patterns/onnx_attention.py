@@ -1237,25 +1237,25 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
         sparse_initializers = []
         functions = []
         inputs.append(
-            oh.make_tensor_value_info("key", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
-        )
-        inputs.append(
-            oh.make_tensor_value_info("query", onnx.TensorProto.FLOAT, shape=("a", 2, "c", "d"))
-        )
-        inputs.append(
-            oh.make_tensor_value_info(
-                "past_key", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
-            )
-        )
-        inputs.append(
-            oh.make_tensor_value_info("value", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
+            oh.make_tensor_value_info("key", onnx.TensorProto.FLOAT, shape=("a", 2, "c", 8))
         )
         inputs.append(
             oh.make_tensor_value_info("mask", onnx.TensorProto.BOOL, shape=("a", 1, "c", "c+h"))
         )
         inputs.append(
+            oh.make_tensor_value_info("value", onnx.TensorProto.FLOAT, shape=("a", 2, "c", 8))
+        )
+        inputs.append(
             oh.make_tensor_value_info(
-                "past_value", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
+                "past_key", onnx.TensorProto.FLOAT, shape=("a", 2, "h", 8)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("query", onnx.TensorProto.FLOAT, shape=("a", 4, "c", 8))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_value", onnx.TensorProto.FLOAT, shape=("a", 2, "h", 8)
             )
         )
         nodes.append(
@@ -1278,8 +1278,8 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
             oh.make_node(
                 "Constant",
                 [],
-                ["one"],
-                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+                ["resh"],
+                value=onh.from_array(np.array([0, 4, -1, 8], dtype=np.int64), name="value"),
             )
         )
         nodes.append(oh.make_node("Concat", ["past_key", "key"], ["present_key"], axis=2))
@@ -1288,10 +1288,10 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
         )
         nodes.append(oh.make_node("Unsqueeze", ["present_key", "two"], ["key_u"]))
         nodes.append(oh.make_node("Expand", ["key_u", "t11211"], ["key_ue"]))
-        nodes.append(oh.make_node("Squeeze", ["key_ue", "one"], ["key_ues"]))
+        nodes.append(oh.make_node("Reshape", ["key_ue", "resh"], ["key_ues"]))
         nodes.append(oh.make_node("Unsqueeze", ["present_value", "two"], ["value_u"]))
         nodes.append(oh.make_node("Expand", ["value_u", "t11211"], ["value_ue"]))
-        nodes.append(oh.make_node("Squeeze", ["value_ue", "one"], ["value_ues"]))
+        nodes.append(oh.make_node("Reshape", ["value_ue", "resh"], ["value_ues"]))
         nodes.append(
             oh.make_node(
                 "Attention",
@@ -1302,16 +1302,16 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
         )
         outputs.append(
             oh.make_tensor_value_info(
-                "present_value", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+                "present_value", onnx.TensorProto.FLOAT, shape=("a", 2, "c+h", 8)
             )
         )
         outputs.append(
             oh.make_tensor_value_info(
-                "present_key", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+                "present_key", onnx.TensorProto.FLOAT, shape=("a", 2, "c+h", 8)
             )
         )
         outputs.append(
-            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2, "c_", "d"))
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 4, "c_", 8))
         )
         graph = oh.make_graph(
             nodes,
@@ -1348,25 +1348,25 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
         sparse_initializers = []
         functions = []
         inputs.append(
-            oh.make_tensor_value_info("key", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
-        )
-        inputs.append(
-            oh.make_tensor_value_info("query", onnx.TensorProto.FLOAT, shape=("a", 2, "c", "d"))
-        )
-        inputs.append(
-            oh.make_tensor_value_info(
-                "past_key", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
-            )
-        )
-        inputs.append(
-            oh.make_tensor_value_info("value", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
+            oh.make_tensor_value_info("key", onnx.TensorProto.FLOAT, shape=("a", 2, "c", 8))
         )
         inputs.append(
             oh.make_tensor_value_info("mask", onnx.TensorProto.BOOL, shape=("a", 1, "c", "c+h"))
         )
         inputs.append(
+            oh.make_tensor_value_info("value", onnx.TensorProto.FLOAT, shape=("a", 2, "c", 8))
+        )
+        inputs.append(
             oh.make_tensor_value_info(
-                "past_value", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
+                "past_key", onnx.TensorProto.FLOAT, shape=("a", 2, "h", 8)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("query", onnx.TensorProto.FLOAT, shape=("a", 4, "c", 8))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_value", onnx.TensorProto.FLOAT, shape=("a", 2, "h", 8)
             )
         )
         nodes.append(
@@ -1380,16 +1380,16 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
         )
         outputs.append(
             oh.make_tensor_value_info(
-                "present_value", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+                "present_value", onnx.TensorProto.FLOAT, shape=("a", 2, "c+h", 8)
             )
         )
         outputs.append(
             oh.make_tensor_value_info(
-                "present_key", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+                "present_key", onnx.TensorProto.FLOAT, shape=("a", 2, "c+h", 8)
             )
         )
         outputs.append(
-            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2, "c_", "d"))
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 4, "c_", 8))
         )
         graph = oh.make_graph(
             nodes,
