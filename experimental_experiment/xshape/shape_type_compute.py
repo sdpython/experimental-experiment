@@ -82,6 +82,66 @@ def broadcast_shape(
     return tuple(new_shape)
 
 
+def _set_shape_type_op_any_attention(g: ShapeBuilder, node: NodeProto):
+    "Sets the output shape for node type Attention."
+    if g.has_type(node.input[0]):
+        itype = g.get_type(node.input[0])
+        for i, o in enumerate(node.output):
+            if i != 2 and o:
+                g.set_type(o, itype)
+        if len(node.output) > 2 and node.output[2] and g.has_type(node.input[2]):
+            g.set_type(node.output[2], g.get_type(node.input[2]))
+    if g.has_shape(node.input[0]) and g.has_shape(node.input[1]) and g.has_shape(node.input[2]):
+        rk = g.get_rank(node.input[0])
+        if rk == 4:
+            batch, q_head, seq, _size = g.get_shape(node.input[0])
+            _batch, k_head, _seq, k_size = g.get_shape(node.input[1])
+            _batch, v_head, _seq, v_size = g.get_shape(node.input[2])
+            g.set_shape(node.output[0], (batch, q_head, seq, v_size))
+        else:
+            batch, seq, q_hidden_size = g.get_shape(node.input[0])
+            _batch, _seq, k_hidden_size = g.get_shape(node.input[1])
+            _batch, _seq, v_hidden_size = g.get_shape(node.input[2])
+            q_head = g.get_attribute_with_default(node, "q_num_heads", 1)
+            k_head = v_head = g.get_attribute_with_default(node, "kv_num_heads", 1)
+            _q_size = q_hidden_size // q_head
+            k_size = k_hidden_size // k_head
+            v_size = v_hidden_size // v_head
+            g.set_shape(node.output[0], (batch, seq, q_head * v_size))
+        if len(node.output) > 1 and node.output[1]:
+            batch, _v_head, past_seq, _size = (
+                g.get_shape(node.input[4])
+                if len(node.input) > 4 and node.input[4]
+                else (batch, 0, 0, 0)
+            )
+            total_seq = (
+                f"{seq}+{past_seq}"
+                if isinstance(seq, str) or isinstance(past_seq, str)
+                else (seq + past_seq)
+            )
+            g.set_shape(node.output[1], (batch, k_head, total_seq, k_size))
+        if len(node.output) > 2 and node.output[2]:
+            batch, _v_head, past_seq, _size = (
+                g.get_shape(node.input[5])
+                if len(node.input) > 5 and node.input[5]
+                else (batch, 0, 0, 0)
+            )
+            total_seq = (
+                f"{seq}+{past_seq}"
+                if isinstance(seq, str) or isinstance(past_seq, str)
+                else (seq + past_seq)
+            )
+            g.set_shape(node.output[1], (batch, v_head, total_seq, v_size))
+        if len(node.output) > 3 and node.output[3]:
+            g.set_shape(node.output[1], (batch, q_head, seq, total_seq))
+    if g.has_rank(node.input[0]):
+        rk = g.get_rank(node.input[0])
+        g.set_rank(node.output[0], rk)
+        for o in node.output[1:]:
+            if o:
+                g.set_rank(o, 4)
+
+
 def set_type_shape_reshape(
     g: ShapeBuilder,
     name: str,
@@ -1376,6 +1436,7 @@ def _set_shape_type_op_any_unary(
 
 
 _set_shape_type_op_any_known = {
+    "Attention": _set_shape_type_op_any_attention,
     "BatchNormalization": _set_shape_type_op_any_batch_normalization,
     "Cast": _set_shape_type_op_any_cast,
     "Compress": _set_shape_type_op_any_compress,
@@ -1745,6 +1806,14 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
 
     # to be improved later
     if node.op_type in {"PackedMultiHeadAttention"} and node.domain == "com.microsoft":
+        if self.has_type(node.input[0]):
+            self.set_type(node.output[0], self.get_type(node.input[0]))
+        if self.has_rank(node.input[0]):
+            self.set_rank(node.output[0], self.get_rank(node.input[0]))
+        return None
+
+    # to be improved later
+    if node.op_type in {"GroupQueryAttention"} and node.domain == "com.microsoft":
         if self.has_type(node.input[0]):
             self.set_type(node.output[0], self.get_type(node.input[0]))
         if self.has_rank(node.input[0]):

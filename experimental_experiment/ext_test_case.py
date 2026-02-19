@@ -11,7 +11,7 @@ import re
 import sys
 import unittest
 import warnings
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout, contextmanager
 from io import StringIO
 from timeit import Timer
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -742,6 +742,19 @@ class ExtTestCase(unittest.TestCase):
             self.assertEqual(len(expected), len(got))
             for e, g in zip(expected, got):
                 self.assertEqualArray(e, g, atol=atol, rtol=rtol, msg=msg)
+
+    @contextmanager
+    def set_env(self, varname: str, value: str):
+        """
+        Sets environment variable `varname` to `value`
+        and sets it back.
+        """
+        old_value = os.environ.get(varname, None)
+        os.environ[varname] = value
+        try:
+            yield
+        finally:
+            os.environ[varname] = old_value or ""
 
 
 def get_figure(ax):

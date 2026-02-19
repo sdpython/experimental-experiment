@@ -174,7 +174,7 @@ def aten_scaled_dot_product_attention(
                 query,
                 key,
                 value,
-                attn_mask=attn_mask,
+                attn_mask,
                 scale=scale,
                 # q_num_heads=q1,
                 # kv_num_heads=k1,

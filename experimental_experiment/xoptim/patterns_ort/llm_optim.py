@@ -1,10 +1,11 @@
 import inspect
+import os
 from typing import List, Optional, Sequence
 import numpy as np
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ...helpers import tensor_dtype_to_np_dtype
 from ..patterns_api import MatchResult, PatternOptimization
-from ..patterns.onnx_attention import FunctionAttentionPattern
+from ..patterns.onnx_attention import FunctionAttentionPattern, FunctionAttentionGQAPattern
 from ..patterns.onnx_rotary import FunctionHalfRotaryEmbeddingPattern
 
 
@@ -1098,7 +1099,13 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         print("DOT-SECTION", to_dot(model))
     """
 
-    _prefix_operator_name = f"{FunctionAttentionPattern._operator_name}_to"
+    _prefixes_operator_name = (
+        f"{FunctionAttentionPattern._operator_name}_to",
+        f"{FunctionAttentionPattern._operator_name}sQ_to",
+    )
+
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super().__init__(verbose, priority)
 
     def match(
         self,
@@ -1107,7 +1114,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         matched: List[MatchResult],
     ) -> Optional[MatchResult]:
         if (
-            not node.op_type.startswith(self._prefix_operator_name)
+            not node.op_type.startswith(self._prefixes_operator_name)
             or node.domain != FunctionAttentionPattern._domain_name
             or len(node.input) != 5
         ):
@@ -1179,7 +1186,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         for n in [q_transpose, k_transpose, v_transpose, node]:
-            if g.is_used_more_than_once(n.output[0]):
+            if n and g.is_used_more_than_once(n.output[0]):
                 return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(
@@ -1250,5 +1257,623 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             if not node.name:
                 node.name = g.builder.unique_node_name(
                     f"{self.__class__.__name__}--{attention.name}"
+                )
+        return nodes
+
+
+class GroupQueryAttention3DPattern(PatternOptimization):
+    """
+    Fuse LocalAttention into GroupQueryAttention.
+    ``bias`` is not supported by this kernel on CUDA.
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 24),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_value", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "key", onnx.TensorProto.FLOAT, shape=("batch", 4, "seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "value", onnx.TensorProto.FLOAT, shape=("batch", 4, "seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_key", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "bitwise_not", onnx.TensorProto.BOOL, shape=("seq_length", "total_length")
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init1_s_::RSh1"],
+                value=onh.from_array(
+                    np.array([0.4204482138156891], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s5_1_1_2_1_1"],
+                value=onh.from_array(np.array([1, 1, 2, 1, 1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s4_0_8_-1_32"],
+                value=onh.from_array(np.array([0, 8, -1, 32], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(oh.make_node("Concat", ["past_key", "key"], ["cat"], axis=2))
+        nodes.append(oh.make_node("Concat", ["past_value", "value"], ["cat_1"], axis=2))
+        nodes.append(
+            oh.make_node(
+                "LocalAttentionGQASW_to1",
+                [
+                    "query",
+                    "cat",
+                    "cat_1",
+                    "bitwise_not",
+                    "init1_s_::RSh1",
+                    "init7_s5_1_1_2_1_1",
+                    "init7_s4_0_8_-1_32",
+                ],
+                ["output_0"],
+                domain="intermediate",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "output_0", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "cat_1",
+                onnx.TensorProto.FLOAT,
+                shape=("batch", 4, "past_length+seq_length", 32),
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "cat", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length+seq_length", 32)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 24),
+            oh.make_opsetid("intermediate", 1),
+            oh.make_opsetid("com.microsoft", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_value", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "key", onnx.TensorProto.FLOAT, shape=("batch", 4, "seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "value", onnx.TensorProto.FLOAT, shape=("batch", 4, "seq_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_key", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length", 32)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "bitwise_not", onnx.TensorProto.BOOL, shape=("seq_length", "total_length")
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init1_s1_3"],
+                value=onh.from_array(
+                    np.array([-3.4028234663852886e38], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init1_s1_2"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s2_0_1"],
+                value=onh.from_array(np.array([0, 1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init6_s1_"],
+                value=onh.from_array(np.array([1], dtype=np.int32), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s3_0_0_-1"],
+                value=onh.from_array(np.array([0, 0, -1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init7_s4_0_0_-1_32"],
+                value=onh.from_array(np.array([0, 0, -1, 32], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Where",
+                ["bitwise_not", "init1_s1_3", "init1_s1_2"],
+                ["GroupQueryAttention3DPattern--bitwise_not2"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Shape", ["query"], ["GroupQueryAttention3DPattern--query3"], end=1, start=0
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Unsqueeze",
+                ["GroupQueryAttention3DPattern--bitwise_not2", "init7_s2_0_1"],
+                ["GroupQueryAttention3DPattern--bitwise_not"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Shape",
+                ["GroupQueryAttention3DPattern--bitwise_not2"],
+                ["GroupQueryAttention3DPattern--tl"],
+                start=-1,
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Cast",
+                ["GroupQueryAttention3DPattern--tl"],
+                ["GroupQueryAttention3DPattern--tl2"],
+                to=6,
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Sub",
+                ["GroupQueryAttention3DPattern--tl2", "init6_s1_"],
+                ["GroupQueryAttention3DPattern--tl_1"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Expand",
+                ["GroupQueryAttention3DPattern--tl_1", "GroupQueryAttention3DPattern--query3"],
+                ["GroupQueryAttention3DPattern--sl"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose",
+                ["query"],
+                ["GroupQueryAttention3DPattern--query2"],
+                perm=[0, 2, 1, 3],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose", ["key"], ["GroupQueryAttention3DPattern--cat2"], perm=[0, 2, 1, 3]
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose",
+                ["value"],
+                ["GroupQueryAttention3DPattern--cat_12"],
+                perm=[0, 2, 1, 3],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["GroupQueryAttention3DPattern--query2", "init7_s3_0_0_-1"],
+                ["GroupQueryAttention3DPattern--query"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["GroupQueryAttention3DPattern--cat2", "init7_s3_0_0_-1"],
+                ["GroupQueryAttention3DPattern--cat"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["GroupQueryAttention3DPattern--cat_12", "init7_s3_0_0_-1"],
+                ["GroupQueryAttention3DPattern--cat_1"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "GroupQueryAttention",
+                [
+                    "GroupQueryAttention3DPattern--query",
+                    "GroupQueryAttention3DPattern--cat",
+                    "GroupQueryAttention3DPattern--cat_1",
+                    "past_key",
+                    "past_value",
+                    "GroupQueryAttention3DPattern--sl",
+                    "GroupQueryAttention3DPattern--tl2",
+                    "",
+                    "",
+                    "",
+                    "GroupQueryAttention3DPattern--bitwise_not",
+                ],
+                ["GroupQueryAttention3DPattern--output_0", "cat", "cat_1"],
+                domain="com.microsoft",
+                do_rotary=0,
+                kv_num_heads=4,
+                num_heads=8,
+                rotary_interleaved=0,
+                scale=0.1767767071723938,
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["GroupQueryAttention3DPattern--output_0", "init7_s4_0_0_-1_32"],
+                ["GroupQueryAttention3DPattern--output_02"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose",
+                ["GroupQueryAttention3DPattern--output_02"],
+                ["output_0"],
+                perm=[0, 2, 1, 3],
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "output_0", onnx.TensorProto.FLOAT, shape=("batch", 8, "seq_length", 32)
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "cat_1",
+                onnx.TensorProto.FLOAT,
+                shape=("batch", 4, "past_length+seq_length", 32),
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "cat", onnx.TensorProto.FLOAT, shape=("batch", 4, "past_length+seq_length", 32)
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
+
+    _prefixes_operator_name = (
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}SW_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}SWsQ_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}sQ_to",
+    )
+
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super().__init__(verbose, priority)
+        self._use_attention = os.environ.get("ONNXOPT_ATTENTION", "0") == "1"
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            not node.op_type.startswith(self._prefixes_operator_name)
+            or node.domain != FunctionAttentionGQAPattern._domain_name
+            or len(node.input) != 7
+        ):
+            return self.none()
+        keys, values = node.input[1:3]
+        concats = g.node_before(keys), g.node_before(values)
+        if None in concats:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(concats[0].input) != 2 or len(concats[1].input) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_attribute_with_default(concats[0], "axis", 0) != g.get_attribute_with_default(
+            concats[1], "axis", 0
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if len(node.input) > 3 and node.input[3] and g.has_processor("CUDA"):
+            # GroupQueryAttention does not work with a bias.
+            return self.none()
+
+        if len(node.input) > 3 and (
+            not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) < 2
+        ):
+            # Only 2D ranks allowed.
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.is_constant_scalar(node.input[4]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[5]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(node.input[5])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = tuple(cst)
+        if len(cst) < 4:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if cst[:2] != cst[3:] or cst[:2] != (1, 1):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[6]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape_or_axis = g.get_computed_constant(node.input[6])
+        if shape_or_axis is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if "sQ_to" in node.op_type:
+            # This is an axis for a Squeeze node.
+            if not g.get_shape(node.input[1]):
+                # We need that shape to get kv_num_heads.
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            # This is a shape for a Reshape node.
+            if shape_or_axis[1] <= 0:
+                return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [*concats, node], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        keys_concat_node: NodeProto,
+        values_concat_node: NodeProto,
+        local_attention_gqa: NodeProto,
+    ) -> List[NodeProto]:
+        query, _keys, _values, mask = local_attention_gqa.input[:4]
+        scale = g.get_constant_scalar(local_attention_gqa.input[4])  # this scale ** 0.5
+        expand_shape = g.get_computed_constant(local_attention_gqa.input[5])
+        repeat = int(expand_shape[2])
+        rk_mask = g.get_rank(mask)
+
+        if "sQ_" in local_attention_gqa.op_type:
+            k_shape = g.get_shape(local_attention_gqa.input[1])
+            kv_num_heads = k_shape[1]
+        else:
+            reshape_shape = g.get_computed_constant(local_attention_gqa.input[6])
+            kv_num_heads = reshape_shape[1] // repeat
+
+        num_heads = kv_num_heads * repeat
+        head_size = g.get_shape(query)[-1]
+
+        shape00 = g.make_initializer(
+            "", np.array([0, 0, -1], dtype=np.int64), source=f"{self.__class__.__name__}.00"
+        )
+        shape0000 = g.make_initializer(
+            "",
+            np.array([0, 0, -1, head_size], dtype=np.int64),
+            source=f"{self.__class__.__name__}.00_1",
+        )
+        one32 = g.make_initializer(
+            "", np.array([1], dtype=np.int32), source=f"{self.__class__.__name__}.1i"
+        )
+
+        query3D = g.unique_name(f"{self.__class__.__name__}--{query}")
+        query4D = g.unique_name(f"{self.__class__.__name__}--{query}")
+        keys3D = g.unique_name(f"{self.__class__.__name__}--{_keys}")
+        keys4D = g.unique_name(f"{self.__class__.__name__}--{_keys}")
+        values3D = g.unique_name(f"{self.__class__.__name__}--{_values}")
+        values4D = g.unique_name(f"{self.__class__.__name__}--{_values}")
+        attn3D = g.unique_name(f"{self.__class__.__name__}--{local_attention_gqa.output[0]}")
+        attn4D = g.unique_name(f"{self.__class__.__name__}--{local_attention_gqa.output[0]}")
+
+        seqlensk = g.unique_name(f"{self.__class__.__name__}--sl")
+        total_length64 = g.unique_name(f"{self.__class__.__name__}--tl")
+        total_length = g.unique_name(f"{self.__class__.__name__}--tl")
+        total_length_1 = g.unique_name(f"{self.__class__.__name__}--tl_1")
+
+        batch_shape = g.unique_name(f"{self.__class__.__name__}--{query}")
+
+        nodes = []
+        # mask is not mask if SW
+        switch_where = "SW" in local_attention_gqa.op_type
+        if g.get_type(mask) == TensorProto.BOOL:
+            itype = g.get_type(query)
+            dtype = tensor_dtype_to_np_dtype(itype)
+            zero = g.make_initializer(
+                "", np.array([0], dtype=dtype), source=f"{self.__class__.__name__}.0"
+            )
+            infty = g.make_initializer(
+                "",
+                np.array([np.finfo(dtype).min], dtype=dtype),
+                source=f"{self.__class__.__name__}.inf{itype}",
+            )
+            float_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            nodes.append(
+                g._make_node(
+                    "Where",
+                    [mask, infty, zero] if switch_where else [mask, zero, infty],
+                    [float_mask],
+                )
+            )
+        else:
+            raise NotImplementedError(
+                f"float mask is not implemented yet for pattern {self.__class__.__name__!r}"
+            )
+
+        if rk_mask == 2:
+            expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            cst01 = g.make_initializer(
+                "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
+            )
+            nodes.append(g._make_node("Unsqueeze", [float_mask, cst01], [expanded_mask]))
+        elif rk_mask == 3:
+            expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            cst0 = g.make_initializer(
+                "", np.array([0], dtype=np.int64), source=f"{self.__class__.__name__}.0"
+            )
+            nodes.append(g._make_node("Unsqueeze", [float_mask, cst0], [expanded_mask]))
+        else:
+            expanded_mask = float_mask
+
+        attention_node = g._make_node(
+            "GroupQueryAttention",
+            [
+                query3D,
+                keys3D,
+                values3D,
+                keys_concat_node.input[0],
+                values_concat_node.input[0],
+                seqlensk,
+                total_length,
+                "",
+                "",
+                "",
+                expanded_mask,
+            ],
+            [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
+            num_heads=num_heads,
+            kv_num_heads=kv_num_heads,
+            scale=scale**2,
+            do_rotary=0,
+            rotary_interleaved=0,
+            domain="com.microsoft",
+            doc_string="This operator only accepts batch_size=1 "
+            "and (past_length==0 or seq_length==1).",
+        )
+
+        nodes.extend(
+            [
+                g._make_node("Shape", [query], [batch_shape], start=0, end=1),
+                g._make_node("Shape", [float_mask], [total_length64], start=-1),
+                g._make_node("Cast", [total_length64], [total_length], to=TensorProto.INT32),
+                g._make_node("Sub", [total_length, one32], [total_length_1]),
+                g._make_node("Expand", [total_length_1, batch_shape], [seqlensk]),
+                g._make_node("Transpose", [query], [query4D], perm=[0, 2, 1, 3]),
+                g._make_node(
+                    "Transpose", [keys_concat_node.input[1]], [keys4D], perm=[0, 2, 1, 3]
+                ),
+                g._make_node(
+                    "Transpose", [values_concat_node.input[1]], [values4D], perm=[0, 2, 1, 3]
+                ),
+                g._make_node("Reshape", [query4D, shape00], [query3D]),
+                g._make_node("Reshape", [keys4D, shape00], [keys3D]),
+                g._make_node("Reshape", [values4D, shape00], [values3D]),
+                attention_node,
+                g._make_node("Reshape", [attn3D, shape0000], [attn4D]),
+                g._make_node(
+                    "Transpose", [attn4D], [local_attention_gqa.output[0]], perm=[0, 2, 1, 3]
+                ),
+            ]
+        )
+        for node in nodes:
+            if not node.name:
+                node.name = g.builder.unique_node_name(
+                    f"{self.__class__.__name__}--{local_attention_gqa.name}"
                 )
         return nodes

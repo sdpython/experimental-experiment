@@ -585,7 +585,12 @@ class ReshapeReshapePattern(PatternOptimization):
     ) -> List[NodeProto]:
         if g.is_constant(next_node.input[1]):
             cst2 = g.get_computed_constant(next_node.input[1])
-            if 0 not in cst2:
+            valid = True
+            if 0 in cst2:
+                cst1 = g.get_computed_constant(node.input[1])
+                if cst1 is None or len(cst1) < len(cst2):
+                    valid = False
+            if valid:
                 # The second shape wins it all.
                 return [
                     g.make_node(
