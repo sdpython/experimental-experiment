@@ -1604,6 +1604,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         zz = ref.run(None, feeds)[0]
         self.assertEqualArray(z, zz, atol=1e-4)
 
+    @hide_stdout()
     def test_contrib_rotary_embedding_no_concat_after(self):
         opset = 20
         model = oh.make_model(
@@ -2407,14 +2408,14 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
     @hide_stdout()
     def test_gqa_ort_contribops(self):
         model, inputs, ds, expected = self._get_model_attention()
-        f1 = self.get_dump_file("test_gqa.default.ort.custom.onnx")
+        f1 = self.get_dump_file("test_gqa_ort_contribops.onnx")
         onx = to_onnx(
             model,
             inputs,
             dynamic_shapes=ds,
             filename=f1,
             options=OptimizationOptions(patterns="default+onnxruntime"),
-            target_opset=24,
+            target_opset=22,
         )
         self.assertIn("GroupQueryAttention", [f.op_type for f in onx.graph.node])
         ort = self._check_with_ort(onx, cpu=True)
@@ -2426,16 +2427,15 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
     @hide_stdout()
     def test_gqa_ort_attention(self):
         model, inputs, ds, expected = self._get_model_attention()
-        f1 = self.get_dump_file("test_gqa.default.ort.attention.custom.onnx")
-        with self.set_env("ONNXOPT_ATTENTION", "1"):
-            onx = to_onnx(
-                model,
-                inputs,
-                dynamic_shapes=ds,
-                filename=f1,
-                options=OptimizationOptions(patterns="default+onnxruntime"),
-                target_opset=24,
-            )
+        f1 = self.get_dump_file("test_gqa_ort_24.onnx")
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            filename=f1,
+            options=OptimizationOptions(patterns="default+onnxruntime"),
+            target_opset=24,
+        )
         self.assertIn("Attention", [f.op_type for f in onx.graph.node])
         ort = self._check_with_ort(onx, cpu=True)
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))

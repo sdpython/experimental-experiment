@@ -588,7 +588,7 @@ class ReshapeReshapePattern(PatternOptimization):
             valid = True
             if 0 in cst2:
                 cst1 = g.get_computed_constant(node.input[1])
-                if len(cst1) < len(cst2):
+                if cst1 is None or len(cst1) < len(cst2):
                     valid = False
             if valid:
                 # The second shape wins it all.

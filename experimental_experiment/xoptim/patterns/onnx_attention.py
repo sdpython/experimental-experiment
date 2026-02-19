@@ -1,7 +1,7 @@
 import inspect
 from typing import List, Optional, Tuple, Union
 import numpy as np
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto
 from ...helpers import tensor_dtype_to_np_dtype
 from ...xbuilder import FunctionOptions, GraphBuilder
 from ..patterns_api import MatchResult, PatternOptimization
@@ -1206,3 +1206,164 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
                 use_qga_squeeze=gqa_reshape_v.op_type == "Squeeze",
             )
         return attention_nodes
+
+
+class AttentionGQAPattern(PatternOptimization):
+    """
+    Fuses LocalAttention into Attention.
+    Opset must be >= 23 to do so.
+    """
+
+    _prefixes_operator_name = (
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}SW_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}SWsQ_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}sQ_to",
+    )
+
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super().__init__(verbose, priority)
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if g.main_opset < 23:
+            return self.none()
+        if (
+            (node.op_type != "Attention" or node.domain != "")
+            and (
+                not node.op_type.startswith(self._prefixes_operator_name)
+                or node.domain != FunctionAttentionGQAPattern._domain_name
+                or len(node.input) != 7
+            )
+        ) or len(node.output) > 1:
+            return self.none()
+
+        keys, values = node.input[1:3]
+        concats = g.node_before(keys), g.node_before(values)
+        if None in concats:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if len(concats[0].input) != 2 or len(concats[1].input) != 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_attribute_with_default(concats[0], "axis", 0) != g.get_attribute_with_default(
+            concats[1], "axis", 0
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if len(node.input) > 3 and (
+            not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) < 2
+        ):
+            # Only 2D ranks allowed.
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        if node.op_type == "Attention":
+            # Node Attention, everything should be fine.
+            pass
+        else:
+            # Local function
+            if not g.is_constant_scalar(node.input[4]):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+            if not g.is_constant(node.input[5]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            cst = g.get_computed_constant(node.input[5])
+            if cst is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            cst = tuple(cst)
+            if len(cst) < 4:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if cst[:2] != cst[3:] or cst[:2] != (1, 1):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if not g.is_constant(node.input[6]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            shape_or_axis = g.get_computed_constant(node.input[6])
+            if shape_or_axis is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if "sQ_to" in node.op_type:
+                # This is an axis for a Squeeze node.
+                if not g.get_shape(node.input[1]):
+                    # We need that shape to get kv_num_heads.
+                    return self.none(node, inspect.currentframe().f_lineno)
+            else:
+                # This is a shape for a Reshape node.
+                if shape_or_axis[1] <= 0:
+                    return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [*concats, node], self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        keys_concat_node: NodeProto,
+        values_concat_node: NodeProto,
+        local_attention_gqa: NodeProto,
+    ) -> List[NodeProto]:
+        query, _keys, _values, mask = local_attention_gqa.input[:4]
+        attn_kwargs = {}
+        if local_attention_gqa.op_type == "Attention":
+            scale = g.get_attribute_with_default(local_attention_gqa, "scale", None)
+            if scale is not None:
+                attn_kwargs["scale"] = scale
+        else:
+            scale = g.get_constant_scalar(local_attention_gqa.input[4]) ** 2  # this scale ** 0.5
+            attn_kwargs["scale"] = scale
+
+        # In case we need the 3D pattern.
+        # expand_shape = g.get_computed_constant(local_attention_gqa.input[5])
+        # repeat = int(expand_shape[2])
+        # if "sQ_" in local_attention_gqa.op_type:
+        #    k_shape = g.get_shape(local_attention_gqa.input[1])
+        #    kv_num_heads = k_shape[1]
+        # else:
+        #    reshape_shape = g.get_computed_constant(local_attention_gqa.input[6])
+        #    kv_num_heads = reshape_shape[1] // repeat
+        #
+        # num_heads = kv_num_heads * repeat
+
+        nodes = []
+
+        final_mask = mask
+        if mask:
+            switch_where = "SW" in local_attention_gqa.op_type
+            if switch_where:
+                # mask is not mask if SW
+                if g.get_type(mask) == TensorProto.BOOL:
+                    final_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+                    nodes.append(g._make_node("Not", [mask], [final_mask]))
+                else:
+                    raise NotImplementedError(
+                        f"float mask is not implemented yet for pattern "
+                        f"{self.__class__.__name__!r}"
+                    )
+
+        nodes.extend(
+            [
+                g._make_node(
+                    "Attention",
+                    [
+                        query,
+                        keys_concat_node.input[1],
+                        values_concat_node.input[1],
+                        final_mask,
+                        keys_concat_node.input[0],
+                        values_concat_node.input[0],
+                    ],
+                    [
+                        local_attention_gqa.output[0],
+                        keys_concat_node.output[0],
+                        values_concat_node.output[0],
+                    ],
+                    # q_num_heads=num_heads,
+                    # kv_num_heads=kv_num_heads,
+                    **attn_kwargs,
+                ),
+            ]
+        )
+        for node in nodes:
+            if not node.name:
+                node.name = g.builder.unique_node_name(
+                    f"{self.__class__.__name__}--{local_attention_gqa.name}"
+                )
+        return nodes

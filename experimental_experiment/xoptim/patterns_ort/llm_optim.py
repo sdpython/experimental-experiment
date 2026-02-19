@@ -1264,9 +1264,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
 class GroupQueryAttention3DPattern(PatternOptimization):
     """
     Fuse LocalAttention into GroupQueryAttention.
-    The envrionment variable ``ONNXOPT_ATTENTION=1`` replaces
-    `GroupQueryAttention` into `Attention` from the main
-    opst. Opset must be >= 23 to do so.
+    ``bias`` is not supported by this kernel on CUDA.
 
     .. gdot::
         :script: DOT-SECTION
@@ -1692,7 +1690,13 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) < 2:
+        if len(node.input) > 3 and node.input[3] and g.has_processor("CUDA"):
+            # GroupQueryAttention does not work with a bias.
+            return self.none()
+
+        if len(node.input) > 3 and (
+            not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) < 2
+        ):
             # Only 2D ranks allowed.
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -1817,49 +1821,31 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         else:
             expanded_mask = float_mask
 
-        # Attention node
-        if not self._use_attention or g.main_opset < 23:
-            attention_node = g._make_node(
-                "GroupQueryAttention",
-                [
-                    query3D,
-                    keys3D,
-                    values3D,
-                    keys_concat_node.input[0],
-                    values_concat_node.input[0],
-                    seqlensk,
-                    total_length,
-                    "",
-                    "",
-                    "",
-                    expanded_mask,
-                ],
-                [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
-                num_heads=num_heads,
-                kv_num_heads=kv_num_heads,
-                scale=scale**2,
-                do_rotary=0,
-                rotary_interleaved=0,
-                domain="com.microsoft",
-                doc_string="This operator only accepts batch_size=1 "
-                "and (past_length==0 or seq_length==1).",
-            )
-        else:
-            attention_node = g._make_node(
-                "Attention",
-                [
-                    query3D,
-                    keys3D,
-                    values3D,
-                    expanded_mask,
-                    keys_concat_node.input[0],
-                    values_concat_node.input[0],
-                ],
-                [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
-                q_num_heads=num_heads,
-                kv_num_heads=kv_num_heads,
-                scale=scale**2,
-            )
+        attention_node = g._make_node(
+            "GroupQueryAttention",
+            [
+                query3D,
+                keys3D,
+                values3D,
+                keys_concat_node.input[0],
+                values_concat_node.input[0],
+                seqlensk,
+                total_length,
+                "",
+                "",
+                "",
+                expanded_mask,
+            ],
+            [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
+            num_heads=num_heads,
+            kv_num_heads=kv_num_heads,
+            scale=scale**2,
+            do_rotary=0,
+            rotary_interleaved=0,
+            domain="com.microsoft",
+            doc_string="This operator only accepts batch_size=1 "
+            "and (past_length==0 or seq_length==1).",
+        )
 
         nodes.extend(
             [
