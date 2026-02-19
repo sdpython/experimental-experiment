@@ -1,3 +1,4 @@
+import collections
 import unittest
 import torch
 from onnx_diagnostic.helpers import max_diff
@@ -49,14 +50,42 @@ class TestOptimizationUntrainedModel(ExtTestCase):
         self.assertEqual(
             ["output_0", "present_key_values_key_0", "present_key_values_value_0"], outputs
         )
-        unique_ops = {n.op_type for n in onx.model_proto.graph.node}
+        node_types = [n.op_type for n in onx.model_proto.graph.node]
+        counter = collections.Counter(node_types)
+        unique_ops = set(node_types)
         # self.assertNotIn("HalfRotaryEmbedding", unique_ops)
         # self.assertIn("RotaryEmbedding", unique_ops)
         self.assertIn("RMSNormalization", unique_ops)
         self.assertIn("CausalMaskMulAdd", unique_ops)
         self.assertIn("CausalMask", unique_ops)
         self.assertIn("Attention", unique_ops)
+        self.assertNotIn("Squeeze", unique_ops)  # GQA
         self.assertInOr(("CosSinCache_p1", "CosSinCacheWithRange"), unique_ops)
+
+        expected_counts = {
+            "Add": 3,
+            "And": 1,
+            "Attention": 1,
+            "Cast": 1,
+            "CausalMask": 1,
+            "CausalMaskMulAdd": 1,
+            "Concat": 5,
+            "CosSinCacheWithRange": 1,
+            "Expand": 1,
+            "Gather": 2,
+            "HalfRotaryEmbedding": 2,
+            "MatMul": 8,
+            "Mul": 5,
+            "Reshape": 3,
+            "RMSNormalization": 3,
+            "Shape": 5,
+            "Sigmoid": 1,
+            "Transpose": 2,
+            "Unsqueeze": 6,
+        }
+        self.assertEqual(counter["Expand"], expected_counts["Expand"])
+        self.assertEqual(counter["Transpose"], expected_counts["Transpose"])
+
         sess = onnxruntime.InferenceSession(filename, providers=["CPUExecutionProvider"])
         feeds = make_feeds(sess, b1, use_numpy=True)
         got = sess.run(None, feeds)

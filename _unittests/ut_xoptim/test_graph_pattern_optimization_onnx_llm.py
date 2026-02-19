@@ -1015,6 +1015,166 @@ class TestGraphPatternOptimizationOnnxLLM(ExtTestCase):
         got = ort.run(None, feeds)
         self.assertEqualArray(expected, got[0], 1e-5)
 
+    def test_attention_gqa_bool(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["past_key", "key"], ["present_key"], axis=2),
+                    oh.make_node("Concat", ["past_value", "value"], ["present_value"], axis=2),
+                    oh.make_node("Unsqueeze", ["present_key", "two"], ["key_u"]),
+                    oh.make_node("Expand", ["key_u", "t11211"], ["key_ue"]),
+                    oh.make_node("Squeeze", ["key_ue", "one"], ["key_ues"]),
+                    oh.make_node("Unsqueeze", ["present_value", "two"], ["value_u"]),
+                    oh.make_node("Expand", ["value_u", "t11211"], ["value_ue"]),
+                    oh.make_node("Squeeze", ["value_ue", "one"], ["value_ues"]),
+                    oh.make_node(
+                        "Attention",
+                        ["query", "key_ues", "value_ues", "mask"],
+                        ["Y"],
+                        scale=0.11,
+                    ),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("query", TFLOAT, ["a", 2, "c", "d"]),
+                    oh.make_tensor_value_info("key", TFLOAT, ["a", 1, "c", "d"]),
+                    oh.make_tensor_value_info("value", TFLOAT, ["a", 1, "c", "d"]),
+                    oh.make_tensor_value_info("mask", TBOOL, ["a", 1, "c", "c+h"]),
+                    oh.make_tensor_value_info("past_key", TFLOAT, ["a", 1, "h", "d"]),
+                    oh.make_tensor_value_info("past_value", TFLOAT, ["a", 1, "h", "d"]),
+                ],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 2, "c_", "d"]),
+                    oh.make_tensor_value_info("present_key", TFLOAT, ["a", 1, "c+h", "d"]),
+                    oh.make_tensor_value_info("present_value", TFLOAT, ["a", 1, "c+h", "d"]),
+                ],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), "one"),
+                    onh.from_array(np.array([2], dtype=np.int64), "two"),
+                    onh.from_array(np.array([1, 1, 2, 1, 1], dtype=np.int64), "t11211"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 24)],
+            ir_version=11,
+        )
+        onnx.checker.check_model(model)
+
+        feeds = dict(
+            query=self._range(1, 2, 3, 8),
+            key=self._range(1, 1, 3, 8),
+            value=self._range(1, 1, 3, 8),
+            mask=(self._range(1, 1, 3, 5).astype(int) % 2) == 1,
+            past_key=self._range(1, 1, 2, 8),
+            past_value=self._range(1, 1, 2, 8),
+        )
+        feeds["mask"][0, 0, 0, ::2] = False
+        feeds["mask"][0, 0, 0, 1::2] = True
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="AttentionGQA", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Attention"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected[1], got[1])
+        self.assertEqualArray(expected[2], got[2])
+        self.assertEqualArray(expected[0], got[0])
+
+        # onnxruntime
+        sess = self._check_with_ort(model, cpu=True)
+        sess_opt = self._check_with_ort(opt_onx, cpu=True)
+        expected = sess.run(None, feeds)
+        got = sess_opt.run(None, feeds)
+        self.assertEqualArray(expected[1], got[1])
+        self.assertEqualArray(expected[2], got[2])
+        self.assertEqualArray(expected[0], got[0])
+
+    def test_attention_gqa_float(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Concat", ["past_key", "key"], ["present_key"], axis=2),
+                    oh.make_node("Concat", ["past_value", "value"], ["present_value"], axis=2),
+                    oh.make_node("Unsqueeze", ["present_key", "two"], ["key_u"]),
+                    oh.make_node("Expand", ["key_u", "t11211"], ["key_ue"]),
+                    oh.make_node("Squeeze", ["key_ue", "one"], ["key_ues"]),
+                    oh.make_node("Unsqueeze", ["present_value", "two"], ["value_u"]),
+                    oh.make_node("Expand", ["value_u", "t11211"], ["value_ue"]),
+                    oh.make_node("Squeeze", ["value_ue", "one"], ["value_ues"]),
+                    oh.make_node(
+                        "Attention",
+                        ["query", "key_ues", "value_ues", "mask"],
+                        ["Y"],
+                        scale=0.11,
+                    ),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("query", TFLOAT, ["a", 2, "c", "d"]),
+                    oh.make_tensor_value_info("key", TFLOAT, ["a", 1, "c", "d"]),
+                    oh.make_tensor_value_info("value", TFLOAT, ["a", 1, "c", "d"]),
+                    oh.make_tensor_value_info("mask", TFLOAT, ["a", 1, "c", "c+h"]),
+                    oh.make_tensor_value_info("past_key", TFLOAT, ["a", 1, "h", "d"]),
+                    oh.make_tensor_value_info("past_value", TFLOAT, ["a", 1, "h", "d"]),
+                ],
+                [
+                    oh.make_tensor_value_info("Y", TFLOAT, ["a", 2, "c_", "d"]),
+                    oh.make_tensor_value_info("present_key", TFLOAT, ["a", 1, "c+h", "d"]),
+                    oh.make_tensor_value_info("present_value", TFLOAT, ["a", 1, "c+h", "d"]),
+                ],
+                [
+                    onh.from_array(np.array([1], dtype=np.int64), "one"),
+                    onh.from_array(np.array([2], dtype=np.int64), "two"),
+                    onh.from_array(np.array([1, 1, 2, 1, 1], dtype=np.int64), "t11211"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 24)],
+            ir_version=11,
+        )
+        onnx.checker.check_model(model)
+
+        feeds = dict(
+            query=self._range(1, 2, 3, 8),
+            key=self._range(1, 1, 3, 8),
+            value=self._range(1, 1, 3, 8),
+            mask=np.where((self._range(1, 1, 3, 5).astype(int) % 2) == 1, 0, -np.inf).astype(
+                np.float32
+            ),
+            past_key=self._range(1, 1, 2, 8),
+            past_value=self._range(1, 1, 2, 8),
+        )
+        feeds["mask"][0, 0, 0, ::2] = 0
+        feeds["mask"][0, 0, 0, 1::2] = -np.inf
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        expected = ref.run(None, feeds)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=False,
+            optimization_options=OptimizationOptions(patterns="AttentionGQA", verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Attention"], [n.op_type for n in opt_onx.graph.node])
+        ref = ExtendedReferenceEvaluator(opt_onx)
+        got = ref.run(None, feeds)
+        self.assertEqualArray(expected[1], got[1])
+        self.assertEqualArray(expected[2], got[2])
+        self.assertEqualArray(expected[0], got[0])
+
+        # onnxruntime
+        sess = self._check_with_ort(model, cpu=True)
+        sess_opt = self._check_with_ort(opt_onx, cpu=True)
+        expected = sess.run(None, feeds)
+        got = sess_opt.run(None, feeds)
+        self.assertEqualArray(expected[1], got[1])
+        self.assertEqualArray(expected[2], got[2])
+        self.assertEqualArray(expected[0], got[0])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

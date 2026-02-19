@@ -1186,7 +1186,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
         for n in [q_transpose, k_transpose, v_transpose, node]:
-            if g.is_used_more_than_once(n.output[0]):
+            if n and g.is_used_more_than_once(n.output[0]):
                 return self.none(node, inspect.currentframe().f_lineno)
 
         return MatchResult(

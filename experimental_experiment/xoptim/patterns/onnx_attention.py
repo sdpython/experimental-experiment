@@ -820,7 +820,68 @@ class FunctionAttentionPattern(PatternOptimization):
         ), f"The function {cls._domain_name}.{name} was not added to the builder."
 
 
-class FunctionAttentionGQAPattern(FunctionAttentionPattern):
+class _CommonGQAMethods:
+    def _match_keys_or_values(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        keys_or_values: str,
+    ) -> Optional[Tuple[NodeProto, NodeProto, NodeProto, Tuple[Tuple[Union[int, str], ...]]]]:
+
+        gqa_reshape = g.node_before(keys_or_values)
+        if (
+            not gqa_reshape
+            or gqa_reshape.op_type not in ("Reshape", "Squeeze")
+            or gqa_reshape.domain != ""
+            or g.main_opset < 18
+        ):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        gqa_expand = g.node_before(gqa_reshape.input[0])
+        if gqa_expand.op_type != "Expand":
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        gqa_unsqueeze = g.node_before(gqa_expand.input[0])
+        if gqa_unsqueeze.op_type != "Unsqueeze":
+            return self.none(node, inspect.currentframe().f_lineno)
+        #
+        if not g.is_constant(gqa_expand.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        exp_shape = g.get_computed_constant(gqa_expand.input[1])
+        if tuple(exp_shape[:2]) != (1, 1) or tuple(exp_shape[3:]) != (1, 1):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(gqa_unsqueeze.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        unsq_shape = g.get_computed_constant(gqa_unsqueeze.input[1])
+        if tuple(unsq_shape) != (2,):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(gqa_reshape.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        resh_shape = g.get_computed_constant(gqa_reshape.input[1])
+        if gqa_reshape.op_type == "Reshape":
+            if resh_shape.size != 4:
+                return self.none(node, inspect.currentframe().f_lineno)
+        elif gqa_reshape.op_type == "Squeeze":
+            if resh_shape.size != 1:
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        if not g.has_shape(gqa_unsqueeze.input[0]) or not g.has_shape(gqa_reshape.output[0]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        shape1 = g.get_shape_renamed(gqa_unsqueeze.input[0])
+        shape2 = g.get_shape_renamed(gqa_reshape.output[0])
+        if shape1[0] != shape2[0] or shape1[2] != shape2[2] or shape1[3] != shape2[3]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        return (
+            gqa_unsqueeze,
+            gqa_expand,
+            gqa_reshape,
+            (tuple(unsq_shape), tuple(exp_shape), tuple(resh_shape)),
+        )
+
+
+class FunctionAttentionGQAPattern(FunctionAttentionPattern, _CommonGQAMethods):
     """
     Merges onnx nodes equivalent to repeat interleave followed by function
     ``LocalAttention`` into ``LocalAttentionGQA`` (GQA for GroupQueryAttention).
@@ -1054,65 +1115,6 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
 
     _operator_gqa_name = f"{FunctionAttentionPattern._operator_name}GQA"
 
-    def _match_keys_or_values(
-        self,
-        g: "GraphBuilderPatternOptimization",  # noqa: F821
-        node: NodeProto,
-        keys_or_values: str,
-    ) -> Optional[Tuple[NodeProto, NodeProto, NodeProto, Tuple[Tuple[Union[int, str], ...]]]]:
-
-        gqa_reshape = g.node_before(keys_or_values)
-        if (
-            not gqa_reshape
-            or gqa_reshape.op_type not in ("Reshape", "Squeeze")
-            or gqa_reshape.domain != ""
-            or g.main_opset < 18
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        gqa_expand = g.node_before(gqa_reshape.input[0])
-        if gqa_expand.op_type != "Expand":
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        gqa_unsqueeze = g.node_before(gqa_expand.input[0])
-        if gqa_unsqueeze.op_type != "Unsqueeze":
-            return self.none(node, inspect.currentframe().f_lineno)
-        #
-        if not g.is_constant(gqa_expand.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        exp_shape = g.get_computed_constant(gqa_expand.input[1])
-        if tuple(exp_shape[:2]) != (1, 1) or tuple(exp_shape[3:]) != (1, 1):
-            return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant(gqa_unsqueeze.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        unsq_shape = g.get_computed_constant(gqa_unsqueeze.input[1])
-        if tuple(unsq_shape) != (2,):
-            return self.none(node, inspect.currentframe().f_lineno)
-        if not g.is_constant(gqa_reshape.input[1]):
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        resh_shape = g.get_computed_constant(gqa_reshape.input[1])
-        if gqa_reshape.op_type == "Reshape":
-            if resh_shape.size != 4:
-                return self.none(node, inspect.currentframe().f_lineno)
-        elif gqa_reshape.op_type == "Squeeze":
-            if resh_shape.size != 1:
-                return self.none(node, inspect.currentframe().f_lineno)
-
-        if not g.has_shape(gqa_unsqueeze.input[0]) or not g.has_shape(gqa_reshape.output[0]):
-            return self.none(node, inspect.currentframe().f_lineno)
-        shape1 = g.get_shape_renamed(gqa_unsqueeze.input[0])
-        shape2 = g.get_shape_renamed(gqa_reshape.output[0])
-        if shape1[0] != shape2[0] or shape1[2] != shape2[2] or shape1[3] != shape2[3]:
-            return self.none(node, inspect.currentframe().f_lineno)
-
-        return (
-            gqa_unsqueeze,
-            gqa_expand,
-            gqa_reshape,
-            (tuple(unsq_shape), tuple(exp_shape), tuple(resh_shape)),
-        )
-
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -1149,6 +1151,7 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
         if resh_shape_v != resh_shape:
             return self.none(node, inspect.currentframe().f_lineno)
 
+        # Final verification, let's check none the nodes is used outside the pattern.
         nodes = [
             gqa_unsqueeze,
             gqa_expand,
@@ -1159,7 +1162,7 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
             node,
         ]
         for n in nodes[:-1]:
-            if g.is_used_more_than_once(n.output[0]):
+            if n and g.is_used_more_than_once(n.output[0]):
                 return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, nodes, self.apply)
 
@@ -1208,10 +1211,197 @@ class FunctionAttentionGQAPattern(FunctionAttentionPattern):
         return attention_nodes
 
 
-class AttentionGQAPattern(PatternOptimization):
+class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
     """
     Fuses LocalAttention into Attention.
     Opset must be >= 23 to do so.
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 24),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("key", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("query", onnx.TensorProto.FLOAT, shape=("a", 2, "c", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_key", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("value", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("mask", onnx.TensorProto.BOOL, shape=("a", 1, "c", "c+h"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_value", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["two"],
+                value=onh.from_array(np.array([2], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["t11211"],
+                value=onh.from_array(np.array([1, 1, 2, 1, 1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["one"],
+                value=onh.from_array(np.array([1], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(oh.make_node("Concat", ["past_key", "key"], ["present_key"], axis=2))
+        nodes.append(
+            oh.make_node("Concat", ["past_value", "value"], ["present_value"], axis=2)
+        )
+        nodes.append(oh.make_node("Unsqueeze", ["present_key", "two"], ["key_u"]))
+        nodes.append(oh.make_node("Expand", ["key_u", "t11211"], ["key_ue"]))
+        nodes.append(oh.make_node("Squeeze", ["key_ue", "one"], ["key_ues"]))
+        nodes.append(oh.make_node("Unsqueeze", ["present_value", "two"], ["value_u"]))
+        nodes.append(oh.make_node("Expand", ["value_u", "t11211"], ["value_ue"]))
+        nodes.append(oh.make_node("Squeeze", ["value_ue", "one"], ["value_ues"]))
+        nodes.append(
+            oh.make_node(
+                "Attention",
+                ["query", "key_ues", "value_ues", "mask"],
+                ["Y"],
+                scale=0.10999999940395355,
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "present_value", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "present_key", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2, "c_", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 24),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info("key", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("query", onnx.TensorProto.FLOAT, shape=("a", 2, "c", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_key", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("value", onnx.TensorProto.FLOAT, shape=("a", 1, "c", "d"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info("mask", onnx.TensorProto.BOOL, shape=("a", 1, "c", "c+h"))
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "past_value", onnx.TensorProto.FLOAT, shape=("a", 1, "h", "d")
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Attention",
+                ["query", "key", "value", "mask", "past_key", "past_value"],
+                ["Y", "present_key", "present_value"],
+                is_causal=0,
+                scale=0.10999999940395355,
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "present_value", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "present_key", onnx.TensorProto.FLOAT, shape=("a", 1, "c+h", "d")
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2, "c_", "d"))
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     _prefixes_operator_name = (
@@ -1242,19 +1432,6 @@ class AttentionGQAPattern(PatternOptimization):
         ) or len(node.output) > 1:
             return self.none()
 
-        keys, values = node.input[1:3]
-        concats = g.node_before(keys), g.node_before(values)
-        if None in concats:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if len(concats[0].input) != 2 or len(concats[1].input) != 2:
-            return self.none(node, inspect.currentframe().f_lineno)
-        if concats[0].op_type != "Concat" or concats[1].op_type != "Concat":
-            return self.none(node, inspect.currentframe().f_lineno)
-        if g.get_attribute_with_default(concats[0], "axis", 0) != g.get_attribute_with_default(
-            concats[1], "axis", 0
-        ):
-            return self.none(node, inspect.currentframe().f_lineno)
-
         if len(node.input) > 3 and (
             not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) < 2
         ):
@@ -1262,9 +1439,64 @@ class AttentionGQAPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         if node.op_type == "Attention":
-            # Node Attention, everything should be fine.
-            pass
+            if not g.has_rank(node.input[0]) and g.get_rank(node.input[0]) != 4:
+                # Only 4D Attention
+                return self.none(node, inspect.currentframe().f_lineno)
+            # Node Attention, we still need to check if there is some GQA node.
+            gqa_keys = self._match_keys_or_values(g, node, node.input[1])
+            if not gqa_keys:
+                return self.none(node, inspect.currentframe().f_lineno)
+            gqa_values = self._match_keys_or_values(g, node, node.input[2])
+            if not gqa_values:
+                return self.none(node, inspect.currentframe().f_lineno)
+            gqa_unsqueeze, gqa_expand, gqa_reshape, shapes = gqa_keys
+            gqa_unsqueeze_v, gqa_expand_v, gqa_reshape_v, shapes_v = gqa_values
+            unsq_shape, exp_shape, resh_shape = shapes
+            unsq_shape_v, exp_shape_v, resh_shape_v = shapes_v
+
+            if unsq_shape_v != unsq_shape:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if exp_shape != exp_shape_v:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if resh_shape_v != resh_shape:
+                return self.none(node, inspect.currentframe().f_lineno)
+            gqa_nodes = [
+                gqa_unsqueeze,
+                gqa_expand,
+                gqa_reshape,
+                gqa_unsqueeze_v,
+                gqa_expand_v,
+                gqa_reshape_v,
+            ]
+
+            concats = g.node_before(gqa_unsqueeze.input[0]), g.node_before(
+                gqa_unsqueeze_v.input[0]
+            )
+            if None in concats:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if len(concats[0].input) != 2 or len(concats[1].input) != 2:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if concats[0].op_type != "Concat" or concats[1].op_type != "Concat":
+                return self.none(node, inspect.currentframe().f_lineno)
+            if g.get_attribute_with_default(
+                concats[0], "axis", 0
+            ) != g.get_attribute_with_default(concats[1], "axis", 0):
+                return self.none(node, inspect.currentframe().f_lineno)
+
         else:
+            keys, values = node.input[1:3]
+            concats = g.node_before(keys), g.node_before(values)
+            if None in concats:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if len(concats[0].input) != 2 or len(concats[1].input) != 2:
+                return self.none(node, inspect.currentframe().f_lineno)
+            if concats[0].op_type != "Concat" or concats[1].op_type != "Concat":
+                return self.none(node, inspect.currentframe().f_lineno)
+            if g.get_attribute_with_default(
+                concats[0], "axis", 0
+            ) != g.get_attribute_with_default(concats[1], "axis", 0):
+                return self.none(node, inspect.currentframe().f_lineno)
+
             # Local function
             if not g.is_constant_scalar(node.input[4]):
                 return self.none(node, inspect.currentframe().f_lineno)
@@ -1293,14 +1525,27 @@ class AttentionGQAPattern(PatternOptimization):
                 # This is a shape for a Reshape node.
                 if shape_or_axis[1] <= 0:
                     return self.none(node, inspect.currentframe().f_lineno)
-        return MatchResult(self, [*concats, node], self.apply)
+            gqa_nodes = [None for _ in range(6)]
+
+        # Final verification, let's check none the nodes is used outside the pattern.
+        nodes = [*concats, *gqa_nodes, node]
+        for n in nodes[2:-1]:
+            if n and g.is_used_more_than_once(n.output[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, nodes, self.apply, insert_at=node)
 
     def apply(
         self,
         g: "GraphBuilder",  # noqa: F821
         keys_concat_node: NodeProto,
         values_concat_node: NodeProto,
-        local_attention_gqa: NodeProto,
+        gqa_unsqueeze: Optional[NodeProto],
+        gqa_expand: Optional[NodeProto],
+        gqa_reshape: Optional[NodeProto],
+        gqa_unsqueeze_v: Optional[NodeProto],
+        gqa_expand_v: Optional[NodeProto],
+        gqa_reshape_v: Optional[NodeProto],
+        local_attention_gqa: Optional[NodeProto],
     ) -> List[NodeProto]:
         query, _keys, _values, mask = local_attention_gqa.input[:4]
         attn_kwargs = {}
@@ -1308,6 +1553,9 @@ class AttentionGQAPattern(PatternOptimization):
             scale = g.get_attribute_with_default(local_attention_gqa, "scale", None)
             if scale is not None:
                 attn_kwargs["scale"] = scale
+            attn_kwargs["is_causal"] = g.get_attribute_with_default(
+                local_attention_gqa, "is_causal", 0
+            )
         else:
             scale = g.get_constant_scalar(local_attention_gqa.input[4]) ** 2  # this scale ** 0.5
             attn_kwargs["scale"] = scale
