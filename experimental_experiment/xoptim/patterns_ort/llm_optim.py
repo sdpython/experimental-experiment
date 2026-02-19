@@ -1661,6 +1661,8 @@ class GroupQueryAttention3DPattern(PatternOptimization):
     _prefixes_operator_name = (
         f"{FunctionAttentionGQAPattern._operator_gqa_name}SW_to",
         f"{FunctionAttentionGQAPattern._operator_gqa_name}SWsQ_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}sQ_to",
     )
 
     def __init__(self, verbose: int = 0, priority: int = 2):
@@ -1690,7 +1692,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         ):
             return self.none(node, inspect.currentframe().f_lineno)
 
-        if not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) != 2:
+        if not g.has_rank(node.input[3]) or g.get_rank(node.input[3]) < 2:
             # Only 2D ranks allowed.
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -1708,9 +1710,18 @@ class GroupQueryAttention3DPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if not g.is_constant(node.input[6]):
             return self.none(node, inspect.currentframe().f_lineno)
-        shape = g.get_computed_constant(node.input[6])
-        if shape[1] <= 0:
+        shape_or_axis = g.get_computed_constant(node.input[6])
+        if shape_or_axis is None:
             return self.none(node, inspect.currentframe().f_lineno)
+        if "sQ_to" in node.op_type:
+            # This is an axis for a Squeeze node.
+            if not g.get_shape(node.input[1]):
+                # We need that shape to get kv_num_heads.
+                return self.none(node, inspect.currentframe().f_lineno)
+        else:
+            # This is a shape for a Reshape node.
+            if shape_or_axis[1] <= 0:
+                return self.none(node, inspect.currentframe().f_lineno)
         return MatchResult(self, [*concats, node], self.apply)
 
     def apply(
@@ -1718,15 +1729,21 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         g: "GraphBuilder",  # noqa: F821
         keys_concat_node: NodeProto,
         values_concat_node: NodeProto,
-        local_attantion_gqa: NodeProto,
+        local_attention_gqa: NodeProto,
     ) -> List[NodeProto]:
-        query, _keys, _values, mask = local_attantion_gqa.input[:4]
-        scale = g.get_constant_scalar(local_attantion_gqa.input[4])  # this scale ** 0.5
-        expand_shape = g.get_computed_constant(local_attantion_gqa.input[5])
+        query, _keys, _values, mask = local_attention_gqa.input[:4]
+        scale = g.get_constant_scalar(local_attention_gqa.input[4])  # this scale ** 0.5
+        expand_shape = g.get_computed_constant(local_attention_gqa.input[5])
         repeat = int(expand_shape[2])
-        reshape_shape = g.get_computed_constant(local_attantion_gqa.input[6])
+        rk_mask = g.get_rank(mask)
 
-        kv_num_heads = reshape_shape[1] // repeat
+        if "sQ_" in local_attention_gqa.op_type:
+            k_shape = g.get_shape(local_attention_gqa.input[1])
+            kv_num_heads = k_shape[1]
+        else:
+            reshape_shape = g.get_computed_constant(local_attention_gqa.input[6])
+            kv_num_heads = reshape_shape[1] // repeat
+
         num_heads = kv_num_heads * repeat
         head_size = g.get_shape(query)[-1]
 
@@ -1738,9 +1755,6 @@ class GroupQueryAttention3DPattern(PatternOptimization):
             np.array([0, 0, -1, head_size], dtype=np.int64),
             source=f"{self.__class__.__name__}.00_1",
         )
-        cst01 = g.make_initializer(
-            "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
-        )
         one32 = g.make_initializer(
             "", np.array([1], dtype=np.int32), source=f"{self.__class__.__name__}.1i"
         )
@@ -1751,8 +1765,8 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         keys4D = g.unique_name(f"{self.__class__.__name__}--{_keys}")
         values3D = g.unique_name(f"{self.__class__.__name__}--{_values}")
         values4D = g.unique_name(f"{self.__class__.__name__}--{_values}")
-        attn3D = g.unique_name(f"{self.__class__.__name__}--{local_attantion_gqa.output[0]}")
-        attn4D = g.unique_name(f"{self.__class__.__name__}--{local_attantion_gqa.output[0]}")
+        attn3D = g.unique_name(f"{self.__class__.__name__}--{local_attention_gqa.output[0]}")
+        attn4D = g.unique_name(f"{self.__class__.__name__}--{local_attention_gqa.output[0]}")
 
         seqlensk = g.unique_name(f"{self.__class__.__name__}--sl")
         total_length64 = g.unique_name(f"{self.__class__.__name__}--tl")
@@ -1760,9 +1774,10 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         total_length_1 = g.unique_name(f"{self.__class__.__name__}--tl_1")
 
         batch_shape = g.unique_name(f"{self.__class__.__name__}--{query}")
-        expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
 
         nodes = []
+        # mask is not mask if SW
+        switch_where = "SW" in local_attention_gqa.op_type
         if g.get_type(mask) == TensorProto.BOOL:
             itype = g.get_type(query)
             dtype = tensor_dtype_to_np_dtype(itype)
@@ -1775,10 +1790,32 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                 source=f"{self.__class__.__name__}.inf{itype}",
             )
             float_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
-            # mask is not mask
-            nodes.append(g._make_node("Where", [mask, infty, zero], [float_mask]))
+            nodes.append(
+                g._make_node(
+                    "Where",
+                    [mask, infty, zero] if switch_where else [mask, zero, infty],
+                    [float_mask],
+                )
+            )
         else:
-            float_mask = mask
+            raise NotImplementedError(
+                f"float mask is not implemented yet for pattern {self.__class__.__name__!r}"
+            )
+
+        if rk_mask == 2:
+            expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            cst01 = g.make_initializer(
+                "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
+            )
+            nodes.append(g._make_node("Unsqueeze", [float_mask, cst01], [expanded_mask]))
+        elif rk_mask == 3:
+            expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            cst0 = g.make_initializer(
+                "", np.array([0], dtype=np.int64), source=f"{self.__class__.__name__}.0"
+            )
+            nodes.append(g._make_node("Unsqueeze", [float_mask, cst0], [expanded_mask]))
+        else:
+            expanded_mask = float_mask
 
         # Attention node
         if not self._use_attention or g.main_opset < 23:
@@ -1804,6 +1841,8 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                 do_rotary=0,
                 rotary_interleaved=0,
                 domain="com.microsoft",
+                doc_string="This operator only accepts batch_size=1 "
+                "and (past_length==0 or seq_length==1).",
             )
         else:
             attention_node = g._make_node(
@@ -1822,11 +1861,9 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                 scale=scale**2,
             )
 
-        # We only allowed 2D masks.
         nodes.extend(
             [
                 g._make_node("Shape", [query], [batch_shape], start=0, end=1),
-                g._make_node("Unsqueeze", [float_mask, cst01], [expanded_mask]),
                 g._make_node("Shape", [float_mask], [total_length64], start=-1),
                 g._make_node("Cast", [total_length64], [total_length], to=TensorProto.INT32),
                 g._make_node("Sub", [total_length, one32], [total_length_1]),
@@ -1844,13 +1881,13 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                 attention_node,
                 g._make_node("Reshape", [attn3D, shape0000], [attn4D]),
                 g._make_node(
-                    "Transpose", [attn4D], [local_attantion_gqa.output[0]], perm=[0, 2, 1, 3]
+                    "Transpose", [attn4D], [local_attention_gqa.output[0]], perm=[0, 2, 1, 3]
                 ),
             ]
         )
         for node in nodes:
             if not node.name:
                 node.name = g.builder.unique_node_name(
-                    f"{self.__class__.__name__}--{local_attantion_gqa.name}"
+                    f"{self.__class__.__name__}--{local_attention_gqa.name}"
                 )
         return nodes
