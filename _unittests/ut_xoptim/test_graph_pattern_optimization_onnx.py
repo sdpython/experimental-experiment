@@ -7309,12 +7309,45 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["NotWhere"], verbose=0),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.dump_onnx("test_swap_range_add.onnx", opt_onx)
         self.assertEqual(["Where"], [n.op_type for n in opt_onx.graph.node])
         self.assertEqual(0, len(opt_onx.graph.initializer))
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
+
+    def test_rms_normalization_mul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("RMSNormalization", ["X", "scale"], ["xs"]),
+                    oh.make_node("Mul", ["xs", "scale2"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 2])],
+                [_mkv_("Y", TFLOAT, ["a", 2])],
+                [
+                    onh.from_array(np.array([3, 4], dtype=np.float32), name="scale"),
+                    onh.from_array(np.array([3, 4], dtype=np.float32), name="scale2"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 23)],
+            ir_version=10,
+        )
+        feeds = {"X": np.array([[0, 1], [2, 3]], dtype=np.float32)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["RMSNormalizationMul"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["RMSNormalization"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-6)
 
 
 if __name__ == "__main__":

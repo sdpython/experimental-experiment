@@ -50,6 +50,7 @@ from .onnx_layer_normalization import (
     LayerNormalizationPattern,
     LayerNormalizationScalePattern,
     RMSNormalizationPattern,
+    RMSNormalizationMulPattern,
 )
 from .onnx_mul import (
     MulMulMulScalarPattern,
@@ -254,5 +255,6 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         FunctionCosSinCachePattern(verbose=verbose),
         FunctionHalfRotaryEmbeddingPattern(verbose=verbose),
         RMSNormalizationPattern(verbose=verbose),
+        RMSNormalizationMulPattern(verbose=verbose),
         AttentionGQAPattern(verbose=verbose),
     ]
