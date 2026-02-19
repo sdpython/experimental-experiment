@@ -1937,7 +1937,18 @@ class RMSNormalizationMulPattern(PatternOptimization):
         )
         cst1 = g.get_computed_constant(rms_node.input[1])
         cst2 = g.get_computed_constant(other)
-        cst = cst1 * cst2
+        if type(cst1) is type(cst2):
+            cst = cst1 * cst2
+        else:
+            if isinstance(cst1, np.ndarray):
+                import torch
+
+                cst1 = torch.from_numpy(cst1)
+            else:
+                import torch
+
+                cst2 = torch.from_numpy(cst2)
+            cst = cst1 * cst2
         cst_init = g.make_initializer("", cst, source=f"{self.__class__.__name__}.cst")
         layer = g.make_node(
             "RMSNormalization",
