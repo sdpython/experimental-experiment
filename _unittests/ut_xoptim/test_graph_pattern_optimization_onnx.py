@@ -12,6 +12,7 @@ import itertools
 import os
 import unittest
 import pprint
+from typing import Optional
 import numpy as np
 import onnx
 from onnx import (
@@ -56,6 +57,13 @@ _mkv_ = oh.make_tensor_value_info
 
 
 class TestGraphPatternOptimization(ExtTestCase):
+    def _range(self, *shape, bias: Optional[float] = None):
+        n = np.prod(shape)
+        x = np.arange(n).astype(np.float32) / n
+        if bias:
+            x = x + bias
+        return x.reshape(tuple(shape)).astype(np.float32)
+
     def test_get_pattern_list(self):
         res = get_pattern_list(negative_list=["Cast"])
         names = set(r.__class__.__name__ for r in res)
