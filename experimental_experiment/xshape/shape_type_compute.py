@@ -90,6 +90,8 @@ def _set_shape_type_op_any_attention(g: ShapeBuilder, node: NodeProto):
             if i != 2 and o:
                 g.set_type(o, itype)
         if len(node.output) > 2 and node.output[2] and g.has_type(node.input[2]):
+            print("********", node.input, [g.has_type(i) for i in node.input])
+            print("********", node.output, [g.has_type(i) for i in node.output])
             g.set_type(node.output[2], g.get_type(node.input[2]))
     if g.has_shape(node.input[0]) and g.has_shape(node.input[1]) and g.has_shape(node.input[2]):
         rk = g.get_rank(node.input[0])

@@ -1248,6 +1248,8 @@ class AttentionGQAPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
         if len(concats[0].input) != 2 or len(concats[1].input) != 2:
             return self.none(node, inspect.currentframe().f_lineno)
+        if concats[0].op_type != "Concat" or concats[1].op_type != "Concat":
+            return self.none(node, inspect.currentframe().f_lineno)
         if g.get_attribute_with_default(concats[0], "axis", 0) != g.get_attribute_with_default(
             concats[1], "axis", 0
         ):
