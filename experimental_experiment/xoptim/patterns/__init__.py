@@ -108,7 +108,7 @@ from .onnx_unsqueeze import (
     SqueezeUnsqueezePattern,
     UnsqueezeUnsqueezePattern,
 )
-from .onnx_where import WhereAddPattern
+from .onnx_where import NotWherePattern, WhereAddPattern
 
 
 class AlmostDoNothingPattern(PatternOptimization):
@@ -189,6 +189,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         LayerNormalizationScalePattern(verbose=verbose),
         LeakyReluPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
+        NotWherePattern(verbose=verbose),
         ReduceArgTopKPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReduceSumNormalizePattern(verbose=verbose),

@@ -50,6 +50,7 @@ from experimental_experiment.xoptim import get_pattern_list, remove_constants_fo
 from experimental_experiment.helpers import pretty_onnx, enumerate_nodes
 from experimental_experiment.xoptim.patterns import MatMulAddPattern
 
+TBOOL = TensorProto.BOOL
 TFLOAT = TensorProto.FLOAT
 TFLOAT16 = TensorProto.FLOAT16
 TINT64 = TensorProto.INT64
@@ -7275,6 +7276,45 @@ class TestGraphPatternOptimization(ExtTestCase):
                 opt_ref = self._check_with_ort(opt_onx)
                 got = opt_ref.run(None, feeds)[0]
                 self.assertEqualArray(expected, got)
+
+    def test_not_where(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Not", ["X"], ["nx"]),
+                    oh.make_node("Where", ["nx", "A", "B"], ["Y"]),
+                ],
+                "dummy",
+                [
+                    _mkv_("X", TBOOL, ["a", "b"]),
+                    _mkv_("A", TINT64, ["a", "b"]),
+                    _mkv_("B", TINT64, ["a", "b"]),
+                ],
+                [_mkv_("Y", TINT64, [])],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        feeds = {
+            "X": np.array([[True, False], [True, False]]),
+            "A": np.array([[1, 2], [3, 4]], dtype=np.int64),
+            "B": np.array([[-1, -2], [-3, -4]], dtype=np.int64),
+        }
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["NotWhere"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_swap_range_add.onnx", opt_onx)
+        self.assertEqual(["Where"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
 
 
 if __name__ == "__main__":
