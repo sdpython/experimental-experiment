@@ -1350,11 +1350,15 @@ class NotNotPattern(PatternOptimization):
     def apply(
         self, g: "GraphBuilder", not_before: NodeProto, not_after: NodeProto  # noqa: F821
     ) -> List[NodeProto]:
+        pre_nodes = []
+        if g.is_used_more_than_once(not_before.output[0]):
+            pre_nodes.append(not_before)
         return [
+            *pre_nodes,
             g.make_node(
                 "Identity",
                 [not_before.input[0]],
                 [not_after.output[0]],
                 name=f"{self.__class__.__name__}--{not_after.name}",
-            )
+            ),
         ]
