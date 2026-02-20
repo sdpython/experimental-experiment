@@ -510,13 +510,16 @@ class FunctionAttentionPattern(PatternOptimization):
             # Where(mask, -inf, X)
             add_node = None
             where_node = node_before
-            if not g.is_constant_scalar(where_node.input[1]):
+            if not g.is_constant_scalar(where_node.input[1]) and not g.is_constant_scalar(
+                where_node.input[2]
+            ):
                 return self.none(node, inspect.currentframe().f_lineno)
             cst_zero = None
-            cst_inf = g.get_constant_scalar(where_node.input[1])
+            inf_index = 1 if g.is_constant_scalar(where_node.input[1]) else 2
+            cst_inf = g.get_constant_scalar(where_node.input[inf_index])
             if not np.isinf(cst_inf) or cst_inf > 0:
                 return self.none(node, inspect.currentframe().f_lineno)
-            mat_qk = g.node_before(where_node.input[2])
+            mat_qk = g.node_before(where_node.input[3 - inf_index])
             if mat_qk is None or mat_qk.op_type not in ("MatMul", "FusedMatMul"):
                 return self.none(node, inspect.currentframe().f_lineno)
         else:
@@ -708,8 +711,12 @@ class FunctionAttentionPattern(PatternOptimization):
     ) -> List[NodeProto]:
         itype = g.get_type(mul1.input[1])
         suffix = []
-        if add_node is None:
+
+        switch_where = g.is_constant(where_node.input[1])
+
+        if switch_where:
             suffix.append("SW")
+
         if transpose is None:
             assert (
                 mat_qk.op_type == "FusedMatMul"
@@ -748,7 +755,7 @@ class FunctionAttentionPattern(PatternOptimization):
                 name,
                 itype=itype,
                 gqa=gqa,
-                switch_where=add_node is None,
+                switch_where=switch_where,
                 use_qga_squeeze=gqa_reshape and gqa_reshape.op_type == "Squeeze",
             )
         return nodes_to_return
