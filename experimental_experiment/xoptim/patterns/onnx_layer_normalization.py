@@ -1939,7 +1939,7 @@ class RMSNormalizationMulPattern(PatternOptimization):
         )
         cst1 = g.get_computed_constant(rms_node.input[1])
         cst2 = g.get_computed_constant(other)
-        if type(cst1) is type(cst2):
+        if type(cst1) == type(cst2):  # noqa: E721
             cst = cst1 * cst2
         else:
             if isinstance(cst1, np.ndarray):
