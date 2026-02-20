@@ -7,7 +7,7 @@ from ..patterns_api import MatchResult, PatternOptimization
 
 class NotWherePattern(PatternOptimization):
     """
-    Replaces the sequence Where(Not(cond), X, Y) -> Where(cond, Y, X), X, -inf).
+    Replaces the sequence Where(Not(cond), X, Y) -> Where(cond, Y, X).
 
     .. gdot::
         :script: DOT-SECTION
