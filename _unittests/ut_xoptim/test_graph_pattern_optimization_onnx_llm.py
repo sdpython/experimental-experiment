@@ -988,7 +988,7 @@ class TestGraphPatternOptimizationOnnxLLM(ExtTestCase):
             options=OptimizationOptions(patterns="default"),
             target_opset=22,
         )
-        self.assertIn("LocalAttentionGQASW_to1", [f.op_type for f in onx.graph.node])
+        self.assertIn("LocalAttentionGQA_to1", [f.op_type for f in onx.graph.node])
         self.assertNotIn("Attention", [f.op_type for f in onx.graph.node])
         ort = self._check_with_ort(onx, cpu=True)
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))

@@ -1247,7 +1247,7 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             g._make_node("Reshape", [values, init_00_1], [r_values]),
             g._make_node(
                 "Where",
-                [mask, minfty, zero] if not switch_where else [mask, zero, minfty],
+                [mask, minfty, zero] if switch_where else [mask, zero, minfty],
                 [attention_bias],
             ),
             g._make_node(
@@ -1261,10 +1261,9 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             g._make_node("Reshape", [r_output, init_00_1l], [transpose.output[0]]),
         ]
         for node in nodes:
-            if not node.name:
-                node.name = g.builder.unique_node_name(
-                    f"{self.__class__.__name__}--{attention.name}"
-                )
+            if node.name:
+                continue
+            node.name = g.builder.unique_node_name(f"{self.__class__.__name__}--{attention.name}")
         return nodes
 
 
