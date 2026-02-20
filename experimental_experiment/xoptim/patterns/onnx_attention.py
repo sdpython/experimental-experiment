@@ -471,6 +471,14 @@ class FunctionAttentionPattern(PatternOptimization):
     def __init__(self, verbose: int = 0, priority: int = 0):
         super().__init__(verbose, priority)
 
+    def _find_index_inf(self, g, where_node):
+        for i in (1, 2):
+            if g.is_constant_scalar(where_node.input[i]):
+                cst = g.get_constant_scalar(where_node.input[i])
+                if np.isinf(cst):
+                    return i
+        return None
+
     def match(
         self,
         g: "GraphBuilderPatternOptimization",  # noqa: F821
@@ -712,8 +720,12 @@ class FunctionAttentionPattern(PatternOptimization):
         itype = g.get_type(mul1.input[1])
         suffix = []
 
-        switch_where = g.is_constant(where_node.input[1])
-
+        index_inf = self._find_index_inf(g, where_node)
+        assert index_inf, (
+            f"Could not any inf in node {g.pretty_node(where_node)}, "
+            f"the pattern {self.__class__.__name__} should not have matched."
+        )
+        switch_where = index_inf == 1
         if switch_where:
             suffix.append("SW")
 
