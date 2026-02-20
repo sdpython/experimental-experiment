@@ -2161,7 +2161,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     onh.from_array(np.array([0.1**0.5], dtype=np.float32), name="scale_sqrt"),
                 ],
             ),
-            opset_imports=[oh.make_operatorsetid("", 18)],
+            opset_imports=[oh.make_opsetid("", 18)],
             ir_version=10,
         )
         feeds = dict(
@@ -2184,13 +2184,13 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         )
         opt_onx = gr.to_onnx(optimize=True)
         self.dump_onnx("test_multi_head_attention.onnx", opt_onx)
+        ref = self.make_inference_session(opt_onx)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz, atol=1e-4)
         self.assertEqual(
             ["Reshape", "Reshape", "Reshape", "Where", "MultiHeadAttention", "Reshape"],
             [n.op_type for n in opt_onx.graph.node],
         )
-        ref = self.make_inference_session(opt_onx)
-        zz = ref.run(None, feeds)[0]
-        self.assertEqualArray(z, zz, atol=1e-4)
 
     def test_multi_head_attention_where_add(self):
         model = oh.make_model(
@@ -2398,7 +2398,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             filename=f1,
             options=OptimizationOptions(patterns="default"),
         )
-        self.assertIn("LocalAttentionGQASW_to1", [f.op_type for f in onx.graph.node])
+        self.assertIn("LocalAttentionGQA_to1", [f.op_type for f in onx.graph.node])
         ort = self._check_with_ort(onx, cpu=True)
         feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
         got = ort.run(None, feeds)

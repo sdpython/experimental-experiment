@@ -1795,3 +1795,168 @@ class RMSNormalizationPattern(PatternOptimization):
         )
         nodes.append(layer)
         return nodes
+
+
+class RMSNormalizationMulPattern(PatternOptimization):
+    """
+    Fuses the nodes RMSNormalization(23) + Mul into RMSNormalization.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 23),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["scale"],
+                value=onh.from_array(np.array([3.0, 4.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["scale2"],
+                value=onh.from_array(np.array([3.0, 4.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(oh.make_node("RMSNormalization", ["X", "scale"], ["xs"]))
+        nodes.append(oh.make_node("Mul", ["xs", "scale2"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 23),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["init1_s2_"],
+                value=onh.from_array(np.array([9.0, 16.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(oh.make_node("RMSNormalization", ["X", "init1_s2_"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, shape=("a", 2)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if g.main_opset < 23:
+            return self.none()
+        if node.op_type != "RMSNormalization" or node.domain != "":
+            return self.none()
+        if len(node.input) < 2:
+            return self.none(node, inspect.currentframe().f_lineno)
+        mul_nodes = g.next_nodes(node.output[0])
+        if len(mul_nodes) != 1:
+            return self.none(node, inspect.currentframe().f_lineno)
+        mul_node = mul_nodes[0]
+        if mul_node.op_type != "Mul" or mul_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        other = mul_node.input[1] if mul_node.input[0] == node.output[0] else mul_node.input[0]
+        if not g.has_shape(node.input[1]) or not g.has_shape(other):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if g.get_shape(node.input[1]) != g.get_shape(other):
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(node.input[1]) or not g.is_constant(other):
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [node, mul_node], self.apply, insert_at=mul_node)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        rms_node: NodeProto,
+        mul_node: NodeProto,
+    ) -> List[NodeProto]:
+        other = (
+            mul_node.input[1] if mul_node.input[0] == rms_node.output[0] else mul_node.input[0]
+        )
+        cst1 = g.get_computed_constant(rms_node.input[1])
+        cst2 = g.get_computed_constant(other)
+        if type(cst1) == type(cst2):  # noqa: E721
+            cst = cst1 * cst2
+        else:
+            if isinstance(cst1, np.ndarray):
+                import torch
+
+                cst1 = torch.from_numpy(cst1)
+            else:
+                import torch
+
+                cst2 = torch.from_numpy(cst2)
+            cst = cst1 * cst2
+        cst_init = g.make_initializer("", cst, source=f"{self.__class__.__name__}.cst")
+        layer = g.make_node(
+            "RMSNormalization",
+            [rms_node.input[0], cst_init],
+            [mul_node.output[0]],
+            name=f"{self.__class__.__name__}--{rms_node.name}",
+        )
+        layer.attribute.extend(rms_node.attribute)
+        return [layer]

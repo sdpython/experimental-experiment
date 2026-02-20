@@ -1102,6 +1102,8 @@ class MultiHeadAttention3DPattern(PatternOptimization):
     _prefixes_operator_name = (
         f"{FunctionAttentionPattern._operator_name}_to",
         f"{FunctionAttentionPattern._operator_name}sQ_to",
+        f"{FunctionAttentionPattern._operator_name}SW_to",
+        f"{FunctionAttentionPattern._operator_name}SWsQ_to",
     )
 
     def __init__(self, verbose: int = 0, priority: int = 2):
@@ -1237,12 +1239,17 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         r_values = g.unique_name(f"{self.__class__.__name__}--{values}")
         attention_bias = g.unique_name(f"{self.__class__.__name__}--{mask}")
         r_output = g.unique_name(f"{self.__class__.__name__}--{transpose.output[0]}")
+        switch_where = "SW" in attention.op_type
 
         nodes = [
             g._make_node("Reshape", [query, init_00_1], [r_query]),
             g._make_node("Reshape", [keys, init_00_1], [r_keys]),
             g._make_node("Reshape", [values, init_00_1], [r_values]),
-            g._make_node("Where", [mask, zero, minfty], [attention_bias]),
+            g._make_node(
+                "Where",
+                [mask, minfty, zero] if switch_where else [mask, zero, minfty],
+                [attention_bias],
+            ),
             g._make_node(
                 "MultiHeadAttention",
                 [r_query, r_keys, r_values, "", "", attention_bias, past_keys, past_values],
@@ -1254,10 +1261,9 @@ class MultiHeadAttention3DPattern(PatternOptimization):
             g._make_node("Reshape", [r_output, init_00_1l], [transpose.output[0]]),
         ]
         for node in nodes:
-            if not node.name:
-                node.name = g.builder.unique_node_name(
-                    f"{self.__class__.__name__}--{attention.name}"
-                )
+            if node.name:
+                continue
+            node.name = g.builder.unique_node_name(f"{self.__class__.__name__}--{attention.name}")
         return nodes
 
 

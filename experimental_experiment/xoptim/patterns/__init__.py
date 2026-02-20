@@ -6,6 +6,7 @@ from ..patterns_api import PatternOptimization, MatchResult
 # onnx patterns
 from .onnx_any import (
     IdentityPattern,
+    NotNotPattern,
     SameChildrenPattern,
     SameChildrenFromInputPattern,
     ShapeBasedIdentityPattern,
@@ -50,6 +51,7 @@ from .onnx_layer_normalization import (
     LayerNormalizationPattern,
     LayerNormalizationScalePattern,
     RMSNormalizationPattern,
+    RMSNormalizationMulPattern,
 )
 from .onnx_mul import (
     MulMulMulScalarPattern,
@@ -108,7 +110,7 @@ from .onnx_unsqueeze import (
     SqueezeUnsqueezePattern,
     UnsqueezeUnsqueezePattern,
 )
-from .onnx_where import WhereAddPattern
+from .onnx_where import NotWherePattern, WhereAddPattern
 
 
 class AlmostDoNothingPattern(PatternOptimization):
@@ -189,6 +191,8 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         LayerNormalizationScalePattern(verbose=verbose),
         LeakyReluPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
+        NotNotPattern(verbose=verbose),
+        NotWherePattern(verbose=verbose),
         ReduceArgTopKPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),
         ReduceSumNormalizePattern(verbose=verbose),
@@ -253,5 +257,6 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         FunctionCosSinCachePattern(verbose=verbose),
         FunctionHalfRotaryEmbeddingPattern(verbose=verbose),
         RMSNormalizationPattern(verbose=verbose),
+        RMSNormalizationMulPattern(verbose=verbose),
         AttentionGQAPattern(verbose=verbose),
     ]
