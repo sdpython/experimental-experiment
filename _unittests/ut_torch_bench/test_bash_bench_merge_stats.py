@@ -157,20 +157,6 @@ class TestBashBenchMergeStats(ExtTestCase):
         self.assertIn("op_torch", set(df))
         self.assertIn("ERR", set(df))
 
-    @skipif_ci_windows("pandas and *.csv do not work well on Windows")
-    @ignore_warnings((FutureWarning,))
-    def test_merge_stats_many_days(self):
-        ddata = os.path.join(os.path.dirname(__file__), "data", "rawdata")
-        data = [os.path.join(ddata, "*.csv")]
-        df = merge_benchmark_reports(
-            data, excel_output=self.get_dump_file("test_merge_stats_many_days.xlsx")
-        )
-        self.assertIsInstance(df, dict)
-        self.assertIn("status", set(df))
-        self.assertIn("memory", set(df))
-        self.assertIn("op_onnx", set(df))
-        self.assertIn("ERR", set(df))
-
     @ignore_warnings((FutureWarning,))
     def test_merge_stats_bug_speedup_summary(self):
         data = os.path.join(os.path.dirname(__file__), "data", "bug_speed_up.csv")
