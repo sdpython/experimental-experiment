@@ -1799,7 +1799,7 @@ class RMSNormalizationPattern(PatternOptimization):
 
 class RMSNormalizationMulPattern(PatternOptimization):
     """
-    Fuses the nodes RMSNormalization(23) + Mul into Mul.
+    Fuses the nodes RMSNormalization(23) + Mul into RMSNormalization.
 
     Model with nodes to be fused:
 
