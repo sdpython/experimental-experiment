@@ -6,6 +6,7 @@ from ..patterns_api import PatternOptimization, MatchResult
 # onnx patterns
 from .onnx_any import (
     IdentityPattern,
+    NotNotPattern,
     SameChildrenPattern,
     SameChildrenFromInputPattern,
     ShapeBasedIdentityPattern,
@@ -190,6 +191,7 @@ def get_default_patterns(verbose: int = 0) -> List[PatternOptimization]:
         LayerNormalizationScalePattern(verbose=verbose),
         LeakyReluPattern(verbose=verbose),
         MulMulMulScalarPattern(verbose=verbose),
+        NotNotPattern(verbose=verbose),
         NotWherePattern(verbose=verbose),
         ReduceArgTopKPattern(verbose=verbose),
         ReduceReshapePattern(verbose=verbose),

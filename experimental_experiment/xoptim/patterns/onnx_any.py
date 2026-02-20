@@ -1251,3 +1251,110 @@ class SwapUnaryPattern(PatternOptimization):
         if node.attribute:
             res[1].attribute.extend(node.attribute)
         return res
+
+
+class NotNotPattern(PatternOptimization):
+    """
+    Fuses Not + Not into Identity.
+
+    Model with nodes to be fused:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 23),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.BOOL, shape=("a", 2)))
+        nodes.append(oh.make_node("Not", ["X"], ["xs"]))
+        nodes.append(oh.make_node("Not", ["xs"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.BOOL, shape=("a", 2)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 23),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(oh.make_tensor_value_info("X", onnx.TensorProto.BOOL, shape=("a", 2)))
+        nodes.append(oh.make_node("Identity", ["X"], ["Y"]))
+        outputs.append(oh.make_tensor_value_info("Y", onnx.TensorProto.BOOL, shape=("a", 2)))
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+    """
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if node.op_type != "Not" or node.domain != "":
+            return self.none()
+
+        not_before = g.node_before(node.input[0])
+        if not not_before or not_before.op_type != "Not" or not_before.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
+        return MatchResult(self, [not_before, node], self.apply, insert_at=node)
+
+    def apply(
+        self, g: "GraphBuilder", not_before: NodeProto, not_after: NodeProto  # noqa: F821
+    ) -> List[NodeProto]:
+        return [
+            g.make_node(
+                "Identity",
+                [not_before.input[0]],
+                [not_after.output[0]],
+                name=f"{self.__class__.__name__}--{not_after.name}",
+            )
+        ]

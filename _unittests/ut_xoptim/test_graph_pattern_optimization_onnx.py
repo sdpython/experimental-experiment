@@ -7349,6 +7349,36 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got, atol=1e-6)
 
+    def test_not_not(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Not", ["X"], ["xs"]),
+                    oh.make_node("Not", ["xs"], ["Y"]),
+                ],
+                "dummy",
+                [_mkv_("X", TBOOL, ["a", 2])],
+                [_mkv_("Y", TBOOL, ["a", 2])],
+            ),
+            opset_imports=[oh.make_opsetid("", 23)],
+            ir_version=10,
+        )
+        feeds = {"X": np.array([[0, 1], [2, 3]], dtype=np.bool)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["NotNot"], verbose=0),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Identity"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(0, len(opt_onx.graph.initializer))
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-6)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
