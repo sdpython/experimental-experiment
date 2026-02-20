@@ -1917,6 +1917,8 @@ class RMSNormalizationMulPattern(PatternOptimization):
         if len(mul_nodes) != 1:
             return self.none(node, inspect.currentframe().f_lineno)
         mul_node = mul_nodes[0]
+        if mul_node.op_type != "Mul" or mul_node.domain != "":
+            return self.none(node, inspect.currentframe().f_lineno)
         other = mul_node.input[1] if mul_node.input[0] == node.output[0] else mul_node.input[0]
         if not g.has_shape(node.input[1]) or not g.has_shape(other):
             return self.none(node, inspect.currentframe().f_lineno)
