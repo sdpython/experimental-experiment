@@ -4521,15 +4521,32 @@ def aten__grouped_mm(
         split_size_miss = g.op.Cast(
             g.op.Sub(ends, starts, name=name), to=TensorProto.INT64, name=name
         )
-        left = g.op.Sub(
-            total_size, g.op.Cast(last_split, to=TensorProto.INT64, name=name), name=name
-        )
+        cast_last_split = g.op.Cast(last_split, to=TensorProto.INT64, name=name)
+        g.set_shape(cast_last_split, (1,))
+        left = g.op.Sub(total_size, cast_last_split, name=name)
         split_size = g.op.Concat(split_size_miss, left, axis=0, name=name)
 
         split_a = [g.unique_name(f"gma#{i}") for i in range(loop_size + 1)]
         split_b = [g.unique_name(f"gmb#{i}") for i in range(loop_size + 1)]
         g.make_node("Split", [ma, split_size], split_a, axis=-1, name=name)
         g.make_node("Split", [mb, split_size], split_b, axis=-2, name=name)
+
+        dims = []
+        if g.has_shape(mat_a):
+            shape_ma = list(g.get_shape(mat_a))
+            for i in range(len(split_a)):
+                shape_ma[-1] = g.unique_dimension_name(f"NEWDIM_mm_split{i}_dim")
+                dims.append(shape_ma[-1])
+                g.set_shape(split_a[i], tuple(shape_ma))
+        else:
+            shape_ma = None
+        if g.has_shape(mat_b):
+            shape_mb = list(g.get_shape(mat_b))
+            for i in range(len(split_b)):
+                shape_mb[-2] = (
+                    dims[i] if dims else g.unique_dimension_name(f"NEWDIM_mm_split{i}_dim")
+                )
+                g.set_shape(split_b[i], tuple(shape_mb))
 
         cats = []
         last = 0

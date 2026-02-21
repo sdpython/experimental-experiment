@@ -9830,18 +9830,20 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         self, rank: int, prefix: str = "d"
     ) -> Tuple["torch.SymInt", ...]:  # noqa: F821
         """Creates a dynamic shape of a known rank with new dynamic dimension."""
+        return tuple(
+            self.torch.SymInt(self.make_new_dynamic_name(f"{prefix}_d{i}")) for i in range(rank)
+        )
 
-        def _new_name(d):
-            if d not in self.dynamic_objects:
-                return d
-            i = 2
-            n = f"{d}_{i}"
-            while n in self.dynamic_objects:
-                i += 1
-                n = f"{n}_{i}"
-            return n
-
-        return tuple(self.torch.SymInt(_new_name(f"{prefix}_d{i}")) for i in range(rank))
+    def make_new_dynamic_name(self, prefix: str = "d") -> str:
+        """Creates a dynamic name for a new dynamic dimension."""
+        if prefix not in self.dynamic_objects:
+            return prefix
+        i = 2
+        n = f"{prefix}_{i}"
+        while n in self.dynamic_objects:
+            i += 1
+            n = f"{prefix}_{i}"
+        return n
 
     def make_torch_tensor_from_np_array(
         self, np_array: np.ndarray
