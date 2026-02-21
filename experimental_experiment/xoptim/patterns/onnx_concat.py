@@ -112,7 +112,7 @@ class ConcatGatherPattern(PatternOptimization):
         if cst is None or cst.dtype != np.int64 or cst.shape != (1,):
             return self.none(node, inspect.currentframe().f_lineno)
         before = g.node_before(node.input[0])
-        if before.op_type != "Concat":
+        if not before or before.op_type != "Concat":
             return self.none(node, inspect.currentframe().f_lineno)
         if any(not g.has_shape(i) for i in before.input):
             return self.none(node, inspect.currentframe().f_lineno)

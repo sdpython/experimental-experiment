@@ -11,7 +11,8 @@ class TestOnnxExportTransformers(ExtTestCase):
 
         if not hasattr(tmoe, "_grouped_mm_fallback"):
             self.skipTest(
-                "transformers.integrations.moe._grouped_mm_fallback introduced in transformers>=5.3"
+                "transformers.integrations.moe._grouped_mm_fallback "
+                "introduced in transformers>=5.3"
             )
 
         class Model(torch.nn.Module):
@@ -28,7 +29,7 @@ class TestOnnxExportTransformers(ExtTestCase):
         torch.export.export(model, (a, b, offs))
         onx = to_onnx(model, (a, b, offs), dynamic_shapes=({0: "G"}, {}, {}))
         self.dump_onnx("test_aten_transformers_grouped_mm_no_offset.onnx", onx)
-        ref = ExtendedReferenceEvaluator(onx, verbose=10)
+        ref = ExtendedReferenceEvaluator(onx, verbose=0)
         got = ref.run(None, dict(a=a.numpy(), b=b.numpy(), offs=offs.numpy()))
         self.assertEqualArray(expected, got[0])
         self.assert_conversion_with_ort_on_cpu(onx, expected, (a, b, offs), atol=1e-3)
