@@ -24,6 +24,7 @@ from . import LOCAL_DOMAIN
 from .export_options import ExportOptions
 from ._exceptions import FunctionNotFoundError
 from .aten_functions import find_function
+from .aten_functions_transformers import find_function as find_transformers_function
 from .aten_methods import find_method
 
 
@@ -1563,6 +1564,8 @@ class DynamoInterpreter:
             lookup_names = [aten_name]
         if fct is None:
             fct, lookup, lookup_names = find_function(aten_name)
+        if fct is None:
+            fct, lookup, lookup_names = find_transformers_function(aten_name)
         if self.dispatcher is not None:
             fct = self.dispatcher.fallback(aten_name, fct, node.args, node.kwargs, self.builder)
 

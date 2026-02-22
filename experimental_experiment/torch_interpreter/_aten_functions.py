@@ -4521,21 +4521,49 @@ def aten__grouped_mm(
         split_size_miss = g.op.Cast(
             g.op.Sub(ends, starts, name=name), to=TensorProto.INT64, name=name
         )
-        left = g.op.Sub(
-            total_size, g.op.Cast(last_split, to=TensorProto.INT64, name=name), name=name
-        )
+        cast_last_split = g.op.Cast(last_split, to=TensorProto.INT64, name=name)
+        g.set_shape(cast_last_split, (1,))
+        left = g.op.Sub(total_size, cast_last_split, name=name)
         split_size = g.op.Concat(split_size_miss, left, axis=0, name=name)
 
+        assert (
+            g.get_rank(mat_a) == 2
+        ), f"Unexpected rank {g.get_rank(mat_a)} for {mat_a!r}{g.get_debug_msg()}"
         split_a = [g.unique_name(f"gma#{i}") for i in range(loop_size + 1)]
-        split_b = [g.unique_name(f"gmb#{i}") for i in range(loop_size + 1)]
         g.make_node("Split", [ma, split_size], split_a, axis=-1, name=name)
+
+        # setting shapes
+        dims = []
+        if g.has_shape(mat_a):
+            shape_ma = list(g.get_shape(mat_a))
+            for i in range(len(split_a)):
+                shape_ma[-2] = g.unique_dimension_name(f"NEWDIM_mm_split{i}_dim")
+                dims.append(shape_ma[-2])
+                g.set_shape(split_a[i], tuple(shape_ma))
+        else:
+            shape_ma = None
+
+        # transformers.grouped_mm.fallback supports rank(mat_a) == 2 and rank(mat_b) == 3
+        assert (
+            g.get_rank(mat_b) == 2
+        ), f"Unexpected rank {g.get_rank(mat_b)} for {mat_b!r}{g.get_debug_msg()}"
+        split_b = [g.unique_name(f"gmb#{i}") for i in range(loop_size + 1)]
         g.make_node("Split", [mb, split_size], split_b, axis=-2, name=name)
+
+        if g.has_shape(mat_b):
+            shape_mb = list(g.get_shape(mat_b))
+            for i in range(len(split_b)):
+                shape_mb[-2] = (
+                    dims[i] if dims else g.unique_dimension_name(f"NEWDIM_mm_split{i}_dim")
+                )
+                g.set_shape(split_b[i], tuple(shape_mb))
 
         cats = []
         last = 0
         for msa, msb in zip(split_a[:-1], split_b[:-1]):
             mm = g.op.MatMul(msa, msb, name=name)
             cats.append(g.op.UnsqueezeAnyOpset(mm, g.ZERO, name=name))
+
         concatenation = g.op.Concat(*cats, axis=0, name=name)
         if dtype_a != TensorProto.FLOAT:
             concatenation = g.op.Cast(concatenation, to=dtype_a, name=name)
@@ -4547,6 +4575,13 @@ def aten__grouped_mm(
             else:
                 g.set_rank(res, g.get_rank(mat_a) + 1)
         return res
+
+    assert (
+        g.get_rank(mat_a) == 2
+    ), f"Unexpected rank {g.get_rank(mat_a)} for {mat_a!r}{g.get_debug_msg()}"
+    assert (
+        g.get_rank(mat_b) == 2
+    ), f"Unexpected rank {g.get_rank(mat_b)} for {mat_b!r}{g.get_debug_msg()}"
 
     # generic case, no constant
     if dtype_a != TensorProto.FLOAT:

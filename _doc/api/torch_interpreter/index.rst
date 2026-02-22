@@ -8,6 +8,7 @@
 
     _aten_functions
     _aten_functions_attention
+    _aten_functions_transformers
     _non_aten_functions
     _aten_methods
     _doc_
