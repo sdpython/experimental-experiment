@@ -3579,6 +3579,51 @@ class TestGraphPatternOptimization(ExtTestCase):
         self.assertEqualArray(expected, got, atol=1e-2)
         self._check_with_ort(opt_onx)
 
+    def test_cast_rms_normalization_cast(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Cast", ["X"], ["xc"], to=TensorProto.FLOAT),
+                    oh.make_node(
+                        "RMSNormalization",
+                        ["xc", "scale"],
+                        ["norm"],
+                        stash_type=1,
+                    ),
+                    oh.make_node("Cast", ["norm"], ["Y"], to=TensorProto.FLOAT16),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT16, [3, 3])],
+                [_mkv_("Y", TFLOAT16, [3, 3])],
+                [onh.from_array(np.array([0.5, 0.6, 0.7], dtype=np.float32), name="scale")],
+            ),
+            opset_imports=[oh.make_opsetid("", 24)],
+            ir_version=11,
+        )
+        check_model(model)
+        feeds = {"X": self._range(3, 3).astype(np.float16)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["CastLayerNormalizationCast"],
+                verbose=0,
+                constant_folding=False,
+            ),
+            verbose=0,
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Cast", "RMSNormalization"], [n.op_type for n in opt_onx.graph.node])
+        self.assertEqual(1, len(opt_onx.graph.initializer))
+
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got, atol=1e-2)
+        self._check_with_ort(opt_onx)
+
     def test_leaky_relu(self):
         model = oh.make_model(
             oh.make_graph(

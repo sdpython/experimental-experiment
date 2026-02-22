@@ -873,7 +873,8 @@ class LayerNormalizationScalePattern(PatternOptimization):
 
 class CastLayerNormalizationCastPattern(PatternOptimization):
     """
-    Checks that a Cast is really needed around LayerNormalization.
+    Checks that a Cast is really needed around
+    GroupNormalization, LayerNormalization, RMSLayerNormalization.
 
     Model with nodes to be fused:
 
@@ -1011,7 +1012,9 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
 
         if node.op_type not in (
+            "GroupNormlization",
             "LayerNormalization",
+            "RMSNormalization",
             "SimplifiedLayerNormalization",
         ) or node.domain not in ("", "com.microsoft"):
             return self.none()
