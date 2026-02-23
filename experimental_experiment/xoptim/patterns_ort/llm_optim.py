@@ -1896,7 +1896,8 @@ class PackedGroupQueryAttention3DPattern(GroupQueryAttention3DPattern):
     that uses the packed format supported by ``com.microsoft.GroupQueryAttention``,
     where the current query, key and value tensors are concatenated into a single
     first input and the separate key/value inputs are left empty.
-    ``bias`` is not supported by this kernel on CUDA.
+    ``bias`` is not supported by this kernel on CUDA (the inherited :meth:`match` method
+    returns no match when a bias input is detected and the processor is CUDA).
 
     The output of the fusion replaces the intermediate ``LocalAttentionGQA*``
     function node with::
@@ -1913,6 +1914,8 @@ class PackedGroupQueryAttention3DPattern(GroupQueryAttention3DPattern):
         local_attention_gqa: NodeProto,
     ) -> List[NodeProto]:
         query, _keys, _values, mask = local_attention_gqa.input[:4]
+        # The intermediate function stores scale as sqrt(actual_scale), so we square it
+        # to recover the actual attention scale for GroupQueryAttention.
         scale = g.get_constant_scalar(local_attention_gqa.input[4])  # this scale ** 0.5
         expand_shape = g.get_computed_constant(local_attention_gqa.input[5])
         repeat = int(expand_shape[2])
