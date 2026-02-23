@@ -7117,6 +7117,76 @@ class TestGraphPatternOptimization(ExtTestCase):
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
 
+    def test_unsqueeze_or_squeeze_reshape_zeros_axis_beyond(self):
+        # Unsqueeze at axis 3, reshape shape [0, 0, 0, -1]:
+        # index_zero=2, min_axis=3, 2 >= 3 is False -> pattern applies.
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "axis"], ["xu0"]),
+                    oh.make_node("Reshape", ["xu0", "shape"], ["Z"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 8, 16])],
+                [_mkv_("Z", TFLOAT, ["a", 8, 16, 1])],
+                [
+                    onh.from_array(np.array([3], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([0, 0, 0, -1], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 8, 16)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["UnsqueezeOrSqueezeReshape"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(["Reshape"], [n.op_type for n in opt_onx.graph.node])
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
+    def test_unsqueeze_or_squeeze_reshape_zeros_axis_overlaps(self):
+        # Unsqueeze at axis 2, reshape shape [0, 0, 0, -1]:
+        # index_zero=2, min_axis=2, 2 >= 2 is True -> pattern does NOT apply.
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Unsqueeze", ["X", "axis"], ["xu0"]),
+                    oh.make_node("Reshape", ["xu0", "shape"], ["Z"]),
+                ],
+                "dummy",
+                [_mkv_("X", TFLOAT, ["a", 8, 16, 4])],
+                [_mkv_("Z", TFLOAT, ["a", 8, 1, 64])],
+                [
+                    onh.from_array(np.array([2], dtype=np.int64), name="axis"),
+                    onh.from_array(np.array([0, 0, 0, -1], dtype=np.int64), name="shape"),
+                ],
+            )
+        )
+        check_model(model)
+        feeds = {"X": self._range(2, 8, 16, 4)}
+        ref = ExtendedReferenceEvaluator(model)
+        expected = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(patterns=["UnsqueezeOrSqueezeReshape"]),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.assertEqual(
+            ["Unsqueeze", "Reshape"], [n.op_type for n in opt_onx.graph.node]
+        )
+        opt_ref = ExtendedReferenceEvaluator(opt_onx)
+        got = opt_ref.run(None, feeds)[0]
+        self.assertEqualArray(expected, got)
+
     def test_same_children_many_duplicated(self):
         nodes = [
             oh.make_node("Add", ["X", "one"], ["x1"]),
