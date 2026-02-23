@@ -2809,6 +2809,78 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(got[2], got[5], atol=1e-5)
         self.assertEqualArray(got[0], got[3], atol=1e-5)
 
+    @ignore_warnings((UserWarning, FutureWarning))
+    @hide_stdout()
+    def test_multi_head_attention_fused_matmul(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Transpose", ["query"], ["t_query"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["keys"], ["t_keys"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["values"], ["t_values"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Concat", ["past_keys", "t_keys"], ["ct_keys"], axis=-2),
+                    oh.make_node("Concat", ["past_values", "t_values"], ["ct_values"], axis=-2),
+                    oh.make_node("Mul", ["t_query", "scale_sqrt"], ["query_scaled"]),
+                    oh.make_node("Mul", ["ct_keys", "scale_sqrt"], ["keys_scaled"]),
+                    oh.make_node(
+                        "FusedMatMul",
+                        ["query_scaled", "keys_scaled"],
+                        ["qk"],
+                        domain="com.microsoft",
+                        transB=1,
+                    ),
+                    oh.make_node("Where", ["mask", "zero", "minfty"], ["bias"]),
+                    oh.make_node("Add", ["qk", "bias"], ["qkb"]),
+                    oh.make_node("Softmax", ["qkb"], ["qkbs"], axis=-1),
+                    oh.make_node("IsNaN", ["qkbs"], ["nans"]),
+                    oh.make_node("Where", ["nans", "zero", "qkbs"], ["filt"]),
+                    oh.make_node("MatMul", ["filt", "ct_values"], ["prob"]),
+                    oh.make_node("Transpose", ["prob"], ["Y"], perm=[0, 2, 1, 3]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("query", TFLOAT, ["aq", "bq", 8, 64]),
+                    oh.make_tensor_value_info("keys", TFLOAT, ["ak", "bk", 8, 64]),
+                    oh.make_tensor_value_info("values", TFLOAT, ["av", "bv", 8, 64]),
+                    oh.make_tensor_value_info("past_keys", TFLOAT, ["pak", 8, "pck", 64]),
+                    oh.make_tensor_value_info("past_values", TFLOAT, ["pav", 8, "pcv", 64]),
+                    oh.make_tensor_value_info("mask", TensorProto.BOOL, ["am", 1, "cm", "dm"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["ay", "by", "cy", "dy"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([-np.inf], dtype=np.float32), name="minfty"),
+                    onh.from_array(np.array([0.1**0.5], dtype=np.float32), name="scale_sqrt"),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18), oh.make_opsetid("com.microsoft", 1)],
+            ir_version=10,
+        )
+        feeds = dict(
+            query=np.random.randn(32, 128, 8, 64).astype(np.float32),
+            keys=np.random.randn(32, 128, 8, 64).astype(np.float32),
+            values=np.random.randn(32, 128, 8, 64).astype(np.float32),
+            mask=np.random.rand(32, 1, 128, 256) >= 0.5,
+            past_keys=np.random.randn(32, 8, 128, 64).astype(np.float32),
+            past_values=np.random.randn(32, 8, 128, 64).astype(np.float32),
+        )
+        ref = ExtendedReferenceEvaluator(model, verbose=0)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionAttention", "MultiHeadAttention3D"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_multi_head_attention_fused_matmul.onnx", opt_onx)
+        self.assertIn("MultiHeadAttention", [n.op_type for n in opt_onx.graph.node])
+        ref2 = self.make_inference_session(opt_onx)
+        zz = ref2.run(None, feeds)[0]
+        self.assertEqualArray(z, zz, atol=1e-4)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
