@@ -874,7 +874,7 @@ class LayerNormalizationScalePattern(PatternOptimization):
 class CastLayerNormalizationCastPattern(PatternOptimization):
     """
     Checks that a Cast is really needed around
-    GroupNormalization, LayerNormalization, RMSLayerNormalization.
+    GroupNormalization, LayerNormalization, RMSNormalization.
 
     Model with nodes to be fused:
 
@@ -1012,7 +1012,7 @@ class CastLayerNormalizationCastPattern(PatternOptimization):
     ) -> Optional[MatchResult]:
 
         if node.op_type not in (
-            "GroupNormlization",
+            "GroupNormalization",
             "LayerNormalization",
             "RMSNormalization",
             "SimplifiedLayerNormalization",
