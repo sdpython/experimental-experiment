@@ -2331,8 +2331,23 @@ class UnsqueezeOrSqueezeReshapePattern(PatternOptimization):
         if not g.is_constant(node.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
         cst2 = g.get_computed_constant(node.input[1])
-        if cst2 is None or 0 in cst2:
+        if cst2 is None:
             return self.none(node, inspect.currentframe().f_lineno)
+        if 0 in cst2:
+            # It may still be possible if the squeezed axis is beyond the last 0.
+            if not g.is_constant(node_before.input[1]):
+                return self.none(node, inspect.currentframe().f_lineno)
+            axis = g.get_computed_constant(node_before.input[1])
+            if axis is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            index_zero = max([i for i, z in enumerate(cst2) if z == 0])
+            min_axis = min(axis)
+            if min_axis < 0:
+                if not g.has_rank(node_before.input[0]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                min_axis += g.get_rank(node_before.input[0])
+            if index_zero >= min(axis):
+                return self.none(node, inspect.currentframe().f_lineno)
         # The second shape wins it all.
         return MatchResult(self, [node_before, node], self.apply, insert_at=node)
 

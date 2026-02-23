@@ -5,7 +5,6 @@
 Playground for big optimization pattern
 =======================================
 
-# %%
 # Write the code producing the model
 # ==================================
 """

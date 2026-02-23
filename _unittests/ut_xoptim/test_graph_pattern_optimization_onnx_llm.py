@@ -582,7 +582,80 @@ class TestGraphPatternOptimizationOnnxLLM(ExtTestCase):
                 zz = ref.run(None, feeds)[0]
                 self.assertEqualArray(z, zz, atol=1e-4)
 
-    def test_local_function_attention(self):
+    def test_local_function_attention_3d(self):
+        model = oh.make_model(
+            oh.make_graph(
+                [
+                    oh.make_node("Reshape", ["query", "shape0"], ["query_reshaped"], name="RQ"),
+                    oh.make_node("Reshape", ["keys", "shape0"], ["keys_reshaped"], name="RK"),
+                    oh.make_node("Reshape", ["values", "shape0"], ["values_reshaped"], name="RV"),
+                    oh.make_node("Transpose", ["query_reshaped"], ["query_t"], perm=[0, 2, 1, 3]),
+                    oh.make_node("Transpose", ["keys_reshaped"], ["keys_t"], perm=[0, 2, 3, 1]),
+                    oh.make_node(
+                        "Transpose", ["values_reshaped"], ["values_t"], perm=[0, 2, 1, 3]
+                    ),
+                    oh.make_node("Mul", ["query_t", "scale_sqrt"], ["query_scaled"]),
+                    oh.make_node("Mul", ["keys_t", "scale_sqrt"], ["keys_scaled"]),
+                    oh.make_node("MatMul", ["query_scaled", "keys_scaled"], ["qk"]),
+                    oh.make_node("Where", ["mask", "zero", "minfty"], ["bias"]),
+                    oh.make_node("Add", ["qk", "bias"], ["qkb"]),
+                    oh.make_node("Softmax", ["qkb"], ["qkbs"], axis=-1),
+                    oh.make_node("IsNaN", ["qkbs"], ["nans"]),
+                    oh.make_node("Where", ["nans", "zero", "qkbs"], ["filt"]),
+                    oh.make_node("MatMul", ["filt", "values_t"], ["Y"]),
+                ],
+                "test",
+                [
+                    oh.make_tensor_value_info("query", TFLOAT, ["aq", "cq", "bq*dq"]),
+                    oh.make_tensor_value_info("keys", TFLOAT, ["ak", "ck", "bk*dk"]),
+                    oh.make_tensor_value_info("values", TFLOAT, ["av", "cv", "bv*dv"]),
+                    oh.make_tensor_value_info("mask", TBOOL, ["am", "bm", "cm", "dm"]),
+                ],
+                [oh.make_tensor_value_info("Y", TFLOAT, ["ay", "by", "cy", "dy"])],
+                [
+                    onh.from_array(np.array([0], dtype=np.float32), name="zero"),
+                    onh.from_array(np.array([-np.inf], dtype=np.float32), name="minfty"),
+                    onh.from_array(np.array([0.1**0.5], dtype=np.float32), name="scale_sqrt"),
+                    onh.from_array(np.array([0, 0, 8, 64], dtype=np.int64), name="shape0"),
+                ],
+            ),
+            opset_imports=[oh.make_operatorsetid("", 18)],
+            ir_version=10,
+        )
+        query = np.random.randn(32, 16, 64 * 8).astype(np.float32)
+        keys = np.random.randn(32, 16, 64 * 8).astype(np.float32)
+        values = np.random.randn(32, 16, 64 * 8).astype(np.float32)
+        mask = np.random.rand(1, 8, 16, 16) >= 0.5
+
+        feeds = dict(query=query, keys=keys, values=values, mask=mask)
+        ref = self._check_with_ort(model, cpu=True)
+        z = ref.run(None, feeds)[0]
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["SwapUnary", "FunctionAttention"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        ref = self._check_with_ort(opt_onx, cpu=True)
+        zz = ref.run(None, feeds)[0]
+        self.assertEqualArray(z, zz, atol=1e-5)
+        self.assertEqual(
+            [
+                "Reshape",
+                "Reshape",
+                "Transpose",
+                "Transpose",
+                "Reshape",
+                "Transpose",
+                "LocalAttention_to1",
+            ],
+            [n.op_type for n in opt_onx.graph.node],
+        )
+
+    def test_local_function_attention_4d(self):
         model = oh.make_model(
             oh.make_graph(
                 [
@@ -616,10 +689,10 @@ class TestGraphPatternOptimizationOnnxLLM(ExtTestCase):
             opset_imports=[oh.make_operatorsetid("", 18)],
             ir_version=10,
         )
-        query = np.random.randn(32, 8, 128, 64).astype(np.float32)
-        keys = np.random.randn(32, 8, 128, 64).astype(np.float32)
-        values = np.random.randn(32, 8, 128, 64).astype(np.float32)
-        mask = np.random.rand(1, 8, 128, 128) >= 0.5
+        query = np.random.randn(32, 8, 16, 64).astype(np.float32)
+        keys = np.random.randn(32, 8, 16, 64).astype(np.float32)
+        values = np.random.randn(32, 8, 16, 64).astype(np.float32)
+        mask = np.random.rand(1, 8, 16, 16) >= 0.5
 
         feeds = dict(query=query, keys=keys, values=values, mask=mask)
         ref = ExtendedReferenceEvaluator(model, verbose=0)

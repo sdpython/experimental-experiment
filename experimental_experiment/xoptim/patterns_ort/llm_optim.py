@@ -376,30 +376,31 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
             if not g.has_shape(cos_sin.input[0]) or not g.has_shape(cos_sin.input[1]):
                 return self.none(node, inspect.currentframe().f_lineno)
             expand_node = g.node_before(cos_sin.input[1])
-            if expand_node is None:
-                return self.none(node, inspect.currentframe().f_lineno)
-            shape_expand = g.builder.value_as_shape(expand_node.input[1])
-            if shape_expand is None or len(shape_expand) != 3 or shape_expand[1:] != (1, 1):
-                # maybe position_ids is not given
-                return self.none(
-                    node,
-                    inspect.currentframe().f_lineno,
-                    msg=lambda: (
-                        f"op_type={expand_node.op_type!r} name={expand_node.input[1]!r} "
-                        f"shape_expand={shape_expand}"
-                    ),
-                )
-            if not g.has_shape(expand_node.input[0]):
-                return self.none(node, inspect.currentframe().f_lineno)
-            wei_shape = g.get_shape(expand_node.input[0])
-            if wei_shape[0] != 1:
-                return self.none(node, inspect.currentframe().f_lineno)
+            if expand_node is not None:
+                # position_ids is expanded first
+                shape_expand = g.builder.value_as_shape(expand_node.input[1])
+                if shape_expand is None or len(shape_expand) != 3 or shape_expand[1:] != (1, 1):
+                    # maybe position_ids is not given
+                    return self.none(
+                        node,
+                        inspect.currentframe().f_lineno,
+                        msg=lambda: (
+                            f"op_type={expand_node.op_type!r} name={expand_node.input[1]!r} "
+                            f"shape_expand={shape_expand}"
+                        ),
+                    )
+                if not g.has_shape(expand_node.input[0]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                wei_shape = g.get_shape(expand_node.input[0])
+                if wei_shape[0] != 1:
+                    return self.none(node, inspect.currentframe().f_lineno)
+
             position_ids_shape = g.get_shape_renamed(cos_sin.input[0])
             weights_shape = g.get_shape_renamed(cos_sin.input[1])
             if (
                 len(position_ids_shape) != 2
                 or len(weights_shape) != 3
-                or position_ids_shape[0] != weights_shape[0]
+                or (position_ids_shape[0] != weights_shape[0] and weights_shape[0] != 1)
             ):
                 return self.none(node, inspect.currentframe().f_lineno)
 
@@ -501,7 +502,6 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
 
         added_nodes = []
         if prefix_nodes:
-            assert expand_node is not None, "expand node is missing, pattern should not match"
             assert prefix_nodes[0].op_type.startswith(
                 "CosSinCache"
             ), f"Unexpected first node {prefix_nodes[0]}"
@@ -518,7 +518,10 @@ class ContribRotaryEmbeddingPattern(PatternOptimization):
                 g._make_node("Unsqueeze", [range_ids, zero], [new_positions_ids]),
                 g._make_node(
                     cos_sin.op_type,
-                    [new_positions_ids, expand_node.input[0]],
+                    [
+                        new_positions_ids,
+                        expand_node.input[0] if expand_node is not None else cos_sin.input[1],
+                    ],
                     [cos_out, sin_out],
                     domain=cos_sin.domain,
                 ),
