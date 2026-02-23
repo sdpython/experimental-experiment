@@ -1104,10 +1104,9 @@ class MultiHeadAttention3DPattern(PatternOptimization):
 
     _prefixes_operator_name = (
         f"{FunctionAttentionPattern._operator_name}_to",
-        f"{FunctionAttentionPattern._operator_name}sQ_to",
         f"{FunctionAttentionPattern._operator_name}SW_to",
-        f"{FunctionAttentionPattern._operator_name}SWsQ_to",
         f"{FunctionAttentionPattern._operator_name}NoT_to",
+        f"{FunctionAttentionPattern._operator_name}SWNoT_to",
     )
 
     def __init__(self, verbose: int = 0, priority: int = 2):
