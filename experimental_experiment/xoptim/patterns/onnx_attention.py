@@ -13,7 +13,8 @@ class FunctionAttentionPattern(PatternOptimization):
     That includes a version for GroupQueryAttention
     (see second pattern).
 
-    Model with nodes to be fused:
+    Main Pattern
+    ++++++++++++
 
     .. gdot::
         :script: DOT-SECTION
@@ -187,7 +188,8 @@ class FunctionAttentionPattern(PatternOptimization):
 
         print("DOT-SECTION", to_dot(model))
 
-    GroupQueryAttention (GQA):
+    GroupQueryAttention (GQA)
+    +++++++++++++++++++++++++
 
     .. gdot::
         :script: DOT-SECTION
@@ -463,6 +465,254 @@ class FunctionAttentionPattern(PatternOptimization):
         model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
 
         print("DOT-SECTION", to_dot(model))
+
+    3D Pattern
+    ++++++++++
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "values_t", onnx.TensorProto.FLOAT, shape=("av", 8, "cv", 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "keys", onnx.TensorProto.FLOAT, shape=("ak", "ck", "bk*dk")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("scale_sqrt", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        inputs.append(oh.make_tensor_value_info("shape0", onnx.TensorProto.INT64, shape=(4,)))
+        inputs.append(
+            oh.make_tensor_value_info(
+                "mask", onnx.TensorProto.BOOL, shape=("am", "bm", "cm", "dm")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("aq", "cq", "bq*dq")
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["scale_sqrt"],
+                value=onh.from_array(
+                    np.array([0.3162277638912201], dtype=np.float32), name="value"
+                ),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["shape0"],
+                value=onh.from_array(np.array([0, 0, 8, 64], dtype=np.int64), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["zero"],
+                value=onh.from_array(np.array([0.0], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Constant",
+                [],
+                ["minfty"],
+                value=onh.from_array(np.array([-inf], dtype=np.float32), name="value"),
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Mul", ["query", "scale_sqrt"], ["SwapUnaryPattern--query_reshaped"]
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose", ["SwapUnaryPattern--query_t"], ["query_scaled"], perm=[0, 2, 1, 3]
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["SwapUnaryPattern--query_reshaped", "shape0"],
+                ["SwapUnaryPattern--query_t"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Mul", ["keys", "scale_sqrt"], ["SwapUnaryPattern--keys_reshaped"]
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["SwapUnaryPattern--keys_reshaped", "shape0"],
+                ["SwapUnaryPattern--keys_t"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose", ["SwapUnaryPattern--keys_t"], ["keys_scaled"], perm=[0, 2, 3, 1]
+            )
+        )
+        nodes.append(oh.make_node("MatMul", ["query_scaled", "keys_scaled"], ["qk"]))
+        nodes.append(oh.make_node("Where", ["mask", "zero", "minfty"], ["bias"]))
+        nodes.append(oh.make_node("Add", ["qk", "bias"], ["qkb"]))
+        nodes.append(oh.make_node("Softmax", ["qkb"], ["qkbs"], axis=-1))
+        nodes.append(oh.make_node("IsNaN", ["qkbs"], ["nans"]))
+        nodes.append(oh.make_node("Where", ["nans", "zero", "qkbs"], ["filt"]))
+        nodes.append(oh.make_node("MatMul", ["filt", "values_t"], ["Y"]))
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("ay", "by", "cy", "dy")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
+
+    Outcome of the fusion:
+
+    .. gdot::
+        :script: DOT-SECTION
+        :process:
+
+        from experimental_experiment.doc import to_dot
+        import numpy as np
+        import ml_dtypes
+        import onnx
+        import onnx.helper as oh
+        import onnx.numpy_helper as onh
+
+        opset_imports = [
+            oh.make_opsetid("", 18),
+            oh.make_opsetid("intermediate", 1),
+        ]
+        inputs = []
+        outputs = []
+        nodes = []
+        initializers = []
+        sparse_initializers = []
+        functions = []
+        inputs.append(
+            oh.make_tensor_value_info(
+                "values_t", onnx.TensorProto.FLOAT, shape=("av", 8, "cv", 64)
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "keys", onnx.TensorProto.FLOAT, shape=("ak", "ck", "bk*dk")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info("scale_sqrt", onnx.TensorProto.FLOAT, shape=(1,))
+        )
+        inputs.append(oh.make_tensor_value_info("shape0", onnx.TensorProto.INT64, shape=(4,)))
+        inputs.append(
+            oh.make_tensor_value_info(
+                "mask", onnx.TensorProto.BOOL, shape=("am", "bm", "cm", "dm")
+            )
+        )
+        inputs.append(
+            oh.make_tensor_value_info(
+                "query", onnx.TensorProto.FLOAT, shape=("aq", "cq", "bq*dq")
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["query", "shape0"],
+                ["FunctionAttentionPattern--SwapUnaryPattern--query_t"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Reshape",
+                ["keys", "shape0"],
+                ["FunctionAttentionPattern--SwapUnaryPattern--keys_t"],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose",
+                ["FunctionAttentionPattern--SwapUnaryPattern--query_t"],
+                ["FunctionAttentionPattern--query"],
+                perm=[0, 2, 1, 3],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "Transpose",
+                ["FunctionAttentionPattern--SwapUnaryPattern--keys_t"],
+                ["FunctionAttentionPattern--keys"],
+                perm=[0, 2, 1, 3],
+            )
+        )
+        nodes.append(
+            oh.make_node(
+                "LocalAttention_to1",
+                [
+                    "FunctionAttentionPattern--query",
+                    "FunctionAttentionPattern--keys",
+                    "values_t",
+                    "mask",
+                    "scale_sqrt",
+                ],
+                ["Y"],
+                domain="intermediate",
+            )
+        )
+        outputs.append(
+            oh.make_tensor_value_info(
+                "Y", onnx.TensorProto.FLOAT, shape=("ay", "by", "cy", "dy")
+            )
+        )
+        graph = oh.make_graph(
+            nodes,
+            "pattern",
+            inputs,
+            outputs,
+            initializers,
+            sparse_initializer=sparse_initializers,
+        )
+        model = oh.make_model(graph, functions=functions, opset_imports=opset_imports)
+
+        print("DOT-SECTION", to_dot(model))
     """
 
     _operator_name = "LocalAttention"
@@ -534,8 +784,23 @@ class FunctionAttentionPattern(PatternOptimization):
             return self.none(node, inspect.currentframe().f_lineno)
 
         mul1 = g.node_before(mat_qk.input[0])
+        if mul1 is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        if mul1.op_type == "Transpose":
+            transpose_mul1 = mul1
+            reshape_mul1 = g.node_before(mul1.input[0])
+            perm = tuple(g.get_attribute(transpose_mul1, "perm").ints)
+            if perm != (0, 2, 1, 3):
+                return self.none(node, inspect.currentframe().f_lineno)
+            if reshape_mul1 is None:
+                return self.none(node, inspect.currentframe().f_lineno)
+            mul1 = g.node_before(reshape_mul1.input[0])
+        else:
+            reshape_mul1 = None
+            transpose_mul1 = None
         if mul1 is None or mul1.op_type != "Mul":
             return self.none(node, inspect.currentframe().f_lineno)
+
         if not g.is_constant_scalar(mul1.input[1]):
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -544,9 +809,28 @@ class FunctionAttentionPattern(PatternOptimization):
             if transpose is None or transpose.op_type != "Transpose":
                 return self.none(node, inspect.currentframe().f_lineno)
             perm = g.get_attribute(transpose, "perm").ints
-            if tuple(perm) != (0, 1, 3, 2):
-                return self.none(node, inspect.currentframe().f_lineno)
-            mul2 = g.node_before(transpose.input[0])
+            if transpose_mul1 is None:
+                if tuple(perm) != (0, 1, 3, 2):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                mul2 = g.node_before(transpose.input[0])
+                reshape_mul2 = None
+            else:
+                if tuple(perm) != (0, 2, 3, 1):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                reshape_mul2 = g.node_before(transpose.input[0])
+                if reshape_mul2 is None:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                mul2 = g.node_before(reshape_mul2.input[0])
+                if not g.is_constant(reshape_mul1.input[1]) or not g.is_constant(
+                    reshape_mul2.input[1]
+                ):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                shapem1 = g.get_computed_constant(reshape_mul1.input[1])
+                shapem2 = g.get_computed_constant(reshape_mul2.input[1])
+                if shapem1 is None or shapem2 is None:
+                    return self.none(node, inspect.currentframe().f_lineno)
+                if shapem1.tolist() != shapem2.tolist():
+                    return self.none(node, inspect.currentframe().f_lineno)
         else:
             transA = g.get_attribute_with_default(mat_qk, "transA", 0)
             transB = g.get_attribute_with_default(mat_qk, "transB", 1)
@@ -554,6 +838,7 @@ class FunctionAttentionPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             transpose = None
             mul2 = g.node_before(mat_qk.input[1])
+            reshape_mul2 = None
 
         if mul2 is None:
             return self.none(node, inspect.currentframe().f_lineno)
@@ -668,8 +953,11 @@ class FunctionAttentionPattern(PatternOptimization):
 
         nodes = [
             mul1,
+            transpose_mul1,
+            reshape_mul1,
             gqa_unsqueeze,
             mul2,
+            reshape_mul2,
             gqa_expand,
             gqa_reshape,
             transpose,
@@ -688,6 +976,9 @@ class FunctionAttentionPattern(PatternOptimization):
         for n in nodes[:-1]:
             if not n:
                 continue
+            if n.op_type == "Where" and id(n) == id(where_node):
+                # The rewriting will add that to the list of rewritten nodes.
+                continue
             if n.op_type == "Softmax":
                 if len(g.next_nodes(n.output[0])) != 2:
                     return self.none(node, inspect.currentframe().f_lineno)
@@ -701,8 +992,11 @@ class FunctionAttentionPattern(PatternOptimization):
         self,
         g: "GraphBuilder",  # noqa: F821
         mul1: NodeProto,
+        transpose_mul1: Optional[NodeProto],
+        reshape_mul1: Optional[NodeProto],
         gqa_unsqueeze: Optional[NodeProto],
         mul2: NodeProto,
+        reshape_mul2: Optional[NodeProto],
         gqa_expand: Optional[NodeProto],
         gqa_reshape: Optional[NodeProto],
         transpose: Optional[NodeProto],
@@ -741,23 +1035,79 @@ class FunctionAttentionPattern(PatternOptimization):
             gqa = ""
             gqa_args = []
 
+        # nodes to add
+        attention_nodes = []
+        if g.is_used_more_than_once(where_node.output[0]):
+            # keep it if it used more than once
+            attention_nodes.append(where_node)
+
+        scale = mul1.input[1]
+        if reshape_mul1 is not None:
+            assert (
+                reshape_mul2 is not None
+                and transpose_mul1 is not None
+                and transpose is not None
+                and gqa_unsqueeze is None
+            ), (
+                f"Inconsistencies with {reshape_mul2=}, {transpose_mul1=}, "
+                f"{transpose=}, {gqa_unsqueeze=}"
+            )
+            keys = g.unique_name(f"{self.__class__.__name__}--{mul1.input[0]}")
+            values = g.unique_name(f"{self.__class__.__name__}--{mul2.input[0]}")
+            keys_t = g.unique_name(f"{self.__class__.__name__}--{transpose_mul1.input[0]}")
+            values_t = g.unique_name(f"{self.__class__.__name__}--{transpose.input[0]}")
+            attention_nodes.extend(
+                [
+                    g.make_node(
+                        "Reshape",
+                        [mul1.input[0], reshape_mul1.input[1]],
+                        [keys_t],
+                        name=f"{self.__class__.__name__}--{reshape_mul1.name}",
+                    ),
+                    g.make_node(
+                        "Reshape",
+                        [mul2.input[0], reshape_mul2.input[1]],
+                        [values_t],
+                        name=f"{self.__class__.__name__}--{reshape_mul2.name}",
+                    ),
+                    g.make_node(
+                        "Transpose",
+                        [keys_t],
+                        [keys],
+                        perm=[0, 2, 1, 3],
+                        name=f"{self.__class__.__name__}--{transpose_mul1.name}",
+                    ),
+                    g.make_node(
+                        "Transpose",
+                        [values_t],
+                        [values],
+                        perm=[0, 2, 1, 3],
+                        name=f"{self.__class__.__name__}--{transpose.name}",
+                    ),
+                ]
+            )
+        else:
+            keys = mul1.input[0]
+            values = gqa_unsqueeze.input[0] if gqa_reshape else mul2.input[0]
+
         name = f"{self._operator_name}{gqa}{''.join(suffix)}_to{itype}"
-        attention_nodes = [
+        attention_nodes.append(
             g.make_node(
                 name,
                 [
-                    mul1.input[0],
-                    gqa_unsqueeze.input[0] if gqa_reshape else mul2.input[0],
+                    keys,
+                    values,
                     gqa_unsqueeze_v.input[0] if gqa_reshape else mat_qkv.input[1],
                     where_node.input[0],
-                    mul1.input[1],
+                    scale,
                     *gqa_args,
                 ],
                 [mat_qkv.output[0]],
                 name=f"{self.__class__.__name__}--{softmax.name}",
                 domain=self._domain_name,
             )
-        ]
+        )
+
         nodes_to_return = attention_nodes
 
         # Creates the local function

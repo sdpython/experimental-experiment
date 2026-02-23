@@ -2341,6 +2341,11 @@ class UnsqueezeOrSqueezeReshapePattern(PatternOptimization):
             if axis is None:
                 return self.none(node, inspect.currentframe().f_lineno)
             index_zero = max([i for i, z in enumerate(cst2) if z == 0])
+            min_axis = min(axis)
+            if min_axis < 0:
+                if not g.has_rank(node_before.input[0]):
+                    return self.none(node, inspect.currentframe().f_lineno)
+                min_axis += g.get_rank(node_before.input[0])
             if index_zero >= min(axis):
                 return self.none(node, inspect.currentframe().f_lineno)
         # The second shape wins it all.
