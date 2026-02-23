@@ -832,6 +832,7 @@ class FunctionAttentionPattern(PatternOptimization):
                 if shapem1.tolist() != shapem2.tolist():
                     return self.none(node, inspect.currentframe().f_lineno)
         else:
+            # FusedMatMul
             transA = g.get_attribute_with_default(mat_qk, "transA", 0)
             transB = g.get_attribute_with_default(mat_qk, "transB", 1)
             if transA != 0 or transB != 1:
@@ -1027,7 +1028,7 @@ class FunctionAttentionPattern(PatternOptimization):
             assert (
                 mat_qk.op_type == "FusedMatMul"
             ), f"transpose is None but mat_qk={g.pretty_node(mat_qk)}"
-            suffix.append("noT")
+            suffix.append("NoT")
         if gqa_reshape:
             gqa = "GQA" if gqa_reshape.op_type == "Reshape" else "GQAsQ"
             gqa_args = [gqa_expand.input[1], gqa_reshape.input[1]]
