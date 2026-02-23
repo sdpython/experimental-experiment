@@ -1886,3 +1886,173 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                     f"{self.__class__.__name__}--{local_attention_gqa.name}"
                 )
         return nodes
+
+
+class PackedGroupQueryAttention3DPattern(GroupQueryAttention3DPattern):
+    """
+    Fuses LocalAttention into GroupQueryAttention with a packed QKV input.
+    This is a variant of
+    :class:`experimental_experiment.xoptim.patterns_ort.llm_optim.GroupQueryAttention3DPattern`
+    that uses the packed format supported by ``com.microsoft.GroupQueryAttention``,
+    where the current query, key and value tensors are concatenated into a single
+    first input and the separate key/value inputs are left empty.
+    ``bias`` is not supported by this kernel on CUDA.
+
+    The output of the fusion replaces the intermediate ``LocalAttentionGQA*``
+    function node with::
+
+        packed_qkv = Concat(query_3D, keys_3D, values_3D, axis=-1)
+        GroupQueryAttention(packed_qkv, "", "", past_key, past_value, ...)
+    """
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        keys_concat_node: NodeProto,
+        values_concat_node: NodeProto,
+        local_attention_gqa: NodeProto,
+    ) -> List[NodeProto]:
+        query, _keys, _values, mask = local_attention_gqa.input[:4]
+        scale = g.get_constant_scalar(local_attention_gqa.input[4])  # this scale ** 0.5
+        expand_shape = g.get_computed_constant(local_attention_gqa.input[5])
+        repeat = int(expand_shape[2])
+        rk_mask = g.get_rank(mask)
+
+        if "sQ_" in local_attention_gqa.op_type:
+            k_shape = g.get_shape(local_attention_gqa.input[1])
+            kv_num_heads = k_shape[1]
+        else:
+            reshape_shape = g.get_computed_constant(local_attention_gqa.input[6])
+            kv_num_heads = reshape_shape[1] // repeat
+
+        num_heads = kv_num_heads * repeat
+        head_size = g.get_shape(query)[-1]
+
+        shape00 = g.make_initializer(
+            "", np.array([0, 0, -1], dtype=np.int64), source=f"{self.__class__.__name__}.00"
+        )
+        shape0000 = g.make_initializer(
+            "",
+            np.array([0, 0, -1, head_size], dtype=np.int64),
+            source=f"{self.__class__.__name__}.00_1",
+        )
+        one32 = g.make_initializer(
+            "", np.array([1], dtype=np.int32), source=f"{self.__class__.__name__}.1i"
+        )
+
+        query3D = g.unique_name(f"{self.__class__.__name__}--{query}")
+        query4D = g.unique_name(f"{self.__class__.__name__}--{query}")
+        keys3D = g.unique_name(f"{self.__class__.__name__}--{_keys}")
+        keys4D = g.unique_name(f"{self.__class__.__name__}--{_keys}")
+        values3D = g.unique_name(f"{self.__class__.__name__}--{_values}")
+        values4D = g.unique_name(f"{self.__class__.__name__}--{_values}")
+        packed_qkv = g.unique_name(f"{self.__class__.__name__}--packed_qkv")
+        attn3D = g.unique_name(f"{self.__class__.__name__}--{local_attention_gqa.output[0]}")
+        attn4D = g.unique_name(f"{self.__class__.__name__}--{local_attention_gqa.output[0]}")
+
+        seqlensk = g.unique_name(f"{self.__class__.__name__}--sl")
+        total_length64 = g.unique_name(f"{self.__class__.__name__}--tl")
+        total_length = g.unique_name(f"{self.__class__.__name__}--tl")
+        total_length_1 = g.unique_name(f"{self.__class__.__name__}--tl_1")
+
+        batch_shape = g.unique_name(f"{self.__class__.__name__}--{query}")
+
+        nodes = []
+        # mask is not mask if SW
+        switch_where = "SW" in local_attention_gqa.op_type
+        if g.get_type(mask) == TensorProto.BOOL:
+            itype = g.get_type(query)
+            dtype = tensor_dtype_to_np_dtype(itype)
+            zero = g.make_initializer(
+                "", np.array([0], dtype=dtype), source=f"{self.__class__.__name__}.0"
+            )
+            infty = g.make_initializer(
+                "",
+                np.array([np.finfo(dtype).min], dtype=dtype),
+                source=f"{self.__class__.__name__}.inf{itype}",
+            )
+            float_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            nodes.append(
+                g._make_node(
+                    "Where",
+                    [mask, infty, zero] if switch_where else [mask, zero, infty],
+                    [float_mask],
+                )
+            )
+        else:
+            raise NotImplementedError(
+                f"float mask is not implemented yet for pattern {self.__class__.__name__!r}"
+            )
+
+        if rk_mask == 2:
+            expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            cst01 = g.make_initializer(
+                "", np.array([0, 1], dtype=np.int64), source=f"{self.__class__.__name__}.01"
+            )
+            nodes.append(g._make_node("Unsqueeze", [float_mask, cst01], [expanded_mask]))
+        elif rk_mask == 3:
+            expanded_mask = g.unique_name(f"{self.__class__.__name__}--{mask}")
+            cst0 = g.make_initializer(
+                "", np.array([0], dtype=np.int64), source=f"{self.__class__.__name__}.0"
+            )
+            nodes.append(g._make_node("Unsqueeze", [float_mask, cst0], [expanded_mask]))
+        else:
+            expanded_mask = float_mask
+
+        attention_node = g._make_node(
+            "GroupQueryAttention",
+            [
+                packed_qkv,
+                "",
+                "",
+                keys_concat_node.input[0],
+                values_concat_node.input[0],
+                seqlensk,
+                total_length,
+                "",
+                "",
+                "",
+                expanded_mask,
+            ],
+            [attn3D, keys_concat_node.output[0], values_concat_node.output[0]],
+            num_heads=num_heads,
+            kv_num_heads=kv_num_heads,
+            scale=scale**2,
+            do_rotary=0,
+            rotary_interleaved=0,
+            domain="com.microsoft",
+            doc_string="This operator only accepts batch_size=1 "
+            "and (past_length==0 or seq_length==1).",
+        )
+
+        nodes.extend(
+            [
+                g._make_node("Shape", [query], [batch_shape], start=0, end=1),
+                g._make_node("Shape", [float_mask], [total_length64], start=-1),
+                g._make_node("Cast", [total_length64], [total_length], to=TensorProto.INT32),
+                g._make_node("Sub", [total_length, one32], [total_length_1]),
+                g._make_node("Expand", [total_length_1, batch_shape], [seqlensk]),
+                g._make_node("Transpose", [query], [query4D], perm=[0, 2, 1, 3]),
+                g._make_node(
+                    "Transpose", [keys_concat_node.input[1]], [keys4D], perm=[0, 2, 1, 3]
+                ),
+                g._make_node(
+                    "Transpose", [values_concat_node.input[1]], [values4D], perm=[0, 2, 1, 3]
+                ),
+                g._make_node("Reshape", [query4D, shape00], [query3D]),
+                g._make_node("Reshape", [keys4D, shape00], [keys3D]),
+                g._make_node("Reshape", [values4D, shape00], [values3D]),
+                g._make_node("Concat", [query3D, keys3D, values3D], [packed_qkv], axis=-1),
+                attention_node,
+                g._make_node("Reshape", [attn3D, shape0000], [attn4D]),
+                g._make_node(
+                    "Transpose", [attn4D], [local_attention_gqa.output[0]], perm=[0, 2, 1, 3]
+                ),
+            ]
+        )
+        for node in nodes:
+            if not node.name:
+                node.name = g.builder.unique_node_name(
+                    f"{self.__class__.__name__}--{local_attention_gqa.name}"
+                )
+        return nodes

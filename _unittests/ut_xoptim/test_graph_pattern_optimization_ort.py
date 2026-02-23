@@ -25,7 +25,7 @@ from experimental_experiment.xbuilder.graph_builder import (
     OptimizationOptions,
     InferShapesOptions,
 )
-from experimental_experiment.xoptim import get_pattern_list
+from experimental_experiment.xoptim import get_pattern_list, get_pattern
 from experimental_experiment.xoptim.patterns_ort.gather_grad import GatherGradPattern
 from experimental_experiment.xoptim.patterns_ort.activation import GeluErfPattern
 from experimental_experiment.xbuilder._onnx_helper import (
@@ -2808,6 +2808,39 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(got[1], got[4], atol=1e-5)
         self.assertEqualArray(got[2], got[5], atol=1e-5)
         self.assertEqualArray(got[0], got[3], atol=1e-5)
+
+    @ignore_warnings((UserWarning, FutureWarning))
+    @hide_stdout()
+    def test_gqa_ort_contribops_packed(self):
+        model, inputs, ds, expected = self._get_model_attention()
+        f1 = self.get_dump_file("test_gqa_ort_contribops_packed.onnx")
+        patterns = get_pattern(
+            "default+onnxruntime-GroupQueryAttention3D+PackedGroupQueryAttention3D",
+            as_list=True,
+        )
+        onx = to_onnx(
+            model,
+            inputs,
+            dynamic_shapes=ds,
+            filename=f1,
+            options=OptimizationOptions(patterns=patterns),
+            target_opset=22,
+        )
+        self.dump_onnx("test_gqa_ort_contribops_packed_opt.onnx", onx)
+        node_types = [n.op_type for n in onx.graph.node]
+        self.assertIn("GroupQueryAttention", node_types)
+        self.assertIn("Concat", node_types)
+        # Verify the GroupQueryAttention node uses packed QKV (first input is concat output,
+        # second and third inputs are empty).
+        gqa_nodes = [n for n in onx.graph.node if n.op_type == "GroupQueryAttention"]
+        self.assertEqual(len(gqa_nodes), 1)
+        gqa_node = gqa_nodes[0]
+        self.assertEqual(gqa_node.input[1], "")
+        self.assertEqual(gqa_node.input[2], "")
+        ort = self._check_with_ort(onx, cpu=True)
+        feeds = dict(zip([i.name for i in onx.graph.input], [t.detach().numpy() for t in inputs]))
+        got = ort.run(None, feeds)
+        self.assertEqualArray(expected, got[0], 1e-5)
 
 
 if __name__ == "__main__":

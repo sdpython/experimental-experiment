@@ -42,6 +42,7 @@ def get_onnxruntime_patterns(
         ContribRotaryEmbedding3DPattern,
         GroupQueryAttention3DPattern,
         MultiHeadAttention3DPattern,
+        PackedGroupQueryAttention3DPattern,
     )
     from .missing_kernels import (
         MissingCosSinPattern,
@@ -79,6 +80,7 @@ def get_onnxruntime_patterns(
         MissingTopKPattern(verbose=verbose),
         MultiHeadAttention3DPattern(verbose=verbose),
         OrtBatchNormalizationTrainingPattern(verbose=verbose),
+        PackedGroupQueryAttention3DPattern(verbose=verbose),
         QuickGeluPattern(verbose=verbose),
         # GatherGradPattern(verbose=verbose),
         ReshapeGemmPattern(verbose=verbose),
