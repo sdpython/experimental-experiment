@@ -2169,24 +2169,46 @@ class DynamoInterpreter:
                                 f"{r_!r} is defined as a sequence already"
                                 f"{self.builder.get_debug_msg()}"
                             )
-                            self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
-                            self.builder.set_device(r_, v_.get_device())
-                            shape = tuple(v_.shape)
-                            if not any(
-                                i == 0 for i in shape if isinstance(i, int)
-                            ) and self.builder.is_dynamic_shape(
-                                shape, allow_new_dynamic_dimension=allow_new_dynamic_dimension
-                            ):
-                                self.builder.set_shape(r_, shape, set_if_more_precise=False)
-                            elif self.builder.has_rank(r_):
-                                assert len(shape) == self.builder.get_rank(r_), (
-                                    f"Rank already set for {r_!r}, "
-                                    f"but rank={self.builder.get_rank(r_)} "
-                                    f"differs for shape={shape!r}"
-                                    f"{self.builder.get_debug_msg()}"
-                                )
-                            else:
-                                self.builder.set_rank(r, len(shape))
+                            if isinstance(v_, self.torch.Tensor):
+                                self.builder.set_type(r_, torch_dtype_to_onnx_dtype(v_.dtype))
+                                self.builder.set_device(r_, v_.get_device())
+                                shape = tuple(v_.shape)
+                                if not any(
+                                    i == 0 for i in shape if isinstance(i, int)
+                                ) and self.builder.is_dynamic_shape(
+                                    shape,
+                                    allow_new_dynamic_dimension=allow_new_dynamic_dimension,
+                                ):
+                                    self.builder.set_shape(r_, shape, set_if_more_precise=False)
+                                elif self.builder.has_rank(r_):
+                                    assert len(shape) == self.builder.get_rank(r_), (
+                                        f"Rank already set for {r_!r}, "
+                                        f"but rank={self.builder.get_rank(r_)} "
+                                        f"differs for shape={shape!r}"
+                                        f"{self.builder.get_debug_msg()}"
+                                    )
+                                else:
+                                    self.builder.set_rank(r_, len(shape))
+                            elif isinstance(v_, self.torch.SymInt):
+                                self.builder.set_shape(r_, tuple())
+                                self.builder.set_type(r_, TensorProto.INT64)
+                                self.builder.make_dynamic_object(r_, v_)
+                            elif isinstance(v_, self.torch.SymFloat):
+                                self.builder.set_shape(r_, tuple())
+                                self.builder.set_type(r_, TensorProto.FLOAT)
+                                self.builder.make_dynamic_object(r_, v_)
+                            elif isinstance(v_, self.torch.SymBool):
+                                self.builder.set_shape(r_, tuple())
+                                self.builder.set_type(r_, TensorProto.BOOL)
+                                self.builder.make_dynamic_object(r_, v_)
+                            elif isinstance(v_, bool):
+                                self.builder.set_shape(r_, tuple())
+                                self.builder.set_type(r_, TensorProto.BOOL)
+                            elif isinstance(v_, int):
+                                self.builder.set_shape(r_, tuple())
+                                self.builder.set_type(r_, TensorProto.INT64)
+                            elif v_ is None:
+                                pass
                     else:
                         # This is coming from the sequence.
                         dtype = list(set(_.dtype for _ in v))

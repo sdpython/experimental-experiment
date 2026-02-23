@@ -7,6 +7,7 @@ from experimental_experiment.ext_test_case import (
     skipif_ci_windows,
     requires_torch,
     ignore_warnings,
+    requires_onnx_diagnostic,
 )
 from experimental_experiment.xbuilder import FunctionOptions
 from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
@@ -843,6 +844,37 @@ class TestOnnxExportSubModules(ExtTestCase):
         ref = ExtendedReferenceEvaluator(onx)
         got = ref.run(None, feeds)
         self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    @skipif_ci_windows("not available on windows")
+    @requires_torch("2.6", "owning module is None before that")
+    @requires_onnx_diagnostic("0.9.0")
+    @ignore_warnings(FutureWarning)
+    def test_submodule_local_functions_tiny_llm(self):
+        """
+        Tests that export_modules_as_functions=True works for Tiny-LLM
+        (arnir0/Tiny-LLM, a LlamaForCausalLM model) where some submodule
+        outputs include SymInt values mixed with tensors.
+        """
+        from onnx_diagnostic.torch_models.hghub import get_untrained_model_with_inputs
+        from onnx_diagnostic.torch_export_patches import torch_export_patches
+
+        model_id = "arnir0/Tiny-LLM"
+        data = get_untrained_model_with_inputs(model_id)
+        model, inputs, ds = data["model"], data["inputs"], data["dynamic_shapes"]
+
+        with torch_export_patches(patch_transformers=True):
+            onx = to_onnx(
+                model,
+                (),
+                kwargs=inputs,
+                dynamic_shapes=ds,
+                export_modules_as_functions=True,
+                inline=False,
+                optimize=False,
+                verbose=0,
+            )
+        check_model(onx)
+        self.assertGreater(len(onx.functions), 0)
 
 
 if __name__ == "__main__":
