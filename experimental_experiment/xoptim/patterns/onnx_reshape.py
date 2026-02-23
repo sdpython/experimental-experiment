@@ -2334,7 +2334,7 @@ class UnsqueezeOrSqueezeReshapePattern(PatternOptimization):
         if cst2 is None:
             return self.none(node, inspect.currentframe().f_lineno)
         if 0 in cst2:
-            # It may still be possible if the squeezed axis is beyong the last 0.
+            # It may still be possible if the squeezed axis is beyond the last 0.
             if not g.is_constant(node_before.input[1]):
                 return self.none(node, inspect.currentframe().f_lineno)
             axis = g.get_computed_constant(node_before.input[1])

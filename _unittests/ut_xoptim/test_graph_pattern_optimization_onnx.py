@@ -7180,9 +7180,7 @@ class TestGraphPatternOptimization(ExtTestCase):
             optimization_options=OptimizationOptions(patterns=["UnsqueezeOrSqueezeReshape"]),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.assertEqual(
-            ["Unsqueeze", "Reshape"], [n.op_type for n in opt_onx.graph.node]
-        )
+        self.assertEqual(["Unsqueeze", "Reshape"], [n.op_type for n in opt_onx.graph.node])
         opt_ref = ExtendedReferenceEvaluator(opt_onx)
         got = opt_ref.run(None, feeds)[0]
         self.assertEqualArray(expected, got)
