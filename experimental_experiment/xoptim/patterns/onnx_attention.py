@@ -1778,6 +1778,10 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
         f"{FunctionAttentionGQAPattern._operator_gqa_name}SWsQ_to",
         f"{FunctionAttentionGQAPattern._operator_gqa_name}_to",
         f"{FunctionAttentionGQAPattern._operator_gqa_name}sQ_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}noT_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}SWnoT_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}sQnoT_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}sQSWnoT_to",
     )
 
     def __init__(self, verbose: int = 0, priority: int = 2):
@@ -1885,7 +1889,7 @@ class AttentionGQAPattern(PatternOptimization, _CommonGQAMethods):
             shape_or_axis = g.get_computed_constant(node.input[6])
             if shape_or_axis is None:
                 return self.none(node, inspect.currentframe().f_lineno)
-            if "sQ_to" in node.op_type:
+            if "GQAsQ" in node.op_type:
                 # This is an axis for a Squeeze node.
                 if not g.get_shape(node.input[1]):
                     # We need that shape to get kv_num_heads.

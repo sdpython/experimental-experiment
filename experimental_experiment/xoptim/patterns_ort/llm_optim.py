@@ -1107,6 +1107,8 @@ class MultiHeadAttention3DPattern(PatternOptimization):
         f"{FunctionAttentionPattern._operator_name}sQ_to",
         f"{FunctionAttentionPattern._operator_name}SW_to",
         f"{FunctionAttentionPattern._operator_name}SWsQ_to",
+        f"{FunctionAttentionPattern._operator_name}noT_to",
+        f"{FunctionAttentionPattern._operator_name}SWnoT_to",
     )
 
     def __init__(self, verbose: int = 0, priority: int = 2):
@@ -1670,6 +1672,10 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         f"{FunctionAttentionGQAPattern._operator_gqa_name}SWsQ_to",
         f"{FunctionAttentionGQAPattern._operator_gqa_name}_to",
         f"{FunctionAttentionGQAPattern._operator_gqa_name}sQ_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}noT_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}SWnoT_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}sQnoT_to",
+        f"{FunctionAttentionGQAPattern._operator_gqa_name}sQSWnoT_to",
     )
 
     def __init__(self, verbose: int = 0, priority: int = 2):
@@ -1726,7 +1732,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         shape_or_axis = g.get_computed_constant(node.input[6])
         if shape_or_axis is None:
             return self.none(node, inspect.currentframe().f_lineno)
-        if "sQ_to" in node.op_type:
+        if "GQAsQ" in node.op_type:
             # This is an axis for a Squeeze node.
             if not g.get_shape(node.input[1]):
                 # We need that shape to get kv_num_heads.
@@ -1750,7 +1756,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
         repeat = int(expand_shape[2])
         rk_mask = g.get_rank(mask)
 
-        if "sQ_" in local_attention_gqa.op_type:
+        if "GQAsQ" in local_attention_gqa.op_type:
             k_shape = g.get_shape(local_attention_gqa.input[1])
             kv_num_heads = k_shape[1]
         else:
