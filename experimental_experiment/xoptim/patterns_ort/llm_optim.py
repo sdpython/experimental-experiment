@@ -1,6 +1,5 @@
 import inspect
-import os
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 import numpy as np
 from onnx import NodeProto, TensorProto
 from ...helpers import tensor_dtype_to_np_dtype
@@ -1674,7 +1673,6 @@ class GroupQueryAttention3DPattern(PatternOptimization):
 
     def __init__(self, verbose: int = 0, priority: int = 2):
         super().__init__(verbose, priority)
-        self._use_attention = os.environ.get("ONNXOPT_ATTENTION", "0") == "1"
 
     def match(
         self,
@@ -1886,3 +1884,146 @@ class GroupQueryAttention3DPattern(PatternOptimization):
                     f"{self.__class__.__name__}--{local_attention_gqa.name}"
                 )
         return nodes
+
+
+class Attention3DPattern(PatternOptimization):
+    _prefixes_operator_name = (f"{FunctionAttentionGQAPattern._operator_gqa_name}_to",)
+
+    def __init__(self, verbose: int = 0, priority: int = 2):
+        super().__init__(verbose, priority)
+
+    def _match_above(
+        self, g: "GraphBuilderPatternOptimization", node: NodeProto, name: str  # noqa: F821
+    ) -> Optional[Tuple[NodeProto, NodeProto, NodeProto]]:
+        transpose = g.node_before(name)
+        if not transpose or transpose.op_type != "Transpose":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if tuple(g.get_attribute(transpose, "perm").ints) != (0, 2, 1, 3):
+            return self.none(node, inspect.currentframe().f_lineno)
+        reshape = g.node_before(transpose.input[0])
+        if not reshape or reshape.op_type != "Reshape":
+            return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant(reshape.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(reshape.input[1])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        matmul = g.node_before(reshape.input[0])
+        if matmul is None or matmul.op_type != "MatMul":
+            return self.none(node, inspect.currentframe().f_lineno)
+        return matmul, reshape, transpose
+
+    def match(
+        self,
+        g: "GraphBuilderPatternOptimization",  # noqa: F821
+        node: NodeProto,
+        matched: List[MatchResult],
+    ) -> Optional[MatchResult]:
+        if (
+            not node.op_type.startswith(self._prefixes_operator_name)
+            or node.domain != FunctionAttentionGQAPattern._domain_name
+            or len(node.input) != 5
+        ):
+            return self.none()
+
+        query, keys, values = node.input[:3]
+
+        before_query = self._match_above(query)
+        if before_query is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        before_keys = self._match_above(keys)
+        if before_keys is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+        before_values = self._match_above(values)
+        if before_values is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        mm_q, re_q, tr_q = before_query
+        mm_k, re_k, tr_k = before_keys
+        mm_v, re_v, tr_v = before_values
+
+        if mm_q.input[0] != mm_k.input[0] or mm_q.input[0] != mm_v.input[0]:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        cst_q = g.get_computed_constant(re_q.input[0])
+        cst_k = g.get_computed_constant(re_k.input[0])
+        cst_v = g.get_computed_constant(re_v.input[0])
+        if tuple(cst_q) != tuple(cst_k) or tuple(cst_q) != tuple(cst_v):
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        transposes = g.next_nodes(node.output[0])
+        if len(transposes) != 1 or transposes[0].op_type != "Transpose":
+            return self.none(node, inspect.currentframe().f_lineno)
+        transpose = transposes[0]
+        if tuple(g.get_attribute(transpose, "perm").ints) != (0, 2, 1, 3):
+            return self.none(node, inspect.currentframe().f_lineno)
+        reshapes = g.next_nodes(transpose.output[0])
+        if len(reshapes) != 1 or reshapes[0].op_type != "Reshape":
+            return self.none(node, inspect.currentframe().f_lineno)
+        reshape = reshapes[0]
+        if not g.is_constant(reshape.input[1]):
+            return self.none(node, inspect.currentframe().f_lineno)
+        cst = g.get_computed_constant(reshape.input[1])
+        if cst is None:
+            return self.none(node, inspect.currentframe().f_lineno)
+
+        nodes = [mm_q, re_q, tr_q, mm_k, re_k, tr_k, mm_v, re_v, tr_v, node, transpose, reshape]
+        for n in nodes[:-1]:
+            if g.is_used_more_than_once(n.output[0]):
+                return self.none(node, inspect.currentframe().f_lineno)
+
+        return MatchResult(self, nodes, self.apply)
+
+    def apply(
+        self,
+        g: "GraphBuilder",  # noqa: F821
+        mm_q: NodeProto,
+        re_q: NodeProto,
+        tr_q: NodeProto,
+        mm_k: NodeProto,
+        re_k: NodeProto,
+        tr_k: NodeProto,
+        mm_v: NodeProto,
+        re_v: NodeProto,
+        tr_v: NodeProto,
+        attention: NodeProto,
+        transpose: NodeProto,
+        reshape: NodeProto,
+    ) -> List[NodeProto]:
+
+        packed = g.unique_name(
+            f"{self.__class__.__name__}--{mm_q.input[1]}-{mm_k.input[1]}-{mm_v.input[1]}"
+        )
+        concat_node = g.make_node(
+            "Concat",
+            [mm_q.input[1], mm_k.input[1], mm_v.input[1]],
+            [packed],
+            axis=-1,
+            name=f"{self.__class__.__name__}--{attention.name}",
+        )
+        scale = float(g.get_constant_scalar(attention.input[4])) ** 2
+        num_heads = g.get_shape(attention.input[0])[1]
+        sizes = (
+            g.get_shape(mm_q.input[1])[-1],
+            g.get_shape(mm_k.input[1])[-1],
+            g.get_shape(mm_k.input[1])[-1],
+        )
+
+        attention_node = g.make_node(
+            "Attention",
+            [
+                mm_q.input[0],
+                packed,
+                "",
+                "",
+                "",
+                attention.input[3],
+            ],
+            [reshape.output[0]],
+            num_heads=num_heads,
+            qkv_hidden_size=sizes,
+            scale=scale**2,
+            domain="com.microsoft",
+            name=f"{self.__class__.__name__}--{attention.name}",
+        )
+        return [concat_node, attention_node]

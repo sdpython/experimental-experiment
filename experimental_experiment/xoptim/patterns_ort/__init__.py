@@ -38,6 +38,7 @@ def get_onnxruntime_patterns(
         TransposeFusedMatMulBPattern,
     )
     from .llm_optim import (
+        Attention3DPattern,
         ContribRotaryEmbeddingPattern,
         ContribRotaryEmbedding3DPattern,
         GroupQueryAttention3DPattern,
@@ -60,6 +61,7 @@ def get_onnxruntime_patterns(
     )
 
     return [
+        Attention3DPattern(verbose=verbose),
         BiasGeluPattern(verbose=verbose),
         BiasSoftmaxPattern(verbose=verbose),
         ContribRotaryEmbeddingPattern(verbose=verbose),
