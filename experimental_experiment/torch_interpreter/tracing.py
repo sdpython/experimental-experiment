@@ -256,28 +256,12 @@ def tree_unflatten_with_proxy(
     child_pytrees = []
     for child_spec in tree_spec._children:
         end += child_spec.num_leaves
-        if child_spec and child_spec.type and child_spec.type.__name__ == "DynamicCache":
-            import transformers
-
-            n = (end - start) // 2
-            cache = transformers.cache_utils.DynamicCache()
-            cache.layers.extend([transformers.cache_utils.DynamicLayer() for _ in range(n)])
-            for i in range(n):
-                cache.layers[i].keys = leaves[start + i * 2]
-                cache.layers[i].values = leaves[start + i * 2 + 1]
-            child_pytrees.append(cache)
-        else:
-            assert (
-                not child_spec
-                or not child_spec.type
-                or not child_spec.type.__name__.endswith("Cache")
-            ), (
-                f"tree_unflatten_with_proxy is not implemented yet for {child_spec.type}, "
-                f"child_spec={child_spec}"
-            )
-            child_pytrees.append(child_spec.unflatten(leaves[start:end]))
+        assert not child_spec or not child_spec.type or child_spec.unflatten, (
+            f"child_spec.unflatten is empty for child_spec.type={child_spec.type}, "
+            f"child_spec={child_spec}"
+        )
+        child_pytrees.append(child_spec.unflatten(leaves[start:end]))
         start = end
-
     return unflatten_fn(child_pytrees, tree_spec._context)
 
 
@@ -352,6 +336,16 @@ class CustomTracer(torch.fx.Tracer):
             param_shapes_constant=param_shapes_constant,
         )
         self._callables = {}
+
+    @torch.fx._compatibility.compatibility(is_backward_compatible=True)
+    def call_module(
+        self,
+        m: torch.nn.Module,
+        forward: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        return super().call_module(m, forward, args, kwargs)
 
     def register_callable(self, name: str, fn: Callable) -> torch.fx.Node:
         """
