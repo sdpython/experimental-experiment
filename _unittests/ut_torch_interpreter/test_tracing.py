@@ -199,7 +199,6 @@ class TestTracing(ExtTestCase):
 
     def test_tracing_inplace_setitem_ellipsis(self):
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.params = torch.zeros((1, 8192, 4), dtype=torch.float32)
@@ -669,6 +668,91 @@ class TestTracing(ExtTestCase):
                             ),
                             t,
                         )
+
+    def test_tracing_submodule(self):
+        class SubModule(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1, kind: int = 0):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+                self.kind = kind
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x)) + self.buff
+
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.suba = SubModule(n_dims, n_targets, kind=1)
+                self.subb = SubModule(n_dims, n_targets, kind=2)
+
+            def forward(self, x, y):
+                return self.suba(x) + self.subb(y)
+
+        def f(mod, module_qualified_name=None):
+            self.assertIsInstance(module_qualified_name, str)
+            self.assertIn(module_qualified_name, ("suba", "subb"))
+            return mod.kind == 1
+
+        module_leaves = {SubModule: f}
+        model = Model()
+        self.assertTrue(f(model.suba, "suba"))
+        self.assertFalse(f(model.subb, "suba"))
+        graph = CustomTracer(module_leaves=module_leaves).trace(model)
+        module_nodes = [n for n in graph.nodes if n.op == "call_module"]
+        self.assertEqual(len(module_nodes), 2)
+        self.assertEqual(module_nodes[0].target, "suba")
+        self.assertEqual(module_nodes[1].target, "subb.linear")
+
+    def test_export_submodule(self):
+        class SubModule(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1, kind: int = 0):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+                self.kind = kind
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x)) + self.buff
+
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.suba = SubModule(n_dims, n_targets, kind=1)
+                self.subb = SubModule(n_dims, n_targets, kind=2)
+
+            def forward(self, x, y):
+                return self.suba(x) + self.subb(y)
+
+        def f(mod, module_qualified_name=None):
+            self.assertIsInstance(module_qualified_name, str)
+            self.assertIn(module_qualified_name, ("suba", "subb"))
+            return mod.kind == 1
+
+        module_leaves = {SubModule: f}
+
+        def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+            is_leave = (
+                m.__module__.startswith("torch.nn") or m.__module__.startswith("torch.ao.nn")
+            ) and not isinstance(m, torch.nn.Sequential)
+            if is_leave:
+                return is_leave
+            if module_leaves and type(m) in module_leaves:
+                f = module_leaves[type(m)]
+                return f(m, module_qualified_name=module_qualified_name)
+            return False
+
+        model = Model()
+        self.assertTrue(f(model.suba, "suba"))
+        self.assertFalse(f(model.subb, "suba"))
+        x, y = torch.randn((5, 3)), torch.randn((5, 3))
+        ep = torch.export.export(
+            model,
+            (x, y),
+            dynamic_shapes=({0: torch.export.Dim.DYNAMIC}, {0: torch.export.Dim.DYNAMIC}),
+        )
+        module_nodes = [n for n in ep.graph.nodes if n.op == "call_module"]
+        self.assertEqual(len(module_nodes), 0)
 
 
 if __name__ == "__main__":

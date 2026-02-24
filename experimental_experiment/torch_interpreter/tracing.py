@@ -322,6 +322,37 @@ class CustomTracer(torch.fx.Tracer):
         from experimental_experiment.torch_interpreter.tracing import CustomTracer
 
         graph = CustomTracer().trace(model)
+
+    Tracer(autowrap_modules=(math,), autowrap_functions=())
+
+    ``Tracer`` is the class that implements the symbolic tracing functionality
+    of ``torch.fx.symbolic_trace``. A call to ``symbolic_trace(m)`` is equivalent
+    to ``Tracer().trace(m)``.
+
+    Tracer can be subclassed to override various behaviors of the tracing
+    process. The different behaviors that can be overridden are described
+    in the docstrings of the methods on this class.
+
+    Args:
+
+        autowrap_modules (Tuple[ModuleType]): defaults to `(math, )`,
+            Python modules whose functions should be wrapped automatically
+            without needing to use fx.wrap(). Backward-compatibility for
+            this parameter is guaranteed.
+
+        autowrap_functions (Tuple[Callable, ...]): defaults to `()`,
+            Python functions that should be wrapped automatically without
+            needing to use fx.wrap(). Backward compatibility for this
+            parameter is guaranteed.
+
+        param_shapes_constant (bool): When this flag is set,  calls to shape,
+            size and a few other shape like attributes of a module's parameter
+            will be evaluated directly, rather than returning a new Proxy value
+            for an attribute access. Backward compatibility for this parameter
+            is guaranteed.
+
+        module_leaves: module to be considered as leaves,
+            the exporter does not trace them
     """
 
     def __init__(
@@ -329,6 +360,7 @@ class CustomTracer(torch.fx.Tracer):
         autowrap_modules: Tuple["ModuleType"] = (math,),  # noqa: F821
         autowrap_functions: Tuple[Callable, ...] = (),
         param_shapes_constant: bool = False,
+        module_leaves: Optional[Dict[type, Callable[[torch.nn.Module], bool]]] = None,
     ):
         super().__init__(
             autowrap_modules=autowrap_modules,
@@ -336,6 +368,38 @@ class CustomTracer(torch.fx.Tracer):
             param_shapes_constant=param_shapes_constant,
         )
         self._callables = {}
+        self.module_leaves = module_leaves
+
+    @torch.fx._compatibility.compatibility(is_backward_compatible=True)
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        """
+        A method to specify whether a given ``nn.Module`` is a "leaf" module.
+
+        Leaf modules are the atomic units that appear in
+        the IR, referenced by ``call_module`` calls. By default,
+        Modules in the PyTorch standard library namespace (torch.nn)
+        are leaf modules. All other modules are traced through and
+        their constituent ops are recorded, unless specified otherwise
+        via this parameter.
+
+        Args:
+
+            m (Module): The module being queried about
+            module_qualified_name (str): The path to root of this module. For example,
+                if you have a module hierarchy where submodule ``foo`` contains
+                submodule ``bar``, which contains submodule ``baz``, that module will
+                appear with the qualified name ``foo.bar.baz`` here.
+        """
+        return (
+            m.__module__.startswith("torch.nn") or m.__module__.startswith("torch.ao.nn")
+        ) and not isinstance(m, torch.nn.Sequential)
+        is_leave = super().is_leaf_module(m, module_qualified_name)
+        if is_leave:
+            return is_leave
+        if self.module_leaves and type(m) in self.module_leaves:
+            f = self.module_leaves[type(m)]
+            return f(m, module_qualified_name=module_qualified_name)
+        return False
 
     @torch.fx._compatibility.compatibility(is_backward_compatible=True)
     def call_module(
@@ -345,6 +409,32 @@ class CustomTracer(torch.fx.Tracer):
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
+        """
+        Method that specifies the behavior of this ``Tracer`` when it encounters
+        a call to an ``nn.Module`` instance.
+
+        By default, the behavior is to check if the called module is a leaf module
+        via ``is_leaf_module``. If it is, emit a ``call_module`` node referring to
+        ``m`` in the ``Graph``. Otherwise, call the ``Module`` normally, tracing through
+        the operations in its ``forward`` function.
+
+        This method can be overridden to--for example--create nested traced
+        GraphModules, or any other behavior you would want while tracing across
+        ``Module`` boundaries.
+
+        Args:
+
+            m (Module): The module for which a call is being emitted
+            forward (Callable): The forward() method of the ``Module`` to be invoked
+            args (Tuple): args of the module callsite
+            kwargs (Dict): kwargs of the module callsite
+
+        Return:
+
+            The return value from the Module call. In the case that a ``call_module``
+            node was emitted, this is a ``Proxy`` value. Otherwise, it is whatever
+            value was returned from the ``Module`` invocation.
+        """
         return super().call_module(m, forward, args, kwargs)
 
     def register_callable(self, name: str, fn: Callable) -> torch.fx.Node:
