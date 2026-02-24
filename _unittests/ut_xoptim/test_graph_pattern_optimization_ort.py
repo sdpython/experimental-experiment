@@ -2864,18 +2864,14 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         if same_hidden:
             inputs = [
                 oh.make_tensor_value_info("hidden", TFLOAT, ["batch", "seq", hidden_dim]),
-                oh.make_tensor_value_info(
-                    "mask", TensorProto.BOOL, [1, 1, "seq", "seq"]
-                ),
+                oh.make_tensor_value_info("mask", TensorProto.BOOL, [1, 1, "seq", "seq"]),
             ]
         else:
             inputs = [
                 oh.make_tensor_value_info("hidden_q", TFLOAT, ["batch", "seq", hidden_dim]),
                 oh.make_tensor_value_info("hidden_k", TFLOAT, ["batch", "seq", hidden_dim]),
                 oh.make_tensor_value_info("hidden_v", TFLOAT, ["batch", "seq", hidden_dim]),
-                oh.make_tensor_value_info(
-                    "mask", TensorProto.BOOL, [1, 1, "seq", "seq"]
-                ),
+                oh.make_tensor_value_info("mask", TensorProto.BOOL, [1, 1, "seq", "seq"]),
             ]
         model = oh.make_model(
             oh.make_graph(
@@ -2890,12 +2886,8 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     onh.from_array(scale_val, name="scale"),
                     onh.from_array(reshape_shape, name="reshape_shape"),
                     onh.from_array(output_shape, name="output_shape"),
-                    onh.from_array(
-                        np.array([0], dtype=dtype), name="zero"
-                    ),
-                    onh.from_array(
-                        np.array([-np.inf], dtype=dtype), name="minfty"
-                    ),
+                    onh.from_array(np.array([0], dtype=dtype), name="zero"),
+                    onh.from_array(np.array([-np.inf], dtype=dtype), name="minfty"),
                 ],
             ),
             opset_imports=[oh.make_opsetid("", 18)],
@@ -2904,19 +2896,16 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         return model, num_heads, head_size, hidden_dim
 
     def test_attention_3d_pattern(self):
-        """
-        Tests that Attention3DPattern folds QKV MatMul projections into a single
-        com.microsoft.Attention node when all projections share the same input.
-
-        The pipeline is:
-        1. FunctionAttentionPattern creates LocalAttention_to1 (intermediate domain, 5 inputs)
-           with Transpose(Reshape(MatMul(hidden, W))) as query/key/value inputs.
-        2. Attention3DPattern matches and replaces with com.microsoft.Attention.
-        """
-        model, num_heads, head_size, hidden_dim = self._build_attention_3d_model(
+        model, _num_heads, _head_size, hidden_dim = self._build_attention_3d_model(
             same_hidden=True
         )
-        self.dump_onnx("test_attention_3d_pattern_input.onnx", model)
+        # self.dump_onnx("test_attention_3d_pattern_input.onnx", model)
+        feeds = dict(
+            hidden=self._range(2, 5, hidden_dim),
+            mask=np.random.randint(0, 2, size=(1, 1, 5, 5)) % 2 == 1,
+        )
+        sess = self._check_with_ort(model, cpu=True)
+        expected = sess.run(None, feeds)
 
         gr = GraphBuilder(
             model,
@@ -2926,7 +2915,10 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
             ),
         )
         opt_onx = gr.to_onnx(optimize=True)
-        self.dump_onnx("test_attention_3d_pattern_output.onnx", opt_onx)
+        # self.dump_onnx("test_attention_3d_pattern_output.onnx", opt_onx)
+        sess_opt = self._check_with_ort(opt_onx, cpu=False)
+        got = sess_opt.run(None, feeds)
+        self.assertEqualArray(expected[0], got[0])
 
         # After optimization, Attention (com.microsoft) should appear
         op_types = [(n.op_type, n.domain) for n in opt_onx.graph.node]
@@ -2935,11 +2927,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertNotIn("LocalAttention_to1", (n for n, _ in op_types))
 
     def test_attention_3d_pattern_no_match_different_hidden(self):
-        """
-        Tests that Attention3DPattern does NOT fire when Q, K, V MatMuls use
-        different input tensors (shared hidden_states required).
-        """
-        model, num_heads, head_size, hidden_dim = self._build_attention_3d_model(
+        model, _num_heads, _head_size, _hidden_dim = self._build_attention_3d_model(
             same_hidden=False
         )
 
@@ -2954,11 +2942,11 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
 
         # Pattern should NOT fire since Q, K, V come from different inputs
         ms_attention = [
-            n for n in opt_onx.graph.node
+            n
+            for n in opt_onx.graph.node
             if n.op_type == "Attention" and n.domain == "com.microsoft"
         ]
         self.assertEqual(0, len(ms_attention))
-        # LocalAttention_to1 should still be present (created by FunctionAttentionPattern)
         self.assertIn("LocalAttention_to1", [n.op_type for n in opt_onx.graph.node])
 
 

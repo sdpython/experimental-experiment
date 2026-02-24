@@ -1925,6 +1925,9 @@ class Attention3DPattern(PatternOptimization):
             or len(node.input) != 5
         ):
             return self.none()
+        if len(node.input) > 3 and node.input[3] and not g.has_type(node.input[3]):
+            # mask type is unknown
+            return self.none(node, inspect.currentframe().f_lineno)
 
         query, keys, values = node.input[:3]
 
@@ -2003,11 +2006,35 @@ class Attention3DPattern(PatternOptimization):
         )
         scale = float(g.get_constant_scalar(attention.input[4])) ** 2
         num_heads = g.get_shape(attention.input[0])[1]
-        sizes = (
+        sizes = [
             g.get_shape(mm_q.input[1])[-1],
             g.get_shape(mm_k.input[1])[-1],
-            g.get_shape(mm_k.input[1])[-1],
-        )
+            g.get_shape(mm_v.input[1])[-1],
+        ]
+
+        where_node = None
+        if len(attention.input) > 3 and attention.input[3]:
+            if g.get_type(attention.input[3]) == TensorProto.BOOL:
+                dtype = tensor_dtype_to_np_dtype(g.get_type(attention.input[0]))
+                mask = g.unique_name(f"{self.__class__.__name__}--{attention.input[3]}")
+                zero = g.make_initializer(
+                    "", np.array([0], dtype=dtype), source=f"{self.__class__.__name__}.0"
+                )
+                inf = g.make_initializer(
+                    "",
+                    np.array([np.finfo(dtype).min], dtype=dtype),
+                    source=f"{self.__class__.__name__}.inf",
+                )
+                where_node = g.make_node(
+                    "Where",
+                    [attention.input[3], zero, inf],
+                    [mask],
+                    name=f"{self.__class__.__name__}--{attention.name}",
+                )
+            else:
+                mask = attention.input[3]
+        else:
+            mask = ""
 
         attention_node = g.make_node(
             "Attention",
@@ -2017,13 +2044,13 @@ class Attention3DPattern(PatternOptimization):
                 "",
                 "",
                 "",
-                attention.input[3],
+                mask,
             ],
             [reshape.output[0]],
             num_heads=num_heads,
-            qkv_hidden_size=sizes,
-            scale=scale**2,
+            qkv_hidden_sizes=sizes,
+            scale=scale,
             domain="com.microsoft",
             name=f"{self.__class__.__name__}--{attention.name}",
         )
-        return [concat_node, attention_node]
+        return [n for n in [concat_node, where_node, attention_node] if n]
