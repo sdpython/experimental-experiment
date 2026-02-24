@@ -646,7 +646,7 @@ class ExportOptions:
 
             if verbose:
                 print(f"[ExportOptions.export] CustomTracer().trace, verbose={verbose}")
-                print(f"[ExportIptions.export] {self.tracing_module_leaves=}")
+                print(f"[ExportOptions.export] {self.tracing_module_leaves=}")
                 print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
                 print(
                     f"[ExportOptions.export] args={string_type(args, with_shape=True, limit=20)}"
@@ -677,12 +677,9 @@ class ExportOptions:
                 save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
                 with open(f"{save_ep}.tracing", "w") as f:
                     f.write(str(graph))
-            print(graph)
+            if verbose:
+                print(f"[ExportOptions.export] graph done")
             gm = _make_graph_module(tracer.root, graph, mod.__class__.__name__)
-
-            # from torch.fx.passes.shape_prop import ShapeProp
-            # ShapeProp(gp).propagate(**concrete_args)
-            # gm = torch.fx.GraphModule(getattr(tracer, "traced_model", None) or mod, graph)
             return gm
 
         if verbose:

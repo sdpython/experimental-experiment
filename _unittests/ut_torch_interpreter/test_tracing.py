@@ -732,17 +732,6 @@ class TestTracing(ExtTestCase):
 
         module_leaves = {SubModule: f}
 
-        def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-            is_leave = (
-                m.__module__.startswith("torch.nn") or m.__module__.startswith("torch.ao.nn")
-            ) and not isinstance(m, torch.nn.Sequential)
-            if is_leave:
-                return is_leave
-            if module_leaves and type(m) in module_leaves:
-                f = module_leaves[type(m)]
-                return f(m, module_qualified_name=module_qualified_name)
-            return False
-
         model = Model()
         self.assertTrue(f(model.suba, "suba"))
         self.assertFalse(f(model.subb, "suba"))
