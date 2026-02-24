@@ -677,7 +677,6 @@ class ExportOptions:
                 save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
                 with open(f"{save_ep}.tracing", "w") as f:
                     f.write(str(graph))
-            print(graph)
             gm = _make_graph_module(tracer.root, graph, mod.__class__.__name__)
 
             # from torch.fx.passes.shape_prop import ShapeProp
