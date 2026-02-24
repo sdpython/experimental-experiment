@@ -1073,10 +1073,11 @@ def to_onnx(
         )
         if isinstance(graph_module, builder.torch.export.ExportedProgram):
             if verbose > 1:
-                print(
-                    f"[to_onnx] unflatten the graph_module, "
-                    f"preserve {sorted((c if isinstance(c, str) else getattr(c, '__name__', str(c))) for c in export_modules_as_functions)}"
+                disp = sorted(
+                    (c if isinstance(c, str) else getattr(c, "__name__", str(c)))
+                    for c in export_modules_as_functions
                 )
+                print(f"[to_onnx] unflatten the graph_module, preserve {disp}")
 
             a = time.perf_counter()
             new_graph_module = builder.torch.export.unflatten(graph_module)
