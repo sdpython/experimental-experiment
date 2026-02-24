@@ -2809,6 +2809,158 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         self.assertEqualArray(got[2], got[5], atol=1e-5)
         self.assertEqualArray(got[0], got[3], atol=1e-5)
 
+    def _build_attention_3d_model(self, same_hidden: bool = True):
+        """
+        Builds a self-attention model with 3D hidden states and QKV projections.
+        This model is designed to be processed by FunctionAttentionPattern, which
+        creates LocalAttention_to1 (intermediate domain) with MatMul→Reshape→Transpose
+        inputs for Q, K, V. Attention3DPattern can then convert it to Attention (com.microsoft).
+        """
+        num_heads = 8
+        head_size = 32
+        hidden_dim = num_heads * head_size  # 256
+
+        Wq = np.random.randn(hidden_dim, hidden_dim).astype(np.float32)
+        Wk = np.random.randn(hidden_dim, hidden_dim).astype(np.float32)
+        Wv = np.random.randn(hidden_dim, hidden_dim).astype(np.float32)
+        scale_val = np.array([head_size**-0.5], dtype=np.float32)
+        reshape_shape = np.array([0, 0, num_heads, head_size], dtype=np.int64)
+        output_shape = np.array([0, 0, hidden_dim], dtype=np.int64)
+
+        # hidden_q = hidden_k = hidden_v when same_hidden=True (pattern fires),
+        # otherwise separate inputs (pattern does NOT fire)
+        q_src = "hidden" if same_hidden else "hidden_q"
+        k_src = "hidden" if same_hidden else "hidden_k"
+        v_src = "hidden" if same_hidden else "hidden_v"
+
+        nodes = [
+            # Q projection: MatMul → Mul(scale) → Reshape → Transpose([0,2,1,3])
+            oh.make_node("MatMul", [q_src, "Wq"], ["Q_3D"]),
+            oh.make_node("Mul", ["Q_3D", "scale"], ["Q_3D_s"]),
+            oh.make_node("Reshape", ["Q_3D_s", "reshape_shape"], ["Q_4D"]),
+            oh.make_node("Transpose", ["Q_4D"], ["Q_4D_t"], perm=[0, 2, 1, 3]),
+            # K projection: MatMul → Mul(scale) → Reshape → Transpose([0,2,3,1])
+            oh.make_node("MatMul", [k_src, "Wk"], ["K_3D"]),
+            oh.make_node("Mul", ["K_3D", "scale"], ["K_3D_s"]),
+            oh.make_node("Reshape", ["K_3D_s", "reshape_shape"], ["K_4D"]),
+            oh.make_node("Transpose", ["K_4D"], ["K_4D_t"], perm=[0, 2, 3, 1]),
+            # V projection: MatMul → Reshape → Transpose([0,2,1,3])
+            oh.make_node("MatMul", [v_src, "Wv"], ["V_3D"]),
+            oh.make_node("Reshape", ["V_3D", "reshape_shape"], ["V_4D"]),
+            oh.make_node("Transpose", ["V_4D"], ["V_4D_t"], perm=[0, 2, 1, 3]),
+            # QK attention scores
+            oh.make_node("MatMul", ["Q_4D_t", "K_4D_t"], ["QK"]),
+            # Where(mask, QK, -inf) → non-SW variant (inf at index 2)
+            oh.make_node("Where", ["mask", "QK", "minfty"], ["masked_QK"]),
+            oh.make_node("Softmax", ["masked_QK"], ["attn"], axis=-1),
+            oh.make_node("IsNaN", ["attn"], ["isnan"]),
+            oh.make_node("Where", ["isnan", "zero", "attn"], ["attn_clean"]),
+            oh.make_node("MatMul", ["attn_clean", "V_4D_t"], ["output_4D"]),
+            # Output reshape
+            oh.make_node("Transpose", ["output_4D"], ["output_4D_t"], perm=[0, 2, 1, 3]),
+            oh.make_node("Reshape", ["output_4D_t", "output_shape"], ["output"]),
+        ]
+        dtype = np.float32
+        if same_hidden:
+            inputs = [
+                oh.make_tensor_value_info("hidden", TFLOAT, ["batch", "seq", hidden_dim]),
+                oh.make_tensor_value_info(
+                    "mask", TensorProto.BOOL, [1, 1, "seq", "seq"]
+                ),
+            ]
+        else:
+            inputs = [
+                oh.make_tensor_value_info("hidden_q", TFLOAT, ["batch", "seq", hidden_dim]),
+                oh.make_tensor_value_info("hidden_k", TFLOAT, ["batch", "seq", hidden_dim]),
+                oh.make_tensor_value_info("hidden_v", TFLOAT, ["batch", "seq", hidden_dim]),
+                oh.make_tensor_value_info(
+                    "mask", TensorProto.BOOL, [1, 1, "seq", "seq"]
+                ),
+            ]
+        model = oh.make_model(
+            oh.make_graph(
+                nodes,
+                "attention_3d",
+                inputs,
+                [oh.make_tensor_value_info("output", TFLOAT, ["batch", "seq", hidden_dim])],
+                [
+                    onh.from_array(Wq, name="Wq"),
+                    onh.from_array(Wk, name="Wk"),
+                    onh.from_array(Wv, name="Wv"),
+                    onh.from_array(scale_val, name="scale"),
+                    onh.from_array(reshape_shape, name="reshape_shape"),
+                    onh.from_array(output_shape, name="output_shape"),
+                    onh.from_array(
+                        np.array([0], dtype=dtype), name="zero"
+                    ),
+                    onh.from_array(
+                        np.array([-np.inf], dtype=dtype), name="minfty"
+                    ),
+                ],
+            ),
+            opset_imports=[oh.make_opsetid("", 18)],
+            ir_version=10,
+        )
+        return model, num_heads, head_size, hidden_dim
+
+    def test_attention_3d_pattern(self):
+        """
+        Tests that Attention3DPattern folds QKV MatMul projections into a single
+        com.microsoft.Attention node when all projections share the same input.
+
+        The pipeline is:
+        1. FunctionAttentionPattern creates LocalAttention_to1 (intermediate domain, 5 inputs)
+           with Transpose(Reshape(MatMul(hidden, W))) as query/key/value inputs.
+        2. Attention3DPattern matches and replaces with com.microsoft.Attention.
+        """
+        model, num_heads, head_size, hidden_dim = self._build_attention_3d_model(
+            same_hidden=True
+        )
+        self.dump_onnx("test_attention_3d_pattern_input.onnx", model)
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionAttention", "Attention3D"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+        self.dump_onnx("test_attention_3d_pattern_output.onnx", opt_onx)
+
+        # After optimization, Attention (com.microsoft) should appear
+        op_types = [(n.op_type, n.domain) for n in opt_onx.graph.node]
+        self.assertIn(("Attention", "com.microsoft"), op_types)
+        # The QKV MatMul/Reshape/Transpose projections should be absorbed
+        self.assertNotIn("LocalAttention_to1", (n for n, _ in op_types))
+
+    def test_attention_3d_pattern_no_match_different_hidden(self):
+        """
+        Tests that Attention3DPattern does NOT fire when Q, K, V MatMuls use
+        different input tensors (shared hidden_states required).
+        """
+        model, num_heads, head_size, hidden_dim = self._build_attention_3d_model(
+            same_hidden=False
+        )
+
+        gr = GraphBuilder(
+            model,
+            infer_shapes_options=True,
+            optimization_options=OptimizationOptions(
+                patterns=["FunctionAttention", "Attention3D"], verbose=0
+            ),
+        )
+        opt_onx = gr.to_onnx(optimize=True)
+
+        # Pattern should NOT fire since Q, K, V come from different inputs
+        ms_attention = [
+            n for n in opt_onx.graph.node
+            if n.op_type == "Attention" and n.domain == "com.microsoft"
+        ]
+        self.assertEqual(0, len(ms_attention))
+        # LocalAttention_to1 should still be present (created by FunctionAttentionPattern)
+        self.assertIn("LocalAttention_to1", [n.op_type for n in opt_onx.graph.node])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

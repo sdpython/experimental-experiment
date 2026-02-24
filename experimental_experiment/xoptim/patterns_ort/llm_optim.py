@@ -1887,7 +1887,7 @@ class GroupQueryAttention3DPattern(PatternOptimization):
 
 
 class Attention3DPattern(PatternOptimization):
-    _prefixes_operator_name = (f"{FunctionAttentionGQAPattern._operator_gqa_name}_to",)
+    _prefixes_operator_name = (f"{FunctionAttentionPattern._operator_name}_to",)
 
     def __init__(self, verbose: int = 0, priority: int = 2):
         super().__init__(verbose, priority)
@@ -1928,13 +1928,13 @@ class Attention3DPattern(PatternOptimization):
 
         query, keys, values = node.input[:3]
 
-        before_query = self._match_above(query)
+        before_query = self._match_above(g, node, query)
         if before_query is None:
             return self.none(node, inspect.currentframe().f_lineno)
-        before_keys = self._match_above(keys)
+        before_keys = self._match_above(g, node, keys)
         if before_keys is None:
             return self.none(node, inspect.currentframe().f_lineno)
-        before_values = self._match_above(values)
+        before_values = self._match_above(g, node, values)
         if before_values is None:
             return self.none(node, inspect.currentframe().f_lineno)
 
@@ -1945,9 +1945,9 @@ class Attention3DPattern(PatternOptimization):
         if mm_q.input[0] != mm_k.input[0] or mm_q.input[0] != mm_v.input[0]:
             return self.none(node, inspect.currentframe().f_lineno)
 
-        cst_q = g.get_computed_constant(re_q.input[0])
-        cst_k = g.get_computed_constant(re_k.input[0])
-        cst_v = g.get_computed_constant(re_v.input[0])
+        cst_q = g.get_computed_constant(re_q.input[1])
+        cst_k = g.get_computed_constant(re_k.input[1])
+        cst_v = g.get_computed_constant(re_v.input[1])
         if tuple(cst_q) != tuple(cst_k) or tuple(cst_q) != tuple(cst_v):
             return self.none(node, inspect.currentframe().f_lineno)
 

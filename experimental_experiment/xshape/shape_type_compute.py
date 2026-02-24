@@ -1813,6 +1813,16 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
         return None
 
     # to be improved later
+    if node.op_type in {"Attention"} and node.domain == "com.microsoft":
+        if self.has_type(node.input[0]):
+            self.set_type(node.output[0], self.get_type(node.input[0]))
+        if self.has_shape(node.input[0]):
+            self.set_shape(node.output[0], self.get_shape(node.input[0]))
+        elif self.has_rank(node.input[0]):
+            self.set_rank(node.output[0], self.get_rank(node.input[0]))
+        return None
+
+    # to be improved later
     if node.op_type in {"GroupQueryAttention"} and node.domain == "com.microsoft":
         if self.has_type(node.input[0]):
             self.set_type(node.output[0], self.get_type(node.input[0]))
