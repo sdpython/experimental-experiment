@@ -703,27 +703,36 @@ class CustomTracer(torch.fx.Tracer):
                 print(f"[CustomTracer.trace] -- new_names={new_names}")
             if new_names:
                 flat_concrete_args, _spec = torch.utils._pytree.tree_flatten(concrete_args)
+                flat_traced_concrete_args, _spec = torch.utils._pytree.tree_flatten(
+                    self._traced_concrete_args
+                )
             mapped = set()
             for node in graph.nodes:
                 if node.op == "placeholder":
                     if not new_names and node.name in concrete_args:
                         ti = concrete_args[node.name]
+                        tif = self._traced_concrete_args[node.name]
                         if verbose:
                             print(
                                 f"[CustomTracer.trace] assign.1 {node.name!r} with "
-                                f"{string_type(ti, with_shape=True)}"
+                                f"{string_type(ti, with_shape=True)} or "
+                                f"{string_type(tif, with_shape=True)}"
                             )
                         node.meta["example_value"] = ti
+                        node.meta["val"] = tif
                         mapped.add(node.name)
                     elif new_names and node.name in new_names:
                         ii = new_names.index(node.name)
                         ti = flat_concrete_args[ii]
+                        tif = flat_traced_concrete_args[ii]
                         if verbose:
                             print(
                                 f"[CustomTracer.trace] assign.1 {node.name!r} with "
-                                f"{string_type(ti, with_shape=True)}"
+                                f"{string_type(ti, with_shape=True)} or "
+                                f"{string_type(tif, with_shape=True)}"
                             )
                         node.meta["example_value"] = ti
+                        node.meta["val"] = ti
                         mapped.add(node.name)
             assert new_names or set(mapped) == set(concrete_args), (
                 f"Missing mapped inputs, set(concrete_args)={set(concrete_args)}, "
