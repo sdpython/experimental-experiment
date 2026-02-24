@@ -698,7 +698,7 @@ class TestTracing(ExtTestCase):
         module_leaves = {SubModule: f}
         model = Model()
         self.assertTrue(f(model.suba, "suba"))
-        self.assertFalse(f(model.subb, "suba"))
+        self.assertFalse(f(model.subb, "subb"))
         graph = CustomTracer(module_leaves=module_leaves).trace(model)
         module_nodes = [n for n in graph.nodes if n.op == "call_module"]
         self.assertEqual(len(module_nodes), 2)
