@@ -646,7 +646,7 @@ class ExportOptions:
 
             if verbose:
                 print(f"[ExportOptions.export] CustomTracer().trace, verbose={verbose}")
-                print(f"[ExportIptions.export] {self.tracing_module_leaves=}")
+                print(f"[ExportOptions.export] {self.tracing_module_leaves=}")
                 print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
                 print(
                     f"[ExportOptions.export] args={string_type(args, with_shape=True, limit=20)}"
