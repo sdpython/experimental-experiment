@@ -126,7 +126,7 @@ class DynamoInterpreter:
     def register_named_modules(
         self,
         parent_interpreter: Optional["DynamoInterpreter"],
-        preserved_modules: Optional[Set[type["torch.nn.Module"]]],  # noqa: F821
+        preserved_modules: Optional[Set[Union[type["torch.nn.Module"], str]]],  # noqa: F821
         named_modules: Dict[str, "torch.nn.Module"],  # noqa: F821
     ):
         """
@@ -2506,7 +2506,9 @@ class DynamoInterpreter:
             and node.target in self.named_modules
             else None
         )
-        preserve_as_submodule = node_module and type(node_module) in self.preserved_modules
+        preserve_as_submodule = node_module and (
+            type(node_module) in self.preserved_modules or node.target in self.preserved_modules
+        )
 
         builder, args, kwargs, output_names = self._interpret_sub_module(
             sub_module,
@@ -2612,8 +2614,9 @@ class DynamoInterpreter:
             prefix = f"_sub_ime__{node.name}_"
         else:
             assert not preserve_as_submodule, (
-                f"Unable to preserve module class {type(node_module)} for node {node!r} "
-                f"type(sub_module)={type(sub_module)}{self.builder.get_debug_msg()}"
+                f"Unable to preserve module class {type(node_module)} for node {node!r}, "
+                f"target={node.target!r}, type(sub_module)={type(sub_module)}"
+                f"{self.builder.get_debug_msg()}"
             )
 
         self.builder._check_constants("before-make_nodes(2)")

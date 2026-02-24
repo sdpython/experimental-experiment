@@ -1066,25 +1066,22 @@ def to_onnx(
         print(f"[to_onnx] graph module done in {t - begin} s")
 
     if export_modules_as_functions:
-        assert isinstance(
-            graph_module, builder.torch.export.ExportedProgram
-        ), f"Unexpected type {type(graph_module)} for graph_module"
-
         if export_modules_as_functions is True:
             export_modules_as_functions = set(type(m) for m in mod.modules())
         interpreter.register_named_modules(
             None, export_modules_as_functions, dict(mod.named_modules())
         )
-        if verbose > 1:
-            print(
-                f"[to_onnx] unflatten the graph_module, "
-                f"preserve {sorted(c.__name__ for c in export_modules_as_functions)}"
-            )
+        if isinstance(graph_module, builder.torch.export.ExportedProgram):
+            if verbose > 1:
+                print(
+                    f"[to_onnx] unflatten the graph_module, "
+                    f"preserve {sorted(c.__name__ for c in export_modules_as_functions)}"
+                )
 
-        a = time.perf_counter()
-        new_graph_module = builder.torch.export.unflatten(graph_module)
-        add_stats["time_export_unflatten"] = t - a
-        graph_module = new_graph_module
+            a = time.perf_counter()
+            new_graph_module = builder.torch.export.unflatten(graph_module)
+            graph_module = new_graph_module
+            add_stats["time_export_unflatten"] = t - a
 
     if filename:
         if isinstance(graph_module, builder.torch.export.ExportedProgram):

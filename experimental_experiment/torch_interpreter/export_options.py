@@ -53,6 +53,9 @@ class ExportOptions:
     :param prefer_deferred_runtime_asserts_over_guards:
         see :func:`torch.export.export`
     :param fake: use fake tensors as inputs
+    :param tracing_module_leaves: this option is used when the module is traced
+        (``tracing=False``), it specified which module should remain a *call_module*,
+        see :class:`experimental_experiment.tracing.CustomTracer`.
 
     The fallback strategy tries the following in order:
 
@@ -120,10 +123,14 @@ class ExportOptions:
         backed_size_oblivious: Union[bool, str] = "auto",
         prefer_deferred_runtime_asserts_over_guards: bool = True,
         fake: bool = False,
+        tracing_module_leaves: Optional[
+            Dict[type, Callable[["torch.nn.Module"], bool]]  # noqa: F821
+        ] = None,
     ):
         self.strict = strict
         self.fallback = fallback
         self.tracing = tracing
+        self.tracing_module_leaves = tracing_module_leaves
         self.save_ep = save_ep
         self.decomposition_table = (
             None if decomposition_table in ("none", None) else decomposition_table
@@ -639,21 +646,28 @@ class ExportOptions:
 
             if verbose:
                 print(f"[ExportOptions.export] CustomTracer().trace, verbose={verbose}")
+                print(f"[ExportIptions.export] {self.tracing_module_leaves=}")
                 print(f"[ExportOptions.export] dynamic_shapes={dynamic_shapes}")
-                print(f"[ExportOptions.export] args={string_type(args, limit=20)}")
-                print(f"[ExportOptions.export] kwargs={string_type(kwargs, limit=20)}")
+                print(
+                    f"[ExportOptions.export] args={string_type(args, with_shape=True, limit=20)}"
+                )
+                print(
+                    f"[ExportOptions.export] kwargs="
+                    f"{string_type(kwargs, with_shape=True, limit=20)}"
+                )
                 print(
                     f"[ExportOptions.export] concrete_args="
                     f"{string_type(concrete_args, limit=20)}"
                 )
 
-            tracer = CustomTracer()
+            tracer = CustomTracer(module_leaves=self.tracing_module_leaves)
             graph = tracer.trace(
                 mod,
                 concrete_args=concrete_args,
                 verbose=verbose,
                 dynamic_shapes=trace_dynamic_shapes,
             )
+            print("***", graph)
             if self.remove_inplace:
                 if verbose:
                     print("[ExportOptions.export] remove_inplace_nodes")
@@ -664,6 +678,7 @@ class ExportOptions:
                 save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
                 with open(f"{save_ep}.tracing", "w") as f:
                     f.write(str(graph))
+            print(graph)
             gm = _make_graph_module(tracer.root, graph, mod.__class__.__name__)
 
             # from torch.fx.passes.shape_prop import ShapeProp

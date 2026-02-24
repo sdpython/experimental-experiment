@@ -390,9 +390,6 @@ class CustomTracer(torch.fx.Tracer):
                 submodule ``bar``, which contains submodule ``baz``, that module will
                 appear with the qualified name ``foo.bar.baz`` here.
         """
-        return (
-            m.__module__.startswith("torch.nn") or m.__module__.startswith("torch.ao.nn")
-        ) and not isinstance(m, torch.nn.Sequential)
         is_leave = super().is_leaf_module(m, module_qualified_name)
         if is_leave:
             return is_leave
