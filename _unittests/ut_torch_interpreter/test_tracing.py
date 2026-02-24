@@ -792,16 +792,19 @@ class TestTracing(ExtTestCase):
         self.assertEqual(module_nodes[0].target, "suba")
         self.assertEqual(module_nodes[1].target, "subb.linear")
 
-        onx = to_onnx(
-            model,
-            (x, y),
-            dynamic_shapes=({0: "batch"}, {0: "batch"}),
-            export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
-            export_modules_as_functions={"suba"},
-            inline=False,
-            verbose=1,
+        self.assertRaise(
+            lambda: to_onnx(
+                model,
+                (x, y),
+                dynamic_shapes=({0: "batch"}, {0: "batch"}),
+                export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
+                export_modules_as_functions={"suba"},
+                inline=False,
+                verbose=0,
+            ),
+            AssertionError,
+            msg="Unable to preserve module class",
         )
-        self.print_onnx(onx)
 
 
 if __name__ == "__main__":
