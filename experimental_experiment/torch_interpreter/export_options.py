@@ -613,6 +613,7 @@ class ExportOptions:
             return dec
 
         if self.tracing:
+            from torch.fx._lazy_graph_module import _make_graph_module
             from .tracing import CustomTracer
 
             concrete_args = kwargs.copy() if kwargs else {}
@@ -663,7 +664,11 @@ class ExportOptions:
                 save_ep = self.save_ep[0] if isinstance(self.save, tuple) else self.save_ep
                 with open(f"{save_ep}.tracing", "w") as f:
                     f.write(str(graph))
-            gm = torch.fx.GraphModule(getattr(tracer, "traced_model", None) or mod, graph)
+            gm = _make_graph_module(tracer.root, graph, mod.__class__.__name__)
+
+            # from torch.fx.passes.shape_prop import ShapeProp
+            # ShapeProp(gp).propagate(**concrete_args)
+            # gm = torch.fx.GraphModule(getattr(tracer, "traced_model", None) or mod, graph)
             return gm
 
         if verbose:

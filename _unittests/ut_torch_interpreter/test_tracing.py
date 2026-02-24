@@ -664,8 +664,8 @@ class TestTracing(ExtTestCase):
                     if "DynamicCache" in t:
                         self.assertEqual(
                             (
-                                "DynamicCache(key_cache=#2[CustomProxy(txn3),CustomProxy(txn5)], "
-                                "value_cache=#2[CustomProxy(txn4),CustomProxy(txn6)])"
+                                "DynamicCache(key_cache=#2[CustomProxy(cat),CustomProxy(cat_2)], "
+                                "value_cache=#2[CustomProxy(cat_1),CustomProxy(cat_3)])"
                             ),
                             t,
                         )
