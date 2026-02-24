@@ -345,7 +345,7 @@ class CustomTracer(torch.fx.Tracer):
         autowrap_modules: Tuple["ModuleType"] = (math,),  # noqa: F821
         autowrap_functions: Tuple[Callable, ...] = (),
         param_shapes_constant: bool = False,
-        module_leaves: Optional[Dict[type, Callable[[torch.nn.Module], bool]]] = None,
+        module_leaves: Optional[Dict[type, Callable[[torch.nn.Module, str], bool]]] = None,
     ):
         super().__init__(
             autowrap_modules=autowrap_modules,
