@@ -607,14 +607,14 @@ class DynamoInterpreter:
         if self.builder.verbose > 2:
             print(
                 f"[DynamoInterpreter-{self._hash()}.placeholder]"
-                f"[{node.name}] val={string_type(val)}"
+                f"[{node.name}] val={string_type(val, with_shape=True)}"
             )
         if val is None:
             example_value = node.meta.get("example_value", None)
             if self.builder.verbose > 2:
                 print(
                     f"[DynamoInterpreter-{self._hash()}.placeholder]"
-                    f"[{node.name}] example_value={string_type(val)}"
+                    f"[{node.name}] example_value={string_type(val, with_shape=True)}"
                 )
             # index_input may be wrong because torch.export.export may flatten the inputs.
             # gathering the default value may not be optimal here.
@@ -759,6 +759,13 @@ class DynamoInterpreter:
                 if isinstance(value, self.builder.torch.nn.Parameter)
                 else None
             )
+
+            if self.builder.verbose > 2:
+                print(
+                    f"[DynamoInterpreter-{self._hash()}.placeholder]"
+                    f"[{node.name}] value={string_type(value, with_shape=True)} into initializer"
+                )
+
             return self.builder.make_initializer(
                 node.name,
                 value,

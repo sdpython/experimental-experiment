@@ -732,7 +732,7 @@ class CustomTracer(torch.fx.Tracer):
                                 f"{string_type(tif, with_shape=True)}"
                             )
                         node.meta["example_value"] = ti
-                        node.meta["val"] = ti
+                        node.meta["val"] = tif
                         mapped.add(node.name)
             assert new_names or set(mapped) == set(concrete_args), (
                 f"Missing mapped inputs, set(concrete_args)={set(concrete_args)}, "
