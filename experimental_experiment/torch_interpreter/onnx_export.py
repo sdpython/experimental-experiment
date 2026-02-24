@@ -1075,7 +1075,7 @@ def to_onnx(
             if verbose > 1:
                 print(
                     f"[to_onnx] unflatten the graph_module, "
-                    f"preserve {sorted(c.__name__ for c in export_modules_as_functions)}"
+                    f"preserve {sorted((c if isinstance(c, str) else getattr(c, '__name__', str(c))) for c in export_modules_as_functions)}"
                 )
 
             a = time.perf_counter()
