@@ -323,36 +323,21 @@ class CustomTracer(torch.fx.Tracer):
 
         graph = CustomTracer().trace(model)
 
-    Tracer(autowrap_modules=(math,), autowrap_functions=())
-
-    ``Tracer`` is the class that implements the symbolic tracing functionality
-    of ``torch.fx.symbolic_trace``. A call to ``symbolic_trace(m)`` is equivalent
-    to ``Tracer().trace(m)``.
-
-    Tracer can be subclassed to override various behaviors of the tracing
-    process. The different behaviors that can be overridden are described
-    in the docstrings of the methods on this class.
-
-    Args:
-
-        autowrap_modules (Tuple[ModuleType]): defaults to `(math, )`,
-            Python modules whose functions should be wrapped automatically
-            without needing to use fx.wrap(). Backward-compatibility for
-            this parameter is guaranteed.
-
-        autowrap_functions (Tuple[Callable, ...]): defaults to `()`,
-            Python functions that should be wrapped automatically without
-            needing to use fx.wrap(). Backward compatibility for this
-            parameter is guaranteed.
-
-        param_shapes_constant (bool): When this flag is set,  calls to shape,
-            size and a few other shape like attributes of a module's parameter
-            will be evaluated directly, rather than returning a new Proxy value
-            for an attribute access. Backward compatibility for this parameter
-            is guaranteed.
-
-        module_leaves: module to be considered as leaves,
-            the exporter does not trace them
+    :param autowrap_modules: defaults to `(math, )`,
+        Python modules whose functions should be wrapped automatically
+        without needing to use fx.wrap().
+    :param autowrap_functions: defaults to `()`,
+        Python functions that should be wrapped automatically without
+        needing to use fx.wrap().
+    :param param_shapes_constant: When this flag is set, calls to shape,
+        size and a few other shape like attributes of a module's parameter
+        will be evaluated directly, rather than returning a new Proxy value
+        for an attribute access.
+    :param module_leaves: modules to be considered as leaves,
+        mapped to a callable ``f(module, module_qualified_name) -> bool``
+        that decides whether a specific module instance is a leaf;
+        the tracer does not trace into leaf modules and emits
+        ``call_module`` nodes for them instead
     """
 
     def __init__(
