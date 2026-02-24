@@ -345,7 +345,7 @@ class CustomTracer(torch.fx.Tracer):
         autowrap_modules: Tuple["ModuleType"] = (math,),  # noqa: F821
         autowrap_functions: Tuple[Callable, ...] = (),
         param_shapes_constant: bool = False,
-        module_leaves: Optional[Dict[type, Callable[[torch.nn.Module], bool]]] = None,
+        module_leaves: Optional[Dict[type, Callable[[torch.nn.Module, str], bool]]] = None,
     ):
         super().__init__(
             autowrap_modules=autowrap_modules,
@@ -375,9 +375,9 @@ class CustomTracer(torch.fx.Tracer):
                 submodule ``bar``, which contains submodule ``baz``, that module will
                 appear with the qualified name ``foo.bar.baz`` here.
         """
-        is_leave = super().is_leaf_module(m, module_qualified_name)
-        if is_leave:
-            return is_leave
+        is_leaf = super().is_leaf_module(m, module_qualified_name)
+        if is_leaf:
+            return is_leaf
         if self.module_leaves and type(m) in self.module_leaves:
             f = self.module_leaves[type(m)]
             return f(m, module_qualified_name=module_qualified_name)
