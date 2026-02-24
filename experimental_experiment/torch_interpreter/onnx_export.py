@@ -1081,7 +1081,7 @@ def to_onnx(
             a = time.perf_counter()
             new_graph_module = builder.torch.export.unflatten(graph_module)
             graph_module = new_graph_module
-            add_stats["time_export_unflatten"] = t - a
+            add_stats["time_export_unflatten"] = time.perf_counter() - a
 
     if filename:
         if isinstance(graph_module, builder.torch.export.ExportedProgram):
