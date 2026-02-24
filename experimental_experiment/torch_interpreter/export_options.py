@@ -54,8 +54,8 @@ class ExportOptions:
         see :func:`torch.export.export`
     :param fake: use fake tensors as inputs
     :param tracing_module_leaves: this option is used when the module is traced
-        (``tracing=False``), it specified which module should remain a *call_module*,
-        see :class:`experimental_experiment.tracing.CustomTracer`.
+        (``tracing=True``), it specifies which modules should remain a *call_module*,
+        see :class:`experimental_experiment.torch_interpreter.tracing.CustomTracer`.
 
     The fallback strategy tries the following in order:
 
