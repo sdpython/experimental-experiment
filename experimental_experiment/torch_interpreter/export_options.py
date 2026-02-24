@@ -667,7 +667,6 @@ class ExportOptions:
                 verbose=verbose,
                 dynamic_shapes=trace_dynamic_shapes,
             )
-            print("***", graph)
             if self.remove_inplace:
                 if verbose:
                     print("[ExportOptions.export] remove_inplace_nodes")
