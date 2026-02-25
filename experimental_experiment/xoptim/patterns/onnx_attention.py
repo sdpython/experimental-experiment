@@ -724,8 +724,9 @@ class FunctionAttentionPattern(PatternOptimization):
     def _find_index_inf(self, g, where_node):
         for i in (1, 2):
             if g.is_constant_scalar(where_node.input[i]):
+                dtype = g.get_computed_constant(where_node.input[i]).dtype
                 cst = g.get_constant_scalar(where_node.input[i])
-                if np.isinf(cst):
+                if np.isinf(cst) or cst == np.finfo(dtype).min:
                     return i
         return None
 
@@ -774,8 +775,9 @@ class FunctionAttentionPattern(PatternOptimization):
                 return self.none(node, inspect.currentframe().f_lineno)
             cst_zero = None
             inf_index = 1 if g.is_constant_scalar(where_node.input[1]) else 2
+            dtype = g.get_computed_constant(where_node.input[inf_index]).dtype
             cst_inf = g.get_constant_scalar(where_node.input[inf_index])
-            if not np.isinf(cst_inf) or cst_inf > 0:
+            if (not np.isinf(cst_inf) and cst_inf != np.finfo(dtype).min) or cst_inf > 0:
                 return self.none(node, inspect.currentframe().f_lineno)
             mat_qk = g.node_before(where_node.input[3 - inf_index])
             if mat_qk is None or mat_qk.op_type not in ("MatMul", "FusedMatMul"):
@@ -1017,7 +1019,7 @@ class FunctionAttentionPattern(PatternOptimization):
 
         index_inf = self._find_index_inf(g, where_node)
         assert index_inf, (
-            f"Could not any inf in node {g.pretty_node(where_node)}, "
+            f"Could not any inf in node {g.pretty_text(where_node)}, "
             f"the pattern {self.__class__.__name__} should not have matched."
         )
         switch_where = index_inf == 1
