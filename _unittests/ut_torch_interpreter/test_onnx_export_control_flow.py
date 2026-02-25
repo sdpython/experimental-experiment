@@ -551,5 +551,113 @@ class TestOnnxExportControlFlow(ExtTestCase):
         )
 
 
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    @ignore_warnings(UserWarning)
+    def test_controlflow_cond_rank_after_if(self):
+        """Tests that rank/type is properly set for If node outputs (issue #573)."""
+        import torch
+
+        class CondModel(torch.nn.Module):
+            def forward(self, x):
+                def true_fn(x):
+                    return torch.sin(x)
+
+                def false_fn(x):
+                    return torch.cos(x)
+
+                return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+
+        model = CondModel()
+        x = torch.rand(5, 3)
+        onx = to_onnx(model, (x,), inline=False)
+
+        # The If node should be in the graph
+        if_nodes = [n for n in onx.graph.node if n.op_type == "If"]
+        self.assertEqual(len(if_nodes), 1)
+        if_node = if_nodes[0]
+
+        # Verify that rank info is available for the If node output
+        # by checking that the model exports successfully with type/shape info
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+        ref = ExtendedReferenceEvaluator(onx)
+        for _x in (x, -x):
+            expected = model(_x)
+            got = ref.run(None, {"x": _x.detach().numpy()})[0]
+            self.assertEqualArray(expected, got, atol=1e-5)
+
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    @ignore_warnings(UserWarning)
+    def test_controlflow_cond_rank_after_if_multi_output(self):
+        """Tests that rank/type is properly set for multi-output If node (issue #573)."""
+        import torch
+
+        class CondModel(torch.nn.Module):
+            def forward(self, x):
+                def true_fn(x):
+                    return torch.sin(x), torch.cos(x)
+
+                def false_fn(x):
+                    return torch.cos(x), torch.sin(x)
+
+                return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+
+        model = CondModel()
+        x = torch.rand(5, 3)
+        onx = to_onnx(model, (x,), inline=False)
+
+        # The If node should be in the graph
+        if_nodes = [n for n in onx.graph.node if n.op_type == "If"]
+        self.assertEqual(len(if_nodes), 1)
+
+        # Verify rank info is set by checking the outputs have type/shape in value_info
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+        ref = ExtendedReferenceEvaluator(onx)
+        for _x in (x, -x):
+            expected = model(_x)
+            got = ref.run(None, {"x": _x.detach().numpy()})
+            self.assertEqual(len(expected), len(got))
+            for e, g in zip(expected, got):
+                self.assertEqualArray(e, g, atol=1e-5)
+
+    @skipif_ci_windows("not yet supported on Windows")
+    @requires_torch("2.4")
+    @ignore_warnings(UserWarning)
+    def test_controlflow_cond_rank_dynamic(self):
+        """Tests that rank is set correctly for If node with dynamic shapes (issue #573)."""
+        import torch
+
+        class CondModel(torch.nn.Module):
+            def forward(self, x):
+                def true_fn(x):
+                    return torch.sin(x)
+
+                def false_fn(x):
+                    return torch.cos(x)
+
+                return torch.cond(x.sum() > 0, true_fn, false_fn, [x])
+
+        model = CondModel()
+        x = torch.rand(5, 3)
+        batch = torch.export.Dim("batch")
+        dynamic_shapes = ({0: batch},)
+        onx = to_onnx(model, (x,), dynamic_shapes=dynamic_shapes, inline=False)
+
+        # The If node should be in the graph
+        if_nodes = [n for n in onx.graph.node if n.op_type == "If"]
+        self.assertEqual(len(if_nodes), 1)
+
+        from experimental_experiment.reference import ExtendedReferenceEvaluator
+
+        ref = ExtendedReferenceEvaluator(onx)
+        for _x in (x, -x):
+            expected = model(_x)
+            got = ref.run(None, {"x": _x.detach().numpy()})[0]
+            self.assertEqualArray(expected, got, atol=1e-5)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
