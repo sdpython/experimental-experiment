@@ -798,19 +798,21 @@ class TestTracing(ExtTestCase):
         self.assertEqual(module_nodes[0].target, "suba")
         self.assertEqual(module_nodes[1].target, "subb.linear")
 
-        self.assertRaise(
-            lambda: to_onnx(
-                model,
-                (x, y),
-                dynamic_shapes=({0: "batch"}, {0: "batch"}),
-                export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
-                export_modules_as_functions={"suba"},
-                inline=False,
-                verbose=0,
-            ),
-            AssertionError,
-            msg="Unable to preserve module class",
+        onx = to_onnx(
+            model,
+            (x, y),
+            dynamic_shapes=({0: "batch"}, {0: "batch"}),
+            export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
+            export_modules_as_functions={"suba"},
+            inline=False,
+            verbose=0,
         )
+        self.dump_onnx("test_tracing_submodule_with_test.onnx", onx)
+
+        expected = model(x, y)
+        sess = self._check_with_ort(onx, cpu=True)
+        got = sess.run(None, dict(x=x.cpu().numpy(), y=y.cpu().numpy()))
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
     def test_tracing_submodule_with_test(self):
         class SubModule(torch.nn.Module):
