@@ -566,6 +566,14 @@ def _make_builder_interpreter(
             print("-- GIVEN GRAPH MODULE")
             print(graph_module.graph)
         exported_program = None
+    elif isinstance(mod, torch.nn.Module) and dispatcher and dispatcher.find_function(type(mod)):
+        graph_module = mod
+        exported_program = None
+        exe_path = mod.__class__.__name__
+        weights = None
+        buffers = None
+        mapping = None
+        constants = None
     else:
         if not isinstance(mod, torch.export.ExportedProgram):
             exe_path = "export"
@@ -1066,25 +1074,23 @@ def to_onnx(
         print(f"[to_onnx] graph module done in {t - begin} s")
 
     if export_modules_as_functions:
-        assert isinstance(
-            graph_module, builder.torch.export.ExportedProgram
-        ), f"Unexpected type {type(graph_module)} for graph_module"
-
         if export_modules_as_functions is True:
             export_modules_as_functions = set(type(m) for m in mod.modules())
         interpreter.register_named_modules(
             None, export_modules_as_functions, dict(mod.named_modules())
         )
-        if verbose > 1:
-            print(
-                f"[to_onnx] unflatten the graph_module, "
-                f"preserve {sorted(c.__name__ for c in export_modules_as_functions)}"
-            )
+        if isinstance(graph_module, builder.torch.export.ExportedProgram):
+            if verbose > 1:
+                disp = sorted(
+                    (c if isinstance(c, str) else getattr(c, "__name__", str(c)))
+                    for c in export_modules_as_functions
+                )
+                print(f"[to_onnx] unflatten the graph_module, preserve {disp}")
 
-        a = time.perf_counter()
-        new_graph_module = builder.torch.export.unflatten(graph_module)
-        add_stats["time_export_unflatten"] = t - a
-        graph_module = new_graph_module
+            a = time.perf_counter()
+            new_graph_module = builder.torch.export.unflatten(graph_module)
+            graph_module = new_graph_module
+            add_stats["time_export_unflatten"] = time.perf_counter() - a
 
     if filename:
         if isinstance(graph_module, builder.torch.export.ExportedProgram):

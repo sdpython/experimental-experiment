@@ -256,28 +256,12 @@ def tree_unflatten_with_proxy(
     child_pytrees = []
     for child_spec in tree_spec._children:
         end += child_spec.num_leaves
-        if child_spec and child_spec.type and child_spec.type.__name__ == "DynamicCache":
-            import transformers
-
-            n = (end - start) // 2
-            cache = transformers.cache_utils.DynamicCache()
-            cache.layers.extend([transformers.cache_utils.DynamicLayer() for _ in range(n)])
-            for i in range(n):
-                cache.layers[i].keys = leaves[start + i * 2]
-                cache.layers[i].values = leaves[start + i * 2 + 1]
-            child_pytrees.append(cache)
-        else:
-            assert (
-                not child_spec
-                or not child_spec.type
-                or not child_spec.type.__name__.endswith("Cache")
-            ), (
-                f"tree_unflatten_with_proxy is not implemented yet for {child_spec.type}, "
-                f"child_spec={child_spec}"
-            )
-            child_pytrees.append(child_spec.unflatten(leaves[start:end]))
+        assert not child_spec or not child_spec.type or child_spec.unflatten, (
+            f"child_spec.unflatten is empty for child_spec.type={child_spec.type}, "
+            f"child_spec={child_spec}"
+        )
+        child_pytrees.append(child_spec.unflatten(leaves[start:end]))
         start = end
-
     return unflatten_fn(child_pytrees, tree_spec._context)
 
 
@@ -338,6 +322,22 @@ class CustomTracer(torch.fx.Tracer):
         from experimental_experiment.torch_interpreter.tracing import CustomTracer
 
         graph = CustomTracer().trace(model)
+
+    :param autowrap_modules: defaults to `(math, )`,
+        Python modules whose functions should be wrapped automatically
+        without needing to use fx.wrap().
+    :param autowrap_functions: defaults to `()`,
+        Python functions that should be wrapped automatically without
+        needing to use fx.wrap().
+    :param param_shapes_constant: When this flag is set, calls to shape,
+        size and a few other shape like attributes of a module's parameter
+        will be evaluated directly, rather than returning a new Proxy value
+        for an attribute access.
+    :param module_leaves: modules to be considered as leaves,
+        mapped to a callable ``f(module, module_qualified_name) -> bool``
+        that decides whether a specific module instance is a leaf;
+        the tracer does not trace into leaf modules and emits
+        ``call_module`` nodes for them instead
     """
 
     def __init__(
@@ -345,6 +345,7 @@ class CustomTracer(torch.fx.Tracer):
         autowrap_modules: Tuple["ModuleType"] = (math,),  # noqa: F821
         autowrap_functions: Tuple[Callable, ...] = (),
         param_shapes_constant: bool = False,
+        module_leaves: Optional[Dict[type, Callable[[torch.nn.Module, str], bool]]] = None,
     ):
         super().__init__(
             autowrap_modules=autowrap_modules,
@@ -352,6 +353,71 @@ class CustomTracer(torch.fx.Tracer):
             param_shapes_constant=param_shapes_constant,
         )
         self._callables = {}
+        self.module_leaves = module_leaves
+
+    @torch.fx._compatibility.compatibility(is_backward_compatible=True)
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        """
+        A method to specify whether a given ``nn.Module`` is a "leaf" module.
+
+        Leaf modules are the atomic units that appear in
+        the IR, referenced by ``call_module`` calls. By default,
+        Modules in the PyTorch standard library namespace (torch.nn)
+        are leaf modules. All other modules are traced through and
+        their constituent ops are recorded, unless specified otherwise
+        via this parameter.
+
+        Args:
+
+            m (Module): The module being queried about
+            module_qualified_name (str): The path to root of this module. For example,
+                if you have a module hierarchy where submodule ``foo`` contains
+                submodule ``bar``, which contains submodule ``baz``, that module will
+                appear with the qualified name ``foo.bar.baz`` here.
+        """
+        is_leaf = super().is_leaf_module(m, module_qualified_name)
+        if is_leaf:
+            return is_leaf
+        if self.module_leaves and type(m) in self.module_leaves:
+            f = self.module_leaves[type(m)]
+            return f(m, module_qualified_name=module_qualified_name)
+        return False
+
+    @torch.fx._compatibility.compatibility(is_backward_compatible=True)
+    def call_module(
+        self,
+        m: torch.nn.Module,
+        forward: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        """
+        Method that specifies the behavior of this ``Tracer`` when it encounters
+        a call to an ``nn.Module`` instance.
+
+        By default, the behavior is to check if the called module is a leaf module
+        via ``is_leaf_module``. If it is, emit a ``call_module`` node referring to
+        ``m`` in the ``Graph``. Otherwise, call the ``Module`` normally, tracing through
+        the operations in its ``forward`` function.
+
+        This method can be overridden to--for example--create nested traced
+        GraphModules, or any other behavior you would want while tracing across
+        ``Module`` boundaries.
+
+        Args:
+
+            m (Module): The module for which a call is being emitted
+            forward (Callable): The forward() method of the ``Module`` to be invoked
+            args (Tuple): args of the module callsite
+            kwargs (Dict): kwargs of the module callsite
+
+        Return:
+
+            The return value from the Module call. In the case that a ``call_module``
+            node was emitted, this is a ``Proxy`` value. Otherwise, it is whatever
+            value was returned from the ``Module`` invocation.
+        """
+        return super().call_module(m, forward, args, kwargs)
 
     def register_callable(self, name: str, fn: Callable) -> torch.fx.Node:
         """
@@ -637,27 +703,36 @@ class CustomTracer(torch.fx.Tracer):
                 print(f"[CustomTracer.trace] -- new_names={new_names}")
             if new_names:
                 flat_concrete_args, _spec = torch.utils._pytree.tree_flatten(concrete_args)
+                flat_traced_concrete_args, _spec = torch.utils._pytree.tree_flatten(
+                    self._traced_concrete_args
+                )
             mapped = set()
             for node in graph.nodes:
                 if node.op == "placeholder":
                     if not new_names and node.name in concrete_args:
                         ti = concrete_args[node.name]
+                        tif = self._traced_concrete_args[node.name]
                         if verbose:
                             print(
                                 f"[CustomTracer.trace] assign.1 {node.name!r} with "
-                                f"{string_type(ti, with_shape=True)}"
+                                f"{string_type(ti, with_shape=True)} or "
+                                f"{string_type(tif, with_shape=True)}"
                             )
                         node.meta["example_value"] = ti
+                        node.meta["val"] = tif
                         mapped.add(node.name)
                     elif new_names and node.name in new_names:
                         ii = new_names.index(node.name)
                         ti = flat_concrete_args[ii]
+                        tif = flat_traced_concrete_args[ii]
                         if verbose:
                             print(
                                 f"[CustomTracer.trace] assign.1 {node.name!r} with "
-                                f"{string_type(ti, with_shape=True)}"
+                                f"{string_type(ti, with_shape=True)} or "
+                                f"{string_type(tif, with_shape=True)}"
                             )
                         node.meta["example_value"] = ti
+                        node.meta["val"] = tif
                         mapped.add(node.name)
             assert new_names or set(mapped) == set(concrete_args), (
                 f"Missing mapped inputs, set(concrete_args)={set(concrete_args)}, "

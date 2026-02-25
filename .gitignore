@@ -4,6 +4,7 @@
 *.so
 *.whl
 *.xlsx
+*.graph
 *.onnx
 *.onnx.data
 *.png

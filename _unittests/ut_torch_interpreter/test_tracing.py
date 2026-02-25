@@ -1,6 +1,9 @@
 import copy
 import operator
 import unittest
+import numpy as np
+import onnx
+import onnx.helper as oh
 import torch
 from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from onnx_diagnostic.torch_export_patches import torch_export_patches
@@ -11,6 +14,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnx_diagnostic,
     requires_torch,
 )
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions, Dispatcher
 from experimental_experiment.torch_interpreter.tracing import (
     CustomTracer,
     CustomProxy,
@@ -19,6 +23,9 @@ from experimental_experiment.torch_interpreter.tracing import (
     setitem_with_transformation,
     tree_unflatten_with_proxy,
 )
+from experimental_experiment.xbuilder import GraphBuilder
+from experimental_experiment.helpers import tensor_dtype_to_np_dtype
+from experimental_experiment.xshape.shape_type_compute import set_type_shape_unary_op
 
 
 class TestTracing(ExtTestCase):
@@ -199,7 +206,6 @@ class TestTracing(ExtTestCase):
 
     def test_tracing_inplace_setitem_ellipsis(self):
         class Model(torch.nn.Module):
-
             def __init__(self):
                 super().__init__()
                 self.params = torch.zeros((1, 8192, 4), dtype=torch.float32)
@@ -664,11 +670,236 @@ class TestTracing(ExtTestCase):
                     if "DynamicCache" in t:
                         self.assertEqual(
                             (
-                                "DynamicCache(key_cache=#2[CustomProxy(txn3),CustomProxy(txn5)], "
-                                "value_cache=#2[CustomProxy(txn4),CustomProxy(txn6)])"
+                                "DynamicCache(key_cache=#2[CustomProxy(cat),CustomProxy(cat_2)], "
+                                "value_cache=#2[CustomProxy(cat_1),CustomProxy(cat_3)])"
                             ),
                             t,
                         )
+
+    def test_tracing_submodule(self):
+        class SubModule(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1, kind: int = 0):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+                self.kind = kind
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x)) + self.buff
+
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.suba = SubModule(n_dims, n_targets, kind=1)
+                self.subb = SubModule(n_dims, n_targets, kind=2)
+
+            def forward(self, x, y):
+                return self.suba(x) + self.subb(y)
+
+        def f(mod, module_qualified_name=None):
+            self.assertIsInstance(module_qualified_name, str)
+            self.assertIn(module_qualified_name, ("suba", "subb"))
+            return mod.kind == 1
+
+        module_leaves = {SubModule: f}
+        model = Model()
+        self.assertTrue(f(model.suba, "suba"))
+        self.assertFalse(f(model.subb, "subb"))
+        graph = CustomTracer(module_leaves=module_leaves).trace(model)
+        module_nodes = [n for n in graph.nodes if n.op == "call_module"]
+        self.assertEqual(len(module_nodes), 2)
+        self.assertEqual(module_nodes[0].target, "suba")
+        self.assertEqual(module_nodes[1].target, "subb.linear")
+
+    def test_export_submodule(self):
+        class SubModule(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1, kind: int = 0):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+                self.kind = kind
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x)) + self.buff
+
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.suba = SubModule(n_dims, n_targets, kind=1)
+                self.subb = SubModule(n_dims, n_targets, kind=2)
+
+            def forward(self, x, y):
+                return self.suba(x) + self.subb(y)
+
+        def f(mod, module_qualified_name=None):
+            self.assertIsInstance(module_qualified_name, str)
+            self.assertIn(module_qualified_name, ("suba", "subb"))
+            return mod.kind == 1
+
+        module_leaves = {SubModule: f}
+
+        def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+            is_leave = (
+                m.__module__.startswith("torch.nn") or m.__module__.startswith("torch.ao.nn")
+            ) and not isinstance(m, torch.nn.Sequential)
+            if is_leave:
+                return is_leave
+            if module_leaves and type(m) in module_leaves:
+                f = module_leaves[type(m)]
+                return f(m, module_qualified_name=module_qualified_name)
+            return False
+
+        model = Model()
+        self.assertTrue(f(model.suba, "suba"))
+        self.assertFalse(f(model.subb, "suba"))
+        x, y = torch.randn((5, 3)), torch.randn((5, 3))
+        ep = torch.export.export(
+            model,
+            (x, y),
+            dynamic_shapes=({0: torch.export.Dim.DYNAMIC}, {0: torch.export.Dim.DYNAMIC}),
+        )
+        module_nodes = [n for n in ep.graph.nodes if n.op == "call_module"]
+        self.assertEqual(len(module_nodes), 0)
+
+    def test_export_and_trace_submodule(self):
+        class SubModule(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1, kind: int = 0):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+                self.kind = kind
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x)) + self.buff
+
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.suba = SubModule(n_dims, n_targets, kind=1)
+                self.subb = SubModule(n_dims, n_targets, kind=2)
+
+            def forward(self, x, y):
+                return self.suba(x) + self.subb(y)
+
+        def f(mod, module_qualified_name=None):
+            self.assertIsInstance(module_qualified_name, str)
+            self.assertIn(module_qualified_name, ("suba", "subb"))
+            return mod.kind == 1
+
+        module_leaves = {SubModule: f}
+        model = Model()
+        self.assertTrue(f(model.suba, "suba"))
+        self.assertFalse(f(model.subb, "suba"))
+        x, y = torch.randn((5, 3)), torch.randn((5, 3))
+
+        graph = CustomTracer(module_leaves=module_leaves).trace(model)
+        module_nodes = [n for n in graph.nodes if n.op == "call_module"]
+        self.assertEqual(len(module_nodes), 2)
+        self.assertEqual(module_nodes[0].target, "suba")
+        self.assertEqual(module_nodes[1].target, "subb.linear")
+
+        onx = to_onnx(
+            model,
+            (x, y),
+            dynamic_shapes=({0: "batch"}, {0: "batch"}),
+            export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
+            export_modules_as_functions={"suba"},
+            inline=False,
+            verbose=0,
+        )
+        self.dump_onnx("test_tracing_submodule_with_test.onnx", onx)
+
+        expected = model(x, y)
+        sess = self._check_with_ort(onx, cpu=True)
+        got = sess.run(None, dict(x=x.cpu().numpy(), y=y.cpu().numpy()))
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+    def test_tracing_submodule_with_test(self):
+        class SubModule(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1, kind: int = 0):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+                self.kind = kind
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x)) + self.buff
+
+        class SubModuleDoNotTrace(torch.nn.Module):
+            def forward(self, x):
+                if x.sum().item() > 0:
+                    return x
+                return -x
+
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.suba = SubModule(n_dims, n_targets, kind=1)
+                self.subdonot = SubModuleDoNotTrace()
+
+            def forward(self, x, y):
+                return self.suba(x) + self.subdonot(y)
+
+        def f(mod, module_qualified_name=None):
+            return isinstance(mod, SubModuleDoNotTrace)
+
+        module_leaves = {SubModuleDoNotTrace: f}
+        model = Model()
+        graph = CustomTracer(module_leaves=module_leaves).trace(model)
+        module_nodes = [n for n in graph.nodes if n.op == "call_module"]
+        self.assertEqual(len(module_nodes), 2)
+        self.assertEqual(module_nodes[0].target, "suba.linear")
+        self.assertEqual(module_nodes[1].target, "subdonot")
+
+        def _mkv_(name):
+            value_info_proto = onnx.ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        def subdonot_convert(g: GraphBuilder, sts: dict, output_names, y, name: str = "subdonot"):
+            dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+            cond = g.op.Greater(
+                g.op.ReduceSumAnyOpset(y, name=name), np.array([0], dtype=dtype), name=name
+            )
+            res = g.op.If(
+                cond,
+                then_branch=oh.make_graph(
+                    [oh.make_node("Identity", [y], ["output"])], "then", [], [_mkv_("output")]
+                ),
+                else_branch=oh.make_graph(
+                    [oh.make_node("Neg", [y], ["output"])],
+                    "else",
+                    [],
+                    [_mkv_("output")],
+                ),
+            )
+            if not sts:
+                set_type_shape_unary_op(g, res, y)
+            return res
+
+        x, y = torch.randn((5, 3)), torch.randn((5, 3))
+
+        onx = to_onnx(
+            model,
+            (x, y),
+            dynamic_shapes=({0: "batch"}, {0: "batch"}),
+            export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
+            # export_modules_as_functions={"subdonot"},
+            inline=False,
+            verbose=0,
+            dispatcher=Dispatcher({SubModuleDoNotTrace: subdonot_convert}),
+        )
+        self.dump_onnx("test_tracing_submodule_with_test.onnx", onx)
+
+        expected = model(x, y)
+        sess = self._check_with_ort(onx, cpu=True)
+        got = sess.run(None, dict(x=x.cpu().numpy(), y=y.cpu().numpy()))
+        self.assertEqualArray(expected, got[0], atol=1e-5)
+
+        expected = model(x, -y)
+        sess = self._check_with_ort(onx, cpu=True)
+        got = sess.run(None, dict(x=x.cpu().numpy(), y=-y.cpu().numpy()))
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":
