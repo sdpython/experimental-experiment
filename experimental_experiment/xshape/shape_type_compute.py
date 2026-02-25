@@ -1816,8 +1816,33 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
     if node.op_type in {"Attention"} and node.domain == "com.microsoft":
         if self.has_type(node.input[0]):
             self.set_type(node.output[0], self.get_type(node.input[0]))
+
+        # The com.microsoft Attention may change the hidden size (last dim)
+        # via qkv_hidden_sizes or non-square projection weights. Avoid
+        # blindly copying the full input shape: either adjust the last
+        # dimension when qkv_hidden_sizes is known, or only propagate rank.
         if self.has_shape(node.input[0]):
-            self.set_shape(node.output[0], self.get_shape(node.input[0]))
+            in_shape = list(self.get_shape(node.input[0]))
+
+            # Try to read qkv_hidden_sizes attribute to infer the output hidden size.
+            qkv_attr = None
+            for attr in node.attribute:
+                if attr.name == "qkv_hidden_sizes":
+                    qkv_attr = attr
+                    break
+
+            if (
+                qkv_attr is not None
+                and len(qkv_attr.ints) >= 3
+                and all_int(qkv_attr.ints)
+                and len(in_shape) >= 1
+            ):
+                # Set the last dimension to the output hidden size.
+                in_shape[-1] = int(qkv_attr.ints[2])
+                self.set_shape(node.output[0], in_shape)
+            else:
+                # We know the rank but not a reliable last dimension.
+                self.set_rank(node.output[0], len(in_shape))
         elif self.has_rank(node.input[0]):
             self.set_rank(node.output[0], self.get_rank(node.input[0]))
         return None
