@@ -5431,7 +5431,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         a progress bar on big models.
         """
         self._debug_msg["process.graph_module"] = graph_module
-        self._debug_msg["process.graph_module.graph"] = graph_module.graph
+        self._debug_msg["process.graph_module.graph"] = getattr(graph_module, "graph", None)
 
         # looks into output marked as "alias_of_input"
         # see https://pytorch.org/functorch/main/_modules/torch/_functorch/aot_autograd.html
@@ -5445,7 +5445,19 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
         #         node.replace_all_uses_with(cloned_node)
         # graph_module.recompile()
-        interpreter.start_graph(graph_module.graph)
+        if (
+            isinstance(graph_module, self.torch.nn.Module)
+            and interpreter.dispatcher
+            and interpreter.dispatcher.find_function(type(graph_module))
+        ):
+            fct = interpreter.dispatcher.find_function(type(graph_module))
+            args = [a.name if hasattr(a, "name") else a for a in self.input_args]
+            kwargs = {
+                k: (v.name if hasattr(v, "name") else v) for k, v in self.input_kwargs.items()
+            }
+            fct(self, {}, None, *args, **kwargs)
+        else:
+            interpreter.start_graph(graph_module.graph)
 
         inputs = []
         for n in graph_module.graph.nodes:

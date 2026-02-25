@@ -1,6 +1,9 @@
 import copy
 import operator
 import unittest
+import numpy as np
+import onnx
+import onnx.helper as oh
 import torch
 from onnx_diagnostic.helpers.cache_helper import make_dynamic_cache
 from onnx_diagnostic.torch_export_patches import torch_export_patches
@@ -11,7 +14,7 @@ from experimental_experiment.ext_test_case import (
     requires_onnx_diagnostic,
     requires_torch,
 )
-from experimental_experiment.torch_interpreter import to_onnx, ExportOptions
+from experimental_experiment.torch_interpreter import to_onnx, ExportOptions, Dispatcher
 from experimental_experiment.torch_interpreter.tracing import (
     CustomTracer,
     CustomProxy,
@@ -20,6 +23,9 @@ from experimental_experiment.torch_interpreter.tracing import (
     setitem_with_transformation,
     tree_unflatten_with_proxy,
 )
+from experimental_experiment.xbuilder import GraphBuilder
+from experimental_experiment.helpers import tensor_dtype_to_np_dtype
+from experimental_experiment.xshape.shape_type_compute import set_type_shape_unary_op
 
 
 class TestTracing(ExtTestCase):
@@ -805,6 +811,92 @@ class TestTracing(ExtTestCase):
             AssertionError,
             msg="Unable to preserve module class",
         )
+
+    def test_tracing_submodule_with_test(self):
+        class SubModule(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1, kind: int = 0):
+                super().__init__()
+                self.linear = torch.nn.Linear(n_dims, n_targets)
+                self.buff = torch.nn.parameter.Buffer(torch.tensor([0.5] * n_targets))
+                self.kind = kind
+
+            def forward(self, x):
+                return torch.sigmoid(self.linear(x)) + self.buff
+
+        class SubModuleDoNotTrace(torch.nn.Module):
+            def forward(self, x):
+                if x.sum().item() > 0:
+                    return x
+                return -x
+
+        class Model(torch.nn.Module):
+            def __init__(self, n_dims: int = 3, n_targets: int = 1):
+                super().__init__()
+                self.suba = SubModule(n_dims, n_targets, kind=1)
+                self.subdonot = SubModuleDoNotTrace()
+
+            def forward(self, x, y):
+                return self.suba(x) + self.subdonot(y)
+
+        def f(mod, module_qualified_name=None):
+            return isinstance(mod, SubModuleDoNotTrace)
+
+        module_leaves = {SubModuleDoNotTrace: f}
+        model = Model()
+        graph = CustomTracer(module_leaves=module_leaves).trace(model)
+        module_nodes = [n for n in graph.nodes if n.op == "call_module"]
+        self.assertEqual(len(module_nodes), 2)
+        self.assertEqual(module_nodes[0].target, "suba.linear")
+        self.assertEqual(module_nodes[1].target, "subdonot")
+
+        def _mkv_(name):
+            value_info_proto = onnx.ValueInfoProto()
+            value_info_proto.name = name
+            return value_info_proto
+
+        def subdonot_convert(g: GraphBuilder, sts: dict, output_names, y, name: str = "subdonot"):
+            dtype = tensor_dtype_to_np_dtype(g.get_type(y))
+            cond = g.op.Greater(
+                g.op.ReduceMaxAnyOpset(y, name=name), np.array([0], dtype=dtype), name=name
+            )
+            res = g.op.If(
+                cond,
+                then_branch=oh.make_graph(
+                    [oh.make_node("Identity", [y], ["output"])], "then", [], [_mkv_("output")]
+                ),
+                else_branch=oh.make_graph(
+                    [oh.make_node("Neg", [y], ["output"])],
+                    "else",
+                    [],
+                    [_mkv_("output")],
+                ),
+            )
+            if not sts:
+                set_type_shape_unary_op(g, res, y)
+            return res
+
+        x, y = torch.randn((5, 3)), torch.randn((5, 3))
+
+        onx = to_onnx(
+            model,
+            (x, y),
+            dynamic_shapes=({0: "batch"}, {0: "batch"}),
+            export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
+            export_modules_as_functions={"subdonot"},
+            inline=False,
+            verbose=0,
+            dispatcher=Dispatcher({SubModuleDoNotTrace: subdonot_convert}),
+        )
+
+        expected = model(x, y)
+        sess = self._check_with_ort(onx, cpu=True)
+        got = sess.run(None, dict(x=x, y=y))
+        self.assertEqualArray(expected, got[0])
+
+        expected = model(x, -y)
+        sess = self._check_with_ort(onx, cpu=True)
+        got = sess.run(None, dict(x=x, y=-y))
+        self.assertEqualArray(expected, got[0])
 
 
 if __name__ == "__main__":

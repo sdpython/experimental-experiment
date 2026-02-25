@@ -2304,6 +2304,12 @@ class DynamoInterpreter:
             and sub_module.__class__.__name__ == "InterpreterModule"
         ):
             gm = sub_module
+        elif (
+            isinstance(sub_module, self.builder.torch.nn.Module)
+            and self.dispatcher
+            and self.dispatcher.find_function(type(sub_module))
+        ):
+            gm = sub_module
         else:
             # https://docs.pytorch.org/docs/stable/fx.html
             tracer_class = self.torch.fx.Tracer
@@ -2326,6 +2332,23 @@ class DynamoInterpreter:
             gm = self.torch.fx.GraphModule(
                 getattr(tracer, "traced_model", None) or sub_module, graph
             )
+
+        """
+            cvt = self.dispatcher.find_function(type(sub_module))
+            fct = self.dispatcher.fallback(
+                type(sub_module), sub_module, new_args, kwargs, self.builder)
+            if fct is None:
+                raise FunctionNotFoundError(
+                    f"Unable to interpret module tpye {type(sub_module)}, "
+                    f"args={new_args}, kwargs={kwargs}, "
+                    f"dispatcher={self.dispatcher}"
+                    f"{self.builder.get_debug_msg()}"
+                )
+            res = fct(self.builder, {}, output_names, *new_args, **kwargs)
+            self._set_shape_and_type(node, res, fct_name=method_name)
+            res = self._check_output_name(node, res, output_names)
+            return res
+        """
 
         graph_module, builder, interpreter, mask_outputs = _make_builder_interpreter(
             gm,

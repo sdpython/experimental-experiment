@@ -566,6 +566,14 @@ def _make_builder_interpreter(
             print("-- GIVEN GRAPH MODULE")
             print(graph_module.graph)
         exported_program = None
+    elif isinstance(mod, torch.nn.Module) and dispatcher and dispatcher.find_function(type(mod)):
+        graph_module = mod
+        exported_program = None
+        exe_path = mod.__class__.__name__
+        weights = None
+        buffers = None
+        mapping = None
+        constants = None
     else:
         if not isinstance(mod, torch.export.ExportedProgram):
             exe_path = "export"
