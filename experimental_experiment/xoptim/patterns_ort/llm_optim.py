@@ -1929,6 +1929,9 @@ class Attention3DPattern(PatternOptimization):
         if len(node.input) > 3 and node.input[3] and not g.has_type(node.input[3]):
             # mask type is unknown
             return self.none(node, inspect.currentframe().f_lineno)
+        if not g.is_constant_scalar(node.input[4]):
+            # scale is expected to be a constant scalar; otherwise apply() will fail
+            return self.none(node, inspect.currentframe().f_lineno)
 
         query, keys, values = node.input[:3]
 
