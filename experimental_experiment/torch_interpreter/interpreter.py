@@ -601,6 +601,17 @@ class DynamoInterpreter:
         """
         if self.builder.verbose > 1:
             print(f"[DynamoInterpreter-{self._hash()}.placeholder][{node.name}]")
+
+        if isinstance(node, VirtualTensor):
+            return self._make_tensor_input(
+                node.name,
+                elem_type=node.dtype,
+                shape=node.shape,
+                is_dimension=False,
+                device=node.device,
+                users=None,
+            )
+
         val = node.meta.get("val", None)
         _msg = lambda _=self: _.builder.get_debug_msg()  # noqa: E731
 
@@ -2333,23 +2344,6 @@ class DynamoInterpreter:
                 getattr(tracer, "traced_model", None) or sub_module, graph
             )
 
-        """
-            cvt = self.dispatcher.find_function(type(sub_module))
-            fct = self.dispatcher.fallback(
-                type(sub_module), sub_module, new_args, kwargs, self.builder)
-            if fct is None:
-                raise FunctionNotFoundError(
-                    f"Unable to interpret module tpye {type(sub_module)}, "
-                    f"args={new_args}, kwargs={kwargs}, "
-                    f"dispatcher={self.dispatcher}"
-                    f"{self.builder.get_debug_msg()}"
-                )
-            res = fct(self.builder, {}, output_names, *new_args, **kwargs)
-            self._set_shape_and_type(node, res, fct_name=method_name)
-            res = self._check_output_name(node, res, output_names)
-            return res
-        """
-
         graph_module, builder, interpreter, mask_outputs = _make_builder_interpreter(
             gm,
             args=None if new_args is None else tuple(new_args),
@@ -2565,90 +2559,89 @@ class DynamoInterpreter:
                 f"Unable to find module name {node.target!r} in "
                 f"{sorted(self.named_modules)}{self.builder.get_debug_msg()}"
             )
-            if preserve_as_submodule:
-                # Which name to give the submodule?
-                # The class, the module name, ...?
-                local_function_name = name = self.get_submodule_name(node.target, node_module)
-                assert local_function_name, (
-                    f"empty value for local_function_name={local_function_name!r}, "
-                    f"type(m)={type(node_module)}, "
-                    f"self.preserved_modules={self.preserved_modules}, "
-                    f"node={node!r}, node.target={node.target}{self.builder.get_debug_msg()}"
-                )
-
-                self.builder._check_constants("before-make_nodes")
-
-                # let's create a function under the appropriate name
-                prefix = f"_sub_IM_{node.name}__"
-                self.builder.make_nodes(
-                    builder,
-                    args,
-                    output_names,
-                    prefix=prefix,
-                    function_options=FunctionOptions(
-                        name=local_function_name,
-                        domain=LOCAL_DOMAIN,
-                        export_as_function=True,
-                        return_initializer=True,
-                        move_initializer_to_constant=self.function_options.move_initializer_to_constant,
-                        external_threshold=self.function_options.external_threshold,
-                        merge_allowed=self.function_options.merge_allowed,
-                        rename_allowed=self.function_options.rename_allowed,
-                    ),
-                    optimize=self.optimize_submodules,
-                )
-
-                self.builder._check_constants("after-make_nodes")
-
-                if len(output_names) == len(builder.outputs):
-                    # One output, both tensor
-                    for name, out_name in zip(builder.output_names, output_names):
-                        if builder.has_type(name):
-                            self.builder.set_type(out_name, builder.get_type(name))
-                        if builder.has_device(name):
-                            self.builder.set_device(out_name, builder.get_device(name))
-                        if builder.has_shape(name):
-                            existing_shape = builder.get_shape(name)
-                            # We need to move any dynamic objects necessary from the submodules
-                            # to the parent module.
-                            self.builder.register_dynamic_objects_from_shape(existing_shape)
-                            self.builder.set_shape(out_name, existing_shape)
-                        elif builder.has_rank(name):
-                            self.builder.set_rank(out_name, builder.get_rank(name))
-                elif len(output_names) == 1 and len(builder.outputs) > 1:
-                    # The module outputs more than one output
-                    itypes, shapes, ranks = [], [], []
-                    for name in builder.output_names:
-                        itypes.append(builder.get_type(name) if builder.has_type(name) else None)
-                        shapes.append(
-                            builder.get_shape(name) if builder.has_shape(name) else None
-                        )
-                        ranks.append(builder.get_rank(name) if builder.has_rank(name) else None)
-                    self.builder.set_sequence(
-                        output_names[0], tuple(itypes), shapes=tuple(shapes), ranks=ranks
-                    )
-                else:
-                    raise AssertionError(
-                        f"Unexpected number of outputs, output_names={output_names}, "
-                        f"len(builder.outputs)={len(builder.outputs)}, "
-                        f"builder.output_names={builder.output_names}"
-                        f"{builder.get_debug_msg()}\n--\n--\n--"
-                        f"{self.builder.get_debug_msg()}\n------\n"
-                    )
-                self._set_shape_and_type(
-                    node,
-                    output_names[0] if len(output_names) == 1 else tuple(output_names),
-                    allow_new_dynamic_dimension=True,
-                )
-                return output_names
-            prefix = f"_sub_ime__{node.name}_"
         else:
-            assert not preserve_as_submodule, (
+            assert isinstance(sub_module, self.torch.nn.Module) or not preserve_as_submodule, (
                 f"Unable to preserve module class {type(node_module)} for node {node!r}, "
                 f"target={node.target!r}, type(sub_module)={type(sub_module)}"
                 f"{self.builder.get_debug_msg()}"
             )
 
+        if preserve_as_submodule:
+            # Which name to give the submodule?
+            # The class, the module name, ...?
+            local_function_name = name = self.get_submodule_name(node.target, node_module)
+            assert local_function_name, (
+                f"empty value for local_function_name={local_function_name!r}, "
+                f"type(m)={type(node_module)}, "
+                f"self.preserved_modules={self.preserved_modules}, "
+                f"node={node!r}, node.target={node.target}{self.builder.get_debug_msg()}"
+            )
+
+            self.builder._check_constants("before-make_nodes")
+
+            # let's create a function under the appropriate name
+            prefix = f"_sub_IM_{node.name}__"
+            self.builder.make_nodes(
+                builder,
+                args,
+                output_names,
+                prefix=prefix,
+                function_options=FunctionOptions(
+                    name=local_function_name,
+                    domain=LOCAL_DOMAIN,
+                    export_as_function=True,
+                    return_initializer=True,
+                    move_initializer_to_constant=self.function_options.move_initializer_to_constant,
+                    external_threshold=self.function_options.external_threshold,
+                    merge_allowed=self.function_options.merge_allowed,
+                    rename_allowed=self.function_options.rename_allowed,
+                ),
+                optimize=self.optimize_submodules,
+            )
+
+            self.builder._check_constants("after-make_nodes")
+
+            if len(output_names) == len(builder.outputs):
+                # One output, both tensor
+                for name, out_name in zip(builder.output_names, output_names):
+                    if builder.has_type(name):
+                        self.builder.set_type(out_name, builder.get_type(name))
+                    if builder.has_device(name):
+                        self.builder.set_device(out_name, builder.get_device(name))
+                    if builder.has_shape(name):
+                        existing_shape = builder.get_shape(name)
+                        # We need to move any dynamic objects necessary from the submodules
+                        # to the parent module.
+                        self.builder.register_dynamic_objects_from_shape(existing_shape)
+                        self.builder.set_shape(out_name, existing_shape)
+                    elif builder.has_rank(name):
+                        self.builder.set_rank(out_name, builder.get_rank(name))
+            elif len(output_names) == 1 and len(builder.outputs) > 1:
+                # The module outputs more than one output
+                itypes, shapes, ranks = [], [], []
+                for name in builder.output_names:
+                    itypes.append(builder.get_type(name) if builder.has_type(name) else None)
+                    shapes.append(builder.get_shape(name) if builder.has_shape(name) else None)
+                    ranks.append(builder.get_rank(name) if builder.has_rank(name) else None)
+                self.builder.set_sequence(
+                    output_names[0], tuple(itypes), shapes=tuple(shapes), ranks=ranks
+                )
+            else:
+                raise AssertionError(
+                    f"Unexpected number of outputs, output_names={output_names}, "
+                    f"len(builder.outputs)={len(builder.outputs)}, "
+                    f"builder.output_names={builder.output_names}"
+                    f"{builder.get_debug_msg()}\n--\n--\n--"
+                    f"{self.builder.get_debug_msg()}\n------\n"
+                )
+            self._set_shape_and_type(
+                node,
+                output_names[0] if len(output_names) == 1 else tuple(output_names),
+                allow_new_dynamic_dimension=True,
+            )
+            return output_names
+
+        prefix = f"_sub_ime__{node.name}_"
         self.builder._check_constants("before-make_nodes(2)")
         self.builder.make_nodes(
             builder, args, output_names, prefix=prefix, force_rename_with_prefix=node.name

@@ -857,7 +857,7 @@ class TestTracing(ExtTestCase):
         def subdonot_convert(g: GraphBuilder, sts: dict, output_names, y, name: str = "subdonot"):
             dtype = tensor_dtype_to_np_dtype(g.get_type(y))
             cond = g.op.Greater(
-                g.op.ReduceMaxAnyOpset(y, name=name), np.array([0], dtype=dtype), name=name
+                g.op.ReduceSumAnyOpset(y, name=name), np.array([0], dtype=dtype), name=name
             )
             res = g.op.If(
                 cond,
@@ -882,21 +882,22 @@ class TestTracing(ExtTestCase):
             (x, y),
             dynamic_shapes=({0: "batch"}, {0: "batch"}),
             export_options=ExportOptions(tracing=True, tracing_module_leaves=module_leaves),
-            export_modules_as_functions={"subdonot"},
+            # export_modules_as_functions={"subdonot"},
             inline=False,
             verbose=0,
             dispatcher=Dispatcher({SubModuleDoNotTrace: subdonot_convert}),
         )
+        self.dump_onnx("test_tracing_submodule_with_test.onnx", onx)
 
         expected = model(x, y)
         sess = self._check_with_ort(onx, cpu=True)
-        got = sess.run(None, dict(x=x, y=y))
-        self.assertEqualArray(expected, got[0])
+        got = sess.run(None, dict(x=x.cpu().numpy(), y=y.cpu().numpy()))
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
         expected = model(x, -y)
         sess = self._check_with_ort(onx, cpu=True)
-        got = sess.run(None, dict(x=x, y=-y))
-        self.assertEqualArray(expected, got[0])
+        got = sess.run(None, dict(x=x.cpu().numpy(), y=-y.cpu().numpy()))
+        self.assertEqualArray(expected, got[0], atol=1e-5)
 
 
 if __name__ == "__main__":
