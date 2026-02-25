@@ -124,7 +124,7 @@ class ExportOptions:
         prefer_deferred_runtime_asserts_over_guards: bool = True,
         fake: bool = False,
         tracing_module_leaves: Optional[
-            Dict[type, Callable[["torch.nn.Module"], bool]]  # noqa: F821
+            Dict[type, Callable[["torch.nn.Module", str], bool]]  # noqa: F821
         ] = None,
     ):
         self.strict = strict
