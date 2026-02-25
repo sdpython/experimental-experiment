@@ -1978,6 +1978,17 @@ def aten_cond(
             [mkv(o) for o in outputs],
         ),
     )
+    if g.has_local_function(true_graph, g.local_domain, builder=True):
+        fct_builder = g.get_local_function(true_graph, g.local_domain, builder=True)
+        for bout, out in zip(fct_builder.output_names, outputs):
+            if fct_builder.has_type(bout):
+                g.set_type(out, fct_builder.get_type(bout))
+            if fct_builder.has_device(bout):
+                g.set_device(out, fct_builder.get_device(bout))
+            if fct_builder.has_shape(bout):
+                g.set_shape(out, fct_builder.get_shape(bout))
+            elif fct_builder.has_rank(bout):
+                g.set_rank(out, fct_builder.get_rank(bout))
     return res
 
 
