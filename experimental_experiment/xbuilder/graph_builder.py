@@ -2267,12 +2267,12 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         if name in self._known_torch_value:
             value = self._known_torch_value[name]
             # something like (
-            #                   'run_node',
-            #                   (
-            #                       '',
-            #                       ('val', torch.float16, torch.Size([2, 12, 2048, 2048]))
-            #                   )
-            #                )
+            #   'run_node',
+            #   (
+            #       '',
+            #       ('val', torch.float16, torch.Size([2, 12, 2048, 2048]))
+            #   )
+            # )
             assert not exc or (
                 isinstance(value, tuple)
                 and len(value) == 2
@@ -4204,23 +4204,36 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         assert (
             op_type not in {"NegXplus1", "ReplaceZero"} or domain != ""
         ), f"Type={op_type!r} and domain {domain!r} mismatch{self.get_debug_msg()}"
-        assert (
-            op_type != "If"
-            or domain != ""
-            or (
-                len(kwargs["then_branch"].output)
-                == len(outputs)
-                == len(kwargs["else_branch"].output)
-                and len(kwargs["then_branch"].input) == 0 == len(kwargs["else_branch"].input)
+        if op_type == "If" and domain == "":
+            then_branch, else_branch = None, None
+            if attributes:
+                for att in attributes:
+                    if att.name == "then_branch":
+                        then_branch = att.g
+                    elif att.name == "else_branch":
+                        else_branch = att.g
+            if "then_branch" in kwargs and not then_branch:
+                then_branch = kwargs["then_branch"]
+            if "else_branch" in kwargs and not else_branch:
+                else_branch = kwargs["else_branch"]
+            assert (
+                then_branch
+                and else_branch
+                and (
+                    len(then_branch.output)
+                    == (outputs if isinstance(outputs, int) else len(outputs))
+                    == len(else_branch.output)
+                    and len(then_branch.input) == 0 == len(else_branch.input)
+                )
+            ), (
+                f"Node 'If' has an unexpected number of inputs or outputs."
+                f"\nIf({', '.join(inputs)}) -> {outputs}"
+                f"\nattributes={attributes}, "
+                f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
             )
-        ), (
-            f"Node 'If' has an unexpected number of inputs or outputs."
-            f"\nIf({', '.join(inputs)}) -> {outputs}"
-            f"\nkwargs={pprint.pformat(kwargs)}{self.get_debug_msg()}"
-        )
         assert outputs != [""], (
             f"Unexpected value for outputs={outputs}, op_type={op_type!r}, domain={domain!r}, "
-            f"inputs={inputs}, attributes={attributes}{self.get_debug_msg()}"
+            f"inputs={inputs}, attributes={attributes}, kwargs={kwargs}{self.get_debug_msg()}"
         )
 
     def do_not_remove(self, node: NodeProto) -> bool:
@@ -4838,10 +4851,10 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
             for k, v in builder.dynamic_objects.items():
                 self.make_dynamic_object(k, v)
 
-            assert len(input_names) == len(
+            assert len(input_names or []) == len(
                 builder.inputs
             ), f"Inconsistency between input_names={input_names} and inputs={builder.inputs}"
-            for name, inp in zip(input_names, builder.inputs):
+            for name, inp in zip(input_names or [], builder.inputs):
                 new_name = self.unique_name(f"{prefix}{inp.name}")
                 renaming[inp.name] = new_name
                 self.make_node("Identity", [name], [new_name], name=".make_nodes")
@@ -4852,7 +4865,9 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
                     f"easier to see where this node is created but name={name!r} "
                     f"and op_type={node.op_type!r}."
                 )
-                new_inputs = [renaming[builder._parameter_renaming.get(i, i)] for i in node.input]
+                new_inputs = [
+                    renaming.get(builder._parameter_renaming.get(i, i), i) for i in node.input
+                ]
                 new_outputs = [self.unique_name(f"{prefix}{o}") for o in node.output]
                 for o, no in zip(node.output, new_outputs):
                     renaming[o] = no
@@ -5431,7 +5446,7 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         a progress bar on big models.
         """
         self._debug_msg["process.graph_module"] = graph_module
-        self._debug_msg["process.graph_module.graph"] = graph_module.graph
+        self._debug_msg["process.graph_module.graph"] = getattr(graph_module, "graph", None)
 
         # looks into output marked as "alias_of_input"
         # see https://pytorch.org/functorch/main/_modules/torch/_functorch/aot_autograd.html
@@ -5445,51 +5460,79 @@ class GraphBuilder(_BuilderRuntime, _ShapeRuntime, _InferenceRuntime):
         #         cloned_node = graph_module.graph.call_method("clone", args=(node.target,))
         #         node.replace_all_uses_with(cloned_node)
         # graph_module.recompile()
-        interpreter.start_graph(graph_module.graph)
-
-        inputs = []
-        for n in graph_module.graph.nodes:
-            if n.op == "placeholder":
-                # Not tensor constant are not captured by the exporter.
-                inputs.append(
-                    (n, bool(n.users), type(n.meta["val"]) if "val" in n.meta else None)
-                )
-        inputs_to_remove = []
-        for n, has_users, type_value in inputs[::-1]:
-            if has_users or type_value not in {int, bool, float, type(None)}:
-                break
-            inputs_to_remove.append(n.name)
-
-        if int(os.environ.get("ONNX_BUILDER_PROGRESS", "0")) or (
-            self.verbose and len(graph_module.graph.nodes) > 100
+        if (
+            isinstance(graph_module, self.torch.nn.Module)
+            and interpreter.dispatcher
+            and interpreter.dispatcher.find_function(type(graph_module))
         ):
-            try:
-                import tqdm
+            fct = interpreter.dispatcher.find_function(type(graph_module))
 
-                loop = tqdm.tqdm(list(enumerate(graph_module.graph.nodes)))
-            except ImportError:
-                loop = enumerate(graph_module.graph.nodes)
+            args = []
+            for node in self.input_args:
+                if hasattr(node, "name"):
+                    interpreter.placeholder(node)
+                    args.append(node.name)
+                else:
+                    args.append(node)
+
+            kwargs = {}
+            for k, node in self.input_kwargs.items():
+                if hasattr(node, "name"):
+                    interpreter.placeholder(node)
+                    kwargs[k] = node.name
+                else:
+                    kwargs[k] = node
+
+            res = fct(self, {}, None, *args, **kwargs)
+            if isinstance(res, str):
+                res = [res]
+            for o in res:
+                self.make_tensor_output(o, allow_untyped_output=True)
         else:
-            loop = enumerate(graph_module.graph.nodes)
+            interpreter.start_graph(graph_module.graph)
+            inputs = []
+            for n in graph_module.graph.nodes:
+                if n.op == "placeholder":
+                    # Not tensor constant are not captured by the exporter.
+                    inputs.append(
+                        (n, bool(n.users), type(n.meta["val"]) if "val" in n.meta else None)
+                    )
+            inputs_to_remove = []
+            for n, has_users, type_value in inputs[::-1]:
+                if has_users or type_value not in {int, bool, float, type(None)}:
+                    break
+                inputs_to_remove.append(n.name)
 
-        inputs_to_remove = set(inputs_to_remove)
-        self._debug_msg["process.inputs_to_remove"] = inputs_to_remove
-        for i, node in loop:
-            if self._debug_print_node and node.name in self._debug_print_node:
-                print(f"-- PRINT-NODE {node.name!r} --")
-                print(f"node.target={node.target!r}")
-                print(f"node.users={list(node.users)}")
-                print(f"node.name in inputs_to_remove={node.name in inputs_to_remove!r}")
-                if "val" in node.meta:
-                    print(f"value type={type(node.meta['val'])}")
-                pprint.pprint(node.meta)
-            if node.op == "placeholder" and node.name in inputs_to_remove and not node.users:
-                continue
-            self._debug_msg["process.progress"] = (
-                f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
-            )
-            interpreter.run_node(node, source_lines=source_lines)
-        interpreter.end_graph(graph_module.graph)
+            if int(os.environ.get("ONNX_BUILDER_PROGRESS", "0")) or (
+                self.verbose and len(graph_module.graph.nodes) > 100
+            ):
+                try:
+                    import tqdm
+
+                    loop = tqdm.tqdm(list(enumerate(graph_module.graph.nodes)))
+                except ImportError:
+                    loop = enumerate(graph_module.graph.nodes)
+            else:
+                loop = enumerate(graph_module.graph.nodes)
+
+            inputs_to_remove = set(inputs_to_remove)
+            self._debug_msg["process.inputs_to_remove"] = inputs_to_remove
+            for i, node in loop:
+                if self._debug_print_node and node.name in self._debug_print_node:
+                    print(f"-- PRINT-NODE {node.name!r} --")
+                    print(f"node.target={node.target!r}")
+                    print(f"node.users={list(node.users)}")
+                    print(f"node.name in inputs_to_remove={node.name in inputs_to_remove!r}")
+                    if "val" in node.meta:
+                        print(f"value type={type(node.meta['val'])}")
+                    pprint.pprint(node.meta)
+                if node.op == "placeholder" and node.name in inputs_to_remove and not node.users:
+                    continue
+                self._debug_msg["process.progress"] = (
+                    f"node {i}/{len(graph_module.graph.nodes)} target={node.target}"
+                )
+                interpreter.run_node(node, source_lines=source_lines)
+            interpreter.end_graph(graph_module.graph)
 
     def _extend_local_function_inputs(self) -> Tuple[Tuple[str, Any], Set[Tuple[str, str]]]:
         """

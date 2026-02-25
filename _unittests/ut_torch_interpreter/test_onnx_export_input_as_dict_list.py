@@ -200,7 +200,7 @@ class TestOnnxExportInputDictList(ExtTestCase):
             (x, list_yz),
             dynamic_shapes=({0: batch}, [{0: batch}, {0: batch}]),
             export_options=ExportOptions(tracing=True),
-            verbose=0,
+            verbose=10,
         )
         import onnx
 

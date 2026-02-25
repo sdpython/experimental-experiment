@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 
 class Dispatcher:
@@ -12,7 +12,7 @@ class Dispatcher:
     :param verbose: verbose
     """
 
-    def __init__(self, registered_functions: Dict[str, Callable], verbose: int = 0):
+    def __init__(self, registered_functions: Dict[Union[type, str], Callable], verbose: int = 0):
         self.registered_functions = registered_functions
         self.verbose = verbose
 
@@ -22,12 +22,15 @@ class Dispatcher:
         self.registered_functions.update(other_dispatcher.registered_functions)
 
     @property
-    def supported(self) -> Set[str]:
+    def supported(self) -> Set[Union[type, str]]:
         "Returns the list supported dispateched names."
         return set(self.registered_functions)
 
     def _get_function_name(self, name: Any) -> str:
         if isinstance(name, str):
+            return name
+
+        if isinstance(name, type) and name in self.registered_functions:
             return name
 
         if isinstance(name, type(abs)):

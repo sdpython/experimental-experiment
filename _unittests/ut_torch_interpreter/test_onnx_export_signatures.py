@@ -21,7 +21,6 @@ from experimental_experiment.torch_test_helper import dummy_llm
 
 
 class TestOnnxExportSignatures(ExtTestCase):
-
     def _flatten_inputs(self, inputs):
         flattened_inputs = []
         for inp in inputs:
