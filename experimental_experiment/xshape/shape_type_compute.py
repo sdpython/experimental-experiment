@@ -1839,7 +1839,7 @@ def set_shape_type_custom(self: ShapeBuilder, node: NodeProto, exc: bool = False
             ):
                 # Set the last dimension to the output hidden size.
                 in_shape[-1] = int(qkv_attr.ints[2])
-                self.set_shape(node.output[0], in_shape)
+                self.set_shape(node.output[0], tuple(in_shape))
             else:
                 # We know the rank but not a reliable last dimension.
                 self.set_rank(node.output[0], len(in_shape))

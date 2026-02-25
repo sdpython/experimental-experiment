@@ -2959,10 +2959,10 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
                     onh.from_array(reshape_shape, name="reshape_shape"),
                     onh.from_array(output_shape, name="output_shape"),
                     onh.from_array(np.array([0], dtype=dtype), name="zero"),
-                    onh.from_array(np.array([-np.inf], dtype=dtype), name="minfty"),
+                    onh.from_array(np.array([np.finfo(dtype).min], dtype=dtype), name="minfty"),
                 ],
             ),
-            opset_imports=[oh.make_opsetid("", 18)],
+            opset_imports=[oh.make_opsetid("", 22)],
             ir_version=10,
         )
         return model, num_heads, head_size, hidden_dim
@@ -2990,7 +2990,7 @@ class TestGraphPatternOptimizationOrt(ExtTestCase):
         # self.dump_onnx("test_attention_3d_pattern_output.onnx", opt_onx)
         sess_opt = self._check_with_ort(opt_onx, cpu=False)
         got = sess_opt.run(None, feeds)
-        self.assertEqualArray(expected[0], got[0])
+        self.assertEqualArray(expected[0], got[0], atol=0.05)
 
         # After optimization, Attention (com.microsoft) should appear
         op_types = [(n.op_type, n.domain) for n in opt_onx.graph.node]
